@@ -1,7 +1,7 @@
-void main()
+i16 main()
 {
 	{
-		int x;
+		i16 x;
 	}
 	<Unknown 'x'>;
 }

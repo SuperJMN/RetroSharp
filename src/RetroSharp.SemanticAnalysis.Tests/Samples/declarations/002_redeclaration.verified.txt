@@ -1,7 +1,7 @@
-void main()
+i16 main()
 {
-	int a;
-	int a;
+	i16 a;
+	i16 a;
 }
 == Diagnostics ==
 Variable a is already declared

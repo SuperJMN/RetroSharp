@@ -4,6 +4,5 @@ i16 main()
 	i16 b;
 	i16 c;
 	i16 d;
-	a=(b+c)*d;
+	a=b+c+d;
 }
-

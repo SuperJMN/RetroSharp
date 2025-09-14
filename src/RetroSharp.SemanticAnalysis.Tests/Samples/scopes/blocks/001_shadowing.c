@@ -1,1 +1,1 @@
-void main(){ int a; { int a; a = 1; } a = 2; }
+void main(){ i16 a; { i16 a; a = 1; } a = 2; }

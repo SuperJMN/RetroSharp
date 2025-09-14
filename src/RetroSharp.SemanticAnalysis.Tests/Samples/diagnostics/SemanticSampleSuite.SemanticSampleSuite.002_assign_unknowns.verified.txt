@@ -1,4 +1,4 @@
-﻿i16 main()
+i16 main()
 {
 	<Unknown 'b'>=<Unknown 'a'>;
 }

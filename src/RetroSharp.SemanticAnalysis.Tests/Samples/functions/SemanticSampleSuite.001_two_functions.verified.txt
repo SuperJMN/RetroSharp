@@ -1,6 +1,6 @@
-﻿void main()
+﻿i16 main()
 {
 }
-void other()
+i16 other()
 {
 }

@@ -20,7 +20,7 @@ public class EndToEndZ80Tests
         var retExpr = new ConstantNode(3);
         var ret = new ReturnNode(Maybe.From<ExpressionNode>(retExpr));
         var block = new BlockNode(new System.Collections.Generic.List<StatementNode> { ret });
-        var main = new FunctionNode("main", block, new System.Collections.Generic.List<string>());
+        var main = new FunctionNode("i16", "main", block, new System.Collections.Generic.List<string>());
         var program = new ProgramNode(new System.Collections.Generic.List<FunctionNode> { main });
 
         // Generate IR

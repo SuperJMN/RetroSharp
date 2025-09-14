@@ -45,7 +45,7 @@ internal class SemanticSnapshotPrinter : INodeVisitor
 
     public void VisitFunctionNode(FunctionNode node)
     {
-        WriteLine($"void {node.Name}()");
+        WriteLine($"{node.ReturnType} {node.Name}()");
         node.Block.Accept(this);
     }
 

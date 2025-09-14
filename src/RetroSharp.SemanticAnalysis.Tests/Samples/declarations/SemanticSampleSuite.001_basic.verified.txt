@@ -1,5 +1,5 @@
-﻿void main()
+﻿i16 main()
 {
-	int a;
+	i16 a;
 	a=1;
 }

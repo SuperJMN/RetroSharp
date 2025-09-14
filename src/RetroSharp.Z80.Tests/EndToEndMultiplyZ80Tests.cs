@@ -22,7 +22,7 @@ public class EndToEndMultiplyZ80Tests
         var mul = new BinaryExpressionNode(two, three, RetroSharp.Core.Operator.Get("*"));
         var ret = new ReturnNode(Maybe.From<ExpressionNode>(mul));
         var block = new BlockNode(new System.Collections.Generic.List<StatementNode> { ret });
-        var main = new FunctionNode("main", block, new System.Collections.Generic.List<string>());
+        var main = new FunctionNode("i16", "main", block, new System.Collections.Generic.List<string>());
         var program = new ProgramNode(new System.Collections.Generic.List<FunctionNode> { main });
 
         // Generate IR
