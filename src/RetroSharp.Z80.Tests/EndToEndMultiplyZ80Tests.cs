@@ -79,7 +79,7 @@ public class EndToEndMultiplyZ80Tests
     [Fact]
     public void Parser_pipeline_main_returns_three_times_two_sets_HL_to_6()
     {
-        var src = @"int main() { return 3 * 2; }";
+var src = @"i16 main() { return 3 * 2; }";
         var hl = Z80.Tests.Support.Z80E2E.RunHL(src, maxSteps: 20000);
         Assert.Equal(6, hl);
     }
@@ -87,7 +87,7 @@ public class EndToEndMultiplyZ80Tests
     [Fact]
     public void Parser_pipeline_function_returns_n_times_n_minus_1_for_3_is_6()
     {
-        var src = @"int f(int n){ return n * (n - 1); } int main(){ return f(3); }";
+var src = @"i16 f(i16 n){ return n * (n - 1); } i16 main(){ return f(3); }";
         var hl = Z80.Tests.Support.Z80E2E.RunHL(src, maxSteps: 20000);
         Assert.Equal(6, hl);
     }
@@ -95,7 +95,7 @@ public class EndToEndMultiplyZ80Tests
     [Fact]
     public void Parser_pipeline_function_returns_n_minus_1_for_3_is_2()
     {
-        var src = @"int f(int n){ return n - 1; } int main(){ return f(3); }";
+var src = @"i16 f(i16 n){ return n - 1; } i16 main(){ return f(3); }";
         var hl = Z80.Tests.Support.Z80E2E.RunHL(src, maxSteps: 20000);
         Assert.Equal(2, hl);
     }
@@ -103,7 +103,7 @@ public class EndToEndMultiplyZ80Tests
     [Fact]
     public void Parser_pipeline_function_returns_n_for_3_is_3()
     {
-        var src = @"int f(int n){ return n; } int main(){ return f(3); }";
+var src = @"i16 f(i16 n){ return n; } i16 main(){ return f(3); }";
         var hl = Z80.Tests.Support.Z80E2E.RunHL(src, maxSteps: 20000);
         Assert.Equal(3, hl);
     }

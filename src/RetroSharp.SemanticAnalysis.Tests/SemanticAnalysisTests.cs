@@ -23,7 +23,7 @@ public class SemanticAnalysisTests
     [Fact]
     public void Declaration()
     {
-        var input = "void main(){ int a; }";
+        var input = "void main(){ i16 a; }";
         var result = Analyze(input);
 
         result.Should().BeEquivalentToIgnoringWhitespace(input);
@@ -32,7 +32,7 @@ public class SemanticAnalysisTests
     [Fact]
     public void Assignment()
     {
-        var input = "void main(){ int a; a = 1; }";
+        var input = "void main(){ i16 a; a = 1; }";
         var result = Analyze(input);
 
         result.Should().BeEquivalentToIgnoringWhitespace(input);
@@ -48,7 +48,7 @@ public class SemanticAnalysisTests
     [Fact]
     public void Addition()
     {
-        var input = "void main(){ int a; int b; int c; a = 1; b = 2; c = a + b; }";
+        var input = "void main(){ i16 a; i16 b; i16 c; a = 1; b = 2; c = a + b; }";
         var result = Analyze(input);
 
         result.Should().BeEquivalentToIgnoringWhitespace(input);

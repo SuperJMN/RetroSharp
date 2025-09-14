@@ -1,6 +1,6 @@
 void main()
 {
-	int c;
+	i16 c;
 	c=<Unknown 'a'>+<Unknown 'b'>;
 }
 == Diagnostics ==

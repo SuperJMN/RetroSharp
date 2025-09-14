@@ -5,7 +5,8 @@
 		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<OutputType>Exe</OutputType>
+		<!-- Force local obj directory to avoid inherited cross-repo IntermediateOutputPath issues -->
+		<BaseIntermediateOutputPath>obj/</BaseIntermediateOutputPath>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -24,6 +25,10 @@
 
 	<ItemGroup>
 	  <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Compile Remove="Program.cs" />
 	</ItemGroup>
 
 	<PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

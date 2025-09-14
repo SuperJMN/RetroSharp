@@ -7,9 +7,8 @@ program: (variableDeclaration | externFunction | function | statement)* EOF;
 variableDeclaration: type IDENTIFIER ('=' expression)? ';';
 
 // Data types
-// Extended to accept TinyCSharp-8bit core types and ptr<T> without changing semantics yet
-// Existing code still treats type as text; we only broaden accepted syntax.
-type: 'void' | 'int' | 'char' | 'string' | 'byte'
+// Canonical core types only. Aliases may be handled in a higher layer if desired.
+type: 'void'
     | 'u8' | 'i8' | 'u16' | 'i16' | 'bool'
     | 'ptr' '<' type '>'
     ;
@@ -95,6 +94,21 @@ forLoop: 'for' '(' (variableDeclaration | assignment)? ';' expression? ';' assig
 returnStatement: 'return' expression? ';';
 
 // Tokens
+// Keyword tokens (must appear before IDENTIFIER to avoid being lexed as identifiers)
+VOID: 'void';
+I16: 'i16';
+U16: 'u16';
+I8: 'i8';
+U8: 'u8';
+BOOL: 'bool';
+PTR: 'ptr';
+IF: 'if';
+ELSE: 'else';
+WHILE: 'while';
+FOR: 'for';
+RETURN: 'return';
+EXTERN: 'extern';
+
 IDENTIFIER: [a-zA-Z_][a-zA-Z_0-9]*;
 LITERAL: LITERAL_INT | LITERAL_CHAR | LITERAL_STRING  | 'true' | 'false';
 LITERAL_INT: [0-9]+;

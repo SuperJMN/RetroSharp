@@ -12,7 +12,7 @@ public class EndToEndFactorialTests
     [InlineData(5, 120)]
     public void Factorial_returns_expected(int n, int expected)
     {
-        var src = $@"int fact(int n) {{
+        var src = $@"i16 fact(i16 n) {{
     if (n == 0) {{
         return 1;
     }} else {{
@@ -20,7 +20,7 @@ public class EndToEndFactorialTests
     }}
 }}
 
-int main() {{
+i16 main() {{
     return fact({n});
 }}";
         var actual = Z80E2E.RunHL(src, maxSteps: 100000);

@@ -12,7 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
-    <ProjectReference Include="..\RetroSharp.Parser.Antlr4.v2\RetroSharp.Parser.csproj" />
+    <ProjectReference Include="..\RetroSharp.Parser\RetroSharp.Parser.csproj" />
   </ItemGroup>
 
 </Project>
