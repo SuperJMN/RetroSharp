@@ -16,7 +16,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <!-- Pin ANTLR runtime to match RetroSharp.Parser.Antlr4.v2 (4.9.3) to avoid MissingMethod issues -->
+    <!-- Pin ANTLR runtime to match RetroSharp.Parser (4.9.3) to avoid MissingMethod issues -->
 <PackageReference Include="Antlr4.Runtime.Standard" />
   </ItemGroup>
   <ItemGroup>

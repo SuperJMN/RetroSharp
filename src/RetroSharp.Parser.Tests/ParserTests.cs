@@ -5,7 +5,7 @@ public class ParserTests
     [Fact]
     public void Empty_main()
     {
-        var source = @"int main() { }";
+        var source = @"i16 main() { }";
         AssertParse(source);
     }
 
@@ -15,14 +15,14 @@ public class ParserTests
     [InlineData(2304)]
     public void Return_integer_constant(int constant)
     {
-        var source = $@"int main() {{ return {constant}; }}";
+        var source = $@"i16 main() {{ return {constant}; }}";
         AssertParse(source);
     }
 
     [Fact]
     public void Assignment()
     {
-        var source = @"int main() { a = 12; }";
+        var source = @"i16 main() { a = 12; }";
         AssertParse(source);
     }
 
@@ -30,10 +30,10 @@ public class ParserTests
     public void Declaration()
     {
         var source = """
-                     int main() 
+                     i16 main() 
                      { 
-                        int a = 1;
-                        int b = 2;                         
+                        i16 a = 1;
+                        i16 b = 2;                         
                      }
                      """;
         AssertParse(source);
@@ -42,126 +42,126 @@ public class ParserTests
     [Fact]
     public void Multiple_lines()
     {
-        var source = @"int main() { int b = 13; int a = 1; }";
+        var source = @"i16 main() { i16 b = 13; i16 a = 1; }";
         AssertParse(source);
     }
 
     [Fact]
     public void More_than_one_function()
     {
-        var source = @"int main() { } int another() { }";
+        var source = @"i16 main() { } void another() { }";
         AssertParse(source);
     }
 
     [Fact]
     public void Function_with_arguments()
     {
-        var source = @"int main(int a, int b) { }";
+        var source = @"i16 main(i16 a, i16 b) { }";
         AssertParse(source);
     }
 
     [Fact]
     public void Arithmetic_addition()
     {
-        var source = @"int main() { a = b + c; }";
+        var source = @"i16 main() { a = b + c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Arithmetic_mult()
     {
-        var source = @"int main() { a = b * c; }";
+        var source = @"i16 main() { a = b * c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Equality()
     {
-        var source = @"int main() { a = b == c; }";
+        var source = @"i16 main() { a = b == c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Inequality()
     {
-        var source = @"int main() { a = b != c; }";
+        var source = @"i16 main() { a = b != c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Greater_than()
     {
-        var source = @"int main() { a = b > c; }";
+        var source = @"i16 main() { a = b > c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Less_than()
     {
-        var source = @"int main() { a = b < c; }";
+        var source = @"i16 main() { a = b < c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Less_than_or_equal()
     {
-        var source = @"int main() { a = b <= c; }";
+        var source = @"i16 main() { a = b <= c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void Greater_than_or_equal()
     {
-        var source = @"int main() { a = b >= c; }";
+        var source = @"i16 main() { a = b >= c; }";
         AssertParse(source);
     }
     
     [Fact]
     public void True()
     {
-        var source = @"int main() { a = true; }";
+        var source = @"i16 main() { a = true; }";
         AssertParse(source);
     }
     
     [Fact]
     public void False()
     {
-        var source = @"int main() { a = false; }";
+        var source = @"i16 main() { a = false; }";
         AssertParse(source);
     }
 
     [Fact]
     public void Empty_return()
     {
-        var source = @"int main() { return; }";
+        var source = @"i16 main() { return; }";
         AssertParse(source);
     }
 
     [Fact]
     public void If_statement_without_else()
     {
-        var source = @"int main() { if (a > b) { return a; }}";
+        var source = @"i16 main() { if (a > b) { return a; }}";
         AssertParse(source);
     }
     
     [Fact]
     public void If_statement_with_else()
     {
-        var source = @"int main() { if (a > b) { return a; } else { return b; } }";
+        var source = @"i16 main() { if (a > b) { return a; } else { return b; } }";
         AssertParse(source);
     }
     
     [Fact]
     public void Parenthesis_are_OK()
     {
-        var source = @"int main() { a = 2*(3+2); }";
+        var source = @"i16 main() { a = 2*(3+2); }";
         AssertParse(source);
     }
     
     [Fact]
     public void Call()
     {
-        var source = @"int main() { Func(13); }";
+        var source = @"i16 main() { Func(13); }";
         AssertParse(source);
     }
     

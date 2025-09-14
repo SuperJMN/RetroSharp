@@ -23,7 +23,7 @@
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\RetroSharp.Parser.Antlr4.v2\RetroSharp.Parser.csproj" />
+    <ProjectReference Include="..\RetroSharp.Parser\RetroSharp.Parser.csproj" />
     <ProjectReference Include="..\RetroSharp.SemanticAnalysis\RetroSharp.SemanticAnalysis.csproj" />
     <ProjectReference Include="..\RetroSharp.Generation.Intermediate\RetroSharp.Generation.Intermediate.csproj" />
     <ProjectReference Include="..\RetroSharp.Z80\RetroSharp.Z80.csproj" />

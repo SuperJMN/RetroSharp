@@ -31,7 +31,7 @@ Repository layout
 - libs/: Git submodules and third-party code used by the solution
 
 High-level architecture
-The solution is structured as a classic compiler pipeline with clear stage separation and an additional VM and backend for Z80.
+The solution is structured as a classic compiler pipeline with clear stage separation and a backend for Z80.
 
 - Frontend (Parsing)
   - RetroSharp.Parser.Antlr4.v2: Antlr4-based parser. The grammar (RetroSharp.g4) is processed via Antlr4BuildTasks at build time to generate lexer/parser code. A small Program.cs is included for quick parsing experiments.
@@ -63,4 +63,11 @@ Development notes
 - Grammar changes: Building RetroSharp.Parser.Antlr4.v2 will regenerate parser sources via Antlr4BuildTasks. A full solution build will handle this automatically; you can also build that project directly if iterating on the grammar.
 - Project targets: All projects target net8.0 with nullable and implicit usings enabled.
 - Test framework: xUnit across test projects (RetroSharp.*.Tests). Prefer running tests per project when iterating quickly.
+
+Language design decisions (summary)
+- Canonical primitive types: i8, u8, i16, u16, bool and ptr<T> (16-bit). Aliases like byte/sbyte/short/ushort may be accepted by the frontend but always lower to canonical types. int/long are rejected on 8-bit targets with a friendly diagnostic.
+- Struct field access: Always use '.' both for value and pointer cases. A single implicit dereference is allowed in semantics so that p: ptr<S> can use p.x as shorthand for (*p).x. More than one level of indirection requires explicit '*'. Offsets are computed at compile time; codegen emits base+offset loads/stores.
+- Rationale: These choices make cost and ABI explicit, map directly to 8/16-bit registers, and keep code predictable for constrained hardware while remaining familiar to C# users.
+
+See docs/RetroSharp.Language.md for the full specification and examples.
 

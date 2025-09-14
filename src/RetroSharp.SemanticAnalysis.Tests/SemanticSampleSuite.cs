@@ -9,13 +9,16 @@ namespace RetroSharp.SemanticAnalysis.Tests;
 
 public class SemanticSampleSuite
 {
-    public static IEnumerable<object[]> Cases()
-        => Directory.EnumerateFiles("Samples", "*.c", SearchOption.AllDirectories)
-                     .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}scopes{Path.DirectorySeparatorChar}"))
-                     .OrderBy(p => p)
-                     .Select(p => new object[] { p });
+public static IEnumerable<object[]> Cases()
+        {
+            var projectSamples = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Samples"));
+            return Directory.EnumerateFiles(projectSamples, "*.c", SearchOption.AllDirectories)
+                .Where(p => !p.Contains($"{Path.DirectorySeparatorChar}scopes{Path.DirectorySeparatorChar}"))
+                .OrderBy(p => p)
+                .Select(p => new object[] { p });
+        }
 
-    [Theory]
+[Theory]
     [MemberData(nameof(Cases))]
     public async Task Golden_samples(string path)
     {
@@ -26,8 +29,8 @@ public class SemanticSampleSuite
 
         var name = Path.GetFileNameWithoutExtension(path);
         var dir = Path.GetDirectoryName(path)!;
-        await Verifier.Verify(text)
+await Verifier.Verify(text)
             .UseDirectory(dir)
-            .UseMethodName(name);
+            .UseMethodName($"SemanticSampleSuite.{name}");
     }
 }

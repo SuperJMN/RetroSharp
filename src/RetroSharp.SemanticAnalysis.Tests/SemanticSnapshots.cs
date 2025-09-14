@@ -9,7 +9,7 @@ public class SemanticSnapshots
     [Fact]
     public async Task Basic_declaration_and_assignment()
     {
-        var src = "void main(){ int a; a = 1; }";
+        var src = "void main(){ i16 a; a = 1; }";
         var analyzed = SemanticTestDriver.Analyze(src);
         Assert.True(analyzed.IsSuccess, analyzed.IsFailure ? analyzed.Error : "");
         var text = SemanticSnapshotPrinter.Print(analyzed.Value);
@@ -29,7 +29,7 @@ public class SemanticSnapshots
     [Fact]
     public async Task Addition_and_multiplication_precedence()
     {
-        var src = "void main(){ int a; int b; int c; int d; a = b + c * d; }";
+        var src = "void main(){ i16 a; i16 b; i16 c; i16 d; a = b + c * d; }";
         var analyzed = SemanticTestDriver.Analyze(src);
         Assert.True(analyzed.IsSuccess, analyzed.IsFailure ? analyzed.Error : "");
         var text = SemanticSnapshotPrinter.Print(analyzed.Value);
@@ -39,7 +39,7 @@ public class SemanticSnapshots
     [Fact]
     public async Task Parentheses_enforced_on_lower_precedence()
     {
-        var src = "void main(){ int a; int b; int c; int d; a = (b + c) * d; }";
+        var src = "void main(){ i16 a; i16 b; i16 c; i16 d; a = (b + c) * d; }";
         var analyzed = SemanticTestDriver.Analyze(src);
         Assert.True(analyzed.IsSuccess, analyzed.IsFailure ? analyzed.Error : "");
         var text = SemanticSnapshotPrinter.Print(analyzed.Value);
@@ -49,7 +49,7 @@ public class SemanticSnapshots
     [Fact]
     public async Task Symbol_usage_statement_visibility()
     {
-        var src = "void main(){ int a; a; }";
+        var src = "void main(){ i16 a; a; }";
         var analyzed = SemanticTestDriver.Analyze(src);
         Assert.True(analyzed.IsSuccess, analyzed.IsFailure ? analyzed.Error : "");
         var text = SemanticSnapshotPrinter.Print(analyzed.Value);
@@ -59,7 +59,7 @@ public class SemanticSnapshots
     [Fact]
     public async Task Unknowns_in_binary_report_two_diagnostics()
     {
-        var src = "void main(){ int c; c = a + b; }";
+        var src = "void main(){ i16 c; c = a + b; }";
         var analyzed = SemanticTestDriver.Analyze(src);
         Assert.True(analyzed.IsSuccess, analyzed.IsFailure ? analyzed.Error : "");
         var text = SemanticSnapshotPrinter.Print(analyzed.Value);
@@ -69,7 +69,7 @@ public class SemanticSnapshots
     [Fact]
     public async Task Redeclaration_reports_error()
     {
-        var src = "void main(){ int a; int a; }";
+        var src = "void main(){ i16 a; i16 a; }";
         var analyzed = SemanticTestDriver.Analyze(src);
         Assert.True(analyzed.IsSuccess, analyzed.IsFailure ? analyzed.Error : "");
         var text = SemanticSnapshotPrinter.Print(analyzed.Value);
