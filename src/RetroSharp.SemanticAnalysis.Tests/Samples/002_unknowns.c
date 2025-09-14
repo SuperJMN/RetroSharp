@@ -1,1 +1,1 @@
-void main(){ x; y = 1; }
+i16 main(){ x; y = 1; }

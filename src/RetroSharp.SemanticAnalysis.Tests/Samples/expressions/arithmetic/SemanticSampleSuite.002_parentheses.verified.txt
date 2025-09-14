@@ -1,8 +1,8 @@
-﻿void main()
+﻿i16 main()
 {
-	int a;
-	int b;
-	int c;
-	int d;
+	i16 a;
+	i16 b;
+	i16 c;
+	i16 d;
 	a=(b+c)*d;
 }

@@ -1,1 +1,1 @@
-void main(){ b = a; }
+i16 main(){ b = a; }

@@ -41,7 +41,7 @@ public class SemanticAnalyzer
 
         var analyzeBlockResult = AnalyzeBlock(function.Block, functionScope);
         var paramNames = function.Parameters.Select(p => p.Name).ToList();
-        var node = new FunctionNode(function.Name, analyzeBlockResult.Node, paramNames)
+        var node = new FunctionNode(function.Type, function.Name, analyzeBlockResult.Node, paramNames)
         {
             Errors = errors
         };

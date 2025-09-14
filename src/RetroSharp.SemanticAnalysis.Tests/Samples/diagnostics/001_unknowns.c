@@ -1,1 +1,1 @@
-void main(){ int c; c = a + b; }
+i16 main(){ i16 c; c = a + b; }

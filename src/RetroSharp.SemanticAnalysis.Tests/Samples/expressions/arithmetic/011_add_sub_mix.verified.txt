@@ -1,8 +1,8 @@
-void main()
+i16 main()
 {
-	int a;
-	int b;
-	int c;
+	i16 a;
+	i16 b;
+	i16 c;
 	a=b-c+b;
 }
 
