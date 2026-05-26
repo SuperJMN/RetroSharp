@@ -25,6 +25,7 @@ Static setup calls:
 - `video_init()`
 - `palette_set(index, color)`
 - `object_palette_set(index, color)`
+- `sprite_asset(name, path[, frameWidth, frameHeight])`
 - `map_column(index, tile0, tile1, ...)`
 - `tilemap_set(x, y, tile)`
 - `tilemap_fill(x, y, width, height, tile)`
@@ -35,6 +36,7 @@ Runtime calls:
 - `video_wait_vblank()`
 - `scroll_set(x, y)`
 - `sprite_set(id, x, y, tile, flags)`
+- `sprite_draw(name, x, y, frame)`
 - `tilemap_fill_column(column, y, height, tile)`
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
 
@@ -43,6 +45,35 @@ Runtime calls:
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
 `map_column(index, ...)` defines a source-level map column. The compiler stores map rows in ROM tables. `map_stream_column(targetColumn, sourceColumn, y, height)` reads one source column from those ROM tables and writes it into the circular Game Boy background map at runtime.
+
+`sprite_asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`.
+
+For example, a two-frame 16x16 runner can be referenced as:
+
+```c
+sprite_asset(player_run, "assets/player-run.gb.png", 16, 16);
+```
+
+In Aseprite, edit the PNG at 1x, keep the transparent background, and use a 16x16 grid for the current runner sample. To add more frames, grow the canvas horizontally by another frame width.
+
+`sprite_asset(name, path)` is still supported for the experimental JSON asset format. That format uses a `platforms.gb.frames` array. Each frame is a list of rows, and each character is a Game Boy color index from `0` to `3`.
+
+```json
+{
+  "platforms": {
+    "gb": {
+      "frames": [
+        [
+          "0022222022200000",
+          "0222222222220000"
+        ]
+      ]
+    }
+  }
+}
+```
+
+`sprite_draw(name, x, y, frame)` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Game Boy sprite asset dimensions must currently be multiples of 8x16, so sizes like 8x16, 16x16, 16x32, and 24x32 are valid.
 
 ## Short-Term Checklist
 
@@ -53,7 +84,8 @@ Runtime calls:
 - [x] Build a runner sample with a fixed actor and scrolling background.
 - [x] Stream new background columns every 8 pixels.
 - [x] Represent maps as source data instead of ad hoc `tilemap_set` calls.
+- [x] Load an editable logical sprite asset and lower it to Game Boy metasprites.
 - [ ] Add collision against a simple tile row.
 - [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
 
-The next meaningful milestone is collision against a simple tile row. The runner sample can now stream source-level map columns, but the actor still has no gameplay interaction with those tiles.
+The next meaningful milestone is collision against a simple tile row. The runner sample can now stream source-level map columns and draw a logical sprite from an external asset, but the actor still has no gameplay interaction with those tiles.

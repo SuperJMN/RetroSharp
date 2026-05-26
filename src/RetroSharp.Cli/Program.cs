@@ -200,7 +200,7 @@ if (options.Target is "gb" or "gameboy")
     try
     {
         var source = ReadInputFile(path);
-        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source);
+        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(Path.GetFullPath(path)));
         var outputPath = options.OutputPath ?? Path.ChangeExtension(path, ".gb");
         File.WriteAllBytes(outputPath, rom);
         Console.Error.WriteLine($"Wrote Game Boy ROM: {outputPath}");

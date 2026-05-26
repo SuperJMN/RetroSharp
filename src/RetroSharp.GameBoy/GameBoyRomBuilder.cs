@@ -38,6 +38,7 @@ internal static class GameBoyRomBuilder
     private static GbBuilder BuildProgram(GameBoyVideoProgram program)
     {
         var builder = new GbBuilder();
+        var tileData = BuildTileData(program);
 
         builder.Emit(0xF3);                         // DI
         builder.Emit(0x31, 0xFE, 0xFF);             // LD SP,$FFFE
@@ -58,7 +59,7 @@ internal static class GameBoyRomBuilder
 
         builder.LoadHl(0x8000);
         builder.LoadDe("tile_data");
-        builder.LoadBc((ushort)BuildTileData().Length);
+        builder.LoadBc((ushort)tileData.Length);
         EmitCopyLoop(builder, "copy_tiles");
 
         builder.LoadHl(0x9800);
@@ -77,7 +78,7 @@ internal static class GameBoyRomBuilder
         builder.JumpRelative(0x18, "forever");     // JR forever
 
         builder.Label("tile_data");
-        builder.Emit(BuildTileData());
+        builder.Emit(tileData);
         builder.Label("tilemap");
         builder.Emit(program.TileMap);
         EmitMapData(builder, program);
@@ -108,10 +109,15 @@ internal static class GameBoyRomBuilder
 
     internal static void EmitWaitVBlank(GbBuilder builder, string label)
     {
-        builder.Label(label);
+        builder.Label($"{label}_wait_visible");
         builder.Emit(0xF0, 0x44);                   // LDH A,($44)
         builder.Emit(0xFE, 0x90);                   // CP $90
-        builder.JumpRelative(0x38, label);          // JR C,label
+        builder.JumpRelative(0x30, $"{label}_wait_visible"); // JR NC,label
+
+        builder.Label($"{label}_wait_vblank");
+        builder.Emit(0xF0, 0x44);                   // LDH A,($44)
+        builder.Emit(0xFE, 0x90);                   // CP $90
+        builder.JumpRelative(0x38, $"{label}_wait_vblank"); // JR C,label
     }
 
     private static void EmitCopyLoop(GbBuilder builder, string label)
@@ -139,16 +145,20 @@ internal static class GameBoyRomBuilder
         builder.JumpRelative(0x20, "clear_oam");   // JR NZ,clear_oam
     }
 
-    private static byte[] BuildTileData()
+    private static byte[] BuildTileData(GameBoyVideoProgram program)
     {
-        var tiles = new byte[14 * 16];
+        var tiles = new byte[(GameBoyVideoProgram.FirstSpriteTile + program.SpriteTileCount) * 16];
         WriteSolidTile(tiles, 1, 1);
         WriteSolidTile(tiles, 2, 2);
         WriteSolidTile(tiles, 3, 3);
         WriteCheckerTile(tiles, 4, 1, 2);
         WriteFrameTile(tiles, 5, 3);
-        WriteRunnerFrameA(tiles);
-        WriteRunnerFrameB(tiles);
+
+        foreach (var asset in program.SpriteAssetsInLoadOrder)
+        {
+            asset.TileData.CopyTo(tiles, asset.FirstTile * 16);
+        }
+
         return tiles;
     }
 
@@ -183,84 +193,6 @@ internal static class GameBoyRomBuilder
                 WriteTileRow(tiles, tile, row, color, 0, 0, 0, 0, 0, 0, color);
             }
         }
-    }
-
-    private static void WriteRunnerFrameA(byte[] tiles)
-    {
-        WriteTileRow(tiles, 6, 0, 0, 0, 2, 2, 2, 2, 2, 0);
-        WriteTileRow(tiles, 6, 1, 0, 2, 2, 2, 2, 2, 2, 2);
-        WriteTileRow(tiles, 6, 2, 0, 0, 1, 1, 1, 3, 0, 0);
-        WriteTileRow(tiles, 6, 3, 0, 1, 3, 1, 1, 1, 0, 0);
-        WriteTileRow(tiles, 6, 4, 0, 1, 1, 1, 1, 0, 0, 0);
-        WriteTileRow(tiles, 6, 5, 0, 0, 3, 3, 3, 0, 0, 0);
-        WriteTileRow(tiles, 6, 6, 0, 0, 2, 2, 2, 2, 0, 0);
-        WriteTileRow(tiles, 6, 7, 0, 2, 2, 2, 2, 2, 2, 0);
-
-        WriteTileRow(tiles, 7, 0, 0, 0, 2, 2, 2, 0, 0, 0);
-        WriteTileRow(tiles, 7, 1, 0, 0, 3, 3, 3, 0, 0, 0);
-        WriteTileRow(tiles, 7, 2, 0, 3, 3, 3, 3, 0, 0, 0);
-        WriteTileRow(tiles, 7, 3, 0, 0, 1, 0, 1, 0, 0, 0);
-        WriteTileRow(tiles, 7, 4, 0, 1, 0, 0, 1, 0, 0, 0);
-        WriteTileRow(tiles, 7, 5, 1, 1, 0, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 7, 6, 1, 0, 0, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 7, 7, 2, 2, 0, 0, 0, 0, 0, 0);
-
-        WriteTileRow(tiles, 8, 0, 2, 2, 2, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 8, 1, 2, 2, 2, 2, 0, 0, 0, 0);
-        WriteTileRow(tiles, 8, 2, 0, 0, 1, 1, 1, 0, 0, 0);
-        WriteTileRow(tiles, 8, 3, 0, 1, 1, 3, 1, 0, 0, 0);
-        WriteTileRow(tiles, 8, 4, 0, 1, 1, 1, 0, 0, 0, 0);
-        WriteTileRow(tiles, 8, 5, 0, 3, 3, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 8, 6, 0, 0, 2, 2, 0, 0, 0, 0);
-        WriteTileRow(tiles, 8, 7, 0, 2, 2, 2, 2, 0, 0, 0);
-
-        WriteTileRow(tiles, 9, 0, 2, 2, 2, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 9, 1, 3, 3, 3, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 9, 2, 3, 3, 3, 3, 0, 0, 0, 0);
-        WriteTileRow(tiles, 9, 3, 1, 0, 0, 1, 0, 0, 0, 0);
-        WriteTileRow(tiles, 9, 4, 0, 1, 0, 0, 1, 0, 0, 0);
-        WriteTileRow(tiles, 9, 5, 0, 0, 1, 1, 0, 0, 0, 0);
-        WriteTileRow(tiles, 9, 6, 0, 0, 0, 1, 0, 0, 0, 0);
-        WriteTileRow(tiles, 9, 7, 0, 0, 0, 2, 2, 0, 0, 0);
-    }
-
-    private static void WriteRunnerFrameB(byte[] tiles)
-    {
-        WriteTileRow(tiles, 10, 0, 0, 0, 2, 2, 2, 2, 2, 0);
-        WriteTileRow(tiles, 10, 1, 0, 2, 2, 2, 2, 2, 2, 2);
-        WriteTileRow(tiles, 10, 2, 0, 0, 1, 1, 1, 3, 0, 0);
-        WriteTileRow(tiles, 10, 3, 0, 1, 3, 1, 1, 1, 0, 0);
-        WriteTileRow(tiles, 10, 4, 0, 1, 1, 1, 1, 0, 0, 0);
-        WriteTileRow(tiles, 10, 5, 0, 0, 3, 3, 3, 0, 0, 0);
-        WriteTileRow(tiles, 10, 6, 0, 0, 2, 2, 2, 2, 0, 0);
-        WriteTileRow(tiles, 10, 7, 0, 2, 2, 2, 2, 2, 2, 0);
-
-        WriteTileRow(tiles, 11, 0, 0, 0, 2, 2, 2, 0, 0, 0);
-        WriteTileRow(tiles, 11, 1, 0, 0, 3, 3, 3, 0, 0, 0);
-        WriteTileRow(tiles, 11, 2, 0, 3, 3, 3, 3, 0, 0, 0);
-        WriteTileRow(tiles, 11, 3, 0, 1, 0, 0, 1, 0, 0, 0);
-        WriteTileRow(tiles, 11, 4, 1, 0, 0, 0, 0, 1, 0, 0);
-        WriteTileRow(tiles, 11, 5, 0, 0, 0, 0, 0, 1, 1, 0);
-        WriteTileRow(tiles, 11, 6, 0, 0, 0, 0, 0, 0, 1, 0);
-        WriteTileRow(tiles, 11, 7, 0, 0, 0, 0, 0, 2, 2, 0);
-
-        WriteTileRow(tiles, 12, 0, 2, 2, 2, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 12, 1, 2, 2, 2, 2, 0, 0, 0, 0);
-        WriteTileRow(tiles, 12, 2, 0, 0, 1, 1, 1, 0, 0, 0);
-        WriteTileRow(tiles, 12, 3, 0, 1, 1, 3, 1, 0, 0, 0);
-        WriteTileRow(tiles, 12, 4, 0, 1, 1, 1, 0, 0, 0, 0);
-        WriteTileRow(tiles, 12, 5, 0, 3, 3, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 12, 6, 0, 0, 2, 2, 0, 0, 0, 0);
-        WriteTileRow(tiles, 12, 7, 0, 2, 2, 2, 2, 0, 0, 0);
-
-        WriteTileRow(tiles, 13, 0, 2, 2, 2, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 13, 1, 3, 3, 3, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 13, 2, 3, 3, 3, 3, 0, 0, 0, 0);
-        WriteTileRow(tiles, 13, 3, 1, 0, 0, 1, 0, 0, 0, 0);
-        WriteTileRow(tiles, 13, 4, 0, 0, 1, 0, 0, 1, 0, 0);
-        WriteTileRow(tiles, 13, 5, 0, 1, 1, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 13, 6, 0, 1, 0, 0, 0, 0, 0, 0);
-        WriteTileRow(tiles, 13, 7, 2, 2, 0, 0, 0, 0, 0, 0);
     }
 
     private static void WriteTileRow(byte[] tiles, int tile, int row, params int[] colors)
@@ -331,6 +263,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly Dictionary<string, ushort> variables = [];
+    private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
 
     public GameBoyRuntimeCompiler(GbBuilder builder, GameBoyVideoProgram program)
@@ -445,6 +378,7 @@ internal sealed class GameBoyRuntimeCompiler
             case "tilemap_set":
             case "tilemap_fill":
             case "map_column":
+            case "sprite_asset":
                 break;
             case "tilemap_fill_column":
                 EmitTilemapFillColumn(call);
@@ -459,11 +393,69 @@ internal sealed class GameBoyRuntimeCompiler
             case "sprite_set":
                 EmitSpriteSet(call);
                 break;
+            case "sprite_draw":
+                EmitSpriteDraw(call);
+                break;
             case "scroll_set":
                 EmitScrollSet(call);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy video API call '{call.Name}'.");
+        }
+    }
+
+    private void EmitSpriteDraw(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 4);
+        var args = call.Parameters.ToList();
+        var assetName = GameBoyVideoProgram.IdentifierArg(args[0], "sprite_draw argument 1");
+        if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{assetName}'. Declare it with sprite_asset(...).");
+        }
+
+        var firstHardwareSprite = nextHardwareSprite;
+        if (firstHardwareSprite + asset.Pieces.Count > 40)
+        {
+            throw new InvalidOperationException("Game Boy sprite_draw calls exceed the 40 hardware sprite OAM limit.");
+        }
+
+        nextHardwareSprite += asset.Pieces.Count;
+        for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
+        {
+            var piece = asset.Pieces[pieceIndex];
+            var oamAddress = (ushort)(0xFE00 + (firstHardwareSprite + pieceIndex) * 4);
+
+            EmitExpressionToA(args[2]);
+            builder.AddAImmediate(16 + piece.YOffset);
+            builder.StoreA(oamAddress);
+
+            EmitExpressionToA(args[1]);
+            builder.AddAImmediate(8 + piece.XOffset);
+            builder.StoreA((ushort)(oamAddress + 1));
+
+            EmitExpressionToA(args[3]);
+            EmitMultiplyAByConstant(asset.TilesPerFrame);
+            builder.AddAImmediate(asset.FirstTile + piece.TileOffset);
+            builder.StoreA((ushort)(oamAddress + 2));
+
+            builder.LoadAImmediate(0);
+            builder.StoreA((ushort)(oamAddress + 3));
+        }
+    }
+
+    private void EmitMultiplyAByConstant(int factor)
+    {
+        if (factor == 1)
+        {
+            return;
+        }
+
+        builder.LoadBFromA();
+        builder.XorA();
+        for (var i = 0; i < factor; i++)
+        {
+            builder.AddAFromB();
         }
     }
 
@@ -761,6 +753,11 @@ internal sealed class GbBuilder
         Emit(0x3E, (byte)value);
     }
 
+    public void XorA()
+    {
+        Emit(0xAF);
+    }
+
     public void LoadA(ushort address)
     {
         Emit(0xFA, (byte)(address & 0xFF), (byte)(address >> 8));
@@ -784,6 +781,11 @@ internal sealed class GbBuilder
     public void LoadAFromB()
     {
         Emit(0x78);
+    }
+
+    public void AddAFromB()
+    {
+        Emit(0x80);
     }
 
     public void LoadLFromA()

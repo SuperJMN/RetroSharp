@@ -1,5 +1,7 @@
 namespace RetroSharp.GameBoy.Tests;
 
+using System.Buffers.Binary;
+using System.IO.Compression;
 using RetroSharp.GameBoy;
 using Xunit;
 
@@ -70,6 +72,117 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(
+                    8,
+                    16,
+                    "01230123",
+                    "32103210")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player_run, "player.sprite.json");
+                                  sprite_draw(player_run, 72, 80, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x55, 0x33, 0xAA, 0xCC]), "ROM should contain tile data loaded from the editable sprite asset.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "sprite_draw should write the logical Y plus the Game Boy sprite offset.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]), "sprite_draw should write the logical X plus the Game Boy sprite offset.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should use the first generated tile for the first hardware sprite.");
+    }
+
+    [Fact]
+    public void Sprite_draw_composes_16x32_assets_from_four_hardware_sprites()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(big_player, "player.sprite.json");
+                                  sprite_draw(big_player, 72, 64, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "Top-left piece should use the logical Y coordinate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x05, 0xFE]), "Top-right piece should add the 8 px X offset.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x20, 0xEA, 0x08, 0xFE]), "Bottom-left piece should add the 16 px Y offset.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xFE]), "Bottom-right piece should use the fourth generated 8x16 tile pair.");
+    }
+
+    [Fact]
+    public void Sprite_draw_treats_frame_as_a_logical_frame_index()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(8, 16, "01230123"),
+                Rows(8, 16, "32103210")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player_run, "player.sprite.json");
+                                  i16 frame = 1;
+                                  sprite_draw(player_run, 72, 80, frame);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should multiply the logical frame by the per-frame tile count.");
+    }
+
+    [Fact]
+    public void Compiles_png_sprite_sheet_to_a_game_boy_metasprite()
+    {
+        var baseDirectory = WriteSpritePng(
+            "player-run.gb.png",
+            16,
+            16,
+            Rows(
+                16,
+                16,
+                "0231000000000000",
+                "3210321000000000"),
+            Rows(
+                16,
+                16,
+                "3210321000000000",
+                "0123012300000000"));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player_run, "player-run.gb.png", 16, 16);
+                                  i16 frame = 1;
+                                  sprite_draw(player_run, 72, 80, frame);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x30, 0x60, 0xAA, 0xCC]), "ROM should contain tile data decoded from the PNG sprite sheet with stable palette indexes.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should use the PNG logical frame index.");
+    }
+
+    [Fact]
     public void Compiles_scroll_set_to_game_boy_scroll_register_writes()
     {
         const string source = """
@@ -89,6 +202,26 @@ public class GameBoyRomCompilerTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE0, 0x43]), "ROM should load camera from WRAM and write it to SCX.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xE0, 0x42]), "ROM should write the constant Y scroll to SCY.");
+    }
+
+    [Fact]
+    public void Video_wait_vblank_waits_for_the_next_vblank_edge()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  while (true) {
+                                      video_wait_vblank();
+                                      scroll_set(1, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30]), "ROM should first wait until the previous VBlank has ended.");
+        Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38]), "ROM should then wait until the next VBlank begins.");
     }
 
     [Fact]
@@ -234,6 +367,154 @@ public class GameBoyRomCompilerTests
         }
 
         return (byte)checksum;
+    }
+
+    private static string WriteSpriteAsset(string fileName, string json)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, fileName), json);
+        return directory;
+    }
+
+    private static string WriteSpritePng(string fileName, int frameWidth, int frameHeight, params string[][] frames)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        var width = frameWidth * frames.Length;
+        var height = frameHeight;
+        var rgba = new byte[width * height * 4];
+        var palette = new[]
+        {
+            (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+            (R: (byte)0xE0, G: (byte)0xF8, B: (byte)0xD0, A: (byte)0xFF),
+            (R: (byte)0x88, G: (byte)0xC0, B: (byte)0x70, A: (byte)0xFF),
+            (R: (byte)0x34, G: (byte)0x68, B: (byte)0x56, A: (byte)0xFF),
+        };
+
+        for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
+        {
+            var frame = frames[frameIndex];
+            for (var y = 0; y < frameHeight; y++)
+            {
+                for (var x = 0; x < frameWidth; x++)
+                {
+                    var color = palette[frame[y][x] - '0'];
+                    var targetX = frameIndex * frameWidth + x;
+                    var offset = (y * width + targetX) * 4;
+                    rgba[offset] = color.R;
+                    rgba[offset + 1] = color.G;
+                    rgba[offset + 2] = color.B;
+                    rgba[offset + 3] = color.A;
+                }
+            }
+        }
+
+        File.WriteAllBytes(Path.Combine(directory, fileName), EncodeRgbaPng(width, height, rgba));
+        return directory;
+    }
+
+    private static string SpriteJson(params string[][] frames)
+    {
+        var frameJson = string.Join(
+            ",",
+            frames.Select(frame => "[" + string.Join(",", frame.Select(row => $"\"{row}\"")) + "]"));
+
+        return $$"""
+                 {
+                   "platforms": {
+                     "gb": {
+                       "frames": [{{frameJson}}]
+                     }
+                   }
+                 }
+                 """;
+    }
+
+    private static string[] Rows(int width, int height, params string[] overrides)
+    {
+        var rows = Enumerable.Repeat(new string('0', width), height).ToArray();
+        for (var i = 0; i < overrides.Length; i++)
+        {
+            rows[i] = overrides[i];
+        }
+
+        return rows;
+    }
+
+    private static byte[] EncodeRgbaPng(int width, int height, byte[] rgba)
+    {
+        using var output = new MemoryStream();
+        output.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        Span<byte> ihdr = stackalloc byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(ihdr[0..4], width);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr[4..8], height);
+        ihdr[8] = 8;
+        ihdr[9] = 6;
+        WritePngChunk(output, "IHDR", ihdr);
+
+        using var raw = new MemoryStream();
+        for (var y = 0; y < height; y++)
+        {
+            raw.WriteByte(0);
+            raw.Write(rgba, y * width * 4, width * 4);
+        }
+
+        using var compressed = new MemoryStream();
+        using (var zlib = new ZLibStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            raw.Position = 0;
+            raw.CopyTo(zlib);
+        }
+
+        WritePngChunk(output, "IDAT", compressed.ToArray());
+        WritePngChunk(output, "IEND", []);
+        return output.ToArray();
+    }
+
+    private static void WritePngChunk(Stream output, string type, ReadOnlySpan<byte> data)
+    {
+        Span<byte> length = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32BigEndian(length, data.Length);
+        output.Write(length);
+
+        var typeBytes = System.Text.Encoding.ASCII.GetBytes(type);
+        output.Write(typeBytes);
+        output.Write(data);
+
+        var crc = Crc32(typeBytes, data);
+        Span<byte> crcBytes = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc);
+        output.Write(crcBytes);
+    }
+
+    private static uint Crc32(ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
+    {
+        var crc = 0xFFFFFFFFu;
+        foreach (var value in type)
+        {
+            crc = UpdateCrc32(crc, value);
+        }
+
+        foreach (var value in data)
+        {
+            crc = UpdateCrc32(crc, value);
+        }
+
+        return crc ^ 0xFFFFFFFFu;
+    }
+
+    private static uint UpdateCrc32(uint crc, byte value)
+    {
+        crc ^= value;
+        for (var i = 0; i < 8; i++)
+        {
+            crc = (crc & 1) == 0 ? crc >> 1 : 0xEDB88320u ^ (crc >> 1);
+        }
+
+        return crc;
     }
 
     private static bool ContainsSequence(byte[] bytes, byte[] sequence)

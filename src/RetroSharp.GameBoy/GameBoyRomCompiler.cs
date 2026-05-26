@@ -1,11 +1,12 @@
 using System.Globalization;
+using System.Text.Json;
 using RetroSharp.Parser;
 
 namespace RetroSharp.GameBoy;
 
 public static class GameBoyRomCompiler
 {
-    public static byte[] CompileSource(string source)
+    public static byte[] CompileSource(string source, string? baseDirectory = null)
     {
         var parse = new SomeParser().Parse(source);
         if (parse.IsFailure)
@@ -13,13 +14,21 @@ public static class GameBoyRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        var videoProgram = GameBoyVideoProgram.FromProgram(parse.Value);
+        var videoProgram = GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
         return GameBoyRomBuilder.Build(videoProgram);
     }
 }
 
 internal sealed class GameBoyVideoProgram
 {
+    public const int FirstSpriteTile = 6;
+
+    private readonly List<GameBoyCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
+    private readonly Dictionary<string, GameBoyCompiledSpriteAsset> spriteAssets = [];
+    private int nextSpriteTile = FirstSpriteTile;
+
+    private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
+
     public byte BackgroundPalette { get; private set; } = 0xE4;
 
     public byte ObjectPalette { get; private set; } = 0xE4;
@@ -30,15 +39,22 @@ internal sealed class GameBoyVideoProgram
 
     public int MapColumnHeight { get; private set; }
 
+    public IReadOnlyList<GameBoyCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
+
+    public IReadOnlyDictionary<string, GameBoyCompiledSpriteAsset> SpriteAssets => spriteAssets;
+
+    public int SpriteTileCount => nextSpriteTile - FirstSpriteTile;
+
     public required BlockSyntax MainBlock { get; init; }
 
-    public static GameBoyVideoProgram FromProgram(ProgramSyntax program)
+    public static GameBoyVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
                    ?? throw new InvalidOperationException("Game Boy target requires a main function.");
 
         var result = new GameBoyVideoProgram
         {
+            BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
             MainBlock = main.Block,
         };
 
@@ -81,8 +97,35 @@ internal sealed class GameBoyVideoProgram
                 case "map_column":
                     ApplyMapColumn(call);
                     break;
+                case "sprite_asset":
+                    ApplySpriteAsset(call);
+                    break;
             }
         }
+    }
+
+    private void ApplySpriteAsset(FunctionCall call)
+    {
+        var count = call.Parameters.Count();
+        if (count is not 2 and not 4)
+        {
+            throw new InvalidOperationException($"sprite_asset expects 2 or 4 arguments, got {count}.");
+        }
+
+        var name = IdentifierArg(call.Parameters.ElementAt(0), "sprite_asset argument 1");
+        if (spriteAssets.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Sprite asset '{name}' is already declared.");
+        }
+
+        var relativePath = StringArg(call, 1);
+        var path = ResolveAssetPath(relativePath);
+        var frameWidth = count == 4 ? ConstArg(call, 2, 1, 160) : (int?)null;
+        var frameHeight = count == 4 ? ConstArg(call, 3, 1, 160) : (int?)null;
+        var asset = GameBoySpriteAssetCompiler.CompileFromFile(name, path, nextSpriteTile, frameWidth, frameHeight);
+        nextSpriteTile += asset.TileCount;
+        spriteAssets.Add(name, asset);
+        spriteAssetsInLoadOrder.Add(asset);
     }
 
     private void ApplyMapColumn(FunctionCall call)
@@ -166,6 +209,40 @@ internal sealed class GameBoyVideoProgram
         return value;
     }
 
+    internal static string IdentifierArg(ExpressionSyntax expression, string context)
+    {
+        if (expression is not IdentifierSyntax identifier)
+        {
+            throw new InvalidOperationException($"{context} must be an identifier.");
+        }
+
+        return identifier.Identifier;
+    }
+
+    internal static string StringArg(FunctionCall call, int index)
+    {
+        var context = $"{call.Name} argument {index + 1}";
+        if (call.Parameters.ElementAt(index) is not ConstantSyntax constant)
+        {
+            throw new InvalidOperationException($"{context} must be a string literal.");
+        }
+
+        var text = Convert.ToString(constant.Value, CultureInfo.InvariantCulture);
+        if (text is null || !text.StartsWith('"'))
+        {
+            throw new InvalidOperationException($"{context} must be a string literal.");
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<string>(text) ?? throw new InvalidOperationException($"{context} must be a string literal.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"{context} must be a valid string literal.", ex);
+        }
+    }
+
     internal static int ConstValue(ExpressionSyntax expression, string context)
     {
         if (expression is not ConstantSyntax constant)
@@ -200,5 +277,11 @@ internal sealed class GameBoyVideoProgram
         }
 
         return value;
+    }
+
+    private string ResolveAssetPath(string path)
+    {
+        var resolved = Path.IsPathRooted(path) ? path : Path.Combine(BaseDirectory, path);
+        return Path.GetFullPath(resolved);
     }
 }

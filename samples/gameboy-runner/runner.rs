@@ -8,6 +8,7 @@ void main() {
     object_palette_set(1, 1);
     object_palette_set(2, 2);
     object_palette_set(3, 3);
+    sprite_asset(player_run, "assets/player-run.gb.png", 16, 16);
 
     tilemap_fill(0, 0, 32, 32, 0);
     tilemap_fill(0, 14, 32, 1, 5);
@@ -43,11 +44,10 @@ void main() {
     while (true) {
         video_wait_vblank();
         scroll_set(camera, 0);
-        sprite_set(0, 72, 80, 6 + frame, 0);
-        sprite_set(1, 80, 80, 8 + frame, 0);
+        sprite_draw(player_run, 72, 80, frame);
         camera = camera + 1;
         fine = fine + 1;
-        frame = frame + 4;
+        frame = frame + 1;
 
         if (fine == 8) {
             fine = 0;
@@ -64,7 +64,7 @@ void main() {
             }
         }
 
-        if (frame == 8) {
+        if (frame == 2) {
             frame = 0;
         }
     }
