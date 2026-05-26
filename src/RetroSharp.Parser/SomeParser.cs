@@ -117,11 +117,14 @@ public class SomeParser
     {
         var name = functionCall.IDENTIFIER().ToString()!;
         var arguments = functionCall.arguments()?.expression()?.Select(ParseExpression) ?? Enumerable.Empty<ExpressionSyntax>();
-        
+
         return new FunctionCall(name, arguments);
     }
 
-    private StatementSyntax ParseWhileLoop(WhileLoopContext whileLoop) => throw new NotImplementedException();
+    private StatementSyntax ParseWhileLoop(WhileLoopContext whileLoop)
+    {
+        return new WhileSyntax(ParseExpression(whileLoop.expression()), ParseBlock(whileLoop.block()));
+    }
 
     private StatementSyntax ParseConditional(ConditionalContext conditional)
     {
@@ -139,7 +142,7 @@ public class SomeParser
 
     private ExpressionSyntax ParseExpression(ExpressionContext expression)
     {
-        if (expression.assignment() is {} assignmentContext)
+        if (expression.assignment() is { } assignmentContext)
         {
             return ParseAssignment(assignmentContext);
         }
@@ -172,7 +175,7 @@ public class SomeParser
             var right = ParseConditionalEquality(conditionalAnd.equalityExpression());
             return new BinaryExpressionSyntax(left, right, Operator.Get("&&"));
         }
-        
+
         return ParseConditionalEquality(conditionalAndExpression.equalityExpression());
     }
 
@@ -184,7 +187,7 @@ public class SomeParser
             var right = ParseConditionalRelational(equalityExpression.relationalExpression());
             return new BinaryExpressionSyntax(left, right, Operator.Get(equalityExpression.children[1].GetText()));
         }
-        
+
         return ParseConditionalRelational(equalityExpression.relationalExpression());
     }
 
@@ -197,7 +200,7 @@ public class SomeParser
             var @operator = relationalExpression.children[1].GetText();
             return new BinaryExpressionSyntax(left, right, Operator.Get(@operator));
         }
-        
+
         return ParseShiftExpression(relationalExpression.shiftExpression());
     }
 
@@ -252,7 +255,7 @@ public class SomeParser
 
     private ExpressionSyntax ParseMultExpression(MulExpressionContext mulExpression)
     {
-        if (mulExpression.mulExpression() is {} multExpr)
+        if (mulExpression.mulExpression() is { } multExpr)
         {
             var left = ParseMultExpression(multExpr);
             var right = ParseUnary(mulExpression.unaryExpression());
@@ -261,7 +264,7 @@ public class SomeParser
             var op = Operator.Get(opText);
             return new BinaryExpressionSyntax(left, right, op);
         }
-        
+
         if (mulExpression.unaryExpression() is { } unary)
         {
             return ParseUnary(unary);
@@ -295,7 +298,7 @@ public class SomeParser
         {
             return new IdentifierSyntax(identifier.GetText());
         }
-        
+
         if (primary.functionCall() is { } functionCall)
         {
             return ParseFunctionCall(functionCall);
@@ -303,7 +306,7 @@ public class SomeParser
 
         if (primary.children[0].GetText() == "(")
         {
-            return ParseExpression((ExpressionContext) primary.children[1]);
+            return ParseExpression((ExpressionContext)primary.children[1]);
         }
         throw new NotImplementedException();
     }
@@ -313,7 +316,7 @@ internal class UnaryExpressionSyntax : ExpressionSyntax
 {
     public UnaryExpressionSyntax(ExpressionSyntax parseAtom)
     {
-        
+
     }
 
     public override void Accept(ISyntaxVisitor visitor)

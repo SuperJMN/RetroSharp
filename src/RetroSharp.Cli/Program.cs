@@ -26,13 +26,6 @@ void PrintDiagnostics(IEnumerable<string> diagnostics)
     PrintSection("Diagnostics:", text);
 }
 
-Result<string> Parse(string source)
-{
-    var parser = new RetroSharp.Parser.SomeParser();
-    var parsed = parser.Parse(source);
-    return parsed.Map(_ => source).MapError(err => err);
-}
-
 Result<RetroSharp.SemanticAnalysis.AnalyzeResult<RetroSharp.SemanticAnalysis.SemanticNode>> Analyze(string source)
 {
     var parser = new RetroSharp.Parser.SomeParser();
@@ -136,13 +129,95 @@ void PrintIR(RetroSharp.Generation.Intermediate.Model.IntermediateCodeProgram ir
     PrintSection("Intermediate code:", text);
 }
 
+static (string? InputPath, string? OutputPath, string Target) ParseCommandLine(string[] args)
+{
+    string? inputPath = null;
+    string? outputPath = null;
+    var target = "z80";
+
+    for (var i = 0; i < args.Length; i++)
+    {
+        switch (args[i])
+        {
+            case "--target":
+                if (i + 1 >= args.Length) throw new ArgumentException("--target requires a value.");
+                target = args[++i].ToLowerInvariant();
+                break;
+            case "--out":
+            case "-o":
+                if (i + 1 >= args.Length) throw new ArgumentException($"{args[i]} requires a value.");
+                outputPath = args[++i];
+                break;
+            default:
+                if (args[i].StartsWith("-", StringComparison.Ordinal))
+                {
+                    throw new ArgumentException($"Unknown option '{args[i]}'.");
+                }
+
+                inputPath ??= args[i];
+                break;
+        }
+    }
+
+    return (inputPath, outputPath, target);
+}
+
 if (args.Length < 1)
 {
     Console.Error.WriteLine("No source file has been specified");
     return;
 }
 
-var path = args[0];
+var options = ParseCommandLine(args);
+if (options.InputPath is null)
+{
+    Console.Error.WriteLine("No source file has been specified");
+    return;
+}
+
+var path = options.InputPath;
+
+if (options.Target == "nes")
+{
+    try
+    {
+        var source = ReadInputFile(path);
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSource(source);
+        var outputPath = options.OutputPath ?? Path.ChangeExtension(path, ".nes");
+        File.WriteAllBytes(outputPath, rom);
+        Console.Error.WriteLine($"Wrote NES ROM: {outputPath}");
+        return;
+    }
+    catch (Exception ex)
+    {
+        PrintError(ex.Message);
+        return;
+    }
+}
+
+if (options.Target is "gb" or "gameboy")
+{
+    try
+    {
+        var source = ReadInputFile(path);
+        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source);
+        var outputPath = options.OutputPath ?? Path.ChangeExtension(path, ".gb");
+        File.WriteAllBytes(outputPath, rom);
+        Console.Error.WriteLine($"Wrote Game Boy ROM: {outputPath}");
+        return;
+    }
+    catch (Exception ex)
+    {
+        PrintError(ex.Message);
+        return;
+    }
+}
+
+if (options.Target != "z80")
+{
+    Console.Error.WriteLine($"Unknown target '{options.Target}'. Supported targets: z80, nes, gb");
+    return;
+}
 
 Result
     .Try(() => ReadInputFile(path))

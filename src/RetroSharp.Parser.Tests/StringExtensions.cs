@@ -10,7 +10,7 @@ public static class StringExtensions
     {
         var actualWithoutWhitespace = Regex.Replace(assertions.Subject, @"\s", "");
         var expectedWithoutWhitespace = Regex.Replace(expected, @"\s", "");
-        
+
         Execute.Assertion
             .ForCondition(actualWithoutWhitespace == expectedWithoutWhitespace)
             .BecauseOf(because, becauseArgs)

@@ -6,14 +6,17 @@ I'm making this in my free time to learn about compilers and some old-school top
 
 ## How does it work?
 
-RetroSharp uses a multi-stage compilation pipeline:
+RetroSharp's original path uses a multi-stage compilation pipeline:
 
 1. **Parser**: Uses ANTLR4 to parse RetroSharp source code into an AST
 2. **Semantic Analysis**: Validates types, scopes, and semantics
 3. **Intermediate Code Generation**: Produces platform-agnostic 3-address code (IL)
 4. **Backend**: Translates IL to target architecture (currently Zilog Z80)
 
-The benefit of this architecture is that the IL is generic enough to target virtually any platform by just writing a new backend.
+The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
+
+- `--target nes`: emits an iNES ROM for static background/tile drawing.
+- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`, `while`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_set(...)`, and runtime map column streaming.
 
 ## What can it do?
 
@@ -35,7 +38,7 @@ int main()
 
 ## Which platforms does it compile for?
 
-Currently, RetroSharp targets the **Zilog Z80** processor - one of the most iconic 8-bit CPUs of all time! The Z80 powered legendary systems like:
+The original backend targets the **Zilog Z80** processor - one of the most iconic 8-bit CPUs of all time! The Z80 powered legendary systems like:
 
 - Nintendo Game Boy
 - Amstrad CPC
@@ -43,7 +46,7 @@ Currently, RetroSharp targets the **Zilog Z80** processor - one of the most icon
 - TRS-80
 - And many arcade machines
 
-The modular design makes it relatively straightforward to add support for other 8-bit processors like the 6502, 8080, or even modern microcontrollers.
+There are also experimental ROM targets for NES and Game Boy under `src/RetroSharp.NES` and `src/RetroSharp.GameBoy`, with runnable samples under `samples/`.
 
 ## Installation
 
@@ -58,3 +61,14 @@ Then use it to compile your programs:
 ```bash
 retroSharp myprogram.rs
 ```
+
+Build the Game Boy runner sample from source:
+
+```bash
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target gb \
+  --out samples/gameboy-runner/runner.gb \
+  samples/gameboy-runner/runner.rs
+```
+
+See `docs/GameBoyTarget.md` for the current Game Boy subset and short-term checklist.

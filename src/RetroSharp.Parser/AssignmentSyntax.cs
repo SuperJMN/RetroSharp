@@ -10,7 +10,7 @@ public class AssignmentSyntax : ExpressionSyntax
 
     public LValue Left { get; }
     public ExpressionSyntax Right { get; }
-    
+
     public override void Accept(ISyntaxVisitor visitor)
     {
         visitor.VisitAssignment(this);

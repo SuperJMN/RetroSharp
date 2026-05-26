@@ -2,7 +2,7 @@
 
 This file provides guidance to WARP (warp.dev) when working with code in this repository.
 
-Repository type: .NET 8 multi-project solution (C#) for RetroSharp - a modern C#-like language that compiles to 8-bit architectures, emitting intermediate 3-address code and targeting Zilog Z80.
+Repository type: .NET 8 multi-project solution (C#) for RetroSharp - a modern C#-like language that compiles to 8-bit architectures. The original compiler path emits intermediate 3-address code and targets Zilog Z80. Experimental cartridge targets also emit NES iNES and Game Boy ROMs from a constrained video/runtime subset.
 
 Common commands
 - Restore and build (all projects)
@@ -20,6 +20,10 @@ Common commands
   - Check only (CI-friendly): dotnet format RetroSharp.sln --verify-no-changes
 - Run the CLI (compile a source file and print IL and Z80 assembly)
   - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- path/to/source.rs
+- Build sample cartridges
+  - NES: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/nes-drawing/drawing.nes samples/nes-drawing/drawing.rs
+  - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-drawing/drawing.gb samples/gameboy-drawing/drawing.rs
+  - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-runner/runner.gb samples/gameboy-runner/runner.rs
 - Optional: collect coverage (coverlet collector is referenced in test projects)
   - dotnet test RetroSharp.sln --collect "XPlat Code Coverage"
 
@@ -31,7 +35,7 @@ Repository layout
 - libs/: Git submodules and third-party code used by the solution
 
 High-level architecture
-The solution is structured as a classic compiler pipeline with clear stage separation and a backend for Z80.
+The solution started as a classic compiler pipeline with clear stage separation and a backend for Z80. The NES and Game Boy projects are currently target-specific ROM compilers used to validate the portable video/runtime idea before the shared IR grows enough to cover those machines cleanly.
 
 - Frontend (Parsing)
   - RetroSharp.Parser.Antlr4.v2: Antlr4-based parser. The grammar (RetroSharp.g4) is processed via Antlr4BuildTasks at build time to generate lexer/parser code. A small Program.cs is included for quick parsing experiments.
@@ -55,6 +59,13 @@ The solution is structured as a classic compiler pipeline with clear stage separ
   - RetroSharp.Z80: Translates the IR into Z80 assembly and related artifacts for the Zilog Z80 target.
   - RetroSharp.Cli: Thin command-line app that ties the pipeline together: reads a RetroSharp source file, compiles to IR, prints IR, generates Z80 assembly, and prints it. Exit reporting is via stderr for success/error messages.
 
+- Cartridge targets
+  - RetroSharp.NES: Experimental iNES ROM emitter for constant video API calls and static background/tile drawing.
+  - RetroSharp.GameBoy: Experimental 32 KiB DMG ROM emitter. It loads tile/background/map data and can emit LR35902 code for a small runtime subset: byte-backed locals, assignment, `if`, `while`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_set(...)`, and runtime map column streaming.
+
+Game Boy planning
+- `docs/GameBoyTarget.md` is the source of truth for the currently supported subset and short-term checklist. Keep it updated when adding runtime intrinsics or raising the supported language surface.
+
 - External projects included in the solution
   - libs/Z80DotNet/*: Z80 processor simulator and tests (e.g., Zexall). Used as a real-world Z80 reference/executor for validation.
   - libs/6502DotNet/Sixty502DotNet/*: Separate external assembler/runtime referenced by the solution (not part of the compiler pipeline itself).
@@ -70,4 +81,3 @@ Language design decisions (summary)
 - Rationale: These choices make cost and ABI explicit, map directly to 8/16-bit registers, and keep code predictable for constrained hardware while remaining familiar to C# users.
 
 See docs/RetroSharp.Language.md for the full specification and examples.
-

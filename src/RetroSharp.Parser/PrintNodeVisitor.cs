@@ -155,6 +155,7 @@ public class PrintNodeVisitor : ISyntaxVisitor
 
     public void VisitIfElse(IfElseSyntax ifElseSyntax)
     {
+        resultBuilder.Append(new string('\t', indentationLevel));
         resultBuilder.Append("if");
         resultBuilder.Append("(");
         ifElseSyntax.Condition.Accept(this);
@@ -165,5 +166,15 @@ public class PrintNodeVisitor : ISyntaxVisitor
             resultBuilder.AppendLine("else");
             block.Accept(this);
         });
+    }
+
+    public void VisitWhile(WhileSyntax whileSyntax)
+    {
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.Append("while");
+        resultBuilder.Append("(");
+        whileSyntax.Condition.Accept(this);
+        resultBuilder.AppendLine(")");
+        whileSyntax.Body.Accept(this);
     }
 }

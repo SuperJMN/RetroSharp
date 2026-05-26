@@ -66,63 +66,63 @@ public class ParserTests
         var source = @"i16 main() { a = b + c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Arithmetic_mult()
     {
         var source = @"i16 main() { a = b * c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Equality()
     {
         var source = @"i16 main() { a = b == c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Inequality()
     {
         var source = @"i16 main() { a = b != c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Greater_than()
     {
         var source = @"i16 main() { a = b > c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Less_than()
     {
         var source = @"i16 main() { a = b < c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Less_than_or_equal()
     {
         var source = @"i16 main() { a = b <= c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Greater_than_or_equal()
     {
         var source = @"i16 main() { a = b >= c; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void True()
     {
         var source = @"i16 main() { a = true; }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void False()
     {
@@ -143,28 +143,35 @@ public class ParserTests
         var source = @"i16 main() { if (a > b) { return a; }}";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void If_statement_with_else()
     {
         var source = @"i16 main() { if (a > b) { return a; } else { return b; } }";
         AssertParse(source);
     }
-    
+
+    [Fact]
+    public void While_loop()
+    {
+        var source = @"i16 main() { while (true) { a = a + 1; } }";
+        AssertParse(source);
+    }
+
     [Fact]
     public void Parenthesis_are_OK()
     {
         var source = @"i16 main() { a = 2*(3+2); }";
         AssertParse(source);
     }
-    
+
     [Fact]
     public void Call()
     {
         var source = @"i16 main() { Func(13); }";
         AssertParse(source);
     }
-    
+
     private static void AssertParse(string source)
     {
         var sut = new SomeParser();

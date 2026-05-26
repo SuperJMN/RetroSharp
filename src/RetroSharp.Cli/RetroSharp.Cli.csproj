@@ -27,6 +27,8 @@
     <ProjectReference Include="..\RetroSharp.SemanticAnalysis\RetroSharp.SemanticAnalysis.csproj" />
     <ProjectReference Include="..\RetroSharp.Generation.Intermediate\RetroSharp.Generation.Intermediate.csproj" />
     <ProjectReference Include="..\RetroSharp.Z80\RetroSharp.Z80.csproj" />
+    <ProjectReference Include="..\RetroSharp.NES\RetroSharp.NES.csproj" />
+    <ProjectReference Include="..\RetroSharp.GameBoy\RetroSharp.GameBoy.csproj" />
     <ProjectReference Include="..\..\libs\Z80DotNet\Main\Main.csproj" />
     <ProjectReference Include="..\..\libs\6502DotNet\Sixty502DotNet.Shared\Sixty502DotNet.Shared.csproj" />
   </ItemGroup>

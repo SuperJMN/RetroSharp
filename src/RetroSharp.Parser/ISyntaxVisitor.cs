@@ -18,4 +18,5 @@ public interface ISyntaxVisitor
     void VisitIdentifier(IdentifierSyntax identifierSyntax);
     void VisitBinaryOperator(BinaryExpressionSyntax binaryExpressionSyntax);
     void VisitIfElse(IfElseSyntax ifElseSyntax);
+    void VisitWhile(WhileSyntax whileSyntax);
 }
