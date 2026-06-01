@@ -46,6 +46,7 @@ internal static class GameBoySpriteAssetCompiler
             _ => throw new InvalidOperationException($"Game Boy sprite asset '{path}' must be a .json or .png file."),
         };
 
+        frames = PadFramesToHardwareCells(frames);
         var width = frames[0][0].Length;
         var height = frames[0].Count;
         var pieces = BuildPieces(width, height);
@@ -142,17 +143,6 @@ internal static class GameBoySpriteAssetCompiler
             throw new InvalidOperationException($"Sprite asset '{path}' frames must contain at least one column.");
         }
 
-        if (width % 8 != 0 || height % 16 != 0)
-        {
-            throw new InvalidOperationException($"Game Boy sprite asset '{path}' dimensions must be multiples of 8x16.");
-        }
-
-        var pieceCount = width / 8 * (height / 16);
-        if (pieceCount > 40)
-        {
-            throw new InvalidOperationException($"Game Boy sprite asset '{path}' needs {pieceCount} hardware sprites, but the hardware limit is 40.");
-        }
-
         for (var frameIndex = 0; frameIndex < frames.Count; frameIndex++)
         {
             var frame = frames[frameIndex];
@@ -180,6 +170,45 @@ internal static class GameBoySpriteAssetCompiler
         }
 
         return frames;
+    }
+
+    private static List<List<string>> PadFramesToHardwareCells(List<List<string>> frames)
+    {
+        var width = frames[0][0].Length;
+        var height = frames[0].Count;
+        var paddedWidth = RoundUp(width, 8);
+        var paddedHeight = RoundUp(height, 16);
+        var pieceCount = paddedWidth / 8 * (paddedHeight / 16);
+        if (pieceCount > 40)
+        {
+            throw new InvalidOperationException($"Game Boy sprite asset needs {pieceCount} hardware sprites, but the hardware limit is 40.");
+        }
+
+        if (paddedWidth == width && paddedHeight == height)
+        {
+            return frames;
+        }
+
+        return frames
+            .Select(frame =>
+            {
+                var padded = frame
+                    .Select(row => row.PadRight(paddedWidth, '0'))
+                    .ToList();
+
+                while (padded.Count < paddedHeight)
+                {
+                    padded.Add(new string('0', paddedWidth));
+                }
+
+                return padded;
+            })
+            .ToList();
+    }
+
+    private static int RoundUp(int value, int unit)
+    {
+        return ((value + unit - 1) / unit) * unit;
     }
 
     private static IReadOnlyList<GameBoyMetaspritePiece> BuildPieces(int width, int height)

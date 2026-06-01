@@ -183,6 +183,53 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_png_sprite_sheet_with_non_hardware_height_by_padding()
+    {
+        var baseDirectory = WriteSpritePng(
+            "mario-run.gb.png",
+            16,
+            27,
+            Rows(16, 27, "0231000000000000"));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(mario_run, "mario-run.gb.png", 16, 27);
+                                  sprite_draw(mario_run, 72, 77, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x4D, 0xC6, 0x20, 0xEA, 0x08, 0xFE]), "sprite_draw should emit a bottom row hardware sprite after padding 27 px to 32 px.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xFE]), "sprite_draw should allocate the fourth 8x16 tile pair for a padded 16x27 logical sprite.");
+    }
+
+    [Fact]
+    public void Compiles_grayscale_png_sprite_sheet_with_stable_light_to_dark_mapping()
+    {
+        var baseDirectory = WriteGrayscaleSpritePng(
+            "mario-run.gb.png",
+            16,
+            27,
+            Rows(16, 27, "3210000000000000"));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(mario_run, "mario-run.gb.png", 16, 27);
+                                  sprite_draw(mario_run, 72, 77, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xA0, 0xC0]), "Grayscale PNG should map black to 3, gray to 2, and white to 1 even when black appears first.");
+    }
+
+    [Fact]
     public void Compiles_scroll_set_to_game_boy_scroll_register_writes()
     {
         const string source = """
@@ -391,6 +438,44 @@ public class GameBoyRomCompilerTests
             (R: (byte)0xE0, G: (byte)0xF8, B: (byte)0xD0, A: (byte)0xFF),
             (R: (byte)0x88, G: (byte)0xC0, B: (byte)0x70, A: (byte)0xFF),
             (R: (byte)0x34, G: (byte)0x68, B: (byte)0x56, A: (byte)0xFF),
+        };
+
+        for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
+        {
+            var frame = frames[frameIndex];
+            for (var y = 0; y < frameHeight; y++)
+            {
+                for (var x = 0; x < frameWidth; x++)
+                {
+                    var color = palette[frame[y][x] - '0'];
+                    var targetX = frameIndex * frameWidth + x;
+                    var offset = (y * width + targetX) * 4;
+                    rgba[offset] = color.R;
+                    rgba[offset + 1] = color.G;
+                    rgba[offset + 2] = color.B;
+                    rgba[offset + 3] = color.A;
+                }
+            }
+        }
+
+        File.WriteAllBytes(Path.Combine(directory, fileName), EncodeRgbaPng(width, height, rgba));
+        return directory;
+    }
+
+    private static string WriteGrayscaleSpritePng(string fileName, int frameWidth, int frameHeight, params string[][] frames)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        var width = frameWidth * frames.Length;
+        var height = frameHeight;
+        var rgba = new byte[width * height * 4];
+        var palette = new[]
+        {
+            (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+            (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
+            (R: (byte)0xB8, G: (byte)0xB8, B: (byte)0xB8, A: (byte)0xFF),
+            (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
         };
 
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)

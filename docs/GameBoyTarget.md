@@ -46,7 +46,7 @@ Runtime calls:
 
 `map_column(index, ...)` defines a source-level map column. The compiler stores map rows in ROM tables. `map_stream_column(targetColumn, sourceColumn, y, height)` reads one source column from those ROM tables and writes it into the circular Game Boy background map at runtime.
 
-`sprite_asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`.
+`sprite_asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`; grayscale exports also map white to `1`, gray to `2`, and black to `3`.
 
 For example, a two-frame 16x16 runner can be referenced as:
 
@@ -54,7 +54,13 @@ For example, a two-frame 16x16 runner can be referenced as:
 sprite_asset(player_run, "assets/player-run.gb.png", 16, 16);
 ```
 
-In Aseprite, edit the PNG at 1x, keep the transparent background, and use a 16x16 grid for the current runner sample. To add more frames, grow the canvas horizontally by another frame width.
+In Aseprite, edit at 1x and keep the transparent background. Export with a horizontal sheet:
+
+```bash
+aseprite -b assets/mario-run.aseprite --sheet assets/mario-run.gb.png --sheet-type horizontal
+```
+
+PNG frame dimensions do not need to be hardware-sized. The compiler pads each frame to Game Boy 8x16 hardware cells internally, so a 16x27 logical sprite is emitted as a 16x32 metasprite.
 
 `sprite_asset(name, path)` is still supported for the experimental JSON asset format. That format uses a `platforms.gb.frames` array. Each frame is a list of rows, and each character is a Game Boy color index from `0` to `3`.
 
@@ -73,7 +79,7 @@ In Aseprite, edit the PNG at 1x, keep the transparent background, and use a 16x1
 }
 ```
 
-`sprite_draw(name, x, y, frame)` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Game Boy sprite asset dimensions must currently be multiples of 8x16, so sizes like 8x16, 16x16, 16x32, and 24x32 are valid.
+`sprite_draw(name, x, y, frame)` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Logical sizes like 16x27 are valid; the emitted hardware footprint is rounded up to 8x16 cells.
 
 ## Short-Term Checklist
 

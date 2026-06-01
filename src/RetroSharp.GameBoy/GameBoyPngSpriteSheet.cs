@@ -323,6 +323,9 @@ internal static class GameBoyPngSpriteSheet
                 0xE0F8D0 => 1,
                 0x88C070 => 2,
                 0x346856 => 3,
+                0xFFFFFF => 1,
+                0xB8B8B8 => 2,
+                0x000000 => 3,
                 _ => null,
             };
         }

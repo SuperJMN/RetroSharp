@@ -8,7 +8,7 @@ void main() {
     object_palette_set(1, 1);
     object_palette_set(2, 2);
     object_palette_set(3, 3);
-    sprite_asset(player_run, "assets/player-run.gb.png", 16, 16);
+    sprite_asset(mario_run, "assets/mario-run.gb.png", 16, 27);
 
     tilemap_fill(0, 0, 32, 32, 0);
     tilemap_fill(0, 14, 32, 1, 5);
@@ -40,14 +40,15 @@ void main() {
     i16 streamColumn = 20;
     i16 mapColumn = 0;
     i16 frame = 0;
+    i16 animTick = 0;
 
     while (true) {
         video_wait_vblank();
         scroll_set(camera, 0);
-        sprite_draw(player_run, 72, 80, frame);
+        sprite_draw(mario_run, 72, 77, frame);
         camera = camera + 1;
         fine = fine + 1;
-        frame = frame + 1;
+        animTick = animTick + 1;
 
         if (fine == 8) {
             fine = 0;
@@ -64,8 +65,12 @@ void main() {
             }
         }
 
-        if (frame == 2) {
-            frame = 0;
+        if (animTick == 6) {
+            animTick = 0;
+            frame = frame + 1;
+            if (frame == 3) {
+                frame = 0;
+            }
         }
     }
 }

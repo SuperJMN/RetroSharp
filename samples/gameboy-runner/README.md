@@ -18,4 +18,10 @@ flatpak run --command=retroarch org.libretro.RetroArch \
 
 This sample uses declarations, assignment, `while`, `if`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_asset(...)`, `sprite_draw(...)`, `map_column(...)`, and `map_stream_column(...)`. The actor stays fixed while the background moves through the Game Boy `SCX` register, then the sample streams a new map column from ROM every 8 pixels.
 
-The runner sprite is editable at `assets/player-run.gb.png`. It is a horizontal PNG sprite sheet with two 16x16 frames, suitable for Aseprite. Open it at 1x, enable a 16x16 grid, keep the background transparent, and add frames by growing the canvas horizontally. The sample colors map `#E0F8D0` to Game Boy color `1`, `#88C070` to `2`, and `#346856` to `3`. The compiler splits each logical frame into 8x16 Game Boy hardware sprites and assigns the generated tiles automatically.
+The runner sprite source is `assets/mario-run.aseprite`. Export it to the PNG used by RetroSharp with:
+
+```bash
+/home/jmn/Repos/Aseprite/build/bin/aseprite -b assets/mario-run.aseprite --sheet assets/mario-run.gb.png --sheet-type horizontal
+```
+
+The exported `assets/mario-run.gb.png` is a horizontal sprite sheet with three 16x27 frames. The compiler pads that logical size internally to 16x32 so it fits Game Boy 8x16 hardware sprites. Keep the background transparent and use at most three opaque colors.
