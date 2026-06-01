@@ -16,6 +16,7 @@ The Game Boy target is the first playable target. It currently compiles a constr
 - `-` when one operand is constant
 - `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
 - `map_tile_at(...)` as a value expression for runtime map queries
+- `button_pressed(...)` as a value expression for joypad queries
 - `true` and `false`
 
 Current numeric locals are stored as one byte in WRAM. Types wider than one byte are accepted only as source-level convenience for this prototype.
@@ -42,6 +43,7 @@ Runtime calls:
 - `tilemap_fill_column(column, y, height, tile)`
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
 - `map_tile_at(sourceColumn, row)`
+- `button_pressed(button)`
 
 `scroll_set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
@@ -50,6 +52,8 @@ Runtime calls:
 `map_column(index, ...)` defines a source-level map column. The compiler stores map rows in ROM tables. `map_stream_column(targetColumn, sourceColumn, y, height)` reads one source column from those ROM tables and writes it into the circular Game Boy background map at runtime.
 
 `map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_tile_at(column, 2) != 0) { ... }`.
+
+`button_pressed(button)` reads the Game Boy joypad and returns `1` when the named button is currently pressed or `0` otherwise. Supported names are `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down`.
 
 `sprite_asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`; grayscale exports also map white to `1`, gray to `2`, and black to `3`.
 
@@ -97,6 +101,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Represent maps as source data instead of ad hoc `tilemap_set` calls.
 - [x] Load an editable logical sprite asset and lower it to Game Boy metasprites.
 - [x] Add collision against a simple tile row.
+- [x] Add input-driven jump from the Game Boy joypad.
 - [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
 
-The next meaningful milestone is input-driven motion. The runner sample can now stream source-level map columns, draw a logical sprite from an external asset, and query a source map row for simple ground collision, but the actor still cannot jump or react to buttons.
+The next meaningful milestone is deciding how much of the GB video/input API should be lifted into a shared portable runtime surface. The runner sample can now stream source-level map columns, draw a logical sprite from an external asset, query a source map row for simple ground collision, and jump from the Game Boy joypad.

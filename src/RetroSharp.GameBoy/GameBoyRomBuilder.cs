@@ -734,6 +734,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "map_tile_at":
                 EmitMapTileAt(call);
                 break;
+            case "button_pressed":
+                EmitButtonPressed(call);
+                break;
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
         }
@@ -756,6 +759,44 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
         builder.AddHlDe();
         builder.LoadAFromHl();
+    }
+
+    private void EmitButtonPressed(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 1);
+        var button = ButtonArg(call);
+        var pressedLabel = builder.CreateLabel("button_pressed");
+        var endLabel = builder.CreateLabel("button_end");
+
+        builder.LoadAImmediate(button.Selector);
+        builder.StoreHighRamA(0x00);
+        builder.LoadHighRamA(0x00);
+        builder.ComplementA();
+        builder.AndImmediate(button.Mask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, pressedLabel); // JP NZ,pressedLabel
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(pressedLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private static GameBoyButton ButtonArg(FunctionCall call)
+    {
+        var name = GameBoyVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "button_pressed argument 1");
+        return name switch
+        {
+            "a" => new GameBoyButton(0x10, 0x01),
+            "b" => new GameBoyButton(0x10, 0x02),
+            "select" => new GameBoyButton(0x10, 0x04),
+            "start" => new GameBoyButton(0x10, 0x08),
+            "right" => new GameBoyButton(0x20, 0x01),
+            "left" => new GameBoyButton(0x20, 0x02),
+            "up" => new GameBoyButton(0x20, 0x04),
+            "down" => new GameBoyButton(0x20, 0x08),
+            _ => throw new InvalidOperationException($"Unsupported Game Boy button '{name}'."),
+        };
     }
 
     private void EmitBinaryExpressionToA(BinaryExpressionSyntax binary)
@@ -820,6 +861,8 @@ internal sealed class GameBoyRuntimeCompiler
         return false;
     }
 
+    private readonly record struct GameBoyButton(byte Selector, byte Mask);
+
     private ushort VariableAddress(string name)
     {
         if (!variables.TryGetValue(name, out var address))
@@ -879,6 +922,21 @@ internal sealed class GbBuilder
     public void StoreHighRamA(byte offset)
     {
         Emit(0xE0, offset);
+    }
+
+    public void LoadHighRamA(byte offset)
+    {
+        Emit(0xF0, offset);
+    }
+
+    public void ComplementA()
+    {
+        Emit(0x2F);
+    }
+
+    public void AndImmediate(int value)
+    {
+        Emit(0xE6, (byte)value);
     }
 
     public void LoadBFromA()

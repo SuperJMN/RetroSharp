@@ -42,12 +42,14 @@ void main() {
     i16 collisionColumn = 0;
     i16 playerY = 40;
     i16 velocityY = 0;
+    i16 grounded = 0;
     i16 frame = 0;
     i16 animTick = 0;
 
     while (true) {
         video_wait_vblank();
 
+        grounded = 0;
         velocityY = velocityY + 1;
         playerY = playerY + velocityY;
         collisionColumn = mapColumn;
@@ -55,6 +57,14 @@ void main() {
             if (map_tile_at(collisionColumn, 2) != 0) {
                 playerY = 77;
                 velocityY = 0;
+                grounded = 1;
+            }
+        }
+
+        if (button_pressed(a) != 0) {
+            if (grounded != 0) {
+                velocityY = 252;
+                grounded = 0;
             }
         }
 

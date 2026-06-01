@@ -433,6 +433,26 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_button_pressed_as_a_runtime_expression()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  i16 jumped = 0;
+                                  if (button_pressed(a) != 0) {
+                                      jumped = 1;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xE0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x01, 0xFE, 0x00]), "ROM should read the Game Boy action-button register and return 1 when A is pressed.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0]), "ROM should execute the branch body when the button is pressed.");
+    }
+
+    [Fact]
     public void Compiles_long_if_body_with_map_streaming()
     {
         const string source = """
