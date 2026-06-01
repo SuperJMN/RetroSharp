@@ -103,5 +103,27 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add collision against a simple tile row.
 - [x] Add input-driven jump from the Game Boy joypad.
 - [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
+- [ ] Define a portable video/input API contract shared by Game Boy and NES.
+- [ ] Add a NES parity spike for logical sprites, input, scroll, and tile collision.
+- [ ] Move the Game Boy runtime intrinsics toward a shared lowering surface instead of direct target-only calls.
+- [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
-The next meaningful milestone is deciding how much of the GB video/input API should be lifted into a shared portable runtime surface. The runner sample can now stream source-level map columns, draw a logical sprite from an external asset, query a source map row for simple ground collision, and jump from the Game Boy joypad.
+## Progress Snapshot
+
+Landed on 2026-06-01:
+
+- The Game Boy runner can draw an editable 16x27 Aseprite/PNG logical sprite and lower it to 8x16 hardware sprites.
+- The runner scrolls the background with `scroll_set(...)` and streams source-level `map_column(...)` data through `map_stream_column(...)`.
+- `map_tile_at(...)` lets RetroSharp source query map data for simple tile collision.
+- `button_pressed(...)` lets RetroSharp source query the Game Boy joypad.
+- The sample now has a small gameplay loop: gravity, simple ground collision, running animation, and A-button jump.
+- The compiler subset grew just enough for that loop: runtime-local addition, relational conditions against constants, value-returning runtime intrinsics, and byte-backed state.
+- Generated runner screenshots are not tracked as source artifacts; regenerate them with RetroArch when needed.
+
+## Next Milestones
+
+1. Define the portable runtime surface before adding more target-specific APIs. The current candidates are `video_wait_vblank`, `scroll_set`, `sprite_asset`, `sprite_draw`, `map_column`, `map_stream_column`, `map_tile_at`, and `button_pressed`.
+2. Decide how target capability differences are reported: hard compiler error, documented degradation, or platform-specific variant.
+3. Spike the same runner contract on NES, starting with `scroll_set` and `button_pressed`, then logical sprites and tile collision.
+4. Extract shared concepts from the Game Boy direct compiler so the ROM targets stop growing as isolated one-off backends.
+5. Keep the GB runner as the acceptance sample: if it cannot still compile and run, the portable runtime surface is not stable enough.
