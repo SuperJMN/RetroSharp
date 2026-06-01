@@ -12,8 +12,10 @@ The Game Boy target is the first playable target. It currently compiles a constr
 - Assignment to local variables
 - `while`
 - `if`
-- `+` and `-` when one operand is constant
-- `==` and `!=` conditions when one side is constant
+- `+` between byte-backed runtime expressions
+- `-` when one operand is constant
+- `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
+- `map_tile_at(...)` as a value expression for runtime map queries
 - `true` and `false`
 
 Current numeric locals are stored as one byte in WRAM. Types wider than one byte are accepted only as source-level convenience for this prototype.
@@ -39,12 +41,15 @@ Runtime calls:
 - `sprite_draw(name, x, y, frame)`
 - `tilemap_fill_column(column, y, height, tile)`
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
+- `map_tile_at(sourceColumn, row)`
 
 `scroll_set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
 `map_column(index, ...)` defines a source-level map column. The compiler stores map rows in ROM tables. `map_stream_column(targetColumn, sourceColumn, y, height)` reads one source column from those ROM tables and writes it into the circular Game Boy background map at runtime.
+
+`map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_tile_at(column, 2) != 0) { ... }`.
 
 `sprite_asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`; grayscale exports also map white to `1`, gray to `2`, and black to `3`.
 
@@ -91,7 +96,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Stream new background columns every 8 pixels.
 - [x] Represent maps as source data instead of ad hoc `tilemap_set` calls.
 - [x] Load an editable logical sprite asset and lower it to Game Boy metasprites.
-- [ ] Add collision against a simple tile row.
+- [x] Add collision against a simple tile row.
 - [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
 
-The next meaningful milestone is collision against a simple tile row. The runner sample can now stream source-level map columns and draw a logical sprite from an external asset, but the actor still has no gameplay interaction with those tiles.
+The next meaningful milestone is input-driven motion. The runner sample can now stream source-level map columns, draw a logical sprite from an external asset, and query a source map row for simple ground collision, but the actor still cannot jump or react to buttons.

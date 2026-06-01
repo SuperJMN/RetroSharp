@@ -16,7 +16,7 @@ RetroSharp's original path uses a multi-stage compilation pipeline:
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
 - `--target nes`: emits an iNES ROM for static background/tile drawing.
-- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`, `while`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_set(...)`, and runtime map column streaming.
+- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`, `while`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_set(...)`, runtime map column streaming, and simple source-map tile queries for collision.
 
 ## What can it do?
 

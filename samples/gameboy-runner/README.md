@@ -16,7 +16,7 @@ flatpak run --command=retroarch org.libretro.RetroArch \
   runner.gb
 ```
 
-This sample uses declarations, assignment, `while`, `if`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_asset(...)`, `sprite_draw(...)`, `map_column(...)`, and `map_stream_column(...)`. The actor stays fixed while the background moves through the Game Boy `SCX` register, then the sample streams a new map column from ROM every 8 pixels.
+This sample uses declarations, assignment, `while`, `if`, relational conditions, `video_wait_vblank()`, `scroll_set(...)`, `sprite_asset(...)`, `sprite_draw(...)`, `map_column(...)`, `map_stream_column(...)`, and `map_tile_at(...)`. The actor keeps a fixed screen X while the background moves through the Game Boy `SCX` register, streams a new map column from ROM every 8 pixels, and lands on a simple source-map tile row.
 
 The runner sprite source is `assets/mario-run.aseprite`. Export it to the PNG used by RetroSharp with:
 

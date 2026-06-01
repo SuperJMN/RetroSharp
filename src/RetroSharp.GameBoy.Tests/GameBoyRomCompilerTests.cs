@@ -370,6 +370,69 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_map_tile_lookup_as_a_runtime_expression()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  map_column(0, 1, 0);
+                                  map_column(1, 0, 2);
+                                  i16 column = 1;
+                                  i16 grounded = 0;
+                                  if (map_tile_at(column, 1) != 0) {
+                                      grounded = 1;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the runtime source map column and the selected row table address.");
+        Assert.True(ContainsSequence(rom, [0x19, 0x7E, 0xFE, 0x00]), "ROM should read the tile id into A and compare it with zero.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x01, 0xC0]), "ROM should execute the branch body when the tile is non-zero.");
+    }
+
+    [Fact]
+    public void Compiles_relational_condition_against_a_constant()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  i16 y = 80;
+                                  i16 grounded = 0;
+                                  if (y >= 78) {
+                                      grounded = 1;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x4E, 0xDA]), "ROM should compare y with 78 and jump over the branch when y is below the threshold.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x01, 0xC0]), "ROM should execute the branch body when the relation is true.");
+    }
+
+    [Fact]
+    public void Compiles_addition_between_runtime_locals()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  i16 y = 40;
+                                  i16 velocity = 3;
+                                  y = y + velocity;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should add the two byte-backed locals and store the result.");
+    }
+
+    [Fact]
     public void Compiles_long_if_body_with_map_streaming()
     {
         const string source = """

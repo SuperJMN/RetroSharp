@@ -39,13 +39,27 @@ void main() {
     i16 fine = 0;
     i16 streamColumn = 20;
     i16 mapColumn = 0;
+    i16 collisionColumn = 0;
+    i16 playerY = 40;
+    i16 velocityY = 0;
     i16 frame = 0;
     i16 animTick = 0;
 
     while (true) {
         video_wait_vblank();
+
+        velocityY = velocityY + 1;
+        playerY = playerY + velocityY;
+        collisionColumn = mapColumn;
+        if (playerY >= 78) {
+            if (map_tile_at(collisionColumn, 2) != 0) {
+                playerY = 77;
+                velocityY = 0;
+            }
+        }
+
         scroll_set(camera, 0);
-        sprite_draw(mario_run, 72, 77, frame);
+        sprite_draw(mario_run, 72, playerY, frame);
         camera = camera + 1;
         fine = fine + 1;
         animTick = animTick + 1;

@@ -603,6 +603,12 @@ internal sealed class GameBoyRuntimeCompiler
                     EmitCompareToConstant(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
                     return;
+                case "<":
+                case "<=":
+                case ">":
+                case ">=":
+                    EmitRelationalFalseJump(binary, falseLabel);
+                    return;
             }
         }
 
@@ -630,6 +636,70 @@ internal sealed class GameBoyRuntimeCompiler
         throw new InvalidOperationException("Game Boy conditions currently require one side of == or != to be constant.");
     }
 
+    private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
+    {
+        if (TryConst(binary.Right, out var rightConstant))
+        {
+            EmitExpressionToA(binary.Left);
+            builder.CompareImmediate(rightConstant);
+            EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
+            return;
+        }
+
+        if (TryConst(binary.Left, out var leftConstant))
+        {
+            EmitExpressionToA(binary.Right);
+            builder.CompareImmediate(leftConstant);
+            EmitRelationalFalseJump(FlipRelationalOperator(binary.Operator.Symbol), falseLabel);
+            return;
+        }
+
+        throw new InvalidOperationException("Game Boy relational conditions currently require one side to be constant.");
+    }
+
+    private void EmitRelationalFalseJump(string op, string falseLabel)
+    {
+        switch (op)
+        {
+            case "<":
+                builder.JumpAbsolute(0xD2, falseLabel); // JP NC,falseLabel
+                return;
+            case "<=":
+                EmitGreaterThanFalseJump(falseLabel);
+                return;
+            case ">":
+                builder.JumpAbsolute(0xDA, falseLabel); // JP C,falseLabel
+                builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
+                return;
+            case ">=":
+                builder.JumpAbsolute(0xDA, falseLabel); // JP C,falseLabel
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy relational operator '{op}'.");
+        }
+    }
+
+    private void EmitGreaterThanFalseJump(string falseLabel)
+    {
+        var trueLabel = builder.CreateLabel("rel_true");
+        builder.JumpAbsolute(0xDA, trueLabel);      // JP C,trueLabel
+        builder.JumpAbsolute(0xCA, trueLabel);      // JP Z,trueLabel
+        builder.JumpAbsolute(falseLabel);
+        builder.Label(trueLabel);
+    }
+
+    private static string FlipRelationalOperator(string op)
+    {
+        return op switch
+        {
+            "<" => ">",
+            "<=" => ">=",
+            ">" => "<",
+            ">=" => "<=",
+            _ => throw new InvalidOperationException($"Unsupported Game Boy relational operator '{op}'."),
+        };
+    }
+
     private void EmitExpressionToA(ExpressionSyntax expression)
     {
         switch (expression)
@@ -646,12 +716,46 @@ internal sealed class GameBoyRuntimeCompiler
             case IdentifierSyntax identifier:
                 builder.LoadA(VariableAddress(identifier.Identifier));
                 break;
+            case FunctionCall call:
+                EmitValueCallToA(call);
+                break;
             case BinaryExpressionSyntax binary:
                 EmitBinaryExpressionToA(binary);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy expression '{expression.GetType().Name}'.");
         }
+    }
+
+    private void EmitValueCallToA(FunctionCall call)
+    {
+        switch (call.Name)
+        {
+            case "map_tile_at":
+                EmitMapTileAt(call);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
+        }
+    }
+
+    private void EmitMapTileAt(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 2);
+        if (program.MapColumnHeight == 0)
+        {
+            throw new InvalidOperationException("map_tile_at requires at least one map_column declaration.");
+        }
+
+        var args = call.Parameters.ToList();
+        var row = CheckedRange(GameBoyVideoProgram.ConstValue(args[1], "map_tile_at argument 2"), 0, program.MapColumnHeight - 1, "map_tile_at argument 2");
+
+        EmitExpressionToA(args[0]);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
+        builder.AddHlDe();
+        builder.LoadAFromHl();
     }
 
     private void EmitBinaryExpressionToA(BinaryExpressionSyntax binary)
@@ -673,7 +777,11 @@ internal sealed class GameBoyRuntimeCompiler
                     return;
                 }
 
-                break;
+                EmitExpressionToA(binary.Right);
+                builder.LoadBFromA();
+                EmitExpressionToA(binary.Left);
+                builder.AddAFromB();
+                return;
             case "-":
                 if (TryConst(binary.Right, out var subtractRight))
                 {
