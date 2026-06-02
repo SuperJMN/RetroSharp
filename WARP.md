@@ -2,7 +2,7 @@
 
 This file provides guidance to WARP (warp.dev) when working with code in this repository.
 
-Repository type: .NET 8 multi-project solution (C#) for RetroSharp - a modern C#-like language that compiles to 8-bit architectures. The original compiler path emits intermediate 3-address code and targets Zilog Z80. Experimental cartridge targets also emit NES iNES and Game Boy ROMs from a constrained video/runtime subset.
+Repository type: .NET 10 multi-project solution (C#) for RetroSharp - a modern C#-like language that compiles to 8-bit architectures. The original compiler path emits intermediate 3-address code and targets Zilog Z80. Experimental cartridge targets also emit NES iNES and Game Boy ROMs from a constrained video/runtime subset.
 
 Common commands
 - Restore and build (all projects)
@@ -28,7 +28,7 @@ Common commands
   - dotnet test RetroSharp.sln --collect "XPlat Code Coverage"
 
 Prerequisites
-- .NET SDK 8.x installed and available on PATH
+- .NET SDK 10.x installed and available on PATH
 
 Repository layout
 - src/: All repository-owned projects (apps, libraries, tests)
@@ -72,7 +72,7 @@ Game Boy planning
 
 Development notes
 - Grammar changes: Building RetroSharp.Parser.Antlr4.v2 will regenerate parser sources via Antlr4BuildTasks. A full solution build will handle this automatically; you can also build that project directly if iterating on the grammar.
-- Project targets: All projects target net8.0 with nullable and implicit usings enabled.
+- Project targets: Repository-owned projects target net10.0 with nullable and implicit usings enabled.
 - Test framework: xUnit across test projects (RetroSharp.*.Tests). Prefer running tests per project when iterating quickly.
 
 Language design decisions (summary)

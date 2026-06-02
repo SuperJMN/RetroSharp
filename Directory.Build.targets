@@ -1,0 +1,6 @@
+<Project>
+  <PropertyGroup Condition="'$(MSBuildProjectName)' == 'Sixty502DotNet.Shared'">
+    <!-- C# 14 changes overload resolution for array Reverse() calls in this submodule. -->
+    <LangVersion>13.0</LangVersion>
+  </PropertyGroup>
+</Project>

@@ -3,7 +3,7 @@
 ## Development Setup
 
 1. **Prerequisites**
-   - .NET 8 SDK
+   - .NET 10 SDK
    - Git
 
 2. **Clone and Build**
