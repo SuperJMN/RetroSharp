@@ -67,7 +67,7 @@ internal static class GameBoyRomBuilder
         builder.LoadBc(1024);
         EmitCopyLoop(builder, "copy_tilemap");
 
-        EmitClearOam(builder);
+        EmitClearOam(builder, "clear_oam");
 
         builder.Emit(0x3E, 0x97);                   // LD A,$97
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
@@ -132,17 +132,17 @@ internal static class GameBoyRomBuilder
         builder.JumpRelative(0x20, label);          // JR NZ,label
     }
 
-    private static void EmitClearOam(GbBuilder builder)
+    internal static void EmitClearOam(GbBuilder builder, string label)
     {
         builder.LoadHl(0xFE00);
         builder.LoadBc(160);
-        builder.Label("clear_oam");
+        builder.Label(label);
         builder.Emit(0x36, 0x00);                   // LD (HL),$00
         builder.Emit(0x23);                         // INC HL
         builder.Emit(0x0B);                         // DEC BC
         builder.Emit(0x78);                         // LD A,B
         builder.Emit(0xB1);                         // OR C
-        builder.JumpRelative(0x20, "clear_oam");   // JR NZ,clear_oam
+        builder.JumpRelative(0x20, label);          // JR NZ,label
     }
 
     private static byte[] BuildTileData(GameBoyVideoProgram program)
@@ -260,6 +260,22 @@ internal static class GameBoyRomBuilder
 internal sealed class GameBoyRuntimeCompiler
 {
     private const ushort FirstVariableAddress = 0xC000;
+    private const ushort InputCurrentAddress = 0xC0F0;
+    private const ushort InputPreviousAddress = 0xC0F1;
+    private const ushort InputHoldTicksStartAddress = 0xC0F2;
+
+    private static readonly GameBoyButton[] Buttons =
+    [
+        new("a", 0x10, 0x01, 0x01, InputHoldTicksStartAddress),
+        new("b", 0x10, 0x02, 0x02, InputHoldTicksStartAddress + 1),
+        new("select", 0x10, 0x04, 0x04, InputHoldTicksStartAddress + 2),
+        new("start", 0x10, 0x08, 0x08, InputHoldTicksStartAddress + 3),
+        new("right", 0x20, 0x01, 0x10, InputHoldTicksStartAddress + 4),
+        new("left", 0x20, 0x02, 0x20, InputHoldTicksStartAddress + 5),
+        new("up", 0x20, 0x04, 0x40, InputHoldTicksStartAddress + 6),
+        new("down", 0x20, 0x08, 0x80, InputHoldTicksStartAddress + 7),
+    ];
+
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly Dictionary<string, ushort> variables = [];
@@ -274,7 +290,19 @@ internal sealed class GameBoyRuntimeCompiler
 
     public void Emit(BlockSyntax block)
     {
+        EmitInputStateInitialization();
         EmitBlock(block);
+    }
+
+    private void EmitInputStateInitialization()
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreA(InputCurrentAddress);
+        builder.StoreA(InputPreviousAddress);
+        foreach (var button in Buttons)
+        {
+            builder.StoreA(button.HoldTicksAddress);
+        }
     }
 
     private void EmitBlock(BlockSyntax block)
@@ -318,6 +346,11 @@ internal sealed class GameBoyRuntimeCompiler
         if (variables.ContainsKey(declaration.Name))
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        if (nextVariableAddress >= InputCurrentAddress)
+        {
+            throw new InvalidOperationException("Game Boy target local variables exceed the current prototype WRAM allocation.");
         }
 
         var address = nextVariableAddress++;
@@ -380,6 +413,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "map_column":
             case "sprite_asset":
                 break;
+            case "input_poll":
+                EmitInputPoll(call);
+                break;
             case "tilemap_fill_column":
                 EmitTilemapFillColumn(call);
                 break;
@@ -404,16 +440,73 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
+    private void EmitInputPoll(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 0);
+
+        builder.LoadA(InputCurrentAddress);
+        builder.StoreA(InputPreviousAddress);
+
+        builder.LoadAImmediate(0x10);
+        builder.StoreHighRamA(0x00);
+        builder.LoadHighRamA(0x00);
+        builder.ComplementA();
+        builder.AndImmediate(0x0F);
+        builder.LoadBFromA();
+
+        builder.LoadAImmediate(0x20);
+        builder.StoreHighRamA(0x00);
+        builder.LoadHighRamA(0x00);
+        builder.ComplementA();
+        builder.AndImmediate(0x0F);
+        builder.SwapA();
+        builder.OrAFromB();
+        builder.StoreA(InputCurrentAddress);
+
+        foreach (var button in Buttons)
+        {
+            EmitUpdateButtonHoldTicks(button);
+        }
+    }
+
+    private void EmitUpdateButtonHoldTicks(GameBoyButton button)
+    {
+        var resetLabel = builder.CreateLabel("button_hold_reset");
+        var endLabel = builder.CreateLabel("button_hold_end");
+
+        builder.LoadA(InputCurrentAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, resetLabel); // JP Z,resetLabel
+
+        builder.LoadA(button.HoldTicksAddress);
+        builder.CompareImmediate(0xFF);
+        builder.JumpAbsolute(0xCA, endLabel);   // JP Z,endLabel
+        builder.AddAImmediate(1);
+        builder.StoreA(button.HoldTicksAddress);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(resetLabel);
+        builder.LoadAImmediate(0);
+        builder.StoreA(button.HoldTicksAddress);
+        builder.Label(endLabel);
+    }
+
     private void EmitSpriteDraw(FunctionCall call)
     {
-        GameBoyVideoProgram.RequireArity(call, 4);
         var args = call.Parameters.ToList();
+        if (args.Count is not 4 and not 5)
+        {
+            throw new InvalidOperationException($"sprite_draw expects 4 or 5 arguments, got {args.Count}.");
+        }
+
         var assetName = GameBoyVideoProgram.IdentifierArg(args[0], "sprite_draw argument 1");
         if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
         {
             throw new InvalidOperationException($"Unknown Game Boy sprite asset '{assetName}'. Declare it with sprite_asset(...).");
         }
 
+        var flags = args.Count == 5 ? args[4] : null;
         var firstHardwareSprite = nextHardwareSprite;
         if (firstHardwareSprite + asset.Pieces.Count > 40)
         {
@@ -430,18 +523,62 @@ internal sealed class GameBoyRuntimeCompiler
             builder.AddAImmediate(16 + piece.YOffset);
             builder.StoreA(oamAddress);
 
-            EmitExpressionToA(args[1]);
-            builder.AddAImmediate(8 + piece.XOffset);
-            builder.StoreA((ushort)(oamAddress + 1));
+            EmitSpriteDrawX(args[1], flags, asset, piece, (ushort)(oamAddress + 1));
 
             EmitExpressionToA(args[3]);
             EmitMultiplyAByConstant(asset.TilesPerFrame);
             builder.AddAImmediate(asset.FirstTile + piece.TileOffset);
             builder.StoreA((ushort)(oamAddress + 2));
 
-            builder.LoadAImmediate(0);
+            if (flags is null)
+            {
+                builder.LoadAImmediate(0);
+            }
+            else
+            {
+                EmitExpressionToA(flags);
+            }
+
             builder.StoreA((ushort)(oamAddress + 3));
         }
+    }
+
+    private void EmitSpriteDrawX(
+        ExpressionSyntax xExpression,
+        ExpressionSyntax? flagsExpression,
+        GameBoyCompiledSpriteAsset asset,
+        GameBoyMetaspritePiece piece,
+        ushort oamAddress)
+    {
+        var normalOffset = piece.XOffset;
+        var flippedOffset = asset.LogicalWidth - 8 - piece.XOffset;
+        if (flagsExpression is null || normalOffset == flippedOffset)
+        {
+            EmitSpriteDrawXAtOffset(xExpression, normalOffset, oamAddress);
+            return;
+        }
+
+        var normalLabel = builder.CreateLabel("sprite_x_normal");
+        var endLabel = builder.CreateLabel("sprite_x_end");
+
+        EmitExpressionToA(flagsExpression);
+        builder.AndImmediate(0x20);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, normalLabel); // JP Z,normalLabel
+
+        EmitSpriteDrawXAtOffset(xExpression, flippedOffset, oamAddress);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(normalLabel);
+        EmitSpriteDrawXAtOffset(xExpression, normalOffset, oamAddress);
+        builder.Label(endLabel);
+    }
+
+    private void EmitSpriteDrawXAtOffset(ExpressionSyntax xExpression, int offset, ushort oamAddress)
+    {
+        EmitExpressionToA(xExpression);
+        builder.AddAImmediate(8 + offset);
+        builder.StoreA(oamAddress);
     }
 
     private void EmitMultiplyAByConstant(int factor)
@@ -737,6 +874,18 @@ internal sealed class GameBoyRuntimeCompiler
             case "button_pressed":
                 EmitButtonPressed(call);
                 break;
+            case "button_down":
+                EmitButtonDown(call);
+                break;
+            case "button_just_pressed":
+                EmitButtonJustPressed(call);
+                break;
+            case "button_just_released":
+                EmitButtonJustReleased(call);
+                break;
+            case "button_hold_ticks":
+                EmitButtonHoldTicks(call);
+                break;
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
         }
@@ -764,7 +913,7 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitButtonPressed(FunctionCall call)
     {
         GameBoyVideoProgram.RequireArity(call, 1);
-        var button = ButtonArg(call);
+        var button = ButtonArg(call, "button_pressed argument 1");
         var pressedLabel = builder.CreateLabel("button_pressed");
         var endLabel = builder.CreateLabel("button_end");
 
@@ -782,21 +931,92 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private static GameBoyButton ButtonArg(FunctionCall call)
+    private void EmitButtonDown(FunctionCall call)
     {
-        var name = GameBoyVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "button_pressed argument 1");
-        return name switch
+        GameBoyVideoProgram.RequireArity(call, 1);
+        EmitButtonMaskToBool(InputCurrentAddress, ButtonArg(call, "button_down argument 1"));
+    }
+
+    private void EmitButtonJustPressed(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 1);
+        var button = ButtonArg(call, "button_just_pressed argument 1");
+        var falseLabel = builder.CreateLabel("button_just_pressed_false");
+        var endLabel = builder.CreateLabel("button_just_pressed_end");
+
+        builder.LoadA(InputCurrentAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
+
+        builder.LoadA(InputPreviousAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
+
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitButtonJustReleased(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 1);
+        var button = ButtonArg(call, "button_just_released argument 1");
+        var falseLabel = builder.CreateLabel("button_just_released_false");
+        var endLabel = builder.CreateLabel("button_just_released_end");
+
+        builder.LoadA(InputCurrentAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
+
+        builder.LoadA(InputPreviousAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
+
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitButtonHoldTicks(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 1);
+        builder.LoadA(ButtonArg(call, "button_hold_ticks argument 1").HoldTicksAddress);
+    }
+
+    private void EmitButtonMaskToBool(ushort address, GameBoyButton button)
+    {
+        var pressedLabel = builder.CreateLabel("button_down");
+        var endLabel = builder.CreateLabel("button_down_end");
+
+        builder.LoadA(address);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, pressedLabel); // JP NZ,pressedLabel
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(pressedLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private static GameBoyButton ButtonArg(FunctionCall call, string context)
+    {
+        var name = GameBoyVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), context);
+        var button = Buttons.FirstOrDefault(button => button.Name == name);
+        if (button.Name is null)
         {
-            "a" => new GameBoyButton(0x10, 0x01),
-            "b" => new GameBoyButton(0x10, 0x02),
-            "select" => new GameBoyButton(0x10, 0x04),
-            "start" => new GameBoyButton(0x10, 0x08),
-            "right" => new GameBoyButton(0x20, 0x01),
-            "left" => new GameBoyButton(0x20, 0x02),
-            "up" => new GameBoyButton(0x20, 0x04),
-            "down" => new GameBoyButton(0x20, 0x08),
-            _ => throw new InvalidOperationException($"Unsupported Game Boy button '{name}'."),
-        };
+            throw new InvalidOperationException($"Unsupported Game Boy button '{name}'.");
+        }
+
+        return button;
     }
 
     private void EmitBinaryExpressionToA(BinaryExpressionSyntax binary)
@@ -861,7 +1081,7 @@ internal sealed class GameBoyRuntimeCompiler
         return false;
     }
 
-    private readonly record struct GameBoyButton(byte Selector, byte Mask);
+    private readonly record struct GameBoyButton(string Name, byte Selector, byte Mask, byte SnapshotMask, ushort HoldTicksAddress);
 
     private ushort VariableAddress(string name)
     {
@@ -939,6 +1159,11 @@ internal sealed class GbBuilder
         Emit(0xE6, (byte)value);
     }
 
+    public void SwapA()
+    {
+        Emit(0xCB, 0x37);
+    }
+
     public void LoadBFromA()
     {
         Emit(0x47);
@@ -952,6 +1177,11 @@ internal sealed class GbBuilder
     public void AddAFromB()
     {
         Emit(0x80);
+    }
+
+    public void OrAFromB()
+    {
+        Emit(0xB0);
     }
 
     public void LoadLFromA()

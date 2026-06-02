@@ -125,6 +125,57 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Sprite_draw_accepts_attributes_and_flips_logical_metasprites_horizontally()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(big_player, "player.sprite.json");
+                                  i16 flags = 32;
+                                  sprite_draw(big_player, 72, 64, 0, flags);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x03, 0xFE]), "sprite_draw should write the dynamic flags byte into OAM attributes.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE6, 0x20, 0xFE, 0x00, 0xCA]), "sprite_draw should test the Game Boy X-flip bit before placing metasprite pieces.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xFE]), "X-flipped first logical piece should move to the mirrored top-right hardware X coordinate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x05, 0xFE]), "X-flipped second logical piece should move to the mirrored top-left hardware X coordinate.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "X-flipped first logical piece should keep its own tile and rely on the OAM flip bit.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x06, 0xFE]), "X-flipped second logical piece should keep its own tile and rely on the OAM flip bit.");
+    }
+
+    [Fact]
+    public void Sprite_draw_flips_against_logical_width_before_padding()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(18, 16)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  i16 flags = 32;
+                                  sprite_draw(player, 72, 64, 0, flags);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xFE]), "The first 8 px piece should move to logical X + 10 when an 18 px sprite is flipped.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xFE]), "The middle 8 px piece should move to logical X + 2 when an 18 px sprite is flipped.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xFE]), "The padded edge piece should straddle the logical origin instead of adding padded left spacing.");
+    }
+
+    [Fact]
     public void Sprite_draw_treats_frame_as_a_logical_frame_index()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -453,6 +504,149 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_tick_input_api_for_variable_jump()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  i16 grounded = 1;
+                                  i16 velocityY = 0;
+                                  i16 jumping = 0;
+                                  i16 jumpTicks = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      input_poll();
+                                      if (button_just_pressed(a) != 0) {
+                                          if (grounded != 0) {
+                                              velocityY = 252;
+                                              jumping = 1;
+                                          }
+                                      }
+                                      if (jumping != 0) {
+                                          jumpTicks = button_hold_ticks(a);
+                                          if (button_down(a) != 0) {
+                                              if (jumpTicks < 12) {
+                                                  velocityY = velocityY - 1;
+                                              }
+                                          }
+                                          if (button_just_released(a) != 0) {
+                                              jumping = 0;
+                                          }
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xEA, 0xF1, 0xC0]), "input_poll should snapshot the previous button mask before reading the current tick.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xE0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0x47]), "input_poll should read the action-button group into the current tick mask.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0xB0, 0xEA, 0xF0, 0xC0]), "input_poll should read the direction-button group and store a combined button mask.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF2, 0xC0, 0xEA, 0x03, 0xC0]), "button_hold_ticks(a) should read the A-button hold counter into a game variable.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xCA]), "button_down(a) and button_just_pressed(a) should test the current tick mask.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF1, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xC2]), "button_just_pressed(a) should reject buttons that were already down in the previous tick.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xC2]), "button_just_released(a) should require the button to be up in the current tick.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF1, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xCA]), "button_just_released(a) should require the button to have been down in the previous tick.");
+    }
+
+    [Fact]
+    public void GameBoy_runner_drives_scroll_and_run_animation_from_dpad()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        var rightStart = source.IndexOf("if (button_down(right) != 0)", StringComparison.Ordinal);
+        Assert.True(rightStart >= 0, "Runner should gate forward movement with the D-pad right button.");
+
+        var leftStart = source.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
+        Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
+
+        var forwardStreamStart = source.IndexOf("if (fine == 8)", StringComparison.Ordinal);
+        Assert.True(forwardStreamStart > rightStart, "Runner should update movement before streaming map columns.");
+
+        var movementBlock = source[rightStart..forwardStreamStart];
+        Assert.Contains("camera = camera + 1;", movementBlock);
+        Assert.Contains("fine = fine + 1;", movementBlock);
+        Assert.Contains("moving = 1;", movementBlock);
+        Assert.Contains("camera = camera - 1;", movementBlock);
+        Assert.Contains("fine = fine - 1;", movementBlock);
+        Assert.Contains("if (moving != 0)", source);
+        Assert.Contains("if (fine == 255)", source);
+        Assert.Contains("streamColumn = streamColumn - 1;", source);
+        Assert.Contains("mapColumn = mapColumn - 1;", source);
+        Assert.Contains("animTick = animTick + 1;", source);
+        Assert.Contains("frame = 0;", source);
+        Assert.Equal(1, CountOccurrences(source, "camera = camera + 1;"));
+        Assert.Equal(1, CountOccurrences(source, "camera = camera - 1;"));
+        Assert.Equal(1, CountOccurrences(source, "animTick = animTick + 1;"));
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_uses_one_actor_spritesheet_for_idle_run_and_jump_states()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("""sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);""", source);
+        Assert.DoesNotContain("sprites_clear();", source);
+        Assert.Contains("if (grounded == 0)", source);
+        Assert.Contains("displayFrame = 4;", source);
+        Assert.Contains("displayFrame = frame + 1;", source);
+        Assert.Contains("displayFrame = 0;", source);
+        Assert.Contains("displayFlags = 32;", source);
+        Assert.Contains("displayFlags = 0;", source);
+        Assert.Contains("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlags);", source);
+        Assert.Equal(1, CountOccurrences(source, "sprite_draw("));
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_uses_lighter_object_palette_for_player_sprite()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("object_palette_set(0, 0);", source);
+        Assert.Contains("object_palette_set(1, 0);", source);
+        Assert.Contains("object_palette_set(2, 1);", source);
+        Assert.Contains("object_palette_set(3, 3);", source);
+        Assert.DoesNotContain("object_palette_set(1, 1);", source);
+        Assert.DoesNotContain("object_palette_set(2, 2);", source);
+        Assert.DoesNotContain("object_palette_set(1, 2);", source);
+        Assert.DoesNotContain("object_palette_set(2, 3);", source);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "Runner should map sprite tones to OBP0 as 0, 0, 1, 3.");
+    }
+
+    [Fact]
+    public void GameBoy_runner_presents_sprites_immediately_after_vblank()
+    {
+        var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
+
+        Assert.Contains("i16 playerY = 77;", source);
+        Assert.Contains("i16 grounded = 1;", source);
+
+        var vblankStart = source.IndexOf("video_wait_vblank();", StringComparison.Ordinal);
+        var inputPoll = source.IndexOf("input_poll();", StringComparison.Ordinal);
+        var gravity = source.IndexOf("velocityY = velocityY + 1;", StringComparison.Ordinal);
+        var draw = source.IndexOf("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlags);", StringComparison.Ordinal);
+
+        Assert.True(vblankStart >= 0);
+        Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
+        Assert.True(inputPoll > draw, "Runner should finish sprite presentation before input and gameplay updates consume VBlank time.");
+        Assert.True(gravity > inputPoll, "Runner should update gameplay after the VBlank presentation block.");
+    }
+
+    [Fact]
     public void Compiles_long_if_body_with_map_streaming()
     {
         const string source = """
@@ -706,5 +900,35 @@ public class GameBoyRomCompilerTests
         }
 
         return false;
+    }
+
+    private static string RepositoryFile(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
     }
 }

@@ -12,6 +12,8 @@ internal sealed class GameBoyCompiledSpriteAsset
 
     public required int Height { get; init; }
 
+    public required int LogicalWidth { get; init; }
+
     public required int FrameCount { get; init; }
 
     public required int TilesPerFrame { get; init; }
@@ -45,6 +47,8 @@ internal static class GameBoySpriteAssetCompiler
             ".png" => ReadPngFrames(path, frameWidth, frameHeight),
             _ => throw new InvalidOperationException($"Game Boy sprite asset '{path}' must be a .json or .png file."),
         };
+
+        var logicalWidth = frames[0][0].Length;
 
         frames = PadFramesToHardwareCells(frames);
         var width = frames[0][0].Length;
@@ -82,6 +86,7 @@ internal static class GameBoySpriteAssetCompiler
             FirstTile = firstTile,
             Width = width,
             Height = height,
+            LogicalWidth = logicalWidth,
             FrameCount = frames.Count,
             TilesPerFrame = tilesPerFrame,
             TileData = tileData,
