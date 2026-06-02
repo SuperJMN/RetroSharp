@@ -263,6 +263,8 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort InputCurrentAddress = 0xC0F0;
     private const ushort InputPreviousAddress = 0xC0F1;
     private const ushort InputHoldTicksStartAddress = 0xC0F2;
+    private const byte JoypadDeselect = 0x30;
+    private const int JoypadSettleReadCount = 4;
 
     private static readonly GameBoyButton[] Buttons =
     [
@@ -447,26 +449,38 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadA(InputCurrentAddress);
         builder.StoreA(InputPreviousAddress);
 
-        builder.LoadAImmediate(0x10);
-        builder.StoreHighRamA(0x00);
-        builder.LoadHighRamA(0x00);
-        builder.ComplementA();
-        builder.AndImmediate(0x0F);
+        EmitReadJoypadNibble(0x10);
         builder.LoadBFromA();
 
-        builder.LoadAImmediate(0x20);
-        builder.StoreHighRamA(0x00);
-        builder.LoadHighRamA(0x00);
-        builder.ComplementA();
-        builder.AndImmediate(0x0F);
+        EmitReadJoypadNibble(0x20);
         builder.SwapA();
         builder.OrAFromB();
         builder.StoreA(InputCurrentAddress);
+        EmitDeselectJoypad();
 
         foreach (var button in Buttons)
         {
             EmitUpdateButtonHoldTicks(button);
         }
+    }
+
+    private void EmitReadJoypadNibble(byte selector)
+    {
+        builder.LoadAImmediate(selector);
+        builder.StoreHighRamA(0x00);
+        for (var i = 0; i < JoypadSettleReadCount; i++)
+        {
+            builder.LoadHighRamA(0x00);
+        }
+
+        builder.ComplementA();
+        builder.AndImmediate(0x0F);
+    }
+
+    private void EmitDeselectJoypad()
+    {
+        builder.LoadAImmediate(JoypadDeselect);
+        builder.StoreHighRamA(0x00);
     }
 
     private void EmitUpdateButtonHoldTicks(GameBoyButton button)
@@ -917,16 +931,15 @@ internal sealed class GameBoyRuntimeCompiler
         var pressedLabel = builder.CreateLabel("button_pressed");
         var endLabel = builder.CreateLabel("button_end");
 
-        builder.LoadAImmediate(button.Selector);
-        builder.StoreHighRamA(0x00);
-        builder.LoadHighRamA(0x00);
-        builder.ComplementA();
+        EmitReadJoypadNibble(button.Selector);
         builder.AndImmediate(button.Mask);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, pressedLabel); // JP NZ,pressedLabel
+        EmitDeselectJoypad();
         builder.LoadAImmediate(0);
         builder.JumpAbsolute(endLabel);
         builder.Label(pressedLabel);
+        EmitDeselectJoypad();
         builder.LoadAImmediate(1);
         builder.Label(endLabel);
     }
