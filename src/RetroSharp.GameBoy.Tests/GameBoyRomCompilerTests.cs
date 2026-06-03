@@ -595,7 +595,10 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (moving != 0)", source);
         Assert.Contains("if (fine == 255)", source);
         Assert.Contains("streamColumn = streamColumn - 1;", source);
-        Assert.Contains("mapColumn = mapColumn - 1;", source);
+        Assert.Contains("leftStreamColumn = leftStreamColumn - 1;", source);
+        Assert.Contains("screenLeftColumn = screenLeftColumn - 1;", source);
+        Assert.Contains("rightSourceColumn = rightSourceColumn - 1;", source);
+        Assert.Contains("leftSourceColumn = leftSourceColumn - 1;", source);
         Assert.Contains("animTick = animTick + 1;", source);
         Assert.Contains("frame = 0;", source);
         Assert.Equal(1, CountOccurrences(source, "camera = camera + 1;"));
@@ -653,7 +656,7 @@ public class GameBoyRomCompilerTests
     {
         var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
 
-        Assert.Contains("i16 playerY = 77;", source);
+        Assert.Contains("i16 playerY = 73;", source);
         Assert.Contains("i16 grounded = 1;", source);
 
         var vblankStart = source.IndexOf("video_wait_vblank();", StringComparison.Ordinal);
@@ -665,6 +668,110 @@ public class GameBoyRomCompilerTests
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
         Assert.True(inputPoll > draw, "Runner should finish sprite presentation before input and gameplay updates consume VBlank time.");
         Assert.True(gravity > inputPoll, "Runner should update gameplay after the VBlank presentation block.");
+    }
+
+    [Fact]
+    public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("i16 playerLeftFootColumn = 0;", source);
+        Assert.Contains("i16 playerRightFootColumn = 0;", source);
+        Assert.Contains("i16 footTile = 0;", source);
+        Assert.Contains("i16 failTile = 0;", source);
+        Assert.Contains("i16 resetRequested = 0;", source);
+
+        Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
+        Assert.Contains("map_column(13, 0, 0, 0, 0);", source);
+        Assert.Contains("playerLeftFootColumn = screenLeftColumn + 9;", source);
+        Assert.Contains("playerRightFootColumn = playerLeftFootColumn + 1;", source);
+        Assert.Contains("if (playerLeftFootColumn >= 16)", source);
+        Assert.Contains("if (playerRightFootColumn == 16)", source);
+        Assert.Contains("map_tile_at(playerLeftFootColumn, 2)", source);
+        Assert.Contains("map_tile_at(playerRightFootColumn, 2)", source);
+        Assert.Equal(1, CountOccurrences(source, "map_tile_at(playerLeftFootColumn, 2)"));
+        Assert.Equal(1, CountOccurrences(source, "map_tile_at(playerRightFootColumn, 2)"));
+        Assert.Contains("if (failTile == 3)", source);
+        Assert.Contains("footTile = failTile;", source);
+        Assert.Contains("if (grounded == 0)", source);
+        Assert.Contains("if (playerY >= 116)", source);
+        Assert.Contains("if (resetRequested != 0)", source);
+        Assert.Contains("playerY = 73;", source);
+        Assert.Contains("velocityY = 0;", source);
+        Assert.Contains("jumping = 0;", source);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_keeps_visible_map_collision_and_streaming_cursors_in_sync()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("tilemap_fill(13, 13, 3, 2, 0);", source);
+        Assert.Contains("tilemap_fill(29, 13, 3, 2, 0);", source);
+        Assert.Contains("map_column(13, 0, 0, 0, 0);", source);
+        Assert.Contains("map_column(14, 0, 0, 0, 0);", source);
+        Assert.Contains("map_column(15, 0, 0, 0, 0);", source);
+
+        Assert.Contains("i16 screenLeftColumn = 0;", source);
+        Assert.Contains("i16 rightSourceColumn = 4;", source);
+        Assert.Contains("i16 leftSourceColumn = 15;", source);
+        Assert.Contains("i16 leftStreamColumn = 31;", source);
+        Assert.Contains("playerLeftFootColumn = screenLeftColumn + 9;", source);
+        Assert.Contains("playerRightFootColumn = playerLeftFootColumn + 1;", source);
+        Assert.Contains("map_stream_column(streamColumn, rightSourceColumn, 11, 4);", source);
+        Assert.Contains("map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);", source);
+        Assert.Contains("screenLeftColumn = screenLeftColumn + 1;", source);
+        Assert.Contains("screenLeftColumn = screenLeftColumn - 1;", source);
+
+        var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
+        Assert.True(resetStart >= 0);
+        var displayStart = source.IndexOf("if (grounded == 0)", resetStart, StringComparison.Ordinal);
+        Assert.True(displayStart > resetStart);
+        var resetBlock = source[resetStart..displayStart];
+        Assert.DoesNotContain("camera = 0;", resetBlock);
+        Assert.DoesNotContain("streamColumn = 20;", resetBlock);
+        Assert.DoesNotContain("screenLeftColumn = 0;", resetBlock);
+        Assert.DoesNotContain("rightSourceColumn = 4;", resetBlock);
+        Assert.DoesNotContain("leftSourceColumn = 15;", resetBlock);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_keeps_ground_alignment_and_reset_animation_state()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("i16 playerY = 73;", source);
+        Assert.Contains("if (playerY >= 74)", source);
+        Assert.Equal(3, CountOccurrences(source, "playerY = 73;"));
+        Assert.DoesNotContain("playerY = 77;", source);
+        Assert.Contains("tilemap_fill(0, 13, 32, 1, 4);", source);
+        Assert.Contains("map_column(0, 0, 0, 4, 5);", source);
+        Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
+        Assert.Contains("tilemap_set(7, 13, 3);", source);
+        Assert.Contains("if (failTile == 3)", source);
+        Assert.DoesNotContain("if (failTile == 4)", source);
+
+        var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
+        Assert.True(resetStart >= 0);
+        var displayStart = source.IndexOf("if (grounded == 0)", resetStart, StringComparison.Ordinal);
+        Assert.True(displayStart > resetStart);
+        var resetBlock = source[resetStart..displayStart];
+        Assert.DoesNotContain("frame = 0;", resetBlock);
+        Assert.DoesNotContain("displayFlags = 0;", resetBlock);
+        Assert.DoesNotContain("animTick = 0;", resetBlock);
+        Assert.DoesNotContain("moving = 0;", resetBlock);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
     }
 
     [Fact]

@@ -13,34 +13,44 @@ void main() {
     tilemap_fill(0, 0, 32, 32, 0);
     tilemap_fill(0, 14, 32, 1, 5);
     tilemap_fill(0, 13, 32, 1, 4);
-    tilemap_set(4, 12, 5);
-    tilemap_set(12, 11, 5);
-    tilemap_set(20, 12, 5);
-    tilemap_set(28, 11, 5);
+    tilemap_fill(13, 13, 3, 2, 0);
+    tilemap_fill(29, 13, 3, 2, 0);
+    tilemap_set(2, 12, 5);
+    tilemap_set(7, 13, 3);
+    tilemap_set(10, 11, 5);
+    tilemap_set(18, 12, 5);
+    tilemap_set(23, 13, 3);
+    tilemap_set(26, 11, 5);
 
-    map_column(0, 0, 0, 3, 5);
-    map_column(1, 0, 0, 3, 5);
-    map_column(2, 0, 5, 3, 5);
-    map_column(3, 0, 0, 3, 5);
-    map_column(4, 0, 0, 3, 5);
-    map_column(5, 0, 0, 3, 5);
-    map_column(6, 0, 5, 3, 5);
+    map_column(0, 0, 0, 4, 5);
+    map_column(1, 0, 0, 4, 5);
+    map_column(2, 0, 5, 4, 5);
+    map_column(3, 0, 0, 4, 5);
+    map_column(4, 0, 0, 4, 5);
+    map_column(5, 0, 0, 4, 5);
+    map_column(6, 0, 0, 4, 5);
     map_column(7, 0, 0, 3, 5);
-    map_column(8, 0, 0, 3, 5);
-    map_column(9, 0, 0, 3, 5);
-    map_column(10, 5, 0, 3, 5);
-    map_column(11, 0, 0, 3, 5);
-    map_column(12, 0, 0, 3, 5);
-    map_column(13, 0, 5, 3, 5);
-    map_column(14, 0, 0, 3, 5);
-    map_column(15, 0, 0, 3, 5);
+    map_column(8, 0, 0, 4, 5);
+    map_column(9, 0, 0, 4, 5);
+    map_column(10, 5, 0, 4, 5);
+    map_column(11, 0, 0, 4, 5);
+    map_column(12, 0, 0, 4, 5);
+    map_column(13, 0, 0, 0, 0);
+    map_column(14, 0, 0, 0, 0);
+    map_column(15, 0, 0, 0, 0);
 
     i16 camera = 0;
     i16 fine = 0;
     i16 streamColumn = 20;
-    i16 mapColumn = 0;
-    i16 collisionColumn = 0;
-    i16 playerY = 77;
+    i16 leftStreamColumn = 31;
+    i16 screenLeftColumn = 0;
+    i16 rightSourceColumn = 4;
+    i16 leftSourceColumn = 15;
+    i16 playerLeftFootColumn = 0;
+    i16 playerRightFootColumn = 0;
+    i16 footTile = 0;
+    i16 failTile = 0;
+    i16 playerY = 73;
     i16 velocityY = 0;
     i16 grounded = 1;
     i16 frame = 0;
@@ -50,6 +60,7 @@ void main() {
     i16 jumping = 0;
     i16 jumpTicks = 0;
     i16 moving = 0;
+    i16 resetRequested = 0;
 
     while (true) {
         video_wait_vblank();
@@ -58,16 +69,56 @@ void main() {
 
         input_poll();
 
+        resetRequested = 0;
         grounded = 0;
         velocityY = velocityY + 1;
         playerY = playerY + velocityY;
-        collisionColumn = mapColumn;
-        if (playerY >= 78) {
-            if (map_tile_at(collisionColumn, 2) != 0) {
-                playerY = 77;
+        playerLeftFootColumn = screenLeftColumn + 9;
+        if (playerLeftFootColumn >= 16) {
+            playerLeftFootColumn = playerLeftFootColumn - 16;
+        }
+
+        playerRightFootColumn = playerLeftFootColumn + 1;
+        if (playerRightFootColumn == 16) {
+            playerRightFootColumn = 0;
+        }
+
+        footTile = 0;
+        failTile = 0;
+        if (playerY >= 74) {
+            failTile = map_tile_at(playerLeftFootColumn, 2);
+            if (failTile == 3) {
+                resetRequested = 1;
+            }
+
+            if (failTile != 0) {
+                if (failTile != 3) {
+                    footTile = failTile;
+                }
+            }
+
+            failTile = map_tile_at(playerRightFootColumn, 2);
+            if (failTile == 3) {
+                resetRequested = 1;
+            }
+
+            if (failTile != 0) {
+                if (failTile != 3) {
+                    footTile = failTile;
+                }
+            }
+
+            if (footTile != 0) {
+                playerY = 73;
                 velocityY = 0;
                 grounded = 1;
                 jumping = 0;
+            }
+        }
+
+        if (grounded == 0) {
+            if (playerY >= 116) {
+                resetRequested = 1;
             }
         }
 
@@ -109,33 +160,63 @@ void main() {
 
         if (fine == 8) {
             fine = 0;
-            map_stream_column(streamColumn, mapColumn, 11, 4);
+            map_stream_column(streamColumn, rightSourceColumn, 11, 4);
 
             streamColumn = streamColumn + 1;
             if (streamColumn == 32) {
                 streamColumn = 0;
             }
 
-            mapColumn = mapColumn + 1;
-            if (mapColumn == 16) {
-                mapColumn = 0;
+            leftStreamColumn = leftStreamColumn + 1;
+            if (leftStreamColumn == 32) {
+                leftStreamColumn = 0;
+            }
+
+            screenLeftColumn = screenLeftColumn + 1;
+            if (screenLeftColumn == 16) {
+                screenLeftColumn = 0;
+            }
+
+            rightSourceColumn = rightSourceColumn + 1;
+            if (rightSourceColumn == 16) {
+                rightSourceColumn = 0;
+            }
+
+            leftSourceColumn = leftSourceColumn + 1;
+            if (leftSourceColumn == 16) {
+                leftSourceColumn = 0;
             }
         }
 
         if (fine == 255) {
             fine = 7;
 
+            map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);
+
             streamColumn = streamColumn - 1;
             if (streamColumn == 255) {
                 streamColumn = 31;
             }
 
-            mapColumn = mapColumn - 1;
-            if (mapColumn == 255) {
-                mapColumn = 15;
+            leftStreamColumn = leftStreamColumn - 1;
+            if (leftStreamColumn == 255) {
+                leftStreamColumn = 31;
             }
 
-            map_stream_column(streamColumn, mapColumn, 11, 4);
+            screenLeftColumn = screenLeftColumn - 1;
+            if (screenLeftColumn == 255) {
+                screenLeftColumn = 15;
+            }
+
+            rightSourceColumn = rightSourceColumn - 1;
+            if (rightSourceColumn == 255) {
+                rightSourceColumn = 15;
+            }
+
+            leftSourceColumn = leftSourceColumn - 1;
+            if (leftSourceColumn == 255) {
+                leftSourceColumn = 15;
+            }
         }
 
         if (moving != 0) {
@@ -153,6 +234,19 @@ void main() {
                     frame = 0;
                 }
             }
+        }
+
+        if (resetRequested != 0) {
+            playerLeftFootColumn = 0;
+            playerRightFootColumn = 0;
+            footTile = 0;
+            failTile = 0;
+            playerY = 73;
+            velocityY = 0;
+            grounded = 1;
+            displayFrame = 0;
+            jumping = 0;
+            jumpTicks = 0;
         }
 
         if (grounded == 0) {

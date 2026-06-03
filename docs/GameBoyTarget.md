@@ -111,7 +111,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add collision against a simple tile row.
 - [x] Add input-driven jump from the Game Boy joypad.
 - [x] Add tick-based input helpers for edge-triggered and variable-height jump behavior.
-- [ ] Make the Game Boy runner a playable loop: hitbox-based ground checks, holes, and reset/fail state.
+- [x] Make the Game Boy runner a playable loop: hitbox-based ground checks, holes, and reset/fail state.
 - [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
 - [ ] Define a portable video/input API contract shared by Game Boy and NES.
 - [ ] Add a NES parity spike for logical sprites, input, scroll, and tile collision.
@@ -138,12 +138,18 @@ Landed after the initial runner loop:
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
 - `sprite_draw` accepts an optional Game Boy OAM flags argument; the runner uses the X-flip bit to make the same idle, run, and jump frames face left while preserving the last facing direction.
 
+Landed after the playable-loop pass:
+
+- The runner checks the logical player width against left and right foot columns instead of using a single source-map tile.
+- The initial visible background matches the same source-map pattern used for streaming, including a visible multi-column hole and failure tile.
+- Separate left/right streaming cursors keep the background stable when changing direction.
+- The reset path restores actor position, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
+
 ## Next Milestones
 
-1. Close the remaining immediate playable-loop gaps in the Game Boy runner: use the logical sprite hitbox for ground checks, add holes/obstacles to the streamed map, and reset when the actor falls or collides with a failure tile.
-2. Promote the runner logic one level above raw intrinsics where it proves stable. Candidate helpers are `map_solid_at`, actor-foot collision, and simple actor reset.
-3. Define the portable runtime surface before adding more target-specific APIs. The current candidates are `video_wait_vblank`, `input_poll`, `scroll_set`, `sprite_asset`, `sprite_draw`, `map_column`, `map_stream_column`, `map_tile_at`, `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`.
-4. Decide how target capability differences are reported: hard compiler error, documented degradation, or platform-specific variant.
-5. Spike the same runner contract on NES, starting with `scroll_set` and the tick-based input helpers, then logical sprites and tile collision.
-6. Extract shared concepts from the Game Boy direct compiler so the ROM targets stop growing as isolated one-off backends.
-7. Keep the GB runner as the acceptance sample: if it cannot still compile and run, the portable runtime surface is not stable enough.
+1. Promote the stable runner logic one level above raw intrinsics. Candidate helpers are `map_solid_at`, actor-foot collision, and simple actor reset.
+2. Define the portable runtime surface before adding more target-specific APIs. The current candidates are `video_wait_vblank`, `input_poll`, `scroll_set`, `sprite_asset`, `sprite_draw`, `map_column`, `map_stream_column`, `map_tile_at`, `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`.
+3. Decide how target capability differences are reported: hard compiler error, documented degradation, or platform-specific variant.
+4. Spike the same runner contract on NES, starting with `scroll_set` and the tick-based input helpers, then logical sprites and tile collision.
+5. Extract shared concepts from the Game Boy direct compiler so the ROM targets stop growing as isolated one-off backends.
+6. Keep the GB runner as the acceptance sample: if it cannot still compile and run, the portable runtime surface is not stable enough.
