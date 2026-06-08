@@ -4,7 +4,7 @@ Status: experimental, intentionally narrow.
 
 The NES target currently compiles a constrained static drawing subset directly to an iNES ROM and supports the first tick-based input, logical sprite, and horizontal camera runtime helpers. It does not yet support vertical camera movement, full Game Boy runner parity, or frame-by-frame background streaming.
 
-See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics.
+See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics, and `Portable2DSdkV1.md` for the current SDK v1 reference.
 
 ## Target Capabilities
 

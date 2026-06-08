@@ -941,14 +941,16 @@ Status: landed 2026-06-08.
 
 #### AR-11.2: Write SDK v1 API reference
 
+- Status: landed 2026-06-08.
 - Layer: documentation.
 - Candidate files: new SDK reference doc, README.
 - Steps:
-  - Document signatures, capability requirements, target support, and failure modes.
-  - Include minimal GB/NES examples.
-  - Link from README.
+  - [x] Document signatures, capability requirements, target support, and failure modes.
+  - [x] Include minimal GB/NES examples.
+  - [x] Link from README.
 - Verification:
-  - New users can find the portable SDK path without reading Game Boy internals.
+  - [x] New users can find the portable SDK path without reading Game Boy internals.
+  - [x] `dotnet test src/RetroSharp.Core.Tests/RetroSharp.Core.Tests.csproj --no-restore --filter SdkV1ReferenceTests`
 
 #### AR-11.3: Add cross-target acceptance checks
 
