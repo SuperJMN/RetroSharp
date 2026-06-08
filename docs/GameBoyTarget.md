@@ -6,6 +6,27 @@ The Game Boy target is the first playable target. It currently compiles a constr
 
 See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics. This file tracks the current Game Boy target subset and runner milestones.
 
+## Target Capabilities
+
+The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capability checks.
+
+| Capability | Value |
+| --- | --- |
+| Target name | `gb` |
+| Screen pixels | 160x144 |
+| Visible tile grid | 20x18 |
+| Tile size | 8x8 |
+| Background buffer | 32x32 tiles |
+| Fine scroll | X and Y |
+| Background tile write budget | 20 tile writes per frame |
+| Attribute write budget | 0 per frame on the current DMG target |
+| Hardware sprites | 40 total, 10 per scanline |
+| Sprite size modes | 8x8 and 8x16 |
+| Sprite palettes | 2 object palette slots |
+| Background palettes | 1 background palette slot |
+| Sprite transforms | Flip X and Flip Y |
+| HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
+
 ## Supported Runtime Subset
 
 - `void main()`
