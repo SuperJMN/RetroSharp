@@ -1,5 +1,7 @@
 # Game Boy Window HUD Sample
 
+Sample Layer: `target-capability-spike`
+
 Build a Game Boy ROM with the first Window HUD prototype:
 
 ```bash

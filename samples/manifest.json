@@ -1,0 +1,34 @@
+{
+  "samples": [
+    {
+      "path": "samples/cross-target-camera/camera.rs",
+      "readme": "samples/cross-target-camera/README.md",
+      "layer": "portable-sdk",
+      "targets": ["gb", "nes"]
+    },
+    {
+      "path": "samples/gameboy-drawing/drawing.rs",
+      "readme": "samples/gameboy-drawing/README.md",
+      "layer": "target-intrinsic",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/gameboy-hud/hud.rs",
+      "readme": "samples/gameboy-hud/README.md",
+      "layer": "target-capability-spike",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/gameboy-runner/runner.rs",
+      "readme": "samples/gameboy-runner/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/nes-drawing/drawing.rs",
+      "readme": "samples/nes-drawing/README.md",
+      "layer": "target-intrinsic",
+      "targets": ["nes"]
+    }
+  ]
+}
