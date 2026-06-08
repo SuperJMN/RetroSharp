@@ -1,0 +1,75 @@
+namespace RetroSharp.Core.Sdk;
+
+using RetroSharp.Core.Targeting;
+
+public static class Sdk2DOperationValidator
+{
+    public static void Validate(Target2DCapabilities capabilities, Sdk2DOperation operation)
+    {
+        switch (operation)
+        {
+            case Sdk2DOperation.WaitFrame:
+            case Sdk2DOperation.PollInput:
+            case Sdk2DOperation.ReadWorldTile:
+            case Sdk2DOperation.ReadWorldTileFlags:
+                return;
+            case Sdk2DOperation.DrawLogicalSprite draw:
+                ValidateDrawLogicalSprite(capabilities, draw);
+                return;
+            case Sdk2DOperation.SetCameraPosition camera:
+                RequireAxes(capabilities, camera.Axes);
+                return;
+            case Sdk2DOperation.ApplyCamera camera:
+                RequireAxes(capabilities, camera.Axes);
+                return;
+            case Sdk2DOperation.StreamMapColumn column:
+                TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Horizontal);
+                RequireBackgroundTileWriteBudget(capabilities, column.Height, "streaming a visible map column");
+                return;
+            case Sdk2DOperation.StreamMapRow row:
+                TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
+                RequireBackgroundTileWriteBudget(capabilities, row.Width, "streaming a visible map row");
+                return;
+            case Sdk2DOperation.SetHudTile hud:
+                TargetCapabilityChecks.RequireHudMode(capabilities, hud.Mode);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK operation '{operation.GetType().Name}'.");
+        }
+    }
+
+    private static void ValidateDrawLogicalSprite(Target2DCapabilities capabilities, Sdk2DOperation.DrawLogicalSprite draw)
+    {
+        if (draw.PaletteSlot < 0 || draw.PaletteSlot >= capabilities.SpritePaletteSlots)
+        {
+            throw new InvalidOperationException(
+                $"Target '{capabilities.Name}' supports sprite palette slots 0..{capabilities.SpritePaletteSlots - 1}, but slot {draw.PaletteSlot} was requested.");
+        }
+
+        TargetCapabilityChecks.RequireSpriteTransform(capabilities, draw.Transform);
+    }
+
+    private static void RequireAxes(Target2DCapabilities capabilities, ScrollAxes axes)
+    {
+        if (axes.HasFlag(ScrollAxes.Horizontal))
+        {
+            TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Horizontal);
+        }
+
+        if (axes.HasFlag(ScrollAxes.Vertical))
+        {
+            TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
+        }
+    }
+
+    private static void RequireBackgroundTileWriteBudget(Target2DCapabilities capabilities, int requiredWrites, string operationDescription)
+    {
+        if (capabilities.MaxBackgroundTileWritesPerFrame >= requiredWrites)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Target '{capabilities.Name}' supports {capabilities.MaxBackgroundTileWritesPerFrame} background tile writes per frame, but {requiredWrites} are required for {operationDescription}.");
+    }
+}

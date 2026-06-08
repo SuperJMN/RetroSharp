@@ -138,6 +138,23 @@ Target 'nes' does not support Window HUD. Use SplitScroll, SpriteHud, or disable
 
 Capability checks should use the shared targeting helpers so diagnostics stay stable. `TargetCapabilityChecks.RequireHudMode(...)` is the first reusable check and formats unsupported-feature messages through `TargetCapabilityErrorFormatter`.
 
+## Shared SDK Operation Model
+
+Portable 2D calls should be represented as semantic operations before target lowering. The first shared model lives under `RetroSharp.Core.Sdk`:
+
+- `Sdk2DOperation.WaitFrame`
+- `Sdk2DOperation.PollInput`
+- `Sdk2DOperation.DrawLogicalSprite`
+- `Sdk2DOperation.SetCameraPosition`
+- `Sdk2DOperation.ApplyCamera`
+- `Sdk2DOperation.StreamMapColumn`
+- `Sdk2DOperation.StreamMapRow`
+- `Sdk2DOperation.ReadWorldTile`
+- `Sdk2DOperation.ReadWorldTileFlags`
+- `Sdk2DOperation.SetHudTile`
+
+`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels.
+
 ## Agent Task Contract
 
 Use the task breakdown below as issue-sized implementation units. Before starting any task, the agent should inspect the current code paths because candidate file names are guidance, not a mandate.
