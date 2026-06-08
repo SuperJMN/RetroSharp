@@ -2,7 +2,9 @@ namespace RetroSharp.GameBoy.Tests;
 
 using System.Buffers.Binary;
 using System.IO.Compression;
+using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
+using RetroSharp.Parser;
 using Xunit;
 
 public class GameBoyRomCompilerTests
@@ -850,6 +852,56 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void World_map_generates_initial_visible_tilemap_from_map_columns()
+    {
+        const string source = """
+                              void define_level_columns() {
+                                  map_column(0, 0, 0, 4, 5);
+                                  map_column(1, 0, 0, 4, 5);
+                                  map_column(2, 0, 5, 4, 5);
+                                  map_column(3, 0, 0, 4, 5);
+                                  map_column(4, 0, 0, 4, 5);
+                                  map_column(5, 0, 0, 4, 5);
+                                  map_column(6, 0, 0, 4, 5);
+                                  map_column(7, 0, 0, 3, 5);
+                                  map_column(8, 0, 0, 4, 5);
+                                  map_column(9, 0, 0, 4, 5);
+                                  map_column(10, 5, 0, 4, 5);
+                                  map_column(11, 0, 0, 4, 5);
+                                  map_column(12, 0, 0, 4, 5);
+                                  map_column(13, 0, 0, 0, 0);
+                                  map_column(14, 0, 0, 0, 0);
+                                  map_column(15, 0, 0, 0, 0);
+                                  return;
+                              }
+
+                              void main() {
+                                  define_level_columns();
+                                  world_map(16, 11, 4);
+                                  return;
+                              }
+                              """;
+
+        var program = CompileVideoProgram(source);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+
+        Assert.Equal(16, worldMap.Width);
+        Assert.Equal(4, worldMap.Height);
+        Assert.Equal(3, worldMap.TileIdAt(7, 2));
+        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(7, 2));
+        Assert.Equal(4, program.TileMap[13 * 32]);
+        Assert.Equal(5, program.TileMap[14 * 32]);
+        Assert.Equal(5, program.TileMap[12 * 32 + 2]);
+        Assert.Equal(5, program.TileMap[11 * 32 + 10]);
+        Assert.Equal(3, program.TileMap[13 * 32 + 7]);
+        Assert.Equal(0, program.TileMap[13 * 32 + 13]);
+        Assert.Equal(0, program.TileMap[14 * 32 + 13]);
+        Assert.Equal(5, program.TileMap[12 * 32 + 18]);
+        Assert.Equal(3, program.TileMap[13 * 32 + 23]);
+        Assert.Equal(0, program.TileMap[13 * 32 + 29]);
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
@@ -885,13 +937,18 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("tilemap_fill(13, 13, 3, 2, 0);", source);
-        Assert.Contains("tilemap_fill(29, 13, 3, 2, 0);", source);
+        Assert.DoesNotContain("void draw_starting_scene()", source);
+        Assert.DoesNotContain("tilemap_fill(", source);
+        Assert.DoesNotContain("tilemap_set(", source);
+        Assert.Contains("world_map(16, 11, 4);", source);
         Assert.Contains("map_column(13, 0, 0, 0, 0);", source);
         Assert.Contains("map_column(14, 0, 0, 0, 0);", source);
         Assert.Contains("map_column(15, 0, 0, 0, 0);", source);
 
         Assert.Contains("camera_init(16, 11, 4);", source);
+        Assert.True(
+            source.IndexOf("camera_init(16, 11, 4);", StringComparison.Ordinal) >
+            source.IndexOf("world_map(16, 11, 4);", StringComparison.Ordinal));
         Assert.Contains("camera_apply();", source);
         Assert.Contains("footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);", source);
         Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
@@ -948,10 +1005,10 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (playerY >= 74)", source);
         Assert.Equal(3, CountOccurrences(source, "playerY = 73;"));
         Assert.DoesNotContain("playerY = 77;", source);
-        Assert.Contains("tilemap_fill(0, 13, 32, 1, 4);", source);
+        Assert.Contains("world_map(16, 11, 4);", source);
         Assert.Contains("map_column(0, 0, 0, 4, 5);", source);
         Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
-        Assert.Contains("tilemap_set(7, 13, 3);", source);
+        Assert.DoesNotContain("tilemap_set(7, 13, 3);", source);
         Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
         Assert.Contains("if (failTile != 0)", source);
         Assert.DoesNotContain("if (failTile == 4)", source);
@@ -1254,5 +1311,16 @@ public class GameBoyRomCompilerTests
         }
 
         return count;
+    }
+
+    private static GameBoyVideoProgram CompileVideoProgram(string source)
+    {
+        var parse = new SomeParser().Parse(source);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        return GameBoyVideoProgram.FromProgram(parse.Value);
     }
 }
