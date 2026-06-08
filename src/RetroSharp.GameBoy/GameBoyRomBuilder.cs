@@ -289,6 +289,9 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort CameraLeftBackgroundColumnAddress = 0xC0E5;
     private const ushort CameraRightSourceColumnAddress = 0xC0E6;
     private const ushort CameraLeftSourceColumnAddress = 0xC0E7;
+    private const ushort CameraYLowAddress = 0xC0E8;
+    private const ushort CameraYHighAddress = 0xC0E9;
+    private const ushort CameraFineYAddress = 0xC0EA;
     private const ushort InputCurrentAddress = 0xC0F0;
     private const ushort InputPreviousAddress = 0xC0F1;
     private const ushort InputHoldTicksStartAddress = 0xC0F2;
@@ -770,37 +773,34 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraRightSourceColumnAddress);
         builder.LoadAImmediate(mapWidth - 1);
         builder.StoreA(CameraLeftSourceColumnAddress);
+
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraYLowAddress);
+        builder.StoreA(CameraYHighAddress);
+        builder.StoreA(CameraFineYAddress);
     }
 
     private void EmitCameraSetPosition(FunctionCall call)
     {
         GameBoyVideoProgram.RequireArity(call, 2);
-        EnsureCameraConfigured(call.Name);
-
         var args = call.Parameters.ToList();
-        var y = GameBoyVideoProgram.ConstValue(args[1], "camera_set_position argument 2");
-        if (y != 0)
-        {
-            throw new InvalidOperationException("camera_set_position argument 2 must be 0 until vertical camera support lands.");
-        }
-
         var config = EnsureCameraConfigured(call.Name);
-        var moveRightLabel = builder.CreateLabel("camera_set_position_right");
-        var endLabel = builder.CreateLabel("camera_set_position_end");
 
-        EmitExpressionToA(args[0]);
-        builder.LoadBFromA();
-        builder.LoadA(CameraXLowAddress);
-        builder.CompareB();
-        builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel
-        builder.JumpAbsolute(0xDA, moveRightLabel); // JP C,moveRightLabel
+        EmitCameraSetAxisPosition(
+            args[0],
+            CameraXLowAddress,
+            () => EmitCameraMoveLeftStep(config),
+            () => EmitCameraMoveRightStep(config),
+            "camera_set_position_right",
+            "camera_set_position_x_end");
 
-        EmitCameraMoveLeftStep(config);
-        builder.JumpAbsolute(endLabel);
-
-        builder.Label(moveRightLabel);
-        EmitCameraMoveRightStep(config);
-        builder.Label(endLabel);
+        EmitCameraSetAxisPosition(
+            args[1],
+            CameraYLowAddress,
+            EmitCameraMoveUpStep,
+            EmitCameraMoveDownStep,
+            "camera_set_position_down",
+            "camera_set_position_y_end");
     }
 
     private void EmitCameraApply(FunctionCall call)
@@ -810,8 +810,34 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadA(CameraXLowAddress);
         builder.StoreHighRamA(0x43);
-        builder.LoadAImmediate(0);
+        builder.LoadA(CameraYLowAddress);
         builder.StoreHighRamA(0x42);
+    }
+
+    private void EmitCameraSetAxisPosition(
+        ExpressionSyntax requestedPosition,
+        ushort currentLowAddress,
+        Action moveNegative,
+        Action movePositive,
+        string positiveLabelName,
+        string endLabelName)
+    {
+        var movePositiveLabel = builder.CreateLabel(positiveLabelName);
+        var endLabel = builder.CreateLabel(endLabelName);
+
+        EmitExpressionToA(requestedPosition);
+        builder.LoadBFromA();
+        builder.LoadA(currentLowAddress);
+        builder.CompareB();
+        builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel
+        builder.JumpAbsolute(0xDA, movePositiveLabel); // JP C,movePositiveLabel
+
+        moveNegative();
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(movePositiveLabel);
+        movePositive();
+        builder.Label(endLabel);
     }
 
     private void EmitCameraMoveRight(FunctionCall call)
@@ -870,6 +896,40 @@ internal sealed class GameBoyRuntimeCompiler
         EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
         EmitDecrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
         EmitDecrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraMoveDownStep()
+    {
+        var endLabel = builder.CreateLabel("camera_move_down_end");
+
+        EmitIncrement16(CameraYLowAddress, CameraYHighAddress);
+        builder.LoadA(CameraFineYAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(CameraFineYAddress);
+        builder.CompareImmediate(8);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraFineYAddress);
+
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraMoveUpStep()
+    {
+        var endLabel = builder.CreateLabel("camera_move_up_end");
+
+        EmitDecrement16(CameraYLowAddress, CameraYHighAddress);
+        builder.LoadA(CameraFineYAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(CameraFineYAddress);
+        builder.CompareImmediate(255);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+
+        builder.LoadAImmediate(7);
+        builder.StoreA(CameraFineYAddress);
 
         builder.Label(endLabel);
     }

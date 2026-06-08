@@ -669,6 +669,8 @@ Status: landed 2026-06-08.
 
 #### AR-5.1: Extend camera state to Y
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK camera and Game Boy runtime.
 - Candidate files: camera state addresses, capability checks, tests.
 - Steps:
