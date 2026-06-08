@@ -181,7 +181,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Sprite_draw_accepts_attributes_and_flips_logical_metasprites_horizontally()
+    public void Sprite_draw_accepts_logical_flip_x_and_flips_logical_metasprites_horizontally()
     {
         var baseDirectory = WriteSpriteAsset(
             "player.sprite.json",
@@ -191,16 +191,16 @@ public class GameBoyRomCompilerTests
                               void main() {
                                   video_init();
                                   sprite_asset(big_player, "player.sprite.json");
-                                  i16 flags = 32;
-                                  sprite_draw(big_player, 72, 64, 0, flags);
+                                  bool flipX = true;
+                                  sprite_draw(big_player, 72, 64, 0, flipX);
                               }
                               """;
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x03, 0xFE]), "sprite_draw should write the dynamic flags byte into OAM attributes.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE6, 0x20, 0xFE, 0x00, 0xCA]), "sprite_draw should test the Game Boy X-flip bit before placing metasprite pieces.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x20]), "sprite_draw should lower logical flipX to the Game Boy OAM X-flip bit.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "sprite_draw should test the logical flipX boolean before placing metasprite pieces.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xFE]), "X-flipped first logical piece should move to the mirrored top-right hardware X coordinate.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x05, 0xFE]), "X-flipped second logical piece should move to the mirrored top-left hardware X coordinate.");
         Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "X-flipped first logical piece should keep its own tile and rely on the OAM flip bit.");
@@ -218,8 +218,8 @@ public class GameBoyRomCompilerTests
                               void main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
-                                  i16 flags = 32;
-                                  sprite_draw(player, 72, 64, 0, flags);
+                                  bool flipX = true;
+                                  sprite_draw(player, 72, 64, 0, flipX);
                               }
                               """;
 
@@ -229,6 +229,26 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xFE]), "The first 8 px piece should move to logical X + 10 when an 18 px sprite is flipped.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xFE]), "The middle 8 px piece should move to logical X + 2 when an 18 px sprite is flipped.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xFE]), "The padded edge piece should straddle the logical origin instead of adding padded left spacing.");
+    }
+
+    [Fact]
+    public void Sprite_draw_rejects_raw_oam_attribute_constants_in_portable_flip_argument()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 64, 0, 32);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.", exception.Message);
     }
 
     [Fact]
@@ -908,9 +928,11 @@ public class GameBoyRomCompilerTests
         Assert.Contains("displayFrame = 4;", source);
         Assert.Contains("displayFrame = frame + 1;", source);
         Assert.Contains("displayFrame = 0;", source);
-        Assert.Contains("displayFlags = 32;", source);
-        Assert.Contains("displayFlags = 0;", source);
-        Assert.Contains("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlags);", source);
+        Assert.Contains("bool displayFlipX = false;", source);
+        Assert.Contains("displayFlipX = true;", source);
+        Assert.Contains("displayFlipX = false;", source);
+        Assert.DoesNotContain("displayFlags = 32;", source);
+        Assert.Contains("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX);", source);
         Assert.Equal(1, CountOccurrences(source, "sprite_draw("));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -970,7 +992,7 @@ public class GameBoyRomCompilerTests
         var vblankStart = source.IndexOf("video_wait_vblank();", StringComparison.Ordinal);
         var inputPoll = source.IndexOf("input_poll();", StringComparison.Ordinal);
         var gravity = source.IndexOf("velocityY = velocityY + 1;", StringComparison.Ordinal);
-        var draw = source.IndexOf("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlags);", StringComparison.Ordinal);
+        var draw = source.IndexOf("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
@@ -1256,7 +1278,7 @@ public class GameBoyRomCompilerTests
         Assert.True(jumpStart > resetStart);
         var resetBlock = source[resetStart..jumpStart];
         Assert.DoesNotContain("frame = 0;", resetBlock);
-        Assert.DoesNotContain("displayFlags = 0;", resetBlock);
+        Assert.DoesNotContain("displayFlipX = false;", resetBlock);
         Assert.DoesNotContain("animTick = 0;", resetBlock);
         Assert.DoesNotContain("moving = 0;", resetBlock);
 

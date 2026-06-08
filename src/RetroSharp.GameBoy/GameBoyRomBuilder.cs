@@ -614,7 +614,7 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException($"Unknown Game Boy sprite asset '{assetName}'. Declare it with sprite_asset(...).");
         }
 
-        var flags = args.Count == 5 ? args[4] : null;
+        var flipX = SpriteDrawFlipXArgument(args);
         var firstHardwareSprite = nextHardwareSprite;
         if (firstHardwareSprite + asset.Pieces.Count > 40)
         {
@@ -631,36 +631,43 @@ internal sealed class GameBoyRuntimeCompiler
             builder.AddAImmediate(16 + piece.YOffset);
             builder.StoreA(oamAddress);
 
-            EmitSpriteDrawX(args[1], flags, asset, piece, (ushort)(oamAddress + 1));
+            EmitSpriteDrawX(args[1], flipX, asset, piece, (ushort)(oamAddress + 1));
 
             EmitExpressionToA(args[3]);
             EmitMultiplyAByConstant(asset.TilesPerFrame);
             builder.AddAImmediate(asset.FirstTile + piece.TileOffset);
             builder.StoreA((ushort)(oamAddress + 2));
 
-            if (flags is null)
-            {
-                builder.LoadAImmediate(0);
-            }
-            else
-            {
-                EmitExpressionToA(flags);
-            }
-
-            builder.StoreA((ushort)(oamAddress + 3));
+            EmitSpriteDrawAttributes(flipX, (ushort)(oamAddress + 3));
         }
+    }
+
+    private ExpressionSyntax? SpriteDrawFlipXArgument(IReadOnlyList<ExpressionSyntax> args)
+    {
+        if (args.Count == 4)
+        {
+            return null;
+        }
+
+        var flipX = args[4];
+        if (TryConst(flipX, out var value) && value is not 0 and not 1)
+        {
+            throw new InvalidOperationException("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.");
+        }
+
+        return flipX;
     }
 
     private void EmitSpriteDrawX(
         ExpressionSyntax xExpression,
-        ExpressionSyntax? flagsExpression,
+        ExpressionSyntax? flipXExpression,
         GameBoyCompiledSpriteAsset asset,
         GameBoyMetaspritePiece piece,
         ushort oamAddress)
     {
         var normalOffset = piece.XOffset;
         var flippedOffset = asset.LogicalWidth - 8 - piece.XOffset;
-        if (flagsExpression is null || normalOffset == flippedOffset)
+        if (flipXExpression is null || normalOffset == flippedOffset)
         {
             EmitSpriteDrawXAtOffset(xExpression, normalOffset, oamAddress);
             return;
@@ -669,8 +676,7 @@ internal sealed class GameBoyRuntimeCompiler
         var normalLabel = builder.CreateLabel("sprite_x_normal");
         var endLabel = builder.CreateLabel("sprite_x_end");
 
-        EmitExpressionToA(flagsExpression);
-        builder.AndImmediate(0x20);
+        EmitExpressionToA(flipXExpression);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, normalLabel); // JP Z,normalLabel
 
@@ -680,6 +686,39 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(normalLabel);
         EmitSpriteDrawXAtOffset(xExpression, normalOffset, oamAddress);
         builder.Label(endLabel);
+    }
+
+    private void EmitSpriteDrawAttributes(ExpressionSyntax? flipXExpression, ushort oamAddress)
+    {
+        if (flipXExpression is null || (TryConst(flipXExpression, out var constant) && constant == 0))
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreA(oamAddress);
+            return;
+        }
+
+        if (TryConst(flipXExpression, out _))
+        {
+            builder.LoadAImmediate(0x20);
+            builder.StoreA(oamAddress);
+            return;
+        }
+
+        var noFlipLabel = builder.CreateLabel("sprite_flags_no_flip");
+        var storeLabel = builder.CreateLabel("sprite_flags_store");
+
+        EmitExpressionToA(flipXExpression);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, noFlipLabel); // JP Z,noFlipLabel
+
+        builder.LoadAImmediate(0x20);
+        builder.JumpAbsolute(storeLabel);
+
+        builder.Label(noFlipLabel);
+        builder.LoadAImmediate(0);
+
+        builder.Label(storeLabel);
+        builder.StoreA(oamAddress);
     }
 
     private void EmitSpriteDrawXAtOffset(ExpressionSyntax xExpression, int offset, ushort oamAddress)

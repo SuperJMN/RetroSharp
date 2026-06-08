@@ -89,7 +89,7 @@ Runtime calls:
 - `camera_span_has_flags(screenX, widthPx, row, flags)`
 - `sprite_width(name)`
 - `sprite_set(id, x, y, tile, flags)`
-- `sprite_draw(name, x, y, frame[, flags])`
+- `sprite_draw(name, x, y, frame[, flipX])`
 - `tilemap_fill_column(column, y, height, tile)`
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
 - `map_tile_at(sourceColumn, row)`
@@ -155,7 +155,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 }
 ```
 
-`sprite_draw(name, x, y, frame[, flags])` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Logical sizes like 16x27 are valid; the emitted hardware footprint is rounded up to 8x16 cells. The optional `flags` argument is written to every generated OAM entry; when bit `32` is set, the compiler also mirrors the logical metasprite's hardware pieces horizontally so a multi-piece actor faces left as a unit.
+`sprite_draw(name, x, y, frame[, flipX])` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Logical sizes like 16x27 are valid; the emitted hardware footprint is rounded up to 8x16 cells. The optional `flipX` argument is a portable boolean: any non-zero local value mirrors the logical metasprite horizontally, and the Game Boy backend lowers that choice to the OAM X-flip bit internally. Raw OAM attribute bytes remain available through the target-intrinsic `sprite_set(...)` API, not through portable `sprite_draw(...)`.
 
 ## Short-Term Checklist
 
@@ -186,6 +186,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Extend camera position state and `camera_apply()` to vertical scroll.
 - [x] Stream visible background rows when vertical camera movement crosses tile boundaries.
 - [x] Preserve logical sprite metadata for loaded Game Boy sprite assets.
+- [x] Replace raw `sprite_draw` flags with a portable `flipX` boolean.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
@@ -207,7 +208,7 @@ Landed after the initial runner loop:
 - The Game Boy runner uses the new input helpers for edge-triggered, variable-height jumping: holding A extends upward impulse for a bounded number of ticks, and releasing A cuts the extension.
 - The runner's horizontal scroll, column streaming, and run animation now advance while D-pad right or left is held; when no horizontal input is active, the sprite returns to its idle frame.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
-- `sprite_draw` accepts an optional Game Boy OAM flags argument; the runner uses the X-flip bit to make the same idle, run, and jump frames face left while preserving the last facing direction.
+- `sprite_draw` accepts an optional portable `flipX` boolean; the runner uses it to make the same idle, run, and jump frames face left while preserving the last facing direction.
 
 Landed after the playable-loop pass:
 
