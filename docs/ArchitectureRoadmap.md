@@ -682,6 +682,8 @@ Status: landed 2026-06-08.
 
 #### AR-5.2: Add row streaming
 
+Status: landed 2026-06-08.
+
 - Layer: Game Boy camera lowering.
 - Candidate files: Game Boy builder map streaming code, tests.
 - Steps:

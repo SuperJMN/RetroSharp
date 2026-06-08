@@ -1,5 +1,6 @@
 namespace RetroSharp.GameBoy.Tests;
 
+using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using Xunit;
@@ -34,5 +35,22 @@ public sealed class GameBoyTargetCapabilitiesTests
         Assert.True(capabilities.SupportsHudMode(HudMode.Window));
         Assert.True(capabilities.SupportsHudMode(HudMode.Sprite));
         Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
+    }
+
+    [Fact]
+    public void Descriptor_accepts_one_visible_row_stream_per_frame()
+    {
+        var capabilities = GameBoyTarget.Capabilities;
+
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.ScreenTiles.Width));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                capabilities,
+                new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.ScreenTiles.Width + 1)));
+
+        Assert.Equal("Target 'gb' supports 20 background tile writes per frame, but 21 are required for streaming a visible map row.", exception.Message);
     }
 }
