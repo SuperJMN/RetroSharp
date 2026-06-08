@@ -249,5 +249,4 @@ Landed after the Collision V1 pass:
 
 ## Next Milestones
 
-1. Add the smallest NES camera/map path that can share the current runner contract.
-2. Add a cross-target runner sample once Game Boy and NES share enough SDK surface.
+1. Add a cross-target runner sample once Game Boy and NES share enough SDK surface.

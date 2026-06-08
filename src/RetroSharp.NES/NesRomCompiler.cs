@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using RetroSharp.Core.Sdk;
 using RetroSharp.Parser;
 
 namespace RetroSharp.NES;
@@ -25,6 +26,9 @@ internal sealed class NesVideoProgram
 
     private readonly List<NesCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, NesCompiledSpriteAsset> spriteAssets = [];
+    private readonly SortedDictionary<int, byte[]> mapColumns = [];
+    private readonly SortedDictionary<int, byte[]> worldColumns = [];
+    private readonly SortedDictionary<int, WorldTileFlags[]> worldFlagColumns = [];
     private int nextSpriteTile = FirstSpriteTile;
 
     private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
@@ -42,6 +46,14 @@ internal sealed class NesVideoProgram
     ];
 
     public byte[] NameTable { get; } = new byte[1024];
+
+    public int MapColumnHeight { get; private set; }
+
+    public int WorldColumnHeight { get; private set; }
+
+    public int WorldFlagColumnHeight { get; private set; }
+
+    public WorldMap2D? WorldMap { get; private set; }
 
     public IReadOnlyList<NesCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
@@ -121,6 +133,18 @@ internal sealed class NesVideoProgram
                     ConstArg(call, 3, 1, 30),
                     ConstArg(call, 4, 0, 255));
                 break;
+            case "map_column":
+                ApplyMapColumn(call);
+                break;
+            case "world_column":
+                ApplyWorldColumn(call);
+                break;
+            case "world_flags":
+                ApplyWorldFlags(call);
+                break;
+            case "world_map":
+                ApplyWorldMap(call);
+                break;
             case "sprite_asset":
                 ApplySpriteAsset(call);
                 break;
@@ -152,6 +176,137 @@ internal sealed class NesVideoProgram
         {
             callStack.Remove(function.Name);
         }
+    }
+
+    private void ApplyMapColumn(FunctionCall call)
+    {
+        var (index, tiles) = ParseColumnData(call);
+
+        if (MapColumnHeight == 0)
+        {
+            MapColumnHeight = tiles.Length;
+        }
+        else if (tiles.Length != MapColumnHeight)
+        {
+            throw new InvalidOperationException("All map_column calls must use the same tile count.");
+        }
+
+        mapColumns[index] = tiles;
+    }
+
+    private void ApplyWorldColumn(FunctionCall call)
+    {
+        var (index, tiles) = ParseColumnData(call);
+
+        if (WorldColumnHeight == 0)
+        {
+            WorldColumnHeight = tiles.Length;
+        }
+        else if (tiles.Length != WorldColumnHeight)
+        {
+            throw new InvalidOperationException("All world_column calls must use the same tile count.");
+        }
+
+        worldColumns[index] = tiles;
+    }
+
+    private void ApplyWorldFlags(FunctionCall call)
+    {
+        var (index, flags) = ParseFlagColumnData(call);
+
+        if (WorldFlagColumnHeight == 0)
+        {
+            WorldFlagColumnHeight = flags.Length;
+        }
+        else if (flags.Length != WorldFlagColumnHeight)
+        {
+            throw new InvalidOperationException("All world_flags calls must use the same flag count.");
+        }
+
+        worldFlagColumns[index] = flags;
+    }
+
+    private void ApplyWorldMap(FunctionCall call)
+    {
+        RequireArity(call, 3);
+        var sourceColumns = WorldColumnHeight == 0 ? mapColumns : worldColumns;
+        var sourceHeight = WorldColumnHeight == 0 ? MapColumnHeight : WorldColumnHeight;
+        if (sourceHeight == 0)
+        {
+            throw new InvalidOperationException("world_map requires at least one world_column or map_column declaration.");
+        }
+
+        var width = ConstArg(call, 0, 1, 255);
+        if (width > 32)
+        {
+            throw new InvalidOperationException("NES world_map width must fit the visible 32-column nametable until runtime streaming lands.");
+        }
+
+        var streamY = ConstArg(call, 1, 0, 29);
+        var height = ConstArg(call, 2, 1, sourceHeight);
+        if (streamY + height > 30)
+        {
+            throw new InvalidOperationException("world_map stream area exceeds the NES visible nametable height.");
+        }
+
+        if (WorldFlagColumnHeight is not 0 && WorldFlagColumnHeight < height)
+        {
+            throw new InvalidOperationException("world_map height must not exceed the declared world_flags height.");
+        }
+
+        var tileIds = new int[width * height];
+        var tileFlags = new WorldTileFlags[width * height];
+        for (var x = 0; x < width; x++)
+        {
+            sourceColumns.TryGetValue(x, out var column);
+            worldFlagColumns.TryGetValue(x, out var flagColumn);
+            for (var y = 0; y < height; y++)
+            {
+                var tile = column is null ? (byte)0 : column[y];
+                tileIds[y * width + x] = tile;
+                tileFlags[y * width + x] = flagColumn is null ? WorldTileFlags.Empty : flagColumn[y];
+                SetTile(x, streamY + y, tile);
+            }
+        }
+
+        WorldMap = new WorldMap2D(width, height, tileIds, tileFlags);
+    }
+
+    private (int Index, byte[] Tiles) ParseColumnData(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count < 2)
+        {
+            throw new InvalidOperationException($"{call.Name} expects an index and at least one tile.");
+        }
+
+        var index = CheckedRange(ConstValue(args[0], $"{call.Name} argument 1"), 0, 255, $"{call.Name} argument 1");
+        var tiles = args
+            .Skip(1)
+            .Select((arg, i) => CheckedRange(ConstValue(arg, $"{call.Name} argument {i + 2}"), 0, 255, $"{call.Name} argument {i + 2}"))
+            .Select(value => (byte)value)
+            .ToArray();
+
+        return (index, tiles);
+    }
+
+    private (int Index, WorldTileFlags[] Flags) ParseFlagColumnData(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count < 2)
+        {
+            throw new InvalidOperationException("world_flags expects an index and at least one flag value.");
+        }
+
+        var index = CheckedRange(ConstValue(args[0], "world_flags argument 1"), 0, 255, "world_flags argument 1");
+        var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
+        var flags = args
+            .Skip(1)
+            .Select((arg, i) => CheckedRange(ConstValue(arg, $"world_flags argument {i + 2}"), 0, allowedFlags, $"world_flags argument {i + 2}"))
+            .Select(value => (WorldTileFlags)value)
+            .ToArray();
+
+        return (index, flags);
     }
 
     private void ApplySpriteAsset(FunctionCall call)
