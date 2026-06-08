@@ -401,6 +401,29 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Camera_set_position_compares_requested_x_before_reusing_camera_steps()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  map_column(0, 0, 0, 4, 5);
+                                  map_column(1, 0, 0, 4, 5);
+                                  camera_init(2, 11, 4);
+                                  i16 requestedX = 1;
+                                  camera_set_position(requestedX, 0);
+                                  camera_apply();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xFA, 0xE0, 0xC0, 0xB8, 0xCA]), "camera_set_position should compare current camera X against the requested X and keep a no-movement path.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xC6, 0x01, 0xEA, 0xE0, 0xC0]), "camera_set_position should reuse the right-step camera movement path.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xFE, 0x00, 0xC2]), "camera_set_position should reuse the left-step camera movement path.");
+    }
+
+    [Fact]
     public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
     {
         const string source = """
