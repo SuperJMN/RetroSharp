@@ -4,7 +4,7 @@ Status: experimental, intentionally narrow.
 
 The Game Boy target is the first playable target. It currently compiles a constrained RetroSharp subset directly to a 32 KiB DMG ROM. This is not yet the shared IR backend path; it is a focused proving ground for the video/runtime API.
 
-See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics. This file tracks the current Game Boy target subset and runner milestones.
+See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics, and `Portable2DSdkV1.md` for the current SDK v1 reference. This file tracks the current Game Boy target subset and runner milestones.
 
 ## Target Capabilities
 
