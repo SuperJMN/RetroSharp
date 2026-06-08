@@ -784,12 +784,23 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException("camera_set_position argument 2 must be 0 until vertical camera support lands.");
         }
 
+        var config = EnsureCameraConfigured(call.Name);
+        var moveRightLabel = builder.CreateLabel("camera_set_position_right");
+        var endLabel = builder.CreateLabel("camera_set_position_end");
+
         EmitExpressionToA(args[0]);
-        builder.StoreA(CameraXLowAddress);
-        builder.AndImmediate(0x07);
-        builder.StoreA(CameraFineXAddress);
-        builder.LoadAImmediate(0);
-        builder.StoreA(CameraXHighAddress);
+        builder.LoadBFromA();
+        builder.LoadA(CameraXLowAddress);
+        builder.CompareB();
+        builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel
+        builder.JumpAbsolute(0xDA, moveRightLabel); // JP C,moveRightLabel
+
+        EmitCameraMoveLeftStep(config);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(moveRightLabel);
+        EmitCameraMoveRightStep(config);
+        builder.Label(endLabel);
     }
 
     private void EmitCameraApply(FunctionCall call)
@@ -807,6 +818,11 @@ internal sealed class GameBoyRuntimeCompiler
     {
         GameBoyVideoProgram.RequireArity(call, 0);
         var config = EnsureCameraConfigured(call.Name);
+        EmitCameraMoveRightStep(config);
+    }
+
+    private void EmitCameraMoveRightStep(CameraConfig config)
+    {
         var endLabel = builder.CreateLabel("camera_move_right_end");
 
         EmitIncrement16(CameraXLowAddress, CameraXHighAddress);
@@ -832,6 +848,11 @@ internal sealed class GameBoyRuntimeCompiler
     {
         GameBoyVideoProgram.RequireArity(call, 0);
         var config = EnsureCameraConfigured(call.Name);
+        EmitCameraMoveLeftStep(config);
+    }
+
+    private void EmitCameraMoveLeftStep(CameraConfig config)
+    {
         var endLabel = builder.CreateLabel("camera_move_left_end");
 
         EmitDecrement16(CameraXLowAddress, CameraXHighAddress);
@@ -1740,6 +1761,11 @@ internal sealed class GbBuilder
     public void CompareImmediate(int value)
     {
         Emit(0xFE, (byte)value);
+    }
+
+    public void CompareB()
+    {
+        Emit(0xB8);
     }
 
     public void LoadHl(ushort value)

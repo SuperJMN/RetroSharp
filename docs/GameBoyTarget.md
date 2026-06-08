@@ -104,7 +104,7 @@ Runtime calls:
 
 `camera_init(mapWidth, streamY, streamHeight)` initializes the current horizontal world camera. It keeps a 16-bit camera X in WRAM, tracks sub-tile movement, tracks the circular Game Boy background map edges, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`camera_set_position(x, y)` is the current position-based camera API candidate. In this horizontal slice, `x` can be a byte-backed expression such as a constant or local variable, and `y` must be `0` until vertical camera support lands. The current Game Boy lowering writes camera X state and fine X state, but AR-4.2 still needs to add differential streaming when position jumps across tile boundaries.
+`camera_set_position(x, y)` is the current position-based camera API candidate. In this horizontal slice, `x` can be a byte-backed expression such as a constant or local variable, and `y` must be `0` until vertical camera support lands. The current Game Boy lowering compares the requested X with the current camera X and reuses the existing one-pixel left/right movement paths, including tile-boundary streaming. One call moves at most one pixel toward the requested X; large jumps require repeated calls or a later bulk-step lowering.
 
 `camera_apply()` writes the camera X low byte to `SCX` and clears `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera by one pixel. When movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
@@ -180,6 +180,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Generate the runner's streaming map data from the same world resource.
 - [x] Generate collision flag tables from the same world resource.
 - [x] Add the first position-based camera API and SDK operation boundary.
+- [x] Reuse the existing horizontal camera runtime from `camera_set_position(...)`.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [x] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.

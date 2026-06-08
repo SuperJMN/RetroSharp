@@ -638,6 +638,8 @@ Status: landed 2026-06-08.
 
 #### AR-4.2: Reuse existing Game Boy horizontal camera runtime
 
+Status: landed 2026-06-08.
+
 - Layer: Game Boy lowering.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, tests.
 - Steps:
