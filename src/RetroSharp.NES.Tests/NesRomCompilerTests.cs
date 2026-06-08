@@ -1,5 +1,6 @@
 namespace RetroSharp.NES.Tests;
 
+using RetroSharp.GameBoy;
 using RetroSharp.NES;
 using Xunit;
 
@@ -91,6 +92,17 @@ public class NesRomCompilerTests
         var rom = NesRomCompiler.CompileSource(source);
 
         Assert.Equal(24592, rom.Length);
+    }
+
+    [Fact]
+    public void Cross_target_camera_sample_compiles_for_game_boy_and_nes()
+    {
+        var sourcePath = RepositoryFile("samples/cross-target-camera/camera.rs");
+        var source = File.ReadAllText(sourcePath);
+        var baseDirectory = Path.GetDirectoryName(sourcePath);
+
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, baseDirectory).Length);
+        Assert.Equal(24592, NesRomCompiler.CompileSource(source, baseDirectory).Length);
     }
 
     [Fact]

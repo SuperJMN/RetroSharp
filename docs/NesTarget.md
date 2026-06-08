@@ -61,3 +61,9 @@ The NES runtime spike supports byte-backed local variables, assignment, `while (
 `world_column(...)`, `world_flags(...)`, and `world_map(width, streamY, height)` build the initial visible nametable from unified world resources. In this spike, `width` must fit the visible 32-column nametable because runtime column streaming is not implemented.
 
 `camera_init(mapWidth, streamY, streamHeight)` enables the horizontal camera path for the current world map. `camera_set_position(x, 0)` stores the horizontal scroll byte, and `camera_apply()` writes horizontal scroll followed by zero vertical scroll to `$2005`. Any non-zero or runtime Y position is rejected with a NES capability error until vertical movement and streaming have a budgeted lowering.
+
+## Cross-Target Sample
+
+`samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.
+
+The sample intentionally avoids raw target calls such as `sprite_set(...)`, `scroll_set(...)`, `tilemap_set(...)`, `tilemap_fill(...)`, `map_stream_column(...)`, and `object_palette_set(...)`. It does not imply support for NES vertical camera movement, runtime nametable streaming, collision queries, runtime animation, or HUD APIs yet.

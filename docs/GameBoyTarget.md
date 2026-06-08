@@ -202,8 +202,8 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Migrate the runner's run animation to an explicit tick plus `animation_frame(...)`.
 - [x] Add world-coordinate tile flag queries through `world_tile_flags_at(...)`.
 - [x] Add boolean AABB tile collision queries through `collision_aabb_tiles(...)`.
-- [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
-- [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
+- [x] Add a NES parity spike for logical sprites, input, and horizontal camera scroll.
+- [x] Add a cross-target camera sample that can compile for both Game Boy and NES.
 
 ## Progress Snapshot
 
@@ -247,6 +247,12 @@ Landed after the Collision V1 pass:
 - The runner derives actor collision X from `cameraX + 72`, wraps it to the active 16-column world width, and queries generated world flags through `collision_aabb_tiles(...)`.
 - Camera span collision remains available as a transitional helper, but the runner no longer depends on it for foot or failure checks.
 
+Landed after the NES portable spike:
+
+- NES now supports the first shared tick-input, logical sprite, unified world-map, and horizontal camera-scroll subset.
+- `samples/cross-target-camera/camera.rs` builds for both Game Boy and NES without raw sprite, scroll, tilemap, or target-palette calls.
+- The cross-target sample deliberately excludes vertical camera movement, runtime map streaming on NES, collision queries, runtime animation, and HUD until those features have explicit capability-gated support on both targets.
+
 ## Next Milestones
 
-1. Add a cross-target runner sample once Game Boy and NES share enough SDK surface.
+1. Start HUD V1 with explicit capability-gated modes.
