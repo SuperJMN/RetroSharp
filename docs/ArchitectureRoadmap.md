@@ -808,12 +808,14 @@ Status: landed 2026-06-08.
 
 #### AR-8.2: Add AABB tile collision query
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK collision.
 - Candidate files: collision helper lowering, tests.
 - Steps:
-  - Add `collision_aabb_tiles(level, x, y, width, height, flags)`.
+  - Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
   - Check every tile overlapped by the AABB.
-  - Return a simple boolean or first matching flag, matching the chosen API.
+  - Return a simple boolean: `1` when any overlapped tile matches the requested flag mask, otherwise `0`.
   - Keep collision resolution outside this helper.
 - Verification:
   - Tests cover one-tile, two-tile-span, empty, solid, and hazard overlaps.
