@@ -12,29 +12,29 @@ void setup_video() {
     return;
 }
 
-void define_level_columns() {
-    map_column(0, 0, 0, 4, 5);
-    map_column(1, 0, 0, 4, 5);
-    map_column(2, 0, 5, 4, 5);
-    map_column(3, 0, 0, 4, 5);
-    map_column(4, 0, 0, 4, 5);
-    map_column(5, 0, 0, 4, 5);
-    map_column(6, 0, 0, 4, 5);
-    map_column(7, 0, 0, 3, 5);
-    map_column(8, 0, 0, 4, 5);
-    map_column(9, 0, 0, 4, 5);
-    map_column(10, 5, 0, 4, 5);
-    map_column(11, 0, 0, 4, 5);
-    map_column(12, 0, 0, 4, 5);
-    map_column(13, 0, 0, 0, 0);
-    map_column(14, 0, 0, 0, 0);
-    map_column(15, 0, 0, 0, 0);
+void define_world() {
+    world_column(0, 0, 0, 4, 5);
+    world_column(1, 0, 0, 4, 5);
+    world_column(2, 0, 5, 4, 5);
+    world_column(3, 0, 0, 4, 5);
+    world_column(4, 0, 0, 4, 5);
+    world_column(5, 0, 0, 4, 5);
+    world_column(6, 0, 0, 4, 5);
+    world_column(7, 0, 0, 3, 5);
+    world_column(8, 0, 0, 4, 5);
+    world_column(9, 0, 0, 4, 5);
+    world_column(10, 5, 0, 4, 5);
+    world_column(11, 0, 0, 4, 5);
+    world_column(12, 0, 0, 4, 5);
+    world_column(13, 0, 0, 0, 0);
+    world_column(14, 0, 0, 0, 0);
+    world_column(15, 0, 0, 0, 0);
     return;
 }
 
 void main() {
     setup_video();
-    define_level_columns();
+    define_world();
     world_map(16, 11, 4);
     camera_init(16, 11, 4);
     i16 footTile = 0;

@@ -73,6 +73,7 @@ Intrinsic work belongs here:
 | `WorldMap2D` | Portable SDK resource | Shared tile ids and collision flags in one map object. |
 | `WorldMapTile` | Portable SDK resource | Query result that combines one tile id with its flags. |
 | `WorldTileFlags` | Portable SDK resource | Defines `Empty`, `Solid`, `Hazard`, and `Platform`. |
+| `world_column(...)` | Portable SDK resource/setup candidate | Current source authoring call for one world column of tile ids. |
 | `world_map(...)` | Portable SDK resource/setup candidate | Current Game Boy call builds the initial visible tilemap from declared world columns. |
 | `GameBoyRomCompiler.CollectSdkOperations(...)` | Compiler architecture boundary | Observes portable `Sdk2DOperation` records before Game Boy lowering. |
 | `video_wait_vblank()` | Portable SDK candidate | Rename or alias to frame terminology later. |
@@ -94,7 +95,7 @@ Intrinsic work belongs here:
 | `camera_tile_column_at(...)` | Transitional SDK helper | Move collision and map reads to world coordinates. |
 | `camera_span_tile_at(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_tile(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
-| `map_column(...)` | Portable SDK candidate | Needs unified visual/logical map resource. |
+| `map_column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `world_column(...)` now. |
 | `map_tile_at(...)` | Portable SDK candidate | Should read from world data and support flags. |
 | `map_stream_column(...)` | Target intrinsic/transitional | SDK camera should own streaming. |
 | `tilemap_set(...)` | Target intrinsic/transitional | Useful setup primitive, not a full portable map contract. |
@@ -174,7 +175,7 @@ The first portable world resource lives under `RetroSharp.Core.Sdk`:
 
 `WorldMap2D` stores tile ids and collision flags as separate fields while exposing coordinate queries for tile id, flags, or both. This keeps visual tile data, streaming data, and collision flags ready to share one source without forcing a compact binary layout yet.
 
-The first Game Boy integration is `world_map(width, streamY, height)`, which derives the initial visible background rows from declared map columns and a `WorldMap2D` instance. Streaming still uses `map_column(...)` directly until AR-3.3 moves those ROM tables to the same world resource.
+The first Game Boy integration is `world_column(...)` plus `world_map(width, streamY, height)`. `world_map(...)` builds a `WorldMap2D`, derives the initial visible background rows from it, and regenerates the streaming ROM column tables from the same resource. `map_column(...)` remains as a compatibility path for older tests and samples, but new runner-level world data should use `world_column(...)`.
 
 ## Agent Task Contract
 
@@ -589,6 +590,8 @@ Status: landed 2026-06-08.
   - Runner ROM builds.
 
 #### AR-3.3: Generate streaming data from world data
+
+Status: landed 2026-06-08.
 
 - Layer: portable SDK camera/resource integration.
 - Candidate files: Game Boy map-column generation, `samples/gameboy-runner/runner.rs`, tests.

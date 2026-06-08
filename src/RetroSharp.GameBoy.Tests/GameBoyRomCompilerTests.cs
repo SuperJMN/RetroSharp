@@ -902,6 +902,50 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void World_map_generates_streaming_columns_from_world_columns()
+    {
+        const string source = """
+                              void define_world() {
+                                  world_column(0, 0, 0, 4, 5);
+                                  world_column(1, 0, 0, 4, 5);
+                                  world_column(2, 0, 5, 4, 5);
+                                  world_column(3, 0, 0, 4, 5);
+                                  world_column(4, 0, 0, 4, 5);
+                                  world_column(5, 0, 0, 4, 5);
+                                  world_column(6, 0, 0, 4, 5);
+                                  world_column(7, 0, 0, 3, 5);
+                                  world_column(8, 0, 0, 4, 5);
+                                  world_column(9, 0, 0, 4, 5);
+                                  world_column(10, 5, 0, 4, 5);
+                                  world_column(11, 0, 0, 4, 5);
+                                  world_column(12, 0, 0, 4, 5);
+                                  world_column(13, 0, 0, 0, 0);
+                                  world_column(14, 0, 0, 0, 0);
+                                  world_column(15, 0, 0, 0, 0);
+                                  return;
+                              }
+
+                              void main() {
+                                  define_world();
+                                  world_map(16, 11, 4);
+                                  camera_init(16, 11, 4);
+                                  return;
+                              }
+                              """;
+
+        var program = CompileVideoProgram(source);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+
+        Assert.Equal(4, program.MapColumnHeight);
+        Assert.Equal(3, worldMap.TileIdAt(7, 2));
+        Assert.Equal(3, program.MapColumns[7][2]);
+        Assert.Equal(0, program.MapColumns[13][2]);
+        Assert.Equal(5, program.TileMap[14 * 32]);
+        Assert.Equal(3, program.TileMap[13 * 32 + 23]);
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
@@ -911,8 +955,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("i16 failTile = 0;", source);
         Assert.Contains("i16 resetRequested = 0;", source);
 
-        Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
-        Assert.Contains("map_column(13, 0, 0, 0, 0);", source);
+        Assert.Contains("world_column(7, 0, 0, 3, 5);", source);
+        Assert.Contains("world_column(13, 0, 0, 0, 0);", source);
+        Assert.DoesNotContain("map_column(", source);
         Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
         Assert.Contains("footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);", source);
         Assert.DoesNotContain("playerLeftFootColumn", source);
@@ -941,9 +986,10 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("tilemap_fill(", source);
         Assert.DoesNotContain("tilemap_set(", source);
         Assert.Contains("world_map(16, 11, 4);", source);
-        Assert.Contains("map_column(13, 0, 0, 0, 0);", source);
-        Assert.Contains("map_column(14, 0, 0, 0, 0);", source);
-        Assert.Contains("map_column(15, 0, 0, 0, 0);", source);
+        Assert.Contains("world_column(13, 0, 0, 0, 0);", source);
+        Assert.Contains("world_column(14, 0, 0, 0, 0);", source);
+        Assert.Contains("world_column(15, 0, 0, 0, 0);", source);
+        Assert.DoesNotContain("map_column(", source);
 
         Assert.Contains("camera_init(16, 11, 4);", source);
         Assert.True(
@@ -1006,8 +1052,9 @@ public class GameBoyRomCompilerTests
         Assert.Equal(3, CountOccurrences(source, "playerY = 73;"));
         Assert.DoesNotContain("playerY = 77;", source);
         Assert.Contains("world_map(16, 11, 4);", source);
-        Assert.Contains("map_column(0, 0, 0, 4, 5);", source);
-        Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
+        Assert.Contains("world_column(0, 0, 0, 4, 5);", source);
+        Assert.Contains("world_column(7, 0, 0, 3, 5);", source);
+        Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("tilemap_set(7, 13, 3);", source);
         Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
         Assert.Contains("if (failTile != 0)", source);
