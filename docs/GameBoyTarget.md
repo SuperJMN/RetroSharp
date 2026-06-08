@@ -255,4 +255,4 @@ Landed after the NES portable spike:
 
 ## Next Milestones
 
-1. Start HUD V1 with explicit capability-gated modes.
+1. Implement the Game Boy Window HUD prototype behind the HUD capability model.

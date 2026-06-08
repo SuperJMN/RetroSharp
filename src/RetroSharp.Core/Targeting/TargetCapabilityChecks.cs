@@ -32,6 +32,11 @@ public static class TargetCapabilityChecks
 
     public static void RequireHudMode(Target2DCapabilities capabilities, HudMode requestedMode)
     {
+        if (requestedMode == HudMode.None)
+        {
+            return;
+        }
+
         if (capabilities.SupportsHudMode(requestedMode))
         {
             return;

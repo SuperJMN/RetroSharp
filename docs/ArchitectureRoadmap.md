@@ -889,14 +889,15 @@ Status: landed 2026-06-08.
 
 #### AR-10.1: Add HUD mode model and capability checks
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK HUD.
 - Candidate files: capability model, SDK operation validation, tests.
 - Steps:
-  - Add HUD mode values for `Window`, `SplitScroll`, `SpriteHud`, and `None`.
-  - Validate requested HUD mode against target capabilities.
-  - Keep HUD disabled by default.
+  - [x] Add HUD mode values for `Window`, `SplitScroll`, `SpriteHud`, and `None`.
+  - [x] Validate requested HUD mode against target capabilities.
+  - [x] Keep HUD disabled by default.
 - Verification:
-  - Tests cover supported, unsupported, and disabled HUD modes.
+  - [x] Tests cover supported, unsupported, and disabled HUD modes.
 
 #### AR-10.2: Implement Game Boy Window HUD prototype
 
