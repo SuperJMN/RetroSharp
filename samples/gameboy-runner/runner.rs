@@ -12,21 +12,6 @@ void setup_video() {
     return;
 }
 
-void draw_starting_scene() {
-    tilemap_fill(0, 0, 32, 32, 0);
-    tilemap_fill(0, 14, 32, 1, 5);
-    tilemap_fill(0, 13, 32, 1, 4);
-    tilemap_fill(13, 13, 3, 2, 0);
-    tilemap_fill(29, 13, 3, 2, 0);
-    tilemap_set(2, 12, 5);
-    tilemap_set(7, 13, 3);
-    tilemap_set(10, 11, 5);
-    tilemap_set(18, 12, 5);
-    tilemap_set(23, 13, 3);
-    tilemap_set(26, 11, 5);
-    return;
-}
-
 void define_level_columns() {
     map_column(0, 0, 0, 4, 5);
     map_column(1, 0, 0, 4, 5);
@@ -49,8 +34,8 @@ void define_level_columns() {
 
 void main() {
     setup_video();
-    draw_starting_scene();
     define_level_columns();
+    world_map(16, 11, 4);
     camera_init(16, 11, 4);
     i16 footTile = 0;
     i16 failTile = 0;

@@ -429,6 +429,7 @@ internal sealed class GameBoyRuntimeCompiler
             case "tilemap_set":
             case "tilemap_fill":
             case "map_column":
+            case "world_map":
             case "sprite_asset":
                 break;
             case "input_poll":

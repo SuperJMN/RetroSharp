@@ -50,6 +50,8 @@ internal sealed class GameBoyVideoProgram
 
     public int MapColumnHeight { get; private set; }
 
+    public WorldMap2D? WorldMap { get; private set; }
+
     public IReadOnlyList<GameBoyCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, GameBoyCompiledSpriteAsset> SpriteAssets => spriteAssets;
@@ -128,6 +130,9 @@ internal sealed class GameBoyVideoProgram
                     break;
                 case "map_column":
                     ApplyMapColumn(call);
+                    break;
+                case "world_map":
+                    ApplyWorldMap(call);
                     break;
                 case "sprite_asset":
                     ApplySpriteAsset(call);
@@ -220,6 +225,48 @@ internal sealed class GameBoyVideoProgram
         }
 
         MapColumns[index] = tiles;
+    }
+
+    private void ApplyWorldMap(FunctionCall call)
+    {
+        RequireArity(call, 3);
+        if (MapColumnHeight == 0)
+        {
+            throw new InvalidOperationException("world_map requires at least one map_column declaration.");
+        }
+
+        var width = ConstArg(call, 0, 1, 255);
+        var streamY = ConstArg(call, 1, 0, 31);
+        var height = ConstArg(call, 2, 1, MapColumnHeight);
+        if (streamY + height > 32)
+        {
+            throw new InvalidOperationException("world_map stream area exceeds the Game Boy background tilemap height.");
+        }
+
+        var tileIds = new int[width * height];
+        var tileFlags = new WorldTileFlags[width * height];
+        for (var x = 0; x < width; x++)
+        {
+            MapColumns.TryGetValue(x, out var column);
+            for (var y = 0; y < height; y++)
+            {
+                tileIds[y * width + x] = column is null ? 0 : column[y];
+            }
+        }
+
+        WorldMap = new WorldMap2D(width, height, tileIds, tileFlags);
+        ApplyWorldMapToTileMap(WorldMap, streamY);
+    }
+
+    private void ApplyWorldMapToTileMap(WorldMap2D worldMap, int streamY)
+    {
+        for (var y = 0; y < worldMap.Height; y++)
+        {
+            for (var x = 0; x < 32; x++)
+            {
+                SetTile(x, streamY + y, worldMap.TileIdAt(x % worldMap.Width, y));
+            }
+        }
     }
 
     private void SetPaletteColor(int index, int color)
