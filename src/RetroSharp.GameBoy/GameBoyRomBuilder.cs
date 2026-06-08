@@ -459,6 +459,8 @@ internal sealed class GameBoyRuntimeCompiler
             case "world_map":
             case "sprite_asset":
                 break;
+            case "animation_clip":
+                break;
             case "input_poll":
                 EmitInputPoll(call);
                 break;
@@ -1468,6 +1470,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "sprite_width":
                 EmitSpriteWidth(call);
                 break;
+            case "animation_frame":
+                EmitAnimationFrame(call);
+                break;
             case "camera_tile_column_at":
                 EmitCameraTileColumnAt(call);
                 break;
@@ -1522,6 +1527,68 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitSpriteWidth(FunctionCall call)
     {
         builder.LoadAImmediate(SpriteWidth(call));
+    }
+
+    private void EmitAnimationFrame(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 2);
+        var clip = AnimationClipArg(call);
+        var tickExpression = call.Parameters.ElementAt(1);
+        if (TryConst(tickExpression, out var tick))
+        {
+            builder.LoadAImmediate(clip.FrameAtTick(tick % clip.DurationTicks));
+            return;
+        }
+
+        EmitExpressionToA(tickExpression);
+        EmitAnimationFrameFromTickInA(clip);
+    }
+
+    private void EmitAnimationFrameFromTickInA(SpriteAnimationClip clip)
+    {
+        var moduloLabel = builder.CreateLabel("animation_frame_modulo");
+        var afterModuloLabel = builder.CreateLabel("animation_frame_after_modulo");
+        var endLabel = builder.CreateLabel("animation_frame_end");
+        var frameLabels = Enumerable
+            .Range(0, Math.Max(clip.FrameCount - 1, 0))
+            .Select(_ => builder.CreateLabel("animation_frame_match"))
+            .ToArray();
+
+        builder.Label(moduloLabel);
+        builder.CompareImmediate(clip.DurationTicks);
+        builder.JumpAbsolute(0xDA, afterModuloLabel); // JP C,afterModuloLabel
+        builder.SubtractAImmediate(clip.DurationTicks);
+        builder.JumpAbsolute(moduloLabel);
+
+        builder.Label(afterModuloLabel);
+        for (var i = 0; i < clip.FrameCount - 1; i++)
+        {
+            builder.CompareImmediate(clip.FrameStartTicks[i + 1]);
+            builder.JumpAbsolute(0xDA, frameLabels[i]); // JP C,frameLabel
+        }
+
+        builder.LoadAImmediate(clip.FrameIndices[^1]);
+        builder.JumpAbsolute(endLabel);
+
+        for (var i = 0; i < frameLabels.Length; i++)
+        {
+            builder.Label(frameLabels[i]);
+            builder.LoadAImmediate(clip.FrameIndices[i]);
+            builder.JumpAbsolute(endLabel);
+        }
+
+        builder.Label(endLabel);
+    }
+
+    private SpriteAnimationClip AnimationClipArg(FunctionCall call)
+    {
+        var clipName = GameBoyVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "animation_frame argument 1");
+        if (!program.AnimationClips.TryGetValue(clipName, out var clip))
+        {
+            throw new InvalidOperationException($"Unknown animation clip '{clipName}'. Declare it with animation_clip(...).");
+        }
+
+        return clip;
     }
 
     private void EmitCameraTileColumnAt(FunctionCall call)

@@ -767,6 +767,8 @@ Status: landed 2026-06-08.
 
 #### AR-7.2: Add frame lookup helper
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK runtime helper.
 - Candidate files: SDK operation model, target lowering tests.
 - Steps:
