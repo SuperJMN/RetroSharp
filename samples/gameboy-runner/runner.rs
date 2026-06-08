@@ -29,6 +29,22 @@ void define_world() {
     world_column(13, 0, 0, 0, 0);
     world_column(14, 0, 0, 0, 0);
     world_column(15, 0, 0, 0, 0);
+    world_flags(0, 0, 0, 1, 1);
+    world_flags(1, 0, 0, 1, 1);
+    world_flags(2, 0, 1, 1, 1);
+    world_flags(3, 0, 0, 1, 1);
+    world_flags(4, 0, 0, 1, 1);
+    world_flags(5, 0, 0, 1, 1);
+    world_flags(6, 0, 0, 1, 1);
+    world_flags(7, 0, 0, 2, 1);
+    world_flags(8, 0, 0, 1, 1);
+    world_flags(9, 0, 0, 1, 1);
+    world_flags(10, 1, 0, 1, 1);
+    world_flags(11, 0, 0, 1, 1);
+    world_flags(12, 0, 0, 1, 1);
+    world_flags(13, 0, 0, 0, 0);
+    world_flags(14, 0, 0, 0, 0);
+    world_flags(15, 0, 0, 0, 0);
     return;
 }
 
@@ -66,20 +82,18 @@ void main() {
         footTile = 0;
         failTile = 0;
         if (playerY >= 74) {
-            failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);
+            failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);
             if (failTile != 0) {
                 resetRequested = 1;
             }
 
-            footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);
+            footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);
 
             if (footTile != 0) {
-                if (footTile != 3) {
-                    playerY = 73;
-                    velocityY = 0;
-                    grounded = 1;
-                    jumping = 0;
-                }
+                playerY = 73;
+                velocityY = 0;
+                grounded = 1;
+                jumping = 0;
             }
         }
 

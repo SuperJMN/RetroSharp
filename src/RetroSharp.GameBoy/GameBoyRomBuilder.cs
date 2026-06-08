@@ -105,9 +105,27 @@ internal static class GameBoyRomBuilder
                 builder.Emit(tile);
             }
         }
+
+        if (program.MapFlagColumnHeight == 0)
+        {
+            return;
+        }
+
+        var flagColumnCount = program.MapFlagColumns.Keys.Max() + 1;
+        for (var row = 0; row < program.MapFlagColumnHeight; row++)
+        {
+            builder.Label(MapFlagRowLabel(row));
+            for (var column = 0; column < flagColumnCount; column++)
+            {
+                var flags = program.MapFlagColumns.TryGetValue(column, out var flagColumn) ? flagColumn[row] : (byte)0;
+                builder.Emit(flags);
+            }
+        }
     }
 
     internal static string MapRowLabel(int row) => $"map_row_{row}";
+
+    internal static string MapFlagRowLabel(int row) => $"map_flags_row_{row}";
 
     internal static void EmitWaitVBlank(GbBuilder builder, string label)
     {
@@ -430,6 +448,7 @@ internal sealed class GameBoyRuntimeCompiler
             case "tilemap_fill":
             case "map_column":
             case "world_column":
+            case "world_flags":
             case "world_map":
             case "sprite_asset":
                 break;
@@ -1138,6 +1157,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "map_tile_at":
                 EmitMapTileAt(call);
                 break;
+            case "map_flags_at":
+                EmitMapFlagsAt(call);
+                break;
             case "button_pressed":
                 EmitButtonPressed(call);
                 break;
@@ -1165,6 +1187,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "camera_span_has_tile":
                 EmitCameraSpanHasTile(call);
                 break;
+            case "camera_span_has_flags":
+                EmitCameraSpanHasFlags(call);
+                break;
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
         }
@@ -1187,6 +1212,21 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
         builder.AddHlDe();
         builder.LoadAFromHl();
+    }
+
+    private void EmitMapFlagsAt(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 2);
+        if (program.MapFlagColumnHeight == 0)
+        {
+            throw new InvalidOperationException("map_flags_at requires world_map collision flag data.");
+        }
+
+        var args = call.Parameters.ToList();
+        var row = CheckedRange(GameBoyVideoProgram.ConstValue(args[1], "map_flags_at argument 2"), 0, program.MapFlagColumnHeight - 1, "map_flags_at argument 2");
+
+        EmitExpressionToA(args[0]);
+        EmitMapFlagsAtSourceColumnInA(row);
     }
 
     private void EmitSpriteWidth(FunctionCall call)
@@ -1265,6 +1305,37 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitCameraSpanHasFlags(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 4);
+        if (program.MapFlagColumnHeight == 0)
+        {
+            throw new InvalidOperationException("camera_span_has_flags requires world_map collision flag data.");
+        }
+
+        var config = EnsureCameraConfigured(call.Name);
+        var span = BuildCameraSpan(call, config.MapWidth, "camera_span_has_flags");
+        var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
+        var flags = CheckedRange(ConstRuntimeValue(call.Parameters.ElementAt(3), "camera_span_has_flags argument 4"), 1, allowedFlags, "camera_span_has_flags argument 4");
+        var foundLabel = builder.CreateLabel("camera_span_has_flags_found");
+        var endLabel = builder.CreateLabel("camera_span_has_flags_end");
+
+        for (var screenColumn = span.FirstScreenColumn; screenColumn <= span.LastScreenColumn; screenColumn++)
+        {
+            EmitCameraTileColumnAt(new ConstantSyntax(screenColumn.ToString(CultureInfo.InvariantCulture)), config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(span.Row);
+            builder.AndImmediate(flags);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
+        }
+
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(foundLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
     private CameraSpanInfo BuildCameraSpan(FunctionCall call, int mapWidth, string context)
     {
         if (program.MapColumnHeight == 0)
@@ -1296,6 +1367,15 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
         builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+    }
+
+    private void EmitMapFlagsAtSourceColumnInA(int row)
+    {
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.LoadHl(GameBoyRomBuilder.MapFlagRowLabel(row));
         builder.AddHlDe();
         builder.LoadAFromHl();
     }

@@ -49,7 +49,7 @@ Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_se
 - `+` between byte-backed runtime expressions
 - `-` when one operand is constant
 - `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
-- `map_tile_at(...)` as a value expression for runtime map queries
+- `map_tile_at(...)` and `map_flags_at(...)` as value expressions for runtime map queries
 - `button_pressed(...)` as a value expression for joypad queries
 - `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` as tick-based input value expressions
 - `true` and `false`
@@ -65,6 +65,7 @@ Static setup calls:
 - `object_palette_set(index, color)`
 - `sprite_asset(name, path[, frameWidth, frameHeight])`
 - `world_column(index, tile0, tile1, ...)`
+- `world_flags(index, flags0, flags1, ...)`
 - `map_column(index, tile0, tile1, ...)`
 - `world_map(width, streamY, height)`
 - `tilemap_set(x, y, tile)`
@@ -83,12 +84,14 @@ Runtime calls:
 - `camera_tile_column_at(screenColumn)`
 - `camera_span_tile_at(screenX, widthPx, row)`
 - `camera_span_has_tile(screenX, widthPx, row, tile)`
+- `camera_span_has_flags(screenX, widthPx, row, flags)`
 - `sprite_width(name)`
 - `sprite_set(id, x, y, tile, flags)`
 - `sprite_draw(name, x, y, frame[, flags])`
 - `tilemap_fill_column(column, y, height, tile)`
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
 - `map_tile_at(sourceColumn, row)`
+- `map_flags_at(sourceColumn, row)`
 - `button_pressed(button)`
 - `button_down(button)`
 - `button_just_pressed(button)`
@@ -97,19 +100,19 @@ Runtime calls:
 
 `scroll_set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
-`camera_init(mapWidth, streamY, streamHeight)` initializes the current horizontal world camera. It keeps a 16-bit camera X in WRAM, tracks sub-tile movement, tracks the circular Game Boy background map edges, and seeds source-map columns from the declared `map_column(...)` data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
+`camera_init(mapWidth, streamY, streamHeight)` initializes the current horizontal world camera. It keeps a 16-bit camera X in WRAM, tracks sub-tile movement, tracks the circular Game Boy background map edges, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
 `camera_apply()` writes the camera X low byte to `SCX` and clears `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera by one pixel. When movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
-`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `screenX`, `widthPx`, `row`, and `tile` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite_asset(...)`.
+`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite_asset(...)`.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
-`world_column(index, ...)` defines one source-level world column. `world_map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming. The Game Boy runner uses this path so the starting scene and streamed terrain share one source.
+`world_column(index, ...)` defines one source-level world tile-id column. `world_flags(index, ...)` defines the matching collision flag column using `0` for `Empty`, `1` for `Solid`, `2` for `Hazard`, and `4` for `Platform`; flag values can be combined. `world_map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming and collision flag reads. The Game Boy runner uses this path so the starting scene, streamed terrain, and collision flags share one source.
 
-`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world_column(...)` so visual setup, streaming data, and later collision flags can share the same world resource.
+`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world_column(...)` and `world_flags(...)` so visual setup, streaming data, and collision flags can share the same world resource.
 
-`map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_tile_at(column, 2) != 0) { ... }`.
+`map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. `map_flags_at(sourceColumn, row)` reads the generated collision flag byte for the same source coordinate. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_flags_at(column, 2) != 0) { ... }`.
 
 `input_poll()` snapshots the joypad for the current game tick. Call it once after `video_wait_vblank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `button_down(button)` returns `1` while the button is down in the current snapshot, `button_just_pressed(button)` returns `1` only on the up-to-down transition, `button_just_released(button)` returns `1` only on the down-to-up transition, and `button_hold_ticks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks.
 
@@ -171,8 +174,9 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Define the portable world map resource shape for tile ids and collision flags.
 - [x] Generate the runner's initial visible tilemap from world data.
 - [x] Generate the runner's streaming map data from the same world resource.
+- [x] Generate collision flag tables from the same world resource.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
-- [ ] Unify visual map data, streaming data, and collision flags into one world resource.
+- [x] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
@@ -181,8 +185,8 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 Landed on 2026-06-01:
 
 - The Game Boy runner can draw an editable 16x27 Aseprite/PNG logical sprite and lower it to 8x16 hardware sprites.
-- The runner scrolls the background with `scroll_set(...)` and streams source-level `map_column(...)` data through `map_stream_column(...)`.
-- `map_tile_at(...)` lets RetroSharp source query map data for simple tile collision.
+- The runner scrolls the background through the camera runtime and streams generated world-map data through `map_stream_column(...)`.
+- `map_tile_at(...)`, `map_flags_at(...)`, and `camera_span_has_flags(...)` let RetroSharp source query generated world-map data for simple tile collision.
 - `button_pressed(...)` lets RetroSharp source query the Game Boy joypad.
 - The sample now has a small gameplay loop: gravity, simple ground collision, running animation, and A-button jump.
 - The compiler subset grew just enough for that loop: runtime-local addition, relational conditions against constants, value-returning runtime intrinsics, and byte-backed state.
