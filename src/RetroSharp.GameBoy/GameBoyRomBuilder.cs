@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using RetroSharp.Core.Sdk;
 using RetroSharp.Parser;
 
 namespace RetroSharp.GameBoy;
@@ -453,7 +454,7 @@ internal sealed class GameBoyRuntimeCompiler
                 break;
             case "video_wait_vblank":
                 GameBoyVideoProgram.RequireArity(call, 0);
-                GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
+                EmitSdkOperation(new Sdk2DOperation.WaitFrame());
                 break;
             case "sprite_set":
                 EmitSpriteSet(call);
@@ -472,6 +473,11 @@ internal sealed class GameBoyRuntimeCompiler
 
                 throw new InvalidOperationException($"Unsupported Game Boy video API call '{call.Name}'.");
         }
+    }
+
+    private void EmitSdkOperation(Sdk2DOperation operation)
+    {
+        GameBoySdkOperationLowerer.Emit(builder, operation);
     }
 
     private bool TryEmitUserFunction(FunctionCall call)

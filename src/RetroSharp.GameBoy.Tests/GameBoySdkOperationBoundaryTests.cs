@@ -7,6 +7,18 @@ using Xunit;
 public sealed class GameBoySdkOperationBoundaryTests
 {
     [Fact]
+    public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
+    {
+        var builder = new GbBuilder();
+
+        GameBoySdkOperationLowerer.Emit(builder, new Sdk2DOperation.WaitFrame());
+
+        Assert.Equal(
+            [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA],
+            builder.Build());
+    }
+
+    [Fact]
     public void Collects_portable_sdk_operations_before_game_boy_lowering()
     {
         const string source = """
