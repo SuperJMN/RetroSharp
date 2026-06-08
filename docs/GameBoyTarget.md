@@ -242,9 +242,14 @@ Landed after the camera-runtime pass:
 - The runner now asks the camera for source-map foot columns instead of wrapping `screenLeftColumn` manually.
 - `camera_span_has_flags(...)` and `sprite_width(...)` let the runner collide against every tile column covered by a logical sprite width using generated world flags instead of hardcoded tile ids.
 
+Landed after the Collision V1 pass:
+
+- The runner derives actor collision X from `cameraX + 72`, wraps it to the active 16-column world width, and queries generated world flags through `collision_aabb_tiles(...)`.
+- Camera span collision remains available as a transitional helper, but the runner no longer depends on it for foot or failure checks.
+
 ## Next Milestones
 
-1. Implement the first architecture slice from `ArchitectureRoadmap.md`: capability descriptors, shared SDK operation model, and unified world map resource.
-2. Keep the GB runner as the acceptance sample while removing target-specific leakage from portable calls.
-3. Move collision from camera span helpers to world-coordinate tile flag queries.
-4. Spike the same runner contract on NES after the shared SDK operation model exists.
+1. Add NES tick input operations with the same down/edge/hold semantics as Game Boy.
+2. Spike NES logical sprite lowering with explicit capability errors.
+3. Add the smallest NES camera/map path that can share the current runner contract.
+4. Add a cross-target runner sample once Game Boy and NES share enough SDK surface.

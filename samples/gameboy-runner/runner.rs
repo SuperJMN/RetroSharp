@@ -55,6 +55,7 @@ void main() {
     world_map(16, 11, 4);
     camera_init(16, 11, 4);
     i16 cameraX = 0;
+    i16 playerWorldX = 72;
     i16 footTile = 0;
     i16 failTile = 0;
     i16 playerY = 73;
@@ -83,12 +84,17 @@ void main() {
         footTile = 0;
         failTile = 0;
         if (playerY >= 74) {
-            failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);
+            playerWorldX = cameraX + 72;
+            if (playerWorldX >= 128) {
+                playerWorldX = playerWorldX - 128;
+            }
+
+            failTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 2);
             if (failTile != 0) {
                 resetRequested = 1;
             }
 
-            footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);
+            footTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 1);
 
             if (footTile != 0) {
                 playerY = 73;

@@ -97,7 +97,7 @@ Intrinsic work belongs here:
 | `camera_tile_column_at(...)` | Transitional SDK helper | Move collision and map reads to world coordinates. |
 | `camera_span_tile_at(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_tile(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
-| `camera_span_has_flags(...)` | Transitional SDK helper | Bridges current camera-span collision to generated world flags until Collision V1. |
+| `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge; runner now uses world-coordinate collision. |
 | `map_column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `world_column(...)` now. |
 | `map_tile_at(...)` | Portable SDK candidate | Reads generated world tile-id rows. |
 | `map_flags_at(...)` | Portable SDK candidate | Reads generated world flag rows. |
@@ -373,8 +373,8 @@ Purpose: make collision world-based and independent from camera internals.
 
 Tasks:
 
-- Add `world_tile_flags_at(level, worldX, worldY)`.
-- Add `collision_aabb_tiles(level, x, y, width, height, flags)`.
+- Add `world_tile_flags_at(worldX, worldY)` while the prototype has one active world map.
+- Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
 - Support tile/AABB overlap checks against map flags.
 - Keep resolution helpers optional and separate from queries.
 - Migrate runner ground, hole, and hazard checks away from camera span APIs.
@@ -821,6 +821,8 @@ Status: landed 2026-06-08.
   - Tests cover one-tile, two-tile-span, empty, solid, and hazard overlaps.
 
 #### AR-8.3: Migrate runner away from camera span collision
+
+Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
 - Candidate files: `samples/gameboy-runner/runner.rs`, Game Boy runner tests.

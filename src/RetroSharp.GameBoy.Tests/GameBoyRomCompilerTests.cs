@@ -1351,6 +1351,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("i16 footTile = 0;", source);
         Assert.Contains("i16 failTile = 0;", source);
+        Assert.Contains("i16 playerWorldX = 72;", source);
         Assert.Contains("i16 resetRequested = 0;", source);
 
         Assert.Contains("world_column(7, 0, 0, 3, 5);", source);
@@ -1358,8 +1359,12 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world_flags(7, 0, 0, 2, 1);", source);
         Assert.Contains("world_flags(13, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
-        Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
-        Assert.Contains("footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);", source);
+        Assert.Contains("playerWorldX = cameraX + 72;", source);
+        Assert.Contains("if (playerWorldX >= 128)", source);
+        Assert.Contains("playerWorldX = playerWorldX - 128;", source);
+        Assert.Contains("failTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 2);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 1);", source);
+        Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
         Assert.DoesNotContain("playerLeftFootColumn", source);
@@ -1403,8 +1408,10 @@ public class GameBoyRomCompilerTests
             source.IndexOf("camera_init(16, 11, 4);", StringComparison.Ordinal) >
             source.IndexOf("world_map(16, 11, 4);", StringComparison.Ordinal));
         Assert.Contains("camera_apply();", source);
-        Assert.Contains("footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);", source);
-        Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
+        Assert.Contains("playerWorldX = cameraX + 72;", source);
+        Assert.Contains("footTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 1);", source);
+        Assert.Contains("failTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 2);", source);
+        Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
         Assert.Contains("camera_set_position(cameraX, 0);", source);
@@ -1467,8 +1474,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world_flags(7, 0, 0, 2, 1);", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("tilemap_set(7, 13, 3);", source);
-        Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
-        Assert.Contains("footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);", source);
+        Assert.Contains("failTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 2);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(playerWorldX, 16, sprite_width(mario_player), 8, 1);", source);
+        Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.Contains("if (failTile != 0)", source);
         Assert.DoesNotContain("if (footTile != 3)", source);
         Assert.DoesNotContain("if (failTile == 4)", source);
