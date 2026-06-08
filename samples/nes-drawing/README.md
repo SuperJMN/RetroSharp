@@ -1,5 +1,7 @@
 # NES Drawing Sample
 
+Sample Layer: `target-intrinsic`
+
 Build a static iNES ROM from the RetroSharp video API subset:
 
 ```bash
@@ -16,7 +18,7 @@ flatpak run --command=retroarch org.libretro.RetroArch \
   drawing.nes
 ```
 
-Supported calls in this first slice:
+Supported target-intrinsic calls in this first slice:
 
 - `video_init()`
 - `palette_set(index, color)`

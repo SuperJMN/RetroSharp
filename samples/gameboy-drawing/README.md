@@ -1,5 +1,7 @@
 # Game Boy Drawing Sample
 
+Sample Layer: `target-intrinsic`
+
 Build a static `.gb` ROM from the RetroSharp video API subset:
 
 ```bash
@@ -16,7 +18,7 @@ flatpak run --command=retroarch org.libretro.RetroArch \
   drawing.gb
 ```
 
-Supported static calls:
+Supported target-intrinsic static calls:
 
 - `video_init()`
 - `palette_set(index, color)`

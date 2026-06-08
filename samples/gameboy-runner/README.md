@@ -1,5 +1,7 @@
 # Game Boy Runner Sample
 
+Sample Layer: `target-acceptance`
+
 Build a `.gb` ROM from RetroSharp source that executes a real loop on the Game Boy CPU:
 
 ```bash

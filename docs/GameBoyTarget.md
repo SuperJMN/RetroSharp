@@ -40,6 +40,10 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 
 Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
+## Sample Classification
+
+Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/gameboy-runner/runner.rs` is a Game Boy `target-acceptance` sample while it still depends on Game Boy-specific setup calls such as `object_palette_set(...)`.
+
 ## Supported Runtime Subset
 
 - `void main()`

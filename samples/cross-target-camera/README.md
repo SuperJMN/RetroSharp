@@ -1,5 +1,7 @@
 # Cross-Target Camera Sample
 
+Sample Layer: `portable-sdk`
+
 This sample is the first small portability acceptance case for the 2D SDK surface. The same `camera.rs` source builds for Game Boy and NES by using shared world data, tick input, horizontal camera positioning, and logical sprite drawing.
 
 Build the Game Boy ROM:

@@ -73,3 +73,5 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.
 
 The sample intentionally avoids raw target calls such as `sprite_set(...)`, `scroll_set(...)`, `tilemap_set(...)`, `tilemap_fill(...)`, `map_stream_column(...)`, and `object_palette_set(...)`. It does not imply support for NES vertical camera movement, runtime nametable streaming, collision queries, runtime animation, or HUD APIs yet.
+
+Sample portability is tracked in `samples/manifest.json`. The NES drawing sample is classified as `target-intrinsic`, not as a portable SDK sample, because it demonstrates raw static `tilemap_*` setup calls for this target.

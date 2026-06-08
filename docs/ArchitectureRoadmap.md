@@ -927,15 +927,17 @@ Status: landed 2026-06-08.
 
 #### AR-11.1: Quarantine transitional APIs
 
+- Status: landed 2026-06-08.
 - Layer: public API hygiene.
 - Candidate files: docs, samples, compiler diagnostics.
 - Steps:
-  - Move transitional APIs to target-specific docs or mark them explicitly.
-  - Remove transitional APIs from portable samples.
-  - Keep compatibility only where needed for existing samples or tests.
+  - [x] Move transitional APIs to target-specific docs or mark them explicitly.
+  - [x] Remove transitional APIs from portable samples.
+  - [x] Keep compatibility only where needed for existing samples or tests.
 - Verification:
-  - `rg -n "scroll_set|sprite_set|camera_move_right|camera_move_left|camera_span_" samples`
-  - Matches are either target-intrinsic samples or intentionally documented.
+  - [x] `dotnet test src/RetroSharp.Core.Tests/RetroSharp.Core.Tests.csproj --no-restore --filter SampleApiQuarantineTests`
+  - [x] `rg -n "scroll_set|sprite_set|camera_move_right|camera_move_left|camera_span_" samples`
+  - [x] Matches are either target-intrinsic samples or intentionally documented.
 
 #### AR-11.2: Write SDK v1 API reference
 
