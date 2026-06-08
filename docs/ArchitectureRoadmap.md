@@ -913,14 +913,15 @@ Status: landed 2026-06-08.
 
 #### AR-10.3: Evaluate NES HUD path
 
+- Status: landed 2026-06-08.
 - Layer: NES capability and design.
 - Candidate files: NES descriptor, docs, tests if implemented.
 - Steps:
-  - Decide between split scroll, reserved band, sprite HUD, or unsupported.
-  - Update NES descriptor honestly.
-  - Implement only if the path is compatible with current camera constraints.
+  - [x] Decide between split scroll, reserved band, sprite HUD, or unsupported.
+  - [x] Update NES descriptor honestly.
+  - [x] Implement only if the path is compatible with current camera constraints.
 - Verification:
-  - Unsupported path emits a clear error, or supported path has a sample build.
+  - [x] Unsupported path emits a clear error, or supported path has a sample build.
 
 ### Iteration 11 Tasks: API Stabilization
 

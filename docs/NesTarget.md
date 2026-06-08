@@ -62,6 +62,12 @@ The NES runtime spike supports byte-backed local variables, assignment, `while (
 
 `camera_init(mapWidth, streamY, streamHeight)` enables the horizontal camera path for the current world map. `camera_set_position(x, 0)` stores the horizontal scroll byte, and `camera_apply()` writes horizontal scroll followed by zero vertical scroll to `$2005`. Any non-zero or runtime Y position is rejected with a NES capability error until vertical movement and streaming have a budgeted lowering.
 
+## HUD Decision
+
+NES HUD support is intentionally undeclared in the current descriptor. `hud_set_tile(window, x, y, tile)` is parsed far enough to fail through `TargetCapabilityChecks.RequireHudMode(...)` with a NES capability error, while `hud_set_tile(none, ...)` is treated as disabled HUD and compiles as a no-op.
+
+Split-scroll HUD needs a timed scroll-change path that the current NES spike does not have. A reserved nametable band would still share the current horizontal scroll and would not behave as a stable HUD. Sprite HUD needs a separate tile-as-sprite contract and sprite-budget policy. Until one of those paths is implemented deliberately, `NesTarget.Capabilities.HudModes` remains `HudMode.None`.
+
 ## Cross-Target Sample
 
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.

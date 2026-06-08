@@ -265,4 +265,4 @@ Landed after the first HUD pass:
 
 ## Next Milestones
 
-1. Evaluate the NES HUD path honestly: split scroll, reserved band, sprite HUD, or unsupported.
+1. Start API stabilization: quarantine transitional APIs and write the SDK v1 reference.

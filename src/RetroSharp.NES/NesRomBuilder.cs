@@ -412,6 +412,9 @@ internal sealed class NesRuntimeCompiler
             case "sprite_asset":
                 NesVideoProgram.RequireArity(call, 2);
                 break;
+            case "hud_set_tile":
+                NesVideoProgram.ValidateHudSetTile(call);
+                break;
             case "camera_init":
                 EmitCameraInit(call);
                 break;
