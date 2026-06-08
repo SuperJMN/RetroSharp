@@ -136,9 +136,9 @@ In Aseprite, edit at 1x and keep the transparent background. Export with a horiz
 aseprite -b assets/mario-run.aseprite --sheet assets/mario-run.gb.png --sheet-type horizontal
 ```
 
-PNG frame dimensions do not need to be hardware-sized. The compiler pads each frame to Game Boy 8x16 hardware cells internally, so a 16x27 logical sprite is emitted as a 16x32 metasprite.
+PNG frame dimensions do not need to be hardware-sized. The compiler pads each frame to Game Boy 8x16 hardware cells internally, so a 16x27 logical sprite is emitted as a 16x32 metasprite. Compiled assets now expose portable sprite metadata: logical width and height, a default origin at `(0, 0)`, a default full-size hitbox, palette slot count, and a default animation clip spanning the loaded frames. Target lowering still uses the existing Game Boy metasprite pieces and tile data.
 
-`sprite_asset(name, path)` is still supported for the experimental JSON asset format. That format uses a `platforms.gb.frames` array. Each frame is a list of rows, and each character is a Game Boy color index from `0` to `3`.
+`sprite_asset(name, path)` is still supported as a transitional legacy path for the experimental JSON asset format. That format uses a `platforms.gb.frames` array. Each frame is a list of rows, and each character is a Game Boy color index from `0` to `3`.
 
 ```json
 {
@@ -185,6 +185,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Unify visual map data, streaming data, and collision flags into one world resource.
 - [x] Extend camera position state and `camera_apply()` to vertical scroll.
 - [x] Stream visible background rows when vertical camera movement crosses tile boundaries.
+- [x] Preserve logical sprite metadata for loaded Game Boy sprite assets.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
