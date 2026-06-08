@@ -838,14 +838,15 @@ Status: landed 2026-06-08.
 
 #### AR-9.1: Add NES tick input operation
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK to NES lowering.
 - Candidate files: `src/RetroSharp.NES/`, SDK operation lowering, NES tests.
 - Steps:
-  - Implement `PollInput` and button state helpers for NES within declared capabilities.
-  - Mirror tick semantics from Game Boy: down, just pressed, just released, hold ticks.
-  - Keep NES-specific controller reads inside NES lowering.
+  - [x] Implement `PollInput` and button state helpers for NES within declared capabilities.
+  - [x] Mirror tick semantics from Game Boy: down, just pressed, just released, hold ticks.
+  - [x] Keep NES-specific controller reads inside NES lowering.
 - Verification:
-  - NES tests cover current, previous, and hold tick state.
+  - [x] NES tests cover current, previous, and hold tick state.
 
 #### AR-9.2: Add NES logical sprite spike
 

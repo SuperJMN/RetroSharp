@@ -1,3 +1,5 @@
+using RetroSharp.Parser;
+
 namespace RetroSharp.NES;
 
 internal static class NesRomBuilder
@@ -49,6 +51,10 @@ internal static class NesRomBuilder
         builder.Emit(0x8D, 0x00, 0x20);             // STA $2000
         builder.Emit(0xA9, 0x0A);                   // LDA #$0A
         builder.Emit(0x8D, 0x01, 0x20);             // STA $2001
+
+        var runtimeCompiler = new NesRuntimeCompiler(builder, program);
+        runtimeCompiler.Emit(program.MainBlock);
+
         builder.Label("forever");
         builder.JumpAbsolute("forever");
 
@@ -170,6 +176,493 @@ internal static class NesRomBuilder
     }
 }
 
+internal sealed class NesRuntimeCompiler
+{
+    private const byte FirstVariableAddress = 0x00;
+    private const byte RuntimeReservedStateAddress = 0xF0;
+    private const byte InputCurrentAddress = 0xF0;
+    private const byte InputPreviousAddress = 0xF1;
+    private const byte InputHoldTicksStartAddress = 0xF2;
+    private const ushort ControllerPortAddress = 0x4016;
+
+    private static readonly NesButton AButton = new("a", 0x01, InputHoldTicksStartAddress);
+    private static readonly NesButton BButton = new("b", 0x02, InputHoldTicksStartAddress + 1);
+    private static readonly NesButton SelectButton = new("select", 0x04, InputHoldTicksStartAddress + 2);
+    private static readonly NesButton StartButton = new("start", 0x08, InputHoldTicksStartAddress + 3);
+    private static readonly NesButton RightButton = new("right", 0x10, InputHoldTicksStartAddress + 4);
+    private static readonly NesButton LeftButton = new("left", 0x20, InputHoldTicksStartAddress + 5);
+    private static readonly NesButton UpButton = new("up", 0x40, InputHoldTicksStartAddress + 6);
+    private static readonly NesButton DownButton = new("down", 0x80, InputHoldTicksStartAddress + 7);
+
+    private static readonly NesButton[] Buttons =
+    [
+        AButton,
+        BButton,
+        SelectButton,
+        StartButton,
+        RightButton,
+        LeftButton,
+        UpButton,
+        DownButton,
+    ];
+
+    private static readonly NesButton[] ControllerReadOrder =
+    [
+        AButton,
+        BButton,
+        SelectButton,
+        StartButton,
+        UpButton,
+        DownButton,
+        LeftButton,
+        RightButton,
+    ];
+
+    private readonly PrgBuilder builder;
+    private readonly NesVideoProgram program;
+    private readonly Dictionary<string, byte> variables = [];
+    private readonly HashSet<string> userFunctionCallStack = [];
+    private byte nextVariableAddress = FirstVariableAddress;
+
+    public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program)
+    {
+        this.builder = builder;
+        this.program = program;
+    }
+
+    public void Emit(BlockSyntax block)
+    {
+        EmitInputStateInitialization();
+        EmitBlock(block);
+    }
+
+    private void EmitInputStateInitialization()
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(InputCurrentAddress);
+        builder.StoreAZeroPage(InputPreviousAddress);
+        foreach (var button in Buttons)
+        {
+            builder.StoreAZeroPage(button.HoldTicksAddress);
+        }
+    }
+
+    private bool EmitBlock(BlockSyntax block)
+    {
+        foreach (var statement in block.Statements)
+        {
+            if (EmitStatement(statement))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool EmitStatement(StatementSyntax statement)
+    {
+        switch (statement)
+        {
+            case DeclarationSyntax declaration:
+                EmitDeclaration(declaration);
+                return false;
+            case ExpressionStatementSyntax expressionStatement:
+                EmitExpressionStatement(expressionStatement);
+                return false;
+            case WhileSyntax whileSyntax:
+                EmitWhile(whileSyntax);
+                return false;
+            case ReturnSyntax:
+                return true;
+            default:
+                throw new InvalidOperationException($"Unsupported NES statement '{statement.GetType().Name}'.");
+        }
+    }
+
+    private void EmitDeclaration(DeclarationSyntax declaration)
+    {
+        if (!IsByteBackedType(declaration.Type))
+        {
+            throw new InvalidOperationException($"NES target does not support local type '{declaration.Type}' yet.");
+        }
+
+        if (variables.ContainsKey(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        {
+            throw new InvalidOperationException("NES target local variables exceed the current prototype zero-page allocation.");
+        }
+
+        var address = nextVariableAddress++;
+        variables.Add(declaration.Name, address);
+
+        if (declaration.Initialization.HasValue)
+        {
+            EmitExpressionToA(declaration.Initialization.Value);
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAZeroPage(address);
+    }
+
+    private static bool IsByteBackedType(string type)
+    {
+        return type is "i8" or "u8" or "i16" or "u16" or "bool";
+    }
+
+    private void EmitExpressionStatement(ExpressionStatementSyntax expressionStatement)
+    {
+        switch (expressionStatement.Expression)
+        {
+            case AssignmentSyntax assignment:
+                EmitAssignment(assignment);
+                break;
+            case FunctionCall call:
+                EmitCall(call);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported NES expression statement '{expressionStatement.Expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitAssignment(AssignmentSyntax assignment)
+    {
+        if (assignment.Left is not IdentifierLValue identifier)
+        {
+            throw new InvalidOperationException("NES target only supports assignments to local variables.");
+        }
+
+        var address = VariableAddress(identifier.Identifier);
+        EmitExpressionToA(assignment.Right);
+        builder.StoreAZeroPage(address);
+    }
+
+    private void EmitCall(FunctionCall call)
+    {
+        switch (call.Name)
+        {
+            case "video_init":
+            case "video_present":
+                NesVideoProgram.RequireArity(call, 0);
+                break;
+            case "palette_set":
+                NesVideoProgram.RequireArity(call, 2);
+                break;
+            case "tilemap_set":
+                NesVideoProgram.RequireArity(call, 3);
+                break;
+            case "tilemap_fill":
+                NesVideoProgram.RequireArity(call, 5);
+                break;
+            case "video_wait_vblank":
+                NesVideoProgram.RequireArity(call, 0);
+                EmitWaitVBlank();
+                break;
+            case "input_poll":
+                EmitInputPoll(call);
+                break;
+            default:
+                if (TryEmitUserFunction(call))
+                {
+                    break;
+                }
+
+                throw new InvalidOperationException($"Unsupported NES video API call '{call.Name}'.");
+        }
+    }
+
+    private bool TryEmitUserFunction(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        NesVideoProgram.RequireParameterlessUserFunction(call, function);
+        if (!userFunctionCallStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            EmitBlock(function.Block);
+        }
+        finally
+        {
+            userFunctionCallStack.Remove(function.Name);
+        }
+
+        return true;
+    }
+
+    private void EmitWhile(WhileSyntax whileSyntax)
+    {
+        if (!TryConst(whileSyntax.Condition, out var condition))
+        {
+            throw new InvalidOperationException("NES target only supports constant while conditions in the current runtime spike.");
+        }
+
+        if (condition == 0)
+        {
+            return;
+        }
+
+        var loopLabel = builder.CreateLabel("while");
+        builder.Label(loopLabel);
+        EmitBlock(whileSyntax.Body);
+        builder.JumpAbsolute(loopLabel);
+    }
+
+    private void EmitWaitVBlank()
+    {
+        var label = builder.CreateLabel("vblank");
+        builder.Label(label);
+        builder.Emit(0x2C, 0x02, 0x20);             // BIT $2002
+        builder.BranchRelative(0x10, label);        // BPL label
+    }
+
+    private void EmitInputPoll(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 0);
+
+        builder.LoadAZeroPage(InputCurrentAddress);
+        builder.StoreAZeroPage(InputPreviousAddress);
+
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(ControllerPortAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(ControllerPortAddress);
+        builder.StoreAZeroPage(InputCurrentAddress);
+
+        foreach (var button in ControllerReadOrder)
+        {
+            EmitReadControllerButton(button);
+        }
+
+        foreach (var button in Buttons)
+        {
+            EmitUpdateButtonHoldTicks(button);
+        }
+    }
+
+    private void EmitReadControllerButton(NesButton button)
+    {
+        var skipLabel = builder.CreateLabel("input_button_skip");
+
+        builder.LoadAAbsolute(ControllerPortAddress);
+        builder.AndImmediate(0x01);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, skipLabel);    // BEQ skipLabel
+        builder.LoadAZeroPage(InputCurrentAddress);
+        builder.OrImmediate(button.SnapshotMask);
+        builder.StoreAZeroPage(InputCurrentAddress);
+        builder.Label(skipLabel);
+    }
+
+    private void EmitUpdateButtonHoldTicks(NesButton button)
+    {
+        var resetLabel = builder.CreateLabel("button_hold_reset");
+        var endLabel = builder.CreateLabel("button_hold_end");
+
+        builder.LoadAZeroPage(InputCurrentAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, resetLabel);   // BEQ resetLabel
+
+        builder.LoadAZeroPage(button.HoldTicksAddress);
+        builder.CompareImmediate(0xFF);
+        builder.BranchRelative(0xF0, endLabel);     // BEQ endLabel
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAZeroPage(button.HoldTicksAddress);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(resetLabel);
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(button.HoldTicksAddress);
+        builder.Label(endLabel);
+    }
+
+    private void EmitExpressionToA(ExpressionSyntax expression)
+    {
+        switch (expression)
+        {
+            case ConstantSyntax:
+                builder.LoadAImmediate(NesVideoProgram.ConstValue(expression, "constant"));
+                break;
+            case IdentifierSyntax { Identifier: "true" }:
+                builder.LoadAImmediate(1);
+                break;
+            case IdentifierSyntax { Identifier: "false" }:
+                builder.LoadAImmediate(0);
+                break;
+            case IdentifierSyntax identifier:
+                builder.LoadAZeroPage(VariableAddress(identifier.Identifier));
+                break;
+            case FunctionCall call:
+                EmitValueCallToA(call);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported NES expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitValueCallToA(FunctionCall call)
+    {
+        switch (call.Name)
+        {
+            case "button_down":
+                EmitButtonDown(call);
+                break;
+            case "button_just_pressed":
+                EmitButtonJustPressed(call);
+                break;
+            case "button_just_released":
+                EmitButtonJustReleased(call);
+                break;
+            case "button_hold_ticks":
+                EmitButtonHoldTicks(call);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported NES value API call '{call.Name}'.");
+        }
+    }
+
+    private void EmitButtonDown(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 1);
+        EmitButtonMaskToBool(InputCurrentAddress, ButtonArg(call, "button_down argument 1"));
+    }
+
+    private void EmitButtonJustPressed(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 1);
+        var button = ButtonArg(call, "button_just_pressed argument 1");
+        var falseLabel = builder.CreateLabel("button_just_pressed_false");
+        var endLabel = builder.CreateLabel("button_just_pressed_end");
+
+        builder.LoadAZeroPage(InputCurrentAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, falseLabel);   // BEQ falseLabel
+
+        builder.LoadAZeroPage(InputPreviousAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xD0, falseLabel);   // BNE falseLabel
+
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitButtonJustReleased(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 1);
+        var button = ButtonArg(call, "button_just_released argument 1");
+        var falseLabel = builder.CreateLabel("button_just_released_false");
+        var endLabel = builder.CreateLabel("button_just_released_end");
+
+        builder.LoadAZeroPage(InputCurrentAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xD0, falseLabel);   // BNE falseLabel
+
+        builder.LoadAZeroPage(InputPreviousAddress);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, falseLabel);   // BEQ falseLabel
+
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitButtonHoldTicks(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 1);
+        builder.LoadAZeroPage(ButtonArg(call, "button_hold_ticks argument 1").HoldTicksAddress);
+    }
+
+    private void EmitButtonMaskToBool(byte address, NesButton button)
+    {
+        var pressedLabel = builder.CreateLabel("button_down");
+        var endLabel = builder.CreateLabel("button_down_end");
+
+        builder.LoadAZeroPage(address);
+        builder.AndImmediate(button.SnapshotMask);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xD0, pressedLabel); // BNE pressedLabel
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(pressedLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private NesButton ButtonArg(FunctionCall call, string context)
+    {
+        var name = NesVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), context);
+        foreach (var button in Buttons)
+        {
+            if (button.Name == name)
+            {
+                return button;
+            }
+        }
+
+        throw new InvalidOperationException($"Unsupported NES button '{name}'.");
+    }
+
+    private bool TryConst(ExpressionSyntax expression, out int value)
+    {
+        if (expression is ConstantSyntax)
+        {
+            value = NesVideoProgram.ConstValue(expression, "constant");
+            return true;
+        }
+
+        if (expression is IdentifierSyntax { Identifier: "true" })
+        {
+            value = 1;
+            return true;
+        }
+
+        if (expression is IdentifierSyntax { Identifier: "false" })
+        {
+            value = 0;
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private byte VariableAddress(string name)
+    {
+        if (!variables.TryGetValue(name, out var address))
+        {
+            throw new InvalidOperationException($"Use of undeclared variable '{name}'.");
+        }
+
+        return address;
+    }
+
+    private readonly record struct NesButton(string Name, byte SnapshotMask, byte HoldTicksAddress);
+}
+
 internal sealed class PrgBuilder
 {
     private const int BaseAddress = 0xC000;
@@ -177,10 +670,33 @@ internal sealed class PrgBuilder
     private readonly Dictionary<string, int> labels = [];
     private readonly List<(int Offset, string Label, int Addend)> absoluteFixups = [];
     private readonly List<(int Offset, string Label)> relativeFixups = [];
+    private int nextLabelId;
 
     public void Label(string name) => labels[name] = bytes.Count;
 
+    public string CreateLabel(string prefix) => $"{prefix}_{nextLabelId++}";
+
     public void Emit(params byte[] values) => bytes.AddRange(values);
+
+    public void LoadAImmediate(int value) => Emit(0xA9, CheckedByte(value));
+
+    public void LoadAZeroPage(byte address) => Emit(0xA5, address);
+
+    public void StoreAZeroPage(byte address) => Emit(0x85, address);
+
+    public void LoadAAbsolute(ushort address) => Emit(0xAD, Low(address), High(address));
+
+    public void StoreAAbsolute(ushort address) => Emit(0x8D, Low(address), High(address));
+
+    public void AndImmediate(int value) => Emit(0x29, CheckedByte(value));
+
+    public void OrImmediate(int value) => Emit(0x09, CheckedByte(value));
+
+    public void CompareImmediate(int value) => Emit(0xC9, CheckedByte(value));
+
+    public void ClearCarry() => Emit(0x18);
+
+    public void AddImmediate(int value) => Emit(0x69, CheckedByte(value));
 
     public void LdaAbsoluteX(string label, int addend = 0)
     {
@@ -224,6 +740,20 @@ internal sealed class PrgBuilder
 
         return bytes.ToArray();
     }
+
+    private static byte CheckedByte(int value)
+    {
+        if (value is < 0 or > 255)
+        {
+            throw new InvalidOperationException($"NES byte immediate must be between 0 and 255, got {value}.");
+        }
+
+        return (byte)value;
+    }
+
+    private static byte Low(ushort value) => (byte)(value & 0xFF);
+
+    private static byte High(ushort value) => (byte)(value >> 8);
 
     private int AddressOf(string label, int addend = 0)
     {

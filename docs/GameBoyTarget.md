@@ -249,7 +249,6 @@ Landed after the Collision V1 pass:
 
 ## Next Milestones
 
-1. Add NES tick input operations with the same down/edge/hold semantics as Game Boy.
-2. Spike NES logical sprite lowering with explicit capability errors.
-3. Add the smallest NES camera/map path that can share the current runner contract.
-4. Add a cross-target runner sample once Game Boy and NES share enough SDK surface.
+1. Spike NES logical sprite lowering with explicit capability errors.
+2. Add the smallest NES camera/map path that can share the current runner contract.
+3. Add a cross-target runner sample once Game Boy and NES share enough SDK surface.
