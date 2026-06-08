@@ -71,4 +71,18 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/gameboy-runner/runner.rs
 ```
 
+Build the first cross-target camera sample for both cartridge targets:
+
+```bash
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target gb \
+  --out /tmp/cross-camera.gb \
+  samples/cross-target-camera/camera.rs
+
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target nes \
+  --out /tmp/cross-camera.nes \
+  samples/cross-target-camera/camera.rs
+```
+
 See `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.

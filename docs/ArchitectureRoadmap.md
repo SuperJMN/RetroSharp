@@ -874,15 +874,16 @@ Status: landed 2026-06-08.
 
 #### AR-9.4: Add cross-target sample
 
+- Status: landed 2026-06-08.
 - Layer: sample acceptance.
 - Candidate files: `samples/`, README/docs, CLI tests.
 - Steps:
-  - Create a small source sample that avoids target intrinsics.
-  - Build it for GB and NES.
-  - Document unsupported optional features explicitly.
+  - [x] Create a small source sample that avoids target intrinsics.
+  - [x] Build it for GB and NES.
+  - [x] Document unsupported optional features explicitly.
 - Verification:
-  - `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/cross.gb <sample>`
-  - `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out /tmp/cross.nes <sample>`
+  - [x] `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/ar-9-4-cross.gb samples/cross-target-camera/camera.rs`
+  - [x] `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out /tmp/ar-9-4-cross.nes samples/cross-target-camera/camera.rs`
 
 ### Iteration 10 Tasks: HUD V1
 
