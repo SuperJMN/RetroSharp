@@ -150,7 +150,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add tick-based input helpers for edge-triggered and variable-height jump behavior.
 - [x] Make the Game Boy runner a playable loop: hitbox-based ground checks, holes, and reset/fail state.
 - [x] Add a horizontal world-camera helper that owns scroll state and map-column streaming.
-- [ ] Add target capability descriptors for Game Boy and NES.
+- [x] Add target capability descriptors for Game Boy and NES.
 - [ ] Move portable 2D concepts toward the shared SDK operation model described in `ArchitectureRoadmap.md`.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [ ] Unify visual map data, streaming data, and collision flags into one world resource.
