@@ -711,6 +711,8 @@ Status: landed 2026-06-08.
 
 #### AR-6.1: Define portable sprite metadata
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK resources.
 - Candidate files: sprite asset compiler, `GameBoySpriteAssets.cs`, shared resource model, tests.
 - Steps:

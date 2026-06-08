@@ -1,4 +1,6 @@
 using System.Text.Json;
+using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 
 namespace RetroSharp.GameBoy;
 
@@ -14,7 +16,11 @@ internal sealed class GameBoyCompiledSpriteAsset
 
     public required int LogicalWidth { get; init; }
 
+    public required int LogicalHeight { get; init; }
+
     public required int FrameCount { get; init; }
+
+    public required SpriteAssetMetadata Metadata { get; init; }
 
     public required int TilesPerFrame { get; init; }
 
@@ -48,7 +54,9 @@ internal static class GameBoySpriteAssetCompiler
             _ => throw new InvalidOperationException($"Game Boy sprite asset '{path}' must be a .json or .png file."),
         };
 
+        var frameCount = frames.Count;
         var logicalWidth = frames[0][0].Length;
+        var logicalHeight = frames[0].Count;
 
         frames = PadFramesToHardwareCells(frames);
         var width = frames[0][0].Length;
@@ -87,7 +95,13 @@ internal static class GameBoySpriteAssetCompiler
             Width = width,
             Height = height,
             LogicalWidth = logicalWidth,
-            FrameCount = frames.Count,
+            LogicalHeight = logicalHeight,
+            FrameCount = frameCount,
+            Metadata = SpriteAssetMetadata.Default(
+                name,
+                new Size2D(logicalWidth, logicalHeight),
+                frameCount,
+                paletteSlots: 1),
             TilesPerFrame = tilesPerFrame,
             TileData = tileData,
             Pieces = pieces,

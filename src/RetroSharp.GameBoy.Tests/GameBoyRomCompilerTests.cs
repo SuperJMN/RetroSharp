@@ -3,6 +3,7 @@ namespace RetroSharp.GameBoy.Tests;
 using System.Buffers.Binary;
 using System.IO.Compression;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.Parser;
 using Xunit;
@@ -917,6 +918,27 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void GameBoy_runner_sprite_asset_preserves_portable_metadata()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        var program = CompileVideoProgram(source, Path.GetDirectoryName(sourcePath));
+        var asset = program.SpriteAssets["mario_player"];
+
+        Assert.Equal("mario_player", asset.Metadata.Id);
+        Assert.Equal(new Size2D(18, 32), asset.Metadata.LogicalSize);
+        Assert.Equal(new Point2D(0, 0), asset.Metadata.Origin);
+        Assert.Equal(new Rect2D(0, 0, 18, 32), asset.Metadata.Hitbox);
+        Assert.Equal(1, asset.Metadata.PaletteSlots);
+
+        var clip = Assert.Single(asset.Metadata.AnimationClips);
+        Assert.Equal("default", clip.Name);
+        Assert.Equal(0, clip.FirstFrame);
+        Assert.Equal(asset.FrameCount, clip.FrameCount);
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_lighter_object_palette_for_player_sprite()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
@@ -1530,12 +1552,17 @@ public class GameBoyRomCompilerTests
 
     private static GameBoyVideoProgram CompileVideoProgram(string source)
     {
+        return CompileVideoProgram(source, null);
+    }
+
+    private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
+    {
         var parse = new SomeParser().Parse(source);
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        return GameBoyVideoProgram.FromProgram(parse.Value);
+        return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
     }
 }
