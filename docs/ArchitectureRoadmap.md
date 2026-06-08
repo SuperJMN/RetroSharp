@@ -158,6 +158,8 @@ Portable 2D calls should be represented as semantic operations before target low
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The initial boundary recognizes `video_wait_vblank()` as `WaitFrame` and `input_poll()` as `PollInput`; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, camera helpers, and tilemap writes remain on the direct Game Boy path until later roadmap tasks move them deliberately.
 
+`GameBoySdkOperationLowerer` lowers the first shared operation to Game Boy bytes: `Sdk2DOperation.WaitFrame` emits the existing VBlank edge wait routine used by `video_wait_vblank()`. `PollInput` remains on the direct Game Boy path until its stateful input lowering can be moved without broadening this slice.
+
 ## Agent Task Contract
 
 Use the task breakdown below as issue-sized implementation units. Before starting any task, the agent should inspect the current code paths because candidate file names are guidance, not a mandate.
@@ -526,6 +528,8 @@ Status: landed 2026-06-08.
   - A unit test observes the SDK operation before target lowering.
 
 #### AR-2.3: Lower the first shared operation to Game Boy
+
+Status: landed 2026-06-08.
 
 - Layer: portable SDK to Game Boy lowering.
 - Candidate files: Game Boy builder/lowering code and tests.

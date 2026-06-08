@@ -34,6 +34,8 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `video_wait_vblank()` as `Sdk2DOperation.WaitFrame`
 - `input_poll()` as `Sdk2DOperation.PollInput`
 
+`Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video_wait_vblank()`.
+
 Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_set(...)`, raw tilemap writes, and current camera helpers still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
 ## Supported Runtime Subset
@@ -161,7 +163,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add a horizontal world-camera helper that owns scroll state and map-column streaming.
 - [x] Add target capability descriptors for Game Boy and NES.
 - [x] Add the first observable SDK operation boundary for frame wait and input poll.
-- [ ] Lower the first portable SDK operation through the shared operation path.
+- [x] Lower the first portable SDK operation through the shared operation path.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [ ] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
