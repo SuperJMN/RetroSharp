@@ -2,7 +2,7 @@
 
 Status: experimental, intentionally narrow.
 
-The NES target currently compiles a constrained static drawing subset directly to an iNES ROM. It does not yet support the Game Boy runner runtime, logical sprite drawing, camera movement, input polling, or frame-by-frame background streaming.
+The NES target currently compiles a constrained static drawing subset directly to an iNES ROM and supports the first tick-based input runtime helpers. It does not yet support logical sprite drawing, camera movement, full Game Boy runner parity, or frame-by-frame background streaming.
 
 See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics.
 
@@ -42,3 +42,14 @@ Static setup calls:
 Parameterless helper functions can group those calls.
 
 The current target stores one visible 32x30 nametable shape and uploads it during startup. `tilemap_fill(...)` rejects rectangles outside that visible area.
+
+## Supported Runtime API
+
+The NES runtime spike supports byte-backed local variables, assignment, `while (true)`, `video_wait_vblank()`, `input_poll()`, and these tick-based button helpers:
+
+- `button_down(button)`
+- `button_just_pressed(button)`
+- `button_just_released(button)`
+- `button_hold_ticks(button)`
+
+`input_poll()` snapshots the previous controller state, strobes controller port `$4016`, reads the current serial button state, and updates per-button hold counters. The logical button names match the portable Game Boy input surface: `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down`.

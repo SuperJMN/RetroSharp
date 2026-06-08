@@ -1,6 +1,5 @@
 using System.Globalization;
 using RetroSharp.Parser;
-using RetroSharp.SemanticAnalysis;
 
 namespace RetroSharp.NES;
 
@@ -14,15 +13,7 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        var analyzed = new SemanticAnalyzer().Analyze(parse.Value);
-        var root = analyzed.Node;
-        var errors = root.AllErrors.ToList();
-        if (errors.Count > 0)
-        {
-            throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
-        }
-
-        var videoProgram = NesVideoProgram.FromProgram((ProgramNode)root);
+        var videoProgram = NesVideoProgram.FromProgram(parse.Value);
         return NesRomBuilder.Build(videoProgram);
     }
 }
@@ -43,21 +34,29 @@ internal sealed class NesVideoProgram
 
     public byte[] NameTable { get; } = new byte[1024];
 
-    public static NesVideoProgram FromProgram(ProgramNode program)
+    public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
+
+    public required BlockSyntax MainBlock { get; init; }
+
+    public static NesVideoProgram FromProgram(ProgramSyntax program)
     {
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
                    ?? throw new InvalidOperationException("NES target requires a main function.");
 
         var functions = BuildFunctionIndex(program.Functions);
-        var result = new NesVideoProgram();
+        var result = new NesVideoProgram
+        {
+            Functions = functions,
+            MainBlock = main.Block,
+        };
 
-        result.ApplyBlock(main.Block, functions, []);
+        result.ApplyStaticVideoCalls(main.Block, []);
         return result;
     }
 
-    private static Dictionary<string, FunctionNode> BuildFunctionIndex(IEnumerable<FunctionNode> functions)
+    private static Dictionary<string, FunctionSyntax> BuildFunctionIndex(IEnumerable<FunctionSyntax> functions)
     {
-        var result = new Dictionary<string, FunctionNode>();
+        var result = new Dictionary<string, FunctionSyntax>();
         foreach (var function in functions)
         {
             if (!result.TryAdd(function.Name, function))
@@ -69,25 +68,20 @@ internal sealed class NesVideoProgram
         return result;
     }
 
-    private void ApplyBlock(BlockNode block, IReadOnlyDictionary<string, FunctionNode> functions, HashSet<string> callStack)
+    private void ApplyStaticVideoCalls(BlockSyntax block, HashSet<string> callStack)
     {
         foreach (var statement in block.Statements)
         {
-            if (statement is ReturnNode)
+            if (statement is not ExpressionStatementSyntax { Expression: FunctionCall call })
             {
                 continue;
             }
 
-            if (statement is not ExpressionStatementNode { Expression: FunctionCallExpressionNode call })
-            {
-                throw new InvalidOperationException($"NES target only supports video API calls in main. Unsupported statement: {statement.GetType().Name}");
-            }
-
-            Apply(call, functions, callStack);
+            ApplyStaticVideoCall(call, callStack);
         }
     }
 
-    private void Apply(FunctionCallExpressionNode call, IReadOnlyDictionary<string, FunctionNode> functions, HashSet<string> callStack)
+    private void ApplyStaticVideoCall(FunctionCall call, HashSet<string> callStack)
     {
         switch (call.Name)
         {
@@ -114,22 +108,19 @@ internal sealed class NesVideoProgram
                     ConstArg(call, 4, 0, 255));
                 break;
             default:
-                ApplyUserFunction(call, functions, callStack);
+                ApplyStaticUserFunction(call, callStack);
                 break;
         }
     }
 
-    private void ApplyUserFunction(FunctionCallExpressionNode call, IReadOnlyDictionary<string, FunctionNode> functions, HashSet<string> callStack)
+    private void ApplyStaticUserFunction(FunctionCall call, HashSet<string> callStack)
     {
-        if (!functions.TryGetValue(call.Name, out var function))
+        if (!Functions.TryGetValue(call.Name, out var function))
         {
-            throw new InvalidOperationException($"Unsupported NES video API call '{call.Name}'.");
+            return;
         }
 
-        if (call.Arguments.Count != 0 || function.Parameters.Count != 0)
-        {
-            throw new InvalidOperationException($"NES target only supports parameterless user function calls. '{call.Name}' declares {function.Parameters.Count} parameter(s) and was called with {call.Arguments.Count} argument(s).");
-        }
+        RequireParameterlessUserFunction(call, function);
 
         if (!callStack.Add(function.Name))
         {
@@ -138,7 +129,7 @@ internal sealed class NesVideoProgram
 
         try
         {
-            ApplyBlock(function.Block, functions, callStack);
+            ApplyStaticVideoCalls(function.Block, callStack);
         }
         finally
         {
@@ -167,30 +158,59 @@ internal sealed class NesVideoProgram
         }
     }
 
-    private static void RequireArity(FunctionCallExpressionNode call, int expected)
+    internal static void RequireParameterlessUserFunction(FunctionCall call, FunctionSyntax function)
     {
-        if (call.Arguments.Count != expected)
+        var argumentCount = call.Parameters.Count();
+        if (argumentCount != 0 || function.Parameters.Count != 0)
         {
-            throw new InvalidOperationException($"{call.Name} expects {expected} arguments, got {call.Arguments.Count}.");
+            throw new InvalidOperationException($"NES target only supports parameterless user function calls. '{call.Name}' declares {function.Parameters.Count} parameter(s) and was called with {argumentCount} argument(s).");
         }
     }
 
-    private static int ConstArg(FunctionCallExpressionNode call, int index, int min, int max)
+    internal static void RequireArity(FunctionCall call, int expected)
     {
-        var arg = call.Arguments[index];
-        if (arg is not ConstantNode constant)
+        var actual = call.Parameters.Count();
+        if (actual != expected)
         {
-            throw new InvalidOperationException($"{call.Name} argument {index + 1} must be a constant integer.");
+            throw new InvalidOperationException($"{call.Name} expects {expected} arguments, got {actual}.");
+        }
+    }
+
+    private static int ConstArg(FunctionCall call, int index, int min, int max)
+    {
+        return CheckedRange(ConstValue(call.Parameters.ElementAt(index), $"{call.Name} argument {index + 1}"), min, max, $"{call.Name} argument {index + 1}");
+    }
+
+    internal static int ConstValue(ExpressionSyntax expression, string context)
+    {
+        if (expression is not ConstantSyntax constant)
+        {
+            throw new InvalidOperationException($"{context} must be a constant integer.");
         }
 
         if (!int.TryParse(Convert.ToString(constant.Value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
         {
-            throw new InvalidOperationException($"{call.Name} argument {index + 1} must be a constant integer.");
+            throw new InvalidOperationException($"{context} must be a constant integer.");
         }
 
+        return value;
+    }
+
+    internal static string IdentifierArg(ExpressionSyntax expression, string context)
+    {
+        if (expression is IdentifierSyntax identifier)
+        {
+            return identifier.Identifier;
+        }
+
+        throw new InvalidOperationException($"{context} must be an identifier.");
+    }
+
+    private static int CheckedRange(int value, int min, int max, string context)
+    {
         if (value < min || value > max)
         {
-            throw new InvalidOperationException($"{call.Name} argument {index + 1} must be between {min} and {max}.");
+            throw new InvalidOperationException($"{context} must be between {min} and {max}.");
         }
 
         return value;
