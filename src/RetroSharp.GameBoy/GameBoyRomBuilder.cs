@@ -1452,6 +1452,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "map_flags_at":
                 EmitMapFlagsAt(call);
                 break;
+            case "world_tile_flags_at":
+                EmitWorldTileFlagsAt(call);
+                break;
             case "button_pressed":
                 EmitButtonPressed(call);
                 break;
@@ -1522,6 +1525,50 @@ internal sealed class GameBoyRuntimeCompiler
 
         EmitExpressionToA(args[0]);
         EmitMapFlagsAtSourceColumnInA(row);
+    }
+
+    private void EmitWorldTileFlagsAt(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 2);
+        var worldMap = program.WorldMap
+                       ?? throw new InvalidOperationException("world_tile_flags_at requires world_map collision flag data.");
+        var args = call.Parameters.ToList();
+        var outOfBoundsLabel = builder.CreateLabel("world_tile_flags_oob");
+        var endLabel = builder.CreateLabel("world_tile_flags_end");
+
+        EmitWorldPixelToTileCoordinate(args[0]);
+        builder.CompareImmediate(worldMap.Width);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadBFromA();
+
+        EmitWorldPixelToTileCoordinate(args[1]);
+        builder.CompareImmediate(worldMap.Height);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadCFromA();
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("world_tile_flags_next_row");
+            builder.LoadAFromC();
+            builder.CompareImmediate(row);
+            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
+            builder.LoadAFromB();
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitWorldPixelToTileCoordinate(ExpressionSyntax expression)
+    {
+        EmitExpressionToA(expression);
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
     }
 
     private void EmitSpriteWidth(FunctionCall call)
@@ -2026,6 +2073,11 @@ internal sealed class GbBuilder
         Emit(0xCB, 0x37);
     }
 
+    public void ShiftRightLogicalA()
+    {
+        Emit(0xCB, 0x3F);
+    }
+
     public void LoadBFromA()
     {
         Emit(0x47);
@@ -2039,6 +2091,11 @@ internal sealed class GbBuilder
     public void LoadAFromB()
     {
         Emit(0x78);
+    }
+
+    public void LoadAFromC()
+    {
+        Emit(0x79);
     }
 
     public void AddAFromB()

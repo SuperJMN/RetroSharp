@@ -1259,6 +1259,54 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void World_tile_flags_at_reads_world_pixel_coordinates_and_bounds_to_empty()
+    {
+        const string source = """
+                              void define_world() {
+                                  world_column(0, 0, 4);
+                                  world_column(1, 3, 5);
+                                  world_flags(0, 0, 1);
+                                  world_flags(1, 2, 1);
+                                  return;
+                              }
+
+                              void main() {
+                                  define_world();
+                                  world_map(2, 11, 2);
+                                  i16 worldX = 8;
+                                  i16 worldY = 0;
+                                  i16 hazard = 0;
+                                  i16 solid = 0;
+                                  i16 empty = 0;
+                                  if (world_tile_flags_at(worldX, worldY) != 0) {
+                                      hazard = 1;
+                                  }
+                                  if (world_tile_flags_at(0, 8) != 0) {
+                                      solid = 1;
+                                  }
+                                  if (world_tile_flags_at(0, 0) != 0) {
+                                      empty = 3;
+                                  }
+                                  if (world_tile_flags_at(16, 0) != 0) {
+                                      empty = 1;
+                                  }
+                                  if (world_tile_flags_at(0, 16) != 0) {
+                                      empty = 2;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x00, 0x02]), "ROM should contain world flag row 0 data.");
+        Assert.True(ContainsSequence(rom, [0x01, 0x01]), "ROM should contain world flag row 1 data.");
+        Assert.True(ContainsSequence(rom, [0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]), "world_tile_flags_at should convert world pixels to tile coordinates by dividing by 8.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0x02, 0xD2]), "world_tile_flags_at should guard map bounds before reading flag rows.");
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");

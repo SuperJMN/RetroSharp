@@ -32,13 +32,25 @@ internal static class GameBoySdkOperationCollector
         {
             switch (statement)
             {
+                case DeclarationSyntax declaration:
+                    if (declaration.Initialization.HasValue)
+                    {
+                        CollectExpression(declaration.Initialization.Value);
+                    }
+
+                    break;
                 case ExpressionStatementSyntax { Expression: FunctionCall call }:
                     CollectCall(call);
                     break;
+                case ExpressionStatementSyntax { Expression: AssignmentSyntax assignment }:
+                    CollectExpression(assignment.Right);
+                    break;
                 case WhileSyntax loop:
+                    CollectExpression(loop.Condition);
                     CollectBlock(loop.Body);
                     break;
                 case IfElseSyntax branch:
+                    CollectExpression(branch.Condition);
                     CollectBlock(branch.ThenBlock);
                     if (branch.ElseBlock.HasValue)
                     {
@@ -65,6 +77,7 @@ internal static class GameBoySdkOperationCollector
                     CollectCameraSetPosition(call);
                     break;
                 default:
+                    CollectCallArguments(call);
                     CollectUserFunction(call);
                     break;
             }
@@ -77,6 +90,49 @@ internal static class GameBoySdkOperationCollector
             var x = ByteExpression(args[0], "camera_set_position argument 1");
             var y = ByteExpression(args[1], "camera_set_position argument 2");
             operations.Add(new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y)));
+        }
+
+        private void CollectExpression(ExpressionSyntax expression)
+        {
+            switch (expression)
+            {
+                case FunctionCall call:
+                    CollectValueCall(call);
+                    break;
+                case BinaryExpressionSyntax binary:
+                    CollectExpression(binary.Left);
+                    CollectExpression(binary.Right);
+                    break;
+            }
+        }
+
+        private void CollectValueCall(FunctionCall call)
+        {
+            switch (call.Name)
+            {
+                case "world_tile_flags_at":
+                    CollectWorldTileFlagsAt(call);
+                    break;
+            }
+
+            CollectCallArguments(call);
+        }
+
+        private void CollectWorldTileFlagsAt(FunctionCall call)
+        {
+            GameBoyVideoProgram.RequireArity(call, 2);
+            var args = call.Parameters.ToList();
+            var worldX = ByteExpression(args[0], "world_tile_flags_at argument 1");
+            var worldY = ByteExpression(args[1], "world_tile_flags_at argument 2");
+            operations.Add(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
+        }
+
+        private void CollectCallArguments(FunctionCall call)
+        {
+            foreach (var parameter in call.Parameters)
+            {
+                CollectExpression(parameter);
+            }
         }
 
         private static SdkByteExpression ByteExpression(ExpressionSyntax expression, string context)
