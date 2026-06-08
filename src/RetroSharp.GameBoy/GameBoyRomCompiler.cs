@@ -10,6 +10,7 @@ public static class GameBoyRomCompiler
     public static byte[] CompileSource(string source, string? baseDirectory = null)
     {
         var videoProgram = ParseVideoProgram(source, baseDirectory);
+        ValidateSdkOperations(videoProgram.SdkOperations);
         return GameBoyRomBuilder.Build(videoProgram);
     }
 
@@ -27,6 +28,14 @@ public static class GameBoyRomCompiler
         }
 
         return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
+    }
+
+    private static void ValidateSdkOperations(IEnumerable<Sdk2DOperation> operations)
+    {
+        foreach (var operation in operations)
+        {
+            Sdk2DOperationValidator.Validate(GameBoyTarget.Capabilities, operation);
+        }
     }
 }
 

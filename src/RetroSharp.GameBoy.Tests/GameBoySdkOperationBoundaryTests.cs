@@ -95,6 +95,28 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Camera_set_position_rejects_diagonal_movement_that_exceeds_game_boy_budget()
+    {
+        const string source = """
+                              void main() {
+                                  map_column(0, 0, 4);
+                                  map_column(1, 0, 4);
+                                  camera_init(2, 11, 2);
+                                  i16 cameraX = 1;
+                                  i16 cameraY = 1;
+                                  camera_set_position(cameraX, cameraY);
+                                  camera_apply();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).",
+            exception.Message);
+    }
+
+    [Fact]
     public void Camera_set_position_validates_arity_at_the_sdk_boundary()
     {
         const string source = """

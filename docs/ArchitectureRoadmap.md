@@ -163,7 +163,7 @@ Portable 2D calls should be represented as semantic operations before target low
 - `Sdk2DOperation.ReadWorldTileFlags`
 - `Sdk2DOperation.SetHudTile`
 
-`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels.
+`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels. Camera movement budgets are computed from the target-visible tile dimensions: horizontal movement can require one visible column, vertical movement can require one visible row, and diagonal movement must fit the combined write count.
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The initial boundary recognizes `video_wait_vblank()` as `WaitFrame` and `input_poll()` as `PollInput`; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, camera helpers, and tilemap writes remain on the direct Game Boy path until later roadmap tasks move them deliberately.
 
@@ -695,6 +695,8 @@ Status: landed 2026-06-08.
   - Tests cover crossing one row up and one row down.
 
 #### AR-5.3: Add diagonal movement budget checks
+
+Status: landed 2026-06-08.
 
 - Layer: portable SDK validation.
 - Candidate files: capability validation, camera operation validation tests.
