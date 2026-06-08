@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
     <ProjectReference Include="..\RetroSharp.NES\RetroSharp.NES.csproj" />
   </ItemGroup>
 </Project>

@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
     <ProjectReference Include="..\RetroSharp.Parser\RetroSharp.Parser.csproj" />
     <ProjectReference Include="..\RetroSharp.SemanticAnalysis\RetroSharp.SemanticAnalysis.csproj" />
   </ItemGroup>
