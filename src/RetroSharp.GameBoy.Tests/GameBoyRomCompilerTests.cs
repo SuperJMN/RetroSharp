@@ -97,6 +97,64 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Hud_set_tile_collects_window_operation_and_compiles_to_game_boy_window_tilemap()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  hud_set_tile(window, 1, 0, 5);
+                                  return;
+                              }
+                              """;
+
+        var operations = GameBoyRomCompiler.CollectSdkOperations(source);
+        var hud = Assert.IsType<Sdk2DOperation.SetHudTile>(Assert.Single(operations));
+
+        Assert.Equal(HudMode.Window, hud.Mode);
+        Assert.Equal(1, hud.X);
+        Assert.Equal(0, hud.Y);
+        Assert.Equal(5, hud.Tile);
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xE0, 0x4A, 0x3E, 0x07, 0xE0, 0x4B]), "Window HUD should position WY=0 and WX=7.");
+        Assert.True(ContainsSequence(rom, [0x21, 0x00, 0x9C]), "Window HUD should copy a separate tilemap to $9C00.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0xF7, 0xE0, 0x40]), "Window HUD should enable the LCD window layer without disabling existing LCD features.");
+    }
+
+    [Fact]
+    public void Rejects_split_scroll_hud_mode_through_capability_check()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  hud_set_tile(split_scroll, 0, 0, 1);
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "Target 'gb' does not support SplitScroll HUD. Use Window HUD, SpriteHud, or disable HUD for this target.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void GameBoy_hud_sample_compiles_with_window_hud()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-hud/hud.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("hud_set_tile(window", source);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void Compiles_runtime_sprite_loop_to_a_game_boy_rom()
     {
         const string source = """

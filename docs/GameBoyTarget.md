@@ -34,6 +34,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `video_wait_vblank()` as `Sdk2DOperation.WaitFrame`
 - `input_poll()` as `Sdk2DOperation.PollInput`
 - `camera_set_position(x, 0)` as `Sdk2DOperation.SetCameraPosition`
+- `hud_set_tile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
 
 `Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video_wait_vblank()`.
 
@@ -69,6 +70,7 @@ Static setup calls:
 - `world_flags(index, flags0, flags1, ...)`
 - `map_column(index, tile0, tile1, ...)`
 - `world_map(width, streamY, height)`
+- `hud_set_tile(window, x, y, tile)`
 - `tilemap_set(x, y, tile)`
 - `tilemap_fill(x, y, width, height, tile)`
 - `video_present()`
@@ -167,6 +169,8 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 
 `animation_clip(name, firstFrame, duration...)` declares a portable animation clip resource. The first argument is a clip identifier, the second is the first logical frame index, and the remaining arguments are per-frame durations in ticks. `animation_frame(name, tick)` returns the logical frame for a tick value and loops by the clip's total duration. Game Boy lowering keeps runtime state explicit in source, reduces dynamic ticks modulo the clip duration, then checks frame boundaries in declaration order.
 
+`hud_set_tile(window, x, y, tile)` writes one static HUD tile into the Game Boy Window tilemap. The compiler validates the requested HUD mode through `GameBoyTarget.Capabilities`, copies the HUD tilemap to `$9C00`, sets the Window position to `WY=0` and `WX=7`, and enables the LCD Window layer only when a Window HUD tile is declared. The HUD tilemap is separate from the scrolling background/camera tilemap. Runtime HUD writes and configurable Window positions are not implemented yet. `split_scroll` is rejected through the target capability check.
+
 ## Short-Term Checklist
 
 - [x] Parse `while`.
@@ -204,6 +208,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add boolean AABB tile collision queries through `collision_aabb_tiles(...)`.
 - [x] Add a NES parity spike for logical sprites, input, and horizontal camera scroll.
 - [x] Add a cross-target camera sample that can compile for both Game Boy and NES.
+- [x] Add a Game Boy Window HUD prototype behind capability checks.
 
 ## Progress Snapshot
 
@@ -253,6 +258,11 @@ Landed after the NES portable spike:
 - `samples/cross-target-camera/camera.rs` builds for both Game Boy and NES without raw sprite, scroll, tilemap, or target-palette calls.
 - The cross-target sample deliberately excludes vertical camera movement, runtime map streaming on NES, collision queries, runtime animation, and HUD until those features have explicit capability-gated support on both targets.
 
+Landed after the first HUD pass:
+
+- `hud_set_tile(window, x, y, tile)` compiles to the Game Boy Window tilemap at `$9C00` and enables the Window layer without sharing camera scroll state.
+- `samples/gameboy-hud/hud.rs` builds as the first HUD sample and keeps Window restrictions explicit.
+
 ## Next Milestones
 
-1. Implement the Game Boy Window HUD prototype behind the HUD capability model.
+1. Evaluate the NES HUD path honestly: split scroll, reserved band, sprite HUD, or unsupported.

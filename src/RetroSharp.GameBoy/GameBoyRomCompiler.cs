@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
 
 namespace RetroSharp.GameBoy;
@@ -55,6 +56,10 @@ internal sealed class GameBoyVideoProgram
     public byte ObjectPalette { get; private set; } = 0xE4;
 
     public byte[] TileMap { get; } = new byte[1024];
+
+    public byte[] WindowTileMap { get; } = new byte[1024];
+
+    public bool UsesWindowHud { get; private set; }
 
     public SortedDictionary<int, byte[]> MapColumns { get; } = [];
 
@@ -170,6 +175,9 @@ internal sealed class GameBoyVideoProgram
                 case "animation_clip":
                     ApplyAnimationClip(call);
                     break;
+                case "hud_set_tile":
+                    ApplyHudSetTile(call);
+                    break;
                 default:
                     ApplyStaticUserFunction(call, callStack);
                     break;
@@ -264,6 +272,31 @@ internal sealed class GameBoyVideoProgram
         }
 
         animationClips.Add(name, clip);
+    }
+
+    private void ApplyHudSetTile(FunctionCall call)
+    {
+        RequireArity(call, 4);
+        var args = call.Parameters.ToList();
+        var mode = HudModeArg(args[0], "hud_set_tile argument 1");
+
+        TargetCapabilityChecks.RequireHudMode(GameBoyTarget.Capabilities, mode);
+        if (mode == HudMode.None)
+        {
+            return;
+        }
+
+        if (mode != HudMode.Window)
+        {
+            throw new InvalidOperationException("Game Boy hud_set_tile currently supports only Window HUD lowering.");
+        }
+
+        var x = CheckedRange(ConstValue(args[1], "hud_set_tile argument 2"), 0, 31, "hud_set_tile argument 2");
+        var y = CheckedRange(ConstValue(args[2], "hud_set_tile argument 3"), 0, 31, "hud_set_tile argument 3");
+        var tile = CheckedRange(ConstValue(args[3], "hud_set_tile argument 4"), 0, 255, "hud_set_tile argument 4");
+
+        WindowTileMap[y * 32 + x] = (byte)tile;
+        UsesWindowHud = true;
     }
 
     private void ApplyMapColumn(FunctionCall call)
@@ -520,6 +553,26 @@ internal sealed class GameBoyVideoProgram
         }
 
         return identifier.Identifier;
+    }
+
+    internal static HudMode HudModeArg(ExpressionSyntax expression, string context)
+    {
+        var identifier = IdentifierArg(expression, context);
+        return NormalizeMode(identifier) switch
+        {
+            "window" => HudMode.Window,
+            "splitscroll" => HudMode.SplitScroll,
+            "sprite" or "spritehud" => HudMode.Sprite,
+            "none" => HudMode.None,
+            _ => throw new InvalidOperationException($"{context} must be one of window, split_scroll, sprite_hud, or none."),
+        };
+
+        static string NormalizeMode(string value)
+        {
+            return value.Replace("_", string.Empty, StringComparison.Ordinal)
+                .Replace("-", string.Empty, StringComparison.Ordinal)
+                .ToLowerInvariant();
+        }
     }
 
     internal static string StringArg(FunctionCall call, int index)

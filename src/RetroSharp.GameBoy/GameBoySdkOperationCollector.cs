@@ -76,6 +76,9 @@ internal static class GameBoySdkOperationCollector
                 case "camera_set_position":
                     CollectCameraSetPosition(call);
                     break;
+                case "hud_set_tile":
+                    CollectHudSetTile(call);
+                    break;
                 default:
                     CollectCallArguments(call);
                     CollectUserFunction(call);
@@ -90,6 +93,18 @@ internal static class GameBoySdkOperationCollector
             var x = ByteExpression(args[0], "camera_set_position argument 1");
             var y = ByteExpression(args[1], "camera_set_position argument 2");
             operations.Add(new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y)));
+        }
+
+        private void CollectHudSetTile(FunctionCall call)
+        {
+            GameBoyVideoProgram.RequireArity(call, 4);
+            var args = call.Parameters.ToList();
+            var mode = GameBoyVideoProgram.HudModeArg(args[0], "hud_set_tile argument 1");
+            var x = ConstRange(args[1], 0, 31, "hud_set_tile argument 2");
+            var y = ConstRange(args[2], 0, 31, "hud_set_tile argument 3");
+            var tile = ConstRange(args[3], 0, 255, "hud_set_tile argument 4");
+
+            operations.Add(new Sdk2DOperation.SetHudTile(mode, x, y, tile));
         }
 
         private void CollectExpression(ExpressionSyntax expression)
@@ -157,6 +172,17 @@ internal static class GameBoySdkOperationCollector
             if (value is < 0 or > 255)
             {
                 throw new InvalidOperationException($"{context} must be between 0 and 255.");
+            }
+
+            return value;
+        }
+
+        private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
+        {
+            var value = GameBoyVideoProgram.ConstValue(expression, context);
+            if (value < min || value > max)
+            {
+                throw new InvalidOperationException($"{context} must be between {min} and {max}.");
             }
 
             return value;
