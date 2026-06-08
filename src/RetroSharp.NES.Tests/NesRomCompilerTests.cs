@@ -126,6 +126,120 @@ public class NesRomCompilerTests
         Assert.True(ContainsSequence(prg, [0xA5, 0xF2]), "button_hold_ticks(a) should read the A-button hold counter.");
     }
 
+    [Fact]
+    public void Compiles_logical_sprite_draw_to_nes_oam_and_chr_data()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(hero, "hero.nes.json");
+                                  while (true) {
+                                      video_wait_vblank();
+                                      sprite_draw(hero, 24, 32, 0, 0, 2);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var chr = rom.Skip(16 + 16 * 1024).Take(8 * 1024).ToArray();
+        var spriteTile = chr.Skip(6 * 16).Take(16).ToArray();
+
+        Assert.Equal(24592, rom.Length);
+        Assert.Equal(Enumerable.Repeat((byte)0xFF, 8).Concat(Enumerable.Repeat((byte)0x00, 8)), spriteTile);
+        Assert.True(ContainsSequence(prg, [0xA9, 0x20, 0x38, 0xE9, 0x01, 0x8D, 0x00, 0x02]), "sprite_draw should write NES OAM Y as logical y - 1.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x06, 0x8D, 0x01, 0x02]), "sprite_draw should write the first compiled sprite tile to OAM.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x8D, 0x02, 0x02]), "sprite_draw should lower portable palette slot 2 to NES OAM attributes.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x18, 0x8D, 0x03, 0x02]), "sprite_draw should write logical x to NES OAM.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x8D, 0x14, 0x40]), "sprite_draw should DMA the OAM shadow page after writing logical sprites.");
+    }
+
+    [Fact]
+    public void Rejects_logical_sprite_palette_slots_outside_nes_capabilities()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  sprite_asset(hero, "hero.nes.json");
+                                  while (true) {
+                                      sprite_draw(hero, 24, 32, 0, 0, 4);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Contains("Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_logical_sprite_assets_that_exceed_nes_sprite_count()
+    {
+        var rows = Enumerable.Repeat(new string('1', 65 * 8), 8);
+        var rowJson = string.Join(",", rows.Select(row => $"\"{row}\""));
+        var baseDirectory = WriteSpriteAsset(
+            "wide.nes.json",
+            "{\"platforms\":{\"nes\":{\"frames\":[[" + rowJson + "]]}}}");
+
+        const string source = """
+                              void main() {
+                                  sprite_asset(wide, "wide.nes.json");
+                                  while (true) {
+                                      sprite_draw(wide, 0, 0, 0);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Contains("NES sprite asset needs 65 hardware sprites, but the hardware limit is 64.", exception.Message);
+    }
+
     private static string RepositoryFile(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -141,6 +255,14 @@ public class NesRomCompilerTests
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private static string WriteSpriteAsset(string fileName, string contents)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.NES.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, fileName), contents);
+        return directory;
     }
 
     private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)

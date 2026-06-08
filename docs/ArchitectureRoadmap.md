@@ -850,14 +850,15 @@ Status: landed 2026-06-08.
 
 #### AR-9.2: Add NES logical sprite spike
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK to NES lowering.
 - Candidate files: NES sprite lowering, sprite resource tests.
 - Steps:
-  - Lower one logical sprite asset to NES OAM pieces.
-  - Enforce NES sprite count and palette slot limits.
-  - Add a clear overflow error before byte emission.
+  - [x] Lower one logical sprite asset to NES OAM pieces.
+  - [x] Enforce NES sprite count and palette slot limits.
+  - [x] Add a clear overflow error before byte emission.
 - Verification:
-  - A minimal NES source draws a logical sprite or fails with a capability error when limits are exceeded.
+  - [x] A minimal NES source draws a logical sprite or fails with a capability error when limits are exceeded.
 
 #### AR-9.3: Add NES camera/map spike
 

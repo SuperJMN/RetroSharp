@@ -10,7 +10,7 @@ internal static class NesRomBuilder
     public static byte[] Build(NesVideoProgram program)
     {
         var prg = BuildPrgRom(program);
-        var chr = BuildChrRom();
+        var chr = BuildChrRom(program);
 
         var rom = new byte[16 + PrgRomSize + ChrRomSize];
         rom[0] = (byte)'N';
@@ -45,14 +45,16 @@ internal static class NesRomBuilder
         EmitPaletteUpload(builder);
         EmitNameTableUpload(builder);
 
+        var runtimeCompiler = new NesRuntimeCompiler(builder, program);
+        runtimeCompiler.EmitInitialization();
+
         builder.Emit(0xA9, 0x00);                   // LDA #$00
         builder.Emit(0x8D, 0x05, 0x20);             // STA $2005
         builder.Emit(0x8D, 0x05, 0x20);             // STA $2005
         builder.Emit(0x8D, 0x00, 0x20);             // STA $2000
-        builder.Emit(0xA9, 0x0A);                   // LDA #$0A
+        builder.Emit(0xA9, 0x1E);                   // LDA #$1E
         builder.Emit(0x8D, 0x01, 0x20);             // STA $2001
 
-        var runtimeCompiler = new NesRuntimeCompiler(builder, program);
         runtimeCompiler.Emit(program.MainBlock);
 
         builder.Label("forever");
@@ -120,7 +122,7 @@ internal static class NesRomBuilder
         }
     }
 
-    private static byte[] BuildChrRom()
+    private static byte[] BuildChrRom(NesVideoProgram program)
     {
         var chr = new byte[ChrRomSize];
         WriteSolidTile(chr, 1, 1);
@@ -128,6 +130,17 @@ internal static class NesRomBuilder
         WriteSolidTile(chr, 3, 3);
         WriteCheckerTile(chr, 4, 1, 2);
         WriteFrameTile(chr, 5, 3);
+        foreach (var asset in program.SpriteAssetsInLoadOrder)
+        {
+            var offset = asset.FirstTile * 16;
+            if (offset + asset.TileData.Length > chr.Length)
+            {
+                throw new InvalidOperationException($"NES sprite asset '{asset.Name}' exceeds CHR ROM size.");
+            }
+
+            asset.TileData.CopyTo(chr, offset);
+        }
+
         return chr;
     }
 
@@ -183,6 +196,8 @@ internal sealed class NesRuntimeCompiler
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
+    private const ushort OamShadowAddress = 0x0200;
+    private const ushort OamDmaAddress = 0x4014;
     private const ushort ControllerPortAddress = 0x4016;
 
     private static readonly NesButton AButton = new("a", 0x01, InputHoldTicksStartAddress);
@@ -223,6 +238,7 @@ internal sealed class NesRuntimeCompiler
     private readonly Dictionary<string, byte> variables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
     private byte nextVariableAddress = FirstVariableAddress;
+    private int nextHardwareSprite;
 
     public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program)
     {
@@ -230,9 +246,14 @@ internal sealed class NesRuntimeCompiler
         this.program = program;
     }
 
-    public void Emit(BlockSyntax block)
+    public void EmitInitialization()
     {
         EmitInputStateInitialization();
+        EmitOamShadowClear();
+    }
+
+    public void Emit(BlockSyntax block)
+    {
         EmitBlock(block);
     }
 
@@ -245,6 +266,19 @@ internal sealed class NesRuntimeCompiler
         {
             builder.StoreAZeroPage(button.HoldTicksAddress);
         }
+    }
+
+    private void EmitOamShadowClear()
+    {
+        var clearLabel = builder.CreateLabel("oam_clear");
+
+        builder.LoadAImmediate(0xFF);
+        builder.LoadXImmediate(0);
+        builder.Label(clearLabel);
+        builder.StoreAAbsoluteX(OamShadowAddress);
+        builder.IncrementX();
+        builder.BranchRelative(0xD0, clearLabel);   // BNE clearLabel
+        EmitOamDma();
     }
 
     private bool EmitBlock(BlockSyntax block)
@@ -361,12 +395,18 @@ internal sealed class NesRuntimeCompiler
             case "tilemap_fill":
                 NesVideoProgram.RequireArity(call, 5);
                 break;
+            case "sprite_asset":
+                NesVideoProgram.RequireArity(call, 2);
+                break;
             case "video_wait_vblank":
                 NesVideoProgram.RequireArity(call, 0);
                 EmitWaitVBlank();
                 break;
             case "input_poll":
                 EmitInputPoll(call);
+                break;
+            case "sprite_draw":
+                EmitSpriteDraw(call);
                 break;
             default:
                 if (TryEmitUserFunction(call))
@@ -489,6 +529,141 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAImmediate(0);
         builder.StoreAZeroPage(button.HoldTicksAddress);
         builder.Label(endLabel);
+    }
+
+    private void EmitSpriteDraw(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count is not 4 and not 5 and not 6)
+        {
+            throw new InvalidOperationException($"sprite_draw expects 4, 5, or 6 arguments, got {args.Count}.");
+        }
+
+        var assetName = NesVideoProgram.IdentifierArg(args[0], "sprite_draw argument 1");
+        if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES sprite asset '{assetName}'. Declare it with sprite_asset(...).");
+        }
+
+        var frame = SpriteDrawFrameArgument(args, asset);
+        var flipX = SpriteDrawFlipXArgument(args);
+        var paletteSlot = SpriteDrawPaletteSlotArgument(args);
+        var firstHardwareSprite = nextHardwareSprite;
+        if (firstHardwareSprite + asset.Pieces.Count > NesTarget.Capabilities.SpriteCount)
+        {
+            throw new InvalidOperationException($"NES sprite_draw calls exceed the {NesTarget.Capabilities.SpriteCount} hardware sprite OAM limit.");
+        }
+
+        nextHardwareSprite += asset.Pieces.Count;
+        for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
+        {
+            var piece = asset.Pieces[pieceIndex];
+            var oamAddress = (ushort)(OamShadowAddress + (firstHardwareSprite + pieceIndex) * 4);
+            var xOffset = flipX ? asset.LogicalWidth - 8 - piece.XOffset : piece.XOffset;
+            var attributes = paletteSlot | (flipX ? 0x40 : 0);
+
+            EmitSpriteDrawY(args[2], piece.YOffset, oamAddress);
+
+            builder.LoadAImmediate(asset.FirstTile + frame * asset.TilesPerFrame + piece.TileOffset);
+            builder.StoreAAbsolute((ushort)(oamAddress + 1));
+
+            builder.LoadAImmediate(attributes);
+            builder.StoreAAbsolute((ushort)(oamAddress + 2));
+
+            EmitSpriteDrawX(args[1], xOffset, (ushort)(oamAddress + 3));
+        }
+
+        EmitOamDma();
+    }
+
+    private int SpriteDrawFrameArgument(IReadOnlyList<ExpressionSyntax> args, NesCompiledSpriteAsset asset)
+    {
+        if (!TryConst(args[3], out var frame))
+        {
+            throw new InvalidOperationException("sprite_draw argument 4 must be a constant frame index for the current NES sprite spike.");
+        }
+
+        if (frame < 0 || frame >= asset.FrameCount)
+        {
+            throw new InvalidOperationException($"sprite_draw argument 4 must be between 0 and {asset.FrameCount - 1}.");
+        }
+
+        return frame;
+    }
+
+    private bool SpriteDrawFlipXArgument(IReadOnlyList<ExpressionSyntax> args)
+    {
+        if (args.Count < 5)
+        {
+            return false;
+        }
+
+        if (!TryConst(args[4], out var flipX) || flipX is not 0 and not 1)
+        {
+            throw new InvalidOperationException("sprite_draw argument 5 is portable flipX and must be 0, 1, true, or false for the current NES sprite spike.");
+        }
+
+        return flipX != 0;
+    }
+
+    private static int SpriteDrawPaletteSlotArgument(IReadOnlyList<ExpressionSyntax> args)
+    {
+        if (args.Count < 6)
+        {
+            return 0;
+        }
+
+        var slot = NesVideoProgram.ConstValue(args[5], "sprite_draw argument 6");
+        if (slot < 0 || slot >= NesTarget.Capabilities.SpritePaletteSlots)
+        {
+            throw new InvalidOperationException(
+                $"Target '{NesTarget.Capabilities.Name}' supports sprite palette slots 0..{NesTarget.Capabilities.SpritePaletteSlots - 1}, but slot {slot} was requested.");
+        }
+
+        return slot;
+    }
+
+    private void EmitSpriteDrawY(ExpressionSyntax yExpression, int offset, ushort oamAddress)
+    {
+        EmitExpressionToA(yExpression);
+        EmitAddSignedImmediate(offset - 1);
+        builder.StoreAAbsolute(oamAddress);
+    }
+
+    private void EmitSpriteDrawX(ExpressionSyntax xExpression, int offset, ushort oamAddress)
+    {
+        EmitExpressionToA(xExpression);
+        EmitAddSignedImmediate(offset);
+        builder.StoreAAbsolute(oamAddress);
+    }
+
+    private void EmitAddSignedImmediate(int offset)
+    {
+        if (offset == 0)
+        {
+            return;
+        }
+
+        if (offset is < -255 or > 255)
+        {
+            throw new InvalidOperationException("NES sprite piece offset must fit in one byte for the current sprite spike.");
+        }
+
+        if (offset > 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(offset);
+            return;
+        }
+
+        builder.SetCarry();
+        builder.SubtractImmediate(-offset);
+    }
+
+    private void EmitOamDma()
+    {
+        builder.LoadAImmediate((OamShadowAddress >> 8) & 0xFF);
+        builder.StoreAAbsolute(OamDmaAddress);
     }
 
     private void EmitExpressionToA(ExpressionSyntax expression)
@@ -680,6 +855,8 @@ internal sealed class PrgBuilder
 
     public void LoadAImmediate(int value) => Emit(0xA9, CheckedByte(value));
 
+    public void LoadXImmediate(int value) => Emit(0xA2, CheckedByte(value));
+
     public void LoadAZeroPage(byte address) => Emit(0xA5, address);
 
     public void StoreAZeroPage(byte address) => Emit(0x85, address);
@@ -687,6 +864,8 @@ internal sealed class PrgBuilder
     public void LoadAAbsolute(ushort address) => Emit(0xAD, Low(address), High(address));
 
     public void StoreAAbsolute(ushort address) => Emit(0x8D, Low(address), High(address));
+
+    public void StoreAAbsoluteX(ushort address) => Emit(0x9D, Low(address), High(address));
 
     public void AndImmediate(int value) => Emit(0x29, CheckedByte(value));
 
@@ -696,7 +875,13 @@ internal sealed class PrgBuilder
 
     public void ClearCarry() => Emit(0x18);
 
+    public void SetCarry() => Emit(0x38);
+
     public void AddImmediate(int value) => Emit(0x69, CheckedByte(value));
+
+    public void SubtractImmediate(int value) => Emit(0xE9, CheckedByte(value));
+
+    public void IncrementX() => Emit(0xE8);
 
     public void LdaAbsoluteX(string label, int addend = 0)
     {
