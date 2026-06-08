@@ -57,7 +57,10 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.DrawLogicalSprite("player", new Size2D(16, 27), X: 72, Y: 80, Frame: 0, PaletteSlot: 1, Transform: SpriteTransform.FlipX));
         Sdk2DOperationValidator.Validate(
             capabilities,
-            new Sdk2DOperation.SetCameraPosition(X: 32, Y: 16, Axes: ScrollAxes.Horizontal | ScrollAxes.Vertical));
+            new Sdk2DOperation.SetCameraPosition(X: 32, Y: 0, Axes: ScrollAxes.Horizontal));
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.SetCameraPosition(X: 0, Y: 16, Axes: ScrollAxes.Vertical));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 18));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.StreamMapRow(TargetRow: 29, SourceRow: 40, X: 0, Width: 20));
@@ -76,6 +79,22 @@ public sealed class Sdk2DOperationTests
 
         Assert.Equal(
             "Target 'gb' does not support SplitScroll HUD. Use Window HUD, SpriteHud, or disable HUD for this target.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Validator_rejects_diagonal_camera_movement_when_combined_streaming_exceeds_budget()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                FullCapabilities(),
+                new Sdk2DOperation.SetCameraPosition(
+                    new SdkByteExpression.Variable("cameraX"),
+                    new SdkByteExpression.Variable("cameraY"),
+                    ScrollAxes.Horizontal | ScrollAxes.Vertical)));
+
+        Assert.Equal(
+            "Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).",
             exception.Message);
     }
 

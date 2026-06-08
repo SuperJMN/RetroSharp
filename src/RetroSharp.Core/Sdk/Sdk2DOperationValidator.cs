@@ -20,6 +20,7 @@ public static class Sdk2DOperationValidator
                 ValidateByteExpression(camera.X, "camera X");
                 ValidateByteExpression(camera.Y, "camera Y");
                 RequireAxes(capabilities, camera.Axes);
+                RequireCameraMovementBudget(capabilities, camera.Axes);
                 return;
             case Sdk2DOperation.ApplyCamera camera:
                 RequireAxes(capabilities, camera.Axes);
@@ -79,6 +80,34 @@ public static class Sdk2DOperationValidator
         {
             TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
         }
+    }
+
+    private static void RequireCameraMovementBudget(Target2DCapabilities capabilities, ScrollAxes axes)
+    {
+        var columnWrites = axes.HasFlag(ScrollAxes.Horizontal) ? capabilities.ScreenTiles.Height : 0;
+        var rowWrites = axes.HasFlag(ScrollAxes.Vertical) ? capabilities.ScreenTiles.Width : 0;
+        var requiredWrites = columnWrites + rowWrites;
+        if (requiredWrites == 0)
+        {
+            return;
+        }
+
+        RequireBackgroundTileWriteBudget(capabilities, requiredWrites, CameraMovementDescription(axes, columnWrites, rowWrites));
+    }
+
+    private static string CameraMovementDescription(ScrollAxes axes, int columnWrites, int rowWrites)
+    {
+        if (axes.HasFlag(ScrollAxes.Horizontal) && axes.HasFlag(ScrollAxes.Vertical))
+        {
+            return $"moving the camera diagonally ({columnWrites} column tiles + {rowWrites} row tiles)";
+        }
+
+        if (axes.HasFlag(ScrollAxes.Horizontal))
+        {
+            return $"moving the camera horizontally ({columnWrites} column tiles)";
+        }
+
+        return $"moving the camera vertically ({rowWrites} row tiles)";
     }
 
     private static void RequireBackgroundTileWriteBudget(Target2DCapabilities capabilities, int requiredWrites, string operationDescription)
