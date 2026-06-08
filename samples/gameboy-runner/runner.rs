@@ -53,6 +53,7 @@ void main() {
     define_world();
     world_map(16, 11, 4);
     camera_init(16, 11, 4);
+    i16 cameraX = 0;
     i16 footTile = 0;
     i16 failTile = 0;
     i16 playerY = 73;
@@ -139,13 +140,17 @@ void main() {
         if (button_down(right) != 0) {
             moving = 1;
             displayFlags = 0;
-            camera_move_right();
+            cameraX = cameraX + 1;
         }
 
         if (button_down(left) != 0) {
             moving = 1;
             displayFlags = 32;
-            camera_move_left();
+            cameraX = cameraX - 1;
+        }
+
+        if (moving != 0) {
+            camera_set_position(cameraX, 0);
         }
 
         if (moving != 0) {

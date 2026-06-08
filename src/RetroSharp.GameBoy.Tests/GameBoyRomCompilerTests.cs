@@ -795,18 +795,22 @@ public class GameBoyRomCompilerTests
         var leftStart = source.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
         Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
 
-        var animationStart = source.IndexOf("if (moving != 0)", StringComparison.Ordinal);
+        var animationStart = source.IndexOf("animTick = animTick + 1;", StringComparison.Ordinal);
         Assert.True(animationStart > rightStart, "Runner should update movement before animation state.");
 
+        Assert.Contains("i16 cameraX = 0;", source);
+
         var movementBlock = source[rightStart..animationStart];
-        Assert.Contains("camera_move_right();", movementBlock);
+        Assert.Contains("cameraX = cameraX + 1;", movementBlock);
         Assert.Contains("moving = 1;", movementBlock);
-        Assert.Contains("camera_move_left();", movementBlock);
+        Assert.Contains("cameraX = cameraX - 1;", movementBlock);
+        Assert.Contains("camera_set_position(cameraX, 0);", movementBlock);
+        Assert.DoesNotContain("camera_move_right();", source);
+        Assert.DoesNotContain("camera_move_left();", source);
         Assert.Contains("if (moving != 0)", source);
         Assert.Contains("animTick = animTick + 1;", source);
         Assert.Contains("frame = 0;", source);
-        Assert.Equal(1, CountOccurrences(source, "camera_move_right();"));
-        Assert.Equal(1, CountOccurrences(source, "camera_move_left();"));
+        Assert.Equal(1, CountOccurrences(source, "camera_set_position(cameraX, 0);"));
         Assert.Equal(1, CountOccurrences(source, "animTick = animTick + 1;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -1080,8 +1084,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
-        Assert.Contains("camera_move_right();", source);
-        Assert.Contains("camera_move_left();", source);
+        Assert.Contains("camera_set_position(cameraX, 0);", source);
+        Assert.DoesNotContain("camera_move_right();", source);
+        Assert.DoesNotContain("camera_move_left();", source);
         Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);
         Assert.DoesNotContain("i16 rightSourceColumn = 4;", source);
         Assert.DoesNotContain("i16 leftSourceColumn = 15;", source);
