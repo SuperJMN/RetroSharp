@@ -50,9 +50,17 @@ internal sealed class GameBoyVideoProgram
 
     public int MapColumnHeight { get; private set; }
 
+    public SortedDictionary<int, byte[]> MapFlagColumns { get; } = [];
+
+    public int MapFlagColumnHeight { get; private set; }
+
     public SortedDictionary<int, byte[]> WorldColumns { get; } = [];
 
     public int WorldColumnHeight { get; private set; }
+
+    public SortedDictionary<int, WorldTileFlags[]> WorldFlagColumns { get; } = [];
+
+    public int WorldFlagColumnHeight { get; private set; }
 
     public WorldMap2D? WorldMap { get; private set; }
 
@@ -137,6 +145,9 @@ internal sealed class GameBoyVideoProgram
                     break;
                 case "world_column":
                     ApplyWorldColumn(call);
+                    break;
+                case "world_flags":
+                    ApplyWorldFlags(call);
                     break;
                 case "world_map":
                     ApplyWorldMap(call);
@@ -239,6 +250,22 @@ internal sealed class GameBoyVideoProgram
         WorldColumns[index] = tiles;
     }
 
+    private void ApplyWorldFlags(FunctionCall call)
+    {
+        var (index, flags) = ParseFlagColumnData(call);
+
+        if (WorldFlagColumnHeight == 0)
+        {
+            WorldFlagColumnHeight = flags.Length;
+        }
+        else if (flags.Length != WorldFlagColumnHeight)
+        {
+            throw new InvalidOperationException("All world_flags calls must use the same flag count.");
+        }
+
+        WorldFlagColumns[index] = flags;
+    }
+
     private void ApplyWorldMap(FunctionCall call)
     {
         RequireArity(call, 3);
@@ -252,6 +279,11 @@ internal sealed class GameBoyVideoProgram
         var width = ConstArg(call, 0, 1, 255);
         var streamY = ConstArg(call, 1, 0, 31);
         var height = ConstArg(call, 2, 1, sourceHeight);
+        if (WorldFlagColumnHeight is not 0 && WorldFlagColumnHeight < height)
+        {
+            throw new InvalidOperationException("world_map height must not exceed the declared world_flags height.");
+        }
+
         if (streamY + height > 32)
         {
             throw new InvalidOperationException("world_map stream area exceeds the Game Boy background tilemap height.");
@@ -262,14 +294,17 @@ internal sealed class GameBoyVideoProgram
         for (var x = 0; x < width; x++)
         {
             sourceColumns.TryGetValue(x, out var column);
+            WorldFlagColumns.TryGetValue(x, out var flagColumn);
             for (var y = 0; y < height; y++)
             {
                 tileIds[y * width + x] = column is null ? 0 : column[y];
+                tileFlags[y * width + x] = flagColumn is null ? WorldTileFlags.Empty : flagColumn[y];
             }
         }
 
         WorldMap = new WorldMap2D(width, height, tileIds, tileFlags);
         GenerateMapColumnsFromWorldMap(WorldMap);
+        GenerateMapFlagColumnsFromWorldMap(WorldMap);
         ApplyWorldMapToTileMap(WorldMap, streamY);
     }
 
@@ -291,6 +326,25 @@ internal sealed class GameBoyVideoProgram
         return (index, tiles);
     }
 
+    private (int Index, WorldTileFlags[] Flags) ParseFlagColumnData(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count < 2)
+        {
+            throw new InvalidOperationException("world_flags expects an index and at least one flag value.");
+        }
+
+        var index = CheckedRange(ConstValue(args[0], "world_flags argument 1"), 0, 255, "world_flags argument 1");
+        var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
+        var flags = args
+            .Skip(1)
+            .Select((arg, i) => CheckedRange(ConstValue(arg, $"world_flags argument {i + 2}"), 0, allowedFlags, $"world_flags argument {i + 2}"))
+            .Select(value => (WorldTileFlags)value)
+            .ToArray();
+
+        return (index, flags);
+    }
+
     private void GenerateMapColumnsFromWorldMap(WorldMap2D worldMap)
     {
         MapColumns.Clear();
@@ -307,6 +361,22 @@ internal sealed class GameBoyVideoProgram
         }
     }
 
+    private void GenerateMapFlagColumnsFromWorldMap(WorldMap2D worldMap)
+    {
+        MapFlagColumns.Clear();
+        MapFlagColumnHeight = worldMap.Height;
+        for (var x = 0; x < worldMap.Width; x++)
+        {
+            var flags = new byte[worldMap.Height];
+            for (var y = 0; y < worldMap.Height; y++)
+            {
+                flags[y] = CheckedByteFlags(worldMap.FlagsAt(x, y), x, y);
+            }
+
+            MapFlagColumns[x] = flags;
+        }
+    }
+
     private static byte CheckedByteTileId(int tileId, int x, int y)
     {
         if (tileId is < 0 or > 255)
@@ -315,6 +385,18 @@ internal sealed class GameBoyVideoProgram
         }
 
         return (byte)tileId;
+    }
+
+    private static byte CheckedByteFlags(WorldTileFlags flags, int x, int y)
+    {
+        var value = (int)flags;
+        var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
+        if (value < 0 || (value & ~allowedFlags) != 0)
+        {
+            throw new InvalidOperationException($"world_map flags ({x}, {y}) contain unsupported Game Boy flag bits.");
+        }
+
+        return (byte)value;
     }
 
     private void ApplyWorldMapToTileMap(WorldMap2D worldMap, int streamY)

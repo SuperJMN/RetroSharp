@@ -946,6 +946,54 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void World_map_generates_collision_flags_and_lowers_flag_queries()
+    {
+        const string source = """
+                              void define_world() {
+                                  world_column(0, 0, 4);
+                                  world_column(1, 3, 5);
+                                  world_flags(0, 0, 1);
+                                  world_flags(1, 2, 1);
+                                  return;
+                              }
+
+                              void main() {
+                                  define_world();
+                                  world_map(2, 11, 2);
+                                  camera_init(2, 11, 2);
+                                  i16 column = 1;
+                                  i16 hazard = 0;
+                                  i16 solid = 0;
+                                  if (map_flags_at(column, 0) != 0) {
+                                      hazard = 1;
+                                  }
+                                  if (camera_span_has_flags(0, 8, 1, 1) != 0) {
+                                      solid = 1;
+                                  }
+                                  if (camera_span_has_flags(8, 8, 0, 2) != 0) {
+                                      hazard = 2;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var program = CompileVideoProgram(source);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 1));
+        Assert.Equal(WorldTileFlags.Hazard, worldMap.FlagsAt(1, 0));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(1, 1));
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x00, 0x02]), "ROM should contain world flag row 0 data.");
+        Assert.True(ContainsSequence(rom, [0x01, 0x01]), "ROM should contain world flag row 1 data.");
+        Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Solid flag queries should mask bit 0 independently.");
+        Assert.True(ContainsSequence(rom, [0xE6, 0x02, 0xFE, 0x00, 0xC2]), "Hazard flag queries should mask bit 1 independently.");
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
@@ -957,14 +1005,19 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("world_column(7, 0, 0, 3, 5);", source);
         Assert.Contains("world_column(13, 0, 0, 0, 0);", source);
+        Assert.Contains("world_flags(7, 0, 0, 2, 1);", source);
+        Assert.Contains("world_flags(13, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
-        Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
-        Assert.Contains("footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);", source);
+        Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
+        Assert.Contains("footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);", source);
+        Assert.DoesNotContain("camera_span_has_tile(", source);
+        Assert.DoesNotContain("camera_span_tile_at(", source);
         Assert.DoesNotContain("playerLeftFootColumn", source);
         Assert.DoesNotContain("playerCenterFootColumn", source);
         Assert.DoesNotContain("playerRightFootColumn", source);
         Assert.DoesNotContain("map_tile_at(player", source);
         Assert.Contains("if (failTile != 0)", source);
+        Assert.DoesNotContain("if (footTile != 3)", source);
         Assert.Contains("if (grounded == 0)", source);
         Assert.Contains("if (playerY >= 116)", source);
         Assert.Contains("if (resetRequested != 0)", source);
@@ -989,6 +1042,10 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world_column(13, 0, 0, 0, 0);", source);
         Assert.Contains("world_column(14, 0, 0, 0, 0);", source);
         Assert.Contains("world_column(15, 0, 0, 0, 0);", source);
+        Assert.Contains("world_flags(7, 0, 0, 2, 1);", source);
+        Assert.Contains("world_flags(13, 0, 0, 0, 0);", source);
+        Assert.Contains("world_flags(14, 0, 0, 0, 0);", source);
+        Assert.Contains("world_flags(15, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
 
         Assert.Contains("camera_init(16, 11, 4);", source);
@@ -996,8 +1053,10 @@ public class GameBoyRomCompilerTests
             source.IndexOf("camera_init(16, 11, 4);", StringComparison.Ordinal) >
             source.IndexOf("world_map(16, 11, 4);", StringComparison.Ordinal));
         Assert.Contains("camera_apply();", source);
-        Assert.Contains("footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);", source);
-        Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
+        Assert.Contains("footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);", source);
+        Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
+        Assert.DoesNotContain("camera_span_has_tile(", source);
+        Assert.DoesNotContain("camera_span_tile_at(", source);
         Assert.Contains("camera_move_right();", source);
         Assert.Contains("camera_move_left();", source);
         Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);
@@ -1054,10 +1113,13 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world_map(16, 11, 4);", source);
         Assert.Contains("world_column(0, 0, 0, 4, 5);", source);
         Assert.Contains("world_column(7, 0, 0, 3, 5);", source);
+        Assert.Contains("world_flags(7, 0, 0, 2, 1);", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("tilemap_set(7, 13, 3);", source);
-        Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
+        Assert.Contains("failTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 2);", source);
+        Assert.Contains("footTile = camera_span_has_flags(72, sprite_width(mario_player), 2, 1);", source);
         Assert.Contains("if (failTile != 0)", source);
+        Assert.DoesNotContain("if (footTile != 3)", source);
         Assert.DoesNotContain("if (failTile == 4)", source);
 
         var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
