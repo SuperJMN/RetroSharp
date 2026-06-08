@@ -25,6 +25,36 @@
       "targets": ["gb"]
     },
     {
+      "path": "samples/gameboy-runner/diagnostics/00-static-background.rs",
+      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/gameboy-runner/diagnostics/01-world-platforms.rs",
+      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/gameboy-runner/diagnostics/02-flat-ground-camera.rs",
+      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/gameboy-runner/diagnostics/02-player-camera.rs",
+      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/gameboy-runner/diagnostics/03-enemy-sprites.rs",
+      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
       "path": "samples/nes-drawing/drawing.rs",
       "readme": "samples/nes-drawing/README.md",
       "layer": "target-intrinsic",

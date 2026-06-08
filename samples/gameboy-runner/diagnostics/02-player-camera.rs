@@ -8,10 +8,8 @@ void setup_video() {
     object_palette_set(1, 0);
     object_palette_set(2, 1);
     object_palette_set(3, 3);
-    sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);
-    sprite_asset(enemy_slug, "assets/enemy-slug.gb.png", 16, 16);
+    sprite_asset(mario_player, "../assets/mario-player.gb.png", 18, 32);
     animation_clip(run, 1, 6, 6, 6);
-    animation_clip(enemy_walk, 0, 12, 12);
     return;
 }
 
@@ -99,16 +97,11 @@ void main() {
     i16 jumpTicks = 0;
     i16 moving = 0;
     i16 resetRequested = 0;
-    i16 enemyX = 128;
-    i16 enemyFrame = 0;
-    i16 enemyTick = 0;
 
     while (true) {
         video_wait_vblank();
         camera_apply();
         sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
-        sprite_draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);
-        sprite_draw(enemy_slug, 40, 57, enemyFrame, true, 0);
 
         input_poll();
 
@@ -200,14 +193,6 @@ void main() {
             }
         }
 
-        if (enemyX >= 68) {
-            if (enemyX <= 90) {
-                if (playerY >= 72) {
-                    resetRequested = 1;
-                }
-            }
-        }
-
         if (resetRequested != 0) {
             footTile = 0;
             failTile = 0;
@@ -217,9 +202,6 @@ void main() {
             displayFrame = 0;
             jumping = 0;
             jumpTicks = 0;
-            enemyX = 128;
-            enemyFrame = 0;
-            enemyTick = 0;
             if (hazardHit != 0) {
                 velocityY = 248;
                 grounded = 0;
@@ -264,14 +246,6 @@ void main() {
         if (moving != 0) {
             camera_set_position(cameraX, 0);
         }
-
-        enemyX = enemyX - 1;
-        if (enemyX <= 96) {
-            enemyX = 136;
-        }
-
-        enemyTick = enemyTick + 1;
-        enemyFrame = animation_frame(enemy_walk, enemyTick);
 
         if (moving != 0) {
             animTick = animTick + 1;

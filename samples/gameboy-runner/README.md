@@ -18,7 +18,31 @@ flatpak run --command=retroarch org.libretro.RetroArch \
   runner.gb
 ```
 
-This sample uses parameterless helper functions, declarations, assignment, `while`, `if`, relational conditions, `video_wait_vblank()`, `input_poll()`, `camera_init(...)`, `camera_apply()`, `camera_set_position(...)`, `collision_aabb_tiles(...)`, `sprite_width(...)`, `sprite_asset(...)`, `sprite_draw(...)`, `animation_clip(...)`, `animation_frame(...)`, `world_map(...)`, `world_column(...)`, `world_flags(...)`, and tick-based button helpers. The actor keeps a fixed screen X while the camera moves through the Game Boy `SCX` register, derives world-space collision X from the camera position, streams new map columns from ROM while D-pad right or left is held, flips the same player sheet horizontally through portable `flipX` when facing left, selects sprite palette slot `0` explicitly, advances the run frames through an explicit `animTick` plus a portable animation clip, checks the logical sprite width against world collision flags through an AABB query, shows holes in the visible background before the actor reaches them, resets the actor on fall/failure tiles without rebasing the scrolled background, and jumps with variable height when the Game Boy A button is pressed.
+Headless preview with PyBoy:
+
+```bash
+python3 -m pip install --target /tmp/retrosharp-pyboy-site pyboy pillow
+PYTHONPATH=/tmp/retrosharp-pyboy-site python3 - <<'PY'
+from pyboy import PyBoy
+pyboy = PyBoy("runner.gb", window="null")
+for _ in range(180):
+    pyboy.tick()
+pyboy.screen.image.save("runner-pyboy.png")
+pyboy.stop()
+PY
+```
+
+For bug isolation, use the incremental diagnostics under `diagnostics/` or run the full matrix:
+
+```bash
+PYTHONPATH=/tmp/retrosharp-pyboy-site python3 ../../tools/gameboy/runner_diagnostics.py
+```
+
+This sample uses parameterless helper functions, declarations, assignment, `while`, `if`, relational conditions, `video_wait_vblank()`, `input_poll()`, `camera_init(...)`, `camera_apply()`, `camera_set_position(...)`, `collision_aabb_tiles(...)`, `sprite_asset(...)`, `sprite_draw(...)`, `animation_clip(...)`, `animation_frame(...)`, `world_map(...)`, `world_column(...)`, `world_flags(...)`, `tilemap_set(...)`, and tick-based button helpers. The actor keeps a fixed screen X while the camera moves through the Game Boy `SCX` register, derives world-space collision X from the camera position, streams the compact playable map from ROM while D-pad right or left is held, flips the same player sheet horizontally through portable `flipX` when facing left, selects sprite palette slot `0` explicitly, advances the run frames through an explicit `animTick` plus a portable animation clip, clamps upward movement at the top of the scene before byte-backed Y can wrap, wraps left/center/right foot probes to the active 16-column world width, lands on an elevated one-way platform only while descending or on the ground row, shows holes and wider failure tiles before the actor reaches them, bounces visibly on hazard contact, resets the actor on falls/enemy contact without rebasing the scrolled background, and jumps with variable height when the Game Boy A button is pressed.
+
+The background uses five built-in Game Boy tiles: empty sky, cloud, distant hill, hazard spikes, and brick/ground. Decorative clouds and hills are placed with static `tilemap_set(...)` calls so the visual background does not inflate the runtime streaming path. The playable platforms, holes, ground, and hazard flags stay in the `world_map(...)` data so visual tiles and collision flags remain synchronized for gameplay.
+
+Enemies are original two-frame 16x16 sprites in `assets/enemy-slug.gb.png`. One slug loops from right to left on the ground and resets the actor on simple screen-space contact; another sits on the raised platform to exercise multiple logical sprite draws in the same frame.
 
 The runner sprite sources are `assets/mario-idle.aseprite`, `assets/mario-run.aseprite`, and `assets/mario-jump.aseprite`. Export them to the PNGs used by RetroSharp with:
 

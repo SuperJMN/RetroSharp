@@ -114,7 +114,7 @@ Runtime calls:
 
 `camera_init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`camera_set_position(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants or local variables. The current Game Boy lowering compares the requested position with the current camera state and moves at most one pixel per axis toward it on each call. X tile-boundary crossings reuse the existing column streaming paths. Y tile-boundary crossings stream one visible row up or down from the generated world-map row data, writing 20 background tiles per streamed row to stay within the Game Boy target budget. A camera operation that can move both axes in the same frame is rejected for Game Boy until a scheduler or split-frame policy can keep the combined column-and-row writes within budget.
+`camera_set_position(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants or local variables. The current Game Boy lowering compares the requested low byte with the current camera low byte as an unsigned modular delta, then moves at most one pixel per axis toward the shortest step direction on each call. This keeps continuous horizontal movement stable across the Game Boy `SCX` byte wrap at 255 -> 0 while the runtime still maintains the internal 16-bit camera counters used by streaming. X tile-boundary crossings reuse the existing column streaming paths. Y tile-boundary crossings stream one visible row up or down from the generated world-map row data, writing 20 background tiles per streamed row to stay within the Game Boy target budget. A camera operation that can move both axes in the same frame is rejected for Game Boy until a scheduler or split-frame policy can keep the combined column-and-row writes within budget.
 
 `camera_apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel. When horizontal movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
@@ -248,12 +248,11 @@ Landed after the camera-runtime pass:
 
 - `camera_init(...)`, `camera_apply()`, `camera_move_right()`, `camera_move_left()`, and `camera_tile_column_at(...)` lift horizontal scrolling one layer above raw `SCX` writes and hand-managed streaming cursors.
 - The camera runtime owns 16-bit world X, sub-tile scroll state, circular background-map edge columns, source-map edge columns, and 8 px column streaming.
-- The runner now asks the camera for source-map foot columns instead of wrapping `screenLeftColumn` manually.
-- `camera_span_has_flags(...)` and `sprite_width(...)` let the runner collide against every tile column covered by a logical sprite width using generated world flags instead of hardcoded tile ids.
+- Camera span helpers remain available for source-map checks, including logical sprite widths through `sprite_width(...)`, but the runner no longer depends on them for player feet.
 
 Landed after the Collision V1 pass:
 
-- The runner derives actor collision X from `cameraX + 72`, wraps it to the active 16-column world width, and queries generated world flags through `collision_aabb_tiles(...)`.
+- The runner derives actor collision X from `cameraX + 72`, wraps left/center/right foot probes to the active 16-column world width, and queries generated world flags through narrow `collision_aabb_tiles(...)` probes.
 - Camera span collision remains available as a transitional helper, but the runner no longer depends on it for foot or failure checks.
 
 Landed after the NES portable spike:
@@ -266,6 +265,13 @@ Landed after the first HUD pass:
 
 - `hud_set_tile(window, x, y, tile)` compiles to the Game Boy Window tilemap at `$9C00` and enables the Window layer without sharing camera scroll state.
 - `samples/gameboy-hud/hud.rs` builds as the first HUD sample and keeps Window restrictions explicit.
+
+Landed after the richer runner scene pass:
+
+- The runner background now uses purpose-built built-in tiles for clouds, distant hills, hazards, ground tops, and bricks while keeping sprite tile indices stable.
+- The runner combines static decorative `tilemap_set(...)` background placement with a compact streamable `world_map(...)` for playable platforms, holes, ground, and hazard flags so the runtime still fits in the current 32 KiB ROM-only target.
+- `samples/gameboy-runner/assets/enemy-slug.gb.png` adds an original two-frame logical enemy sprite. The runner draws one patrolling ground enemy and one raised-platform enemy in the VBlank presentation block.
+- The ground enemy has simple screen-space contact reset logic, while platform, ground, and hazard collision remain world-flag probes.
 
 ## Next Milestones
 

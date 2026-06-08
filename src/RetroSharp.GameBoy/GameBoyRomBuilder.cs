@@ -28,7 +28,8 @@ internal static class GameBoyRomBuilder
         var programBytes = builder.Build();
         if (programBytes.Length > RomSize - 0x0150)
         {
-            throw new InvalidOperationException("Generated Game Boy program does not fit in a 32 KiB ROM.");
+            throw new InvalidOperationException(
+                $"Generated Game Boy program is {programBytes.Length} bytes, but only {RomSize - 0x0150} bytes fit in a 32 KiB ROM.");
         }
 
         programBytes.CopyTo(rom, 0x0150);
@@ -189,11 +190,11 @@ internal static class GameBoyRomBuilder
     private static byte[] BuildTileData(GameBoyVideoProgram program)
     {
         var tiles = new byte[(GameBoyVideoProgram.FirstSpriteTile + program.SpriteTileCount) * 16];
-        WriteSolidTile(tiles, 1, 1);
-        WriteSolidTile(tiles, 2, 2);
-        WriteSolidTile(tiles, 3, 3);
-        WriteCheckerTile(tiles, 4, 1, 2);
-        WriteFrameTile(tiles, 5, 3);
+        WriteCloudTile(tiles, 1);
+        WriteHillTile(tiles, 2);
+        WriteSpikeTile(tiles, 3);
+        WriteGroundTopTile(tiles, 4);
+        WriteBrickTile(tiles, 5);
 
         foreach (var asset in program.SpriteAssetsInLoadOrder)
         {
@@ -234,6 +235,66 @@ internal static class GameBoyRomBuilder
                 WriteTileRow(tiles, tile, row, color, 0, 0, 0, 0, 0, 0, color);
             }
         }
+    }
+
+    private static void WriteCloudTile(byte[] tiles, int tile)
+    {
+        WriteTileRow(tiles, tile, 0, 0, 0, 0, 0, 1, 1, 0, 0);
+        WriteTileRow(tiles, tile, 1, 0, 0, 1, 1, 1, 1, 1, 0);
+        WriteTileRow(tiles, tile, 2, 0, 1, 1, 1, 1, 1, 1, 1);
+        WriteTileRow(tiles, tile, 3, 1, 1, 1, 1, 1, 1, 1, 1);
+        WriteTileRow(tiles, tile, 4, 0, 1, 1, 1, 1, 1, 1, 0);
+        WriteTileRow(tiles, tile, 5, 0, 0, 1, 1, 1, 1, 0, 0);
+        WriteTileRow(tiles, tile, 6, 0, 0, 0, 0, 0, 0, 0, 0);
+        WriteTileRow(tiles, tile, 7, 0, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    private static void WriteHillTile(byte[] tiles, int tile)
+    {
+        WriteTileRow(tiles, tile, 0, 0, 0, 0, 0, 2, 2, 0, 0);
+        WriteTileRow(tiles, tile, 1, 0, 0, 0, 2, 2, 2, 2, 0);
+        WriteTileRow(tiles, tile, 2, 0, 0, 2, 2, 1, 2, 2, 2);
+        WriteTileRow(tiles, tile, 3, 0, 2, 2, 1, 2, 2, 1, 2);
+        WriteTileRow(tiles, tile, 4, 2, 2, 2, 2, 2, 1, 2, 2);
+        WriteTileRow(tiles, tile, 5, 2, 1, 2, 2, 2, 2, 2, 1);
+        WriteTileRow(tiles, tile, 6, 2, 2, 2, 1, 2, 2, 2, 2);
+        WriteTileRow(tiles, tile, 7, 2, 2, 2, 2, 2, 2, 2, 2);
+    }
+
+    private static void WriteSpikeTile(byte[] tiles, int tile)
+    {
+        WriteTileRow(tiles, tile, 0, 0, 0, 0, 3, 3, 0, 0, 0);
+        WriteTileRow(tiles, tile, 1, 0, 0, 3, 3, 3, 3, 0, 0);
+        WriteTileRow(tiles, tile, 2, 0, 3, 3, 3, 3, 3, 3, 0);
+        WriteTileRow(tiles, tile, 3, 3, 3, 3, 3, 3, 3, 3, 3);
+        WriteTileRow(tiles, tile, 4, 2, 2, 3, 2, 2, 3, 2, 2);
+        WriteTileRow(tiles, tile, 5, 2, 3, 2, 2, 3, 2, 2, 3);
+        WriteTileRow(tiles, tile, 6, 3, 2, 2, 3, 2, 2, 3, 2);
+        WriteTileRow(tiles, tile, 7, 3, 3, 3, 3, 3, 3, 3, 3);
+    }
+
+    private static void WriteGroundTopTile(byte[] tiles, int tile)
+    {
+        WriteTileRow(tiles, tile, 0, 1, 1, 1, 1, 1, 1, 1, 1);
+        WriteTileRow(tiles, tile, 1, 2, 1, 2, 1, 2, 1, 2, 1);
+        WriteTileRow(tiles, tile, 2, 2, 2, 2, 2, 2, 2, 2, 2);
+        WriteTileRow(tiles, tile, 3, 2, 3, 2, 2, 2, 3, 2, 2);
+        WriteTileRow(tiles, tile, 4, 2, 2, 2, 3, 2, 2, 2, 3);
+        WriteTileRow(tiles, tile, 5, 3, 2, 2, 2, 3, 2, 2, 2);
+        WriteTileRow(tiles, tile, 6, 2, 2, 3, 2, 2, 2, 3, 2);
+        WriteTileRow(tiles, tile, 7, 2, 2, 2, 2, 2, 2, 2, 2);
+    }
+
+    private static void WriteBrickTile(byte[] tiles, int tile)
+    {
+        WriteTileRow(tiles, tile, 0, 3, 3, 3, 3, 3, 3, 3, 3);
+        WriteTileRow(tiles, tile, 1, 3, 2, 2, 2, 3, 2, 2, 2);
+        WriteTileRow(tiles, tile, 2, 3, 2, 2, 2, 3, 2, 2, 2);
+        WriteTileRow(tiles, tile, 3, 3, 3, 3, 3, 3, 3, 3, 3);
+        WriteTileRow(tiles, tile, 4, 2, 2, 3, 2, 2, 2, 3, 2);
+        WriteTileRow(tiles, tile, 5, 2, 2, 3, 2, 2, 2, 3, 2);
+        WriteTileRow(tiles, tile, 6, 3, 3, 3, 3, 3, 3, 3, 3);
+        WriteTileRow(tiles, tile, 7, 2, 2, 2, 3, 2, 2, 2, 3);
     }
 
     private static void WriteTileRow(byte[] tiles, int tile, int row, params int[] colors)
@@ -937,8 +998,12 @@ internal sealed class GameBoyRuntimeCompiler
         EmitExpressionToA(requestedPosition);
         builder.LoadBFromA();
         builder.LoadA(currentLowAddress);
-        builder.CompareB();
+        builder.LoadCFromA();
+        builder.LoadAFromB();
+        builder.SubtractAFromC();
+        builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel
+        builder.CompareImmediate(128);
         builder.JumpAbsolute(0xDA, movePositiveLabel); // JP C,movePositiveLabel
 
         moveNegative();
@@ -2234,6 +2299,11 @@ internal sealed class GbBuilder
     public void SubtractAImmediate(int value)
     {
         Emit(0xD6, (byte)value);
+    }
+
+    public void SubtractAFromC()
+    {
+        Emit(0x91);
     }
 
     public void CompareImmediate(int value)

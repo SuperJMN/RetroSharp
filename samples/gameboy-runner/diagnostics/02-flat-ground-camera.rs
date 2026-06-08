@@ -8,10 +8,8 @@ void setup_video() {
     object_palette_set(1, 0);
     object_palette_set(2, 1);
     object_palette_set(3, 3);
-    sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);
-    sprite_asset(enemy_slug, "assets/enemy-slug.gb.png", 16, 16);
+    sprite_asset(mario_player, "../assets/mario-player.gb.png", 18, 32);
     animation_clip(run, 1, 6, 6, 6);
-    animation_clip(enemy_walk, 0, 12, 12);
     return;
 }
 
@@ -40,38 +38,38 @@ void draw_background() {
 }
 
 void define_world() {
-    world_column(0, 0, 0, 2, 0, 4, 5);
-    world_column(1, 0, 0, 2, 0, 4, 5);
+    world_column(0, 0, 0, 0, 0, 4, 5);
+    world_column(1, 0, 0, 0, 0, 4, 5);
     world_column(2, 0, 0, 0, 0, 4, 5);
     world_column(3, 0, 0, 0, 0, 4, 5);
     world_column(4, 0, 0, 0, 0, 4, 5);
-    world_column(5, 5, 0, 0, 0, 4, 5);
-    world_column(6, 5, 0, 0, 0, 4, 5);
-    world_column(7, 5, 0, 0, 0, 3, 5);
-    world_column(8, 5, 0, 2, 0, 3, 5);
-    world_column(9, 0, 0, 2, 0, 4, 5);
-    world_column(10, 0, 0, 2, 0, 4, 5);
+    world_column(5, 0, 0, 0, 0, 4, 5);
+    world_column(6, 0, 0, 0, 0, 4, 5);
+    world_column(7, 0, 0, 0, 0, 4, 5);
+    world_column(8, 0, 0, 0, 0, 4, 5);
+    world_column(9, 0, 0, 0, 0, 4, 5);
+    world_column(10, 0, 0, 0, 0, 4, 5);
     world_column(11, 0, 0, 0, 0, 4, 5);
-    world_column(12, 0, 0, 0, 0, 3, 5);
-    world_column(13, 0, 0, 0, 0, 3, 5);
-    world_column(14, 0, 0, 0, 0, 0, 0);
-    world_column(15, 0, 0, 0, 0, 0, 0);
+    world_column(12, 0, 0, 0, 0, 4, 5);
+    world_column(13, 0, 0, 0, 0, 4, 5);
+    world_column(14, 0, 0, 0, 0, 4, 5);
+    world_column(15, 0, 0, 0, 0, 4, 5);
     world_flags(0, 0, 0, 0, 0, 1, 1);
     world_flags(1, 0, 0, 0, 0, 1, 1);
     world_flags(2, 0, 0, 0, 0, 1, 1);
     world_flags(3, 0, 0, 0, 0, 1, 1);
     world_flags(4, 0, 0, 0, 0, 1, 1);
-    world_flags(5, 1, 0, 0, 0, 1, 1);
-    world_flags(6, 1, 0, 0, 0, 1, 1);
-    world_flags(7, 1, 0, 0, 0, 2, 1);
-    world_flags(8, 1, 0, 0, 0, 2, 1);
+    world_flags(5, 0, 0, 0, 0, 1, 1);
+    world_flags(6, 0, 0, 0, 0, 1, 1);
+    world_flags(7, 0, 0, 0, 0, 1, 1);
+    world_flags(8, 0, 0, 0, 0, 1, 1);
     world_flags(9, 0, 0, 0, 0, 1, 1);
     world_flags(10, 0, 0, 0, 0, 1, 1);
     world_flags(11, 0, 0, 0, 0, 1, 1);
-    world_flags(12, 0, 0, 0, 0, 2, 1);
-    world_flags(13, 0, 0, 0, 0, 2, 1);
-    world_flags(14, 0, 0, 0, 0, 0, 0);
-    world_flags(15, 0, 0, 0, 0, 0, 0);
+    world_flags(12, 0, 0, 0, 0, 1, 1);
+    world_flags(13, 0, 0, 0, 0, 1, 1);
+    world_flags(14, 0, 0, 0, 0, 1, 1);
+    world_flags(15, 0, 0, 0, 0, 1, 1);
     return;
 }
 
@@ -83,12 +81,7 @@ void main() {
     camera_init(16, 9, 6);
     i16 cameraX = 0;
     i16 playerWorldX = 72;
-    i16 footLeftX = 72;
-    i16 footCenterX = 80;
-    i16 footRightX = 89;
     i16 footTile = 0;
-    i16 failTile = 0;
-    i16 hazardHit = 0;
     i16 playerY = 73;
     i16 velocityY = 0;
     i16 grounded = 1;
@@ -99,21 +92,15 @@ void main() {
     i16 jumpTicks = 0;
     i16 moving = 0;
     i16 resetRequested = 0;
-    i16 enemyX = 128;
-    i16 enemyFrame = 0;
-    i16 enemyTick = 0;
 
     while (true) {
         video_wait_vblank();
         camera_apply();
         sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
-        sprite_draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);
-        sprite_draw(enemy_slug, 40, 57, enemyFrame, true, 0);
 
         input_poll();
 
         resetRequested = 0;
-        hazardHit = 0;
         grounded = 0;
         velocityY = velocityY + 1;
         playerY = playerY + velocityY;
@@ -126,65 +113,13 @@ void main() {
         }
 
         footTile = 0;
-        failTile = 0;
         playerWorldX = cameraX + 72;
         if (playerWorldX >= 128) {
             playerWorldX = playerWorldX - 128;
         }
 
-        footLeftX = playerWorldX;
-        footCenterX = playerWorldX + 8;
-        if (footCenterX >= 128) {
-            footCenterX = footCenterX - 128;
-        }
-
-        footRightX = playerWorldX + 17;
-        if (footRightX >= 128) {
-            footRightX = footRightX - 128;
-        }
-
-        if (playerY >= 42) {
-            if (playerY <= 58) {
-                if (velocityY < 128) {
-                    if (velocityY != 0) {
-                        footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, 1);
-                        if (footTile == 0) {
-                            footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, 1);
-                        }
-                        if (footTile == 0) {
-                            footTile = collision_aabb_tiles(footRightX, 0, 1, 8, 1);
-                        }
-                        if (footTile != 0) {
-                            playerY = 41;
-                            velocityY = 0;
-                            grounded = 1;
-                            jumping = 0;
-                        }
-                    }
-                }
-            }
-        }
-
         if (playerY >= 74) {
-            failTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 2);
-            if (failTile == 0) {
-                failTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 2);
-            }
-            if (failTile == 0) {
-                failTile = collision_aabb_tiles(footRightX, 32, 1, 8, 2);
-            }
-            if (failTile != 0) {
-                resetRequested = 1;
-                hazardHit = 1;
-            }
-
-            footTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 1);
-            if (footTile == 0) {
-                footTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 1);
-            }
-            if (footTile == 0) {
-                footTile = collision_aabb_tiles(footRightX, 32, 1, 8, 1);
-            }
+            footTile = collision_aabb_tiles(playerWorldX, 32, sprite_width(mario_player), 8, 1);
 
             if (footTile != 0) {
                 playerY = 73;
@@ -200,31 +135,14 @@ void main() {
             }
         }
 
-        if (enemyX >= 68) {
-            if (enemyX <= 90) {
-                if (playerY >= 72) {
-                    resetRequested = 1;
-                }
-            }
-        }
-
         if (resetRequested != 0) {
             footTile = 0;
-            failTile = 0;
             playerY = 73;
             velocityY = 0;
             grounded = 1;
             displayFrame = 0;
             jumping = 0;
             jumpTicks = 0;
-            enemyX = 128;
-            enemyFrame = 0;
-            enemyTick = 0;
-            if (hazardHit != 0) {
-                velocityY = 248;
-                grounded = 0;
-                displayFrame = 4;
-            }
         }
 
         if (button_just_pressed(a) != 0) {
@@ -264,14 +182,6 @@ void main() {
         if (moving != 0) {
             camera_set_position(cameraX, 0);
         }
-
-        enemyX = enemyX - 1;
-        if (enemyX <= 96) {
-            enemyX = 136;
-        }
-
-        enemyTick = enemyTick + 1;
-        enemyFrame = animation_frame(enemy_walk, enemyTick);
 
         if (moving != 0) {
             animTick = animTick + 1;
