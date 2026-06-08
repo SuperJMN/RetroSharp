@@ -1,0 +1,154 @@
+namespace RetroSharp.Cli.Tests;
+
+using System.Diagnostics;
+using Xunit;
+
+public sealed class CrossTargetCliAcceptanceTests
+{
+    [Fact]
+    public void Cli_builds_portable_sample_for_game_boy_and_nes_under_temp_directory()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sample = RepositoryFile("samples/cross-target-camera/camera.rs");
+
+        var gameBoyRom = Path.Combine(workspace.Path, "cross-target.gb");
+        var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);
+
+        Assert.Equal(0, gameBoy.ExitCode);
+        Assert.True(File.Exists(gameBoyRom), gameBoy.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(gameBoyRom).Length);
+        Assert.Contains("Wrote Game Boy ROM:", gameBoy.CombinedOutput, StringComparison.Ordinal);
+
+        var nesRom = Path.Combine(workspace.Path, "cross-target.nes");
+        var nes = RunCli("--target", "nes", "--out", nesRom, sample);
+
+        Assert.Equal(0, nes.ExitCode);
+        Assert.True(File.Exists(nesRom), nes.CombinedOutput);
+        Assert.Equal(24592, new FileInfo(nesRom).Length);
+        Assert.Contains("Wrote NES ROM:", nes.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_reports_unsupported_feature_diagnostics_with_nonzero_exit_code()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourcePath = Path.Combine(workspace.Path, "unsupported-hud.rs");
+        var outputPath = Path.Combine(workspace.Path, "unsupported-hud.nes");
+        File.WriteAllText(
+            sourcePath,
+            """
+            void main() {
+                video_init();
+                hud_set_tile(window, 0, 0, 1);
+                return;
+            }
+            """);
+
+        var result = RunCli("--target", "nes", "--out", outputPath, sourcePath);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.False(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Contains("Target 'nes' does not support Window HUD. Use disable HUD for this target.", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    private static CliResult RunCli(params string[] args)
+    {
+        var processArgs = new List<string>
+        {
+            CliAssembly(),
+        };
+        processArgs.AddRange(args);
+
+        using var process = new Process();
+        process.StartInfo = new ProcessStartInfo("dotnet")
+        {
+            WorkingDirectory = RepositoryRoot(),
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+
+        foreach (var arg in processArgs)
+        {
+            process.StartInfo.ArgumentList.Add(arg);
+        }
+
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+
+        if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new TimeoutException($"dotnet CLI command timed out: {string.Join(" ", processArgs)}");
+        }
+
+        return new CliResult(process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+    }
+
+    private static TemporaryDirectory TemporaryWorkspace()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "retrosharp-cli-tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return new TemporaryDirectory(path);
+    }
+
+    private static string RepositoryFile(string relativePath)
+    {
+        var path = Path.Combine(RepositoryRoot(), relativePath);
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+        }
+
+        return path;
+    }
+
+    private static string CliAssembly()
+    {
+        var configuration = TestConfiguration();
+        return RepositoryFile($"src/RetroSharp.Cli/bin/{configuration}/net10.0/RetroSharp.Cli.dll");
+    }
+
+    private static string TestConfiguration()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        var configurationDirectory = directory.Parent;
+        return configurationDirectory?.Name
+            ?? throw new InvalidOperationException($"Could not infer test configuration from '{AppContext.BaseDirectory}'.");
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")) &&
+                Directory.Exists(Path.Combine(directory.FullName, "samples")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException("Could not find repository root.");
+    }
+
+    private sealed record CliResult(int ExitCode, string StandardOutput, string StandardError)
+    {
+        public string CombinedOutput => $"{StandardOutput}{StandardError}";
+    }
+
+    private sealed class TemporaryDirectory(string path) : IDisposable
+    {
+        public string Path { get; } = path;
+
+        public void Dispose()
+        {
+            if (Directory.Exists(Path))
+            {
+                Directory.Delete(Path, recursive: true);
+            }
+        }
+    }
+}

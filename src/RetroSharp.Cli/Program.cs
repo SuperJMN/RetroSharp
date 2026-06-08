@@ -165,14 +165,14 @@ static (string? InputPath, string? OutputPath, string Target) ParseCommandLine(s
 if (args.Length < 1)
 {
     Console.Error.WriteLine("No source file has been specified");
-    return;
+    return 1;
 }
 
 var options = ParseCommandLine(args);
 if (options.InputPath is null)
 {
     Console.Error.WriteLine("No source file has been specified");
-    return;
+    return 1;
 }
 
 var path = options.InputPath;
@@ -186,12 +186,12 @@ if (options.Target == "nes")
         var outputPath = options.OutputPath ?? Path.ChangeExtension(path, ".nes");
         File.WriteAllBytes(outputPath, rom);
         Console.Error.WriteLine($"Wrote NES ROM: {outputPath}");
-        return;
+        return 0;
     }
     catch (Exception ex)
     {
         PrintError(ex.Message);
-        return;
+        return 1;
     }
 }
 
@@ -204,22 +204,22 @@ if (options.Target is "gb" or "gameboy")
         var outputPath = options.OutputPath ?? Path.ChangeExtension(path, ".gb");
         File.WriteAllBytes(outputPath, rom);
         Console.Error.WriteLine($"Wrote Game Boy ROM: {outputPath}");
-        return;
+        return 0;
     }
     catch (Exception ex)
     {
         PrintError(ex.Message);
-        return;
+        return 1;
     }
 }
 
 if (options.Target != "z80")
 {
     Console.Error.WriteLine($"Unknown target '{options.Target}'. Supported targets: z80, nes, gb");
-    return;
+    return 1;
 }
 
-Result
+return Result
     .Try(() => ReadInputFile(path))
     .Tap(PrintSource)
     .Bind(Analyze)
@@ -231,4 +231,14 @@ Result
     .Tap(PrintAsm)
     .Bind(RunAsm)
     .Tap(PrintRunResult)
-    .Match(_ => PrintSuccess(), PrintError);
+    .Match(
+        _ =>
+        {
+            PrintSuccess();
+            return 0;
+        },
+        error =>
+        {
+            PrintError(error);
+            return 1;
+        });
