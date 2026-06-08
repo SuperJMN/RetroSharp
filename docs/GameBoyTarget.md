@@ -94,6 +94,8 @@ Runtime calls:
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
 - `map_tile_at(sourceColumn, row)`
 - `map_flags_at(sourceColumn, row)`
+- `animation_clip(name, firstFrame, duration...)`
+- `animation_frame(name, tick)`
 - `button_pressed(button)`
 - `button_down(button)`
 - `button_just_pressed(button)`
@@ -157,6 +159,8 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 
 `sprite_draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Logical sizes like 16x27 are valid; the emitted hardware footprint is rounded up to 8x16 cells. The optional `flipX` argument is a portable boolean: any non-zero local value mirrors the logical metasprite horizontally, and the Game Boy backend lowers that choice to the OAM X-flip bit internally. The optional `paletteSlot` argument is a portable sprite palette slot validated against the target descriptor; Game Boy supports slots `0` and `1` and lowers slot `1` to the OBP1 OAM attribute bit. Raw OAM attribute bytes remain available through the target-intrinsic `sprite_set(...)` API, not through portable `sprite_draw(...)`.
 
+`animation_clip(name, firstFrame, duration...)` declares a portable animation clip resource. The first argument is a clip identifier, the second is the first logical frame index, and the remaining arguments are per-frame durations in ticks. `animation_frame(name, tick)` returns the logical frame for a tick value and loops by the clip's total duration. Game Boy lowering keeps runtime state explicit in source, reduces dynamic ticks modulo the clip duration, then checks frame boundaries in declaration order.
+
 ## Short-Term Checklist
 
 - [x] Parse `while`.
@@ -188,6 +192,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Preserve logical sprite metadata for loaded Game Boy sprite assets.
 - [x] Replace raw `sprite_draw` flags with a portable `flipX` boolean.
 - [x] Add logical sprite palette slot selection to `sprite_draw`.
+- [x] Add animation clip data and looping `animation_frame(...)` lookup.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 

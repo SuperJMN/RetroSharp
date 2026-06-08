@@ -45,6 +45,7 @@ internal sealed class GameBoyVideoProgram
 
     private readonly List<GameBoyCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, GameBoyCompiledSpriteAsset> spriteAssets = [];
+    private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
     private int nextSpriteTile = FirstSpriteTile;
 
     private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
@@ -76,6 +77,8 @@ internal sealed class GameBoyVideoProgram
     public IReadOnlyList<GameBoyCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, GameBoyCompiledSpriteAsset> SpriteAssets => spriteAssets;
+
+    public IReadOnlyDictionary<string, SpriteAnimationClip> AnimationClips => animationClips;
 
     public int SpriteTileCount => nextSpriteTile - FirstSpriteTile;
 
@@ -164,6 +167,9 @@ internal sealed class GameBoyVideoProgram
                 case "sprite_asset":
                     ApplySpriteAsset(call);
                     break;
+                case "animation_clip":
+                    ApplyAnimationClip(call);
+                    break;
                 default:
                     ApplyStaticUserFunction(call, callStack);
                     break;
@@ -225,6 +231,39 @@ internal sealed class GameBoyVideoProgram
         nextSpriteTile += asset.TileCount;
         spriteAssets.Add(name, asset);
         spriteAssetsInLoadOrder.Add(asset);
+    }
+
+    private void ApplyAnimationClip(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count < 3)
+        {
+            throw new InvalidOperationException($"animation_clip expects at least 3 arguments, got {args.Count}.");
+        }
+
+        var name = IdentifierArg(args[0], "animation_clip argument 1");
+        if (animationClips.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Animation clip '{name}' is already declared.");
+        }
+
+        var firstFrame = CheckedRange(ConstValue(args[1], "animation_clip argument 2"), 0, 255, "animation_clip argument 2");
+        var durations = args
+            .Skip(2)
+            .Select((arg, i) => CheckedRange(ConstValue(arg, $"animation_clip argument {i + 3}"), 1, 255, $"animation_clip argument {i + 3}"))
+            .ToArray();
+        var clip = new SpriteAnimationClip(name, firstFrame, durations);
+        if (clip.FrameIndices[^1] > 255)
+        {
+            throw new InvalidOperationException($"Animation clip '{name}' frame indices must fit in one byte for the Game Boy target.");
+        }
+
+        if (clip.DurationTicks > 255)
+        {
+            throw new InvalidOperationException($"Animation clip '{name}' total duration must be 255 ticks or less for the Game Boy target.");
+        }
+
+        animationClips.Add(name, clip);
     }
 
     private void ApplyMapColumn(FunctionCall call)

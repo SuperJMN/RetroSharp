@@ -250,6 +250,55 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Animation_frame_maps_constant_ticks_through_looping_clip_data()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  animation_clip(run, 1, 6, 6, 6);
+                                  sprite_set(0, 72, 80, animation_frame(run, 0), 0);
+                                  sprite_set(1, 80, 80, animation_frame(run, 5), 0);
+                                  sprite_set(2, 88, 80, animation_frame(run, 6), 0);
+                                  sprite_set(3, 96, 80, animation_frame(run, 17), 0);
+                                  sprite_set(4, 104, 80, animation_frame(run, 18), 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xFE]), "tick 0 should select frame 1.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x06, 0xFE]), "tick 5 should still select frame 1.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0xEA, 0x0A, 0xFE]), "tick 6 should select frame 2.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x0E, 0xFE]), "tick 17 should select frame 3.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x12, 0xFE]), "tick 18 should loop to frame 1.");
+    }
+
+    [Fact]
+    public void Animation_frame_lowers_dynamic_ticks_with_predictable_modulo_and_boundary_checks()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  animation_clip(run, 1, 6, 6, 6);
+                                  i16 tick = 18;
+                                  sprite_set(0, 72, 80, animation_frame(run, tick), 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFE, 0x12, 0xDA]), "animation_frame should compare the tick against total clip duration before modulo subtraction.");
+        Assert.True(ContainsSequence(rom, [0xD6, 0x12]), "animation_frame should subtract total clip duration while the tick is outside the clip.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0x06, 0xDA]), "animation_frame should test the first frame boundary.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0x0C, 0xDA]), "animation_frame should test the second frame boundary.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01]), "animation_frame should be able to return frame 1.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x02]), "animation_frame should be able to return frame 2.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03]), "animation_frame should be able to return frame 3.");
+    }
+
+    [Fact]
     public void Sprite_draw_rejects_palette_slots_outside_game_boy_capabilities()
     {
         var baseDirectory = WriteSpriteAsset(
