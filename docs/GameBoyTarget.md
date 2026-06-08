@@ -181,7 +181,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Generate collision flag tables from the same world resource.
 - [x] Add the first position-based camera API and SDK operation boundary.
 - [x] Reuse the existing horizontal camera runtime from `camera_set_position(...)`.
-- [ ] Replace direction-specific camera helpers with a position-based camera API.
+- [x] Replace direction-specific camera helpers with a position-based camera API in the runner.
 - [x] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
@@ -224,6 +224,5 @@ Landed after the camera-runtime pass:
 
 1. Implement the first architecture slice from `ArchitectureRoadmap.md`: capability descriptors, shared SDK operation model, and unified world map resource.
 2. Keep the GB runner as the acceptance sample while removing target-specific leakage from portable calls.
-3. Replace `camera_move_right()` and `camera_move_left()` with position-based camera state before adding vertical scroll.
-4. Move collision from camera span helpers to world-coordinate tile flag queries.
-5. Spike the same runner contract on NES after the shared SDK operation model exists.
+3. Move collision from camera span helpers to world-coordinate tile flag queries.
+4. Spike the same runner contract on NES after the shared SDK operation model exists.
