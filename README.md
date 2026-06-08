@@ -71,4 +71,4 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/gameboy-runner/runner.rs
 ```
 
-See `docs/GameBoyTarget.md` for the current Game Boy subset and short-term checklist.
+See `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.

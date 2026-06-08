@@ -1,0 +1,76 @@
+name: Agent roadmap task
+description: Track one AR-x.y architecture roadmap task for agent execution.
+title: "AR-x.y: "
+labels:
+  - roadmap
+  - agent-task
+  - needs-integration
+body:
+  - type: input
+    id: roadmap_task
+    attributes:
+      label: Roadmap task
+      description: Stable task id from docs/ArchitectureRoadmap.md.
+      placeholder: "AR-1.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Layer
+      description: Architectural layer touched by this task.
+      options:
+        - language
+        - sdk-2d
+        - target-intrinsic
+        - documentation
+        - validation
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List prerequisite roadmap tasks or issues.
+      placeholder: "Depends on: AR-1.1"
+  - type: textarea
+    id: candidate_files
+    attributes:
+      label: Candidate files
+      description: Files or areas the agent should inspect first.
+      placeholder: |
+        - docs/ArchitectureRoadmap.md
+        - src/RetroSharp.GameBoy/...
+    validations:
+      required: true
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      description: Concrete implementation steps.
+      placeholder: |
+        - [ ] Inspect current code path.
+        - [ ] Implement the scoped change.
+        - [ ] Update docs if public API changes.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Observable criteria for completing this issue.
+      placeholder: |
+        - Existing Game Boy runner ROM still builds.
+        - Capability errors are deterministic.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Exact commands or checks required before closing.
+      placeholder: |
+        - dotnet test RetroSharp.sln
+        - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/gameboy-runner/runner.rs
+    validations:
+      required: true

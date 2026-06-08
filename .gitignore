@@ -63,6 +63,10 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# Python helper script caches
+__pycache__/
+*.py[cod]
+
 # Generated emulator screenshots
 samples/gameboy-runner/*.png
 

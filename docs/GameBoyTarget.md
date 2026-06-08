@@ -4,6 +4,8 @@ Status: experimental, intentionally narrow.
 
 The Game Boy target is the first playable target. It currently compiles a constrained RetroSharp subset directly to a 32 KiB DMG ROM. This is not yet the shared IR backend path; it is a focused proving ground for the video/runtime API.
 
+See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics. This file tracks the current Game Boy target subset and runner milestones.
+
 ## Supported Runtime Subset
 
 - `void main()`
@@ -127,10 +129,11 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add tick-based input helpers for edge-triggered and variable-height jump behavior.
 - [x] Make the Game Boy runner a playable loop: hitbox-based ground checks, holes, and reset/fail state.
 - [x] Add a horizontal world-camera helper that owns scroll state and map-column streaming.
-- [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
-- [ ] Define a portable video/input API contract shared by Game Boy and NES.
-- [ ] Add a NES parity spike for logical sprites, input, scroll, and tile collision.
-- [ ] Move the Game Boy runtime intrinsics toward a shared lowering surface instead of direct target-only calls.
+- [ ] Add target capability descriptors for Game Boy and NES.
+- [ ] Move portable 2D concepts toward the shared SDK operation model described in `ArchitectureRoadmap.md`.
+- [ ] Replace direction-specific camera helpers with a position-based camera API.
+- [ ] Unify visual map data, streaming data, and collision flags into one world resource.
+- [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
 ## Progress Snapshot
@@ -169,9 +172,8 @@ Landed after the camera-runtime pass:
 
 ## Next Milestones
 
-1. Promote the remaining stable runner logic one level above raw intrinsics. Candidate helpers are `map_solid_at`, actor-foot collision, and simple actor reset.
-2. Define the portable runtime surface before adding more target-specific APIs. The current candidates are `video_wait_vblank`, `input_poll`, `scroll_set`, `camera_init`, `camera_apply`, `camera_move_right`, `camera_move_left`, `camera_tile_column_at`, `camera_span_tile_at`, `camera_span_has_tile`, `sprite_width`, `sprite_asset`, `sprite_draw`, `map_column`, `map_stream_column`, `map_tile_at`, `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`.
-3. Decide how target capability differences are reported: hard compiler error, documented degradation, or platform-specific variant.
-4. Spike the same runner contract on NES, starting with `scroll_set` and the tick-based input helpers, then logical sprites and tile collision.
-5. Extract shared concepts from the Game Boy direct compiler so the ROM targets stop growing as isolated one-off backends.
-6. Keep the GB runner as the acceptance sample: if it cannot still compile and run, the portable runtime surface is not stable enough.
+1. Implement the first architecture slice from `ArchitectureRoadmap.md`: capability descriptors, shared SDK operation model, and unified world map resource.
+2. Keep the GB runner as the acceptance sample while removing target-specific leakage from portable calls.
+3. Replace `camera_move_right()` and `camera_move_left()` with position-based camera state before adding vertical scroll.
+4. Move collision from camera span helpers to world-coordinate tile flag queries.
+5. Spike the same runner contract on NES after the shared SDK operation model exists.
