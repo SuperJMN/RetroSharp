@@ -70,6 +70,9 @@ Intrinsic work belongs here:
 
 | API | Layer | Notes |
 | --- | --- | --- |
+| `WorldMap2D` | Portable SDK resource | Shared tile ids and collision flags in one map object. |
+| `WorldMapTile` | Portable SDK resource | Query result that combines one tile id with its flags. |
+| `WorldTileFlags` | Portable SDK resource | Defines `Empty`, `Solid`, `Hazard`, and `Platform`. |
 | `GameBoyRomCompiler.CollectSdkOperations(...)` | Compiler architecture boundary | Observes portable `Sdk2DOperation` records before Game Boy lowering. |
 | `video_wait_vblank()` | Portable SDK candidate | Rename or alias to frame terminology later. |
 | `input_poll()` | Portable SDK | Current tick boundary. |
@@ -159,6 +162,16 @@ Portable 2D calls should be represented as semantic operations before target low
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The initial boundary recognizes `video_wait_vblank()` as `WaitFrame` and `input_poll()` as `PollInput`; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, camera helpers, and tilemap writes remain on the direct Game Boy path until later roadmap tasks move them deliberately.
 
 `GameBoySdkOperationLowerer` lowers the first shared operation to Game Boy bytes: `Sdk2DOperation.WaitFrame` emits the existing VBlank edge wait routine used by `video_wait_vblank()`. `PollInput` remains on the direct Game Boy path until its stateful input lowering can be moved without broadening this slice.
+
+## Shared World Map Resource
+
+The first portable world resource lives under `RetroSharp.Core.Sdk`:
+
+- `WorldMap2D`
+- `WorldMapTile`
+- `WorldTileFlags`
+
+`WorldMap2D` stores tile ids and collision flags as separate fields while exposing coordinate queries for tile id, flags, or both. This keeps visual tile data, streaming data, and collision flags ready to share one source without forcing a compact binary layout yet.
 
 ## Agent Task Contract
 
@@ -545,6 +558,8 @@ Status: landed 2026-06-08.
 ### Iteration 3 Tasks: Unified World Map Resource
 
 #### AR-3.1: Define world map data structures
+
+Status: landed 2026-06-08.
 
 - Layer: portable SDK resources.
 - Candidate files: new shared resource namespace, `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs`, tests.

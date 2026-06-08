@@ -164,6 +164,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add target capability descriptors for Game Boy and NES.
 - [x] Add the first observable SDK operation boundary for frame wait and input poll.
 - [x] Lower the first portable SDK operation through the shared operation path.
+- [x] Define the portable world map resource shape for tile ids and collision flags.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [ ] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
