@@ -208,6 +208,68 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Sprite_draw_accepts_logical_palette_slot_and_lowers_to_game_boy_object_palette_bit()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 64, 0, false, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xEA, 0x03, 0xFE]), "palette slot 1 should lower to the Game Boy OBP1 OAM attribute bit.");
+    }
+
+    [Fact]
+    public void Sprite_draw_combines_logical_flip_x_and_palette_slot_in_oam_attributes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 64, 0, true, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x30, 0xEA, 0x03, 0xFE]), "flipX and palette slot 1 should combine into OAM attributes without exposing raw flags in source.");
+    }
+
+    [Fact]
+    public void Sprite_draw_rejects_palette_slots_outside_game_boy_capabilities()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 64, 0, false, 2);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.", exception.Message);
+    }
+
+    [Fact]
     public void Sprite_draw_flips_against_logical_width_before_padding()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -932,7 +994,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("displayFlipX = true;", source);
         Assert.Contains("displayFlipX = false;", source);
         Assert.DoesNotContain("displayFlags = 32;", source);
-        Assert.Contains("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX);", source);
+        Assert.Contains("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);", source);
         Assert.Equal(1, CountOccurrences(source, "sprite_draw("));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -992,7 +1054,7 @@ public class GameBoyRomCompilerTests
         var vblankStart = source.IndexOf("video_wait_vblank();", StringComparison.Ordinal);
         var inputPoll = source.IndexOf("input_poll();", StringComparison.Ordinal);
         var gravity = source.IndexOf("velocityY = velocityY + 1;", StringComparison.Ordinal);
-        var draw = source.IndexOf("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX);", StringComparison.Ordinal);
+        var draw = source.IndexOf("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
