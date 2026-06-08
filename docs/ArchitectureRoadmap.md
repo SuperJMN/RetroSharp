@@ -136,6 +136,8 @@ Example:
 Target 'nes' does not support Window HUD. Use SplitScroll, SpriteHud, or disable HUD for this target.
 ```
 
+Capability checks should use the shared targeting helpers so diagnostics stay stable. `TargetCapabilityChecks.RequireHudMode(...)` is the first reusable check and formats unsupported-feature messages through `TargetCapabilityErrorFormatter`.
+
 ## Agent Task Contract
 
 Use the task breakdown below as issue-sized implementation units. Before starting any task, the agent should inspect the current code paths because candidate file names are guidance, not a mandate.
