@@ -73,8 +73,8 @@ dotnet pack src/RetroSharp.Cli/RetroSharp.Cli.csproj -c Release -o packages/
 dotnet tool install --global --add-source ./packages RetroSharp.Tool
 
 # Use DotnetDeployer (if installed)
-dotnetdeployer nuget --no-push  # Dry run
-dotnetdeployer nuget            # Publish to NuGet
+dotnetdeployer --config dotnetdeployer.yml --dry-run  # Dry run
+dotnetdeployer --config dotnetdeployer.yml            # Publish to NuGet
 ```
 
 ### Setting up Azure DevOps

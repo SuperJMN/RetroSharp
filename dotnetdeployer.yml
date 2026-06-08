@@ -14,6 +14,9 @@ output:
   
 nuget:
   source: https://api.nuget.org/v3/index.json
+  apiKey:
+    from: env
+    name: NUGET_API_KEY
   
 versioning:
   strategy: gitversion
