@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using RetroSharp.Parser;
 
@@ -260,9 +261,19 @@ internal static class GameBoyRomBuilder
 internal sealed class GameBoyRuntimeCompiler
 {
     private const ushort FirstVariableAddress = 0xC000;
+    private const ushort RuntimeReservedStateAddress = 0xC0E0;
+    private const ushort CameraXLowAddress = 0xC0E0;
+    private const ushort CameraXHighAddress = 0xC0E1;
+    private const ushort CameraFineXAddress = 0xC0E2;
+    private const ushort CameraScreenLeftColumnAddress = 0xC0E3;
+    private const ushort CameraRightBackgroundColumnAddress = 0xC0E4;
+    private const ushort CameraLeftBackgroundColumnAddress = 0xC0E5;
+    private const ushort CameraRightSourceColumnAddress = 0xC0E6;
+    private const ushort CameraLeftSourceColumnAddress = 0xC0E7;
     private const ushort InputCurrentAddress = 0xC0F0;
     private const ushort InputPreviousAddress = 0xC0F1;
     private const ushort InputHoldTicksStartAddress = 0xC0F2;
+    private const int VisibleScreenTileWidth = 20;
     private const byte JoypadDeselect = 0x30;
     private const int JoypadSettleReadCount = 4;
 
@@ -284,6 +295,9 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly HashSet<string> userFunctionCallStack = [];
     private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
+    private int? cameraMapWidth;
+    private int? cameraStreamY;
+    private int? cameraStreamHeight;
 
     public GameBoyRuntimeCompiler(GbBuilder builder, GameBoyVideoProgram program)
     {
@@ -351,7 +365,7 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
 
-        if (nextVariableAddress >= InputCurrentAddress)
+        if (nextVariableAddress >= RuntimeReservedStateAddress)
         {
             throw new InvalidOperationException("Game Boy target local variables exceed the current prototype WRAM allocation.");
         }
@@ -424,6 +438,18 @@ internal sealed class GameBoyRuntimeCompiler
                 break;
             case "map_stream_column":
                 EmitMapStreamColumn(call);
+                break;
+            case "camera_init":
+                EmitCameraInit(call);
+                break;
+            case "camera_apply":
+                EmitCameraApply(call);
+                break;
+            case "camera_move_right":
+                EmitCameraMoveRight(call);
+                break;
+            case "camera_move_left":
+                EmitCameraMoveLeft(call);
                 break;
             case "video_wait_vblank":
                 GameBoyVideoProgram.RequireArity(call, 0);
@@ -671,6 +697,194 @@ internal sealed class GameBoyRuntimeCompiler
             builder.LoadAFromB();
             builder.StoreHlA();
         }
+    }
+
+    private void EmitCameraInit(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 3);
+        if (program.MapColumnHeight == 0)
+        {
+            throw new InvalidOperationException("camera_init requires at least one map_column declaration.");
+        }
+
+        var args = call.Parameters.ToList();
+        var mapWidth = CheckedRange(GameBoyVideoProgram.ConstValue(args[0], "camera_init argument 1"), 1, 255, "camera_init argument 1");
+        var mapDataColumnCount = program.MapColumns.Keys.Max() + 1;
+        if (mapWidth > mapDataColumnCount)
+        {
+            throw new InvalidOperationException($"camera_init argument 1 must not exceed the declared map column count ({mapDataColumnCount}).");
+        }
+
+        var y = CheckedRange(GameBoyVideoProgram.ConstValue(args[1], "camera_init argument 2"), 0, 31, "camera_init argument 2");
+        var height = CheckedRange(GameBoyVideoProgram.ConstValue(args[2], "camera_init argument 3"), 1, program.MapColumnHeight, "camera_init argument 3");
+        if (y + height > 32)
+        {
+            throw new InvalidOperationException("camera_init stream area exceeds the Game Boy background tilemap height.");
+        }
+
+        cameraMapWidth = mapWidth;
+        cameraStreamY = y;
+        cameraStreamHeight = height;
+
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraXLowAddress);
+        builder.StoreA(CameraXHighAddress);
+        builder.StoreA(CameraFineXAddress);
+        builder.StoreA(CameraScreenLeftColumnAddress);
+
+        builder.LoadAImmediate(VisibleScreenTileWidth);
+        builder.StoreA(CameraRightBackgroundColumnAddress);
+        builder.LoadAImmediate(31);
+        builder.StoreA(CameraLeftBackgroundColumnAddress);
+        builder.LoadAImmediate(VisibleScreenTileWidth % mapWidth);
+        builder.StoreA(CameraRightSourceColumnAddress);
+        builder.LoadAImmediate(mapWidth - 1);
+        builder.StoreA(CameraLeftSourceColumnAddress);
+    }
+
+    private void EmitCameraApply(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 0);
+        EnsureCameraConfigured(call.Name);
+
+        builder.LoadA(CameraXLowAddress);
+        builder.StoreHighRamA(0x43);
+        builder.LoadAImmediate(0);
+        builder.StoreHighRamA(0x42);
+    }
+
+    private void EmitCameraMoveRight(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 0);
+        var config = EnsureCameraConfigured(call.Name);
+        var endLabel = builder.CreateLabel("camera_move_right_end");
+
+        EmitIncrement16(CameraXLowAddress, CameraXHighAddress);
+        builder.LoadA(CameraFineXAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(CameraFineXAddress);
+        builder.CompareImmediate(8);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraFineXAddress);
+        EmitMapStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress, config.StreamY, config.StreamHeight);
+        EmitIncrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
+        EmitIncrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
+        EmitIncrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
+        EmitIncrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
+        EmitIncrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraMoveLeft(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 0);
+        var config = EnsureCameraConfigured(call.Name);
+        var endLabel = builder.CreateLabel("camera_move_left_end");
+
+        EmitDecrement16(CameraXLowAddress, CameraXHighAddress);
+        builder.LoadA(CameraFineXAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(CameraFineXAddress);
+        builder.CompareImmediate(255);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+
+        builder.LoadAImmediate(7);
+        builder.StoreA(CameraFineXAddress);
+        EmitMapStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress, config.StreamY, config.StreamHeight);
+        EmitDecrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
+        EmitDecrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
+        EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
+        EmitDecrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
+        EmitDecrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+
+        builder.Label(endLabel);
+    }
+
+    private void EmitMapStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, int y, int height)
+    {
+        for (var row = 0; row < height; row++)
+        {
+            builder.LoadA(sourceColumnAddress);
+            builder.LoadEFromA();
+            builder.LoadDImmediate(0);
+            builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
+            builder.AddHlDe();
+            builder.LoadAFromHl();
+            builder.LoadBFromA();
+
+            var rowAddress = 0x9800 + (y + row) * 32;
+            builder.LoadA(targetColumnAddress);
+            builder.AddAImmediate(rowAddress & 0xFF);
+            builder.LoadLFromA();
+            builder.LoadHImmediate(rowAddress >> 8);
+            builder.LoadAFromB();
+            builder.StoreHlA();
+        }
+    }
+
+    private void EmitIncrement16(ushort lowAddress, ushort highAddress)
+    {
+        var endLabel = builder.CreateLabel("increment16_end");
+
+        builder.LoadA(lowAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(lowAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+
+        builder.LoadA(highAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(highAddress);
+        builder.Label(endLabel);
+    }
+
+    private void EmitDecrement16(ushort lowAddress, ushort highAddress)
+    {
+        var noBorrowLabel = builder.CreateLabel("decrement16_no_borrow");
+
+        builder.LoadA(lowAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, noBorrowLabel); // JP NZ,noBorrowLabel
+
+        builder.LoadA(highAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(highAddress);
+
+        builder.Label(noBorrowLabel);
+        builder.LoadA(lowAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(lowAddress);
+    }
+
+    private void EmitIncrementAddressModulo(ushort address, int modulo)
+    {
+        var endLabel = builder.CreateLabel("increment_modulo_end");
+
+        builder.LoadA(address);
+        builder.AddAImmediate(1);
+        builder.StoreA(address);
+        builder.CompareImmediate(modulo);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+        builder.LoadAImmediate(0);
+        builder.StoreA(address);
+        builder.Label(endLabel);
+    }
+
+    private void EmitDecrementAddressModulo(ushort address, int modulo)
+    {
+        var endLabel = builder.CreateLabel("decrement_modulo_end");
+
+        builder.LoadA(address);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(address);
+        builder.CompareImmediate(255);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+        builder.LoadAImmediate(modulo - 1);
+        builder.StoreA(address);
+        builder.Label(endLabel);
     }
 
     private void EmitTilemapFillColumn(FunctionCall call)
@@ -931,6 +1145,18 @@ internal sealed class GameBoyRuntimeCompiler
             case "button_hold_ticks":
                 EmitButtonHoldTicks(call);
                 break;
+            case "sprite_width":
+                EmitSpriteWidth(call);
+                break;
+            case "camera_tile_column_at":
+                EmitCameraTileColumnAt(call);
+                break;
+            case "camera_span_tile_at":
+                EmitCameraSpanTileAt(call);
+                break;
+            case "camera_span_has_tile":
+                EmitCameraSpanHasTile(call);
+                break;
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
         }
@@ -948,6 +1174,117 @@ internal sealed class GameBoyRuntimeCompiler
         var row = CheckedRange(GameBoyVideoProgram.ConstValue(args[1], "map_tile_at argument 2"), 0, program.MapColumnHeight - 1, "map_tile_at argument 2");
 
         EmitExpressionToA(args[0]);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+    }
+
+    private void EmitSpriteWidth(FunctionCall call)
+    {
+        builder.LoadAImmediate(SpriteWidth(call));
+    }
+
+    private void EmitCameraTileColumnAt(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 1);
+        var config = EnsureCameraConfigured(call.Name);
+        EmitCameraTileColumnAt(call.Parameters.ElementAt(0), config.MapWidth);
+    }
+
+    private void EmitCameraTileColumnAt(ExpressionSyntax screenColumnExpression, int mapWidth)
+    {
+        var wrapLabel = builder.CreateLabel("camera_tile_column_wrap");
+        var endLabel = builder.CreateLabel("camera_tile_column_end");
+
+        EmitExpressionToA(screenColumnExpression);
+        builder.LoadBFromA();
+        builder.LoadA(CameraScreenLeftColumnAddress);
+        builder.AddAFromB();
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+        builder.SubtractAImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraSpanTileAt(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 3);
+        var config = EnsureCameraConfigured(call.Name);
+        var span = BuildCameraSpan(call, config.MapWidth, "camera_span_tile_at");
+        var foundLabel = builder.CreateLabel("camera_span_tile_found");
+        var endLabel = builder.CreateLabel("camera_span_tile_end");
+
+        for (var screenColumn = span.FirstScreenColumn; screenColumn <= span.LastScreenColumn; screenColumn++)
+        {
+            EmitCameraTileColumnAt(new ConstantSyntax(screenColumn.ToString(CultureInfo.InvariantCulture)), config.MapWidth);
+            EmitMapTileAtSourceColumnInA(span.Row);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
+        }
+
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(foundLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraSpanHasTile(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 4);
+        var config = EnsureCameraConfigured(call.Name);
+        var span = BuildCameraSpan(call, config.MapWidth, "camera_span_has_tile");
+        var tile = CheckedRange(ConstRuntimeValue(call.Parameters.ElementAt(3), "camera_span_has_tile argument 4"), 0, 255, "camera_span_has_tile argument 4");
+        var foundLabel = builder.CreateLabel("camera_span_has_tile_found");
+        var endLabel = builder.CreateLabel("camera_span_has_tile_end");
+
+        for (var screenColumn = span.FirstScreenColumn; screenColumn <= span.LastScreenColumn; screenColumn++)
+        {
+            EmitCameraTileColumnAt(new ConstantSyntax(screenColumn.ToString(CultureInfo.InvariantCulture)), config.MapWidth);
+            EmitMapTileAtSourceColumnInA(span.Row);
+            builder.CompareImmediate(tile);
+            builder.JumpAbsolute(0xCA, foundLabel); // JP Z,foundLabel
+        }
+
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(foundLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private CameraSpanInfo BuildCameraSpan(FunctionCall call, int mapWidth, string context)
+    {
+        if (program.MapColumnHeight == 0)
+        {
+            throw new InvalidOperationException($"{context} requires at least one map_column declaration.");
+        }
+
+        var args = call.Parameters.ToList();
+        var screenX = CheckedRange(ConstRuntimeValue(args[0], $"{context} argument 1"), 0, 255, $"{context} argument 1");
+        var width = CheckedRange(ConstRuntimeValue(args[1], $"{context} argument 2"), 1, 255, $"{context} argument 2");
+        var row = CheckedRange(ConstRuntimeValue(args[2], $"{context} argument 3"), 0, program.MapColumnHeight - 1, $"{context} argument 3");
+        var firstScreenColumn = screenX / 8;
+        var lastScreenColumn = (screenX + width - 1) / 8;
+        if (lastScreenColumn > 31)
+        {
+            throw new InvalidOperationException($"{context} span must fit within the Game Boy background tilemap width.");
+        }
+
+        if (lastScreenColumn - firstScreenColumn + 1 > mapWidth)
+        {
+            throw new InvalidOperationException($"{context} span must not cover more columns than the configured camera map width.");
+        }
+
+        return new CameraSpanInfo(firstScreenColumn, lastScreenColumn, row);
+    }
+
+    private void EmitMapTileAtSourceColumnInA(int row)
+    {
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
         builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
@@ -1125,6 +1462,28 @@ internal sealed class GameBoyRuntimeCompiler
         return false;
     }
 
+    private int ConstRuntimeValue(ExpressionSyntax expression, string context)
+    {
+        if (expression is FunctionCall { Name: "sprite_width" } spriteWidthCall)
+        {
+            return SpriteWidth(spriteWidthCall);
+        }
+
+        return GameBoyVideoProgram.ConstValue(expression, context);
+    }
+
+    private int SpriteWidth(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 1);
+        var assetName = GameBoyVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "sprite_width argument 1");
+        if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{assetName}'. Declare it with sprite_asset(...).");
+        }
+
+        return asset.LogicalWidth;
+    }
+
     private readonly record struct GameBoyButton(string Name, byte Selector, byte Mask, byte SnapshotMask, ushort HoldTicksAddress);
 
     private ushort VariableAddress(string name)
@@ -1146,6 +1505,20 @@ internal sealed class GameBoyRuntimeCompiler
 
         return value;
     }
+
+    private CameraConfig EnsureCameraConfigured(string callName)
+    {
+        if (cameraMapWidth is not { } mapWidth || cameraStreamY is not { } streamY || cameraStreamHeight is not { } streamHeight)
+        {
+            throw new InvalidOperationException($"{callName} requires camera_init(...) to be emitted first.");
+        }
+
+        return new CameraConfig(mapWidth, streamY, streamHeight);
+    }
+
+    private readonly record struct CameraConfig(int MapWidth, int StreamY, int StreamHeight);
+
+    private readonly record struct CameraSpanInfo(int FirstScreenColumn, int LastScreenColumn, int Row);
 }
 
 internal sealed class GbBuilder

@@ -40,6 +40,14 @@ Runtime calls:
 - `video_wait_vblank()`
 - `input_poll()`
 - `scroll_set(x, y)`
+- `camera_init(mapWidth, streamY, streamHeight)`
+- `camera_apply()`
+- `camera_move_right()`
+- `camera_move_left()`
+- `camera_tile_column_at(screenColumn)`
+- `camera_span_tile_at(screenX, widthPx, row)`
+- `camera_span_has_tile(screenX, widthPx, row, tile)`
+- `sprite_width(name)`
 - `sprite_set(id, x, y, tile, flags)`
 - `sprite_draw(name, x, y, frame[, flags])`
 - `tilemap_fill_column(column, y, height, tile)`
@@ -52,6 +60,12 @@ Runtime calls:
 - `button_hold_ticks(button)`
 
 `scroll_set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
+
+`camera_init(mapWidth, streamY, streamHeight)` initializes the current horizontal world camera. It keeps a 16-bit camera X in WRAM, tracks sub-tile movement, tracks the circular Game Boy background map edges, and seeds source-map columns from the declared `map_column(...)` data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
+
+`camera_apply()` writes the camera X low byte to `SCX` and clears `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera by one pixel. When movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
+
+`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `screenX`, `widthPx`, `row`, and `tile` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite_asset(...)`.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
@@ -112,6 +126,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add input-driven jump from the Game Boy joypad.
 - [x] Add tick-based input helpers for edge-triggered and variable-height jump behavior.
 - [x] Make the Game Boy runner a playable loop: hitbox-based ground checks, holes, and reset/fail state.
+- [x] Add a horizontal world-camera helper that owns scroll state and map-column streaming.
 - [ ] Evaluate whether the same `scroll_set` API maps cleanly to NES.
 - [ ] Define a portable video/input API contract shared by Game Boy and NES.
 - [ ] Add a NES parity spike for logical sprites, input, scroll, and tile collision.
@@ -140,15 +155,22 @@ Landed after the initial runner loop:
 
 Landed after the playable-loop pass:
 
-- The runner checks the logical player width against left and right foot columns instead of using a single source-map tile.
+- The runner checks the logical player width against each covered foot column instead of using a single source-map tile.
 - The initial visible background matches the same source-map pattern used for streaming, including a visible multi-column hole and failure tile.
 - Separate left/right streaming cursors keep the background stable when changing direction.
 - The reset path restores actor position, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
 
+Landed after the camera-runtime pass:
+
+- `camera_init(...)`, `camera_apply()`, `camera_move_right()`, `camera_move_left()`, and `camera_tile_column_at(...)` lift horizontal scrolling one layer above raw `SCX` writes and hand-managed streaming cursors.
+- The camera runtime owns 16-bit world X, sub-tile scroll state, circular background-map edge columns, source-map edge columns, and 8 px column streaming.
+- The runner now asks the camera for source-map foot columns instead of wrapping `screenLeftColumn` manually.
+- `camera_span_tile_at(...)`, `camera_span_has_tile(...)`, and `sprite_width(...)` let the runner collide against every tile column covered by a logical sprite width instead of hardcoding foot columns.
+
 ## Next Milestones
 
-1. Promote the stable runner logic one level above raw intrinsics. Candidate helpers are `map_solid_at`, actor-foot collision, and simple actor reset.
-2. Define the portable runtime surface before adding more target-specific APIs. The current candidates are `video_wait_vblank`, `input_poll`, `scroll_set`, `sprite_asset`, `sprite_draw`, `map_column`, `map_stream_column`, `map_tile_at`, `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`.
+1. Promote the remaining stable runner logic one level above raw intrinsics. Candidate helpers are `map_solid_at`, actor-foot collision, and simple actor reset.
+2. Define the portable runtime surface before adding more target-specific APIs. The current candidates are `video_wait_vblank`, `input_poll`, `scroll_set`, `camera_init`, `camera_apply`, `camera_move_right`, `camera_move_left`, `camera_tile_column_at`, `camera_span_tile_at`, `camera_span_has_tile`, `sprite_width`, `sprite_asset`, `sprite_draw`, `map_column`, `map_stream_column`, `map_tile_at`, `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`.
 3. Decide how target capability differences are reported: hard compiler error, documented degradation, or platform-specific variant.
 4. Spike the same runner contract on NES, starting with `scroll_set` and the tick-based input helpers, then logical sprites and tile collision.
 5. Extract shared concepts from the Game Boy direct compiler so the ROM targets stop growing as isolated one-off backends.

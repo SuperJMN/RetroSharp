@@ -356,6 +356,140 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_camera_runtime_to_world_scroll_state_and_streaming()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  map_column(0, 0, 0, 4, 5);
+                                  map_column(1, 0, 0, 4, 5);
+                                  map_column(2, 0, 0, 4, 5);
+                                  map_column(3, 0, 0, 4, 5);
+                                  map_column(4, 0, 0, 4, 5);
+                                  map_column(5, 0, 0, 4, 5);
+                                  map_column(6, 0, 0, 4, 5);
+                                  map_column(7, 0, 0, 4, 5);
+                                  map_column(8, 0, 0, 4, 5);
+                                  map_column(9, 0, 0, 4, 5);
+                                  map_column(10, 0, 0, 4, 5);
+                                  map_column(11, 0, 0, 4, 5);
+                                  map_column(12, 0, 0, 4, 5);
+                                  map_column(13, 0, 0, 4, 5);
+                                  map_column(14, 0, 0, 4, 5);
+                                  map_column(15, 0, 0, 4, 5);
+                                  camera_init(16, 11, 4);
+                                  while (true) {
+                                      video_wait_vblank();
+                                      camera_apply();
+                                      camera_move_right();
+                                      camera_move_left();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xE0, 0xC0, 0xEA, 0xE1, 0xC0, 0xEA, 0xE2, 0xC0]), "camera_init should initialize the 16-bit world X and fine scroll state.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x14, 0xEA, 0xE4, 0xC0, 0x3E, 0x1F, 0xEA, 0xE5, 0xC0]), "camera_init should seed the circular background streaming edges.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xE0, 0x43, 0x3E, 0x00, 0xE0, 0x42]), "camera_apply should write the current camera X low byte to SCX.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xC6, 0x01, 0xEA, 0xE0, 0xC0]), "camera_move_right should increment the 16-bit camera X low byte.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE6, 0xC0, 0x5F, 0x16, 0x00]), "camera_move_right should stream from the right source column.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x60, 0x6F, 0x26, 0x99]), "camera_move_left should stream into the left background edge.");
+    }
+
+    [Fact]
+    public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  map_column(0, 0, 0, 4, 5);
+                                  map_column(1, 0, 0, 4, 5);
+                                  map_column(2, 0, 0, 4, 5);
+                                  map_column(3, 0, 0, 4, 5);
+                                  map_column(4, 0, 0, 4, 5);
+                                  map_column(5, 0, 0, 4, 5);
+                                  map_column(6, 0, 0, 4, 5);
+                                  map_column(7, 0, 0, 4, 5);
+                                  map_column(8, 0, 0, 4, 5);
+                                  map_column(9, 0, 0, 4, 5);
+                                  map_column(10, 0, 0, 4, 5);
+                                  map_column(11, 0, 0, 4, 5);
+                                  map_column(12, 0, 0, 4, 5);
+                                  map_column(13, 0, 0, 4, 5);
+                                  map_column(14, 0, 0, 4, 5);
+                                  map_column(15, 0, 0, 4, 5);
+                                  camera_init(16, 11, 4);
+                                  i16 tile = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      tile = map_tile_at(camera_tile_column_at(19), 2);
+                                      camera_move_right();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x13, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "camera_tile_column_at should add a screen tile column to the camera's source-left column.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0x10, 0xDA]), "camera_tile_column_at should branch when the source column is already inside the configured map width.");
+        Assert.True(ContainsSequence(rom, [0xD6, 0x10]), "camera_tile_column_at should wrap columns by subtracting the configured map width.");
+    }
+
+    [Fact]
+    public void Compiles_camera_span_tile_helpers_across_sprite_logical_width()
+    {
+        var baseDirectory = WriteSpritePng(
+            "player-wide.gb.png",
+            33,
+            16,
+            Rows(33, 16, new string('1', 33)));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(mario_player, "player-wide.gb.png", 33, 16);
+                                  map_column(0, 0, 0, 4, 5);
+                                  map_column(1, 0, 0, 4, 5);
+                                  map_column(2, 0, 0, 4, 5);
+                                  map_column(3, 0, 0, 4, 5);
+                                  map_column(4, 0, 0, 4, 5);
+                                  map_column(5, 0, 0, 4, 5);
+                                  map_column(6, 0, 0, 4, 5);
+                                  map_column(7, 0, 0, 4, 5);
+                                  map_column(8, 0, 0, 4, 5);
+                                  map_column(9, 0, 0, 4, 5);
+                                  map_column(10, 0, 0, 4, 5);
+                                  map_column(11, 0, 0, 4, 5);
+                                  map_column(12, 0, 0, 4, 5);
+                                  map_column(13, 0, 0, 3, 5);
+                                  map_column(14, 0, 0, 4, 5);
+                                  map_column(15, 0, 0, 4, 5);
+                                  camera_init(16, 11, 4);
+                                  i16 logicalWidth = 0;
+                                  i16 footTile = 0;
+                                  i16 fail = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      logicalWidth = sprite_width(mario_player);
+                                      footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);
+                                      fail = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x21]), "sprite_width should compile to the sprite asset's logical width.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x09, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "Span collision should check the first tile column covered by screen X.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x0D, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "Span collision should check the last tile column covered by a 33 px logical sprite.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0x03, 0xCA]), "camera_span_has_tile should compare each covered source tile against the requested tile id.");
+    }
+
+    [Fact]
     public void Video_wait_vblank_waits_for_the_next_vblank_edge()
     {
         const string source = """
@@ -636,26 +770,18 @@ public class GameBoyRomCompilerTests
         var leftStart = source.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
         Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
 
-        var forwardStreamStart = source.IndexOf("if (fine == 8)", StringComparison.Ordinal);
-        Assert.True(forwardStreamStart > rightStart, "Runner should update movement before streaming map columns.");
+        var animationStart = source.IndexOf("if (moving != 0)", StringComparison.Ordinal);
+        Assert.True(animationStart > rightStart, "Runner should update movement before animation state.");
 
-        var movementBlock = source[rightStart..forwardStreamStart];
-        Assert.Contains("camera = camera + 1;", movementBlock);
-        Assert.Contains("fine = fine + 1;", movementBlock);
+        var movementBlock = source[rightStart..animationStart];
+        Assert.Contains("camera_move_right();", movementBlock);
         Assert.Contains("moving = 1;", movementBlock);
-        Assert.Contains("camera = camera - 1;", movementBlock);
-        Assert.Contains("fine = fine - 1;", movementBlock);
+        Assert.Contains("camera_move_left();", movementBlock);
         Assert.Contains("if (moving != 0)", source);
-        Assert.Contains("if (fine == 255)", source);
-        Assert.Contains("streamColumn = streamColumn - 1;", source);
-        Assert.Contains("leftStreamColumn = leftStreamColumn - 1;", source);
-        Assert.Contains("screenLeftColumn = screenLeftColumn - 1;", source);
-        Assert.Contains("rightSourceColumn = rightSourceColumn - 1;", source);
-        Assert.Contains("leftSourceColumn = leftSourceColumn - 1;", source);
         Assert.Contains("animTick = animTick + 1;", source);
         Assert.Contains("frame = 0;", source);
-        Assert.Equal(1, CountOccurrences(source, "camera = camera + 1;"));
-        Assert.Equal(1, CountOccurrences(source, "camera = camera - 1;"));
+        Assert.Equal(1, CountOccurrences(source, "camera_move_right();"));
+        Assert.Equal(1, CountOccurrences(source, "camera_move_left();"));
         Assert.Equal(1, CountOccurrences(source, "animTick = animTick + 1;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -729,24 +855,19 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("i16 playerLeftFootColumn = 0;", source);
-        Assert.Contains("i16 playerRightFootColumn = 0;", source);
         Assert.Contains("i16 footTile = 0;", source);
         Assert.Contains("i16 failTile = 0;", source);
         Assert.Contains("i16 resetRequested = 0;", source);
 
         Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
         Assert.Contains("map_column(13, 0, 0, 0, 0);", source);
-        Assert.Contains("playerLeftFootColumn = screenLeftColumn + 9;", source);
-        Assert.Contains("playerRightFootColumn = playerLeftFootColumn + 1;", source);
-        Assert.Contains("if (playerLeftFootColumn >= 16)", source);
-        Assert.Contains("if (playerRightFootColumn == 16)", source);
-        Assert.Contains("map_tile_at(playerLeftFootColumn, 2)", source);
-        Assert.Contains("map_tile_at(playerRightFootColumn, 2)", source);
-        Assert.Equal(1, CountOccurrences(source, "map_tile_at(playerLeftFootColumn, 2)"));
-        Assert.Equal(1, CountOccurrences(source, "map_tile_at(playerRightFootColumn, 2)"));
-        Assert.Contains("if (failTile == 3)", source);
-        Assert.Contains("footTile = failTile;", source);
+        Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
+        Assert.Contains("footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);", source);
+        Assert.DoesNotContain("playerLeftFootColumn", source);
+        Assert.DoesNotContain("playerCenterFootColumn", source);
+        Assert.DoesNotContain("playerRightFootColumn", source);
+        Assert.DoesNotContain("map_tile_at(player", source);
+        Assert.Contains("if (failTile != 0)", source);
         Assert.Contains("if (grounded == 0)", source);
         Assert.Contains("if (playerY >= 116)", source);
         Assert.Contains("if (resetRequested != 0)", source);
@@ -770,16 +891,18 @@ public class GameBoyRomCompilerTests
         Assert.Contains("map_column(14, 0, 0, 0, 0);", source);
         Assert.Contains("map_column(15, 0, 0, 0, 0);", source);
 
-        Assert.Contains("i16 screenLeftColumn = 0;", source);
-        Assert.Contains("i16 rightSourceColumn = 4;", source);
-        Assert.Contains("i16 leftSourceColumn = 15;", source);
-        Assert.Contains("i16 leftStreamColumn = 31;", source);
-        Assert.Contains("playerLeftFootColumn = screenLeftColumn + 9;", source);
-        Assert.Contains("playerRightFootColumn = playerLeftFootColumn + 1;", source);
-        Assert.Contains("map_stream_column(streamColumn, rightSourceColumn, 11, 4);", source);
-        Assert.Contains("map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);", source);
-        Assert.Contains("screenLeftColumn = screenLeftColumn + 1;", source);
-        Assert.Contains("screenLeftColumn = screenLeftColumn - 1;", source);
+        Assert.Contains("camera_init(16, 11, 4);", source);
+        Assert.Contains("camera_apply();", source);
+        Assert.Contains("footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);", source);
+        Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
+        Assert.Contains("camera_move_right();", source);
+        Assert.Contains("camera_move_left();", source);
+        Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);
+        Assert.DoesNotContain("i16 rightSourceColumn = 4;", source);
+        Assert.DoesNotContain("i16 leftSourceColumn = 15;", source);
+        Assert.DoesNotContain("i16 leftStreamColumn = 31;", source);
+        Assert.DoesNotContain("map_stream_column(streamColumn, rightSourceColumn, 11, 4);", source);
+        Assert.DoesNotContain("map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);", source);
 
         var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
@@ -787,10 +910,29 @@ public class GameBoyRomCompilerTests
         Assert.True(displayStart > resetStart);
         var resetBlock = source[resetStart..displayStart];
         Assert.DoesNotContain("camera = 0;", resetBlock);
+        Assert.DoesNotContain("camera_init(", resetBlock);
         Assert.DoesNotContain("streamColumn = 20;", resetBlock);
         Assert.DoesNotContain("screenLeftColumn = 0;", resetBlock);
         Assert.DoesNotContain("rightSourceColumn = 4;", resetBlock);
         Assert.DoesNotContain("leftSourceColumn = 15;", resetBlock);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_applies_reset_before_consuming_jump_input()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
+        var jumpStart = source.IndexOf("if (button_just_pressed(a) != 0)", StringComparison.Ordinal);
+        var movementStart = source.IndexOf("moving = 0;", resetStart, StringComparison.Ordinal);
+
+        Assert.True(resetStart >= 0);
+        Assert.True(jumpStart > resetStart, "Reset should restore safe actor state before jump input is consumed.");
+        Assert.True(movementStart > resetStart, "Reset should not discard horizontal movement input for the same frame.");
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         Assert.Equal(32768, rom.Length);
@@ -810,14 +952,15 @@ public class GameBoyRomCompilerTests
         Assert.Contains("map_column(0, 0, 0, 4, 5);", source);
         Assert.Contains("map_column(7, 0, 0, 3, 5);", source);
         Assert.Contains("tilemap_set(7, 13, 3);", source);
-        Assert.Contains("if (failTile == 3)", source);
+        Assert.Contains("failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);", source);
+        Assert.Contains("if (failTile != 0)", source);
         Assert.DoesNotContain("if (failTile == 4)", source);
 
         var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
-        var displayStart = source.IndexOf("if (grounded == 0)", resetStart, StringComparison.Ordinal);
-        Assert.True(displayStart > resetStart);
-        var resetBlock = source[resetStart..displayStart];
+        var jumpStart = source.IndexOf("if (button_just_pressed(a) != 0)", resetStart, StringComparison.Ordinal);
+        Assert.True(jumpStart > resetStart);
+        var resetBlock = source[resetStart..jumpStart];
         Assert.DoesNotContain("frame = 0;", resetBlock);
         Assert.DoesNotContain("displayFlags = 0;", resetBlock);
         Assert.DoesNotContain("animTick = 0;", resetBlock);

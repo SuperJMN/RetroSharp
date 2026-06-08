@@ -51,15 +51,7 @@ void main() {
     setup_video();
     draw_starting_scene();
     define_level_columns();
-    i16 camera = 0;
-    i16 fine = 0;
-    i16 streamColumn = 20;
-    i16 leftStreamColumn = 31;
-    i16 screenLeftColumn = 0;
-    i16 rightSourceColumn = 4;
-    i16 leftSourceColumn = 15;
-    i16 playerLeftFootColumn = 0;
-    i16 playerRightFootColumn = 0;
+    camera_init(16, 11, 4);
     i16 footTile = 0;
     i16 failTile = 0;
     i16 playerY = 73;
@@ -76,7 +68,7 @@ void main() {
 
     while (true) {
         video_wait_vblank();
-        scroll_set(camera, 0);
+        camera_apply();
         sprite_draw(mario_player, 72, playerY, displayFrame, displayFlags);
 
         input_poll();
@@ -85,46 +77,24 @@ void main() {
         grounded = 0;
         velocityY = velocityY + 1;
         playerY = playerY + velocityY;
-        playerLeftFootColumn = screenLeftColumn + 9;
-        if (playerLeftFootColumn >= 16) {
-            playerLeftFootColumn = playerLeftFootColumn - 16;
-        }
-
-        playerRightFootColumn = playerLeftFootColumn + 1;
-        if (playerRightFootColumn == 16) {
-            playerRightFootColumn = 0;
-        }
 
         footTile = 0;
         failTile = 0;
         if (playerY >= 74) {
-            failTile = map_tile_at(playerLeftFootColumn, 2);
-            if (failTile == 3) {
+            failTile = camera_span_has_tile(72, sprite_width(mario_player), 2, 3);
+            if (failTile != 0) {
                 resetRequested = 1;
             }
 
-            if (failTile != 0) {
-                if (failTile != 3) {
-                    footTile = failTile;
-                }
-            }
-
-            failTile = map_tile_at(playerRightFootColumn, 2);
-            if (failTile == 3) {
-                resetRequested = 1;
-            }
-
-            if (failTile != 0) {
-                if (failTile != 3) {
-                    footTile = failTile;
-                }
-            }
+            footTile = camera_span_tile_at(72, sprite_width(mario_player), 2);
 
             if (footTile != 0) {
-                playerY = 73;
-                velocityY = 0;
-                grounded = 1;
-                jumping = 0;
+                if (footTile != 3) {
+                    playerY = 73;
+                    velocityY = 0;
+                    grounded = 1;
+                    jumping = 0;
+                }
             }
         }
 
@@ -132,6 +102,17 @@ void main() {
             if (playerY >= 116) {
                 resetRequested = 1;
             }
+        }
+
+        if (resetRequested != 0) {
+            footTile = 0;
+            failTile = 0;
+            playerY = 73;
+            velocityY = 0;
+            grounded = 1;
+            displayFrame = 0;
+            jumping = 0;
+            jumpTicks = 0;
         }
 
         if (button_just_pressed(a) != 0) {
@@ -159,76 +140,13 @@ void main() {
         if (button_down(right) != 0) {
             moving = 1;
             displayFlags = 0;
-            camera = camera + 1;
-            fine = fine + 1;
+            camera_move_right();
         }
 
         if (button_down(left) != 0) {
             moving = 1;
             displayFlags = 32;
-            camera = camera - 1;
-            fine = fine - 1;
-        }
-
-        if (fine == 8) {
-            fine = 0;
-            map_stream_column(streamColumn, rightSourceColumn, 11, 4);
-
-            streamColumn = streamColumn + 1;
-            if (streamColumn == 32) {
-                streamColumn = 0;
-            }
-
-            leftStreamColumn = leftStreamColumn + 1;
-            if (leftStreamColumn == 32) {
-                leftStreamColumn = 0;
-            }
-
-            screenLeftColumn = screenLeftColumn + 1;
-            if (screenLeftColumn == 16) {
-                screenLeftColumn = 0;
-            }
-
-            rightSourceColumn = rightSourceColumn + 1;
-            if (rightSourceColumn == 16) {
-                rightSourceColumn = 0;
-            }
-
-            leftSourceColumn = leftSourceColumn + 1;
-            if (leftSourceColumn == 16) {
-                leftSourceColumn = 0;
-            }
-        }
-
-        if (fine == 255) {
-            fine = 7;
-
-            map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);
-
-            streamColumn = streamColumn - 1;
-            if (streamColumn == 255) {
-                streamColumn = 31;
-            }
-
-            leftStreamColumn = leftStreamColumn - 1;
-            if (leftStreamColumn == 255) {
-                leftStreamColumn = 31;
-            }
-
-            screenLeftColumn = screenLeftColumn - 1;
-            if (screenLeftColumn == 255) {
-                screenLeftColumn = 15;
-            }
-
-            rightSourceColumn = rightSourceColumn - 1;
-            if (rightSourceColumn == 255) {
-                rightSourceColumn = 15;
-            }
-
-            leftSourceColumn = leftSourceColumn - 1;
-            if (leftSourceColumn == 255) {
-                leftSourceColumn = 15;
-            }
+            camera_move_left();
         }
 
         if (moving != 0) {
@@ -246,19 +164,6 @@ void main() {
                     frame = 0;
                 }
             }
-        }
-
-        if (resetRequested != 0) {
-            playerLeftFootColumn = 0;
-            playerRightFootColumn = 0;
-            footTile = 0;
-            failTile = 0;
-            playerY = 73;
-            velocityY = 0;
-            grounded = 1;
-            displayFrame = 0;
-            jumping = 0;
-            jumpTicks = 0;
         }
 
         if (grounded == 0) {

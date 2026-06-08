@@ -61,7 +61,7 @@ The solution started as a classic compiler pipeline with clear stage separation 
 
 - Cartridge targets
   - RetroSharp.NES: Experimental iNES ROM emitter for constant video API calls and static background/tile drawing.
-  - RetroSharp.GameBoy: Experimental 32 KiB DMG ROM emitter. It loads tile/background/map data and can emit LR35902 code for a small runtime subset: byte-backed locals, assignment, `if`, `while`, `video_wait_vblank()`, `scroll_set(...)`, `sprite_set(...)`, and runtime map column streaming.
+  - RetroSharp.GameBoy: Experimental 32 KiB DMG ROM emitter. It loads tile/background/map data and can emit LR35902 code for a small runtime subset: byte-backed locals, assignment, `if`, `while`, `video_wait_vblank()`, `scroll_set(...)`, horizontal `camera_*` helpers, `sprite_set(...)`, and runtime map column streaming.
 
 Game Boy planning
 - `docs/GameBoyTarget.md` is the source of truth for the currently supported subset and short-term checklist. Keep it updated when adding runtime intrinsics or raising the supported language surface.
