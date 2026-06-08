@@ -47,6 +47,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetroSharp.GameBoy", "src\R
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetroSharp.GameBoy.Tests", "src\RetroSharp.GameBoy.Tests\RetroSharp.GameBoy.Tests.csproj", "{4E5E8CCD-7B33-4BED-9D2D-201946D43A77}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetroSharp.Core.Tests", "src\RetroSharp.Core.Tests\RetroSharp.Core.Tests.csproj", "{EA7403FA-A981-4A3C-AA8F-4BCD595905E6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,10 @@ Global
 		{4E5E8CCD-7B33-4BED-9D2D-201946D43A77}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4E5E8CCD-7B33-4BED-9D2D-201946D43A77}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4E5E8CCD-7B33-4BED-9D2D-201946D43A77}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EA7403FA-A981-4A3C-AA8F-4BCD595905E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA7403FA-A981-4A3C-AA8F-4BCD595905E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA7403FA-A981-4A3C-AA8F-4BCD595905E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA7403FA-A981-4A3C-AA8F-4BCD595905E6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -150,6 +156,7 @@ Global
 		{A4707793-8590-493E-81C1-A9FCC1CC04ED} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
 		{78E25DE2-8E09-411C-85CA-F9E96C2E2761} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
 		{4E5E8CCD-7B33-4BED-9D2D-201946D43A77} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
+		{EA7403FA-A981-4A3C-AA8F-4BCD595905E6} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D913E0AD-76F5-46F9-9F9A-378CC38F61EF}

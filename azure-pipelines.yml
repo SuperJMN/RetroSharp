@@ -11,13 +11,13 @@ steps:
 - pwsh: dotnet tool install --global DotnetDeployer.Tool
   displayName: Install DotnetDeployer
 
-- pwsh: dotnetdeployer nuget --api-key $env:NUGET_API_KEY
+- pwsh: dotnetdeployer --config dotnetdeployer.yml
   displayName: Publish NuGet packages
   condition: eq(variables['Build.SourceBranch'], 'refs/heads/master')
   env:
     NUGET_API_KEY: $(NuGetApiKey)
 
-- pwsh: dotnetdeployer nuget --api-key $env:NUGET_API_KEY --no-push
+- pwsh: dotnetdeployer --config dotnetdeployer.yml --dry-run
   displayName: Publish NuGet packages (dry run)
   condition: ne(variables['Build.SourceBranch'], 'refs/heads/master')
   env:
