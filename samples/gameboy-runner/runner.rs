@@ -9,6 +9,7 @@ void setup_video() {
     object_palette_set(2, 1);
     object_palette_set(3, 3);
     sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);
+    animation_clip(run, 1, 6, 6, 6);
     return;
 }
 
@@ -59,7 +60,6 @@ void main() {
     i16 playerY = 73;
     i16 velocityY = 0;
     i16 grounded = 1;
-    i16 frame = 0;
     i16 displayFrame = 0;
     bool displayFlipX = false;
     i16 animTick = 0;
@@ -157,24 +157,13 @@ void main() {
             animTick = animTick + 1;
         } else {
             animTick = 0;
-            frame = 0;
-        }
-
-        if (moving != 0) {
-            if (animTick == 6) {
-                animTick = 0;
-                frame = frame + 1;
-                if (frame == 3) {
-                    frame = 0;
-                }
-            }
         }
 
         if (grounded == 0) {
             displayFrame = 4;
         } else {
             if (moving != 0) {
-                displayFrame = frame + 1;
+                displayFrame = animation_frame(run, animTick);
             } else {
                 displayFrame = 0;
             }
