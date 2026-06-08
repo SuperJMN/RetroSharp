@@ -1307,6 +1307,43 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Collision_aabb_tiles_checks_each_overlapped_world_tile()
+    {
+        const string source = """
+                              void define_world() {
+                                  world_column(0, 0, 4, 0);
+                                  world_column(1, 3, 5, 0);
+                                  world_column(2, 0, 0, 6);
+                                  world_flags(0, 0, 1, 0);
+                                  world_flags(1, 2, 1, 0);
+                                  world_flags(2, 0, 0, 4);
+                                  return;
+                              }
+
+                              void main() {
+                                  define_world();
+                                  world_map(3, 11, 3);
+                                  i16 x = 7;
+                                  i16 y = 8;
+                                  i16 oneTile = collision_aabb_tiles(8, 0, 8, 8, 2);
+                                  i16 horizontalSpan = collision_aabb_tiles(x, y, 2, 1, 1);
+                                  i16 verticalSpan = collision_aabb_tiles(0, 7, 1, 2, 1);
+                                  i16 empty = collision_aabb_tiles(0, 0, 8, 8, 1);
+                                  i16 platform = collision_aabb_tiles(16, 16, 8, 8, 4);
+                                  i16 zeroWidth = collision_aabb_tiles(0, 8, 0, 8, 1);
+                                  return;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "AABB collision should mask solid flags.");
+        Assert.True(ContainsSequence(rom, [0xE6, 0x02, 0xFE, 0x00, 0xC2]), "AABB collision should mask hazard flags.");
+        Assert.True(ContainsSequence(rom, [0xE6, 0x04, 0xFE, 0x00, 0xC2]), "AABB collision should mask platform flags.");
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");

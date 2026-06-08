@@ -50,7 +50,7 @@ Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_se
 - `+` between byte-backed runtime expressions
 - `-` when one operand is constant
 - `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
-- `map_tile_at(...)`, `map_flags_at(...)`, and `world_tile_flags_at(...)` as value expressions for runtime map queries
+- `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, and `collision_aabb_tiles(...)` as value expressions for runtime map queries
 - `button_pressed(...)` as a value expression for joypad queries
 - `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` as tick-based input value expressions
 - `true` and `false`
@@ -95,6 +95,7 @@ Runtime calls:
 - `map_tile_at(sourceColumn, row)`
 - `map_flags_at(sourceColumn, row)`
 - `world_tile_flags_at(worldX, worldY)`
+- `collision_aabb_tiles(x, y, width, height, flags)`
 - `animation_clip(name, firstFrame, duration...)`
 - `animation_frame(name, tick)`
 - `button_pressed(button)`
@@ -122,6 +123,8 @@ Runtime calls:
 `map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. `map_flags_at(sourceColumn, row)` reads the generated collision flag byte for the same source coordinate. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_flags_at(column, 2) != 0) { ... }`.
 
 `world_tile_flags_at(worldX, worldY)` reads collision flags by world pixel coordinates. The Game Boy lowering divides each byte-backed coordinate by the 8x8 tile size, reads the generated world flag row table, and returns `0` when the coordinate falls outside the active `world_map(...)`. The language syntax intentionally omits a `level` argument while this prototype has one active world map; the SDK operation still records `WorldId = "default"` as the future extension point for named maps.
+
+`collision_aabb_tiles(x, y, width, height, flags)` returns `1` when any world tile overlapped by the pixel AABB has one of the requested flag bits, otherwise `0`. Width and height are compile-time values in this prototype, with `sprite_width(name)` accepted as a static width source. Zero width, zero height, or a zero flag mask returns `0`. This helper only reports overlap; actor movement and collision resolution remain source-level policy.
 
 `input_poll()` snapshots the joypad for the current game tick. Call it once after `video_wait_vblank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `button_down(button)` returns `1` while the button is down in the current snapshot, `button_just_pressed(button)` returns `1` only on the up-to-down transition, `button_just_released(button)` returns `1` only on the down-to-up transition, and `button_hold_ticks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks.
 
@@ -198,6 +201,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Add animation clip data and looping `animation_frame(...)` lookup.
 - [x] Migrate the runner's run animation to an explicit tick plus `animation_frame(...)`.
 - [x] Add world-coordinate tile flag queries through `world_tile_flags_at(...)`.
+- [x] Add boolean AABB tile collision queries through `collision_aabb_tiles(...)`.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
@@ -222,6 +226,7 @@ Landed after the initial runner loop:
 - `sprite_draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
 - `animation_clip(...)` and `animation_frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
 - `world_tile_flags_at(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
+- `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.
 
 Landed after the playable-loop pass:
 

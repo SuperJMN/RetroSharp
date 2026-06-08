@@ -1455,6 +1455,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "world_tile_flags_at":
                 EmitWorldTileFlagsAt(call);
                 break;
+            case "collision_aabb_tiles":
+                EmitCollisionAabbTiles(call);
+                break;
             case "button_pressed":
                 EmitButtonPressed(call);
                 break;
@@ -1530,18 +1533,22 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitWorldTileFlagsAt(FunctionCall call)
     {
         GameBoyVideoProgram.RequireArity(call, 2);
-        var worldMap = program.WorldMap
-                       ?? throw new InvalidOperationException("world_tile_flags_at requires world_map collision flag data.");
         var args = call.Parameters.ToList();
+        EmitWorldTileFlagsAt(args[0], 0, args[1], 0, call.Name);
+    }
+
+    private void EmitWorldTileFlagsAt(ExpressionSyntax worldX, int worldXOffset, ExpressionSyntax worldY, int worldYOffset, string callName)
+    {
+        var worldMap = WorldMapForFlagQuery(callName);
         var outOfBoundsLabel = builder.CreateLabel("world_tile_flags_oob");
         var endLabel = builder.CreateLabel("world_tile_flags_end");
 
-        EmitWorldPixelToTileCoordinate(args[0]);
+        EmitWorldPixelToTileCoordinate(worldX, worldXOffset);
         builder.CompareImmediate(worldMap.Width);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadBFromA();
 
-        EmitWorldPixelToTileCoordinate(args[1]);
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
@@ -1563,12 +1570,75 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitWorldPixelToTileCoordinate(ExpressionSyntax expression)
+    private WorldMap2D WorldMapForFlagQuery(string callName)
+    {
+        return program.WorldMap
+               ?? throw new InvalidOperationException($"{callName} requires world_map collision flag data.");
+    }
+
+    private void EmitWorldPixelToTileCoordinate(ExpressionSyntax expression, int offset)
     {
         EmitExpressionToA(expression);
+        if (offset != 0)
+        {
+            builder.AddAImmediate(offset);
+        }
+
         builder.ShiftRightLogicalA();
         builder.ShiftRightLogicalA();
         builder.ShiftRightLogicalA();
+    }
+
+    private void EmitCollisionAabbTiles(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 5);
+        _ = WorldMapForFlagQuery(call.Name);
+        var args = call.Parameters.ToList();
+        var width = CheckedRange(ConstRuntimeValue(args[2], "collision_aabb_tiles argument 3"), 0, 255, "collision_aabb_tiles argument 3");
+        var height = CheckedRange(ConstRuntimeValue(args[3], "collision_aabb_tiles argument 4"), 0, 255, "collision_aabb_tiles argument 4");
+        var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
+        var flags = CheckedRange(GameBoyVideoProgram.ConstValue(args[4], "collision_aabb_tiles argument 5"), 0, allowedFlags, "collision_aabb_tiles argument 5");
+        if (width == 0 || height == 0 || flags == 0)
+        {
+            builder.LoadAImmediate(0);
+            return;
+        }
+
+        var foundLabel = builder.CreateLabel("collision_aabb_tiles_found");
+        var endLabel = builder.CreateLabel("collision_aabb_tiles_end");
+        foreach (var yOffset in AabbSampleOffsets(height))
+        {
+            foreach (var xOffset in AabbSampleOffsets(width))
+            {
+                EmitWorldTileFlagsAt(args[0], xOffset, args[1], yOffset, call.Name);
+                builder.AndImmediate(flags);
+                builder.CompareImmediate(0);
+                builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
+            }
+        }
+
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(foundLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private static IReadOnlyList<int> AabbSampleOffsets(int size)
+    {
+        var offsets = new List<int>();
+        for (var offset = 0; offset < size; offset += 8)
+        {
+            offsets.Add(offset);
+        }
+
+        var lastOffset = size - 1;
+        if (!offsets.Contains(lastOffset))
+        {
+            offsets.Add(lastOffset);
+        }
+
+        return offsets;
     }
 
     private void EmitSpriteWidth(FunctionCall call)
