@@ -901,14 +901,15 @@ Status: landed 2026-06-08.
 
 #### AR-10.2: Implement Game Boy Window HUD prototype
 
+- Status: landed 2026-06-08.
 - Layer: Game Boy intrinsic-backed SDK lowering.
 - Candidate files: Game Boy PPU/window lowering, HUD sample, tests.
 - Steps:
-  - Lower HUD tile writes to the Game Boy window layer if the descriptor allows it.
-  - Keep HUD state separate from camera scroll state.
-  - Document any window-position restrictions.
+  - [x] Lower HUD tile writes to the Game Boy window layer if the descriptor allows it.
+  - [x] Keep HUD state separate from camera scroll state.
+  - [x] Document any window-position restrictions.
 - Verification:
-  - Game Boy HUD sample builds and does not use camera internals.
+  - [x] Game Boy HUD sample builds and does not use camera internals.
 
 #### AR-10.3: Evaluate NES HUD path
 

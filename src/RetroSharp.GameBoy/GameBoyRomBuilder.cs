@@ -58,6 +58,13 @@ internal static class GameBoyRomBuilder
         builder.Emit(0xAF);                         // XOR A
         builder.Emit(0xE0, 0x42);                   // LDH ($42),A
         builder.Emit(0xE0, 0x43);                   // LDH ($43),A
+        if (program.UsesWindowHud)
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreHighRamA(0x4A);            // WY=0
+            builder.LoadAImmediate(7);
+            builder.StoreHighRamA(0x4B);            // WX=7 maps to screen X=0
+        }
 
         builder.LoadHl(0x8000);
         builder.LoadDe("tile_data");
@@ -69,9 +76,17 @@ internal static class GameBoyRomBuilder
         builder.LoadBc(1024);
         EmitCopyLoop(builder, "copy_tilemap");
 
+        if (program.UsesWindowHud)
+        {
+            builder.LoadHl(0x9C00);
+            builder.LoadDe("window_tilemap");
+            builder.LoadBc(1024);
+            EmitCopyLoop(builder, "copy_window_tilemap");
+        }
+
         EmitClearOam(builder, "clear_oam");
 
-        builder.Emit(0x3E, 0x97);                   // LD A,$97
+        builder.Emit(0x3E, (byte)(program.UsesWindowHud ? 0xF7 : 0x97));
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
 
         new GameBoyRuntimeCompiler(builder, program).Emit(program.MainBlock);
@@ -83,6 +98,12 @@ internal static class GameBoyRomBuilder
         builder.Emit(tileData);
         builder.Label("tilemap");
         builder.Emit(program.TileMap);
+        if (program.UsesWindowHud)
+        {
+            builder.Label("window_tilemap");
+            builder.Emit(program.WindowTileMap);
+        }
+
         EmitMapData(builder, program);
 
         return builder;
@@ -460,6 +481,8 @@ internal sealed class GameBoyRuntimeCompiler
             case "sprite_asset":
                 break;
             case "animation_clip":
+                break;
+            case "hud_set_tile":
                 break;
             case "input_poll":
                 EmitInputPoll(call);
