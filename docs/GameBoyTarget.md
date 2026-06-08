@@ -64,6 +64,7 @@ Static setup calls:
 - `palette_set(index, color)`
 - `object_palette_set(index, color)`
 - `sprite_asset(name, path[, frameWidth, frameHeight])`
+- `world_column(index, tile0, tile1, ...)`
 - `map_column(index, tile0, tile1, ...)`
 - `world_map(width, streamY, height)`
 - `tilemap_set(x, y, tile)`
@@ -104,9 +105,9 @@ Runtime calls:
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
-`map_column(index, ...)` defines a source-level map column. The compiler stores map rows in ROM tables. `map_stream_column(targetColumn, sourceColumn, y, height)` reads one source column from those ROM tables and writes it into the circular Game Boy background map at runtime.
+`world_column(index, ...)` defines one source-level world column. `world_map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming. The Game Boy runner uses this path so the starting scene and streamed terrain share one source.
 
-`world_map(width, streamY, height)` creates the current portable `WorldMap2D` resource from declared `map_column(...)` data and fills the initial visible Game Boy background rows from that resource. The Game Boy runner uses it to keep the starting scene aligned with the world columns. `map_column(...)` still provides the streaming ROM tables until the next roadmap task moves streaming data generation to the same world resource.
+`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world_column(...)` so visual setup, streaming data, and later collision flags can share the same world resource.
 
 `map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_tile_at(column, 2) != 0) { ... }`.
 
@@ -169,6 +170,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Lower the first portable SDK operation through the shared operation path.
 - [x] Define the portable world map resource shape for tile ids and collision flags.
 - [x] Generate the runner's initial visible tilemap from world data.
+- [x] Generate the runner's streaming map data from the same world resource.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [ ] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.

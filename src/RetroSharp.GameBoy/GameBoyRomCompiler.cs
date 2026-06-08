@@ -50,6 +50,10 @@ internal sealed class GameBoyVideoProgram
 
     public int MapColumnHeight { get; private set; }
 
+    public SortedDictionary<int, byte[]> WorldColumns { get; } = [];
+
+    public int WorldColumnHeight { get; private set; }
+
     public WorldMap2D? WorldMap { get; private set; }
 
     public IReadOnlyList<GameBoyCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
@@ -131,6 +135,9 @@ internal sealed class GameBoyVideoProgram
                 case "map_column":
                     ApplyMapColumn(call);
                     break;
+                case "world_column":
+                    ApplyWorldColumn(call);
+                    break;
                 case "world_map":
                     ApplyWorldMap(call);
                     break;
@@ -202,18 +209,7 @@ internal sealed class GameBoyVideoProgram
 
     private void ApplyMapColumn(FunctionCall call)
     {
-        var args = call.Parameters.ToList();
-        if (args.Count < 2)
-        {
-            throw new InvalidOperationException("map_column expects an index and at least one tile.");
-        }
-
-        var index = CheckedRange(ConstValue(args[0], "map_column argument 1"), 0, 255, "map_column argument 1");
-        var tiles = args
-            .Skip(1)
-            .Select((arg, i) => CheckedRange(ConstValue(arg, $"map_column argument {i + 2}"), 0, 255, $"map_column argument {i + 2}"))
-            .Select(value => (byte)value)
-            .ToArray();
+        var (index, tiles) = ParseColumnData(call);
 
         if (MapColumnHeight == 0)
         {
@@ -227,17 +223,35 @@ internal sealed class GameBoyVideoProgram
         MapColumns[index] = tiles;
     }
 
+    private void ApplyWorldColumn(FunctionCall call)
+    {
+        var (index, tiles) = ParseColumnData(call);
+
+        if (WorldColumnHeight == 0)
+        {
+            WorldColumnHeight = tiles.Length;
+        }
+        else if (tiles.Length != WorldColumnHeight)
+        {
+            throw new InvalidOperationException("All world_column calls must use the same tile count.");
+        }
+
+        WorldColumns[index] = tiles;
+    }
+
     private void ApplyWorldMap(FunctionCall call)
     {
         RequireArity(call, 3);
-        if (MapColumnHeight == 0)
+        var sourceColumns = WorldColumnHeight == 0 ? MapColumns : WorldColumns;
+        var sourceHeight = WorldColumnHeight == 0 ? MapColumnHeight : WorldColumnHeight;
+        if (sourceHeight == 0)
         {
-            throw new InvalidOperationException("world_map requires at least one map_column declaration.");
+            throw new InvalidOperationException("world_map requires at least one world_column or map_column declaration.");
         }
 
         var width = ConstArg(call, 0, 1, 255);
         var streamY = ConstArg(call, 1, 0, 31);
-        var height = ConstArg(call, 2, 1, MapColumnHeight);
+        var height = ConstArg(call, 2, 1, sourceHeight);
         if (streamY + height > 32)
         {
             throw new InvalidOperationException("world_map stream area exceeds the Game Boy background tilemap height.");
@@ -247,7 +261,7 @@ internal sealed class GameBoyVideoProgram
         var tileFlags = new WorldTileFlags[width * height];
         for (var x = 0; x < width; x++)
         {
-            MapColumns.TryGetValue(x, out var column);
+            sourceColumns.TryGetValue(x, out var column);
             for (var y = 0; y < height; y++)
             {
                 tileIds[y * width + x] = column is null ? 0 : column[y];
@@ -255,7 +269,52 @@ internal sealed class GameBoyVideoProgram
         }
 
         WorldMap = new WorldMap2D(width, height, tileIds, tileFlags);
+        GenerateMapColumnsFromWorldMap(WorldMap);
         ApplyWorldMapToTileMap(WorldMap, streamY);
+    }
+
+    private (int Index, byte[] Tiles) ParseColumnData(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count < 2)
+        {
+            throw new InvalidOperationException($"{call.Name} expects an index and at least one tile.");
+        }
+
+        var index = CheckedRange(ConstValue(args[0], $"{call.Name} argument 1"), 0, 255, $"{call.Name} argument 1");
+        var tiles = args
+            .Skip(1)
+            .Select((arg, i) => CheckedRange(ConstValue(arg, $"{call.Name} argument {i + 2}"), 0, 255, $"{call.Name} argument {i + 2}"))
+            .Select(value => (byte)value)
+            .ToArray();
+
+        return (index, tiles);
+    }
+
+    private void GenerateMapColumnsFromWorldMap(WorldMap2D worldMap)
+    {
+        MapColumns.Clear();
+        MapColumnHeight = worldMap.Height;
+        for (var x = 0; x < worldMap.Width; x++)
+        {
+            var tiles = new byte[worldMap.Height];
+            for (var y = 0; y < worldMap.Height; y++)
+            {
+                tiles[y] = CheckedByteTileId(worldMap.TileIdAt(x, y), x, y);
+            }
+
+            MapColumns[x] = tiles;
+        }
+    }
+
+    private static byte CheckedByteTileId(int tileId, int x, int y)
+    {
+        if (tileId is < 0 or > 255)
+        {
+            throw new InvalidOperationException($"world_map tile ({x}, {y}) must be between 0 and 255 for the Game Boy target.");
+        }
+
+        return (byte)tileId;
     }
 
     private void ApplyWorldMapToTileMap(WorldMap2D worldMap, int streamY)
