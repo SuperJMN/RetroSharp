@@ -738,6 +738,8 @@ Status: landed 2026-06-08.
 
 #### AR-6.3: Add logical palette slot selection
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK sprites and capabilities.
 - Candidate files: sprite draw API, palette capability checks, Game Boy/NES descriptors.
 - Steps:

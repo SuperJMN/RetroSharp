@@ -603,9 +603,9 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitSpriteDraw(FunctionCall call)
     {
         var args = call.Parameters.ToList();
-        if (args.Count is not 4 and not 5)
+        if (args.Count is not 4 and not 5 and not 6)
         {
-            throw new InvalidOperationException($"sprite_draw expects 4 or 5 arguments, got {args.Count}.");
+            throw new InvalidOperationException($"sprite_draw expects 4, 5, or 6 arguments, got {args.Count}.");
         }
 
         var assetName = GameBoyVideoProgram.IdentifierArg(args[0], "sprite_draw argument 1");
@@ -614,7 +614,7 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException($"Unknown Game Boy sprite asset '{assetName}'. Declare it with sprite_asset(...).");
         }
 
-        var flipX = SpriteDrawFlipXArgument(args);
+        var options = SpriteDrawOptionsFromArguments(args);
         var firstHardwareSprite = nextHardwareSprite;
         if (firstHardwareSprite + asset.Pieces.Count > 40)
         {
@@ -631,15 +631,22 @@ internal sealed class GameBoyRuntimeCompiler
             builder.AddAImmediate(16 + piece.YOffset);
             builder.StoreA(oamAddress);
 
-            EmitSpriteDrawX(args[1], flipX, asset, piece, (ushort)(oamAddress + 1));
+            EmitSpriteDrawX(args[1], options.FlipX, asset, piece, (ushort)(oamAddress + 1));
 
             EmitExpressionToA(args[3]);
             EmitMultiplyAByConstant(asset.TilesPerFrame);
             builder.AddAImmediate(asset.FirstTile + piece.TileOffset);
             builder.StoreA((ushort)(oamAddress + 2));
 
-            EmitSpriteDrawAttributes(flipX, (ushort)(oamAddress + 3));
+            EmitSpriteDrawAttributes(options.FlipX, options.PaletteSlot, (ushort)(oamAddress + 3));
         }
+    }
+
+    private SpriteDrawOptions SpriteDrawOptionsFromArguments(IReadOnlyList<ExpressionSyntax> args)
+    {
+        return new SpriteDrawOptions(
+            FlipX: SpriteDrawFlipXArgument(args),
+            PaletteSlot: SpriteDrawPaletteSlotArgument(args));
     }
 
     private ExpressionSyntax? SpriteDrawFlipXArgument(IReadOnlyList<ExpressionSyntax> args)
@@ -656,6 +663,23 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         return flipX;
+    }
+
+    private static int SpriteDrawPaletteSlotArgument(IReadOnlyList<ExpressionSyntax> args)
+    {
+        if (args.Count < 6)
+        {
+            return 0;
+        }
+
+        var slot = GameBoyVideoProgram.ConstValue(args[5], "sprite_draw argument 6");
+        if (slot < 0 || slot >= GameBoyTarget.Capabilities.SpritePaletteSlots)
+        {
+            throw new InvalidOperationException(
+                $"Target '{GameBoyTarget.Capabilities.Name}' supports sprite palette slots 0..{GameBoyTarget.Capabilities.SpritePaletteSlots - 1}, but slot {slot} was requested.");
+        }
+
+        return slot;
     }
 
     private void EmitSpriteDrawX(
@@ -688,18 +712,19 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitSpriteDrawAttributes(ExpressionSyntax? flipXExpression, ushort oamAddress)
+    private void EmitSpriteDrawAttributes(ExpressionSyntax? flipXExpression, int paletteSlot, ushort oamAddress)
     {
+        var paletteAttribute = SpritePaletteAttribute(paletteSlot);
         if (flipXExpression is null || (TryConst(flipXExpression, out var constant) && constant == 0))
         {
-            builder.LoadAImmediate(0);
+            builder.LoadAImmediate(paletteAttribute);
             builder.StoreA(oamAddress);
             return;
         }
 
         if (TryConst(flipXExpression, out _))
         {
-            builder.LoadAImmediate(0x20);
+            builder.LoadAImmediate(paletteAttribute | 0x20);
             builder.StoreA(oamAddress);
             return;
         }
@@ -711,15 +736,22 @@ internal sealed class GameBoyRuntimeCompiler
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, noFlipLabel); // JP Z,noFlipLabel
 
-        builder.LoadAImmediate(0x20);
+        builder.LoadAImmediate(paletteAttribute | 0x20);
         builder.JumpAbsolute(storeLabel);
 
         builder.Label(noFlipLabel);
-        builder.LoadAImmediate(0);
+        builder.LoadAImmediate(paletteAttribute);
 
         builder.Label(storeLabel);
         builder.StoreA(oamAddress);
     }
+
+    private static int SpritePaletteAttribute(int paletteSlot)
+    {
+        return (paletteSlot & 0x01) << 4;
+    }
+
+    private readonly record struct SpriteDrawOptions(ExpressionSyntax? FlipX, int PaletteSlot);
 
     private void EmitSpriteDrawXAtOffset(ExpressionSyntax xExpression, int offset, ushort oamAddress)
     {

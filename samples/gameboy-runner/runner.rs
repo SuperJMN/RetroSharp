@@ -71,7 +71,7 @@ void main() {
     while (true) {
         video_wait_vblank();
         camera_apply();
-        sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX);
+        sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
 
         input_poll();
 
