@@ -724,6 +724,8 @@ Status: landed 2026-06-08.
 
 #### AR-6.2: Replace raw flip flags in portable API
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK sprites.
 - Candidate files: `samples/gameboy-runner/runner.rs`, Game Boy sprite draw lowering, tests.
 - Steps:

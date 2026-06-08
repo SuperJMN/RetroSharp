@@ -61,7 +61,7 @@ void main() {
     i16 grounded = 1;
     i16 frame = 0;
     i16 displayFrame = 0;
-    i16 displayFlags = 0;
+    bool displayFlipX = false;
     i16 animTick = 0;
     i16 jumping = 0;
     i16 jumpTicks = 0;
@@ -71,7 +71,7 @@ void main() {
     while (true) {
         video_wait_vblank();
         camera_apply();
-        sprite_draw(mario_player, 72, playerY, displayFrame, displayFlags);
+        sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX);
 
         input_poll();
 
@@ -139,13 +139,13 @@ void main() {
         moving = 0;
         if (button_down(right) != 0) {
             moving = 1;
-            displayFlags = 0;
+            displayFlipX = false;
             cameraX = cameraX + 1;
         }
 
         if (button_down(left) != 0) {
             moving = 1;
-            displayFlags = 32;
+            displayFlipX = true;
             cameraX = cameraX - 1;
         }
 
