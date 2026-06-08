@@ -2,6 +2,34 @@ namespace RetroSharp.Core.Targeting;
 
 public static class TargetCapabilityChecks
 {
+    public static void RequireScrollAxis(Target2DCapabilities capabilities, ScrollAxes requestedAxis)
+    {
+        if (capabilities.SupportsScrollAxis(requestedAxis))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            TargetCapabilityErrorFormatter.UnsupportedFeature(
+                capabilities,
+                FormatScrollAxis(requestedAxis),
+                []));
+    }
+
+    public static void RequireSpriteTransform(Target2DCapabilities capabilities, SpriteTransform requestedTransform)
+    {
+        if (requestedTransform == SpriteTransform.None || capabilities.SupportsSpriteTransform(requestedTransform))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            TargetCapabilityErrorFormatter.UnsupportedFeature(
+                capabilities,
+                FormatSpriteTransform(requestedTransform),
+                []));
+    }
+
     public static void RequireHudMode(Target2DCapabilities capabilities, HudMode requestedMode)
     {
         if (capabilities.SupportsHudMode(requestedMode))
@@ -47,6 +75,26 @@ public static class TargetCapabilityChecks
             HudMode.SplitScroll => "SplitScroll HUD",
             HudMode.Sprite => "SpriteHud",
             _ => mode.ToString(),
+        };
+    }
+
+    private static string FormatScrollAxis(ScrollAxes axis)
+    {
+        return axis switch
+        {
+            ScrollAxes.Horizontal => "horizontal scrolling",
+            ScrollAxes.Vertical => "vertical scrolling",
+            _ => $"{axis} scrolling",
+        };
+    }
+
+    private static string FormatSpriteTransform(SpriteTransform transform)
+    {
+        return transform switch
+        {
+            SpriteTransform.FlipX => "sprite FlipX",
+            SpriteTransform.FlipY => "sprite FlipY",
+            _ => $"sprite transform {transform}",
         };
     }
 }
