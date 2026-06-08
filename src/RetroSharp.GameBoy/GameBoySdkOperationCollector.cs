@@ -76,8 +76,7 @@ internal static class GameBoySdkOperationCollector
             var args = call.Parameters.ToList();
             var x = ByteExpression(args[0], "camera_set_position argument 1");
             var y = ByteExpression(args[1], "camera_set_position argument 2");
-            RequireHorizontalOnly(y, "camera_set_position argument 2");
-            operations.Add(new Sdk2DOperation.SetCameraPosition(x, y, ScrollAxes.Horizontal));
+            operations.Add(new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y)));
         }
 
         private static SdkByteExpression ByteExpression(ExpressionSyntax expression, string context)
@@ -107,14 +106,21 @@ internal static class GameBoySdkOperationCollector
             return value;
         }
 
-        private static void RequireHorizontalOnly(SdkByteExpression y, string context)
+        private static ScrollAxes AxesFor(SdkByteExpression x, SdkByteExpression y)
         {
-            if (y is SdkByteExpression.Constant { Value: 0 })
+            var axes = ScrollAxes.None;
+
+            if (x is not SdkByteExpression.Constant { Value: 0 })
             {
-                return;
+                axes |= ScrollAxes.Horizontal;
             }
 
-            throw new InvalidOperationException($"{context} must be 0 until vertical camera support lands.");
+            if (y is not SdkByteExpression.Constant { Value: 0 })
+            {
+                axes |= ScrollAxes.Vertical;
+            }
+
+            return axes;
         }
 
         private void CollectUserFunction(FunctionCall call)

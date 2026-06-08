@@ -72,6 +72,29 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Collects_camera_set_position_with_vertical_axis_when_y_can_move()
+    {
+        const string source = """
+                              void main() {
+                                  map_column(0, 0, 4);
+                                  map_column(1, 0, 4);
+                                  camera_init(2, 11, 2);
+                                  i16 cameraY = 1;
+                                  camera_set_position(0, cameraY);
+                                  camera_apply();
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
+        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(operation);
+
+        Assert.Equal(new SdkByteExpression.Constant(0), camera.X);
+        Assert.Equal(new SdkByteExpression.Variable("cameraY"), camera.Y);
+        Assert.Equal(ScrollAxes.Vertical, camera.Axes);
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+    }
+
+    [Fact]
     public void Camera_set_position_validates_arity_at_the_sdk_boundary()
     {
         const string source = """

@@ -102,11 +102,11 @@ Runtime calls:
 
 `scroll_set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
-`camera_init(mapWidth, streamY, streamHeight)` initializes the current horizontal world camera. It keeps a 16-bit camera X in WRAM, tracks sub-tile movement, tracks the circular Game Boy background map edges, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
+`camera_init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`camera_set_position(x, y)` is the current position-based camera API candidate. In this horizontal slice, `x` can be a byte-backed expression such as a constant or local variable, and `y` must be `0` until vertical camera support lands. The current Game Boy lowering compares the requested X with the current camera X and reuses the existing one-pixel left/right movement paths, including tile-boundary streaming. One call moves at most one pixel toward the requested X; large jumps require repeated calls or a later bulk-step lowering.
+`camera_set_position(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants or local variables. The current Game Boy lowering compares the requested position with the current camera state and moves at most one pixel per axis toward it on each call. X tile-boundary crossings reuse the existing column streaming paths; Y tile-boundary crossings are tracked in camera state, with row streaming still pending.
 
-`camera_apply()` writes the camera X low byte to `SCX` and clears `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera by one pixel. When movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
+`camera_apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel. When horizontal movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite_asset(...)`.
 
@@ -183,6 +183,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Reuse the existing horizontal camera runtime from `camera_set_position(...)`.
 - [x] Replace direction-specific camera helpers with a position-based camera API in the runner.
 - [x] Unify visual map data, streaming data, and collision flags into one world resource.
+- [x] Extend camera position state and `camera_apply()` to vertical scroll.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
