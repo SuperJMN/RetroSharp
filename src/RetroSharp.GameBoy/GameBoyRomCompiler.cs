@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using RetroSharp.Core.Sdk;
 using RetroSharp.Parser;
 
 namespace RetroSharp.GameBoy;
@@ -8,14 +9,24 @@ public static class GameBoyRomCompiler
 {
     public static byte[] CompileSource(string source, string? baseDirectory = null)
     {
+        var videoProgram = ParseVideoProgram(source, baseDirectory);
+        return GameBoyRomBuilder.Build(videoProgram);
+    }
+
+    public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(string source, string? baseDirectory = null)
+    {
+        return ParseVideoProgram(source, baseDirectory).SdkOperations;
+    }
+
+    private static GameBoyVideoProgram ParseVideoProgram(string source, string? baseDirectory)
+    {
         var parse = new SomeParser().Parse(source);
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var videoProgram = GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
-        return GameBoyRomBuilder.Build(videoProgram);
+        return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
     }
 }
 
@@ -49,6 +60,8 @@ internal sealed class GameBoyVideoProgram
 
     public required BlockSyntax MainBlock { get; init; }
 
+    public required IReadOnlyList<Sdk2DOperation> SdkOperations { get; init; }
+
     public static GameBoyVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
@@ -60,6 +73,7 @@ internal sealed class GameBoyVideoProgram
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
             Functions = functions,
             MainBlock = main.Block,
+            SdkOperations = GameBoySdkOperationCollector.Collect(main.Block, functions),
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
