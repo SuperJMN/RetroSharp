@@ -862,14 +862,15 @@ Status: landed 2026-06-08.
 
 #### AR-9.3: Add NES camera/map spike
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK to NES lowering.
 - Candidate files: NES background/PPU code, shared camera operations, tests.
 - Steps:
-  - Implement the smallest feasible horizontal camera movement path.
-  - Stream map data from unified world resources.
-  - Defer vertical or diagonal scroll if capability/budget checks say it is not ready.
+  - [x] Implement the smallest feasible horizontal camera movement path.
+  - [x] Seed the visible nametable from unified world resources.
+  - [x] Defer vertical or diagonal scroll with explicit capability errors.
 - Verification:
-  - A cross-target sample can compile the shared horizontal camera path for GB and NES.
+  - [x] A minimal shared horizontal camera path compiles for NES.
 
 #### AR-9.4: Add cross-target sample
 

@@ -32,9 +32,9 @@ public sealed class NesTargetCapabilitiesTests
     {
         var capabilities = NesTarget.Capabilities;
 
-        Assert.False(capabilities.SupportsScrollAxis(ScrollAxes.Horizontal));
+        Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Horizontal));
         Assert.False(capabilities.SupportsScrollAxis(ScrollAxes.Vertical));
-        Assert.False(capabilities.SupportsFineScrollX);
+        Assert.True(capabilities.SupportsFineScrollX);
         Assert.False(capabilities.SupportsFineScrollY);
         Assert.Equal(0, capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(0, capabilities.MaxAttributeWritesPerFrame);

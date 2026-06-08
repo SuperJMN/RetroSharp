@@ -2,7 +2,7 @@
 
 Status: experimental, intentionally narrow.
 
-The NES target currently compiles a constrained static drawing subset directly to an iNES ROM and supports the first tick-based input and logical sprite runtime helpers. It does not yet support camera movement, full Game Boy runner parity, or frame-by-frame background streaming.
+The NES target currently compiles a constrained static drawing subset directly to an iNES ROM and supports the first tick-based input, logical sprite, and horizontal camera runtime helpers. It does not yet support vertical camera movement, full Game Boy runner parity, or frame-by-frame background streaming.
 
 See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics.
 
@@ -17,7 +17,7 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Visible tile grid | 32x30 |
 | Tile size | 8x8 |
 | Background buffer | 32x30 tiles for the current static drawing path |
-| Fine scroll | Not declared supported by the current backend |
+| Fine scroll | Horizontal only |
 | Background tile write budget | 0 runtime tile writes per frame |
 | Attribute write budget | 0 runtime attribute writes per frame |
 | Hardware sprites | 64 total, 8 per scanline |
@@ -27,7 +27,7 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Sprite transforms | Flip X and Flip Y hardware flags |
 | HUD modes | None declared portable support yet |
 
-The descriptor records NES sprite and palette hardware limits. Runtime sprite lowering is implemented only for the current JSON logical sprite spike. Portable SDK operations that need scroll axes, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code.
+The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented only for the current JSON logical sprite spike. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, so portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code.
 
 ## Supported Video API
 
@@ -45,7 +45,7 @@ The current target stores one visible 32x30 nametable shape and uploads it durin
 
 ## Supported Runtime API
 
-The NES runtime spike supports byte-backed local variables, assignment, `while (true)`, `video_wait_vblank()`, `input_poll()`, `sprite_asset(...)`, `sprite_draw(...)`, and these tick-based button helpers:
+The NES runtime spike supports byte-backed local variables, assignment, `while (true)`, `video_wait_vblank()`, `input_poll()`, `world_column(...)`, `world_flags(...)`, `world_map(...)`, `camera_init(...)`, `camera_set_position(...)`, `camera_apply()`, `sprite_asset(...)`, `sprite_draw(...)`, and these tick-based button helpers:
 
 - `button_down(button)`
 - `button_just_pressed(button)`
@@ -57,3 +57,7 @@ The NES runtime spike supports byte-backed local variables, assignment, `while (
 `sprite_asset(name, path)` currently loads a JSON asset with a `platforms.nes.frames` variant. Each frame is an array of rows using NES color indexes `0`, `1`, `2`, and `3`. The compiler pads frames to 8x8 hardware cells, writes their tiles into CHR ROM starting at tile `6`, and rejects assets that need more than 64 hardware sprites or exceed the one-byte pattern-table tile index range.
 
 `sprite_draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite through the NES OAM shadow page and performs OAM DMA. In this spike, `frame`, `flipX`, and `paletteSlot` are compile-time values. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` must fit the NES sprite palette slots `0..3`.
+
+`world_column(...)`, `world_flags(...)`, and `world_map(width, streamY, height)` build the initial visible nametable from unified world resources. In this spike, `width` must fit the visible 32-column nametable because runtime column streaming is not implemented.
+
+`camera_init(mapWidth, streamY, streamHeight)` enables the horizontal camera path for the current world map. `camera_set_position(x, 0)` stores the horizontal scroll byte, and `camera_apply()` writes horizontal scroll followed by zero vertical scroll to `$2005`. Any non-zero or runtime Y position is rejected with a NES capability error until vertical movement and streaming have a budgeted lowering.

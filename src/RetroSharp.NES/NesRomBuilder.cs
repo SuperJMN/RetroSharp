@@ -192,7 +192,8 @@ internal static class NesRomBuilder
 internal sealed class NesRuntimeCompiler
 {
     private const byte FirstVariableAddress = 0x00;
-    private const byte RuntimeReservedStateAddress = 0xF0;
+    private const byte RuntimeReservedStateAddress = 0xE0;
+    private const byte CameraXAddress = 0xE0;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -239,6 +240,7 @@ internal sealed class NesRuntimeCompiler
     private readonly HashSet<string> userFunctionCallStack = [];
     private byte nextVariableAddress = FirstVariableAddress;
     private int nextHardwareSprite;
+    private bool cameraConfigured;
 
     public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program)
     {
@@ -248,6 +250,7 @@ internal sealed class NesRuntimeCompiler
 
     public void EmitInitialization()
     {
+        EmitCameraStateInitialization();
         EmitInputStateInitialization();
         EmitOamShadowClear();
     }
@@ -255,6 +258,12 @@ internal sealed class NesRuntimeCompiler
     public void Emit(BlockSyntax block)
     {
         EmitBlock(block);
+    }
+
+    private void EmitCameraStateInitialization()
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(CameraXAddress);
     }
 
     private void EmitInputStateInitialization()
@@ -395,8 +404,22 @@ internal sealed class NesRuntimeCompiler
             case "tilemap_fill":
                 NesVideoProgram.RequireArity(call, 5);
                 break;
+            case "map_column":
+            case "world_column":
+            case "world_flags":
+            case "world_map":
+                break;
             case "sprite_asset":
                 NesVideoProgram.RequireArity(call, 2);
+                break;
+            case "camera_init":
+                EmitCameraInit(call);
+                break;
+            case "camera_set_position":
+                EmitCameraSetPosition(call);
+                break;
+            case "camera_apply":
+                EmitCameraApply(call);
                 break;
             case "video_wait_vblank":
                 NesVideoProgram.RequireArity(call, 0);
@@ -529,6 +552,72 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAImmediate(0);
         builder.StoreAZeroPage(button.HoldTicksAddress);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraInit(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 3);
+        var worldMap = program.WorldMap
+                       ?? throw new InvalidOperationException("camera_init requires world_map(...) data for the NES target.");
+        var mapWidth = NesVideoProgram.ConstValue(call.Parameters.ElementAt(0), "camera_init argument 1");
+        if (mapWidth is < 1 or > 32)
+        {
+            throw new InvalidOperationException("NES camera_init map width must fit the visible 32-column nametable until runtime streaming lands.");
+        }
+
+        if (mapWidth > worldMap.Width)
+        {
+            throw new InvalidOperationException($"camera_init argument 1 must not exceed the declared world_map width ({worldMap.Width}).");
+        }
+
+        var streamY = NesVideoProgram.ConstValue(call.Parameters.ElementAt(1), "camera_init argument 2");
+        var height = NesVideoProgram.ConstValue(call.Parameters.ElementAt(2), "camera_init argument 3");
+        if (height > worldMap.Height)
+        {
+            throw new InvalidOperationException($"camera_init argument 3 must not exceed the declared world_map height ({worldMap.Height}).");
+        }
+
+        if (streamY < 0 || height < 1 || streamY + height > 30)
+        {
+            throw new InvalidOperationException("camera_init stream area must fit within the NES visible nametable height.");
+        }
+
+        cameraConfigured = true;
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(CameraXAddress);
+    }
+
+    private void EmitCameraSetPosition(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 2);
+        EnsureCameraConfigured(call.Name);
+        if (!TryConst(call.Parameters.ElementAt(1), out var y) || y != 0)
+        {
+            throw new InvalidOperationException("Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.");
+        }
+
+        EmitExpressionToA(call.Parameters.ElementAt(0));
+        builder.StoreAZeroPage(CameraXAddress);
+    }
+
+    private void EmitCameraApply(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 0);
+        EnsureCameraConfigured(call.Name);
+
+        builder.LoadAAbsolute(0x2002);              // reset PPU scroll latch
+        builder.LoadAZeroPage(CameraXAddress);
+        builder.StoreAAbsolute(0x2005);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(0x2005);
+    }
+
+    private void EnsureCameraConfigured(string callName)
+    {
+        if (!cameraConfigured)
+        {
+            throw new InvalidOperationException($"{callName} requires camera_init(...) to be emitted first.");
+        }
     }
 
     private void EmitSpriteDraw(FunctionCall call)

@@ -240,6 +240,60 @@ public class NesRomCompilerTests
         Assert.Contains("NES sprite asset needs 65 hardware sprites, but the hardware limit is 64.", exception.Message);
     }
 
+    [Fact]
+    public void Compiles_horizontal_camera_path_from_world_map_to_nes_scroll()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 1, 2);
+                                  world_column(1, 3, 4);
+                                  world_map(2, 10, 2);
+                                  camera_init(2, 10, 2);
+                                  while (true) {
+                                      video_wait_vblank();
+                                      camera_set_position(8, 0);
+                                      camera_apply();
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var expectedRows = Enumerable
+            .Repeat((byte)0, 64)
+            .ToArray();
+        expectedRows[0] = 1;
+        expectedRows[1] = 3;
+        expectedRows[32] = 2;
+        expectedRows[33] = 4;
+
+        Assert.Equal(24592, rom.Length);
+        Assert.True(ContainsSequence(prg, expectedRows), "world_map should seed the visible NES nametable from world_column data.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xE0]), "camera_set_position(8, 0) should store the horizontal camera byte.");
+        Assert.True(ContainsSequence(prg, [0xAD, 0x02, 0x20, 0xA5, 0xE0, 0x8D, 0x05, 0x20, 0xA9, 0x00, 0x8D, 0x05, 0x20]), "camera_apply should reset the PPU scroll latch and write horizontal then zero vertical scroll.");
+    }
+
+    [Fact]
+    public void Rejects_vertical_camera_position_in_current_nes_camera_spike()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 1, 2);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  while (true) {
+                                      camera_set_position(0, 1);
+                                      camera_apply();
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Contains("Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.", exception.Message);
+    }
+
     private static string RepositoryFile(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
