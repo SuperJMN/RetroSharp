@@ -780,6 +780,8 @@ Status: landed 2026-06-08.
 
 #### AR-7.3: Migrate runner animation constants
 
+Status: landed 2026-06-08.
+
 - Layer: sample/API adoption.
 - Candidate files: `samples/gameboy-runner/runner.rs`, runner tests.
 - Steps:

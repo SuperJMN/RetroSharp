@@ -1019,7 +1019,11 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.Contains("if (moving != 0)", source);
         Assert.Contains("animTick = animTick + 1;", source);
-        Assert.Contains("frame = 0;", source);
+        Assert.Contains("animation_frame(run, animTick);", source);
+        Assert.DoesNotContain("i16 frame = 0;", source);
+        Assert.DoesNotContain("frame = frame + 1;", source);
+        Assert.DoesNotContain("if (frame == 3)", source);
+        Assert.DoesNotContain("displayFrame = frame + 1;", source);
         Assert.Equal(1, CountOccurrences(source, "camera_set_position(cameraX, 0);"));
         Assert.Equal(1, CountOccurrences(source, "animTick = animTick + 1;"));
 
@@ -1034,10 +1038,11 @@ public class GameBoyRomCompilerTests
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("""sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);""", source);
+        Assert.Contains("animation_clip(run, 1, 6, 6, 6);", source);
         Assert.DoesNotContain("sprites_clear();", source);
         Assert.Contains("if (grounded == 0)", source);
         Assert.Contains("displayFrame = 4;", source);
-        Assert.Contains("displayFrame = frame + 1;", source);
+        Assert.Contains("displayFrame = animation_frame(run, animTick);", source);
         Assert.Contains("displayFrame = 0;", source);
         Assert.Contains("bool displayFlipX = false;", source);
         Assert.Contains("displayFlipX = true;", source);

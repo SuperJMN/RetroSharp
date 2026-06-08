@@ -193,6 +193,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Replace raw `sprite_draw` flags with a portable `flipX` boolean.
 - [x] Add logical sprite palette slot selection to `sprite_draw`.
 - [x] Add animation clip data and looping `animation_frame(...)` lookup.
+- [x] Migrate the runner's run animation to an explicit tick plus `animation_frame(...)`.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
 - [ ] Add a cross-target runner sample that can compile for both Game Boy and NES.
 
@@ -215,6 +216,7 @@ Landed after the initial runner loop:
 - The runner's horizontal scroll, column streaming, and run animation now advance while D-pad right or left is held; when no horizontal input is active, the sprite returns to its idle frame.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
 - `sprite_draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
+- `animation_clip(...)` and `animation_frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
 
 Landed after the playable-loop pass:
 
