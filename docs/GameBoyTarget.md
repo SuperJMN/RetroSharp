@@ -33,10 +33,11 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 
 - `video_wait_vblank()` as `Sdk2DOperation.WaitFrame`
 - `input_poll()` as `Sdk2DOperation.PollInput`
+- `camera_set_position(x, 0)` as `Sdk2DOperation.SetCameraPosition`
 
 `Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video_wait_vblank()`.
 
-Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_set(...)`, raw tilemap writes, and current camera helpers still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
+Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
 ## Supported Runtime Subset
 
@@ -78,6 +79,7 @@ Runtime calls:
 - `input_poll()`
 - `scroll_set(x, y)`
 - `camera_init(mapWidth, streamY, streamHeight)`
+- `camera_set_position(x, y)`
 - `camera_apply()`
 - `camera_move_right()`
 - `camera_move_left()`
@@ -101,6 +103,8 @@ Runtime calls:
 `scroll_set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
 `camera_init(mapWidth, streamY, streamHeight)` initializes the current horizontal world camera. It keeps a 16-bit camera X in WRAM, tracks sub-tile movement, tracks the circular Game Boy background map edges, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera_apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
+
+`camera_set_position(x, y)` is the current position-based camera API candidate. In this horizontal slice, `x` can be a byte-backed expression such as a constant or local variable, and `y` must be `0` until vertical camera support lands. The current Game Boy lowering writes camera X state and fine X state, but AR-4.2 still needs to add differential streaming when position jumps across tile boundaries.
 
 `camera_apply()` writes the camera X low byte to `SCX` and clears `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera by one pixel. When movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
@@ -175,6 +179,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Generate the runner's initial visible tilemap from world data.
 - [x] Generate the runner's streaming map data from the same world resource.
 - [x] Generate collision flag tables from the same world resource.
+- [x] Add the first position-based camera API and SDK operation boundary.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [x] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
@@ -212,7 +217,7 @@ Landed after the camera-runtime pass:
 - `camera_init(...)`, `camera_apply()`, `camera_move_right()`, `camera_move_left()`, and `camera_tile_column_at(...)` lift horizontal scrolling one layer above raw `SCX` writes and hand-managed streaming cursors.
 - The camera runtime owns 16-bit world X, sub-tile scroll state, circular background-map edge columns, source-map edge columns, and 8 px column streaming.
 - The runner now asks the camera for source-map foot columns instead of wrapping `screenLeftColumn` manually.
-- `camera_span_tile_at(...)`, `camera_span_has_tile(...)`, and `sprite_width(...)` let the runner collide against every tile column covered by a logical sprite width instead of hardcoding foot columns.
+- `camera_span_has_flags(...)` and `sprite_width(...)` let the runner collide against every tile column covered by a logical sprite width using generated world flags instead of hardcoded tile ids.
 
 ## Next Milestones
 

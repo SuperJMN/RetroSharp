@@ -464,6 +464,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "camera_init":
                 EmitCameraInit(call);
                 break;
+            case "camera_set_position":
+                EmitCameraSetPosition(call);
+                break;
             case "camera_apply":
                 EmitCameraApply(call);
                 break;
@@ -767,6 +770,26 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraRightSourceColumnAddress);
         builder.LoadAImmediate(mapWidth - 1);
         builder.StoreA(CameraLeftSourceColumnAddress);
+    }
+
+    private void EmitCameraSetPosition(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 2);
+        EnsureCameraConfigured(call.Name);
+
+        var args = call.Parameters.ToList();
+        var y = GameBoyVideoProgram.ConstValue(args[1], "camera_set_position argument 2");
+        if (y != 0)
+        {
+            throw new InvalidOperationException("camera_set_position argument 2 must be 0 until vertical camera support lands.");
+        }
+
+        EmitExpressionToA(args[0]);
+        builder.StoreA(CameraXLowAddress);
+        builder.AndImmediate(0x07);
+        builder.StoreA(CameraFineXAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraXHighAddress);
     }
 
     private void EmitCameraApply(FunctionCall call)

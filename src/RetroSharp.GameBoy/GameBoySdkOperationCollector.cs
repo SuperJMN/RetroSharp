@@ -1,6 +1,7 @@
 namespace RetroSharp.GameBoy;
 
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
 
 internal static class GameBoySdkOperationCollector
@@ -60,10 +61,60 @@ internal static class GameBoySdkOperationCollector
                     GameBoyVideoProgram.RequireArity(call, 0);
                     operations.Add(new Sdk2DOperation.PollInput());
                     break;
+                case "camera_set_position":
+                    CollectCameraSetPosition(call);
+                    break;
                 default:
                     CollectUserFunction(call);
                     break;
             }
+        }
+
+        private void CollectCameraSetPosition(FunctionCall call)
+        {
+            GameBoyVideoProgram.RequireArity(call, 2);
+            var args = call.Parameters.ToList();
+            var x = ByteExpression(args[0], "camera_set_position argument 1");
+            var y = ByteExpression(args[1], "camera_set_position argument 2");
+            RequireHorizontalOnly(y, "camera_set_position argument 2");
+            operations.Add(new Sdk2DOperation.SetCameraPosition(x, y, ScrollAxes.Horizontal));
+        }
+
+        private static SdkByteExpression ByteExpression(ExpressionSyntax expression, string context)
+        {
+            switch (expression)
+            {
+                case ConstantSyntax:
+                    return new SdkByteExpression.Constant(CheckedByte(GameBoyVideoProgram.ConstValue(expression, context), context));
+                case IdentifierSyntax { Identifier: "true" }:
+                    return new SdkByteExpression.Constant(1);
+                case IdentifierSyntax { Identifier: "false" }:
+                    return new SdkByteExpression.Constant(0);
+                case IdentifierSyntax identifier:
+                    return new SdkByteExpression.Variable(identifier.Identifier);
+                default:
+                    throw new InvalidOperationException($"{context} must be a byte constant or local variable.");
+            }
+        }
+
+        private static int CheckedByte(int value, string context)
+        {
+            if (value is < 0 or > 255)
+            {
+                throw new InvalidOperationException($"{context} must be between 0 and 255.");
+            }
+
+            return value;
+        }
+
+        private static void RequireHorizontalOnly(SdkByteExpression y, string context)
+        {
+            if (y is SdkByteExpression.Constant { Value: 0 })
+            {
+                return;
+            }
+
+            throw new InvalidOperationException($"{context} must be 0 until vertical camera support lands.");
         }
 
         private void CollectUserFunction(FunctionCall call)

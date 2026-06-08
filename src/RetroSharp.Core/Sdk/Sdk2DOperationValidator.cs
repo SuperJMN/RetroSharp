@@ -17,6 +17,8 @@ public static class Sdk2DOperationValidator
                 ValidateDrawLogicalSprite(capabilities, draw);
                 return;
             case Sdk2DOperation.SetCameraPosition camera:
+                ValidateByteExpression(camera.X, "camera X");
+                ValidateByteExpression(camera.Y, "camera Y");
                 RequireAxes(capabilities, camera.Axes);
                 return;
             case Sdk2DOperation.ApplyCamera camera:
@@ -47,6 +49,23 @@ public static class Sdk2DOperationValidator
         }
 
         TargetCapabilityChecks.RequireSpriteTransform(capabilities, draw.Transform);
+    }
+
+    private static void ValidateByteExpression(SdkByteExpression expression, string context)
+    {
+        switch (expression)
+        {
+            case SdkByteExpression.Constant { Value: < 0 or > 255 } constant:
+                throw new InvalidOperationException($"{context} constant must be between 0 and 255, got {constant.Value}.");
+            case SdkByteExpression.Constant:
+                return;
+            case SdkByteExpression.Variable { Name: { Length: > 0 } }:
+                return;
+            case SdkByteExpression.Variable:
+                throw new InvalidOperationException($"{context} variable name must not be empty.");
+            default:
+                throw new InvalidOperationException($"{context} uses unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
     }
 
     private static void RequireAxes(Target2DCapabilities capabilities, ScrollAxes axes)
