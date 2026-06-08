@@ -18,9 +18,15 @@ public abstract record Sdk2DOperation
         SpriteTransform Transform) : Sdk2DOperation;
 
     public sealed record SetCameraPosition(
-        int X,
-        int Y,
-        ScrollAxes Axes) : Sdk2DOperation;
+        SdkByteExpression X,
+        SdkByteExpression Y,
+        ScrollAxes Axes) : Sdk2DOperation
+    {
+        public SetCameraPosition(int X, int Y, ScrollAxes Axes)
+            : this(new SdkByteExpression.Constant(X), new SdkByteExpression.Constant(Y), Axes)
+        {
+        }
+    }
 
     public sealed record ApplyCamera(
         ScrollAxes Axes) : Sdk2DOperation;

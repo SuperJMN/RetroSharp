@@ -89,7 +89,8 @@ Intrinsic work belongs here:
 | `sprite_width(...)` | Portable SDK | Add `sprite_height(...)`. |
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
-| `camera_init(...)` | Portable SDK candidate | Current form is Game Boy horizontal camera. Needs `camera_set_position`. |
+| `camera_init(...)` | Portable SDK candidate | Current form is Game Boy horizontal camera setup. |
+| `camera_set_position(...)` | Portable SDK camera | First position-based camera API candidate; current Game Boy slice is horizontal-only. |
 | `camera_apply()` | Portable SDK candidate | Valid concept, but should apply SDK camera state. |
 | `camera_move_right()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
 | `camera_move_left()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
@@ -622,6 +623,8 @@ Status: landed 2026-06-08.
 ### Iteration 4 Tasks: Camera2D Horizontal Replacement
 
 #### AR-4.1: Add position-based camera API parsing/lowering
+
+Status: landed 2026-06-08.
 
 - Layer: portable SDK camera.
 - Candidate files: parser call handling if needed, Game Boy compiler, SDK operation model, tests.
