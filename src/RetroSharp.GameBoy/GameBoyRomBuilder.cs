@@ -292,6 +292,10 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort CameraYLowAddress = 0xC0E8;
     private const ushort CameraYHighAddress = 0xC0E9;
     private const ushort CameraFineYAddress = 0xC0EA;
+    private const ushort CameraTopBackgroundRowAddress = 0xC0EB;
+    private const ushort CameraBottomBackgroundRowAddress = 0xC0EC;
+    private const ushort CameraTopSourceRowAddress = 0xC0ED;
+    private const ushort CameraBottomSourceRowAddress = 0xC0EE;
     private const ushort InputCurrentAddress = 0xC0F0;
     private const ushort InputPreviousAddress = 0xC0F1;
     private const ushort InputHoldTicksStartAddress = 0xC0F2;
@@ -778,6 +782,15 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraYLowAddress);
         builder.StoreA(CameraYHighAddress);
         builder.StoreA(CameraFineYAddress);
+
+        builder.LoadAImmediate(y);
+        builder.StoreA(CameraTopBackgroundRowAddress);
+        builder.LoadAImmediate((y + height) % 32);
+        builder.StoreA(CameraBottomBackgroundRowAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraTopSourceRowAddress);
+        builder.LoadAImmediate(height % program.MapColumnHeight);
+        builder.StoreA(CameraBottomSourceRowAddress);
     }
 
     private void EmitCameraSetPosition(FunctionCall call)
@@ -797,8 +810,8 @@ internal sealed class GameBoyRuntimeCompiler
         EmitCameraSetAxisPosition(
             args[1],
             CameraYLowAddress,
-            EmitCameraMoveUpStep,
-            EmitCameraMoveDownStep,
+            () => EmitCameraMoveUpStep(config),
+            () => EmitCameraMoveDownStep(config),
             "camera_set_position_down",
             "camera_set_position_y_end");
     }
@@ -900,7 +913,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitCameraMoveDownStep()
+    private void EmitCameraMoveDownStep(CameraConfig config)
     {
         var endLabel = builder.CreateLabel("camera_move_down_end");
 
@@ -913,11 +926,16 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineYAddress);
+        EmitMapStreamRowFromSourceRowAddress(CameraBottomBackgroundRowAddress, CameraBottomSourceRowAddress, config);
+        EmitIncrementAddressModulo(CameraTopBackgroundRowAddress, 32);
+        EmitIncrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
+        EmitIncrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
+        EmitIncrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
 
         builder.Label(endLabel);
     }
 
-    private void EmitCameraMoveUpStep()
+    private void EmitCameraMoveUpStep(CameraConfig config)
     {
         var endLabel = builder.CreateLabel("camera_move_up_end");
 
@@ -930,6 +948,11 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(7);
         builder.StoreA(CameraFineYAddress);
+        EmitDecrementAddressModulo(CameraTopBackgroundRowAddress, 32);
+        EmitDecrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
+        EmitDecrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
+        EmitDecrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
+        EmitMapStreamRowFromSourceRowAddress(CameraTopBackgroundRowAddress, CameraTopSourceRowAddress, config);
 
         builder.Label(endLabel);
     }
@@ -954,6 +977,98 @@ internal sealed class GameBoyRuntimeCompiler
             builder.LoadAFromB();
             builder.StoreHlA();
         }
+    }
+
+    private void EmitMapStreamRowFromSourceRowAddress(ushort targetRowAddress, ushort sourceRowAddress, CameraConfig config)
+    {
+        Sdk2DOperationValidator.Validate(
+            GameBoyTarget.Capabilities,
+            new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: VisibleScreenTileWidth));
+
+        var endLabel = builder.CreateLabel("map_stream_row_end");
+
+        for (var sourceRow = 0; sourceRow < config.SourceHeight; sourceRow++)
+        {
+            var nextLabel = builder.CreateLabel("map_stream_row_next");
+            builder.LoadA(sourceRowAddress);
+            builder.CompareImmediate(sourceRow);
+            builder.JumpAbsolute(0xC2, nextLabel); // JP NZ,nextLabel
+
+            EmitMapStreamRow(sourceRow, targetRowAddress, config.MapWidth);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextLabel);
+        }
+
+        builder.Label(endLabel);
+    }
+
+    private void EmitMapStreamRow(int sourceRow, ushort targetRowAddress, int mapWidth)
+    {
+        for (var screenColumn = 0; screenColumn < VisibleScreenTileWidth; screenColumn++)
+        {
+            EmitCameraTileColumnAt(new ConstantSyntax(screenColumn.ToString(CultureInfo.InvariantCulture)), mapWidth);
+            EmitMapTileAtSourceColumnInA(sourceRow);
+            builder.LoadBFromA();
+            EmitVisibleBackgroundColumnToC(screenColumn);
+            EmitBackgroundTileAddressToHl(targetRowAddress);
+            builder.LoadAFromB();
+            builder.StoreHlA();
+        }
+    }
+
+    private void EmitVisibleBackgroundColumnToC(int screenColumn)
+    {
+        var endLabel = builder.CreateLabel("camera_row_target_column_end");
+
+        builder.LoadA(CameraLeftBackgroundColumnAddress);
+        builder.AddAImmediate(1 + screenColumn);
+        builder.CompareImmediate(32);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+        builder.SubtractAImmediate(32);
+        builder.Label(endLabel);
+        builder.LoadCFromA();
+    }
+
+    private void EmitBackgroundTileAddressToHl(ushort rowAddress)
+    {
+        EmitBackgroundTileAddressHighToH(rowAddress);
+
+        builder.LoadA(rowAddress);
+        for (var i = 0; i < 5; i++)
+        {
+            builder.AddAFromA();
+        }
+
+        builder.AddAFromC();
+        builder.LoadLFromA();
+    }
+
+    private void EmitBackgroundTileAddressHighToH(ushort rowAddress)
+    {
+        var high98Label = builder.CreateLabel("camera_row_high_98");
+        var high99Label = builder.CreateLabel("camera_row_high_99");
+        var high9ALabel = builder.CreateLabel("camera_row_high_9a");
+        var endLabel = builder.CreateLabel("camera_row_high_end");
+
+        builder.LoadA(rowAddress);
+        builder.CompareImmediate(8);
+        builder.JumpAbsolute(0xDA, high98Label); // JP C,high98Label
+        builder.CompareImmediate(16);
+        builder.JumpAbsolute(0xDA, high99Label); // JP C,high99Label
+        builder.CompareImmediate(24);
+        builder.JumpAbsolute(0xDA, high9ALabel); // JP C,high9ALabel
+
+        builder.LoadHImmediate(0x9B);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(high98Label);
+        builder.LoadHImmediate(0x98);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(high99Label);
+        builder.LoadHImmediate(0x99);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(high9ALabel);
+        builder.LoadHImmediate(0x9A);
+        builder.Label(endLabel);
     }
 
     private void EmitIncrement16(ushort lowAddress, ushort highAddress)
@@ -1705,10 +1820,10 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException($"{callName} requires camera_init(...) to be emitted first.");
         }
 
-        return new CameraConfig(mapWidth, streamY, streamHeight);
+        return new CameraConfig(mapWidth, streamY, streamHeight, program.MapColumnHeight);
     }
 
-    private readonly record struct CameraConfig(int MapWidth, int StreamY, int StreamHeight);
+    private readonly record struct CameraConfig(int MapWidth, int StreamY, int StreamHeight, int SourceHeight);
 
     private readonly record struct CameraSpanInfo(int FirstScreenColumn, int LastScreenColumn, int Row);
 }
@@ -1778,6 +1893,11 @@ internal sealed class GbBuilder
         Emit(0x47);
     }
 
+    public void LoadCFromA()
+    {
+        Emit(0x4F);
+    }
+
     public void LoadAFromB()
     {
         Emit(0x78);
@@ -1786,6 +1906,16 @@ internal sealed class GbBuilder
     public void AddAFromB()
     {
         Emit(0x80);
+    }
+
+    public void AddAFromC()
+    {
+        Emit(0x81);
+    }
+
+    public void AddAFromA()
+    {
+        Emit(0x87);
     }
 
     public void OrAFromB()

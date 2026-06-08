@@ -449,6 +449,59 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Camera_set_position_streams_bottom_row_when_y_crosses_tile_down()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 0, 1, 2, 3, 4, 5);
+                                  world_column(1, 6, 7, 8, 9, 10, 11);
+                                  world_map(2, 11, 6);
+                                  camera_init(2, 11, 4);
+                                  i16 cameraY = 8;
+                                  camera_set_position(0, cameraY);
+                                  camera_apply();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x0B, 0xEA, 0xEB, 0xC0, 0x3E, 0x0F, 0xEA, 0xEC, 0xC0]), "camera_init should seed top and bottom background row cursors.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xED, 0xC0, 0x3E, 0x04, 0xEA, 0xEE, 0xC0]), "camera_init should seed top and bottom source row cursors.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xFE, 0x04, 0xC2]), "downward row streaming should select the current bottom source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "downward row streaming should fill the visible row from the current background-left column.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEC, 0xC0, 0xFE, 0x08, 0xDA]), "downward row streaming should compute the target background row address from the bottom row cursor.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEC, 0xC0, 0xC6, 0x01, 0xEA, 0xEC, 0xC0]), "downward row streaming should advance the bottom background row cursor.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xC6, 0x01, 0xEA, 0xEE, 0xC0]), "downward row streaming should advance the bottom source row cursor.");
+    }
+
+    [Fact]
+    public void Camera_set_position_streams_top_row_when_y_crosses_tile_up()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 0, 1, 2, 3, 4, 5);
+                                  world_column(1, 6, 7, 8, 9, 10, 11);
+                                  world_map(2, 11, 6);
+                                  camera_init(2, 11, 4);
+                                  camera_set_position(0, 0);
+                                  camera_apply();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xD6, 0x01, 0xEA, 0xEB, 0xC0]), "upward row streaming should move the top background row cursor before streaming.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xD6, 0x01, 0xEA, 0xED, 0xC0]), "upward row streaming should move the top source row cursor before streaming.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xFE, 0x05, 0xC2]), "upward row streaming should select the wrapped top source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xFE, 0x08, 0xDA]), "upward row streaming should compute the target background row address from the top row cursor.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "upward row streaming should fill the visible row from the current background-left column.");
+    }
+
+    [Fact]
     public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
     {
         const string source = """
