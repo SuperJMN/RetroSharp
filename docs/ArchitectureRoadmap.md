@@ -70,6 +70,7 @@ Intrinsic work belongs here:
 
 | API | Layer | Notes |
 | --- | --- | --- |
+| `GameBoyRomCompiler.CollectSdkOperations(...)` | Compiler architecture boundary | Observes portable `Sdk2DOperation` records before Game Boy lowering. |
 | `video_wait_vblank()` | Portable SDK candidate | Rename or alias to frame terminology later. |
 | `input_poll()` | Portable SDK | Current tick boundary. |
 | `button_down(...)` | Portable SDK | Good shared input semantics. |
@@ -154,6 +155,8 @@ Portable 2D calls should be represented as semantic operations before target low
 - `Sdk2DOperation.SetHudTile`
 
 `Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels.
+
+`GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The initial boundary recognizes `video_wait_vblank()` as `WaitFrame` and `input_poll()` as `PollInput`; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, camera helpers, and tilemap writes remain on the direct Game Boy path until later roadmap tasks move them deliberately.
 
 ## Agent Task Contract
 
@@ -508,6 +511,8 @@ Acceptance criteria:
   - Unit tests construct and validate operations without invoking a ROM builder.
 
 #### AR-2.2: Add an operation creation boundary
+
+Status: landed 2026-06-08.
 
 - Layer: compiler architecture.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs`, `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, new shared operation builder.

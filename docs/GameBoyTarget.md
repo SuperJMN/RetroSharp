@@ -27,6 +27,15 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Sprite transforms | Flip X and Flip Y |
 | HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
 
+## SDK Operation Boundary
+
+`GameBoyRomCompiler.CollectSdkOperations(...)` exposes the first compiler boundary where portable 2D calls become semantic `Sdk2DOperation` records before Game Boy ROM lowering. The current boundary recognizes:
+
+- `video_wait_vblank()` as `Sdk2DOperation.WaitFrame`
+- `input_poll()` as `Sdk2DOperation.PollInput`
+
+Target intrinsics and transitional helpers such as `sprite_set(...)`, `scroll_set(...)`, raw tilemap writes, and current camera helpers still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
+
 ## Supported Runtime Subset
 
 - `void main()`
@@ -151,7 +160,8 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Make the Game Boy runner a playable loop: hitbox-based ground checks, holes, and reset/fail state.
 - [x] Add a horizontal world-camera helper that owns scroll state and map-column streaming.
 - [x] Add target capability descriptors for Game Boy and NES.
-- [ ] Move portable 2D concepts toward the shared SDK operation model described in `ArchitectureRoadmap.md`.
+- [x] Add the first observable SDK operation boundary for frame wait and input poll.
+- [ ] Lower the first portable SDK operation through the shared operation path.
 - [ ] Replace direction-specific camera helpers with a position-based camera API.
 - [ ] Unify visual map data, streaming data, and collision flags into one world resource.
 - [ ] Add a NES parity spike for logical sprites, input, camera scroll, and tile collision.
