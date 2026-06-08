@@ -106,6 +106,40 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Rejects_window_hud_mode_through_nes_capability_check()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  hud_set_tile(window, 0, 0, 1);
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "Target 'nes' does not support Window HUD. Use disable HUD for this target.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_disabled_hud_mode_as_no_op_for_nes()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  hud_set_tile(none, 0, 0, 1);
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(24592, rom.Length);
+    }
+
+    [Fact]
     public void Compiles_tick_input_helpers_to_nes_controller_state()
     {
         const string source = """

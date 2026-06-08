@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
 
 namespace RetroSharp.NES;
@@ -147,6 +148,9 @@ internal sealed class NesVideoProgram
                 break;
             case "sprite_asset":
                 ApplySpriteAsset(call);
+                break;
+            case "hud_set_tile":
+                ValidateHudSetTile(call);
                 break;
             default:
                 ApplyStaticUserFunction(call, callStack);
@@ -408,6 +412,33 @@ internal sealed class NesVideoProgram
         }
 
         throw new InvalidOperationException($"{context} must be an identifier.");
+    }
+
+    internal static void ValidateHudSetTile(FunctionCall call)
+    {
+        RequireArity(call, 4);
+        var mode = HudModeArg(call.Parameters.ElementAt(0), "hud_set_tile argument 1");
+        TargetCapabilityChecks.RequireHudMode(NesTarget.Capabilities, mode);
+    }
+
+    internal static HudMode HudModeArg(ExpressionSyntax expression, string context)
+    {
+        var identifier = IdentifierArg(expression, context);
+        return NormalizeMode(identifier) switch
+        {
+            "window" => HudMode.Window,
+            "splitscroll" => HudMode.SplitScroll,
+            "sprite" or "spritehud" => HudMode.Sprite,
+            "none" => HudMode.None,
+            _ => throw new InvalidOperationException($"{context} must be one of window, split_scroll, sprite_hud, or none."),
+        };
+
+        static string NormalizeMode(string value)
+        {
+            return value.Replace("_", string.Empty, StringComparison.Ordinal)
+                .Replace("-", string.Empty, StringComparison.Ordinal)
+                .ToLowerInvariant();
+        }
     }
 
     internal static string StringArg(FunctionCall call, int index)
