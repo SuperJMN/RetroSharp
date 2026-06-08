@@ -23,3 +23,5 @@ Supported calls in this first slice:
 - `tilemap_set(x, y, tile)`
 - `tilemap_fill(x, y, width, height, tile)`
 - `video_present()`
+
+Parameterless helper functions can group those calls.

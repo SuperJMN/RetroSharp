@@ -45,6 +45,8 @@ internal sealed class GameBoyVideoProgram
 
     public int SpriteTileCount => nextSpriteTile - FirstSpriteTile;
 
+    public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
+
     public required BlockSyntax MainBlock { get; init; }
 
     public static GameBoyVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
@@ -52,17 +54,33 @@ internal sealed class GameBoyVideoProgram
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
                    ?? throw new InvalidOperationException("Game Boy target requires a main function.");
 
+        var functions = BuildFunctionIndex(program.Functions);
         var result = new GameBoyVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
+            Functions = functions,
             MainBlock = main.Block,
         };
 
-        result.ApplyStaticVideoCalls(main.Block);
+        result.ApplyStaticVideoCalls(main.Block, []);
         return result;
     }
 
-    private void ApplyStaticVideoCalls(BlockSyntax block)
+    private static Dictionary<string, FunctionSyntax> BuildFunctionIndex(IEnumerable<FunctionSyntax> functions)
+    {
+        var result = new Dictionary<string, FunctionSyntax>();
+        foreach (var function in functions)
+        {
+            if (!result.TryAdd(function.Name, function))
+            {
+                throw new InvalidOperationException($"Function '{function.Name}' is already declared.");
+            }
+        }
+
+        return result;
+    }
+
+    private void ApplyStaticVideoCalls(BlockSyntax block, HashSet<string> callStack)
     {
         foreach (var statement in block.Statements)
         {
@@ -100,7 +118,42 @@ internal sealed class GameBoyVideoProgram
                 case "sprite_asset":
                     ApplySpriteAsset(call);
                     break;
+                default:
+                    ApplyStaticUserFunction(call, callStack);
+                    break;
             }
+        }
+    }
+
+    private void ApplyStaticUserFunction(FunctionCall call, HashSet<string> callStack)
+    {
+        if (!Functions.TryGetValue(call.Name, out var function))
+        {
+            return;
+        }
+
+        RequireParameterlessUserFunction("Game Boy", call, function);
+        if (!callStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            ApplyStaticVideoCalls(function.Block, callStack);
+        }
+        finally
+        {
+            callStack.Remove(function.Name);
+        }
+    }
+
+    internal static void RequireParameterlessUserFunction(string target, FunctionCall call, FunctionSyntax function)
+    {
+        var argumentCount = call.Parameters.Count();
+        if (argumentCount != 0 || function.Parameters.Count != 0)
+        {
+            throw new InvalidOperationException($"{target} target only supports parameterless user function calls. '{call.Name}' declares {function.Parameters.Count} parameter(s) and was called with {argumentCount} argument(s).");
         }
     }
 

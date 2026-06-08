@@ -1,4 +1,4 @@
-void main() {
+void setup_video() {
     video_init();
     palette_set(0, 0);
     palette_set(1, 1);
@@ -9,7 +9,10 @@ void main() {
     object_palette_set(2, 1);
     object_palette_set(3, 3);
     sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);
+    return;
+}
 
+void draw_starting_scene() {
     tilemap_fill(0, 0, 32, 32, 0);
     tilemap_fill(0, 14, 32, 1, 5);
     tilemap_fill(0, 13, 32, 1, 4);
@@ -21,7 +24,10 @@ void main() {
     tilemap_set(18, 12, 5);
     tilemap_set(23, 13, 3);
     tilemap_set(26, 11, 5);
+    return;
+}
 
+void define_level_columns() {
     map_column(0, 0, 0, 4, 5);
     map_column(1, 0, 0, 4, 5);
     map_column(2, 0, 5, 4, 5);
@@ -38,7 +44,13 @@ void main() {
     map_column(13, 0, 0, 0, 0);
     map_column(14, 0, 0, 0, 0);
     map_column(15, 0, 0, 0, 0);
+    return;
+}
 
+void main() {
+    setup_video();
+    draw_starting_scene();
+    define_level_columns();
     i16 camera = 0;
     i16 fine = 0;
     i16 streamColumn = 20;

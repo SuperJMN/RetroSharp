@@ -48,9 +48,30 @@ internal sealed class NesVideoProgram
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
                    ?? throw new InvalidOperationException("NES target requires a main function.");
 
+        var functions = BuildFunctionIndex(program.Functions);
         var result = new NesVideoProgram();
 
-        foreach (var statement in main.Block.Statements)
+        result.ApplyBlock(main.Block, functions, []);
+        return result;
+    }
+
+    private static Dictionary<string, FunctionNode> BuildFunctionIndex(IEnumerable<FunctionNode> functions)
+    {
+        var result = new Dictionary<string, FunctionNode>();
+        foreach (var function in functions)
+        {
+            if (!result.TryAdd(function.Name, function))
+            {
+                throw new InvalidOperationException($"Function '{function.Name}' is already declared.");
+            }
+        }
+
+        return result;
+    }
+
+    private void ApplyBlock(BlockNode block, IReadOnlyDictionary<string, FunctionNode> functions, HashSet<string> callStack)
+    {
+        foreach (var statement in block.Statements)
         {
             if (statement is ReturnNode)
             {
@@ -62,13 +83,11 @@ internal sealed class NesVideoProgram
                 throw new InvalidOperationException($"NES target only supports video API calls in main. Unsupported statement: {statement.GetType().Name}");
             }
 
-            result.Apply(call);
+            Apply(call, functions, callStack);
         }
-
-        return result;
     }
 
-    private void Apply(FunctionCallExpressionNode call)
+    private void Apply(FunctionCallExpressionNode call, IReadOnlyDictionary<string, FunctionNode> functions, HashSet<string> callStack)
     {
         switch (call.Name)
         {
@@ -95,7 +114,35 @@ internal sealed class NesVideoProgram
                     ConstArg(call, 4, 0, 255));
                 break;
             default:
-                throw new InvalidOperationException($"Unsupported NES video API call '{call.Name}'.");
+                ApplyUserFunction(call, functions, callStack);
+                break;
+        }
+    }
+
+    private void ApplyUserFunction(FunctionCallExpressionNode call, IReadOnlyDictionary<string, FunctionNode> functions, HashSet<string> callStack)
+    {
+        if (!functions.TryGetValue(call.Name, out var function))
+        {
+            throw new InvalidOperationException($"Unsupported NES video API call '{call.Name}'.");
+        }
+
+        if (call.Arguments.Count != 0 || function.Parameters.Count != 0)
+        {
+            throw new InvalidOperationException($"NES target only supports parameterless user function calls. '{call.Name}' declares {function.Parameters.Count} parameter(s) and was called with {call.Arguments.Count} argument(s).");
+        }
+
+        if (!callStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            ApplyBlock(function.Block, functions, callStack);
+        }
+        finally
+        {
+            callStack.Remove(function.Name);
         }
     }
 

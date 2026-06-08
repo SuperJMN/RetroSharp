@@ -1,12 +1,18 @@
-void main() {
+void setup_video() {
     video_init();
     palette_set(0, 0);
     palette_set(1, 1);
     palette_set(2, 2);
     palette_set(3, 3);
+    return;
+}
 
+void clear_background() {
     tilemap_fill(0, 0, 32, 32, 0);
+    return;
+}
 
+void draw_face() {
     tilemap_set(7, 4, 1);
     tilemap_set(8, 4, 1);
     tilemap_set(9, 4, 1);
@@ -52,14 +58,24 @@ void main() {
     tilemap_set(9, 9, 3);
     tilemap_set(10, 9, 3);
     tilemap_set(11, 9, 1);
+    return;
+}
 
+void draw_platform() {
     tilemap_set(7, 12, 5);
     tilemap_set(8, 12, 4);
     tilemap_set(9, 12, 4);
     tilemap_set(10, 12, 4);
     tilemap_set(11, 12, 4);
     tilemap_set(12, 12, 5);
+    return;
+}
 
+void main() {
+    setup_video();
+    clear_background();
+    draw_face();
+    draw_platform();
     video_present();
     return;
 }

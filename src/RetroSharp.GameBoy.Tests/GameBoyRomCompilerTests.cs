@@ -41,6 +41,59 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_parameterless_user_functions_like_inline_video_blocks()
+    {
+        const string directSource = """
+                                    void main() {
+                                        video_init();
+                                        palette_set(0, 0);
+                                        palette_set(1, 1);
+                                        tilemap_set(8, 7, 1);
+                                        tilemap_set(9, 7, 2);
+                                        video_present();
+                                        return;
+                                    }
+                                    """;
+
+        const string functionSource = """
+                                      void setup_palette() {
+                                          palette_set(0, 0);
+                                          palette_set(1, 1);
+                                          return;
+                                      }
+
+                                      void draw_mark() {
+                                          tilemap_set(8, 7, 1);
+                                          tilemap_set(9, 7, 2);
+                                          return;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          setup_palette();
+                                          draw_mark();
+                                          video_present();
+                                          return;
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(directSource), GameBoyRomCompiler.CompileSource(functionSource));
+    }
+
+    [Fact]
+    public void GameBoy_drawing_sample_compiles_with_helper_functions()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-drawing/drawing.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("void draw_face()", source);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void Compiles_runtime_sprite_loop_to_a_game_boy_rom()
     {
         const string source = """

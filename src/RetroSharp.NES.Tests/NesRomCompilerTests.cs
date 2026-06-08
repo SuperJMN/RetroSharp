@@ -40,4 +40,73 @@ public class NesRomCompilerTests
         Assert.Equal(0xC0, prg[^3]);
         Assert.Contains(chr, b => b != 0);
     }
+
+    [Fact]
+    public void Compiles_parameterless_user_functions_like_inline_video_blocks()
+    {
+        const string directSource = """
+                                    void main() {
+                                        video_init();
+                                        palette_set(0, 15);
+                                        palette_set(1, 39);
+                                        tilemap_set(14, 12, 1);
+                                        tilemap_set(15, 12, 2);
+                                        video_present();
+                                        return;
+                                    }
+                                    """;
+
+        const string functionSource = """
+                                      void setup_palette() {
+                                          palette_set(0, 15);
+                                          palette_set(1, 39);
+                                          return;
+                                      }
+
+                                      void draw_mark() {
+                                          tilemap_set(14, 12, 1);
+                                          tilemap_set(15, 12, 2);
+                                          return;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          setup_palette();
+                                          draw_mark();
+                                          video_present();
+                                          return;
+                                      }
+                                      """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(directSource), NesRomCompiler.CompileSource(functionSource));
+    }
+
+    [Fact]
+    public void Nes_drawing_sample_compiles_with_helper_functions()
+    {
+        var source = File.ReadAllText(RepositoryFile("samples/nes-drawing/drawing.rs"));
+
+        Assert.Contains("void draw_face()", source);
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(24592, rom.Length);
+    }
+
+    private static string RepositoryFile(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
 }

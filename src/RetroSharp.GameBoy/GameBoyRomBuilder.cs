@@ -281,6 +281,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly Dictionary<string, ushort> variables = [];
+    private readonly HashSet<string> userFunctionCallStack = [];
     private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
 
@@ -438,8 +439,38 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitScrollSet(call);
                 break;
             default:
+                if (TryEmitUserFunction(call))
+                {
+                    break;
+                }
+
                 throw new InvalidOperationException($"Unsupported Game Boy video API call '{call.Name}'.");
         }
+    }
+
+    private bool TryEmitUserFunction(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        GameBoyVideoProgram.RequireParameterlessUserFunction("Game Boy", call, function);
+        if (!userFunctionCallStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            EmitBlock(function.Block);
+        }
+        finally
+        {
+            userFunctionCallStack.Remove(function.Name);
+        }
+
+        return true;
     }
 
     private void EmitInputPoll(FunctionCall call)
