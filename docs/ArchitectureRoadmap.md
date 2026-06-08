@@ -795,10 +795,12 @@ Status: landed 2026-06-08.
 
 #### AR-8.1: Add world tile flag query
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK collision.
 - Candidate files: world map resource, SDK operation model, Game Boy lowering, tests.
 - Steps:
-  - Add `world_tile_flags_at(level, worldX, worldY)`.
+  - Add `world_tile_flags_at(worldX, worldY)` while the prototype has one active world map. The SDK operation records `WorldId = "default"` as the future named-map extension point.
   - Convert pixel coordinates to tile coordinates explicitly.
   - Validate map bounds behavior.
 - Verification:

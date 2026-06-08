@@ -95,6 +95,27 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Collects_world_tile_flags_query_with_byte_backed_coordinates()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 11, 2);
+                                  i16 worldX = 0;
+                                  i16 flags = world_tile_flags_at(worldX, 8);
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
+        var flags = Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operation);
+
+        Assert.Equal("default", flags.WorldId);
+        Assert.Equal(new SdkByteExpression.Variable("worldX"), flags.WorldX);
+        Assert.Equal(new SdkByteExpression.Constant(8), flags.WorldY);
+    }
+
+    [Fact]
     public void Camera_set_position_rejects_diagonal_movement_that_exceeds_game_boy_budget()
     {
         const string source = """

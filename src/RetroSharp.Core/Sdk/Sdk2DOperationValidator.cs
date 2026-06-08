@@ -10,8 +10,14 @@ public static class Sdk2DOperationValidator
         {
             case Sdk2DOperation.WaitFrame:
             case Sdk2DOperation.PollInput:
-            case Sdk2DOperation.ReadWorldTile:
-            case Sdk2DOperation.ReadWorldTileFlags:
+                return;
+            case Sdk2DOperation.ReadWorldTile tile:
+                ValidateByteExpression(tile.WorldX, "world tile X");
+                ValidateByteExpression(tile.WorldY, "world tile Y");
+                return;
+            case Sdk2DOperation.ReadWorldTileFlags flags:
+                ValidateByteExpression(flags.WorldX, "world tile flags X");
+                ValidateByteExpression(flags.WorldY, "world tile flags Y");
                 return;
             case Sdk2DOperation.DrawLogicalSprite draw:
                 ValidateDrawLogicalSprite(capabilities, draw);

@@ -45,13 +45,25 @@ public abstract record Sdk2DOperation
 
     public sealed record ReadWorldTile(
         string WorldId,
-        int WorldX,
-        int WorldY) : Sdk2DOperation;
+        SdkByteExpression WorldX,
+        SdkByteExpression WorldY) : Sdk2DOperation
+    {
+        public ReadWorldTile(string WorldId, int WorldX, int WorldY)
+            : this(WorldId, new SdkByteExpression.Constant(WorldX), new SdkByteExpression.Constant(WorldY))
+        {
+        }
+    }
 
     public sealed record ReadWorldTileFlags(
         string WorldId,
-        int WorldX,
-        int WorldY) : Sdk2DOperation;
+        SdkByteExpression WorldX,
+        SdkByteExpression WorldY) : Sdk2DOperation
+    {
+        public ReadWorldTileFlags(string WorldId, int WorldX, int WorldY)
+            : this(WorldId, new SdkByteExpression.Constant(WorldX), new SdkByteExpression.Constant(WorldY))
+        {
+        }
+    }
 
     public sealed record SetHudTile(
         HudMode Mode,
