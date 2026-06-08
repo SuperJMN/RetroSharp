@@ -954,14 +954,16 @@ Status: landed 2026-06-08.
 
 #### AR-11.3: Add cross-target acceptance checks
 
+- Status: landed 2026-06-08.
 - Layer: validation.
 - Candidate files: test projects, CLI test fixtures, samples.
 - Steps:
-  - Add automated checks that build the portable sample for GB and NES.
-  - Keep generated ROM paths under temporary or test output directories.
-  - Assert unsupported features fail with capability diagnostics.
+  - [x] Add automated checks that build the portable sample for GB and NES.
+  - [x] Keep generated ROM paths under temporary or test output directories.
+  - [x] Assert unsupported features fail with capability diagnostics.
 - Verification:
-  - A single test command covers the portable sample builds and one unsupported-feature diagnostic.
+  - [x] A single test command covers the portable sample builds and one unsupported-feature diagnostic.
+  - [x] `dotnet test src/RetroSharp.Cli.Tests/RetroSharp.Cli.Tests.csproj --no-restore --filter CrossTargetCliAcceptanceTests`
 
 ## First Recommended Implementation Slice
 
