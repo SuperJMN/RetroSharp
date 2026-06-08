@@ -8,7 +8,33 @@ public class Target2DCapabilitiesTests
     [Fact]
     public void Descriptor_keeps_portable_2d_limits_without_target_builder_dependencies()
     {
-        var capabilities = new Target2DCapabilities(
+        var capabilities = Capabilities(HudMode.Window | HudMode.Sprite);
+
+        Assert.Equal("test", capabilities.Name);
+        Assert.Equal(new Size2D(160, 144), capabilities.ScreenPixels);
+        Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Horizontal));
+        Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Vertical));
+        Assert.False(capabilities.SupportsScrollAxis(ScrollAxes.None));
+        Assert.True(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite8x16));
+        Assert.False(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite16x16));
+        Assert.True(capabilities.SupportsSpriteTransform(SpriteTransform.FlipX));
+        Assert.True(capabilities.SupportsHudMode(HudMode.Window));
+        Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
+    }
+
+    [Fact]
+    public void Hud_capability_check_accepts_disabled_hud_even_when_target_supports_no_hud()
+    {
+        var capabilities = Capabilities(HudMode.None);
+
+        TargetCapabilityChecks.RequireHudMode(capabilities, HudMode.None);
+
+        Assert.False(capabilities.SupportsHudMode(HudMode.None));
+    }
+
+    private static Target2DCapabilities Capabilities(HudMode hudModes)
+    {
+        return new Target2DCapabilities(
             Name: "test",
             ScreenPixels: new Size2D(160, 144),
             ScreenTiles: new Size2D(20, 18),
@@ -25,17 +51,6 @@ public class Target2DCapabilitiesTests
             SpritePaletteSlots: 2,
             BackgroundPaletteSlots: 1,
             SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
-            HudModes: HudMode.Window | HudMode.Sprite);
-
-        Assert.Equal("test", capabilities.Name);
-        Assert.Equal(new Size2D(160, 144), capabilities.ScreenPixels);
-        Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Horizontal));
-        Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Vertical));
-        Assert.False(capabilities.SupportsScrollAxis(ScrollAxes.None));
-        Assert.True(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite8x16));
-        Assert.False(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite16x16));
-        Assert.True(capabilities.SupportsSpriteTransform(SpriteTransform.FlipX));
-        Assert.True(capabilities.SupportsHudMode(HudMode.Window));
-        Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
+            HudModes: hudModes);
     }
 }
