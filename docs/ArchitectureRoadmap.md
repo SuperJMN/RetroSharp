@@ -754,6 +754,8 @@ Status: landed 2026-06-08.
 
 #### AR-7.1: Add animation clip resource data
 
+Status: landed 2026-06-08.
+
 - Layer: portable SDK resources.
 - Candidate files: shared sprite/animation resource model, tests.
 - Steps:
