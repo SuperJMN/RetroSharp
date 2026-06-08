@@ -450,6 +450,7 @@ Acceptance criteria:
 
 #### AR-0.1: Keep the roadmap discoverable
 
+- Status: landed 2026-06-08.
 - Layer: documentation.
 - Candidate files: `README.md`, `docs/GameBoyTarget.md`, `docs/ArchitectureRoadmap.md`.
 - Steps:
@@ -462,6 +463,7 @@ Acceptance criteria:
 
 #### AR-0.2: Classify new APIs before implementation
 
+- Status: landed 2026-06-08.
 - Layer: documentation and API governance.
 - Candidate files: `docs/ArchitectureRoadmap.md`, target docs touched by the feature.
 - Steps:
@@ -475,6 +477,7 @@ Acceptance criteria:
 
 #### AR-1.1: Add the capability model types
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK infrastructure.
 - Candidate files: a shared target/SDK project such as `src/RetroSharp.Targeting/`, or a shared namespace used by `RetroSharp.GameBoy` and `RetroSharp.NES`.
 - Steps:
@@ -487,6 +490,7 @@ Acceptance criteria:
 
 #### AR-1.2: Add Game Boy capabilities
 
+- Status: landed 2026-06-08.
 - Layer: target descriptor.
 - Candidate files: `src/RetroSharp.GameBoy/`, new shared targeting project, Game Boy tests.
 - Steps:
@@ -499,6 +503,7 @@ Acceptance criteria:
 
 #### AR-1.3: Add NES capabilities
 
+- Status: landed 2026-06-08.
 - Layer: target descriptor.
 - Candidate files: `src/RetroSharp.NES/`, new shared targeting project, NES tests.
 - Steps:
@@ -511,6 +516,7 @@ Acceptance criteria:
 
 #### AR-1.4: Add capability error formatting
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK infrastructure.
 - Candidate files: shared targeting project, compiler error helper tests.
 - Steps:
@@ -524,6 +530,7 @@ Acceptance criteria:
 
 #### AR-2.1: Add SDK operation records
 
+- Status: landed 2026-06-08.
 - Layer: portable SDK infrastructure.
 - Candidate files: a shared SDK/lowering namespace, parser or compiler integration tests.
 - Steps:
