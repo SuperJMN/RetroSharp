@@ -182,7 +182,7 @@ if (options.Target == "nes")
     try
     {
         var source = ReadInputFile(path);
-        var rom = RetroSharp.NES.NesRomCompiler.CompileSource(source);
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSource(source, Path.GetDirectoryName(Path.GetFullPath(path)));
         var outputPath = options.OutputPath ?? Path.ChangeExtension(path, ".nes");
         File.WriteAllBytes(outputPath, rom);
         Console.Error.WriteLine($"Wrote NES ROM: {outputPath}");

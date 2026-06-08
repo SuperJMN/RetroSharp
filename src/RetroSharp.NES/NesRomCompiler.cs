@@ -1,11 +1,12 @@
 using System.Globalization;
+using System.Text.Json;
 using RetroSharp.Parser;
 
 namespace RetroSharp.NES;
 
 public static class NesRomCompiler
 {
-    public static byte[] CompileSource(string source)
+    public static byte[] CompileSource(string source, string? baseDirectory = null)
     {
         var parse = new SomeParser().Parse(source);
         if (parse.IsFailure)
@@ -13,13 +14,21 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value);
+        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
         return NesRomBuilder.Build(videoProgram);
     }
 }
 
 internal sealed class NesVideoProgram
 {
+    public const int FirstSpriteTile = 6;
+
+    private readonly List<NesCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
+    private readonly Dictionary<string, NesCompiledSpriteAsset> spriteAssets = [];
+    private int nextSpriteTile = FirstSpriteTile;
+
+    private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
+
     public byte[] Palette { get; } =
     [
         0x0F, 0x27, 0x16, 0x30,
@@ -34,11 +43,15 @@ internal sealed class NesVideoProgram
 
     public byte[] NameTable { get; } = new byte[1024];
 
+    public IReadOnlyList<NesCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
+
+    public IReadOnlyDictionary<string, NesCompiledSpriteAsset> SpriteAssets => spriteAssets;
+
     public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
 
     public required BlockSyntax MainBlock { get; init; }
 
-    public static NesVideoProgram FromProgram(ProgramSyntax program)
+    public static NesVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
                    ?? throw new InvalidOperationException("NES target requires a main function.");
@@ -46,6 +59,7 @@ internal sealed class NesVideoProgram
         var functions = BuildFunctionIndex(program.Functions);
         var result = new NesVideoProgram
         {
+            BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
             Functions = functions,
             MainBlock = main.Block,
         };
@@ -107,6 +121,9 @@ internal sealed class NesVideoProgram
                     ConstArg(call, 3, 1, 30),
                     ConstArg(call, 4, 0, 255));
                 break;
+            case "sprite_asset":
+                ApplySpriteAsset(call);
+                break;
             default:
                 ApplyStaticUserFunction(call, callStack);
                 break;
@@ -135,6 +152,27 @@ internal sealed class NesVideoProgram
         {
             callStack.Remove(function.Name);
         }
+    }
+
+    private void ApplySpriteAsset(FunctionCall call)
+    {
+        var count = call.Parameters.Count();
+        if (count != 2)
+        {
+            throw new InvalidOperationException($"NES sprite_asset expects 2 arguments for the current JSON sprite spike, got {count}.");
+        }
+
+        var name = IdentifierArg(call.Parameters.ElementAt(0), "sprite_asset argument 1");
+        if (spriteAssets.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Sprite asset '{name}' is already declared.");
+        }
+
+        var path = ResolveAssetPath(StringArg(call, 1));
+        var asset = NesSpriteAssetCompiler.CompileFromFile(name, path, nextSpriteTile);
+        nextSpriteTile += asset.TileCount;
+        spriteAssets.Add(name, asset);
+        spriteAssetsInLoadOrder.Add(asset);
     }
 
     private void SetTile(int x, int y, int tile)
@@ -188,7 +226,18 @@ internal sealed class NesVideoProgram
             throw new InvalidOperationException($"{context} must be a constant integer.");
         }
 
-        if (!int.TryParse(Convert.ToString(constant.Value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+        var text = Convert.ToString(constant.Value, CultureInfo.InvariantCulture);
+        if (text == "true")
+        {
+            return 1;
+        }
+
+        if (text == "false")
+        {
+            return 0;
+        }
+
+        if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
         {
             throw new InvalidOperationException($"{context} must be a constant integer.");
         }
@@ -206,6 +255,30 @@ internal sealed class NesVideoProgram
         throw new InvalidOperationException($"{context} must be an identifier.");
     }
 
+    internal static string StringArg(FunctionCall call, int index)
+    {
+        var context = $"{call.Name} argument {index + 1}";
+        if (call.Parameters.ElementAt(index) is not ConstantSyntax constant)
+        {
+            throw new InvalidOperationException($"{context} must be a string literal.");
+        }
+
+        var text = Convert.ToString(constant.Value, CultureInfo.InvariantCulture);
+        if (text is null || !text.StartsWith('"'))
+        {
+            throw new InvalidOperationException($"{context} must be a string literal.");
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<string>(text) ?? throw new InvalidOperationException($"{context} must be a string literal.");
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"{context} must be a valid string literal.", ex);
+        }
+    }
+
     private static int CheckedRange(int value, int min, int max, string context)
     {
         if (value < min || value > max)
@@ -214,5 +287,11 @@ internal sealed class NesVideoProgram
         }
 
         return value;
+    }
+
+    private string ResolveAssetPath(string path)
+    {
+        var resolved = Path.IsPathRooted(path) ? path : Path.Combine(BaseDirectory, path);
+        return Path.GetFullPath(resolved);
     }
 }
