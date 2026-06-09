@@ -62,6 +62,322 @@ public class SemanticAnalysisTests
         enumerable.Should().ContainMatch("*undeclared*");
     }
 
+    [Fact]
+    public void Expression_bodied_function_resolves_parameters_and_body()
+    {
+        var input = "u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0; void main(){ u8 moving = 1; u8 speed = choose_speed(moving, 2); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Function_parameter_default_value_resolves_parameter_and_default()
+    {
+        var input = "u8 step(u8 value, u8 amount = value + 1) => value + amount; void main(){ u8 next = step(4); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Function_parameter_default_value_reports_undeclared_symbols()
+    {
+        var input = "u8 step(u8 value, u8 amount = missing + 1) => value + amount; void main(){ u8 next = step(4); }";
+        Errors(input).Should().ContainMatch("*undeclared*missing*");
+    }
+
+    [Fact]
+    public void Struct_member_access_resolves_declared_fields()
+    {
+        var input = "struct Vec2 { i16 x; i16 y; } void main(){ Vec2 position; position.x = 12; position.y = position.x + 4; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Struct_initializer_resolves_named_fields_and_values()
+    {
+        var input = "struct Vec2 { u8 x; u8 y; } void main(){ u8 seed = 4; Vec2 position = { y: seed + 1, x: 2 }; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Struct_initializer_shorthand_resolves_matching_variables()
+    {
+        var input = "struct Vec2 { u8 x; u8 y; } void main(){ u8 x = 2; u8 y = 4; Vec2 position = { x, y: y + 1 }; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Struct_initializer_reports_unknown_fields_and_values()
+    {
+        var input = "struct Vec2 { u8 x; u8 y; } void main(){ Vec2 position = { z: missing }; }";
+        Errors(input).Should().ContainMatch("*field*z*")
+            .And.ContainMatch("*undeclared*missing*");
+    }
+
+    [Fact]
+    public void Type_alias_resolves_to_underlying_type()
+    {
+        var input = "type ActorIndex = u8; struct Vec2 { u8 x; u8 y; } type Position = Vec2; void main(){ ActorIndex actor = 1; Position position; position.x = actor; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Const_identifier_resolves_without_storage()
+    {
+        var input = "const u8 StartX = 40; void main(){ i16 x; x = StartX; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Hex_binary_and_separated_integer_literals_resolve_as_constants()
+    {
+        var input = "const Mask = 0b1010_0000u8; const Tile = 0x2Au8; void main(){ u8 flags = Mask | 0x0Fu8; u8 tile = Tile; u16 distance = 1_28u16; i8 delta = -1i8; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Local_const_identifier_resolves_in_block_scope()
+    {
+        var input = "void main(){ const u8 StartX = 40; const u8 Copy = StartX; u8 x; x = Copy; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Sizeof_type_expression_resolves_to_constant()
+    {
+        var input = "struct Vec2 { u8 x; u16 y; } void main(){ const u8 Size = sizeof(Vec2); const u8 PtrSize = sizeof(ptr<u8>); u8 x; x = Size + PtrSize; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Offsetof_field_expression_resolves_to_constant()
+    {
+        var input = "struct Actor { u8 x; u16 y; bool active; } void main(){ const u8 YOffset = offsetof(Actor, y); u8 x; x = YOffset; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Enum_member_access_resolves_declared_enum()
+    {
+        var input = "enum Direction { Left = 1, Right, Up = 8 } void main(){ Direction direction; direction = Direction.Right; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Fixed_size_array_constant_index_access_resolves_declared_array()
+    {
+        var input = "void main(){ u8 values[4]; values[0] = 40; values[1] = values[0]; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Fixed_size_array_hex_constant_index_access_resolves_declared_array()
+    {
+        var input = "void main(){ u8 values[4]; values[0x1] = 40; values[0b10] = values[0x1]; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Countof_fixed_size_array_resolves_to_constant()
+    {
+        var input = "void main(){ u8 values[4]; u8 size; size = countof(values); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Countof_scalar_reports_semantic_error()
+    {
+        var input = "void main(){ u8 value; u8 size; size = countof(value); }";
+        Errors(input).Should().ContainMatch("*not an array*");
+    }
+
+    [Fact]
+    public void Countof_scalar_shadow_reports_semantic_error()
+    {
+        var input = "void main(){ u8 values[4]; if (true){ u8 values; u8 size; size = countof(values); } }";
+        Errors(input).Should().ContainMatch("*not an array*");
+    }
+
+    [Fact]
+    public void Fixed_size_array_runtime_index_access_resolves_element_type()
+    {
+        var input = "void main(){ u8 values[4]; u8 i = 1; values[i] += 1; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Fixed_size_array_initializer_resolves_element_expressions()
+    {
+        var input = "void main(){ u8 seed = 1; u8 values[3] = [seed, seed + 1, 3]; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Fixed_size_array_initializer_infers_length_for_countof()
+    {
+        var input = "void main(){ u8 seed = 1; u8 values[] = [seed, seed + 1, 3]; u8 size = countof(values); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Fixed_size_array_initializer_reports_undeclared_element_symbols()
+    {
+        var input = "void main(){ u8 values[2] = [1, missing]; }";
+        Errors(input).Should().ContainMatch("*undeclared*missing*");
+    }
+
+    [Fact]
+    public void Compound_assignment_resolves_declared_lvalue()
+    {
+        var input = "void main(){ u8 x = 1; x += 2; x -= 1; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Bitwise_expressions_and_compound_assignment_resolve_declared_lvalue()
+    {
+        var input = "const Solid = 1; const Hazard = 2; const Toggle = 4; void main(){ u8 flags = 0; flags |= Solid; flags &= ~Hazard; flags ^= Toggle; u8 visible = flags & Solid; u8 toggled = flags ^ Toggle; u8 combined = flags | Toggle; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Value_returning_helper_call_expression_resolves_arguments()
+    {
+        var input = "u8 set_flag(u8 flags, u8 mask){ return flags | mask; } void main(){ u8 flags = 0; flags = set_flag(flags, 1); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Value_returning_helper_call_expression_resolves_named_arguments()
+    {
+        var input = "u8 step(u8 value, u8 amount = value + 1) => value + amount; void main(){ u8 next = step(amount: 5, value: 4); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Explicit_cast_expression_resolves_operand_and_target_type()
+    {
+        var input = "void main(){ u16 wide = 1; u8 narrowed = (u8)(wide | 2); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Increment_and_decrement_resolve_declared_lvalue()
+    {
+        var input = "void main(){ u8 x = 1; x++; x--; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void For_loop_resolves_initializer_condition_body_and_increment()
+    {
+        var input = "void main(){ u8 x = 0; for (u8 i = 0; i < 3; i += 1){ x += i; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void For_loop_resolves_postfix_increment()
+    {
+        var input = "void main(){ u8 x = 0; for (u8 i = 0; i < 3; i++){ x += i; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Range_for_loop_resolves_as_counted_loop()
+    {
+        var input = "void main(){ u8 x = 0; for (u8 i in 0..3){ x += i; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Bare_loop_resolves_break_and_continue()
+    {
+        var input = "void main(){ u8 x = 0; loop { x++; if (x == 1){ continue; } if (x == 3){ break; } } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Break_and_continue_resolve_inside_for_loop()
+    {
+        var input = "void main(){ u8 x = 0; for (u8 i = 0; i < 4; i += 1){ if (i == 1){ continue; } if (i == 3){ break; } x += 1; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Do_while_resolves_condition_body_break_and_continue()
+    {
+        var input = "void main(){ u8 x = 0; do { x++; if (x == 1){ continue; } if (x == 3){ break; } x += 2; } while (x < 4); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Logical_conditions_resolve_both_operands()
+    {
+        var input = "void main(){ u8 x = 0; u8 y = 1; if (x != 0 && y != 0){ x += 1; } if (x != 0 || y != 0){ y += 1; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Range_membership_condition_resolves_subject_and_bounds()
+    {
+        var input = "void main(){ u8 tile = 2; u8 first = 1; u8 limit = 4; if (tile in first..limit){ tile += 1; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Logical_value_expressions_resolve_both_operands()
+    {
+        var input = "void main(){ u8 x = 0; u8 y = 1; u8 both = x != 0 && y != 0; u8 either = x != 0 || y != 0; u8 notX = !(x != 0); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Conditional_value_expression_resolves_condition_and_branches()
+    {
+        var input = "void main(){ u8 moving = 1; u8 speed = moving != 0 ? 2 : 0; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Unary_not_condition_resolves_operand()
+    {
+        var input = "void main(){ u8 x = 0; if (!(x != 0)){ x += 1; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Else_if_chain_resolves_nested_conditions()
+    {
+        var input = "void main(){ u8 x = 0; if (x == 0){ x += 1; } else if (x == 1){ x += 2; } else { x += 3; } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Switch_resolves_subject_cases_and_default_blocks()
+    {
+        var input = "enum State { Idle, Run } void main(){ State state = State.Run; u8 speed; switch (state){ case State.Idle { speed = 0; } case State.Run { speed = 2; } default { speed = 1; } } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Switch_resolves_multiple_case_values()
+    {
+        var input = "enum State { Idle, Walk, Run } void main(){ State state = State.Run; u8 speed; switch (state){ case State.Idle, State.Walk { speed = 1; } case State.Run { speed = 3; } } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Switch_resolves_half_open_case_ranges()
+    {
+        var input = "const u8 LastGround = 4; enum Tile { Empty, Brick, Coin, Spike, Water } void main(){ Tile tile = Tile.Coin; u8 solid; switch (tile){ case Tile.Brick..LastGround { solid = 1; } default { solid = 0; } } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Untyped_constants_are_resolved_in_global_and_block_scopes()
+    {
+        var input = "const Start = 2; void main(){ const End = Start + 3; u8 value = End; }";
+        Errors(input).Should().BeEmpty();
+    }
+
     private IEnumerable<string> Errors(string input)
     {
         // Create a new instance of the SomeParser class.

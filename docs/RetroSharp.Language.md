@@ -2,7 +2,7 @@
 
 This document captures the current design decisions for RetroSharp, a C#-inspired language targeting 8-bit systems with zero hidden runtime. It focuses on explicit cost, portability, and predictable code generation.
 
-Status: Draft for contributors. Parser/semantic updates will follow.
+Status: Language v1 preview. Type aliases, top-level and block-local numeric constants with optional type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, top-level enums, plain local structs with named and shorthand initializer lists, `.` member access, fixed-size local byte arrays with initializer lists, initializer-inferred lengths, and constant or runtime index access, explicit casts, arithmetic and bitwise compound assignment, statement-only `++`/`--`, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, half-open range membership expressions, `while`, `do while`, `loop`, short-circuit logical conditions including unary `!`, byte-backed conditional value expressions with `condition ? whenTrue : whenFalse`, C-style `for` loops, half-open range `for` loops, `break`/`continue`, and inline helper functions with parameters, named arguments, default parameter values, single return expressions, or `=>` expression bodies are implemented for the front-end and the current Game Boy/NES cartridge targets; pointer/member access through arrays and full ABI layout work remain planned.
 
 ---
 
@@ -24,24 +24,36 @@ Canonical types in the core:
 - i8, u8, i16, u16, bool
 - ptr<T> (16-bit pointer)
 - struct, enum (plain aggregates)
+- `type Name = ExistingType;` aliases for source-level intent without layout changes
+- Top-level and block-local `const` declarations for symbolic compile-time values
 
 Rationale:
 - Width and signedness are explicit; maps 1:1 to 8/16-bit registers.
 - Simplifies ABI and codegen; avoids surprising promotions.
+- Type aliases are normalized to the underlying type before semantic lowering and target codegen. They do not create new runtime types, storage, casts, or dispatch.
+- `sizeof(type)` is compile-time only. It currently returns 1 for `i8`, `u8`, `bool`, and enum types; 2 for `i16`, `u16`, and `ptr<T>`; and the sum of field sizes for plain struct types.
+- `offsetof(type, field)` is compile-time only. It returns the byte offset of a direct field in a plain struct using the same layout as `sizeof`; nested field paths remain planned.
+- `countof(array)` is compile-time only. It returns the declared element count of a fixed-size local array visible at that point.
 
 Frontend sugar (aliases), optional:
 - byte → u8, sbyte → i8, ushort → u16, short → i16
 - int/uint/long are not supported on 8-bit targets; emit a clear error suggesting i16/u16.
 
 Literals:
-- Allow numeric suffixes: 255u8, 0x1234u16. Without suffix, the default can be target-defined (e.g., u16).
+- Current support: decimal (`42`), hexadecimal (`0x2A`), binary (`0b1010_0000`), `_` separators, and width suffixes (`255u8`, `-1i8`, `0x1234u16`, `0b1010_0000u8`) in integer literals. These are source-level forms for the same integer value and lower to the same constants or immediates as unsuffixed decimal.
+- Without suffix, the default can be target-defined (e.g., u16).
 - Minimize implicit promotions; require explicit casts when width/sign changes.
+- Explicit casts use `(type)expr`. In the current cartridge targets they are validated against byte-backed local types and then lower as zero-cost expression markers: they do not add helper calls, temporaries, sign extension, or truncation code in this prototype.
 
 ---
 
 ## 3. Structs, enums, and memory layout
 
 - struct: plain aggregates with explicit fields. No implicit padding unless requested.
+- Current cartridge-target support: local structs with byte-backed fields lower to adjacent local storage slots. Named initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` zero-fill through the same declaration path, then emit direct field stores in declaration order; omitted fields remain zero. A field shorthand such as `{ x, y: seed + 1 }` is parsed as `{ x: x, y: seed + 1 }`. This is a zero-runtime abstraction over the same byte loads/stores used by separate locals.
+- Current cartridge-target support: local fixed-size arrays of byte-backed element types use `u8 values[4];` declarations and may use initializer lists such as `u8 values[4] = [1, seed, seed + 1];`. Initializer declarations can omit the length as `u8 values[] = [1, seed, seed + 1];`; the parser infers the fixed length from the listed element count before semantic and target lowering. Constant element access lowers to direct adjacent local storage slots such as `values[0]`, `values[1]`; runtime byte-backed index access computes an address from the array base and the index. Initializer lists zero-fill through the same declaration path and then emit direct stores for the listed elements; omitted trailing elements remain zero. `countof(values)` folds to the declared or inferred element count before target lowering. There is no heap allocation, implicit bounds check, implicit index mask, hidden helper, or array object.
+- Current cartridge-target support: top-level enums use qualified member access such as `Tile.Brick`. Explicit members use their literal value; implicit members start at `0` or continue from the previous member. Enum declarations do not reserve storage, and enum locals are byte-backed in the current cartridge target path.
+- Top-level and block-local `const` declarations name numeric or boolean literals, earlier constants visible at that point, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, simple integer constant expressions using arithmetic, shift, and bitwise operators, or conditional expressions whose condition selects a constant branch. Integer literals can use decimal, `0x` hexadecimal, `0b` binary, `_` digit separators, and `u8`, `i8`, `u16`, or `i16` suffixes. Their type annotation is optional because the value is folded into literal expressions before target lowering and does not reserve RAM or ROM storage by itself.
 - Attributes for layout (planned): [packed], [align(n)], [section(".name")], [bank(n)], [zeropage] (6502), etc.
 - const data → ROM. Non-const globals → static RAM. Locals → stack. Volatile for MMIO.
 
@@ -72,8 +84,21 @@ Rationale:
 
 ## 5. Control flow and operators (core)
 
-- if, while, for, return.
-- Operators: + - * / %  & | ^ ~ << >>  == != < > <= >=  && ||
+- if/else if/else, while, do/while, loop, C-style for, half-open range for, break, continue, return.
+- Operators: + - * / %  & | ^ ~ << >>  == != < > <= >=  && ||  += -= &= |= ^=
+- `x += y`, `x -= y`, `x &= y`, `x |= y`, and `x ^= y` are assignment sugar for reading the target once as an expression, applying the operator, and storing the result back to the same lvalue. The current cartridge targets lower this to the same direct load/operation/store sequences as the expanded assignment.
+- Byte-backed `&`, `|`, and `^` lower to direct target bit operations for flag masks. Constant masks, including `~Mask`, fold before target lowering; byte-backed runtime masks use direct register or zero-page/WRAM operations where supported. There is no helper call, hidden local, or materialized boolean.
+- `x++` and `x--` are statement-only mutation sugar for `x += 1` and `x -= 1`; they are also allowed in the increment slot of `for`. They are not value expressions, so they introduce no temporary, no unspecified evaluation order, and no hidden runtime helper.
+- `else if` is source-level conditional nesting. The current cartridge targets lower it as an `else` branch containing another `if`, so it adds no dispatcher, state machine, or runtime helper beyond the direct branches the equivalent nested code would use.
+- `switch (expr) { case Value { ... } default { ... } }` is structured branch sugar with no fallthrough. Each case owns a block; `break` is not required between cases. Multi-value cases use `case A, B { ... }` and lower to `expr == A || expr == B`. Half-open range cases use `case A..B { ... }` and lower to `expr >= A && expr < B`. The current cartridge targets lower switches to `if`/`else if` compare chains using direct comparisons and short-circuit branches, so they add no table, dispatcher, helper call, or hidden state.
+- `value in start..end` is a half-open range membership expression. It lowers to `value >= start && value < end`, using the same short-circuit compare branches as the hand-written expression. It does not create a range object, helper call, hidden local, hidden bounds check, or implicit subject cache.
+- In conditions, `&&` and `||` use short-circuit control flow. `a && b` emits a false branch after `a` before evaluating `b`; `a || b` emits a true branch after `a` and skips `b` when possible. Unary `!` inverts the branch direction. When these forms are used as byte-backed value expressions, the current cartridge targets materialize `1` or `0` with direct branches and no helper call or hidden storage.
+- `condition ? whenTrue : whenFalse` is a byte-backed conditional value expression. The current cartridge targets lower it to the same direct branch machinery as `if`: evaluate the condition, emit only the selected branch expression on each path, and store the selected byte. There is no helper call, hidden local, or eager evaluation of both branches.
+- `for (init; condition; increment) { ... }` is structured control-flow sugar. The current cartridge targets emit the initializer once, a branchable condition check, the body, the increment, and a jump back to the loop condition; there is no iterator object, hidden call, or runtime helper.
+- `for (u8 i in start..end) { ... }` is half-open range sugar for `for (u8 i = start; i < end; i++) { ... }`. The range start initializes the loop local once; the end expression is the loop condition's exclusive upper bound and is evaluated wherever that condition would be evaluated. There is no iterator object, hidden temporary, hidden bounds check, helper call, or runtime range value.
+- `loop { ... }` is explicit infinite-loop sugar for `while (true) { ... }`. The current cartridge targets emit the loop body and a direct jump back to its start; `continue` jumps to the start label, and `break` jumps to the end label. There is no condition expression, hidden state, helper call, or local storage.
+- `do { ... } while (condition);` is a post-test loop. The current cartridge targets emit the body first, place the `continue` target at the final condition check, and branch directly back to the body while the condition is true. There is no hidden state or helper call.
+- `break` and `continue` are direct control-flow jumps. In a `for` loop, `continue` jumps to the increment slot before returning to the condition; in a `while` loop, it jumps back to the loop condition.
 - Casts are explicit. Overflow is unchecked by default; opt-in checked mode can be added.
 
 ---
@@ -81,6 +106,7 @@ Rationale:
 ## 6. Functions and ABI (sketch)
 
 - Signature: RetType Name(params) { ... }
+- Current Game Boy/NES cartridge targets inline user helper calls with parameter substitution. Statement helpers expand their block; value helpers are accepted when the body is exactly one `return expr;` and expand to that expression. Expression-bodied helpers use `Ret name(args) => expr;` and are normalized to the same single-return helper shape before target lowering. Call sites can use named arguments such as `step(amount: 5, value: 4)`, which are reordered against the helper signature before lowering. Parameters can provide defaults with `type name = expr`; omitted defaults are substituted before lowering and may reference constants or earlier parameters visible at that point. This provides reusable source-level helpers without call overhead, stack setup, hidden storage, or ABI cost.
 - Return registers: u8 → A; u16 → HL (Z80) or A:X (6502).
 - Parameters on stack by default; attributes may enable fastcall via registers.
 - Attributes (planned): [inline], [naked], [fastcall], [regs(HL,DE)], [intrinsic], [romcall(addr)], [target(...)].
@@ -100,34 +126,107 @@ Platform-specific (examples): Spectrum out/in/map_bank, GameBoy oam_dma/ppu_*, N
 
 ## 8. Grammar updates (EBNF excerpt)
 
-Adds member access as an expression and as an lvalue. One-level implicit deref in semantics.
+Current parser support includes top-level plain enum and struct declarations, identifier-based member access as an expression and as an lvalue, and local fixed-size array declarations with constant or byte-backed runtime index reads/writes. Pointer/member forms through array elements remain planned.
 
 ```
+ConstDecl     = "const" Type? Ident "=" ConstExpr ";" ;
+TypeAlias     = "type" Ident "=" Type ";" ;
+ConstExpr     = Literal | EarlierConstIdent | SizeOf | OffsetOf | CountOf
+              | ConstExpr "?" ConstExpr ":" ConstExpr
+              | ConstExpr ("+" | "-" | "*" | "/" | "%" | "<<" | ">>" | "&" | "^" | "|") ConstExpr
+              | ("+" | "-" | "~") ConstExpr ;
+SizeOf        = "sizeof" "(" Type ")" ;
+OffsetOf      = "offsetof" "(" Type "," Ident ")" ;
+CountOf       = "countof" "(" Ident ")" ;
+EnumDecl      = "enum" Ident "{" EnumMember ("," EnumMember)* ","? "}" ;
+EnumMember    = Ident ("=" Expr)? ;
+StructDecl    = "struct" Ident "{" Field* "}" ;
+Field         = Type Ident ";" ;
+Statement     = ConstDecl | VarDecl | Assignment ";" | PostfixMutation ";" | If | Switch | While | DoWhile | Loop | ForLoop | RangeForLoop | Break | Continue | Return ;
+Function      = Type Ident "(" Parameters? ")" (Block | "=>" Expr ";") ;
+Parameter     = Type Ident ("=" Expr)? ;
+FunctionCall  = Ident "(" Arguments? ")" ;
+Arguments     = Argument ("," Argument)* ;
+Argument      = Ident ":" Expr | Expr ;
+VarDeclarator = Type Ident ("[" Expr? "]")? ("=" VariableInitializer)? ;
+VariableInitializer = ArrayInitializer | StructInitializer | Expr ;
+ArrayInitializer = "[" (Expr ("," Expr)* ","?)? "]" ;
+StructInitializer = "{" (FieldInitializer ("," FieldInitializer)* ","?)? "}" ;
+FieldInitializer = Ident (":" Expr)? ;
+VarDecl       = VarDeclarator ";" ;
+Assignment    = LValue ("=" | "+=" | "-=" | "&=" | "|=" | "^=") Expr ;
+ConditionalExpr = OrExpr ("?" Expr ":" Expr)? ;
+RangeMembershipExpr = ShiftExpr "in" ShiftExpr ".." ShiftExpr ;
+PostfixMutation = LValue ("++" | "--") ;
+ForLoop       = "for" "(" (VarDeclarator | Assignment)? ";" Expr? ";" (Assignment | PostfixMutation)? ")" Block ;
+RangeForLoop  = "for" "(" Type Ident "in" Expr ".." Expr ")" Block ;
+DoWhile       = "do" Block "while" "(" Expr ")" ";" ;
+Loop          = "loop" Block ;
+If            = "if" "(" Expr ")" Block ("else" (If | Block))? ;
+Switch        = "switch" "(" Expr ")" "{" SwitchCase+ DefaultCase? "}" ;
+SwitchCase    = "case" SwitchCasePattern ("," SwitchCasePattern)* Block ;
+SwitchCasePattern = Expr (".." Expr)? ;
+DefaultCase   = "default" Block ;
+Break         = "break" ";" ;
+Continue      = "continue" ";" ;
 LValue        = MemberAccess | "*" Expr | Ident "[" Expr "]" | Ident ;
-MemberAccess  = Base "." Ident ;
-Base          = Ident | "(" Expr ")" | Ident "[" Expr "]" | "*" Expr ;
+MemberAccess  = Ident ("." Ident)+ ;
+IndexAccess   = Ident "[" Expr "]" ;
 
 Primary       = Number | Char | "true" | "false"
-              | MemberAccess | Ident | Ident "[" Expr "]" | "(" Expr ")" ;
+              | SizeOf | OffsetOf | CountOf | FunctionCall | MemberAccess | IndexAccess | Ident | "(" Expr ")" ;
 ```
 
-Note: The parser will be updated to reflect this. Until then, code using '.' may not parse.
+The semantic analyzer resolves type aliases, declared constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enum members, struct fields, struct initializer fields including shorthand fields, array element access, array initializer elements, initializer-inferred fixed array lengths, statement-only postfix mutations, explicit `loop` blocks, half-open range `for` loops, no-fallthrough `switch` cases, half-open range membership expressions, conditional value expressions, and named helper-argument expressions through compile-time tables and structured scopes. Game Boy and NES normalize aliases to their underlying types, fold top-level and block-local constants with or without type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members into literals, lower named helper arguments and defaults to positional parameter substitutions, lower struct and array initializer lists to the same direct stores as explicit assignments, lower `loop` blocks to `while (true)`, lower range `for` loops to counted `for` loops, lower `++`/`--` to compound assignments, lower `switch` statements to `if`/`else` compare chains, lower multi-value cases to short-circuit `||` comparisons, lower half-open range cases and `value in start..end` expressions to `>=` and `<` short-circuit bounds checks, lower logical value expressions and `condition ? whenTrue : whenFalse` to direct branch materialization, lower bitwise flag operations to direct AND/OR/XOR instructions, and lower current local struct fields and fixed array elements by flattening names such as `position.x` and `values[0]` into adjacent local byte storage.
 
 ---
 
 ## 9. Examples
 
-Value and pointer access:
+Value access:
 
 ```c
+const StartX = 72;
+type ActorIndex = u8;
+
+enum Tile { Empty, Brick, Ladder, Bonus }
+
 struct Vec2 { i16 x; i16 y; }
 
 void f() {
     Vec2 v;
-    v.x = 10;
+    Tile tile = Tile.Brick;
+    ActorIndex actor = 1;
+    u8 history[4];
+    const HistorySize = countof(history);
+    switch (tile) {
+        case Tile.Empty, Tile.Brick {
+            actor = 0;
+        }
+        case Tile.Ladder..Tile.Bonus {
+            actor = 1;
+        }
+        default {
+            actor = 2;
+        }
+    }
+    v.x = StartX;
+    history[0] = v.x;
+    history[0]++;
+    history[1] = history[0];
+    for (u8 i in 0..HistorySize) {
+        if (i == 1) {
+            continue;
+        }
+        history[i] += 1;
+    }
     i16 t = v.y;
 }
+```
 
+Planned pointer access:
+
+```c
 void g(ptr<Vec2> p) {
     p.x = 1;
     p.y = p.y + 4;
@@ -137,11 +236,13 @@ void g(ptr<Vec2> p) {
 
 ---
 
-## 10. Status and next steps
+## 10. V1 closure and next steps
 
-- Implement parser changes for member access and extend lvalue recognition.
+- Extend member access beyond identifier-based local structs to pointer targets, array elements, and address-of fields.
+- Extend array support from local byte-backed elements to struct elements, pointer-backed arrays, and wider element layouts.
+- Extend enum support beyond byte-backed cartridge-target locals when the shared ABI and wider integer layout are implemented.
 - Enforce canonical types and friendly errors for disallowed aliases (int/long).
-- Add unit tests covering struct field access (value/pointer/array), address-of, and codegen offsets.
+- Add unit tests covering pointer/array field access, address-of, and backend-specific word-sized field layout.
 - Document ABI details per backend (register conventions, preserved registers).
 
 ---

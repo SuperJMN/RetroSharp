@@ -68,6 +68,14 @@ internal class SemanticSnapshotPrinter : INodeVisitor
         WriteLine(symbol + ";");
     }
 
+    public void VisitConstDeclarationNode(ConstDeclarationNode node)
+    {
+        var symbol = node.Scope.Get(node.Name).Match(x => x.ToString(), () => $"<Unknown '{node.Name}'>");
+        Write("const " + symbol + "=");
+        node.Value.Accept(this);
+        sb.AppendLine(";");
+    }
+
     public void VisitExpressionStatement(ExpressionStatementNode node)
     {
         // One-liner expression
@@ -110,8 +118,39 @@ internal class SemanticSnapshotPrinter : INodeVisitor
         VisitOperand(node, node.Right);
     }
 
+    public void VisitConditionalExpression(ConditionalExpressionNode node)
+    {
+        node.Condition.Accept(this);
+        sb.Append("?");
+        node.WhenTrue.Accept(this);
+        sb.Append(":");
+        node.WhenFalse.Accept(this);
+    }
+
+    public void VisitUnaryExpression(UnaryExpressionNode node)
+    {
+        sb.Append(node.OperatorSymbol);
+        if (node.Operand is BinaryExpressionNode or ConditionalExpressionNode)
+        {
+            sb.Append("(");
+            node.Operand.Accept(this);
+            sb.Append(")");
+            return;
+        }
+
+        node.Operand.Accept(this);
+    }
+
     private void VisitOperand(BinaryExpressionNode parent, ExpressionNode child)
     {
+        if (child is ConditionalExpressionNode)
+        {
+            sb.Append("(");
+            child.Accept(this);
+            sb.Append(")");
+            return;
+        }
+
         if (child is BinaryExpressionNode bin && bin.Operator.Precedence > parent.Operator.Precedence)
         {
             sb.Append("(");
@@ -152,6 +191,47 @@ internal class SemanticSnapshotPrinter : INodeVisitor
         }
     }
 
+    public void VisitFor(ForNode forNode)
+    {
+        sb.Append(new string('\t', indent));
+        sb.Append("for (");
+        forNode.Initializer.Execute(initializer => initializer.Accept(this));
+        sb.Append("; ");
+        forNode.Condition.Execute(condition => condition.Accept(this));
+        sb.Append("; ");
+        forNode.Increment.Execute(increment => increment.Accept(this));
+        sb.AppendLine(")");
+        forNode.Body.Accept(this);
+    }
+
+    public void VisitDoWhile(DoWhileNode doWhileNode)
+    {
+        WriteLine("do");
+        doWhileNode.Body.Accept(this);
+        sb.Append(new string('\t', indent));
+        sb.Append("while (");
+        doWhileNode.Condition.Accept(this);
+        sb.AppendLine(");");
+    }
+
+    public void VisitLoop(LoopNode loopNode)
+    {
+        WriteLine("loop");
+        loopNode.Body.Accept(this);
+    }
+
+    public void VisitBreak(BreakNode breakNode)
+    {
+        sb.Append(new string('\t', indent));
+        sb.AppendLine("break;");
+    }
+
+    public void VisitContinue(ContinueNode continueNode)
+    {
+        sb.Append(new string('\t', indent));
+        sb.AppendLine("continue;");
+    }
+
     public void VisitFunctionCall(FunctionCallExpressionNode functionCall)
     {
         sb.Append(functionCall.Name);
@@ -164,5 +244,21 @@ internal class SemanticSnapshotPrinter : INodeVisitor
             arg.Accept(this);
         }
         sb.Append(")");
+    }
+
+    public void VisitCastExpression(CastExpressionNode castExpressionNode)
+    {
+        sb.Append("(");
+        sb.Append(castExpressionNode.Type);
+        sb.Append(")");
+        if (castExpressionNode.Expression is BinaryExpressionNode or ConditionalExpressionNode)
+        {
+            sb.Append("(");
+            castExpressionNode.Expression.Accept(this);
+            sb.Append(")");
+            return;
+        }
+
+        castExpressionNode.Expression.Accept(this);
     }
 }

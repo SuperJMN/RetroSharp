@@ -2,6 +2,8 @@
 
 Samples are classified by architectural layer in `samples/manifest.json`.
 
+Current samples use the language v1 surface where it helps readability without hiding target cost: symbolic `const` values, enums for tile/flag names, aliases for byte-backed values, `loop` for intentional infinite loops, and compound mutation syntax for direct state updates.
+
 | Layer | Meaning |
 | --- | --- |
 | `portable-sdk` | A source sample that is allowed to prove cross-target SDK portability. It must not call target intrinsics or transitional helpers. |

@@ -8,7 +8,7 @@ Build a Game Boy ROM with the first Window HUD prototype:
 dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out hud.gb hud.rs
 ```
 
-This sample uses `hud_set_tile(window, x, y, tile)` to place static HUD tiles in the Game Boy Window tilemap.
+This sample uses `hud_set_tile(window, x, y, tile)` to place static HUD tiles in the Game Boy Window tilemap. Tile ids are named with a small enum, which folds to the same static bytes before lowering.
 
 Current restrictions:
 

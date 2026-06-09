@@ -12,6 +12,14 @@ public class PrintNodeVisitor : INodeVisitor
         resultBuilder.AppendLine(new string('\t', indentationLevel) + $"{node.Scope.Get(node.Name).Value};");
     }
 
+    public void VisitConstDeclarationNode(ConstDeclarationNode node)
+    {
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.Append($"const {node.Scope.Get(node.Name).Value}=");
+        node.Value.Accept(this);
+        resultBuilder.AppendLine(";");
+    }
+
     public void VisitBlockNode(BlockNode node)
     { 
         resultBuilder.AppendLine(new string('\t', indentationLevel) + "{");
@@ -79,9 +87,40 @@ public class PrintNodeVisitor : INodeVisitor
         resultBuilder.Append(binaryExpressionNode.Operator.Symbol);
         VisitOperand(binaryExpressionNode, binaryExpressionNode.Right);
     }
+
+    public void VisitConditionalExpression(ConditionalExpressionNode conditionalExpressionNode)
+    {
+        conditionalExpressionNode.Condition.Accept(this);
+        resultBuilder.Append("?");
+        conditionalExpressionNode.WhenTrue.Accept(this);
+        resultBuilder.Append(":");
+        conditionalExpressionNode.WhenFalse.Accept(this);
+    }
+
+    public void VisitUnaryExpression(UnaryExpressionNode unaryExpressionNode)
+    {
+        resultBuilder.Append(unaryExpressionNode.OperatorSymbol);
+        if (unaryExpressionNode.Operand is BinaryExpressionNode or ConditionalExpressionNode)
+        {
+            resultBuilder.Append("(");
+            unaryExpressionNode.Operand.Accept(this);
+            resultBuilder.Append(")");
+            return;
+        }
+
+        unaryExpressionNode.Operand.Accept(this);
+    }
     
     private void VisitOperand(BinaryExpressionNode parent, ExpressionNode child)
     {
+        if (child is ConditionalExpressionNode)
+        {
+            resultBuilder.Append("(");
+            child.Accept(this);
+            resultBuilder.Append(")");
+            return;
+        }
+
         if (child is BinaryExpressionNode childBinary)
         {
             if (childBinary.Operator.Precedence > parent.Operator.Precedence)
@@ -122,6 +161,47 @@ public class PrintNodeVisitor : INodeVisitor
         }
     }
 
+    public void VisitDoWhile(DoWhileNode doWhileNode)
+    {
+        resultBuilder.AppendLine(new string('\t', indentationLevel) + "do");
+        doWhileNode.Body.Accept(this);
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.Append("while (");
+        doWhileNode.Condition.Accept(this);
+        resultBuilder.AppendLine(");");
+    }
+
+    public void VisitLoop(LoopNode loopNode)
+    {
+        resultBuilder.AppendLine(new string('\t', indentationLevel) + "loop");
+        loopNode.Body.Accept(this);
+    }
+
+    public void VisitFor(ForNode forNode)
+    {
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.Append("for (");
+        forNode.Initializer.Execute(initializer => initializer.Accept(this));
+        resultBuilder.Append("; ");
+        forNode.Condition.Execute(condition => condition.Accept(this));
+        resultBuilder.Append("; ");
+        forNode.Increment.Execute(increment => increment.Accept(this));
+        resultBuilder.AppendLine(")");
+        forNode.Body.Accept(this);
+    }
+
+    public void VisitBreak(BreakNode breakNode)
+    {
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.AppendLine("break;");
+    }
+
+    public void VisitContinue(ContinueNode continueNode)
+    {
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.AppendLine("continue;");
+    }
+
     public void VisitFunctionCall(FunctionCallExpressionNode functionCall)
     {
         resultBuilder.Append(functionCall.Name);
@@ -134,6 +214,22 @@ public class PrintNodeVisitor : INodeVisitor
             arg.Accept(this);
         }
         resultBuilder.Append(")");
+    }
+
+    public void VisitCastExpression(CastExpressionNode castExpressionNode)
+    {
+        resultBuilder.Append("(");
+        resultBuilder.Append(castExpressionNode.Type);
+        resultBuilder.Append(")");
+        if (castExpressionNode.Expression is BinaryExpressionNode or ConditionalExpressionNode)
+        {
+            resultBuilder.Append("(");
+            castExpressionNode.Expression.Accept(this);
+            resultBuilder.Append(")");
+            return;
+        }
+
+        castExpressionNode.Expression.Accept(this);
     }
 
     public override string ToString()

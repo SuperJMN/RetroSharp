@@ -1,7 +1,7 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-06-08.
+Last updated: 2026-06-09.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
@@ -34,11 +34,12 @@ Language work belongs here:
 
 - Fixed-width primitives: `u8`, `i8`, `u16`, `i16`, `bool`.
 - Pointers and addressable storage: `ptr<T>`, static data, ROM data, RAM data.
-- `struct`, `enum`, fixed-size arrays, constants, casts, and operators.
+- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local byte arrays with initializer lists, initializer-inferred lengths, and constant or runtime byte indices, explicit casts to byte-backed local types, arithmetic and bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, explicit infinite `loop`, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; the shared ABI/layout work remains broader.
 - Functions, parameters, returns, calling convention, and attributes.
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
 - Target attributes such as `[target("gb")]` or `[intrinsic]`.
 - Namespaces or modules if needed to separate SDK and intrinsics.
+- Zero-cost high-level ergonomics such as SDK namespaced dot calls, struct receiver methods, immutable `let` locals, switch expressions, static pipeline syntax, purity/inline contracts, and compile-time-only traits or constraints, provided they lower to direct calls, branches, local storage, or constants. These features must not require heap allocation, delegates, closure objects, boxing, virtual dispatch, runtime interface tables, or object identity.
 
 ### Portable 2D SDK
 
@@ -971,6 +972,76 @@ Status: landed 2026-06-08.
 - Verification:
   - [x] A single test command covers the portable sample builds and one unsupported-feature diagnostic.
   - [x] `dotnet test src/RetroSharp.Cli.Tests/RetroSharp.Cli.Tests.csproj --no-restore --filter CrossTargetCliAcceptanceTests`
+
+### Language V1 Closure
+
+Status: landed 2026-06-09.
+
+Purpose: close the current language work as a coherent zero-cost v1 surface for the Game Boy/NES cartridge targets instead of continuing to add syntax indefinitely.
+
+This iteration treats the implemented source forms as v1 when they satisfy two rules:
+
+- They compile through parser, semantic analysis, and the current cartridge targets.
+- They lower to constants, direct branches, direct local storage, direct bit operations, or source-level inline expansion without hidden heap allocation, dispatch tables, closures, iterators, exceptions, or runtime objects.
+
+V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local byte arrays, initializer lists, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `loop`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
+
+Tasks:
+
+- [x] Keep the v1 language surface bounded to features implemented by the front-end and current Game Boy/NES cartridge targets.
+- [x] Document remaining gaps as pointer/member access through arrays, address-of fields, wider ABI/layout, backend calling conventions, and canonical-type diagnostics.
+- [x] Migrate runnable samples to use the v1 style where it improves clarity without changing target behavior.
+- [x] Keep diagnostic samples simple enough to isolate target regressions while still using the stable `loop` and mutation syntax.
+- [x] Move dot-call SDK namespaces, receiver methods, immutable `let`, switch expressions, pipeline syntax, explicit `pure`/`inline` contracts, and trait-like constraints out of v1 and into post-v1 candidates.
+
+Verification:
+
+- [x] Cross-target portable sample builds for Game Boy and NES.
+- [x] Game Boy runner sample builds after migration.
+- [x] Game Boy drawing, HUD, runner diagnostics, and NES drawing samples build after migration.
+
+### Iteration 12: Post-V1 Zero-Cost High-Level Language Surface
+
+Status: post-v1 candidate.
+
+Purpose: make RetroSharp read more like a compact modern C#/functional language while keeping emitted Game Boy/NES code equivalent to hand-written low-level helpers.
+
+This iteration deliberately stays outside language v1. It also excludes managed object features, runtime polymorphism, closures/delegates, lambda syntax, and built-in `Option`/`Result` abstractions until their ergonomics and runtime model are justified for the current 8-bit target constraints.
+
+Tasks:
+
+- Add SDK namespaced dot-call syntax such as `video.Init()`, `input.Poll()`, `camera.SetPosition(x, y)`, and `sprites.Draw(...)`.
+  - Treat the left side as a compile-time SDK namespace/module, not as a runtime object instance.
+  - Resolve calls statically to existing or future SDK operations such as `video_init()`, `input_poll()`, and `camera_set_position(...)`.
+  - Preserve target capability checks before lowering.
+- Add struct receiver/extension methods such as `actor.Move(dx, dy)`.
+  - Resolve them statically to helper calls such as `Actor_Move(ref actor, dx, dy)` or to an inline equivalent.
+  - Support an explicit receiver form in the declaration model, for example `ref this Actor actor`, without adding object identity or dynamic dispatch.
+  - Keep the feature available only where the receiver type is known at compile time.
+- Add immutable local bindings with `let`.
+  - Lower `let name = expr;` to the same constant, immediate, or local storage form that an equivalent read-only local would use.
+  - Reject reassignment in semantic analysis.
+  - Prefer constant folding when the initializer is compile-time evaluable.
+- Add switch expressions for byte-backed values.
+  - Lower `state switch { State.Idle => 0, State.Run => 2, _ => 1 }` to the same no-fallthrough compare branches as statement `switch`.
+  - Require branch result types to be compatible before target lowering.
+- Add static pipeline syntax.
+  - Lower `value |> Clamp(0, 120) |> SnapToTile()` to ordinary nested static calls or inline helper expansion.
+  - Do not create pipe objects, range objects, iterators, or temporaries beyond what the lowered expression requires.
+- Add `pure` and `inline` source contracts for helper functions.
+  - `pure` is a compile-time promise checked against the supported subset; it must not emit runtime code by itself.
+  - `inline` requests the existing parameter-substitution lowering and should fail clearly when a function cannot be inlined in the current target path.
+- Add compile-time-only traits or constraints for future generic-looking helpers only if the target code remains monomorphized or statically resolved.
+  - No runtime `interface`, vtable, boxing, virtual dispatch, or reflection support.
+  - Any trait-like feature must be proven with emitted-code tests that compare against the direct helper equivalent.
+
+Acceptance criteria:
+
+- Each new syntax form has parser tests, semantic tests, and Game Boy/NES emitted-code tests where it reaches cartridge targets.
+- Every accepted example lowers to direct branches, direct helper calls, inline substitutions, constants, or existing local storage.
+- There is no new runtime allocation, runtime dispatch table, delegate representation, closure object, or hidden iterator/range object.
+- SDK namespaced calls and struct receiver methods are represented as distinct concepts in the semantic model even though both use dot-call syntax.
+- Docs explicitly state that this iteration adds high-level source ergonomics, not managed objects or polymorphism.
 
 ## First Recommended Implementation Slice
 

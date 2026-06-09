@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
@@ -62,22 +63,60 @@ internal sealed class NesVideoProgram
 
     public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
 
+    public required IReadOnlyDictionary<string, EnumSyntax> Enums { get; init; }
+
+    public required IReadOnlyDictionary<string, StructSyntax> Structs { get; init; }
+
     public required BlockSyntax MainBlock { get; init; }
 
     public static NesVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
+        program = ConstantFolder.Fold(program);
+
         var main = program.Functions.FirstOrDefault(f => f.Name == "main")
                    ?? throw new InvalidOperationException("NES target requires a main function.");
 
         var functions = BuildFunctionIndex(program.Functions);
+        var enums = BuildEnumIndex(program.Enums);
+        var structs = BuildStructIndex(program.Structs);
         var result = new NesVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
             Functions = functions,
+            Enums = enums,
+            Structs = structs,
             MainBlock = main.Block,
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
+        return result;
+    }
+
+    private static Dictionary<string, EnumSyntax> BuildEnumIndex(IEnumerable<EnumSyntax> enums)
+    {
+        var result = new Dictionary<string, EnumSyntax>();
+        foreach (var enumSyntax in enums)
+        {
+            if (!result.TryAdd(enumSyntax.Name, enumSyntax))
+            {
+                throw new InvalidOperationException($"Enum '{enumSyntax.Name}' is already declared.");
+            }
+        }
+
+        return result;
+    }
+
+    private static Dictionary<string, StructSyntax> BuildStructIndex(IEnumerable<StructSyntax> structs)
+    {
+        var result = new Dictionary<string, StructSyntax>();
+        foreach (var structSyntax in structs)
+        {
+            if (!result.TryAdd(structSyntax.Name, structSyntax))
+            {
+                throw new InvalidOperationException($"Struct '{structSyntax.Name}' is already declared.");
+            }
+        }
+
         return result;
     }
 
@@ -165,8 +204,6 @@ internal sealed class NesVideoProgram
             return;
         }
 
-        RequireParameterlessUserFunction(call, function);
-
         if (!callStack.Add(function.Name))
         {
             throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
@@ -174,7 +211,7 @@ internal sealed class NesVideoProgram
 
         try
         {
-            ApplyStaticVideoCalls(function.Block, callStack);
+            ApplyStaticVideoCalls(ParameterSubstitution.Substitute(function, call, "NES"), callStack);
         }
         finally
         {
@@ -355,15 +392,6 @@ internal sealed class NesVideoProgram
         }
     }
 
-    internal static void RequireParameterlessUserFunction(FunctionCall call, FunctionSyntax function)
-    {
-        var argumentCount = call.Parameters.Count();
-        if (argumentCount != 0 || function.Parameters.Count != 0)
-        {
-            throw new InvalidOperationException($"NES target only supports parameterless user function calls. '{call.Name}' declares {function.Parameters.Count} parameter(s) and was called with {argumentCount} argument(s).");
-        }
-    }
-
     internal static void RequireArity(FunctionCall call, int expected)
     {
         var actual = call.Parameters.Count();
@@ -380,6 +408,11 @@ internal sealed class NesVideoProgram
 
     internal static int ConstValue(ExpressionSyntax expression, string context)
     {
+        if (expression is CastSyntax cast)
+        {
+            return ConstValue(cast.Expression, context);
+        }
+
         if (expression is not ConstantSyntax constant)
         {
             throw new InvalidOperationException($"{context} must be a constant integer.");
@@ -396,7 +429,7 @@ internal sealed class NesVideoProgram
             return 0;
         }
 
-        if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+        if (!IntegerLiteral.TryParse(text, out var value))
         {
             throw new InvalidOperationException($"{context} must be a constant integer.");
         }
@@ -412,6 +445,25 @@ internal sealed class NesVideoProgram
         }
 
         throw new InvalidOperationException($"{context} must be an identifier.");
+    }
+
+    internal static string MemberAccessName(MemberAccessSyntax memberAccess)
+    {
+        var parts = new Stack<string>();
+        ExpressionSyntax current = memberAccess;
+        while (current is MemberAccessSyntax member)
+        {
+            parts.Push(member.Member);
+            current = member.Target;
+        }
+
+        if (current is not IdentifierSyntax identifier)
+        {
+            throw new InvalidOperationException("NES member access currently requires an identifier base.");
+        }
+
+        parts.Push(identifier.Identifier);
+        return string.Join(".", parts);
     }
 
     internal static void ValidateHudSetTile(FunctionCall call)

@@ -26,4 +26,4 @@ Supported target-intrinsic calls in this first slice:
 - `tilemap_fill(x, y, width, height, tile)`
 - `video_present()`
 
-Parameterless helper functions can group those calls.
+Parameterless helper functions can group those calls. This sample uses top-level `const` values and a tile enum so static target-intrinsic data has names without changing the emitted setup work.

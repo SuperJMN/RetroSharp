@@ -3,6 +3,7 @@
 public interface INodeVisitor
 {
     void VisitDeclarationNode(DeclarationNode node);
+    void VisitConstDeclarationNode(ConstDeclarationNode node);
     void VisitBlockNode(BlockNode node);
     void VisitFunctionNode(FunctionNode node);
     void VisitProgramNode(ProgramNode node);
@@ -13,7 +14,15 @@ public interface INodeVisitor
     void VisitUnknownSymbol(UnknownSymbol unknownSymbol);
     void VisitSymbolExpression(SymbolExpressionNode symbolExpressionNode);
     void VisitBinaryExpression(BinaryExpressionNode binaryExpressionNode);
+    void VisitUnaryExpression(UnaryExpressionNode unaryExpressionNode);
+    void VisitCastExpression(CastExpressionNode castExpressionNode);
+    void VisitConditionalExpression(ConditionalExpressionNode conditionalExpressionNode);
     void VisitReturn(ReturnNode returnNode);
     void VisitIfElse(IfElseNode ifElseNode);
+    void VisitDoWhile(DoWhileNode doWhileNode);
+    void VisitLoop(LoopNode loopNode);
+    void VisitFor(ForNode forNode);
+    void VisitBreak(BreakNode breakNode);
+    void VisitContinue(ContinueNode continueNode);
     void VisitFunctionCall(FunctionCallExpressionNode functionCall);
 }

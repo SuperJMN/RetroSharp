@@ -1,3 +1,4 @@
+using RetroSharp.Core;
 using RetroSharp.Parser;
 
 namespace RetroSharp.NES;
@@ -237,7 +238,9 @@ internal sealed class NesRuntimeCompiler
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly Dictionary<string, byte> variables = [];
+    private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
+    private readonly Stack<LoopTarget> loopTargets = [];
     private byte nextVariableAddress = FirstVariableAddress;
     private int nextHardwareSprite;
     private bool cameraConfigured;
@@ -316,6 +319,26 @@ internal sealed class NesRuntimeCompiler
             case WhileSyntax whileSyntax:
                 EmitWhile(whileSyntax);
                 return false;
+            case DoWhileSyntax doWhileSyntax:
+                EmitDoWhile(doWhileSyntax);
+                return false;
+            case LoopSyntax loopSyntax:
+                EmitWhile(LoopLowerer.Lower(loopSyntax));
+                return false;
+            case RangeForSyntax rangeForSyntax:
+                EmitFor(RangeForLowerer.Lower(rangeForSyntax));
+                return false;
+            case ForSyntax forSyntax:
+                EmitFor(forSyntax);
+                return false;
+            case IfElseSyntax ifElseSyntax:
+                return EmitIf(ifElseSyntax);
+            case BreakSyntax:
+                EmitBreak();
+                return true;
+            case ContinueSyntax:
+                EmitContinue();
+                return true;
             case ReturnSyntax:
                 return true;
             default:
@@ -325,23 +348,77 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitDeclaration(DeclarationSyntax declaration)
     {
-        if (!IsByteBackedType(declaration.Type))
+        if (declaration.ArrayLength.HasValue)
         {
-            throw new InvalidOperationException($"NES target does not support local type '{declaration.Type}' yet.");
+            EmitArrayDeclaration(declaration);
+            return;
         }
 
-        if (variables.ContainsKey(declaration.Name))
+        if (IsByteBackedLocalType(declaration.Type))
+        {
+            EmitByteBackedDeclaration(declaration);
+            return;
+        }
+
+        if (program.Structs.TryGetValue(declaration.Type, out var structSyntax))
+        {
+            EmitStructDeclaration(declaration, structSyntax);
+            return;
+        }
+
+        throw new InvalidOperationException($"NES target does not support local type '{declaration.Type}' yet.");
+    }
+
+    private void EmitArrayDeclaration(DeclarationSyntax declaration)
+    {
+        if (!IsByteBackedLocalType(declaration.Type))
+        {
+            throw new InvalidOperationException($"NES target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
+        }
+
+        if (!declaredVariables.Add(declaration.Name))
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
 
-        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        var length = CheckedRange(NesVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
+        var elementAddresses = new List<byte>();
+        for (var index = 0; index < length; index++)
         {
-            throw new InvalidOperationException("NES target local variables exceed the current prototype zero-page allocation.");
+            var address = DeclareVariable(IndexedElementName(declaration.Name, index));
+            elementAddresses.Add(address);
+            builder.LoadAImmediate(0);
+            builder.StoreAZeroPage(address);
         }
 
-        var address = nextVariableAddress++;
-        variables.Add(declaration.Name, address);
+        if (declaration.Initialization.HasValue)
+        {
+            EmitArrayInitializer(declaration, declaration.Initialization.Value, length, elementAddresses);
+        }
+    }
+
+    private void EmitArrayInitializer(DeclarationSyntax declaration, ExpressionSyntax initialization, int length, IReadOnlyList<byte> elementAddresses)
+    {
+        if (initialization is not ArrayInitializerSyntax arrayInitializer)
+        {
+            throw new InvalidOperationException($"NES target requires an array initializer for local array '{declaration.Name}'.");
+        }
+
+        if (arrayInitializer.Elements.Count > length)
+        {
+            throw new InvalidOperationException($"NES target array initializer for '{declaration.Name}' has {arrayInitializer.Elements.Count} element(s), but the array length is {length}.");
+        }
+
+        for (var index = 0; index < arrayInitializer.Elements.Count; index++)
+        {
+            EmitExpressionToA(arrayInitializer.Elements[index]);
+            builder.StoreAZeroPage(elementAddresses[index]);
+        }
+    }
+
+    private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
+    {
+        var address = DeclareVariable(declaration.Name);
 
         if (declaration.Initialization.HasValue)
         {
@@ -355,9 +432,110 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(address);
     }
 
+    private void EmitStructDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
+    {
+        if (!declaredVariables.Add(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        var fieldAddresses = new Dictionary<string, byte>(StringComparer.Ordinal);
+        var fieldNames = new List<string>();
+        foreach (var field in structSyntax.Fields)
+        {
+            if (!IsByteBackedLocalType(field.Type))
+            {
+                throw new InvalidOperationException($"NES target does not support struct field type '{field.Type}' yet.");
+            }
+
+            var address = DeclareVariable($"{declaration.Name}.{field.Name}");
+            fieldAddresses.Add(field.Name, address);
+            fieldNames.Add(field.Name);
+            builder.LoadAImmediate(0);
+            builder.StoreAZeroPage(address);
+        }
+
+        if (declaration.Initialization.HasValue)
+        {
+            EmitStructInitializer(declaration, declaration.Initialization.Value, fieldNames, fieldAddresses);
+        }
+    }
+
+    private void EmitStructInitializer(
+        DeclarationSyntax declaration,
+        ExpressionSyntax initialization,
+        IReadOnlyList<string> fieldNames,
+        IReadOnlyDictionary<string, byte> fieldAddresses)
+    {
+        if (initialization is not StructInitializerSyntax structInitializer)
+        {
+            throw new InvalidOperationException($"NES target requires a struct initializer for local struct '{declaration.Name}'.");
+        }
+
+        var initializedFields = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+        foreach (var field in structInitializer.Fields)
+        {
+            if (!initializedFields.TryAdd(field.Name, field.Expression))
+            {
+                throw new InvalidOperationException($"NES target struct initializer for '{declaration.Name}' supplies field '{field.Name}' more than once.");
+            }
+
+            if (!fieldAddresses.ContainsKey(field.Name))
+            {
+                throw new InvalidOperationException($"NES target struct initializer for '{declaration.Name}' has no field named '{field.Name}'.");
+            }
+        }
+
+        foreach (var fieldName in fieldNames)
+        {
+            if (!initializedFields.TryGetValue(fieldName, out var expression))
+            {
+                continue;
+            }
+
+            EmitExpressionToA(expression);
+            builder.StoreAZeroPage(fieldAddresses[fieldName]);
+        }
+    }
+
+    private byte DeclareVariable(string name)
+    {
+        if (!declaredVariables.Add(name))
+        {
+            throw new InvalidOperationException($"Variable '{name}' is already declared.");
+        }
+
+        if (variables.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Variable '{name}' is already declared.");
+        }
+
+        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        {
+            throw new InvalidOperationException("NES target local variables exceed the current prototype zero-page allocation.");
+        }
+
+        var address = nextVariableAddress++;
+        variables.Add(name, address);
+        return address;
+    }
+
     private static bool IsByteBackedType(string type)
     {
         return type is "i8" or "u8" or "i16" or "u16" or "bool";
+    }
+
+    private bool IsByteBackedLocalType(string type)
+    {
+        return IsByteBackedType(type) || program.Enums.ContainsKey(type);
+    }
+
+    private void RequireSupportedCastTarget(CastSyntax cast)
+    {
+        if (!IsByteBackedLocalType(cast.Type))
+        {
+            throw new InvalidOperationException($"NES target only supports explicit casts to byte-backed local types; '{cast.Type}' is not supported yet.");
+        }
     }
 
     private void EmitExpressionStatement(ExpressionStatementSyntax expressionStatement)
@@ -377,14 +555,148 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitAssignment(AssignmentSyntax assignment)
     {
-        if (assignment.Left is not IdentifierLValue identifier)
+        if (assignment.Left is IndexLValue indexLValue && !TryConst(indexLValue.Index, out _))
         {
-            throw new InvalidOperationException("NES target only supports assignments to local variables.");
+            EmitRuntimeIndexedAssignment(indexLValue, assignment);
+            return;
         }
 
-        var address = VariableAddress(identifier.Identifier);
-        EmitExpressionToA(assignment.Right);
+        var address = LValueAddress(assignment.Left);
+        EmitAssignmentRightToA(assignment);
         builder.StoreAZeroPage(address);
+    }
+
+    private void EmitRuntimeIndexedAssignment(IndexLValue indexLValue, AssignmentSyntax assignment)
+    {
+        var baseAddress = ArrayBaseAddress(indexLValue.BaseIdentifier);
+        EmitRuntimeIndexToX(indexLValue.Index);
+
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                RequireExpressionPreservesX(assignment.Right, "runtime indexed assignment");
+                EmitExpressionToA(assignment.Right);
+                builder.StoreAZeroPageX(baseAddress);
+                return;
+            case "+=":
+                if (TryConst(assignment.Right, out var addRight))
+                {
+                    builder.LoadAZeroPageX(baseAddress);
+                    builder.ClearCarry();
+                    builder.AddImmediate(addRight);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                if (TryDirectAddress(assignment.Right, out var addAddress))
+                {
+                    builder.LoadAZeroPage(addAddress);
+                    builder.ClearCarry();
+                    builder.AddZeroPageX(baseAddress);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                throw new InvalidOperationException("NES target only supports constants or direct byte-backed values on the right side of runtime indexed += assignments.");
+            case "-=":
+                builder.LoadAZeroPageX(baseAddress);
+                builder.SetCarry();
+                if (TryConst(assignment.Right, out var subtractRight))
+                {
+                    builder.SubtractImmediate(subtractRight);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                if (TryDirectAddress(assignment.Right, out var subtractAddress))
+                {
+                    builder.SubtractZeroPage(subtractAddress);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                throw new InvalidOperationException("NES target only supports constants or direct byte-backed values on the right side of runtime indexed -= assignments.");
+            case "&=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "&", "runtime indexed &= assignment");
+                return;
+            case "|=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "|", "runtime indexed |= assignment");
+                return;
+            case "^=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "^", "runtime indexed ^= assignment");
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES assignment operator '{assignment.OperatorSymbol}'.");
+        }
+    }
+
+    private void EmitRuntimeIndexedBitwiseCompoundAssignment(byte baseAddress, ExpressionSyntax right, string op, string context)
+    {
+        builder.LoadAZeroPageX(baseAddress);
+        if (TryConst(right, out var constant))
+        {
+            EmitBitwiseImmediate(op, constant);
+            builder.StoreAZeroPageX(baseAddress);
+            return;
+        }
+
+        if (TryDirectAddress(right, out var address))
+        {
+            EmitBitwiseZeroPage(op, address);
+            builder.StoreAZeroPageX(baseAddress);
+            return;
+        }
+
+        throw new InvalidOperationException($"NES target only supports constants or direct byte-backed values on the right side of {context}.");
+    }
+
+    private void EmitAssignmentRightToA(AssignmentSyntax assignment)
+    {
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                EmitExpressionToA(assignment.Right);
+                return;
+            case "+=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("+")));
+                return;
+            case "-=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("-")));
+                return;
+            case "&=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("&")));
+                return;
+            case "|=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("|")));
+                return;
+            case "^=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("^")));
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES assignment operator '{assignment.OperatorSymbol}'.");
+        }
+    }
+
+    private byte LValueAddress(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => VariableAddress(identifier.Identifier),
+            MemberAccessLValue memberAccess => VariableAddress(NesVideoProgram.MemberAccessName(memberAccess.MemberAccess)),
+            IndexLValue index => VariableAddress(IndexedElementName(index.BaseIdentifier, index.Index, $"{index.BaseIdentifier} array index")),
+            _ => throw new InvalidOperationException("NES target only supports assignments to local variables, struct fields, or constant array indices."),
+        };
+    }
+
+    private static ExpressionSyntax ExpressionFromLValue(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => new IdentifierSyntax(identifier.Identifier),
+            MemberAccessLValue memberAccess => memberAccess.MemberAccess,
+            IndexLValue index => new IndexExpressionSyntax(index.BaseIdentifier, index.Index),
+            _ => throw new InvalidOperationException("Compound assignment target must be readable."),
+        };
     }
 
     private void EmitCall(FunctionCall call)
@@ -451,7 +763,6 @@ internal sealed class NesRuntimeCompiler
             return false;
         }
 
-        NesVideoProgram.RequireParameterlessUserFunction(call, function);
         if (!userFunctionCallStack.Add(function.Name))
         {
             throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
@@ -459,7 +770,31 @@ internal sealed class NesRuntimeCompiler
 
         try
         {
-            EmitBlock(function.Block);
+            EmitBlock(ParameterSubstitution.Substitute(function, call, "NES"));
+        }
+        finally
+        {
+            userFunctionCallStack.Remove(function.Name);
+        }
+
+        return true;
+    }
+
+    private bool TryEmitUserValueFunction(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (!userFunctionCallStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            EmitExpressionToA(ParameterSubstitution.SubstituteReturnExpression(function, call, "NES"));
         }
         finally
         {
@@ -482,9 +817,309 @@ internal sealed class NesRuntimeCompiler
         }
 
         var loopLabel = builder.CreateLabel("while");
+        var endLabel = builder.CreateLabel("while_end");
         builder.Label(loopLabel);
-        EmitBlock(whileSyntax.Body);
+        loopTargets.Push(new LoopTarget(endLabel, loopLabel));
+        try
+        {
+            EmitBlock(whileSyntax.Body);
+        }
+        finally
+        {
+            loopTargets.Pop();
+        }
+
         builder.JumpAbsolute(loopLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitDoWhile(DoWhileSyntax doWhileSyntax)
+    {
+        var loopLabel = builder.CreateLabel("do");
+        var continueLabel = builder.CreateLabel("do_continue");
+        var endLabel = builder.CreateLabel("do_end");
+
+        builder.Label(loopLabel);
+        loopTargets.Push(new LoopTarget(endLabel, continueLabel));
+        try
+        {
+            EmitBlock(doWhileSyntax.Body);
+        }
+        finally
+        {
+            loopTargets.Pop();
+        }
+
+        builder.Label(continueLabel);
+        EmitConditionFalseJump(doWhileSyntax.Condition, endLabel);
+        builder.JumpAbsolute(loopLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitFor(ForSyntax forSyntax)
+    {
+        if (forSyntax.Initializer.HasValue)
+        {
+            EmitStatement(forSyntax.Initializer.Value);
+        }
+
+        var loopLabel = builder.CreateLabel("for");
+        var continueLabel = builder.CreateLabel("for_continue");
+        var endLabel = builder.CreateLabel("for_end");
+
+        builder.Label(loopLabel);
+        if (forSyntax.Condition.HasValue)
+        {
+            EmitConditionFalseJump(forSyntax.Condition.Value, endLabel);
+        }
+
+        loopTargets.Push(new LoopTarget(endLabel, continueLabel));
+        try
+        {
+            EmitBlock(forSyntax.Body);
+        }
+        finally
+        {
+            loopTargets.Pop();
+        }
+
+        builder.Label(continueLabel);
+        if (forSyntax.Increment.HasValue)
+        {
+            if (forSyntax.Increment.Value is not AssignmentSyntax increment)
+            {
+                throw new InvalidOperationException($"Unsupported NES for increment '{forSyntax.Increment.Value.GetType().Name}'.");
+            }
+
+            EmitAssignment(increment);
+        }
+
+        builder.JumpAbsolute(loopLabel);
+        builder.Label(endLabel);
+    }
+
+    private bool EmitIf(IfElseSyntax ifElseSyntax)
+    {
+        var falseLabel = builder.CreateLabel("if_false");
+        var endLabel = builder.CreateLabel("if_end");
+
+        EmitConditionFalseJump(ifElseSyntax.Condition, falseLabel);
+        var thenTerminates = EmitBlock(ifElseSyntax.ThenBlock);
+        if (ifElseSyntax.ElseBlock.HasValue)
+        {
+            if (!thenTerminates)
+            {
+                builder.JumpAbsolute(endLabel);
+            }
+
+            builder.Label(falseLabel);
+            var elseTerminates = EmitBlock(ifElseSyntax.ElseBlock.Value);
+            builder.Label(endLabel);
+            return thenTerminates && elseTerminates;
+        }
+
+        builder.Label(falseLabel);
+        return false;
+    }
+
+    private void EmitBreak()
+    {
+        if (loopTargets.Count == 0)
+        {
+            throw new InvalidOperationException("break can only be used inside a loop.");
+        }
+
+        builder.JumpAbsolute(loopTargets.Peek().BreakLabel);
+    }
+
+    private void EmitContinue()
+    {
+        if (loopTargets.Count == 0)
+        {
+            throw new InvalidOperationException("continue can only be used inside a loop.");
+        }
+
+        builder.JumpAbsolute(loopTargets.Peek().ContinueLabel);
+    }
+
+    private void EmitConditionFalseJump(ExpressionSyntax condition, string falseLabel)
+    {
+        if (TryConst(condition, out var constant))
+        {
+            if (constant == 0)
+            {
+                builder.JumpAbsolute(falseLabel);
+            }
+
+            return;
+        }
+
+        if (condition is BinaryExpressionSyntax binary)
+        {
+            switch (binary.Operator.Symbol)
+            {
+                case "&&":
+                    EmitConditionFalseJump(binary.Left, falseLabel);
+                    EmitConditionFalseJump(binary.Right, falseLabel);
+                    return;
+                case "||":
+                    var trueLabel = builder.CreateLabel("or_true");
+                    EmitConditionTrueJump(binary.Left, trueLabel);
+                    EmitConditionFalseJump(binary.Right, falseLabel);
+                    builder.Label(trueLabel);
+                    return;
+                case "==":
+                    EmitCompareToConstant(binary.Left, binary.Right);
+                    builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
+                    return;
+                case "!=":
+                    EmitCompareToConstant(binary.Left, binary.Right);
+                    builder.BranchRelative(0xF0, falseLabel); // BEQ falseLabel
+                    return;
+                case "<":
+                case "<=":
+                case ">":
+                case ">=":
+                    EmitRelationalFalseJump(binary, falseLabel);
+                    return;
+            }
+        }
+
+        if (condition is UnaryExpressionSyntax { OperatorSymbol: "!" } unary)
+        {
+            EmitConditionTrueJump(unary.Operand, falseLabel);
+            return;
+        }
+
+        EmitExpressionToA(condition);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, falseLabel);   // BEQ falseLabel
+    }
+
+    private void EmitConditionTrueJump(ExpressionSyntax condition, string trueLabel)
+    {
+        if (TryConst(condition, out var constant))
+        {
+            if (constant != 0)
+            {
+                builder.JumpAbsolute(trueLabel);
+            }
+
+            return;
+        }
+
+        if (condition is BinaryExpressionSyntax binary)
+        {
+            switch (binary.Operator.Symbol)
+            {
+                case "&&":
+                    var falseLabel = builder.CreateLabel("and_false");
+                    EmitConditionFalseJump(binary.Left, falseLabel);
+                    EmitConditionTrueJump(binary.Right, trueLabel);
+                    builder.Label(falseLabel);
+                    return;
+                case "||":
+                    EmitConditionTrueJump(binary.Left, trueLabel);
+                    EmitConditionTrueJump(binary.Right, trueLabel);
+                    return;
+                case "==":
+                    EmitCompareToConstant(binary.Left, binary.Right);
+                    builder.BranchRelative(0xF0, trueLabel); // BEQ trueLabel
+                    return;
+                case "!=":
+                    EmitCompareToConstant(binary.Left, binary.Right);
+                    builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
+                    return;
+            }
+        }
+
+        if (condition is UnaryExpressionSyntax { OperatorSymbol: "!" } unary)
+        {
+            EmitConditionFalseJump(unary.Operand, trueLabel);
+            return;
+        }
+
+        EmitExpressionToA(condition);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xD0, trueLabel);     // BNE trueLabel
+    }
+
+    private void EmitCompareToConstant(ExpressionSyntax left, ExpressionSyntax right)
+    {
+        if (TryConst(right, out var rightConstant))
+        {
+            EmitExpressionToA(left);
+            builder.CompareImmediate(rightConstant);
+            return;
+        }
+
+        if (TryConst(left, out var leftConstant))
+        {
+            EmitExpressionToA(right);
+            builder.CompareImmediate(leftConstant);
+            return;
+        }
+
+        throw new InvalidOperationException("NES equality conditions currently require one side to be constant.");
+    }
+
+    private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
+    {
+        if (TryConst(binary.Right, out var rightConstant))
+        {
+            EmitExpressionToA(binary.Left);
+            builder.CompareImmediate(rightConstant);
+            EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
+            return;
+        }
+
+        if (TryConst(binary.Left, out var leftConstant))
+        {
+            EmitExpressionToA(binary.Right);
+            builder.CompareImmediate(leftConstant);
+            EmitRelationalFalseJump(FlipRelationalOperator(binary.Operator.Symbol), falseLabel);
+            return;
+        }
+
+        throw new InvalidOperationException("NES relational conditions currently require one side to be constant.");
+    }
+
+    private void EmitRelationalFalseJump(string op, string falseLabel)
+    {
+        switch (op)
+        {
+            case "<":
+                builder.BranchRelative(0xB0, falseLabel); // BCS falseLabel
+                return;
+            case "<=":
+                var trueLabel = builder.CreateLabel("rel_true");
+                builder.BranchRelative(0x90, trueLabel);  // BCC trueLabel
+                builder.BranchRelative(0xF0, trueLabel);  // BEQ trueLabel
+                builder.JumpAbsolute(falseLabel);
+                builder.Label(trueLabel);
+                return;
+            case ">":
+                builder.BranchRelative(0x90, falseLabel); // BCC falseLabel
+                builder.BranchRelative(0xF0, falseLabel); // BEQ falseLabel
+                return;
+            case ">=":
+                builder.BranchRelative(0x90, falseLabel); // BCC falseLabel
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES relational operator '{op}'.");
+        }
+    }
+
+    private static string FlipRelationalOperator(string op)
+    {
+        return op switch
+        {
+            "<" => ">",
+            "<=" => ">=",
+            ">" => "<",
+            ">=" => "<=",
+            _ => throw new InvalidOperationException($"Unsupported NES relational operator '{op}'."),
+        };
     }
 
     private void EmitWaitVBlank()
@@ -774,12 +1409,275 @@ internal sealed class NesRuntimeCompiler
             case IdentifierSyntax identifier:
                 builder.LoadAZeroPage(VariableAddress(identifier.Identifier));
                 break;
+            case MemberAccessSyntax memberAccess:
+                builder.LoadAZeroPage(VariableAddress(NesVideoProgram.MemberAccessName(memberAccess)));
+                break;
+            case IndexExpressionSyntax indexExpression:
+                if (TryConst(indexExpression.Index, out _))
+                {
+                    builder.LoadAZeroPage(VariableAddress(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index")));
+                }
+                else
+                {
+                    EmitRuntimeIndexToX(indexExpression.Index);
+                    builder.LoadAZeroPageX(ArrayBaseAddress(indexExpression.BaseIdentifier));
+                }
+                break;
             case FunctionCall call:
                 EmitValueCallToA(call);
+                break;
+            case CastSyntax cast:
+                RequireSupportedCastTarget(cast);
+                EmitExpressionToA(cast.Expression);
+                break;
+            case ConditionalExpressionSyntax conditional:
+                EmitConditionalExpressionToA(conditional);
+                break;
+            case UnaryExpressionSyntax unary when IsBooleanValueExpression(unary):
+                EmitBooleanExpressionToA(unary);
+                break;
+            case BinaryExpressionSyntax binary when IsBooleanValueExpression(binary):
+                EmitBooleanExpressionToA(binary);
+                break;
+            case BinaryExpressionSyntax binary:
+                EmitBinaryExpressionToA(binary);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported NES expression '{expression.GetType().Name}'.");
         }
+    }
+
+    private void EmitConditionalExpressionToA(ConditionalExpressionSyntax conditional)
+    {
+        var falseLabel = builder.CreateLabel("conditional_false");
+        var endLabel = builder.CreateLabel("conditional_end");
+
+        EmitConditionFalseJump(conditional.Condition, falseLabel);
+        EmitExpressionToA(conditional.WhenTrue);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        EmitExpressionToA(conditional.WhenFalse);
+        builder.Label(endLabel);
+    }
+
+    private static bool IsBooleanValueExpression(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            UnaryExpressionSyntax { OperatorSymbol: "!" } => true,
+            BinaryExpressionSyntax binary => binary.Operator.Symbol is "&&" or "||" or "==" or "!=" or "<" or "<=" or ">" or ">=",
+            _ => false,
+        };
+    }
+
+    private void EmitBooleanExpressionToA(ExpressionSyntax expression)
+    {
+        var falseLabel = builder.CreateLabel("bool_false");
+        var endLabel = builder.CreateLabel("bool_end");
+
+        EmitConditionFalseJump(expression, falseLabel);
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitBinaryExpressionToA(BinaryExpressionSyntax binary)
+    {
+        switch (binary.Operator.Symbol)
+        {
+            case "+":
+                if (TryConst(binary.Right, out var addRight))
+                {
+                    EmitExpressionToA(binary.Left);
+                    builder.ClearCarry();
+                    builder.AddImmediate(addRight);
+                    return;
+                }
+
+                if (TryConst(binary.Left, out var addLeft))
+                {
+                    EmitExpressionToA(binary.Right);
+                    builder.ClearCarry();
+                    builder.AddImmediate(addLeft);
+                    return;
+                }
+
+                if (TryAddress(binary.Left, out var addAddress))
+                {
+                    EmitExpressionToA(binary.Right);
+                    builder.ClearCarry();
+                    builder.AddZeroPage(addAddress);
+                    return;
+                }
+
+                break;
+            case "-":
+                if (TryConst(binary.Right, out var subtractRight))
+                {
+                    EmitExpressionToA(binary.Left);
+                    builder.SetCarry();
+                    builder.SubtractImmediate(subtractRight);
+                    return;
+                }
+
+                if (TryAddress(binary.Right, out var subtractAddress))
+                {
+                    EmitExpressionToA(binary.Left);
+                    builder.SetCarry();
+                    builder.SubtractZeroPage(subtractAddress);
+                    return;
+                }
+
+                break;
+            case "&":
+            case "|":
+            case "^":
+                if (EmitBitwiseBinaryExpressionToA(binary))
+                {
+                    return;
+                }
+
+                break;
+        }
+
+        throw new InvalidOperationException($"Unsupported NES binary expression '{binary.Operator.Symbol}'.");
+    }
+
+    private bool EmitBitwiseBinaryExpressionToA(BinaryExpressionSyntax binary)
+    {
+        if (TryConst(binary.Right, out var rightConstant))
+        {
+            EmitExpressionToA(binary.Left);
+            EmitBitwiseImmediate(binary.Operator.Symbol, rightConstant);
+            return true;
+        }
+
+        if (TryConst(binary.Left, out var leftConstant))
+        {
+            EmitExpressionToA(binary.Right);
+            EmitBitwiseImmediate(binary.Operator.Symbol, leftConstant);
+            return true;
+        }
+
+        if (TryAddress(binary.Right, out var rightAddress))
+        {
+            EmitExpressionToA(binary.Left);
+            EmitBitwiseZeroPage(binary.Operator.Symbol, rightAddress);
+            return true;
+        }
+
+        if (TryAddress(binary.Left, out var leftAddress))
+        {
+            EmitExpressionToA(binary.Right);
+            EmitBitwiseZeroPage(binary.Operator.Symbol, leftAddress);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void EmitBitwiseImmediate(string op, int value)
+    {
+        var mask = value & 0xFF;
+        switch (op)
+        {
+            case "&":
+                builder.AndImmediate(mask);
+                return;
+            case "|":
+                builder.OrImmediate(mask);
+                return;
+            case "^":
+                builder.XorImmediate(mask);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES bitwise operator '{op}'.");
+        }
+    }
+
+    private void EmitBitwiseZeroPage(string op, byte address)
+    {
+        switch (op)
+        {
+            case "&":
+                builder.AndZeroPage(address);
+                return;
+            case "|":
+                builder.OrZeroPage(address);
+                return;
+            case "^":
+                builder.XorZeroPage(address);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES bitwise operator '{op}'.");
+        }
+    }
+
+    private bool TryAddress(ExpressionSyntax expression, out byte address)
+    {
+        return TryDirectAddress(expression, out address);
+    }
+
+    private bool TryDirectAddress(ExpressionSyntax expression, out byte address)
+    {
+        switch (expression)
+        {
+            case CastSyntax cast:
+                RequireSupportedCastTarget(cast);
+                return TryDirectAddress(cast.Expression, out address);
+            case IdentifierSyntax identifier:
+                address = VariableAddress(identifier.Identifier);
+                return true;
+            case MemberAccessSyntax memberAccess:
+                address = VariableAddress(NesVideoProgram.MemberAccessName(memberAccess));
+                return true;
+            case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
+                address = VariableAddress(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index"));
+                return true;
+            default:
+                address = 0;
+                return false;
+        }
+    }
+
+    private void EmitRuntimeIndexToX(ExpressionSyntax index)
+    {
+        EmitExpressionToA(index);
+        builder.TransferAToX();
+    }
+
+    private byte ArrayBaseAddress(string baseIdentifier)
+    {
+        return VariableAddress(IndexedElementName(baseIdentifier, 0));
+    }
+
+    private void RequireExpressionPreservesX(ExpressionSyntax expression, string context)
+    {
+        if (!PreservesX(expression))
+        {
+            throw new InvalidOperationException($"NES target cannot use expression '{expression.GetType().Name}' as the right side of a {context} yet because it also needs X for array indexing.");
+        }
+    }
+
+    private bool PreservesX(ExpressionSyntax expression)
+    {
+        if (TryConst(expression, out _))
+        {
+            return true;
+        }
+
+        return expression switch
+        {
+            IdentifierSyntax => true,
+            MemberAccessSyntax => true,
+            IndexExpressionSyntax indexExpression => TryConst(indexExpression.Index, out _),
+            CastSyntax cast => PreservesX(cast.Expression),
+            ConditionalExpressionSyntax conditional => PreservesX(conditional.Condition) && PreservesX(conditional.WhenTrue) && PreservesX(conditional.WhenFalse),
+            BinaryExpressionSyntax binary => PreservesX(binary.Left) && PreservesX(binary.Right),
+            _ => false,
+        };
     }
 
     private void EmitValueCallToA(FunctionCall call)
@@ -799,6 +1697,11 @@ internal sealed class NesRuntimeCompiler
                 EmitButtonHoldTicks(call);
                 break;
             default:
+                if (TryEmitUserValueFunction(call))
+                {
+                    break;
+                }
+
                 throw new InvalidOperationException($"Unsupported NES value API call '{call.Name}'.");
         }
     }
@@ -895,6 +1798,12 @@ internal sealed class NesRuntimeCompiler
 
     private bool TryConst(ExpressionSyntax expression, out int value)
     {
+        if (expression is CastSyntax cast)
+        {
+            RequireSupportedCastTarget(cast);
+            return TryConst(cast.Expression, out value);
+        }
+
         if (expression is ConstantSyntax)
         {
             value = NesVideoProgram.ConstValue(expression, "constant");
@@ -917,6 +1826,27 @@ internal sealed class NesRuntimeCompiler
         return false;
     }
 
+    private static string IndexedElementName(string baseIdentifier, int index)
+    {
+        return $"{baseIdentifier}[{index}]";
+    }
+
+    private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
+    {
+        var value = CheckedRange(NesVideoProgram.ConstValue(index, context), 0, 255, context);
+        return IndexedElementName(baseIdentifier, value);
+    }
+
+    private static int CheckedRange(int value, int min, int max, string context)
+    {
+        if (value < min || value > max)
+        {
+            throw new InvalidOperationException($"{context} must be between {min} and {max}.");
+        }
+
+        return value;
+    }
+
     private byte VariableAddress(string name)
     {
         if (!variables.TryGetValue(name, out var address))
@@ -928,6 +1858,8 @@ internal sealed class NesRuntimeCompiler
     }
 
     private readonly record struct NesButton(string Name, byte SnapshotMask, byte HoldTicksAddress);
+
+    private readonly record struct LoopTarget(string BreakLabel, string ContinueLabel);
 }
 
 internal sealed class PrgBuilder
@@ -951,7 +1883,11 @@ internal sealed class PrgBuilder
 
     public void LoadAZeroPage(byte address) => Emit(0xA5, address);
 
+    public void LoadAZeroPageX(byte address) => Emit(0xB5, address);
+
     public void StoreAZeroPage(byte address) => Emit(0x85, address);
+
+    public void StoreAZeroPageX(byte address) => Emit(0x95, address);
 
     public void LoadAAbsolute(ushort address) => Emit(0xAD, Low(address), High(address));
 
@@ -961,7 +1897,15 @@ internal sealed class PrgBuilder
 
     public void AndImmediate(int value) => Emit(0x29, CheckedByte(value));
 
+    public void AndZeroPage(byte address) => Emit(0x25, address);
+
     public void OrImmediate(int value) => Emit(0x09, CheckedByte(value));
+
+    public void OrZeroPage(byte address) => Emit(0x05, address);
+
+    public void XorImmediate(int value) => Emit(0x49, CheckedByte(value));
+
+    public void XorZeroPage(byte address) => Emit(0x45, address);
 
     public void CompareImmediate(int value) => Emit(0xC9, CheckedByte(value));
 
@@ -971,9 +1915,17 @@ internal sealed class PrgBuilder
 
     public void AddImmediate(int value) => Emit(0x69, CheckedByte(value));
 
+    public void AddZeroPage(byte address) => Emit(0x65, address);
+
+    public void AddZeroPageX(byte address) => Emit(0x75, address);
+
     public void SubtractImmediate(int value) => Emit(0xE9, CheckedByte(value));
 
+    public void SubtractZeroPage(byte address) => Emit(0xE5, address);
+
     public void IncrementX() => Emit(0xE8);
+
+    public void TransferAToX() => Emit(0xAA);
 
     public void LdaAbsoluteX(string label, int addend = 0)
     {

@@ -35,7 +35,7 @@ void main() {
     setup_video();
     draw_background();
 
-    while (true) {
+    loop {
         video_wait_vblank();
     }
 }

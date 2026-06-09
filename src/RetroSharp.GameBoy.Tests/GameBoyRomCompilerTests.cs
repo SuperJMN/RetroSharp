@@ -84,6 +84,155 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_parameterized_static_user_functions_like_inline_video_blocks()
+    {
+        const string directSource = """
+                                    void main() {
+                                        video_init();
+                                        tilemap_set(14, 12, 1);
+                                        tilemap_set(15, 12, 2);
+                                        video_present();
+                                        return;
+                                    }
+                                    """;
+
+        const string functionSource = """
+                                      void draw_tile(u8 x, u8 tile) {
+                                          tilemap_set(x, 12, tile);
+                                          return;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          draw_tile(14, 1);
+                                          draw_tile(15, 2);
+                                          video_present();
+                                          return;
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(directSource), GameBoyRomCompiler.CompileSource(functionSource));
+    }
+
+    [Fact]
+    public void Compiles_parameterized_runtime_user_functions_like_inline_video_blocks()
+    {
+        const string directSource = """
+                                    void main() {
+                                        video_init();
+                                        i16 x = 0;
+                                        scroll_set(4, 0);
+                                        x = 7;
+                                    }
+                                    """;
+
+        const string functionSource = """
+                                      void apply_scroll(u8 amount) {
+                                          scroll_set(amount, 0);
+                                          return;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          i16 x = 0;
+                                          apply_scroll(4);
+                                          x = 7;
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(directSource), GameBoyRomCompiler.CompileSource(functionSource));
+    }
+
+    [Fact]
+    public void Compiles_expression_bodied_value_functions_like_single_return_helpers()
+    {
+        const string blockSource = """
+                                   u8 choose_speed(u8 moving, u8 fast) {
+                                       return moving != 0 ? fast : 0;
+                                   }
+
+                                   void main() {
+                                       video_init();
+                                       u8 moving = 1;
+                                       u8 fast = 2;
+                                       u8 speed = choose_speed(moving, fast);
+                                   }
+                                   """;
+
+        const string expressionSource = """
+                                        u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;
+
+                                        void main() {
+                                            video_init();
+                                            u8 moving = 1;
+                                            u8 fast = 2;
+                                            u8 speed = choose_speed(moving, fast);
+                                        }
+                                        """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(blockSource), GameBoyRomCompiler.CompileSource(expressionSource));
+    }
+
+    [Fact]
+    public void Compiles_default_parameter_value_functions_like_explicit_arguments()
+    {
+        const string explicitSource = """
+                                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
+
+                                      void main() {
+                                          video_init();
+                                          u8 next = step(4, 5);
+                                      }
+                                      """;
+
+        const string omittedSource = """
+                                     u8 step(u8 value, u8 amount = value + 1) => value + amount;
+
+                                     void main() {
+                                         video_init();
+                                         u8 next = step(4);
+                                     }
+                                     """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitSource), GameBoyRomCompiler.CompileSource(omittedSource));
+    }
+
+    [Fact]
+    public void Compiles_named_argument_value_functions_like_explicit_arguments()
+    {
+        const string explicitSource = """
+                                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
+
+                                      void main() {
+                                          video_init();
+                                          u8 next = step(4, 5);
+                                      }
+                                      """;
+
+        const string namedSource = """
+                                   u8 step(u8 value, u8 amount = value + 1) => value + amount;
+
+                                   void main() {
+                                       video_init();
+                                       u8 next = step(amount: 5, value: 4);
+                                   }
+                                   """;
+
+        const string omittedNamedSource = """
+                                          u8 step(u8 value, u8 amount = value + 1) => value + amount;
+
+                                          void main() {
+                                              video_init();
+                                              u8 next = step(value: 4);
+                                          }
+                                          """;
+
+        var explicitRom = GameBoyRomCompiler.CompileSource(explicitSource);
+        Assert.Equal(explicitRom, GameBoyRomCompiler.CompileSource(namedSource));
+        Assert.Equal(explicitRom, GameBoyRomCompiler.CompileSource(omittedNamedSource));
+    }
+
+    [Fact]
     public void GameBoy_drawing_sample_compiles_with_helper_functions()
     {
         var sourcePath = RepositoryFile("samples/gameboy-drawing/drawing.rs");
@@ -966,6 +1115,912 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_struct_member_access_as_adjacent_wram_fields()
+    {
+        const string source = """
+                              struct Vec2 {
+                                  i16 x;
+                                  i16 y;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  Vec2 position;
+                                  position.x = 40;
+                                  position.y = 3;
+                                  position.x = position.x + position.y;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "ROM should store position.x at the first field address.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x01, 0xC0]), "ROM should store position.y at the next field address.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should use direct loads/stores for member arithmetic with no helper call.");
+    }
+
+    [Fact]
+    public void Compiles_struct_initializer_like_explicit_member_assignments()
+    {
+        const string explicitSource = """
+                                      struct Vec2 {
+                                          u8 x;
+                                          u8 y;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          u8 seed = 4;
+                                          Vec2 position;
+                                          position.x = 2;
+                                          position.y = seed + 1;
+                                      }
+                                      """;
+
+        const string initializerSource = """
+                                         struct Vec2 {
+                                             u8 x;
+                                             u8 y;
+                                         }
+
+                                         void main() {
+                                             video_init();
+                                             u8 seed = 4;
+                                             Vec2 position = { y: seed + 1, x: 2 };
+                                         }
+                                         """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitSource), GameBoyRomCompiler.CompileSource(initializerSource));
+    }
+
+    [Fact]
+    public void Compiles_struct_initializer_shorthand_like_explicit_member_assignments()
+    {
+        const string explicitSource = """
+                                      struct Vec2 {
+                                          u8 x;
+                                          u8 y;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          u8 x = 2;
+                                          u8 y = 4;
+                                          Vec2 position;
+                                          position.x = x;
+                                          position.y = y + 1;
+                                      }
+                                      """;
+
+        const string initializerSource = """
+                                         struct Vec2 {
+                                             u8 x;
+                                             u8 y;
+                                         }
+
+                                         void main() {
+                                             video_init();
+                                             u8 x = 2;
+                                             u8 y = 4;
+                                             Vec2 position = { x, y: y + 1 };
+                                         }
+                                         """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitSource), GameBoyRomCompiler.CompileSource(initializerSource));
+    }
+
+    [Fact]
+    public void Compiles_type_aliases_as_underlying_types_without_runtime_cost()
+    {
+        const string source = """
+                              type ActorIndex = u8;
+
+                              struct Vec2 {
+                                  u8 x;
+                                  u8 y;
+                              }
+
+                              type Position = Vec2;
+
+                              void main() {
+                                  video_init();
+                                  ActorIndex actor = 7;
+                                  Position position;
+                                  position.x = actor;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x00, 0xC0]), "Alias ActorIndex should compile as the first byte-backed local.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x01, 0xC0]), "Alias Position should compile as a struct field at the next local address.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x02, 0xC0]), "Alias Position should preserve all struct fields with no alias storage.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Alias assignments should lower to direct local load/store.");
+    }
+
+    [Fact]
+    public void Compiles_const_identifiers_as_immediates_without_local_storage()
+    {
+        const string source = """
+                              const u8 StartX = 40;
+                              const u8 Velocity = StartX - 37;
+
+                              void main() {
+                                  video_init();
+                                  i16 x = StartX;
+                                  i16 velocity = Velocity;
+                                  x = x + velocity;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "Const StartX should compile as an immediate store to the first local.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x01, 0xC0]), "Const Velocity should compile as an immediate store to the second local, with no const storage slot.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "Const declarations should not shift runtime local addresses.");
+    }
+
+    [Fact]
+    public void Compiles_local_const_identifiers_as_immediates_without_local_storage()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  const u8 StartX = 40;
+                                  const u8 Velocity = StartX + 1;
+                                  i16 x = Velocity;
+                                  i16 y = 1;
+                                  y = x;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x29, 0xEA, 0x00, 0xC0]), "Local const Velocity should compile its derived value as an immediate store to the first local.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x01, 0xC0]), "Local const declarations should not reserve WRAM before the second local.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Local const declarations should not shift runtime local addresses.");
+    }
+
+    [Fact]
+    public void Compiles_const_conditional_expressions_as_immediates_without_runtime_branch()
+    {
+        const string source = """
+                              const UseFast = true;
+                              const Speed = UseFast ? 2 : 0;
+
+                              void main() {
+                                  video_init();
+                                  u8 speed = Speed;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0xEA, 0x00, 0xC0]), "Const conditional expression should fold to one immediate store with no runtime conditional.");
+    }
+
+    [Fact]
+    public void Compiles_hex_binary_and_separated_literals_like_decimal_immediates()
+    {
+        const string decimalSource = """
+                                     const Mask = 160;
+                                     const Tile = 42;
+
+                                     void main() {
+                                         video_init();
+                                         u8 flags = Mask | 15;
+                                         u8 tile = Tile;
+                                         u16 distance = 128;
+                                     }
+                                     """;
+
+        const string literalSource = """
+                                     const Mask = 0b1010_0000;
+                                     const Tile = 0x2A;
+
+                                     void main() {
+                                         video_init();
+                                         u8 flags = Mask | 0x0F;
+                                         u8 tile = Tile;
+                                         u16 distance = 1_28u16;
+                                     }
+                                     """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(decimalSource), GameBoyRomCompiler.CompileSource(literalSource));
+    }
+
+    [Fact]
+    public void Compiles_sizeof_type_as_immediate_without_runtime_code()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u16 y;
+                                  bool active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  u8 actorSize = sizeof(Actor);
+                                  u8 pointerSize = sizeof(ptr<u8>);
+                                  pointerSize = actorSize;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0xEA, 0x00, 0xC0]), "sizeof(Actor) should compile as the struct byte size immediate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0xEA, 0x01, 0xC0]), "sizeof(ptr<u8>) should compile as the pointer byte size immediate.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "sizeof expressions should not reserve storage or emit helper code.");
+    }
+
+    [Fact]
+    public void Compiles_offsetof_field_as_immediate_without_runtime_code()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u16 y;
+                                  bool active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  u8 yOffset = offsetof(Actor, y);
+                                  u8 activeOffset = offsetof(Actor, active);
+                                  activeOffset = yOffset;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0]), "offsetof(Actor, y) should compile as the field byte offset immediate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x01, 0xC0]), "offsetof(Actor, active) should compile as the field byte offset immediate.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "offsetof expressions should not reserve storage or emit helper code.");
+    }
+
+    [Fact]
+    public void Compiles_fixed_size_array_constant_indices_as_adjacent_wram_bytes()
+    {
+        const string source = """
+                              const u8 Count = 4;
+                              const u8 First = 0;
+                              const u8 Second = 1;
+
+                              void main() {
+                                  u8 values[Count];
+                                  values[First] = 40;
+                                  values[Second] = values[First];
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "Array index 0 should store to the first WRAM byte.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Array index 1 should load from the adjacent WRAM byte with direct addressing.");
+    }
+
+    [Fact]
+    public void Compiles_fixed_size_array_initializer_like_explicit_assignments()
+    {
+        const string explicitSource = """
+                                      void main() {
+                                          video_init();
+                                          u8 seed = 3;
+                                          u8 values[4];
+                                          values[0] = 1;
+                                          values[1] = seed;
+                                          values[2] = seed + 1;
+                                          u8 copy = values[3];
+                                      }
+                                      """;
+
+        const string initializerSource = """
+                                         void main() {
+                                             video_init();
+                                             u8 seed = 3;
+                                             u8 values[4] = [1, seed, seed + 1];
+                                             u8 copy = values[3];
+                                         }
+                                         """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitSource), GameBoyRomCompiler.CompileSource(initializerSource));
+    }
+
+    [Fact]
+    public void Compiles_array_initializer_with_inferred_length_like_explicit_length()
+    {
+        const string explicitLengthSource = """
+                                            void main() {
+                                                video_init();
+                                                u8 seed = 3;
+                                                u8 values[3] = [1, seed, seed + 1];
+                                                u8 size = countof(values);
+                                            }
+                                            """;
+
+        const string inferredLengthSource = """
+                                            void main() {
+                                                video_init();
+                                                u8 seed = 3;
+                                                u8 values[] = [1, seed, seed + 1];
+                                                u8 size = countof(values);
+                                            }
+                                            """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitLengthSource), GameBoyRomCompiler.CompileSource(inferredLengthSource));
+    }
+
+    [Fact]
+    public void Compiles_countof_fixed_size_array_as_immediate_without_runtime_code()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  u8 values[4];
+                                  u8 size = countof(values);
+                                  values[0] = size;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0xEA, 0x04, 0xC0]), "countof(values) should compile as an immediate store after the four array bytes.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x04, 0xC0, 0xEA, 0x00, 0xC0]), "countof should not emit a helper; subsequent array assignment should remain direct.");
+    }
+
+    [Fact]
+    public void Compiles_enum_members_as_immediates_without_local_storage()
+    {
+        const string source = """
+                              enum Tile {
+                                  Empty,
+                                  Brick = 40,
+                                  Bonus
+                              }
+
+                              void main() {
+                                  Tile tile = Tile.Brick;
+                                  Tile bonus = Tile.Bonus;
+                                  bonus = tile;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "Enum Brick should compile as an immediate store to the first local.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x29, 0xEA, 0x01, 0xC0]), "Implicit enum Bonus should compile as the next immediate value with no enum storage slot.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Enum declarations should not shift runtime local addresses.");
+    }
+
+    [Fact]
+    public void Compiles_compound_assignment_as_direct_lvalue_arithmetic()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 1;
+                                  u8 y = 2;
+                                  x += y;
+                                  x -= 1;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "x += y should lower to the same direct load/add/store sequence as x = x + y.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xD6, 0x01, 0xEA, 0x00, 0xC0]), "x -= 1 should lower to direct subtract/store without a helper call.");
+    }
+
+    [Fact]
+    public void Compiles_for_loop_to_direct_branching_without_helper_calls()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  for (u8 i = 0; i < 3; i += 1) {
+                                      x += i;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x03, 0xD2]), "for condition should compare the loop local and jump out when i >= 3.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "for body should use direct x += i arithmetic.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]), "for increment should use direct i += 1 arithmetic.");
+    }
+
+    [Fact]
+    public void Compiles_increment_decrement_and_for_postfix_increment_as_direct_arithmetic()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  x++;
+                                  x--;
+                                  for (u8 i = 0; i < 3; i++) {
+                                      x += i;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "x++ should lower to direct x += 1 arithmetic.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xD6, 0x01, 0xEA, 0x00, 0xC0]), "x-- should lower to direct x -= 1 arithmetic.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]), "for i++ should lower to direct i += 1 arithmetic.");
+    }
+
+    [Fact]
+    public void Compiles_range_for_loop_as_direct_counted_loop()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  for (u8 i in 0..3) {
+                                      x += i;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x01, 0xC0]), "range-for should initialize the loop local once from the range start.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x03, 0xD2]), "range-for should compare i with the exclusive upper bound and branch out when i >= end.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "range-for body should use direct x += i arithmetic.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]), "range-for should increment i with direct i++ arithmetic.");
+    }
+
+    [Fact]
+    public void Compiles_runtime_indexed_array_access_without_helper_calls()
+    {
+        const string source = """
+                              void main() {
+                                  u8 values[4];
+                                  u8 i = 1;
+                                  values[i] += 1;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x04, 0xC0, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19]), "runtime array indexing should compute HL from the array base and the byte index without a helper call.");
+        Assert.True(ContainsSequence(rom, [0x7E, 0xC6, 0x01, 0x77]), "values[i] += 1 should load, add, and store through HL without a helper call.");
+    }
+
+    [Fact]
+    public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  loop {
+                                      x++;
+                                      if (x == 1) {
+                                          continue;
+                                      }
+                                      if (x == 3) {
+                                          break;
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        var loopStart = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]);
+        var continueCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xC2]);
+        var breakCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x03, 0xC2]);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(loopStart >= 0, "loop body should start with direct x++ arithmetic.");
+        Assert.True(continueCompare >= 0, "continue guard should compare x with 1.");
+        Assert.True(breakCompare >= 0, "break guard should compare x with 3.");
+        Assert.Equal(loopStart, ReadLittleEndian16(rom, continueCompare + 9));
+        Assert.True(ReadLittleEndian16(rom, breakCompare + 9) > breakCompare, "break should jump beyond the loop body.");
+    }
+
+    [Fact]
+    public void Compiles_break_and_continue_as_direct_for_loop_jumps()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  for (u8 i = 0; i < 4; i += 1) {
+                                      if (i == 1) {
+                                          continue;
+                                      }
+                                      if (i == 3) {
+                                          break;
+                                      }
+                                      x += 1;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        var continueCompare = IndexOfSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x01, 0xC2]);
+        var breakCompare = IndexOfSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x03, 0xC2]);
+        var increment = IndexOfSequence(rom, [0xFA, 0x01, 0xC0, 0xC6, 0x01, 0xEA, 0x01, 0xC0]);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(continueCompare >= 0, "continue guard should compare i with 1.");
+        Assert.True(breakCompare >= 0, "break guard should compare i with 3.");
+        Assert.True(increment >= 0, "for increment should still be emitted as direct i += 1 arithmetic.");
+
+        var continueJumpTarget = ReadLittleEndian16(rom, continueCompare + 9);
+        Assert.Equal(increment, continueJumpTarget);
+
+        var breakJumpTarget = ReadLittleEndian16(rom, breakCompare + 9);
+        Assert.True(breakJumpTarget > increment + 8, "break should jump beyond the increment and final loop jump.");
+    }
+
+    [Fact]
+    public void Compiles_do_while_continue_to_condition_check()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  do {
+                                      x++;
+                                      if (x == 1) {
+                                          continue;
+                                      }
+                                      x += 2;
+                                  } while (x < 3);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        var continueCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xC2]);
+        var conditionCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x03, 0xD2]);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "do body should emit x++ as direct arithmetic before the first condition check.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x02, 0xEA, 0x00, 0xC0]), "do body should emit direct arithmetic after the continue guard.");
+        Assert.True(continueCompare >= 0, "continue guard should compare x with 1.");
+        Assert.True(conditionCompare >= 0, "do-while condition should compare x with 3 at the bottom of the loop.");
+
+        var continueJumpTarget = ReadLittleEndian16(rom, continueCompare + 9);
+        Assert.Equal(conditionCompare, continueJumpTarget);
+    }
+
+    [Fact]
+    public void Compiles_logical_conditions_with_short_circuit_branches()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  u8 y = 1;
+                                  u8 z = 0;
+                                  if (x != 0 && y != 0) {
+                                      z += 1;
+                                  }
+                                  if (x != 0 || y != 0) {
+                                      z += 2;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        var andLeftCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]);
+        var andRightCompare = IndexOfSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x00, 0xCA]);
+        var orLeftCompare = IndexOfSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]);
+        var orBody = IndexOfSequence(rom, [0xFA, 0x02, 0xC0, 0xC6, 0x02, 0xEA, 0x02, 0xC0]);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(andLeftCompare >= 0, "&& should test the left condition and jump false before touching the right side.");
+        Assert.True(andRightCompare > andLeftCompare, "&& should evaluate the right condition only after the left condition succeeds.");
+        Assert.True(orLeftCompare >= 0, "|| should test the left condition with a direct true branch.");
+        Assert.True(orBody > orLeftCompare, "|| body should be emitted after the left condition branch.");
+        Assert.Equal(orBody, ReadLittleEndian16(rom, orLeftCompare + 6));
+    }
+
+    [Fact]
+    public void Compiles_range_membership_condition_like_explicit_bounds_checks()
+    {
+        const string explicitSource = """
+                                      void main() {
+                                          u8 tile = 2;
+                                          u8 hit = 0;
+                                          if (tile >= 1 && tile < 4) {
+                                              hit = 1;
+                                          }
+                                      }
+                                      """;
+
+        const string membershipSource = """
+                                        void main() {
+                                            u8 tile = 2;
+                                            u8 hit = 0;
+                                            if (tile in 1..4) {
+                                                hit = 1;
+                                            }
+                                        }
+                                        """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitSource), GameBoyRomCompiler.CompileSource(membershipSource));
+    }
+
+    [Fact]
+    public void Compiles_unary_not_condition_by_inverting_the_branch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  if (!(x != 0)) {
+                                      x += 1;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]), "! should invert x != 0 into a false jump when the inner condition is true.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "then body should remain direct x += 1 arithmetic.");
+    }
+
+    [Fact]
+    public void Compiles_else_if_chain_as_nested_direct_branches()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  if (x == 0) {
+                                      x += 1;
+                                  } else if (x == 1) {
+                                      x += 2;
+                                  } else {
+                                      x += 3;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]), "first if should compare x with 0 and jump to the else branch when false.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xC2]), "else-if should compile as a nested if compare.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x01, 0xEA, 0x00, 0xC0]), "first body should remain direct x += 1 arithmetic.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x02, 0xEA, 0x00, 0xC0]), "else-if body should remain direct x += 2 arithmetic.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x03, 0xEA, 0x00, 0xC0]), "else body should remain direct x += 3 arithmetic.");
+    }
+
+    [Fact]
+    public void Compiles_switch_as_direct_compare_branches_without_runtime_helper()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  u8 state = 1;
+                                  u8 value;
+                                  switch (state) {
+                                      case 0 {
+                                          value = 10;
+                                      }
+                                      case 1 {
+                                          value = 20;
+                                      }
+                                      default {
+                                          value = 30;
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0]), "Switch subject should stay a normal byte-backed local.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00]), "First switch case should compare the subject directly to the case literal.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01]), "Second switch case should compare the subject directly to the case literal.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x0A, 0xEA, 0x01, 0xC0]), "First switch case should lower to the direct branch body.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x14, 0xEA, 0x01, 0xC0]), "Second switch case should lower to the direct branch body.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x1E, 0xEA, 0x01, 0xC0]), "Default switch case should lower to the direct fallback body.");
+    }
+
+    [Fact]
+    public void Compiles_switch_case_with_multiple_values_as_direct_compares()
+    {
+        const string source = """
+                              void main() {
+                                  u8 state = 1;
+                                  u8 value;
+                                  switch (state) {
+                                      case 0, 1 {
+                                          value = 10;
+                                      }
+                                      default {
+                                          value = 30;
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00]), "Multi-value switch case should compare the subject with the first literal.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01]), "Multi-value switch case should compare the subject with the second literal.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x0A, 0xEA, 0x01, 0xC0]), "Multi-value switch case should share one direct branch body.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x1E, 0xEA, 0x01, 0xC0]), "Default switch case should remain a direct fallback body.");
+    }
+
+    [Fact]
+    public void Compiles_switch_case_with_half_open_range_as_direct_bounds_checks()
+    {
+        const string source = """
+                              void main() {
+                                  u8 state = 2;
+                                  u8 value;
+                                  switch (state) {
+                                      case 1..4 {
+                                          value = 10;
+                                      }
+                                      default {
+                                          value = 30;
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x01, 0xDA]), "Range switch case should compare the subject with the inclusive lower bound and jump out when subject < start.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x04, 0xD2]), "Range switch case should compare the subject with the exclusive upper bound and jump out when subject >= end.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x0A, 0xEA, 0x01, 0xC0]), "Range switch case should share one direct branch body.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x1E, 0xEA, 0x01, 0xC0]), "Default switch case should remain a direct fallback body.");
+    }
+
+    [Fact]
+    public void Compiles_untyped_constants_as_folded_literals()
+    {
+        const string source = """
+                              const BaseValue = 4;
+                              void main() {
+                                  u8 value = BaseValue;
+                                  const NextValue = BaseValue + 1;
+                                  value = NextValue;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0xEA, 0x00, 0xC0]), "Untyped top-level const should fold to the direct literal initializer.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x05, 0xEA, 0x00, 0xC0]), "Untyped block-local const should fold to the direct literal assignment.");
+    }
+
+    [Fact]
+    public void Compiles_bitwise_compound_assignment_as_direct_mask_operations()
+    {
+        const string source = """
+                              const Solid = 1;
+                              const Hazard = 2;
+                              const Toggle = 4;
+                              void main() {
+                                  u8 flags = 0;
+                                  flags |= Solid;
+                                  flags &= ~Hazard;
+                                  flags ^= Toggle;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF6, 0x01, 0xEA, 0x00, 0xC0]), "flags |= Solid should lower to LD/OR immediate/store with no helper.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE6, 0xFD, 0xEA, 0x00, 0xC0]), "flags &= ~Hazard should lower to LD/AND immediate/store with no helper.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEE, 0x04, 0xEA, 0x00, 0xC0]), "flags ^= Toggle should lower to LD/XOR immediate/store with no helper.");
+    }
+
+    [Fact]
+    public void Compiles_value_returning_user_functions_like_inline_expressions()
+    {
+        const string source = """
+                              u8 set_flag(u8 flags, u8 mask) {
+                                  return flags | mask;
+                              }
+
+                              u8 clear_flag(u8 flags, u8 mask) {
+                                  return flags & ~mask;
+                              }
+
+                              void main() {
+                                  u8 flags = 0;
+                                  flags = set_flag(flags, 1);
+                                  flags = clear_flag(flags, 2);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF6, 0x01, 0xEA, 0x00, 0xC0]), "set_flag(flags, 1) should inline as LD/OR immediate/store with no call ABI.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xE6, 0xFD, 0xEA, 0x00, 0xC0]), "clear_flag(flags, 2) should inline as LD/AND immediate/store with no call ABI.");
+    }
+
+    [Fact]
+    public void Compiles_explicit_casts_as_zero_cost_expression_markers()
+    {
+        const string source = """
+                              void main() {
+                                  u8 flags = 0;
+                                  u16 wide = 1;
+                                  flags = (u8)(wide | 2);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xF6, 0x02, 0xEA, 0x00, 0xC0]), "Explicit casts should disappear before Game Boy lowering and leave the direct expression sequence.");
+    }
+
+    [Fact]
+    public void Compiles_logical_value_expressions_as_direct_boolean_materialization()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 1;
+                                  u8 y = 0;
+                                  u8 both = x != 0 && y != 0;
+                                  u8 either = x != 0 || y != 0;
+                                  u8 notX = !(x != 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "&& should false-branch after the left operand.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xFE, 0x00, 0xCA]), "&& should false-branch after the right operand.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x02, 0xC0]), "&& should materialize false as 0 in the destination byte.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xC2]), "|| and ! should true-branch using direct compares.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x03, 0xC0]), "|| should materialize false as 0 in the destination byte.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x04, 0xC0]), "! should materialize false as 0 in the destination byte.");
+    }
+
+    [Fact]
+    public void Compiles_conditional_value_expressions_as_direct_branches()
+    {
+        const string source = """
+                              void main() {
+                                  u8 moving = 1;
+                                  u8 fast = 2;
+                                  u8 speed = moving != 0 ? fast : 0;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "Conditional expression should branch to the false value when the condition is false.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0xC3]), "Conditional expression should load the true branch value and jump over the false branch.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0x02, 0xC0]), "Conditional expression should load the false branch value and store one selected byte.");
+    }
+
+    [Fact]
     public void Compiles_button_pressed_as_a_runtime_expression()
     {
         const string source = """
@@ -1065,28 +2120,29 @@ public class GameBoyRomCompilerTests
         var leftStart = source.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
         Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
 
-        var animationStart = source.IndexOf("animTick = animTick + 1;", StringComparison.Ordinal);
+        var animationStart = source.IndexOf("animTick++;", StringComparison.Ordinal);
         Assert.True(animationStart > rightStart, "Runner should update movement before animation state.");
 
-        Assert.Contains("i16 cameraX = 0;", source);
+        Assert.Contains("type Pixel = i16;", source);
+        Assert.Contains("Pixel cameraX = 0;", source);
 
         var movementBlock = source[rightStart..animationStart];
-        Assert.Contains("cameraX = cameraX + 1;", movementBlock);
+        Assert.Contains("cameraX += 1;", movementBlock);
         Assert.Contains("moving = 1;", movementBlock);
-        Assert.Contains("cameraX = cameraX - 1;", movementBlock);
+        Assert.Contains("cameraX -= 1;", movementBlock);
         Assert.Contains("camera_set_position(cameraX, 0);", movementBlock);
         Assert.DoesNotContain("if (cameraX > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.Contains("if (moving != 0)", source);
-        Assert.Contains("animTick = animTick + 1;", source);
+        Assert.Contains("animTick++;", source);
         Assert.Contains("animation_frame(run, animTick);", source);
         Assert.DoesNotContain("i16 frame = 0;", source);
         Assert.DoesNotContain("frame = frame + 1;", source);
         Assert.DoesNotContain("if (frame == 3)", source);
         Assert.DoesNotContain("displayFrame = frame + 1;", source);
         Assert.Equal(1, CountOccurrences(source, "camera_set_position(cameraX, 0);"));
-        Assert.Equal(1, CountOccurrences(source, "animTick = animTick + 1;"));
+        Assert.Equal(1, CountOccurrences(source, "animTick++;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         Assert.Equal(32768, rom.Length);
@@ -1112,9 +2168,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("displayFlipX = true;", source);
         Assert.Contains("displayFlipX = false;", source);
         Assert.DoesNotContain("displayFlags = 32;", source);
-        Assert.Contains("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);", source);
-        Assert.Contains("sprite_draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);", source);
-        Assert.Contains("sprite_draw(enemy_slug, 40, 57, enemyFrame, true, 0);", source);
+        Assert.Contains("sprite_draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);", source);
+        Assert.Contains("sprite_draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);", source);
+        Assert.Contains("sprite_draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);", source);
         Assert.Equal(3, CountOccurrences(source, "sprite_draw("));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -1173,15 +2229,15 @@ public class GameBoyRomCompilerTests
     {
         var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
 
-        Assert.Contains("i16 playerY = 73;", source);
-        Assert.Contains("i16 grounded = 1;", source);
+        Assert.Contains("Pixel playerY = PlayerStartY;", source);
+        Assert.Contains("Pixel grounded = 1;", source);
 
         var vblankStart = source.IndexOf("video_wait_vblank();", StringComparison.Ordinal);
         var inputPoll = source.IndexOf("input_poll();", StringComparison.Ordinal);
-        var gravity = source.IndexOf("velocityY = velocityY + 1;", StringComparison.Ordinal);
-        var draw = source.IndexOf("sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);", StringComparison.Ordinal);
-        var firstEnemyDraw = source.IndexOf("sprite_draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);", StringComparison.Ordinal);
-        var secondEnemyDraw = source.IndexOf("sprite_draw(enemy_slug, 40, 57, enemyFrame, true, 0);", StringComparison.Ordinal);
+        var gravity = source.IndexOf("velocityY += 1;", StringComparison.Ordinal);
+        var draw = source.IndexOf("sprite_draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);", StringComparison.Ordinal);
+        var firstEnemyDraw = source.IndexOf("sprite_draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);", StringComparison.Ordinal);
+        var secondEnemyDraw = source.IndexOf("sprite_draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
@@ -1424,14 +2480,14 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("i16 footTile = 0;", source);
-        Assert.Contains("i16 failTile = 0;", source);
-        Assert.Contains("i16 playerWorldX = 72;", source);
-        Assert.Contains("i16 footLeftX = 72;", source);
-        Assert.Contains("i16 footCenterX = 80;", source);
-        Assert.Contains("i16 footRightX = 89;", source);
-        Assert.Contains("i16 hazardHit = 0;", source);
-        Assert.Contains("i16 resetRequested = 0;", source);
+        Assert.Contains("Pixel footTile = 0;", source);
+        Assert.Contains("Pixel failTile = 0;", source);
+        Assert.Contains("Pixel playerWorldX = PlayerScreenX;", source);
+        Assert.Contains("Pixel footLeftX = PlayerScreenX;", source);
+        Assert.Contains("Pixel footCenterX = PlayerScreenX + 8;", source);
+        Assert.Contains("Pixel footRightX = PlayerScreenX + 17;", source);
+        Assert.Contains("Pixel hazardHit = 0;", source);
+        Assert.Contains("Pixel resetRequested = 0;", source);
 
         Assert.Contains("world_column(5, 5, 0, 0, 0, 4, 5);", source);
         Assert.Contains("world_column(7, 5, 0, 0, 0, 3, 5);", source);
@@ -1444,26 +2500,23 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world_flags(13, 0, 0, 0, 0, 2, 1);", source);
         Assert.Contains("world_flags(14, 0, 0, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
-        Assert.Contains("playerWorldX = cameraX + 72;", source);
-        Assert.Contains("if (playerWorldX >= 128)", source);
-        Assert.Contains("playerWorldX = playerWorldX - 128;", source);
-        Assert.Contains("footCenterX = playerWorldX + 8;", source);
-        Assert.Contains("footRightX = playerWorldX + 17;", source);
-        Assert.Contains("if (footCenterX >= 128)", source);
-        Assert.Contains("if (footRightX >= 128)", source);
-        Assert.Contains("if (velocityY >= 128)", source);
+        Assert.Contains("Pixel wrap_world_x(Pixel x) => x >= WorldWrap ? x - WorldWrap : x;", source);
+        Assert.Contains("playerWorldX = wrap_world_x(cameraX + PlayerScreenX);", source);
+        Assert.Contains("footCenterX = wrap_world_x(playerWorldX + 8);", source);
+        Assert.Contains("footRightX = wrap_world_x(playerWorldX + 17);", source);
+        Assert.Contains("if (velocityY >= WorldWrap)", source);
         Assert.Contains("playerY = 0;", source);
-        Assert.Contains("if (velocityY < 128)", source);
-        Assert.Contains("if (velocityY != 0)", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, 1);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, 1);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 0, 1, 8, 1);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 2);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 2);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footRightX, 32, 1, 8, 2);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 1);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 1);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 32, 1, 8, 1);", source);
+        Assert.Contains("velocityY < WorldWrap", source);
+        Assert.Contains("velocityY != 0", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("failTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("failTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("failTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
@@ -1474,14 +2527,13 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (failTile != 0)", source);
         Assert.Contains("hazardHit = 1;", source);
         Assert.Contains("if (hazardHit != 0)", source);
-        Assert.Contains("velocityY = 248;", source);
-        Assert.Contains("if (enemyX >= 68)", source);
-        Assert.Contains("if (enemyX <= 90)", source);
+        Assert.Contains("velocityY = HazardBounceVelocity;", source);
+        Assert.Contains("if (enemyX in EnemyHitStartX..EnemyHitEndX)", source);
         Assert.DoesNotContain("if (footTile != 3)", source);
         Assert.Contains("if (grounded == 0)", source);
-        Assert.Contains("if (playerY >= 116)", source);
+        Assert.Contains("if (playerY >= PlayerFallResetY)", source);
         Assert.Contains("if (resetRequested != 0)", source);
-        Assert.Contains("playerY = 73;", source);
+        Assert.Contains("playerY = PlayerStartY;", source);
         Assert.Contains("velocityY = 0;", source);
         Assert.Contains("jumping = 0;", source);
 
@@ -1500,7 +2552,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("void draw_background()", source);
         Assert.Contains("tilemap_set(2, 4, 1);", source);
         Assert.Contains("tilemap_set(10, 7, 2);", source);
-        Assert.Contains("world_map(16, 9, 6);", source);
+        Assert.Contains("world_map(WorldWidth, WorldStreamY, WorldHeight);", source);
         Assert.Contains("world_column(14, 0, 0, 0, 0, 0, 0);", source);
         Assert.Contains("world_column(15, 0, 0, 0, 0, 0, 0);", source);
         Assert.Contains("world_flags(7, 1, 0, 0, 0, 2, 1);", source);
@@ -1510,34 +2562,34 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world_flags(15, 0, 0, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
 
-        Assert.Contains("camera_init(16, 9, 6);", source);
+        Assert.Contains("camera_init(WorldWidth, WorldStreamY, WorldHeight);", source);
         Assert.True(
-            source.IndexOf("camera_init(16, 9, 6);", StringComparison.Ordinal) >
-            source.IndexOf("world_map(16, 9, 6);", StringComparison.Ordinal));
+            source.IndexOf("camera_init(WorldWidth, WorldStreamY, WorldHeight);", StringComparison.Ordinal) >
+            source.IndexOf("world_map(WorldWidth, WorldStreamY, WorldHeight);", StringComparison.Ordinal));
         Assert.Contains("camera_apply();", source);
-        Assert.Contains("playerWorldX = cameraX + 72;", source);
+        Assert.Contains("playerWorldX = wrap_world_x(cameraX + PlayerScreenX);", source);
         Assert.Contains("footLeftX = playerWorldX;", source);
-        Assert.Contains("footCenterX = playerWorldX + 8;", source);
-        Assert.Contains("footRightX = playerWorldX + 17;", source);
-        var topClampStart = source.IndexOf("if (velocityY >= 128)", StringComparison.Ordinal);
+        Assert.Contains("footCenterX = wrap_world_x(playerWorldX + 8);", source);
+        Assert.Contains("footRightX = wrap_world_x(playerWorldX + 17);", source);
+        var topClampStart = source.IndexOf("if (velocityY >= WorldWrap)", StringComparison.Ordinal);
         Assert.True(topClampStart >= 0);
         var footProbeStart = source.IndexOf("footLeftX = playerWorldX;", StringComparison.Ordinal);
         Assert.True(footProbeStart > topClampStart, "Runner should clamp upward Y wrap before collision probes and reset checks.");
         var topClampBlock = source[topClampStart..footProbeStart];
-        Assert.Contains("if (playerY >= 128)", topClampBlock);
+        Assert.Contains("if (playerY >= WorldWrap)", topClampBlock);
         Assert.Contains("playerY = 0;", topClampBlock);
         Assert.Contains("velocityY = 0;", topClampBlock);
         Assert.Contains("jumping = 0;", topClampBlock);
-        var platformBandStart = source.IndexOf("if (playerY >= 42)", StringComparison.Ordinal);
-        var groundBandStart = source.IndexOf("if (playerY >= 74)", StringComparison.Ordinal);
+        var platformBandStart = source.IndexOf("if (playerY in PlatformProbeStartY..PlatformProbeEndY", StringComparison.Ordinal);
+        var groundBandStart = source.IndexOf("if (playerY >= PlayerGroundY + 1)", StringComparison.Ordinal);
         Assert.True(platformBandStart >= 0);
         Assert.True(groundBandStart > platformBandStart);
         var platformBlock = source[platformBandStart..groundBandStart];
-        Assert.Contains("if (velocityY < 128)", platformBlock);
-        Assert.Contains("if (velocityY != 0)", platformBlock);
-        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, 1);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 32, 1, 8, 1);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footRightX, 32, 1, 8, 2);", source);
+        Assert.Contains("velocityY < WorldWrap", platformBlock);
+        Assert.Contains("velocityY != 0", platformBlock);
+        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("failTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
@@ -1610,22 +2662,25 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("i16 playerY = 73;", source);
-        Assert.Contains("if (playerY >= 74)", source);
-        Assert.Equal(3, CountOccurrences(source, "playerY = 73;"));
+        Assert.Contains("const PlayerStartY = 73;", source);
+        Assert.Contains("const PlayerGroundY = 73;", source);
+        Assert.Contains("Pixel playerY = PlayerStartY;", source);
+        Assert.Contains("if (playerY >= PlayerGroundY + 1)", source);
+        Assert.Equal(2, CountOccurrences(source, "playerY = PlayerStartY;"));
+        Assert.Equal(1, CountOccurrences(source, "playerY = PlayerGroundY;"));
         Assert.DoesNotContain("playerY = 77;", source);
-        Assert.Contains("world_map(16, 9, 6);", source);
+        Assert.Contains("world_map(WorldWidth, WorldStreamY, WorldHeight);", source);
         Assert.Contains("world_column(0, 0, 0, 2, 0, 4, 5);", source);
         Assert.Contains("world_column(7, 5, 0, 0, 0, 3, 5);", source);
         Assert.Contains("world_flags(7, 1, 0, 0, 0, 2, 1);", source);
         Assert.Contains("world_flags(8, 1, 0, 0, 0, 2, 1);", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("tilemap_set(7, 13, 3);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 2);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 1);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 0, 1, 8, 1);", source);
-        Assert.Contains("if (velocityY < 128)", source);
-        Assert.Contains("if (velocityY != 0)", source);
+        Assert.Contains("failTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("velocityY < WorldWrap", source);
+        Assert.Contains("velocityY != 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.Contains("if (failTile != 0)", source);
         Assert.Contains("if (hazardHit != 0)", source);
@@ -1881,6 +2936,11 @@ public class GameBoyRomCompilerTests
 
     private static bool ContainsSequence(byte[] bytes, byte[] sequence)
     {
+        return IndexOfSequence(bytes, sequence) >= 0;
+    }
+
+    private static int IndexOfSequence(byte[] bytes, byte[] sequence)
+    {
         for (var i = 0; i <= bytes.Length - sequence.Length; i++)
         {
             var matches = true;
@@ -1895,11 +2955,16 @@ public class GameBoyRomCompilerTests
 
             if (matches)
             {
-                return true;
+                return i;
             }
         }
 
-        return false;
+        return -1;
+    }
+
+    private static int ReadLittleEndian16(byte[] bytes, int offset)
+    {
+        return bytes[offset] | bytes[offset + 1] << 8;
     }
 
     private static string RepositoryFile(string relativePath)

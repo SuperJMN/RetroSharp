@@ -4,6 +4,8 @@ Sample Layer: `portable-sdk`
 
 This sample is the first small portability acceptance case for the 2D SDK surface. The same `camera.rs` source builds for Game Boy and NES by using shared world data, tick input, horizontal camera positioning, and logical sprite drawing.
 
+The source also exercises the language v1 style shared by both cartridge targets: `type` aliases, top-level `const` values, `loop`, and boolean literals for portable sprite draw arguments.
+
 Build the Game Boy ROM:
 
 ```bash

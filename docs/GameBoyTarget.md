@@ -47,20 +47,70 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 ## Supported Runtime Subset
 
 - `void main()`
-- Local byte-backed variables declared as `i8`, `u8`, `i16`, `u16`, or `bool`
+- Top-level and block-local `const` declarations, with or without type annotations, folded into literal expressions
+- Type aliases normalized to their underlying type before Game Boy lowering
+- `sizeof(type)` folded into literal byte-size expressions for primitive, pointer, enum, and plain struct types
+- `offsetof(type, field)` folded into literal byte-offset expressions for direct fields of plain struct types
+- `countof(array)` folded into literal element-count expressions for fixed-size local arrays
+- Decimal, hexadecimal (`0x2A`), binary (`0b1010_0000`), `_`-separated, and width-suffixed (`255u8`, `0x1234u16`) integer literals folded to the same immediates
+- Top-level `enum` declarations with qualified members folded into literal expressions
+- User helper calls inline with parameter substitution, including named arguments, default parameter values, helpers whose body is exactly one `return expr;`, or expression-bodied helpers written as `Ret name(args) => expr;` used as value expressions; there is no runtime call/return overhead for the current cartridge target path
+- Local byte-backed variables declared as `i8`, `u8`, `i16`, `u16`, `bool`, or a declared enum type
+- Plain local `struct` declarations whose fields are byte-backed types, with named and shorthand initializer lists
+- Fixed-size local arrays of byte-backed types with initializer lists, optional initializer-inferred lengths, and constant or byte-backed runtime index reads/writes, for example `u8 values[4] = [1, 2]` or `u8 values[] = [1, 2]`
 - Constant initializers
-- Assignment to local variables
+- Assignment and compound assignment (`+=`, `-=`, `&=`, `|=`, `^=`) to local variables, `struct.field` lvalues, and constant or byte-backed runtime array indices
+- Statement-only `++` and `--` on the same lvalues, including the increment slot of `for`
+- Explicit casts such as `(u8)expr` to byte-backed local types as zero-cost expression markers
 - `while`
-- `if`
+- `do while` with post-body conditions and `continue` targeting the final condition check
+- `loop` as explicit infinite-loop sugar over `while (true)`
+- `for` loops with local or assignment initializers, byte-backed conditions supported by the current relational lowering, and assignment increments
+- Half-open range `for` loops such as `for (u8 i in 0..countof(values))`
+- `break` and `continue` inside `while`, `do while`, and `for`
+- `if`/`else if`/`else`
+- No-fallthrough `switch` with block-owned cases and multi-value or half-open range cases lowered to direct `if`/`else` compare chains
+- Half-open range membership expressions such as `tile in 1..4`, lowered to the same direct bounds checks as `tile >= 1 && tile < 4`
 - `+` between byte-backed runtime expressions
 - `-` when one operand is constant
+- `&`, `|`, and `^` between byte-backed expressions or constants for flag masks
 - `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
+- Short-circuit `&&`/`||` and unary `!` in branch conditions built from the supported condition forms, and as byte-backed 0/1 value expressions
+- Conditional value expressions (`condition ? whenTrue : whenFalse`) over byte-backed branch expressions
 - `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, and `collision_aabb_tiles(...)` as value expressions for runtime map queries
 - `button_pressed(...)` as a value expression for joypad queries
 - `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` as tick-based input value expressions
 - `true` and `false`
 
-Current numeric locals are stored as one byte in WRAM. Types wider than one byte are accepted only as source-level convenience for this prototype.
+Current numeric and enum locals are stored as one byte in WRAM. Types wider than one byte are accepted only as source-level convenience for this prototype. Type aliases are normalized to their underlying type before Game Boy lowering, so `type ActorIndex = u8;` has the same runtime shape as `u8`. Top-level constants, block-local constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members are substituted before ROM lowering and do not reserve WRAM. Integer literal spelling is source-only: decimal, `0x` hexadecimal, `0b` binary, `_`-separated, and `u8`/`i8`/`u16`/`i16` suffixed forms all fold to the same immediate value. Constant type annotations are optional; omitting one does not change the emitted code because the constant disappears before target lowering. Constant boolean literals normalize to `1` or `0`, and constant conditional expressions select one branch before ROM lowering. `sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive and pointer types; and the sum of field sizes for plain structs. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. `countof(array)` returns the declared element count of a fixed-size local array visible at that point. Block-local constants can reference earlier constants visible at that point, including simple integer expressions such as `StartX + 1`, then disappear from the runtime block. Plain local structs are flattened to adjacent WRAM byte slots for their fields, so `position.x` and `position.y` have the same runtime cost as two separately declared locals. Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to the same zero-fill plus direct field stores as declaring the struct and assigning those members by hand; field expressions are emitted in declaration order, shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are also flattened to adjacent WRAM byte slots; `values[0]` and `values[1]` compile to direct absolute loads/stores with no heap and no runtime indexing helper. Initializer lists such as `u8 values[4] = [1, seed, seed + 1];` lower to the same zero-fill plus direct element stores as declaring the array and assigning those constant indices by hand; `u8 values[] = [1, seed, seed + 1];` infers the fixed length `3` before lowering and emits the same bytes as the explicit length form. Omitted trailing elements remain zero when the explicit length is larger than the initializer list. Runtime element access such as `values[i]` computes `HL = base + i` and loads or stores through `HL`; it does not add an implicit bounds check or mask.
+
+`++` and `--` are statement-only source sugar over `+= 1` and `-= 1`. They can be used as standalone statements or as the increment in a `for` loop, and lower to the same direct load/arithmetic/store sequences as the expanded compound assignment.
+
+Bitwise `&`, `|`, `^`, and their compound assignment forms lower to direct LR35902 AND/OR/XOR instructions. Constant masks, including forms such as `~Hazard`, use immediate opcodes such as `AND d8`, `OR d8`, and `XOR d8`; byte-backed runtime masks use direct register operations. There is no helper call, hidden local, or boolean materialization.
+
+Explicit casts validate that the requested target is a byte-backed local type, then emit the operand directly. In this prototype `(u8)(wide | 2)` is an intent marker for the source and semantic model; it does not add a helper call, temporary, sign extension, or truncation sequence.
+
+Current user helper calls are source-level inline expansion. Statement helpers expand their substituted block; value helpers are accepted when the body is exactly one `return expr;` and expand to that expression before Game Boy lowering. Expression-bodied helpers such as `u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;` normalize to that same single-return shape. Named arguments are matched to helper parameters before substitution, so `step(amount: 5, value: 4)` lowers like `step(4, 5)`. Default parameter values are substituted at the call site before lowering; a helper such as `u8 step(u8 value, u8 amount = value + 1) => value + amount;` emits the same bytes for `step(value: 4)` and `step(4)` as for `step(4, 5)`. This allows source-level helpers such as `set_flag(flags, mask)` without adding a call sequence, stack traffic, runtime local, or runtime ABI dependency.
+
+`for` loops lower to direct branches: initializer code is emitted once, the condition uses the same compare-and-jump path as `if`/`while`, the body emits normally, and the increment is emitted before jumping back to the condition. A counted loop such as `for (u8 i = 0; i < 3; i += 1)` therefore adds no hidden iterator, stack frame, or helper call.
+
+Half-open range `for` loops lower to the same counted-loop form. `for (u8 i in start..end)` becomes the equivalent of `for (u8 i = start; i < end; i++)`: `start` initializes the loop local once, `end` is the exclusive upper-bound condition, and no iterator object, hidden temporary, bounds check, or helper call is emitted.
+
+Half-open range membership expressions lower to ordinary short-circuit bounds checks. `value in start..end` emits the same compare-and-jump sequence as `value >= start && value < end`; there is no range object, helper call, hidden local, hidden bounds check, or implicit subject cache.
+
+`loop` lowers to the same direct-branch shape as `while (true)`. The body is emitted once, the tail jumps back to the body start, `continue` jumps directly to that start label, and `break` jumps to the loop end. There is no condition expression, hidden local, stack frame, or helper call.
+
+`do while` loops lower to direct branches with the body first and the condition at the bottom. `continue` jumps to that bottom condition check, matching source semantics without duplicating the body or adding helper state.
+
+`else if` lowers as a nested `if` in the `else` branch, using the same compare-and-jump path as hand-written nested conditionals. It does not allocate state, materialize a boolean, or call a helper.
+
+`switch` lowers as a nested `if`/`else if` compare chain. Each `case` owns a block and there is no fallthrough, so no `break` is needed between cases. Multi-value cases such as `case 0, 1` lower to the same short-circuit branch condition as `state == 0 || state == 1`. Half-open range cases such as `case 1..4` lower to `state >= 1 && state < 4`, using the same direct compare-and-jump primitives as hand-written bounds checks. Case expressions are folded before Game Boy lowering when they are constants or enum members. There is no jump table, dispatcher, helper call, or hidden local.
+
+`break` and `continue` lower to unconditional jumps to the active loop labels. In a `for` loop, `continue` jumps to the increment label so counted loops still execute their increment; in a `while` loop, it jumps back to the condition/start label.
+
+Logical `&&` and `||` in conditions lower to short-circuit jumps. The right-hand condition is emitted only on the path that needs it, so expressions such as `if (x != 0 && y != 0)` and `if (x != 0 || y != 0)` add branch code only; they do not allocate a temporary boolean or call a helper. Unary `!` in a condition lowers by inverting the branch target. When used as byte-backed value expressions, logical and comparison forms materialize `1` or `0` through the same direct branch machinery and store that byte in the destination.
+
+Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct branches using the same condition lowering as `if`. Only the selected branch expression is emitted on each path, then the selected byte is stored by the surrounding assignment or call argument. There is no helper call, hidden local, or eager evaluation of both values.
 
 ## Supported Video API
 

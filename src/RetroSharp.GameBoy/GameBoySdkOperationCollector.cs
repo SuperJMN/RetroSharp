@@ -33,6 +33,11 @@ internal static class GameBoySdkOperationCollector
             switch (statement)
             {
                 case DeclarationSyntax declaration:
+                    if (declaration.ArrayLength.HasValue)
+                    {
+                        CollectExpression(declaration.ArrayLength.Value);
+                    }
+
                     if (declaration.Initialization.HasValue)
                     {
                         CollectExpression(declaration.Initialization.Value);
@@ -43,11 +48,40 @@ internal static class GameBoySdkOperationCollector
                     CollectCall(call);
                     break;
                 case ExpressionStatementSyntax { Expression: AssignmentSyntax assignment }:
+                    CollectLValue(assignment.Left);
                     CollectExpression(assignment.Right);
                     break;
                 case WhileSyntax loop:
                     CollectExpression(loop.Condition);
                     CollectBlock(loop.Body);
+                    break;
+                case DoWhileSyntax loop:
+                    CollectBlock(loop.Body);
+                    CollectExpression(loop.Condition);
+                    break;
+                case LoopSyntax loop:
+                    CollectBlock(loop.Body);
+                    break;
+                case RangeForSyntax loop:
+                    CollectStatement(RangeForLowerer.Lower(loop));
+                    break;
+                case ForSyntax loop:
+                    if (loop.Initializer.HasValue)
+                    {
+                        CollectStatement(loop.Initializer.Value);
+                    }
+
+                    if (loop.Condition.HasValue)
+                    {
+                        CollectExpression(loop.Condition.Value);
+                    }
+
+                    CollectBlock(loop.Body);
+                    if (loop.Increment.HasValue)
+                    {
+                        CollectExpression(loop.Increment.Value);
+                    }
+
                     break;
                 case IfElseSyntax branch:
                     CollectExpression(branch.Condition);
@@ -114,10 +148,44 @@ internal static class GameBoySdkOperationCollector
                 case FunctionCall call:
                     CollectValueCall(call);
                     break;
+                case NamedArgumentSyntax namedArgument:
+                    CollectExpression(namedArgument.Expression);
+                    break;
+                case ArrayInitializerSyntax arrayInitializer:
+                    foreach (var element in arrayInitializer.Elements)
+                    {
+                        CollectExpression(element);
+                    }
+                    break;
+                case StructInitializerSyntax structInitializer:
+                    foreach (var field in structInitializer.Fields)
+                    {
+                        CollectExpression(field.Expression);
+                    }
+                    break;
                 case BinaryExpressionSyntax binary:
                     CollectExpression(binary.Left);
                     CollectExpression(binary.Right);
                     break;
+                case ConditionalExpressionSyntax conditional:
+                    CollectExpression(conditional.Condition);
+                    CollectExpression(conditional.WhenTrue);
+                    CollectExpression(conditional.WhenFalse);
+                    break;
+                case CastSyntax cast:
+                    CollectExpression(cast.Expression);
+                    break;
+                case IndexExpressionSyntax indexExpression:
+                    CollectExpression(indexExpression.Index);
+                    break;
+            }
+        }
+
+        private void CollectLValue(LValue lValue)
+        {
+            if (lValue is IndexLValue index)
+            {
+                CollectExpression(index.Index);
             }
         }
 
@@ -127,6 +195,13 @@ internal static class GameBoySdkOperationCollector
             {
                 case "world_tile_flags_at":
                     CollectWorldTileFlagsAt(call);
+                    break;
+                default:
+                    if (CollectUserValueFunction(call))
+                    {
+                        return;
+                    }
+
                     break;
             }
 
@@ -162,9 +237,21 @@ internal static class GameBoySdkOperationCollector
                     return new SdkByteExpression.Constant(0);
                 case IdentifierSyntax identifier:
                     return new SdkByteExpression.Variable(identifier.Identifier);
+                case MemberAccessSyntax memberAccess:
+                    return new SdkByteExpression.Variable(GameBoyVideoProgram.MemberAccessName(memberAccess));
+                case IndexExpressionSyntax indexExpression:
+                    return new SdkByteExpression.Variable(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, context));
+                case CastSyntax cast:
+                    return ByteExpression(cast.Expression, context);
                 default:
                     throw new InvalidOperationException($"{context} must be a byte constant or local variable.");
             }
+        }
+
+        private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
+        {
+            var value = CheckedByte(GameBoyVideoProgram.ConstValue(index, context), context);
+            return $"{baseIdentifier}[{value}]";
         }
 
         private static int CheckedByte(int value, string context)
@@ -212,7 +299,6 @@ internal static class GameBoySdkOperationCollector
                 return;
             }
 
-            GameBoyVideoProgram.RequireParameterlessUserFunction("Game Boy", call, function);
             if (!userFunctionCallStack.Add(function.Name))
             {
                 throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
@@ -220,12 +306,36 @@ internal static class GameBoySdkOperationCollector
 
             try
             {
-                CollectBlock(function.Block);
+                CollectBlock(ParameterSubstitution.Substitute(function, call, "Game Boy"));
             }
             finally
             {
                 userFunctionCallStack.Remove(function.Name);
             }
+        }
+
+        private bool CollectUserValueFunction(FunctionCall call)
+        {
+            if (!functions.TryGetValue(call.Name, out var function))
+            {
+                return false;
+            }
+
+            if (!userFunctionCallStack.Add(function.Name))
+            {
+                throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+            }
+
+            try
+            {
+                CollectExpression(ParameterSubstitution.SubstituteReturnExpression(function, call, "Game Boy"));
+            }
+            finally
+            {
+                userFunctionCallStack.Remove(function.Name);
+            }
+
+            return true;
         }
     }
 }

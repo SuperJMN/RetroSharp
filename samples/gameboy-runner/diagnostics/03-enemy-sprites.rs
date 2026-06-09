@@ -29,15 +29,15 @@ void main() {
     i16 enemyFrame = 0;
     i16 enemyTick = 0;
 
-    while (true) {
+    loop {
         video_wait_vblank();
         sprite_draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);
         sprite_draw(enemy_slug, 40, 57, enemyFrame, true, 0);
-        enemyX = enemyX - 1;
+        enemyX--;
         if (enemyX <= 96) {
             enemyX = 136;
         }
-        enemyTick = enemyTick + 1;
+        enemyTick++;
         enemyFrame = animation_frame(enemy_walk, enemyTick);
     }
 }

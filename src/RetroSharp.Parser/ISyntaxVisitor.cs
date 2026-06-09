@@ -4,11 +4,22 @@ public interface ISyntaxVisitor
 {
     void VisitBlock(BlockSyntax programSyntax);
     void VisitProgram(ProgramSyntax programSyntax);
+    void VisitTypeAlias(TypeAliasSyntax typeAlias);
+    void VisitConstDeclaration(ConstDeclarationSyntax constDeclaration);
+    void VisitEnum(EnumSyntax enumSyntax);
+    void VisitEnumMember(EnumMemberSyntax enumMember);
+    void VisitStruct(StructSyntax structSyntax);
+    void VisitStructField(StructFieldSyntax structField);
+    void VisitArrayInitializer(ArrayInitializerSyntax arrayInitializerSyntax);
+    void VisitStructInitializer(StructInitializerSyntax structInitializerSyntax);
     void VisitFunctionCall(FunctionCall functionCall);
+    void VisitNamedArgument(NamedArgumentSyntax namedArgumentSyntax);
     void VisitIdentifierLValue(IdentifierLValue identifierLValue);
     void VisitPointerDerefLValue(PointerDerefLValue pointerDerefLValue);
     void VisitIndexLValue(IndexLValue indexLValue);
+    void VisitMemberAccessLValue(MemberAccessLValue memberAccessLValue);
     void VisitAssignment(AssignmentSyntax assignmentSyntax);
+    void VisitPostfixMutation(PostfixMutationSyntax postfixMutationSyntax);
     void VisitExpressionStatement(ExpressionStatementSyntax expressionStatementSyntax);
     void VisitFunction(FunctionSyntax function);
     void VisitConstant(ConstantSyntax constantSyntax);
@@ -16,7 +27,23 @@ public interface ISyntaxVisitor
     void VisitParameter(ParameterSyntax parameterSyntax);
     void VisitReturn(ReturnSyntax returnSyntax);
     void VisitIdentifier(IdentifierSyntax identifierSyntax);
+    void VisitMemberAccess(MemberAccessSyntax memberAccessSyntax);
+    void VisitIndexExpression(IndexExpressionSyntax indexExpressionSyntax);
+    void VisitSizeOf(SizeOfSyntax sizeOfSyntax);
+    void VisitOffsetOf(OffsetOfSyntax offsetOfSyntax);
+    void VisitCountOf(CountOfSyntax countOfSyntax);
+    void VisitCast(CastSyntax castSyntax);
+    void VisitUnaryOperator(UnaryExpressionSyntax unaryExpressionSyntax);
     void VisitBinaryOperator(BinaryExpressionSyntax binaryExpressionSyntax);
+    void VisitConditionalExpression(ConditionalExpressionSyntax conditionalExpressionSyntax);
     void VisitIfElse(IfElseSyntax ifElseSyntax);
     void VisitWhile(WhileSyntax whileSyntax);
+    void VisitDoWhile(DoWhileSyntax doWhileSyntax);
+    void VisitLoop(LoopSyntax loopSyntax);
+    void VisitRangeFor(RangeForSyntax rangeForSyntax);
+    void VisitFor(ForSyntax forSyntax);
+    void VisitSwitch(SwitchSyntax switchSyntax);
+    void VisitSwitchCase(SwitchCaseSyntax switchCaseSyntax);
+    void VisitBreak(BreakSyntax breakSyntax);
+    void VisitContinue(ContinueSyntax continueSyntax);
 }

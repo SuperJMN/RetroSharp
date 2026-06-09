@@ -93,7 +93,7 @@ void main() {
     i16 moving = 0;
     i16 resetRequested = 0;
 
-    while (true) {
+    loop {
         video_wait_vblank();
         camera_apply();
         sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
@@ -102,8 +102,8 @@ void main() {
 
         resetRequested = 0;
         grounded = 0;
-        velocityY = velocityY + 1;
-        playerY = playerY + velocityY;
+        velocityY += 1;
+        playerY += velocityY;
         if (velocityY >= 128) {
             if (playerY >= 128) {
                 playerY = 0;
@@ -157,7 +157,7 @@ void main() {
             jumpTicks = button_hold_ticks(a);
             if (button_down(a) != 0) {
                 if (jumpTicks < 12) {
-                    velocityY = velocityY - 1;
+                    velocityY -= 1;
                 }
             }
 
@@ -170,13 +170,13 @@ void main() {
         if (button_down(right) != 0) {
             moving = 1;
             displayFlipX = false;
-            cameraX = cameraX + 1;
+            cameraX += 1;
         }
 
         if (button_down(left) != 0) {
             moving = 1;
             displayFlipX = true;
-            cameraX = cameraX - 1;
+            cameraX -= 1;
         }
 
         if (moving != 0) {
@@ -184,7 +184,7 @@ void main() {
         }
 
         if (moving != 0) {
-            animTick = animTick + 1;
+            animTick++;
         } else {
             animTick = 0;
         }

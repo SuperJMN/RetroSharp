@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Parser;
 
@@ -400,7 +401,9 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly Dictionary<string, ushort> variables = [];
+    private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
+    private readonly Stack<LoopTarget> loopTargets = [];
     private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
     private int? cameraMapWidth;
@@ -451,8 +454,26 @@ internal sealed class GameBoyRuntimeCompiler
             case WhileSyntax whileSyntax:
                 EmitWhile(whileSyntax);
                 break;
+            case DoWhileSyntax doWhileSyntax:
+                EmitDoWhile(doWhileSyntax);
+                break;
+            case LoopSyntax loopSyntax:
+                EmitWhile(LoopLowerer.Lower(loopSyntax));
+                break;
+            case RangeForSyntax rangeForSyntax:
+                EmitFor(RangeForLowerer.Lower(rangeForSyntax));
+                break;
+            case ForSyntax forSyntax:
+                EmitFor(forSyntax);
+                break;
             case IfElseSyntax ifElseSyntax:
                 EmitIf(ifElseSyntax);
+                break;
+            case BreakSyntax:
+                EmitBreak();
+                break;
+            case ContinueSyntax:
+                EmitContinue();
                 break;
             case ReturnSyntax:
                 break;
@@ -463,23 +484,77 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitDeclaration(DeclarationSyntax declaration)
     {
-        if (!IsByteBackedType(declaration.Type))
+        if (declaration.ArrayLength.HasValue)
         {
-            throw new InvalidOperationException($"Game Boy target does not support local type '{declaration.Type}' yet.");
+            EmitArrayDeclaration(declaration);
+            return;
         }
 
-        if (variables.ContainsKey(declaration.Name))
+        if (IsByteBackedLocalType(declaration.Type))
+        {
+            EmitByteBackedDeclaration(declaration);
+            return;
+        }
+
+        if (program.Structs.TryGetValue(declaration.Type, out var structSyntax))
+        {
+            EmitStructDeclaration(declaration, structSyntax);
+            return;
+        }
+
+        throw new InvalidOperationException($"Game Boy target does not support local type '{declaration.Type}' yet.");
+    }
+
+    private void EmitArrayDeclaration(DeclarationSyntax declaration)
+    {
+        if (!IsByteBackedLocalType(declaration.Type))
+        {
+            throw new InvalidOperationException($"Game Boy target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
+        }
+
+        if (!declaredVariables.Add(declaration.Name))
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
 
-        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        var length = CheckedRange(GameBoyVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
+        var elementAddresses = new List<ushort>();
+        for (var index = 0; index < length; index++)
         {
-            throw new InvalidOperationException("Game Boy target local variables exceed the current prototype WRAM allocation.");
+            var address = DeclareVariable(IndexedElementName(declaration.Name, index));
+            elementAddresses.Add(address);
+            builder.LoadAImmediate(0);
+            builder.StoreA(address);
         }
 
-        var address = nextVariableAddress++;
-        variables.Add(declaration.Name, address);
+        if (declaration.Initialization.HasValue)
+        {
+            EmitArrayInitializer(declaration, declaration.Initialization.Value, length, elementAddresses);
+        }
+    }
+
+    private void EmitArrayInitializer(DeclarationSyntax declaration, ExpressionSyntax initialization, int length, IReadOnlyList<ushort> elementAddresses)
+    {
+        if (initialization is not ArrayInitializerSyntax arrayInitializer)
+        {
+            throw new InvalidOperationException($"Game Boy target requires an array initializer for local array '{declaration.Name}'.");
+        }
+
+        if (arrayInitializer.Elements.Count > length)
+        {
+            throw new InvalidOperationException($"Game Boy target array initializer for '{declaration.Name}' has {arrayInitializer.Elements.Count} element(s), but the array length is {length}.");
+        }
+
+        for (var index = 0; index < arrayInitializer.Elements.Count; index++)
+        {
+            EmitExpressionToA(arrayInitializer.Elements[index]);
+            builder.StoreA(elementAddresses[index]);
+        }
+    }
+
+    private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
+    {
+        var address = DeclareVariable(declaration.Name);
 
         if (declaration.Initialization.HasValue)
         {
@@ -493,9 +568,110 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(address);
     }
 
+    private void EmitStructDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
+    {
+        if (!declaredVariables.Add(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        var fieldAddresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        var fieldNames = new List<string>();
+        foreach (var field in structSyntax.Fields)
+        {
+            if (!IsByteBackedLocalType(field.Type))
+            {
+                throw new InvalidOperationException($"Game Boy target does not support struct field type '{field.Type}' yet.");
+            }
+
+            var address = DeclareVariable($"{declaration.Name}.{field.Name}");
+            fieldAddresses.Add(field.Name, address);
+            fieldNames.Add(field.Name);
+            builder.LoadAImmediate(0);
+            builder.StoreA(address);
+        }
+
+        if (declaration.Initialization.HasValue)
+        {
+            EmitStructInitializer(declaration, declaration.Initialization.Value, fieldNames, fieldAddresses);
+        }
+    }
+
+    private void EmitStructInitializer(
+        DeclarationSyntax declaration,
+        ExpressionSyntax initialization,
+        IReadOnlyList<string> fieldNames,
+        IReadOnlyDictionary<string, ushort> fieldAddresses)
+    {
+        if (initialization is not StructInitializerSyntax structInitializer)
+        {
+            throw new InvalidOperationException($"Game Boy target requires a struct initializer for local struct '{declaration.Name}'.");
+        }
+
+        var initializedFields = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+        foreach (var field in structInitializer.Fields)
+        {
+            if (!initializedFields.TryAdd(field.Name, field.Expression))
+            {
+                throw new InvalidOperationException($"Game Boy target struct initializer for '{declaration.Name}' supplies field '{field.Name}' more than once.");
+            }
+
+            if (!fieldAddresses.ContainsKey(field.Name))
+            {
+                throw new InvalidOperationException($"Game Boy target struct initializer for '{declaration.Name}' has no field named '{field.Name}'.");
+            }
+        }
+
+        foreach (var fieldName in fieldNames)
+        {
+            if (!initializedFields.TryGetValue(fieldName, out var expression))
+            {
+                continue;
+            }
+
+            EmitExpressionToA(expression);
+            builder.StoreA(fieldAddresses[fieldName]);
+        }
+    }
+
+    private ushort DeclareVariable(string name)
+    {
+        if (!declaredVariables.Add(name))
+        {
+            throw new InvalidOperationException($"Variable '{name}' is already declared.");
+        }
+
+        if (variables.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Variable '{name}' is already declared.");
+        }
+
+        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        {
+            throw new InvalidOperationException("Game Boy target local variables exceed the current prototype WRAM allocation.");
+        }
+
+        var address = nextVariableAddress++;
+        variables.Add(name, address);
+        return address;
+    }
+
     private static bool IsByteBackedType(string type)
     {
         return type is "i8" or "u8" or "i16" or "u16" or "bool";
+    }
+
+    private bool IsByteBackedLocalType(string type)
+    {
+        return IsByteBackedType(type) || program.Enums.ContainsKey(type);
+    }
+
+    private void RequireSupportedCastTarget(CastSyntax cast)
+    {
+        if (!IsByteBackedLocalType(cast.Type))
+        {
+            throw new InvalidOperationException($"Game Boy target only supports explicit casts to byte-backed local types; '{cast.Type}' is not supported yet.");
+        }
     }
 
     private void EmitExpressionStatement(ExpressionStatementSyntax expressionStatement)
@@ -515,14 +691,137 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitAssignment(AssignmentSyntax assignment)
     {
-        if (assignment.Left is not IdentifierLValue identifier)
+        if (assignment.Left is IndexLValue indexLValue && !TryConst(indexLValue.Index, out _))
         {
-            throw new InvalidOperationException("Game Boy target only supports assignments to local variables.");
+            EmitRuntimeIndexedAssignment(indexLValue, assignment);
+            return;
         }
 
-        var address = VariableAddress(identifier.Identifier);
-        EmitExpressionToA(assignment.Right);
+        var address = LValueAddress(assignment.Left);
+        EmitAssignmentRightToA(assignment);
         builder.StoreA(address);
+    }
+
+    private void EmitRuntimeIndexedAssignment(IndexLValue indexLValue, AssignmentSyntax assignment)
+    {
+        EmitRuntimeIndexedAddressToHl(indexLValue.BaseIdentifier, indexLValue.Index);
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed assignment");
+                EmitExpressionToA(assignment.Right);
+                builder.StoreHlA();
+                return;
+            case "+=":
+                builder.LoadAFromHl();
+                if (TryConst(assignment.Right, out var addRight))
+                {
+                    builder.AddAImmediate(addRight);
+                    builder.StoreHlA();
+                    return;
+                }
+
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed compound assignment");
+                builder.LoadCFromA();
+                EmitExpressionToA(assignment.Right);
+                builder.AddAFromC();
+                builder.StoreHlA();
+                return;
+            case "-=":
+                builder.LoadAFromHl();
+                if (TryConst(assignment.Right, out var subtractRight))
+                {
+                    builder.SubtractAImmediate(subtractRight);
+                    builder.StoreHlA();
+                    return;
+                }
+
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed compound assignment");
+                builder.LoadCFromA();
+                EmitExpressionToA(assignment.Right);
+                builder.LoadBFromA();
+                builder.LoadAFromC();
+                builder.SubtractB();
+                builder.StoreHlA();
+                return;
+            case "&=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "&", "runtime indexed &= assignment");
+                return;
+            case "|=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "|", "runtime indexed |= assignment");
+                return;
+            case "^=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "^", "runtime indexed ^= assignment");
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy assignment operator '{assignment.OperatorSymbol}'.");
+        }
+    }
+
+    private void EmitRuntimeIndexedBitwiseCompoundAssignment(ExpressionSyntax right, string op, string context)
+    {
+        builder.LoadAFromHl();
+        if (TryConst(right, out var constant))
+        {
+            EmitBitwiseImmediate(op, constant);
+            builder.StoreHlA();
+            return;
+        }
+
+        RequireExpressionPreservesHl(right, context);
+        builder.LoadCFromA();
+        EmitExpressionToA(right);
+        EmitBitwiseAFromC(op);
+        builder.StoreHlA();
+    }
+
+    private void EmitAssignmentRightToA(AssignmentSyntax assignment)
+    {
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                EmitExpressionToA(assignment.Right);
+                return;
+            case "+=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("+")));
+                return;
+            case "-=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("-")));
+                return;
+            case "&=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("&")));
+                return;
+            case "|=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("|")));
+                return;
+            case "^=":
+                EmitExpressionToA(new BinaryExpressionSyntax(ExpressionFromLValue(assignment.Left), assignment.Right, Operator.Get("^")));
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy assignment operator '{assignment.OperatorSymbol}'.");
+        }
+    }
+
+    private ushort LValueAddress(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => VariableAddress(identifier.Identifier),
+            MemberAccessLValue memberAccess => VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess.MemberAccess)),
+            IndexLValue index => VariableAddress(IndexedElementName(index.BaseIdentifier, index.Index, $"{index.BaseIdentifier} array index")),
+            _ => throw new InvalidOperationException("Game Boy target only supports assignments to local variables, struct fields, or constant array indices."),
+        };
+    }
+
+    private static ExpressionSyntax ExpressionFromLValue(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => new IdentifierSyntax(identifier.Identifier),
+            MemberAccessLValue memberAccess => memberAccess.MemberAccess,
+            IndexLValue index => new IndexExpressionSyntax(index.BaseIdentifier, index.Index),
+            _ => throw new InvalidOperationException("Compound assignment target must be readable."),
+        };
     }
 
     private void EmitCall(FunctionCall call)
@@ -604,7 +903,6 @@ internal sealed class GameBoyRuntimeCompiler
             return false;
         }
 
-        GameBoyVideoProgram.RequireParameterlessUserFunction("Game Boy", call, function);
         if (!userFunctionCallStack.Add(function.Name))
         {
             throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
@@ -612,7 +910,31 @@ internal sealed class GameBoyRuntimeCompiler
 
         try
         {
-            EmitBlock(function.Block);
+            EmitBlock(ParameterSubstitution.Substitute(function, call, "Game Boy"));
+        }
+        finally
+        {
+            userFunctionCallStack.Remove(function.Name);
+        }
+
+        return true;
+    }
+
+    private bool TryEmitUserValueFunction(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (!userFunctionCallStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            EmitExpressionToA(ParameterSubstitution.SubstituteReturnExpression(function, call, "Game Boy"));
         }
         finally
         {
@@ -1357,9 +1679,103 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.Label(startLabel);
         EmitConditionFalseJump(whileSyntax.Condition, endLabel);
-        EmitBlock(whileSyntax.Body);
+        loopTargets.Push(new LoopTarget(endLabel, startLabel));
+        try
+        {
+            EmitBlock(whileSyntax.Body);
+        }
+        finally
+        {
+            loopTargets.Pop();
+        }
+
         builder.JumpAbsolute(startLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitDoWhile(DoWhileSyntax doWhileSyntax)
+    {
+        var startLabel = builder.CreateLabel("do_start");
+        var continueLabel = builder.CreateLabel("do_continue");
+        var endLabel = builder.CreateLabel("do_end");
+
+        builder.Label(startLabel);
+        loopTargets.Push(new LoopTarget(endLabel, continueLabel));
+        try
+        {
+            EmitBlock(doWhileSyntax.Body);
+        }
+        finally
+        {
+            loopTargets.Pop();
+        }
+
+        builder.Label(continueLabel);
+        EmitConditionFalseJump(doWhileSyntax.Condition, endLabel);
+        builder.JumpAbsolute(startLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitFor(ForSyntax forSyntax)
+    {
+        if (forSyntax.Initializer.HasValue)
+        {
+            EmitStatement(forSyntax.Initializer.Value);
+        }
+
+        var startLabel = builder.CreateLabel("for_start");
+        var continueLabel = builder.CreateLabel("for_continue");
+        var endLabel = builder.CreateLabel("for_end");
+
+        builder.Label(startLabel);
+        if (forSyntax.Condition.HasValue)
+        {
+            EmitConditionFalseJump(forSyntax.Condition.Value, endLabel);
+        }
+
+        loopTargets.Push(new LoopTarget(endLabel, continueLabel));
+        try
+        {
+            EmitBlock(forSyntax.Body);
+        }
+        finally
+        {
+            loopTargets.Pop();
+        }
+
+        builder.Label(continueLabel);
+        if (forSyntax.Increment.HasValue)
+        {
+            if (forSyntax.Increment.Value is not AssignmentSyntax increment)
+            {
+                throw new InvalidOperationException($"Unsupported Game Boy for increment '{forSyntax.Increment.Value.GetType().Name}'.");
+            }
+
+            EmitAssignment(increment);
+        }
+
+        builder.JumpAbsolute(startLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitBreak()
+    {
+        if (loopTargets.Count == 0)
+        {
+            throw new InvalidOperationException("break can only be used inside a loop.");
+        }
+
+        builder.JumpAbsolute(loopTargets.Peek().BreakLabel);
+    }
+
+    private void EmitContinue()
+    {
+        if (loopTargets.Count == 0)
+        {
+            throw new InvalidOperationException("continue can only be used inside a loop.");
+        }
+
+        builder.JumpAbsolute(loopTargets.Peek().ContinueLabel);
     }
 
     private void EmitIf(IfElseSyntax ifElseSyntax)
@@ -1398,6 +1814,16 @@ internal sealed class GameBoyRuntimeCompiler
         {
             switch (binary.Operator.Symbol)
             {
+                case "&&":
+                    EmitConditionFalseJump(binary.Left, falseLabel);
+                    EmitConditionFalseJump(binary.Right, falseLabel);
+                    return;
+                case "||":
+                    var trueLabel = builder.CreateLabel("or_true");
+                    EmitConditionTrueJump(binary.Left, trueLabel);
+                    EmitConditionFalseJump(binary.Right, falseLabel);
+                    builder.Label(trueLabel);
+                    return;
                 case "==":
                     EmitCompareToConstant(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
@@ -1415,9 +1841,63 @@ internal sealed class GameBoyRuntimeCompiler
             }
         }
 
+        if (condition is UnaryExpressionSyntax { OperatorSymbol: "!" } unary)
+        {
+            EmitConditionTrueJump(unary.Operand, falseLabel);
+            return;
+        }
+
         EmitExpressionToA(condition);
         builder.Emit(0xFE, 0x00);                   // CP $00
         builder.JumpAbsolute(0xCA, falseLabel);     // JP Z,falseLabel
+    }
+
+    private void EmitConditionTrueJump(ExpressionSyntax condition, string trueLabel)
+    {
+        if (TryConst(condition, out var constant))
+        {
+            if (constant != 0)
+            {
+                builder.JumpAbsolute(trueLabel);
+            }
+
+            return;
+        }
+
+        if (condition is BinaryExpressionSyntax binary)
+        {
+            switch (binary.Operator.Symbol)
+            {
+                case "&&":
+                    var falseLabel = builder.CreateLabel("and_false");
+                    EmitConditionFalseJump(binary.Left, falseLabel);
+                    EmitConditionTrueJump(binary.Right, trueLabel);
+                    builder.Label(falseLabel);
+                    return;
+                case "||":
+                    EmitConditionTrueJump(binary.Left, trueLabel);
+                    EmitConditionTrueJump(binary.Right, trueLabel);
+                    return;
+                case "==":
+                    EmitCompareToConstant(binary.Left, binary.Right);
+                    builder.JumpAbsolute(0xCA, trueLabel); // JP Z,trueLabel
+                    return;
+                case "!=":
+                    EmitCompareToConstant(binary.Left, binary.Right);
+                    builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
+                    return;
+            }
+        }
+
+        if (condition is UnaryExpressionSyntax { OperatorSymbol: "!" } unary)
+        {
+            EmitConditionFalseJump(unary.Operand, trueLabel);
+            return;
+        }
+
+        EmitExpressionToA(condition);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, trueLabel);       // JP NZ,trueLabel
     }
 
     private void EmitCompareToConstant(ExpressionSyntax left, ExpressionSyntax right)
@@ -1519,8 +1999,35 @@ internal sealed class GameBoyRuntimeCompiler
             case IdentifierSyntax identifier:
                 builder.LoadA(VariableAddress(identifier.Identifier));
                 break;
+            case MemberAccessSyntax memberAccess:
+                builder.LoadA(VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess)));
+                break;
+            case IndexExpressionSyntax indexExpression:
+                if (TryConst(indexExpression.Index, out _))
+                {
+                    builder.LoadA(VariableAddress(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index")));
+                }
+                else
+                {
+                    EmitRuntimeIndexedAddressToHl(indexExpression.BaseIdentifier, indexExpression.Index);
+                    builder.LoadAFromHl();
+                }
+                break;
             case FunctionCall call:
                 EmitValueCallToA(call);
+                break;
+            case CastSyntax cast:
+                RequireSupportedCastTarget(cast);
+                EmitExpressionToA(cast.Expression);
+                break;
+            case ConditionalExpressionSyntax conditional:
+                EmitConditionalExpressionToA(conditional);
+                break;
+            case UnaryExpressionSyntax unary when IsBooleanValueExpression(unary):
+                EmitBooleanExpressionToA(unary);
+                break;
+            case BinaryExpressionSyntax binary when IsBooleanValueExpression(binary):
+                EmitBooleanExpressionToA(binary);
                 break;
             case BinaryExpressionSyntax binary:
                 EmitBinaryExpressionToA(binary);
@@ -1528,6 +2035,42 @@ internal sealed class GameBoyRuntimeCompiler
             default:
                 throw new InvalidOperationException($"Unsupported Game Boy expression '{expression.GetType().Name}'.");
         }
+    }
+
+    private void EmitConditionalExpressionToA(ConditionalExpressionSyntax conditional)
+    {
+        var falseLabel = builder.CreateLabel("conditional_false");
+        var endLabel = builder.CreateLabel("conditional_end");
+
+        EmitConditionFalseJump(conditional.Condition, falseLabel);
+        EmitExpressionToA(conditional.WhenTrue);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        EmitExpressionToA(conditional.WhenFalse);
+        builder.Label(endLabel);
+    }
+
+    private static bool IsBooleanValueExpression(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            UnaryExpressionSyntax { OperatorSymbol: "!" } => true,
+            BinaryExpressionSyntax binary => binary.Operator.Symbol is "&&" or "||" or "==" or "!=" or "<" or "<=" or ">" or ">=",
+            _ => false,
+        };
+    }
+
+    private void EmitBooleanExpressionToA(ExpressionSyntax expression)
+    {
+        var falseLabel = builder.CreateLabel("bool_false");
+        var endLabel = builder.CreateLabel("bool_end");
+
+        EmitConditionFalseJump(expression, falseLabel);
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
     }
 
     private void EmitValueCallToA(FunctionCall call)
@@ -1580,6 +2123,11 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitCameraSpanHasFlags(call);
                 break;
             default:
+                if (TryEmitUserValueFunction(call))
+                {
+                    break;
+                }
+
                 throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
         }
     }
@@ -2083,13 +2631,101 @@ internal sealed class GameBoyRuntimeCompiler
                 }
 
                 break;
+            case "&":
+            case "|":
+            case "^":
+                EmitBitwiseBinaryExpressionToA(binary);
+                return;
         }
 
         throw new InvalidOperationException($"Unsupported Game Boy binary expression '{binary.Operator.Symbol}'.");
     }
 
+    private void EmitBitwiseBinaryExpressionToA(BinaryExpressionSyntax binary)
+    {
+        if (TryConst(binary.Right, out var rightConstant))
+        {
+            EmitExpressionToA(binary.Left);
+            EmitBitwiseImmediate(binary.Operator.Symbol, rightConstant);
+            return;
+        }
+
+        if (TryConst(binary.Left, out var leftConstant))
+        {
+            EmitExpressionToA(binary.Right);
+            EmitBitwiseImmediate(binary.Operator.Symbol, leftConstant);
+            return;
+        }
+
+        EmitExpressionToA(binary.Right);
+        builder.LoadBFromA();
+        EmitExpressionToA(binary.Left);
+        EmitBitwiseAFromB(binary.Operator.Symbol);
+    }
+
+    private void EmitBitwiseImmediate(string op, int value)
+    {
+        var mask = value & 0xFF;
+        switch (op)
+        {
+            case "&":
+                builder.AndImmediate(mask);
+                return;
+            case "|":
+                builder.OrImmediate(mask);
+                return;
+            case "^":
+                builder.XorImmediate(mask);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy bitwise operator '{op}'.");
+        }
+    }
+
+    private void EmitBitwiseAFromB(string op)
+    {
+        switch (op)
+        {
+            case "&":
+                builder.AndAFromB();
+                return;
+            case "|":
+                builder.OrAFromB();
+                return;
+            case "^":
+                builder.XorAFromB();
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy bitwise operator '{op}'.");
+        }
+    }
+
+    private void EmitBitwiseAFromC(string op)
+    {
+        switch (op)
+        {
+            case "&":
+                builder.AndAFromC();
+                return;
+            case "|":
+                builder.OrAFromC();
+                return;
+            case "^":
+                builder.XorAFromC();
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy bitwise operator '{op}'.");
+        }
+    }
+
     private bool TryConst(ExpressionSyntax expression, out int value)
     {
+        if (expression is CastSyntax cast)
+        {
+            RequireSupportedCastTarget(cast);
+            return TryConst(cast.Expression, out value);
+        }
+
         if (expression is ConstantSyntax)
         {
             value = GameBoyVideoProgram.ConstValue(expression, "constant");
@@ -2112,14 +2748,68 @@ internal sealed class GameBoyRuntimeCompiler
         return false;
     }
 
+    private void EmitRuntimeIndexedAddressToHl(string baseIdentifier, ExpressionSyntax index)
+    {
+        var baseAddress = VariableAddress(IndexedElementName(baseIdentifier, 0));
+        EmitExpressionToA(index);
+        builder.LoadHl(baseAddress);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+    }
+
+    private void RequireExpressionPreservesHl(ExpressionSyntax expression, string context)
+    {
+        if (!PreservesHl(expression))
+        {
+            throw new InvalidOperationException($"Game Boy target cannot use expression '{expression.GetType().Name}' as the right side of a {context} yet because it also needs HL for array addressing.");
+        }
+    }
+
+    private bool PreservesHl(ExpressionSyntax expression)
+    {
+        if (TryConst(expression, out _))
+        {
+            return true;
+        }
+
+        return expression switch
+        {
+            IdentifierSyntax => true,
+            MemberAccessSyntax => true,
+            IndexExpressionSyntax indexExpression => TryConst(indexExpression.Index, out _),
+            CastSyntax cast => PreservesHl(cast.Expression),
+            ConditionalExpressionSyntax conditional => PreservesHl(conditional.Condition) && PreservesHl(conditional.WhenTrue) && PreservesHl(conditional.WhenFalse),
+            BinaryExpressionSyntax binary => PreservesHl(binary.Left) && PreservesHl(binary.Right),
+            _ => false,
+        };
+    }
+
     private int ConstRuntimeValue(ExpressionSyntax expression, string context)
     {
+        if (expression is CastSyntax cast)
+        {
+            RequireSupportedCastTarget(cast);
+            return ConstRuntimeValue(cast.Expression, context);
+        }
+
         if (expression is FunctionCall { Name: "sprite_width" } spriteWidthCall)
         {
             return SpriteWidth(spriteWidthCall);
         }
 
         return GameBoyVideoProgram.ConstValue(expression, context);
+    }
+
+    private static string IndexedElementName(string baseIdentifier, int index)
+    {
+        return $"{baseIdentifier}[{index}]";
+    }
+
+    private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
+    {
+        var value = CheckedRange(GameBoyVideoProgram.ConstValue(index, context), 0, 255, context);
+        return IndexedElementName(baseIdentifier, value);
     }
 
     private int SpriteWidth(FunctionCall call)
@@ -2169,6 +2859,8 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly record struct CameraConfig(int MapWidth, int StreamY, int StreamHeight, int SourceHeight);
 
     private readonly record struct CameraSpanInfo(int FirstScreenColumn, int LastScreenColumn, int Row);
+
+    private readonly record struct LoopTarget(string BreakLabel, string ContinueLabel);
 }
 
 internal sealed class GbBuilder
@@ -2226,6 +2918,16 @@ internal sealed class GbBuilder
         Emit(0xE6, (byte)value);
     }
 
+    public void OrImmediate(int value)
+    {
+        Emit(0xF6, (byte)value);
+    }
+
+    public void XorImmediate(int value)
+    {
+        Emit(0xEE, (byte)value);
+    }
+
     public void SwapA()
     {
         Emit(0xCB, 0x37);
@@ -2276,6 +2978,31 @@ internal sealed class GbBuilder
         Emit(0xB0);
     }
 
+    public void AndAFromB()
+    {
+        Emit(0xA0);
+    }
+
+    public void AndAFromC()
+    {
+        Emit(0xA1);
+    }
+
+    public void OrAFromC()
+    {
+        Emit(0xB1);
+    }
+
+    public void XorAFromB()
+    {
+        Emit(0xA8);
+    }
+
+    public void XorAFromC()
+    {
+        Emit(0xA9);
+    }
+
     public void LoadLFromA()
     {
         Emit(0x6F);
@@ -2304,6 +3031,11 @@ internal sealed class GbBuilder
     public void SubtractAFromC()
     {
         Emit(0x91);
+    }
+
+    public void SubtractB()
+    {
+        Emit(0x90);
     }
 
     public void CompareImmediate(int value)

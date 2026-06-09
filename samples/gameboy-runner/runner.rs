@@ -1,3 +1,34 @@
+type Pixel = i16;
+
+const WorldWidth = 16;
+const WorldStreamY = 9;
+const WorldHeight = 6;
+const WorldWrap = 128;
+const PlayerScreenX = 72;
+const PlayerStartY = 73;
+const PlayerPlatformY = 41;
+const PlayerGroundY = 73;
+const PlayerEnemyHitY = 72;
+const PlayerFallResetY = 116;
+const PlatformProbeStartY = 42;
+const PlatformProbeEndY = 59;
+const GroundProbeY = 32;
+const JumpVelocity = 252;
+const HazardBounceVelocity = 248;
+const JumpBoostTicks = 12;
+const EnemyStartX = 128;
+const EnemyGroundY = 89;
+const EnemyPlatformX = 40;
+const EnemyPlatformY = 57;
+const EnemyWrapAtX = 96;
+const EnemyRespawnX = 136;
+const EnemyHitStartX = 68;
+const EnemyHitEndX = 91;
+
+enum CollisionFlag { None = 0, Solid = 1, Hazard = 2 }
+
+Pixel wrap_world_x(Pixel x) => x >= WorldWrap ? x - WorldWrap : x;
+
 void setup_video() {
     video_init();
     palette_set(0, 0);
@@ -79,46 +110,46 @@ void main() {
     setup_video();
     draw_background();
     define_world();
-    world_map(16, 9, 6);
-    camera_init(16, 9, 6);
-    i16 cameraX = 0;
-    i16 playerWorldX = 72;
-    i16 footLeftX = 72;
-    i16 footCenterX = 80;
-    i16 footRightX = 89;
-    i16 footTile = 0;
-    i16 failTile = 0;
-    i16 hazardHit = 0;
-    i16 playerY = 73;
-    i16 velocityY = 0;
-    i16 grounded = 1;
-    i16 displayFrame = 0;
+    world_map(WorldWidth, WorldStreamY, WorldHeight);
+    camera_init(WorldWidth, WorldStreamY, WorldHeight);
+    Pixel cameraX = 0;
+    Pixel playerWorldX = PlayerScreenX;
+    Pixel footLeftX = PlayerScreenX;
+    Pixel footCenterX = PlayerScreenX + 8;
+    Pixel footRightX = PlayerScreenX + 17;
+    Pixel footTile = 0;
+    Pixel failTile = 0;
+    Pixel hazardHit = 0;
+    Pixel playerY = PlayerStartY;
+    Pixel velocityY = 0;
+    Pixel grounded = 1;
+    Pixel displayFrame = 0;
     bool displayFlipX = false;
-    i16 animTick = 0;
-    i16 jumping = 0;
-    i16 jumpTicks = 0;
-    i16 moving = 0;
-    i16 resetRequested = 0;
-    i16 enemyX = 128;
-    i16 enemyFrame = 0;
-    i16 enemyTick = 0;
+    Pixel animTick = 0;
+    Pixel jumping = 0;
+    Pixel jumpTicks = 0;
+    Pixel moving = 0;
+    Pixel resetRequested = 0;
+    Pixel enemyX = EnemyStartX;
+    Pixel enemyFrame = 0;
+    Pixel enemyTick = 0;
 
-    while (true) {
+    loop {
         video_wait_vblank();
         camera_apply();
-        sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
-        sprite_draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);
-        sprite_draw(enemy_slug, 40, 57, enemyFrame, true, 0);
+        sprite_draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);
+        sprite_draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);
+        sprite_draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);
 
         input_poll();
 
         resetRequested = 0;
         hazardHit = 0;
         grounded = 0;
-        velocityY = velocityY + 1;
-        playerY = playerY + velocityY;
-        if (velocityY >= 128) {
-            if (playerY >= 128) {
+        velocityY += 1;
+        playerY += velocityY;
+        if (velocityY >= WorldWrap) {
+            if (playerY >= WorldWrap) {
                 playerY = 0;
                 velocityY = 0;
                 jumping = 0;
@@ -127,67 +158,50 @@ void main() {
 
         footTile = 0;
         failTile = 0;
-        playerWorldX = cameraX + 72;
-        if (playerWorldX >= 128) {
-            playerWorldX = playerWorldX - 128;
-        }
-
+        playerWorldX = wrap_world_x(cameraX + PlayerScreenX);
         footLeftX = playerWorldX;
-        footCenterX = playerWorldX + 8;
-        if (footCenterX >= 128) {
-            footCenterX = footCenterX - 128;
-        }
+        footCenterX = wrap_world_x(playerWorldX + 8);
+        footRightX = wrap_world_x(playerWorldX + 17);
 
-        footRightX = playerWorldX + 17;
-        if (footRightX >= 128) {
-            footRightX = footRightX - 128;
-        }
-
-        if (playerY >= 42) {
-            if (playerY <= 58) {
-                if (velocityY < 128) {
-                    if (velocityY != 0) {
-                        footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, 1);
-                        if (footTile == 0) {
-                            footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, 1);
-                        }
-                        if (footTile == 0) {
-                            footTile = collision_aabb_tiles(footRightX, 0, 1, 8, 1);
-                        }
-                        if (footTile != 0) {
-                            playerY = 41;
-                            velocityY = 0;
-                            grounded = 1;
-                            jumping = 0;
-                        }
-                    }
-                }
+        if (playerY in PlatformProbeStartY..PlatformProbeEndY && velocityY < WorldWrap && velocityY != 0) {
+            footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);
+            if (footTile == 0) {
+                footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, CollisionFlag.Solid);
+            }
+            if (footTile == 0) {
+                footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);
+            }
+            if (footTile != 0) {
+                playerY = PlayerPlatformY;
+                velocityY = 0;
+                grounded = 1;
+                jumping = 0;
             }
         }
 
-        if (playerY >= 74) {
-            failTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 2);
+        if (playerY >= PlayerGroundY + 1) {
+            failTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Hazard);
             if (failTile == 0) {
-                failTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 2);
+                failTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Hazard);
             }
             if (failTile == 0) {
-                failTile = collision_aabb_tiles(footRightX, 32, 1, 8, 2);
+                failTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Hazard);
             }
             if (failTile != 0) {
                 resetRequested = 1;
                 hazardHit = 1;
             }
 
-            footTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 1);
+            footTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Solid);
             if (footTile == 0) {
-                footTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 1);
+                footTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Solid);
             }
             if (footTile == 0) {
-                footTile = collision_aabb_tiles(footRightX, 32, 1, 8, 1);
+                footTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Solid);
             }
 
             if (footTile != 0) {
-                playerY = 73;
+                playerY = PlayerGroundY;
                 velocityY = 0;
                 grounded = 1;
                 jumping = 0;
@@ -195,33 +209,31 @@ void main() {
         }
 
         if (grounded == 0) {
-            if (playerY >= 116) {
+            if (playerY >= PlayerFallResetY) {
                 resetRequested = 1;
             }
         }
 
-        if (enemyX >= 68) {
-            if (enemyX <= 90) {
-                if (playerY >= 72) {
-                    resetRequested = 1;
-                }
+        if (enemyX in EnemyHitStartX..EnemyHitEndX) {
+            if (playerY >= PlayerEnemyHitY) {
+                resetRequested = 1;
             }
         }
 
         if (resetRequested != 0) {
             footTile = 0;
             failTile = 0;
-            playerY = 73;
+            playerY = PlayerStartY;
             velocityY = 0;
             grounded = 1;
             displayFrame = 0;
             jumping = 0;
             jumpTicks = 0;
-            enemyX = 128;
+            enemyX = EnemyStartX;
             enemyFrame = 0;
             enemyTick = 0;
             if (hazardHit != 0) {
-                velocityY = 248;
+                velocityY = HazardBounceVelocity;
                 grounded = 0;
                 displayFrame = 4;
             }
@@ -229,7 +241,7 @@ void main() {
 
         if (button_just_pressed(a) != 0) {
             if (grounded != 0) {
-                velocityY = 252;
+                velocityY = JumpVelocity;
                 grounded = 0;
                 jumping = 1;
             }
@@ -238,8 +250,8 @@ void main() {
         if (jumping != 0) {
             jumpTicks = button_hold_ticks(a);
             if (button_down(a) != 0) {
-                if (jumpTicks < 12) {
-                    velocityY = velocityY - 1;
+                if (jumpTicks < JumpBoostTicks) {
+                    velocityY -= 1;
                 }
             }
 
@@ -252,29 +264,29 @@ void main() {
         if (button_down(right) != 0) {
             moving = 1;
             displayFlipX = false;
-            cameraX = cameraX + 1;
+            cameraX += 1;
         }
 
         if (button_down(left) != 0) {
             moving = 1;
             displayFlipX = true;
-            cameraX = cameraX - 1;
+            cameraX -= 1;
         }
 
         if (moving != 0) {
             camera_set_position(cameraX, 0);
         }
 
-        enemyX = enemyX - 1;
-        if (enemyX <= 96) {
-            enemyX = 136;
+        enemyX--;
+        if (enemyX <= EnemyWrapAtX) {
+            enemyX = EnemyRespawnX;
         }
 
-        enemyTick = enemyTick + 1;
+        enemyTick++;
         enemyFrame = animation_frame(enemy_walk, enemyTick);
 
         if (moving != 0) {
-            animTick = animTick + 1;
+            animTick++;
         } else {
             animTick = 0;
         }

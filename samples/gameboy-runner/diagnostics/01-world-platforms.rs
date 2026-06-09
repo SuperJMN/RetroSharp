@@ -73,7 +73,7 @@ void main() {
     define_world();
     world_map(16, 9, 6);
 
-    while (true) {
+    loop {
         video_wait_vblank();
     }
 }
