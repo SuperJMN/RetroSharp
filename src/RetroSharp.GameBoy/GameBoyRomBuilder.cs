@@ -402,6 +402,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GameBoyVideoProgram program;
     private readonly Dictionary<string, ushort> variables = [];
     private readonly HashSet<string> declaredVariables = [];
+    private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
     private readonly Stack<LoopTarget> loopTargets = [];
     private int nextHardwareSprite;
@@ -517,6 +518,8 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
 
+        TrackImmutable(declaration);
+
         var length = CheckedRange(GameBoyVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
         var elementAddresses = new List<ushort>();
         for (var index = 0; index < length; index++)
@@ -555,6 +558,7 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
     {
         var address = DeclareVariable(declaration.Name);
+        TrackImmutable(declaration);
 
         if (declaration.Initialization.HasValue)
         {
@@ -574,6 +578,8 @@ internal sealed class GameBoyRuntimeCompiler
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
+
+        TrackImmutable(declaration);
 
         var fieldAddresses = new Dictionary<string, ushort>(StringComparer.Ordinal);
         var fieldNames = new List<string>();
@@ -656,6 +662,14 @@ internal sealed class GameBoyRuntimeCompiler
         return address;
     }
 
+    private void TrackImmutable(DeclarationSyntax declaration)
+    {
+        if (declaration.IsImmutable)
+        {
+            immutableVariables.Add(declaration.Name);
+        }
+    }
+
     private static bool IsByteBackedType(string type)
     {
         return type is "i8" or "u8" or "i16" or "u16" or "bool";
@@ -691,6 +705,8 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitAssignment(AssignmentSyntax assignment)
     {
+        RequireMutableAssignmentTarget(assignment.Left);
+
         if (assignment.Left is IndexLValue indexLValue && !TryConst(indexLValue.Index, out _))
         {
             EmitRuntimeIndexedAssignment(indexLValue, assignment);
@@ -700,6 +716,35 @@ internal sealed class GameBoyRuntimeCompiler
         var address = LValueAddress(assignment.Left);
         EmitAssignmentRightToA(assignment);
         builder.StoreA(address);
+    }
+
+    private void RequireMutableAssignmentTarget(LValue lValue)
+    {
+        if (AssignedRoot(lValue) is { } name && immutableVariables.Contains(name))
+        {
+            throw new InvalidOperationException($"Cannot assign to immutable local '{name}'.");
+        }
+    }
+
+    private static string? AssignedRoot(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => identifier.Identifier,
+            IndexLValue index => index.BaseIdentifier,
+            MemberAccessLValue memberAccess => MemberAccessRoot(memberAccess.MemberAccess),
+            _ => null,
+        };
+    }
+
+    private static string? MemberAccessRoot(MemberAccessSyntax memberAccess)
+    {
+        return memberAccess.Target switch
+        {
+            IdentifierSyntax identifier => identifier.Identifier,
+            MemberAccessSyntax nested => MemberAccessRoot(nested),
+            _ => null,
+        };
     }
 
     private void EmitRuntimeIndexedAssignment(IndexLValue indexLValue, AssignmentSyntax assignment)

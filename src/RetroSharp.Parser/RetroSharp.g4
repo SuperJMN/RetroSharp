@@ -1,7 +1,7 @@
 ﻿grammar RetroSharp;
 
 // We define the main rule that starts parsing the file
-program: (typeAliasDeclaration | constDeclaration | enumDeclaration | structDeclaration | variableDeclaration | externFunction | function | statement)* EOF;
+program: (typeAliasDeclaration | constDeclaration | enumDeclaration | structDeclaration | variableDeclaration | externFunction | function)* EOF;
 
 enumDeclaration: 'enum' IDENTIFIER '{' enumMember (',' enumMember)* ','? '}';
 enumMember: IDENTIFIER ('=' expression)?;
@@ -12,6 +12,7 @@ structDeclaration: 'struct' IDENTIFIER '{' structField* '}';
 structField: type IDENTIFIER ';';
 
 constDeclaration: 'const' (type IDENTIFIER | IDENTIFIER) '=' expression ';';
+letDeclaration: 'let' IDENTIFIER '=' expression ';';
 
 // Variable declaration with optional fixed-size array rank and inline initialization
 variableDeclaration: variableDeclarator ';';
@@ -32,22 +33,25 @@ type: 'void'
 
 // Attributes (zero-cost hints; currently ignored by semantics)
 attrs: ('[' IDENTIFIER ('(' arguments? ')')? ']')* ;
+functionModifier: 'inline' | 'pure';
 
 // Extern function declaration (prototype only)
 externFunction: attrs 'extern' type IDENTIFIER '(' parameters? ')' ';' ;
 
 // Function definition (now supports optional attributes before the signature)
-function: attrs type IDENTIFIER '(' parameters? ')' (block | '=>' expression ';');
+function: functionModifier* attrs type IDENTIFIER '(' parameters? ')' (block | '=>' expression ';');
 
 // Function parameters, separated by commas
 parameters: parameter (',' parameter)*;
-parameter: type IDENTIFIER ('=' expression)?;
+parameter: receiverParameter | type IDENTIFIER ('=' expression)?;
+receiverParameter: 'this' type IDENTIFIER;
 
 // Code blocks, for functions, conditionals, and loops
 block: '{' statement* '}';
 
 // Statements that can appear within functions and blocks
-statement: variableDeclaration
+statement: letDeclaration
+          | variableDeclaration
           | constDeclaration
           | breakStatement
           | continueStatement
@@ -65,12 +69,19 @@ statement: variableDeclaration
           ;
 
 // Expressions
-expression: assignment | conditionalExpression ;
+expression: assignment | switchExpression | pipelineExpression | conditionalExpression ;
 
 assignment: lvalue assignmentOperator expression ;
 assignmentOperator: '=' | '+=' | '-=' | '&=' | '|=' | '^=' ;
 postfixMutation: lvalue postfixOperator ;
 postfixOperator: '++' | '--' ;
+
+switchExpression: conditionalExpression 'switch' '{' switchExpressionArm (',' switchExpressionArm)* ','? '}';
+switchExpressionArm: switchExpressionCaseArm | switchExpressionDefaultArm;
+switchExpressionCaseArm: switchCasePattern (',' switchCasePattern)* '=>' expression;
+switchExpressionDefaultArm: UNDERSCORE '=>' expression;
+pipelineExpression: conditionalExpression pipelineStep+;
+pipelineStep: '|>' IDENTIFIER '(' arguments? ')';
 
 conditionalExpression: conditionalOrExpression ('?' expression ':' expression)? ;
 
@@ -118,6 +129,7 @@ primary: '(' expression ')'
        | sizeofExpression
        | offsetofExpression
        | countofExpression
+       | sdkDotCall
        | functionCall
        | memberAccess
        | indexExpression
@@ -128,6 +140,7 @@ sizeofExpression: 'sizeof' '(' type ')';
 offsetofExpression: 'offsetof' '(' type ',' IDENTIFIER ')';
 countofExpression: 'countof' '(' IDENTIFIER ')';
 
+sdkDotCall: IDENTIFIER '.' IDENTIFIER '(' arguments? ')';
 memberAccess: IDENTIFIER ('.' IDENTIFIER)+;
 indexExpression: IDENTIFIER '[' expression ']';
 
@@ -190,6 +203,11 @@ EXTERN: 'extern';
 ENUM: 'enum';
 STRUCT: 'struct';
 CONST: 'const';
+LET: 'let';
+INLINE: 'inline';
+PURE: 'pure';
+UNDERSCORE: '_';
+THIS: 'this';
 
 IDENTIFIER: [a-zA-Z_][a-zA-Z_0-9]*;
 LITERAL: LITERAL_INT | LITERAL_CHAR | LITERAL_STRING  | 'true' | 'false';

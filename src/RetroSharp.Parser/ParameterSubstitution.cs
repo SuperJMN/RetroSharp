@@ -11,6 +11,8 @@ public static class ParameterSubstitution
 
     public static ExpressionSyntax SubstituteReturnExpression(FunctionSyntax function, FunctionCall call, string targetName)
     {
+        FunctionContractValidator.RequireValueInlineSubstitution(function, targetName);
+
         if (function.Block.Statements.Count != 1 ||
             function.Block.Statements[0] is not ReturnSyntax returnSyntax ||
             !returnSyntax.Expression.HasValue)
@@ -117,7 +119,8 @@ public static class ParameterSubstitution
                 declaration.Type,
                 declaration.Name,
                 declaration.ArrayLength.Map(expression => Substitute(expression, substitutions)),
-                declaration.Initialization.Map(expression => Substitute(expression, substitutions))),
+                declaration.Initialization.Map(expression => Substitute(expression, substitutions)),
+                declaration.IsImmutable),
             ExpressionStatementSyntax expressionStatement => new ExpressionStatementSyntax(Substitute(expressionStatement.Expression, substitutions)),
             IfElseSyntax ifElse => new IfElseSyntax(
                 Substitute(ifElse.Condition, substitutions),
@@ -168,8 +171,27 @@ public static class ParameterSubstitution
                 Substitute(conditional.Condition, substitutions),
                 Substitute(conditional.WhenTrue, substitutions),
                 Substitute(conditional.WhenFalse, substitutions)),
+            SwitchExpressionSyntax switchExpression => new SwitchExpressionSyntax(
+                Substitute(switchExpression.Subject, substitutions),
+                switchExpression.Arms
+                    .Select(arm => new SwitchExpressionArmSyntax(
+                        arm.Patterns.Select(pattern => Substitute(pattern, substitutions)).ToList(),
+                        Substitute(arm.Value, substitutions)))
+                    .ToList(),
+                switchExpression.DefaultValue.Map(expression => Substitute(expression, substitutions))),
+            PipelineExpressionSyntax pipeline => new PipelineExpressionSyntax(
+                Substitute(pipeline.Value, substitutions),
+                pipeline.Steps
+                    .Select(step => new PipelineStepSyntax(
+                        step.FunctionName,
+                        step.Arguments.Select(argument => Substitute(argument, substitutions))))
+                    .ToList()),
             UnaryExpressionSyntax unary => new UnaryExpressionSyntax(unary.OperatorSymbol, Substitute(unary.Operand, substitutions)),
             CastSyntax cast => new CastSyntax(cast.Type, Substitute(cast.Expression, substitutions)),
+            SdkDotCallSyntax sdkDotCall => new SdkDotCallSyntax(
+                sdkDotCall.Module,
+                sdkDotCall.Method,
+                sdkDotCall.Parameters.Select(parameter => Substitute(parameter, substitutions))),
             FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => Substitute(parameter, substitutions))),
             NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, Substitute(namedArgument.Expression, substitutions)),
             MemberAccessSyntax memberAccess => new MemberAccessSyntax(Substitute(memberAccess.Target, substitutions), memberAccess.Member),

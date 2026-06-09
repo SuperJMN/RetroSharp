@@ -210,6 +210,31 @@ public class ParserTests
     }
 
     [Fact]
+    public void Inline_and_pure_function_modifiers()
+    {
+        var source = """
+                     inline pure u8 step(u8 value) => value + 1;
+
+                     void main()
+                     {
+                        u8 next = step(4);
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Function_modifiers_are_preserved_in_the_ast()
+    {
+        var result = new SomeParser().Parse("inline pure u8 step(u8 value) => value + 1;");
+
+        result.Should().Succeed();
+        var function = Assert.Single(result.Value.Functions);
+        function.IsInline.Should().BeTrue();
+        function.IsPure.Should().BeTrue();
+    }
+
+    [Fact]
     public void Function_parameter_default_value()
     {
         var source = """
@@ -224,6 +249,30 @@ public class ParserTests
     }
 
     [Fact]
+    public void Switch_expression()
+    {
+        var source = """
+                     void main()
+                     {
+                        u8 state = 2;
+                        u8 speed = state switch { 0 => 0, 1, 2 => 3, 3..6 => 5, _ => 1 };
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Switch_expression_is_preserved_in_the_ast()
+    {
+        var result = new SomeParser().Parse("void main(){ u8 state = 2; u8 speed = state switch { 0 => 0, _ => 1 }; }");
+
+        result.Should().Succeed();
+        var function = Assert.Single(result.Value.Functions);
+        var declaration = Assert.IsType<DeclarationSyntax>(function.Block.Statements[1]);
+        Assert.IsType<SwitchExpressionSyntax>(declaration.Initialization.Value);
+    }
+
+    [Fact]
     public void Function_call_named_arguments()
     {
         var source = """
@@ -235,6 +284,93 @@ public class ParserTests
                      }
                      """;
         AssertParse(source);
+    }
+
+    [Fact]
+    public void Sdk_namespaced_dot_calls()
+    {
+        var source = """
+                     void main()
+                     {
+                        video.Init();
+                        input.Poll();
+                        camera.SetPosition(4, 0);
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Sdk_namespaced_dot_call_is_preserved_in_the_ast()
+    {
+        var result = new SomeParser().Parse("void main(){ video.Init(); }");
+
+        result.Should().Succeed();
+        var function = Assert.Single(result.Value.Functions);
+        var statement = Assert.IsType<ExpressionStatementSyntax>(Assert.Single(function.Block.Statements));
+        var call = Assert.IsType<SdkDotCallSyntax>(statement.Expression);
+        call.Module.Should().Be("video");
+        call.Method.Should().Be("Init");
+    }
+
+    [Fact]
+    public void Receiver_method_declaration_and_call()
+    {
+        var source = """
+                     struct Actor
+                     {
+                        u8 x;
+                     }
+
+                     inline void Move(this Actor actor, u8 dx)
+                     {
+                        actor.x += dx;
+                     }
+
+                     void main()
+                     {
+                        Actor actor;
+                        actor.Move(2);
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Receiver_parameter_is_preserved_in_the_ast()
+    {
+        var result = new SomeParser().Parse("struct Actor { u8 x; } void Move(this Actor actor, u8 dx){}");
+
+        result.Should().Succeed();
+        var function = Assert.Single(result.Value.Functions);
+        function.Parameters[0].IsReceiver.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Pipeline_expression()
+    {
+        var source = """
+                     u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
+                     u8 SnapToTile(u8 value) => value & 0xF8;
+
+                     void main()
+                     {
+                        u8 value = 130;
+                        u8 snapped = value |> Clamp(0, 120) |> SnapToTile();
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Pipeline_expression_is_preserved_in_the_ast()
+    {
+        var result = new SomeParser().Parse("void main(){ u8 snapped = value |> Clamp(0, 120) |> SnapToTile(); }");
+
+        result.Should().Succeed();
+        var function = Assert.Single(result.Value.Functions);
+        var declaration = Assert.IsType<DeclarationSyntax>(Assert.Single(function.Block.Statements));
+        Assert.IsType<PipelineExpressionSyntax>(declaration.Initialization.Value);
     }
 
     [Fact]
@@ -923,6 +1059,38 @@ public class ParserTests
                      }
                      """;
         AssertParse(source);
+    }
+
+    [Fact]
+    public void Immutable_let_local_binding()
+    {
+        var source = """
+                     void main()
+                     {
+                        let speed = 2;
+                        u8 next = speed + 1;
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Immutable_let_local_binding_is_not_parsed_as_a_user_type()
+    {
+        var result = new SomeParser().Parse("void main(){ let speed = 2; }");
+
+        result.Should().Succeed();
+        var function = Assert.Single(result.Value.Functions);
+        var declaration = Assert.IsType<DeclarationSyntax>(Assert.Single(function.Block.Statements));
+        declaration.Type.Should().Be("u8");
+        declaration.IsImmutable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Top_level_let_binding_is_rejected()
+    {
+        new SomeParser().Parse("let speed = 2; void main(){}")
+            .Should().Fail();
     }
 
     private static void AssertParse(string source)

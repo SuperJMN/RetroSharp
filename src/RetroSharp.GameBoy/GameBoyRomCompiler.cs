@@ -29,7 +29,17 @@ public static class GameBoyRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
+        ValidateFunctionContracts(parse.Value);
         return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
+    }
+
+    private static void ValidateFunctionContracts(ProgramSyntax program)
+    {
+        var errors = FunctionContractValidator.ValidateProgram(program).ToList();
+        if (errors.Count != 0)
+        {
+            throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+        }
     }
 
     private static void ValidateSdkOperations(IEnumerable<Sdk2DOperation> operations)

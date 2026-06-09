@@ -17,8 +17,18 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
+        ValidateFunctionContracts(parse.Value);
         var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
         return NesRomBuilder.Build(videoProgram);
+    }
+
+    private static void ValidateFunctionContracts(ProgramSyntax program)
+    {
+        var errors = FunctionContractValidator.ValidateProgram(program).ToList();
+        if (errors.Count != 0)
+        {
+            throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+        }
     }
 }
 

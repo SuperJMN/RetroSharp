@@ -70,6 +70,22 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Inline_and_pure_helper_modifiers_are_compile_time_contracts()
+    {
+        var input = "inline pure u8 step(u8 value) => value + 1; void main(){ u8 next = step(4); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Pure_helper_rejects_side_effects()
+    {
+        Errors("pure void draw(){ video_init(); }")
+            .Should().ContainMatch("*pure*side-effect*");
+        Errors("pure u8 step(u8 value){ value += 1; return value; }")
+            .Should().ContainMatch("*pure*return expression*");
+    }
+
+    [Fact]
     public void Function_parameter_default_value_resolves_parameter_and_default()
     {
         var input = "u8 step(u8 value, u8 amount = value + 1) => value + amount; void main(){ u8 next = step(4); }";
@@ -225,6 +241,24 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Immutable_let_binding_resolves_like_a_local()
+    {
+        var input = "void main(){ let speed = 2; u8 next = speed + 1; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Immutable_let_binding_rejects_mutation()
+    {
+        Errors("void main(){ let speed = 2; speed = 3; }")
+            .Should().ContainMatch("*immutable*speed*");
+        Errors("void main(){ let speed = 2; speed += 1; }")
+            .Should().ContainMatch("*immutable*speed*");
+        Errors("void main(){ let speed = 2; speed++; }")
+            .Should().ContainMatch("*immutable*speed*");
+    }
+
+    [Fact]
     public void Compound_assignment_resolves_declared_lvalue()
     {
         var input = "void main(){ u8 x = 1; x += 2; x -= 1; }";
@@ -249,6 +283,55 @@ public class SemanticAnalysisTests
     public void Value_returning_helper_call_expression_resolves_named_arguments()
     {
         var input = "u8 step(u8 value, u8 amount = value + 1) => value + amount; void main(){ u8 next = step(amount: 5, value: 4); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Sdk_namespaced_dot_calls_resolve_arguments()
+    {
+        var input = "void main(){ video.Init(); input.Poll(); camera.SetPosition(4, 0); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Receiver_method_call_resolves_receiver_and_arguments()
+    {
+        var input = "struct Actor { u8 x; } inline void Move(this Actor actor, u8 dx){ actor.x += dx; } void main(){ Actor actor; actor.Move(2); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Receiver_method_call_resolves_inside_nested_blocks()
+    {
+        var input = "struct Actor { u8 x; } inline void Move(this Actor actor, u8 dx){ actor.x += dx; } void main(){ Actor actor; if (1 != 0){ actor.Move(2); } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Receiver_method_call_rejects_type_mismatch()
+    {
+        var input = "struct Actor { u8 x; } inline void Move(this Actor actor, u8 dx){ actor.x += dx; } void main(){ u8 actor = 0; actor.Move(2); }";
+        Errors(input).Should().ContainMatch("*receiver*Actor*");
+    }
+
+    [Fact]
+    public void Receiver_method_call_allows_variable_that_shadows_sdk_module_name()
+    {
+        var input = "struct Actor { u8 x; } inline void Move(this Actor actor, u8 dx){ actor.x += dx; } void main(){ Actor video; video.Move(2); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Pipeline_expression_resolves_nested_helper_arguments()
+    {
+        var input = "u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value; u8 SnapToTile(u8 value) => value & 0xF8; void main(){ u8 value = 130; u8 snapped = value |> Clamp(0, 120) |> SnapToTile(); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Pipeline_expression_resolves_receiver_method_value()
+    {
+        var input = "struct Actor { u8 x; } u8 X(this Actor actor) => actor.x; u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value; void main(){ Actor actor = { x: 130 }; u8 clamped = actor.X() |> Clamp(max: 120); }";
         Errors(input).Should().BeEmpty();
     }
 
@@ -334,6 +417,34 @@ public class SemanticAnalysisTests
     {
         var input = "void main(){ u8 moving = 1; u8 speed = moving != 0 ? 2 : 0; }";
         Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Switch_expression_resolves_subject_patterns_and_results()
+    {
+        var input = "void main(){ u8 state = 2; u8 speed = state switch { 0 => 0, 1, 2 => 3, 3..6 => 5, _ => 1 }; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Switch_expression_requires_default_arm()
+    {
+        var input = "void main(){ u8 state = 2; u8 speed = state switch { 0 => 0 }; }";
+        Errors(input).Should().ContainMatch("*switch expression*default*");
+    }
+
+    [Fact]
+    public void Switch_expression_rejects_non_simple_subject()
+    {
+        var input = "u8 next(u8 value) => value + 1; void main(){ u8 speed = next(1) switch { 0 => 0, _ => 1 }; }";
+        Errors(input).Should().ContainMatch("*switch expression*subject*simple*");
+    }
+
+    [Fact]
+    public void Switch_expression_rejects_incompatible_branch_result_shapes()
+    {
+        var input = "void main(){ u8 state = 2; u8 speed = state switch { 0 => true, _ => 1 }; }";
+        Errors(input).Should().ContainMatch("*switch expression*branch*compatible*");
     }
 
     [Fact]

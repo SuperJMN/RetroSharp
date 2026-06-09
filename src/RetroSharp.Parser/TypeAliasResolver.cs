@@ -26,10 +26,13 @@ public static class TypeAliasResolver
                     .Select(parameter => new ParameterSyntax(
                         ResolveType(parameter.Type, aliases),
                         parameter.Name,
-                        parameter.DefaultValue.Map(expression => ResolveExpression(expression, aliases))))
+                        parameter.DefaultValue.Map(expression => ResolveExpression(expression, aliases)),
+                        parameter.IsReceiver))
                     .ToList(),
                 ResolveBlock(function.Block, aliases),
-                function.IsExpressionBodied))
+                function.IsExpressionBodied,
+                function.IsInline,
+                function.IsPure))
             .ToList();
 
         return new ProgramSyntax([], constants, program.Enums, structs, functions);
@@ -68,7 +71,8 @@ public static class TypeAliasResolver
                 ResolveType(declaration.Type, aliases),
                 declaration.Name,
                 declaration.ArrayLength.Map(expression => ResolveExpression(expression, aliases)),
-                declaration.Initialization.Map(expression => ResolveExpression(expression, aliases))),
+                declaration.Initialization.Map(expression => ResolveExpression(expression, aliases)),
+                declaration.IsImmutable),
             ExpressionStatementSyntax expressionStatement => new ExpressionStatementSyntax(ResolveExpression(expressionStatement.Expression, aliases)),
             IfElseSyntax ifElse => new IfElseSyntax(
                 ResolveExpression(ifElse.Condition, aliases),
@@ -119,10 +123,29 @@ public static class TypeAliasResolver
                 ResolveExpression(conditional.Condition, aliases),
                 ResolveExpression(conditional.WhenTrue, aliases),
                 ResolveExpression(conditional.WhenFalse, aliases)),
+            SwitchExpressionSyntax switchExpression => new SwitchExpressionSyntax(
+                ResolveExpression(switchExpression.Subject, aliases),
+                switchExpression.Arms
+                    .Select(arm => new SwitchExpressionArmSyntax(
+                        arm.Patterns.Select(pattern => ResolveSwitchCasePattern(pattern, aliases)).ToList(),
+                        ResolveExpression(arm.Value, aliases)))
+                    .ToList(),
+                switchExpression.DefaultValue.Map(expression => ResolveExpression(expression, aliases))),
+            PipelineExpressionSyntax pipeline => new PipelineExpressionSyntax(
+                ResolveExpression(pipeline.Value, aliases),
+                pipeline.Steps
+                    .Select(step => new PipelineStepSyntax(
+                        step.FunctionName,
+                        step.Arguments.Select(argument => ResolveExpression(argument, aliases))))
+                    .ToList()),
             ArrayInitializerSyntax arrayInitializer => new ArrayInitializerSyntax(arrayInitializer.Elements.Select(element => ResolveExpression(element, aliases))),
             StructInitializerSyntax structInitializer => new StructInitializerSyntax(structInitializer.Fields.Select(field => new StructFieldInitializerSyntax(field.Name, ResolveExpression(field.Expression, aliases)))),
             UnaryExpressionSyntax unary => new UnaryExpressionSyntax(unary.OperatorSymbol, ResolveExpression(unary.Operand, aliases)),
             CastSyntax cast => new CastSyntax(ResolveType(cast.Type, aliases), ResolveExpression(cast.Expression, aliases)),
+            SdkDotCallSyntax sdkDotCall => new SdkDotCallSyntax(
+                sdkDotCall.Module,
+                sdkDotCall.Method,
+                sdkDotCall.Parameters.Select(parameter => ResolveExpression(parameter, aliases))),
             FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => ResolveExpression(parameter, aliases))),
             NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, ResolveExpression(namedArgument.Expression, aliases)),
             MemberAccessSyntax memberAccess => new MemberAccessSyntax(ResolveExpression(memberAccess.Target, aliases), memberAccess.Member),

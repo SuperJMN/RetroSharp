@@ -12,10 +12,11 @@ public class SemanticAnalyzer
         node = TypeAliasResolver.Resolve(node);
         var types = BuildTypeTable(node.Enums, node.Structs);
         scope = DeclareConstants(node.Constants, scope, types);
+        var functionIndex = node.Functions.ToDictionary(function => function.Name, StringComparer.Ordinal);
         var functions = new List<FunctionNode>();
         foreach (var function in node.Functions)
         {
-            var functionResult = AnalyzeFunction(function, scope, types);
+            var functionResult = AnalyzeFunction(function, scope, types, functionIndex);
             scope = functionResult.Scope;
             functions.Add(functionResult.Node);
         }
@@ -106,7 +107,7 @@ public class SemanticAnalyzer
         return false;
     }
 
-    private AnalyzeResult<FunctionNode> AnalyzeFunction(FunctionSyntax function, Scope parentScope, IReadOnlyDictionary<string, SymbolType> types)
+    private AnalyzeResult<FunctionNode> AnalyzeFunction(FunctionSyntax function, Scope parentScope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
         // Create a child scope for the function body so locals don't leak out
         var functionScope = new Scope(parentScope);
@@ -132,7 +133,8 @@ public class SemanticAnalyzer
             }
         }
 
-        var analyzeBlockResult = AnalyzeBlock(function.Block, functionScope, types);
+        var analyzeBlockResult = AnalyzeBlock(function.Block, functionScope, types, functions);
+        errors.AddRange(FunctionContractValidator.Validate(function));
         var paramNames = function.Parameters.Select(p => p.Name).ToList();
         var node = new FunctionNode(function.Type, function.Name, analyzeBlockResult.Node, paramNames)
         {
@@ -144,12 +146,17 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<BlockNode> AnalyzeBlock(BlockSyntax block, Scope outerScope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        return AnalyzeBlock(block, outerScope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<BlockNode> AnalyzeBlock(BlockSyntax block, Scope outerScope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
         // Each block introduces a new child scope
         var blockScope = new Scope(outerScope);
         var statements = new List<StatementNode>();
         foreach (var statement in block.Statements)
         {
-            var analyzedStatementResult = AnalyzeStatement(statement, blockScope, types);
+            var analyzedStatementResult = AnalyzeStatement(statement, blockScope, types, functions);
             statements.Add(analyzedStatementResult.Node);
             blockScope = analyzedStatementResult.Scope;
         }
@@ -160,32 +167,37 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<StatementNode> AnalyzeStatement(StatementSyntax statement, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        return AnalyzeStatement(statement, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeStatement(StatementSyntax statement, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
         switch (statement)
         {
             case ConstDeclarationSyntax constDeclaration:
                 return AnalyzeConstDeclaration(constDeclaration, scope, types);
             case DeclarationSyntax declarationStatement:
-                return AnalyzeDeclaration(declarationStatement, scope, types);
+                return AnalyzeDeclaration(declarationStatement, scope, types, functions);
             case ExpressionStatementSyntax expressionStatement:
-                return AnalyzeExpressionStatement(expressionStatement, scope, types);
+                return AnalyzeExpressionStatement(expressionStatement, scope, types, functions);
             case IfElseSyntax ifElseStatement:
-                return AnalyzeIfElse(ifElseStatement, scope, types);
+                return AnalyzeIfElse(ifElseStatement, scope, types, functions);
             case DoWhileSyntax doWhileStatement:
-                return AnalyzeDoWhile(doWhileStatement, scope, types);
+                return AnalyzeDoWhile(doWhileStatement, scope, types, functions);
             case LoopSyntax loopStatement:
-                return AnalyzeLoop(loopStatement, scope, types);
+                return AnalyzeLoop(loopStatement, scope, types, functions);
             case RangeForSyntax rangeForStatement:
-                return AnalyzeFor(RangeForLowerer.Lower(rangeForStatement), scope, types);
+                return AnalyzeFor(RangeForLowerer.Lower(rangeForStatement), scope, types, functions);
             case ForSyntax forStatement:
-                return AnalyzeFor(forStatement, scope, types);
+                return AnalyzeFor(forStatement, scope, types, functions);
             case SwitchSyntax switchStatement:
-                return AnalyzeIfElse(SwitchLowerer.Lower(switchStatement), scope, types);
+                return AnalyzeIfElse(SwitchLowerer.Lower(switchStatement), scope, types, functions);
             case BreakSyntax:
                 return new AnalyzeResult<StatementNode>(new BreakNode(), scope);
             case ContinueSyntax:
                 return new AnalyzeResult<StatementNode>(new ContinueNode(), scope);
             case ReturnSyntax returnStatement:
-                return AnalyzeReturn(returnStatement, scope, types);
+                return AnalyzeReturn(returnStatement, scope, types, functions);
             default:
                 throw new ArgumentOutOfRangeException(nameof(statement));
         }
@@ -193,15 +205,25 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<StatementNode> AnalyzeExpressionStatement(ExpressionStatementSyntax expressionStatement, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var analyzeExpressionResult = AnalyzeExpression(expressionStatement.Expression, scope, types);
+        return AnalyzeExpressionStatement(expressionStatement, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeExpressionStatement(ExpressionStatementSyntax expressionStatement, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var analyzeExpressionResult = AnalyzeExpression(expressionStatement.Expression, scope, types, functions);
         return new AnalyzeResult<StatementNode>(new ExpressionStatementNode(analyzeExpressionResult.Node), scope);
     }
 
     private AnalyzeResult<ExpressionNode> AnalyzeExpression(ExpressionSyntax expression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        return AnalyzeExpression(expression, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeExpression(ExpressionSyntax expression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
         if (expression is AssignmentSyntax assignment)
         {
-            return AnalyzeAssignmentExpression(assignment, scope, types);
+            return AnalyzeAssignmentExpression(assignment, scope, types, functions);
         }
         
         if (expression is ConstantSyntax c)
@@ -211,22 +233,22 @@ public class SemanticAnalyzer
 
         if (expression is BinaryExpressionSyntax binaryExpression)
         {
-            return AnalyzeBinaryExpression(binaryExpression, scope, types);
+            return AnalyzeBinaryExpression(binaryExpression, scope, types, functions);
         }
 
         if (expression is ConditionalExpressionSyntax conditionalExpression)
         {
-            return AnalyzeConditionalExpression(conditionalExpression, scope, types);
+            return AnalyzeConditionalExpression(conditionalExpression, scope, types, functions);
         }
 
         if (expression is UnaryExpressionSyntax unaryExpression)
         {
-            return AnalyzeUnaryExpression(unaryExpression, scope, types);
+            return AnalyzeUnaryExpression(unaryExpression, scope, types, functions);
         }
 
         if (expression is CastSyntax castExpression)
         {
-            return AnalyzeCastExpression(castExpression, scope, types);
+            return AnalyzeCastExpression(castExpression, scope, types, functions);
         }
 
         if (expression is IdentifierSyntax i)
@@ -276,28 +298,117 @@ public class SemanticAnalyzer
 
         if (expression is PostfixMutationSyntax postfixMutation)
         {
-            return AnalyzeAssignmentExpression(postfixMutation.ToAssignment(), scope, types);
+            return AnalyzeAssignmentExpression(postfixMutation.ToAssignment(), scope, types, functions);
+        }
+
+        if (expression is SwitchExpressionSyntax switchExpression)
+        {
+            return AnalyzeSwitchExpression(switchExpression, scope, types, functions);
+        }
+
+        if (expression is SdkDotCallSyntax sdkDotCall)
+        {
+            if (scope.Get(sdkDotCall.Module).HasValue)
+            {
+                return AnalyzeReceiverDotCall(sdkDotCall, scope, types, functions);
+            }
+
+            if (SdkDotCallLowerer.IsKnownModule(sdkDotCall.Module))
+            {
+                return AnalyzeExpression(SdkDotCallLowerer.Lower(sdkDotCall), scope, types, functions);
+            }
+
+            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+            {
+                Errors = [$"Unknown SDK module or receiver method '{sdkDotCall.Module}.{sdkDotCall.Method}'"]
+            }, scope);
+        }
+
+        if (expression is PipelineExpressionSyntax pipeline)
+        {
+            return AnalyzeExpression(PipelineExpressionLowerer.Lower(pipeline), scope, types, functions);
         }
 
         if (expression is FunctionCall functionCall)
         {
-            var analyzedArgs = functionCall.Parameters.Select(arg => AnalyzeExpression(arg, scope, types).Node).ToList();
+            var analyzedArgs = functionCall.Parameters.Select(arg => AnalyzeExpression(arg, scope, types, functions).Node).ToList();
             return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(functionCall.Name, analyzedArgs), scope);
         }
 
         if (expression is NamedArgumentSyntax namedArgument)
         {
-            return AnalyzeExpression(namedArgument.Expression, scope, types);
+            return AnalyzeExpression(namedArgument.Expression, scope, types, functions);
         }
 
         throw new InvalidOperationException("Por aquí no vas a ningún sitio");
     }
 
+    private AnalyzeResult<ExpressionNode> AnalyzeReceiverDotCall(
+        SdkDotCallSyntax sdkDotCall,
+        Scope scope,
+        IReadOnlyDictionary<string, SymbolType> types,
+        IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        if (!ReceiverMethodLowerer.TryLower(sdkDotCall, functions.Values, out var receiverCall, out var receiverFunction))
+        {
+            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+            {
+                Errors = [$"Unknown receiver method '{sdkDotCall.Module}.{sdkDotCall.Method}'"]
+            }, scope);
+        }
+
+        var receiverSymbol = scope.Get(sdkDotCall.Module).Value;
+        var expectedType = ResolveType(receiverFunction.Parameters[0].Type, types);
+        if (receiverSymbol.Type != expectedType)
+        {
+            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+            {
+                Errors = [$"receiver method '{sdkDotCall.Method}' expects receiver type '{expectedType}', but '{sdkDotCall.Module}' has type '{receiverSymbol.Type}'"]
+            }, scope);
+        }
+
+        return AnalyzeExpression(receiverCall, scope, types, functions);
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeSwitchExpression(SwitchExpressionSyntax switchExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
+    {
+        return AnalyzeSwitchExpression(switchExpression, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeSwitchExpression(SwitchExpressionSyntax switchExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var errors = SwitchExpressionValidator.Validate(switchExpression).ToList();
+        if (errors.Count != 0)
+        {
+            var subject = AnalyzeExpression(switchExpression.Subject, scope, types);
+            return new AnalyzeResult<ExpressionNode>(new ConstantNode(0)
+            {
+                Errors = subject.Node.AllErrors.Concat(errors)
+            }, scope);
+        }
+
+        if (!switchExpression.DefaultValue.HasValue)
+        {
+            var subject = AnalyzeExpression(switchExpression.Subject, scope, types);
+            return new AnalyzeResult<ExpressionNode>(new ConstantNode(0)
+            {
+                Errors = subject.Node.AllErrors.Concat(["switch expression requires a default arm"])
+            }, scope);
+        }
+
+        return AnalyzeExpression(SwitchExpressionLowerer.Lower(switchExpression), scope, types, functions);
+    }
+
     private AnalyzeResult<ExpressionNode> AnalyzeConditionalExpression(ConditionalExpressionSyntax conditionalExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var condition = AnalyzeExpression(conditionalExpression.Condition, scope, types);
-        var whenTrue = AnalyzeExpression(conditionalExpression.WhenTrue, scope, types);
-        var whenFalse = AnalyzeExpression(conditionalExpression.WhenFalse, scope, types);
+        return AnalyzeConditionalExpression(conditionalExpression, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeConditionalExpression(ConditionalExpressionSyntax conditionalExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var condition = AnalyzeExpression(conditionalExpression.Condition, scope, types, functions);
+        var whenTrue = AnalyzeExpression(conditionalExpression.WhenTrue, scope, types, functions);
+        var whenFalse = AnalyzeExpression(conditionalExpression.WhenFalse, scope, types, functions);
         return new AnalyzeResult<ExpressionNode>(new ConditionalExpressionNode(condition.Node, whenTrue.Node, whenFalse.Node), scope);
     }
 
@@ -480,8 +591,13 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<ExpressionNode> AnalyzeBinaryExpression(BinaryExpressionSyntax binaryExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var left = AnalyzeExpression(binaryExpression.Left, scope, types);
-        var right = AnalyzeExpression(binaryExpression.Right, scope, types);
+        return AnalyzeBinaryExpression(binaryExpression, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeBinaryExpression(BinaryExpressionSyntax binaryExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var left = AnalyzeExpression(binaryExpression.Left, scope, types, functions);
+        var right = AnalyzeExpression(binaryExpression.Right, scope, types, functions);
         return new AnalyzeResult<ExpressionNode>(new BinaryExpressionNode(left.Node, right.Node, binaryExpression.Operator), scope);
 
         throw new InvalidOperationException("Por aquí no vas a ningún sitio tampoco");
@@ -489,13 +605,23 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<ExpressionNode> AnalyzeUnaryExpression(UnaryExpressionSyntax unaryExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var operand = AnalyzeExpression(unaryExpression.Operand, scope, types);
+        return AnalyzeUnaryExpression(unaryExpression, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeUnaryExpression(UnaryExpressionSyntax unaryExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var operand = AnalyzeExpression(unaryExpression.Operand, scope, types, functions);
         return new AnalyzeResult<ExpressionNode>(new UnaryExpressionNode(unaryExpression.OperatorSymbol, operand.Node), scope);
     }
 
     private AnalyzeResult<ExpressionNode> AnalyzeCastExpression(CastSyntax castExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var expression = AnalyzeExpression(castExpression.Expression, scope, types);
+        return AnalyzeCastExpression(castExpression, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeCastExpression(CastSyntax castExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var expression = AnalyzeExpression(castExpression.Expression, scope, types, functions);
         var errors = TrySizeOfType(castExpression.Type, types, out _)
             ? []
             : new[] { $"Cannot cast to unknown type '{castExpression.Type}'" };
@@ -507,14 +633,32 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<ExpressionNode> AnalyzeAssignmentExpression(AssignmentSyntax assignment, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        return AnalyzeAssignmentExpression(assignment, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<ExpressionNode> AnalyzeAssignmentExpression(AssignmentSyntax assignment, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
         var symbolNode = GetLValueSymbolNode(scope, assignment.Left);
 
-        var analyzeExpression = AnalyzeExpression(assignment.Right, scope, types);
+        var analyzeExpression = AnalyzeExpression(assignment.Right, scope, types, functions);
 
         return new AnalyzeResult<ExpressionNode>(new AssignmentNode(symbolNode, analyzeExpression.Node)
         {
-            Errors = SymbolError(symbolNode)
+            Errors = AssignmentErrors(symbolNode)
         }, scope);
+    }
+
+    private IEnumerable<string> AssignmentErrors(SymbolNode symbolNode)
+    {
+        foreach (var error in SymbolError(symbolNode))
+        {
+            yield return error;
+        }
+
+        if (symbolNode is KnownSymbolNode { Symbol.IsImmutable: true } knownSymbol)
+        {
+            yield return $"Cannot assign to immutable local '{knownSymbol.Symbol.Name}'.";
+        }
     }
 
     private SymbolNode GetLValueSymbolNode(Scope scope, LValue lValue)
@@ -548,15 +692,20 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<StatementNode> AnalyzeDeclaration(DeclarationSyntax declarationStatement, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        return AnalyzeDeclaration(declarationStatement, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeDeclaration(DeclarationSyntax declarationStatement, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
         var type = ResolveType(declarationStatement.Type, types);
         if (declarationStatement.ArrayLength.HasValue)
         {
             type = new ArrayType(type, ArrayLength(declarationStatement.ArrayLength.Value));
         }
 
-        var initializerErrors = AnalyzeDeclarationInitializer(declarationStatement, scope, types).ToList();
+        var initializerErrors = AnalyzeDeclarationInitializer(declarationStatement, scope, types, functions).ToList();
         var declaration = scope
-            .TryDeclare(new Symbol(declarationStatement.Name, type))
+            .TryDeclare(new Symbol(declarationStatement.Name, type, declarationStatement.IsImmutable))
             .Match(
                 s => new AnalyzeResult<StatementNode>(new DeclarationNode(declarationStatement.Name, s)
                 {
@@ -570,6 +719,11 @@ public class SemanticAnalyzer
     }
 
     private IEnumerable<string> AnalyzeDeclarationInitializer(DeclarationSyntax declaration, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
+    {
+        return AnalyzeDeclarationInitializer(declaration, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private IEnumerable<string> AnalyzeDeclarationInitializer(DeclarationSyntax declaration, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
         if (!declaration.Initialization.HasValue)
         {
@@ -585,16 +739,16 @@ public class SemanticAnalyzer
                 errors.Add("Array initializer requires a fixed-size array declaration");
             }
 
-            errors.AddRange(arrayInitializer.Elements.SelectMany(element => AnalyzeExpression(element, scope, types).Node.AllErrors));
+            errors.AddRange(arrayInitializer.Elements.SelectMany(element => AnalyzeExpression(element, scope, types, functions).Node.AllErrors));
             return errors;
         }
 
         if (initialization is StructInitializerSyntax structInitializer)
         {
-            return AnalyzeStructInitializer(declaration, structInitializer, scope, types);
+            return AnalyzeStructInitializer(declaration, structInitializer, scope, types, functions);
         }
 
-        var expressionErrors = AnalyzeExpression(initialization, scope, types).Node.AllErrors;
+        var expressionErrors = AnalyzeExpression(initialization, scope, types, functions).Node.AllErrors;
         return declaration.ArrayLength.HasValue
             ? expressionErrors.Concat([$"Fixed-size array '{declaration.Name}' requires an array initializer"])
             : expressionErrors;
@@ -605,6 +759,16 @@ public class SemanticAnalyzer
         StructInitializerSyntax initializer,
         Scope scope,
         IReadOnlyDictionary<string, SymbolType> types)
+    {
+        return AnalyzeStructInitializer(declaration, initializer, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private IEnumerable<string> AnalyzeStructInitializer(
+        DeclarationSyntax declaration,
+        StructInitializerSyntax initializer,
+        Scope scope,
+        IReadOnlyDictionary<string, SymbolType> types,
+        IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
         var errors = new List<string>();
         if (declaration.ArrayLength.HasValue)
@@ -631,7 +795,7 @@ public class SemanticAnalyzer
                 errors.Add($"Struct '{type}' does not contain field '{fieldInitializer.Name}'");
             }
 
-            errors.AddRange(AnalyzeExpression(fieldInitializer.Expression, scope, types).Node.AllErrors);
+            errors.AddRange(AnalyzeExpression(fieldInitializer.Expression, scope, types, functions).Node.AllErrors);
         }
 
         return errors;
@@ -646,10 +810,15 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<StatementNode> AnalyzeIfElse(IfElseSyntax ifElse, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var cond = AnalyzeExpression(ifElse.Condition, scope, types).Node;
-        var thenBlock = AnalyzeBlock(ifElse.ThenBlock, scope, types).Node;
+        return AnalyzeIfElse(ifElse, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeIfElse(IfElseSyntax ifElse, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var cond = AnalyzeExpression(ifElse.Condition, scope, types, functions).Node;
+        var thenBlock = AnalyzeBlock(ifElse.ThenBlock, scope, types, functions).Node;
         var elseBlock = ifElse.ElseBlock.Match(
-            b => AnalyzeBlock(b, scope, types).Node,
+            b => AnalyzeBlock(b, scope, types, functions).Node,
             () => null as BlockNode
         );
         var maybeElse = elseBlock is null ? Maybe<BlockNode>.None : Maybe.From(elseBlock);
@@ -658,38 +827,58 @@ public class SemanticAnalyzer
 
     private AnalyzeResult<StatementNode> AnalyzeDoWhile(DoWhileSyntax doWhileSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var body = AnalyzeBlock(doWhileSyntax.Body, scope, types).Node;
-        var condition = AnalyzeExpression(doWhileSyntax.Condition, scope, types).Node;
+        return AnalyzeDoWhile(doWhileSyntax, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeDoWhile(DoWhileSyntax doWhileSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var body = AnalyzeBlock(doWhileSyntax.Body, scope, types, functions).Node;
+        var condition = AnalyzeExpression(doWhileSyntax.Condition, scope, types, functions).Node;
         return new AnalyzeResult<StatementNode>(new DoWhileNode(body, condition), scope);
     }
 
     private AnalyzeResult<StatementNode> AnalyzeLoop(LoopSyntax loopSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var body = AnalyzeBlock(loopSyntax.Body, scope, types).Node;
+        return AnalyzeLoop(loopSyntax, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeLoop(LoopSyntax loopSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var body = AnalyzeBlock(loopSyntax.Body, scope, types, functions).Node;
         return new AnalyzeResult<StatementNode>(new LoopNode(body), scope);
     }
 
     private AnalyzeResult<StatementNode> AnalyzeFor(ForSyntax forSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        return AnalyzeFor(forSyntax, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeFor(ForSyntax forSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
         var forScope = new Scope(scope);
         var initializer = forSyntax.Initializer.Match(
             statement =>
             {
-                var result = AnalyzeStatement(statement, forScope, types);
+                var result = AnalyzeStatement(statement, forScope, types, functions);
                 forScope = result.Scope;
                 return Maybe.From(result.Node);
             },
             () => Maybe<StatementNode>.None);
-        var condition = forSyntax.Condition.Map(expression => AnalyzeExpression(expression, forScope, types).Node);
-        var body = AnalyzeBlock(forSyntax.Body, forScope, types).Node;
-        var increment = forSyntax.Increment.Map(expression => AnalyzeExpression(expression, forScope, types).Node);
+        var condition = forSyntax.Condition.Map(expression => AnalyzeExpression(expression, forScope, types, functions).Node);
+        var body = AnalyzeBlock(forSyntax.Body, forScope, types, functions).Node;
+        var increment = forSyntax.Increment.Map(expression => AnalyzeExpression(expression, forScope, types, functions).Node);
 
         return new AnalyzeResult<StatementNode>(new ForNode(initializer, condition, increment, body), scope);
     }
 
     private AnalyzeResult<StatementNode> AnalyzeReturn(ReturnSyntax ret, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
-        var maybeExpr = ret.Expression.Map(expr => AnalyzeExpression(expr, scope, types).Node);
+        return AnalyzeReturn(ret, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeReturn(ReturnSyntax ret, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var maybeExpr = ret.Expression.Map(expr => AnalyzeExpression(expr, scope, types, functions).Node);
         return new AnalyzeResult<StatementNode>(new ReturnNode(maybeExpr), scope);
     }
 }

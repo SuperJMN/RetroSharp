@@ -245,9 +245,23 @@ void g(ptr<Vec2> p) {
 - Add unit tests covering pointer/array field access, address-of, and backend-specific word-sized field layout.
 - Document ABI details per backend (register conventions, preserved registers).
 
+## 11. Post-v1 high-level surface
+
+Iteration 12 adds source ergonomics only when the lowering remains static and predictable:
+
+- `let name = expr;` declares an immutable local binding. The current cartridge targets infer the binding as byte-backed local storage and reject reassignment, compound assignment, and postfix mutation.
+- `inline` marks a helper that must use source-level substitution in the current cartridge targets. Explicit inline value helpers fail clearly if the body is not a single return expression.
+- `pure` marks a helper whose body must stay in the supported side-effect-free subset. It is validated before Game Boy/NES lowering and emits no runtime code by itself.
+- `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
+- `video.Init()`, `video.WaitVBlank()`, `input.Poll()`, `camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
+- `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
+- `value |> Clamp(0, 120) |> SnapToTile()` rewrites left-to-right to nested static/helper calls and does not create a pipe object, iterator, delegate, or hidden range value.
+
+Traits, constraints, managed objects, closures, delegates, runtime polymorphism, and built-in `Option`/`Result` abstractions are outside this iteration.
+
 ---
 
-## 11. Rationale summary
+## 12. Rationale summary
 
 - Canonical fixed-width types make cost and ABI explicit and portable on 8-bit.
 - '.'-based member access with single-level auto-deref provides familiarity and keeps codegen simple (base + offset).

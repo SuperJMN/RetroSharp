@@ -39,7 +39,7 @@ Language work belongs here:
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
 - Target attributes such as `[target("gb")]` or `[intrinsic]`.
 - Namespaces or modules if needed to separate SDK and intrinsics.
-- Zero-cost high-level ergonomics such as SDK namespaced dot calls, struct receiver methods, immutable `let` locals, switch expressions, static pipeline syntax, purity/inline contracts, and compile-time-only traits or constraints, provided they lower to direct calls, branches, local storage, or constants. These features must not require heap allocation, delegates, closure objects, boxing, virtual dispatch, runtime interface tables, or object identity.
+- Zero-cost high-level ergonomics such as SDK namespaced dot calls, struct receiver methods, immutable `let` locals, switch expressions, static pipeline syntax, and purity/inline contracts, provided they lower to direct calls, branches, local storage, or constants. These features must not require heap allocation, delegates, closure objects, boxing, virtual dispatch, runtime interface tables, or object identity.
 
 ### Portable 2D SDK
 
@@ -992,7 +992,7 @@ Tasks:
 - [x] Document remaining gaps as pointer/member access through arrays, address-of fields, wider ABI/layout, backend calling conventions, and canonical-type diagnostics.
 - [x] Migrate runnable samples to use the v1 style where it improves clarity without changing target behavior.
 - [x] Keep diagnostic samples simple enough to isolate target regressions while still using the stable `loop` and mutation syntax.
-- [x] Move dot-call SDK namespaces, receiver methods, immutable `let`, switch expressions, pipeline syntax, explicit `pure`/`inline` contracts, and trait-like constraints out of v1 and into post-v1 candidates.
+- [x] Move dot-call SDK namespaces, receiver methods, immutable `let`, switch expressions, pipeline syntax, and explicit `pure`/`inline` contracts out of v1 and into post-v1 candidates. Trait-like constraints remain outside v1 and outside Iteration 12.
 
 Verification:
 
@@ -1006,34 +1006,97 @@ Status: post-v1 candidate.
 
 Purpose: make RetroSharp read more like a compact modern C#/functional language while keeping emitted Game Boy/NES code equivalent to hand-written low-level helpers.
 
-This iteration deliberately stays outside language v1. It also excludes managed object features, runtime polymorphism, closures/delegates, lambda syntax, and built-in `Option`/`Result` abstractions until their ergonomics and runtime model are justified for the current 8-bit target constraints.
+This iteration deliberately stays outside language v1. It also excludes managed object features, runtime polymorphism, closures/delegates, lambda syntax, built-in `Option`/`Result` abstractions, and trait/constraint systems until their ergonomics and runtime model are justified for the current 8-bit target constraints.
+
+Design rules:
+
+- Every accepted form must lower before cartridge target emission to an existing call, inline helper substitution, expression tree, direct branch, direct local storage, or constant.
+- Dot syntax has two distinct meanings. `module.Call(...)` is a compile-time SDK/module call when the left side names a known module. `value.Method(...)` is a receiver method only when the left side is a resolved value with a known struct type.
+- Receiver methods are static source sugar. They do not introduce object identity, virtual dispatch, method tables, `this` objects, boxing, or hidden heap state.
+- `let` is a local immutable binding. It may fold to a constant when the initializer is compile-time evaluable, otherwise it uses the same local storage shape as an equivalent variable and rejects reassignment.
+- `inline` describes the already-supported parameter-substitution lowering. A helper marked `inline` must fail clearly if the current target cannot inline it.
+- `pure` is a compile-time contract over the supported subset. It must not emit runtime code by itself.
+- Pipeline syntax rewrites to nested static/helper calls. It must not create pipe objects, iterator objects, range objects, delegates, or hidden temporaries beyond those already required by the lowered expression.
 
 Tasks:
 
-- Add SDK namespaced dot-call syntax such as `video.Init()`, `input.Poll()`, `camera.SetPosition(x, y)`, and `sprites.Draw(...)`.
-  - Treat the left side as a compile-time SDK namespace/module, not as a runtime object instance.
-  - Resolve calls statically to existing or future SDK operations such as `video_init()`, `input_poll()`, and `camera_set_position(...)`.
-  - Preserve target capability checks before lowering.
-- Add struct receiver/extension methods such as `actor.Move(dx, dy)`.
-  - Resolve them statically to helper calls such as `Actor_Move(ref actor, dx, dy)` or to an inline equivalent.
-  - Support an explicit receiver form in the declaration model, for example `ref this Actor actor`, without adding object identity or dynamic dispatch.
-  - Keep the feature available only where the receiver type is known at compile time.
-- Add immutable local bindings with `let`.
-  - Lower `let name = expr;` to the same constant, immediate, or local storage form that an equivalent read-only local would use.
-  - Reject reassignment in semantic analysis.
-  - Prefer constant folding when the initializer is compile-time evaluable.
-- Add switch expressions for byte-backed values.
-  - Lower `state switch { State.Idle => 0, State.Run => 2, _ => 1 }` to the same no-fallthrough compare branches as statement `switch`.
-  - Require branch result types to be compatible before target lowering.
-- Add static pipeline syntax.
-  - Lower `value |> Clamp(0, 120) |> SnapToTile()` to ordinary nested static calls or inline helper expansion.
-  - Do not create pipe objects, range objects, iterators, or temporaries beyond what the lowered expression requires.
-- Add `pure` and `inline` source contracts for helper functions.
-  - `pure` is a compile-time promise checked against the supported subset; it must not emit runtime code by itself.
-  - `inline` requests the existing parameter-substitution lowering and should fail clearly when a function cannot be inlined in the current target path.
-- Add compile-time-only traits or constraints for future generic-looking helpers only if the target code remains monomorphized or statically resolved.
-  - No runtime `interface`, vtable, boxing, virtual dispatch, or reflection support.
-  - Any trait-like feature must be proven with emitted-code tests that compare against the direct helper equivalent.
+#### AR-12.1: Add immutable `let` locals
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, semantic analyzer, Game Boy/NES lowering tests, docs.
+- Steps:
+  - [x] Parse `let name = expr;` as a local immutable declaration.
+  - [x] Fold compile-time evaluable initializers when possible.
+  - [x] Reject reassignment, compound assignment, and postfix mutation of a `let` binding in semantic analysis or before target lowering with a clear diagnostic.
+  - [x] Lower non-constant `let` bindings to the same local storage cost as an equivalent byte-backed variable.
+- Verification:
+  - [x] Parser tests cover local `let` and reject top-level `let`.
+  - [x] Semantic tests cover visible immutable bindings and reassignment errors.
+  - [x] Game Boy and NES emitted-code tests prove accepted `let` bindings compile with no helper/runtime object and reject mutation.
+
+#### AR-12.2: Add explicit `inline` and `pure` helper contracts
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, helper substitution, semantic analyzer, target compiler tests, docs.
+- Steps:
+  - [x] Parse `inline` and `pure` modifiers on helper declarations.
+  - [x] Preserve existing implicit inline behavior for current cartridge helpers while making explicit `inline` fail clearly when inlining is impossible.
+  - [x] Check `pure` helpers against the supported side-effect-free subset before target lowering.
+  - [x] Keep both modifiers compile-time only.
+- Verification:
+  - [x] Parser and semantic tests cover accepted and rejected modifiers.
+  - [x] Game Boy/NES emitted-code or lowering tests compare against equivalent current inline helpers and prove no extra helper call, object, hidden temporary, or dispatch artifact is introduced.
+
+#### AR-12.3: Add switch expressions
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, switch lowering, semantic analyzer, Game Boy/NES expression lowering tests, docs.
+- Steps:
+  - [x] Parse `expr switch { Pattern => value, _ => fallback }`.
+  - [x] Reuse existing no-fallthrough switch pattern semantics for exact values, multi-values, and half-open ranges.
+  - [x] Require a default arm, simple subject, and compatible branch result shapes before target lowering.
+  - [x] Lower to the same compare branches as an equivalent conditional chain.
+- Verification:
+  - [x] Parser and semantic tests cover value cases, default case, ranges, incompatible branch results, and subject restrictions.
+  - [x] Game Boy/NES tests prove byte-backed switch expressions lower without dispatch tables or helper calls.
+
+#### AR-12.4: Add SDK namespaced dot-call syntax
+
+- Layer: language-to-SDK call surface.
+- Candidate files: parser grammar/syntax, call resolver, SDK operation collector, Game Boy/NES tests, docs.
+- Steps:
+  - [x] Parse SDK namespaced dot-call syntax such as `video.Init()`, `video.WaitVBlank()`, `input.Poll()`, `camera.SetPosition(x, y)`, and `world.Map(...)`.
+  - [x] Treat the left side as a compile-time SDK namespace/module when it names a known SDK module, not as a runtime object instance.
+  - [x] Resolve calls statically to existing SDK functions such as `video_init()`, `video_wait_vblank()`, `input_poll()`, and `camera_set_position(...)`.
+  - [x] Preserve target capability checks before lowering.
+- Verification:
+  - [x] Parser and semantic tests distinguish module dot-calls from member access.
+  - [x] Game Boy/NES tests prove dot-calls reach the same capability checks and lowering as their existing function-call equivalents.
+
+#### AR-12.5: Add struct receiver methods
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, helper resolver, semantic analyzer, target compiler tests, docs.
+- Steps:
+  - [x] Add receiver methods such as `actor.Move(dx)` when a helper declares `this Actor actor`.
+  - [x] Resolve them statically to helper calls such as `Move(actor, dx)` or to an inline equivalent.
+  - [x] Support an explicit receiver form in the declaration model, `this Actor actor`, without adding object identity or dynamic dispatch.
+  - [x] Keep the feature available only where a matching static helper has a receiver parameter.
+- Verification:
+  - [x] Parser and semantic tests distinguish receiver calls from SDK module dot-calls.
+  - [x] Game Boy/NES tests prove receiver methods lower to static/inline equivalents with no dispatch table.
+
+#### AR-12.6: Add static pipeline syntax
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, expression rewriter, helper call lowering tests, docs.
+- Steps:
+  - [x] Add static pipeline syntax.
+  - [x] Lower `value |> Clamp(0, 120) |> SnapToTile()` to ordinary nested static calls or inline helper expansion.
+  - [x] Do not create pipe objects, range objects, iterators, or temporaries beyond what the lowered expression requires.
+- Verification:
+  - [x] Parser and semantic tests cover chained pipelines.
+  - [x] Game Boy/NES emitted-code or lowering tests prove generated behavior matches the equivalent nested helper calls with no extra helper call, object, hidden temporary, or dispatch artifact.
 
 Acceptance criteria:
 
@@ -1042,6 +1105,7 @@ Acceptance criteria:
 - There is no new runtime allocation, runtime dispatch table, delegate representation, closure object, or hidden iterator/range object.
 - SDK namespaced calls and struct receiver methods are represented as distinct concepts in the semantic model even though both use dot-call syntax.
 - Docs explicitly state that this iteration adds high-level source ergonomics, not managed objects or polymorphism.
+- Trait/constraint systems are not part of this iteration.
 
 ## First Recommended Implementation Slice
 

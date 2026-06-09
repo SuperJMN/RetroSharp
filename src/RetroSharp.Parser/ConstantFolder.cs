@@ -21,6 +21,7 @@ public static class ConstantFolder
         var typeSizes = BuildTypeSizeTable(program.Enums, program.Structs);
         var fieldOffsets = BuildFieldOffsetTable(program.Structs, typeSizes);
         var constants = BuildConstantTable(program.Constants, program.Enums, typeSizes, fieldOffsets);
+        var functionIndex = program.Functions.ToDictionary(function => function.Name, StringComparer.Ordinal);
         var functions = program.Functions.Select(function => new FunctionSyntax(
             function.Type,
             function.Name,
@@ -28,10 +29,13 @@ public static class ConstantFolder
                 .Select(parameter => new ParameterSyntax(
                     parameter.Type,
                     parameter.Name,
-                    parameter.DefaultValue.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, new Dictionary<string, int>(StringComparer.Ordinal)))))
+                    parameter.DefaultValue.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, new Dictionary<string, int>(StringComparer.Ordinal))),
+                    parameter.IsReceiver))
                 .ToList(),
-            FoldBlock(function.Block, constants, typeSizes, fieldOffsets, new Dictionary<string, int>(StringComparer.Ordinal)),
-            function.IsExpressionBodied)).ToList();
+            FoldBlock(function.Block, constants, typeSizes, fieldOffsets, new Dictionary<string, int>(StringComparer.Ordinal), functionIndex.Values),
+            function.IsExpressionBodied,
+            function.IsInline,
+            function.IsPure)).ToList();
 
         return new ProgramSyntax(program.TypeAliases, program.Constants, program.Enums, program.Structs, functions);
     }
@@ -306,6 +310,17 @@ public static class ConstantFolder
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
         IReadOnlyDictionary<string, int> arrays)
     {
+        return FoldBlock(block, constants, typeSizes, fieldOffsets, arrays, []);
+    }
+
+    private static BlockSyntax FoldBlock(
+        BlockSyntax block,
+        IReadOnlyDictionary<string, string> constants,
+        IReadOnlyDictionary<string, int> typeSizes,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
+        IReadOnlyDictionary<string, int> arrays,
+        IEnumerable<FunctionSyntax> functions)
+    {
         var scopedConstants = new Dictionary<string, string>(constants, StringComparer.Ordinal);
         var scopedArrays = new Dictionary<string, int>(arrays, StringComparer.Ordinal);
         var statements = new List<StatementSyntax>();
@@ -318,7 +333,7 @@ public static class ConstantFolder
                 continue;
             }
 
-            var folded = FoldStatement(statement, scopedConstants, typeSizes, fieldOffsets, scopedArrays);
+            var folded = FoldStatement(statement, scopedConstants, typeSizes, fieldOffsets, scopedArrays, functions);
             RegisterDeclaration(folded, scopedConstants, typeSizes, fieldOffsets, scopedArrays);
             statements.Add(folded);
         }
@@ -363,27 +378,39 @@ public static class ConstantFolder
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
         IReadOnlyDictionary<string, int> arrays)
     {
+        return FoldStatement(statement, constants, typeSizes, fieldOffsets, arrays, []);
+    }
+
+    private static StatementSyntax FoldStatement(
+        StatementSyntax statement,
+        IReadOnlyDictionary<string, string> constants,
+        IReadOnlyDictionary<string, int> typeSizes,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
+        IReadOnlyDictionary<string, int> arrays,
+        IEnumerable<FunctionSyntax> functions)
+    {
         return statement switch
         {
             DeclarationSyntax declaration => new DeclarationSyntax(
                 declaration.Type,
                 declaration.Name,
-                declaration.ArrayLength.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays)),
-                declaration.Initialization.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays))),
-            ExpressionStatementSyntax expressionStatement => new ExpressionStatementSyntax(FoldExpression(expressionStatement.Expression, constants, typeSizes, fieldOffsets, arrays)),
+                declaration.ArrayLength.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays, functions)),
+                declaration.Initialization.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays, functions)),
+                declaration.IsImmutable),
+            ExpressionStatementSyntax expressionStatement => new ExpressionStatementSyntax(FoldExpression(expressionStatement.Expression, constants, typeSizes, fieldOffsets, arrays, functions)),
             IfElseSyntax ifElse => new IfElseSyntax(
-                FoldExpression(ifElse.Condition, constants, typeSizes, fieldOffsets, arrays),
-                FoldBlock(ifElse.ThenBlock, constants, typeSizes, fieldOffsets, arrays),
-                ifElse.ElseBlock.Map(block => FoldBlock(block, constants, typeSizes, fieldOffsets, arrays))),
-            WhileSyntax whileSyntax => new WhileSyntax(FoldExpression(whileSyntax.Condition, constants, typeSizes, fieldOffsets, arrays), FoldBlock(whileSyntax.Body, constants, typeSizes, fieldOffsets, arrays)),
+                FoldExpression(ifElse.Condition, constants, typeSizes, fieldOffsets, arrays, functions),
+                FoldBlock(ifElse.ThenBlock, constants, typeSizes, fieldOffsets, arrays, functions),
+                ifElse.ElseBlock.Map(block => FoldBlock(block, constants, typeSizes, fieldOffsets, arrays, functions))),
+            WhileSyntax whileSyntax => new WhileSyntax(FoldExpression(whileSyntax.Condition, constants, typeSizes, fieldOffsets, arrays, functions), FoldBlock(whileSyntax.Body, constants, typeSizes, fieldOffsets, arrays, functions)),
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
-                FoldBlock(doWhileSyntax.Body, constants, typeSizes, fieldOffsets, arrays),
-                FoldExpression(doWhileSyntax.Condition, constants, typeSizes, fieldOffsets, arrays)),
-            LoopSyntax loopSyntax => new LoopSyntax(FoldBlock(loopSyntax.Body, constants, typeSizes, fieldOffsets, arrays)),
-            RangeForSyntax rangeForSyntax => FoldFor(RangeForLowerer.Lower(rangeForSyntax), constants, typeSizes, fieldOffsets, arrays),
-            ForSyntax forSyntax => FoldFor(forSyntax, constants, typeSizes, fieldOffsets, arrays),
-            SwitchSyntax switchSyntax => FoldSwitch(switchSyntax, constants, typeSizes, fieldOffsets, arrays),
-            ReturnSyntax returnSyntax => new ReturnSyntax(returnSyntax.Expression.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays))),
+                FoldBlock(doWhileSyntax.Body, constants, typeSizes, fieldOffsets, arrays, functions),
+                FoldExpression(doWhileSyntax.Condition, constants, typeSizes, fieldOffsets, arrays, functions)),
+            LoopSyntax loopSyntax => new LoopSyntax(FoldBlock(loopSyntax.Body, constants, typeSizes, fieldOffsets, arrays, functions)),
+            RangeForSyntax rangeForSyntax => FoldFor(RangeForLowerer.Lower(rangeForSyntax), constants, typeSizes, fieldOffsets, arrays, functions),
+            ForSyntax forSyntax => FoldFor(forSyntax, constants, typeSizes, fieldOffsets, arrays, functions),
+            SwitchSyntax switchSyntax => FoldSwitch(switchSyntax, constants, typeSizes, fieldOffsets, arrays, functions),
+            ReturnSyntax returnSyntax => new ReturnSyntax(returnSyntax.Expression.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays, functions))),
             _ => statement,
         };
     }
@@ -395,16 +422,27 @@ public static class ConstantFolder
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
         IReadOnlyDictionary<string, int> arrays)
     {
+        return FoldSwitch(switchSyntax, constants, typeSizes, fieldOffsets, arrays, []);
+    }
+
+    private static IfElseSyntax FoldSwitch(
+        SwitchSyntax switchSyntax,
+        IReadOnlyDictionary<string, string> constants,
+        IReadOnlyDictionary<string, int> typeSizes,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
+        IReadOnlyDictionary<string, int> arrays,
+        IEnumerable<FunctionSyntax> functions)
+    {
         var foldedSwitch = new SwitchSyntax(
-            FoldExpression(switchSyntax.Subject, constants, typeSizes, fieldOffsets, arrays),
+            FoldExpression(switchSyntax.Subject, constants, typeSizes, fieldOffsets, arrays, functions),
             switchSyntax.Cases
                 .Select(switchCase => new SwitchCaseSyntax(
                     switchCase.Patterns
                         .Select(pattern => FoldSwitchCasePattern(pattern, constants, typeSizes, fieldOffsets, arrays))
                         .ToList(),
-                    FoldBlock(switchCase.Block, constants, typeSizes, fieldOffsets, arrays)))
+                    FoldBlock(switchCase.Block, constants, typeSizes, fieldOffsets, arrays, functions)))
                 .ToList(),
-            switchSyntax.DefaultBlock.Map(block => FoldBlock(block, constants, typeSizes, fieldOffsets, arrays)));
+            switchSyntax.DefaultBlock.Map(block => FoldBlock(block, constants, typeSizes, fieldOffsets, arrays, functions)));
 
         return SwitchLowerer.Lower(foldedSwitch);
     }
@@ -429,20 +467,31 @@ public static class ConstantFolder
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
         IReadOnlyDictionary<string, int> arrays)
     {
+        return FoldFor(forSyntax, constants, typeSizes, fieldOffsets, arrays, []);
+    }
+
+    private static ForSyntax FoldFor(
+        ForSyntax forSyntax,
+        IReadOnlyDictionary<string, string> constants,
+        IReadOnlyDictionary<string, int> typeSizes,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
+        IReadOnlyDictionary<string, int> arrays,
+        IEnumerable<FunctionSyntax> functions)
+    {
         var scopedConstants = new Dictionary<string, string>(constants, StringComparer.Ordinal);
         var scopedArrays = new Dictionary<string, int>(arrays, StringComparer.Ordinal);
         var initializer = forSyntax.Initializer.Map(init =>
         {
-            var folded = FoldStatement(init, scopedConstants, typeSizes, fieldOffsets, scopedArrays);
+            var folded = FoldStatement(init, scopedConstants, typeSizes, fieldOffsets, scopedArrays, functions);
             RegisterDeclaration(folded, scopedConstants, typeSizes, fieldOffsets, scopedArrays);
             return folded;
         });
 
         return new ForSyntax(
             initializer,
-            forSyntax.Condition.Map(condition => FoldExpression(condition, scopedConstants, typeSizes, fieldOffsets, scopedArrays)),
-            forSyntax.Increment.Map(increment => FoldExpression(increment, scopedConstants, typeSizes, fieldOffsets, scopedArrays)),
-            FoldBlock(forSyntax.Body, scopedConstants, typeSizes, fieldOffsets, scopedArrays));
+            forSyntax.Condition.Map(condition => FoldExpression(condition, scopedConstants, typeSizes, fieldOffsets, scopedArrays, functions)),
+            forSyntax.Increment.Map(increment => FoldExpression(increment, scopedConstants, typeSizes, fieldOffsets, scopedArrays, functions)),
+            FoldBlock(forSyntax.Body, scopedConstants, typeSizes, fieldOffsets, scopedArrays, functions));
     }
 
     private static ExpressionSyntax FoldExpression(
@@ -452,6 +501,17 @@ public static class ConstantFolder
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
         IReadOnlyDictionary<string, int> arrays)
     {
+        return FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays, []);
+    }
+
+    private static ExpressionSyntax FoldExpression(
+        ExpressionSyntax expression,
+        IReadOnlyDictionary<string, string> constants,
+        IReadOnlyDictionary<string, int> typeSizes,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
+        IReadOnlyDictionary<string, int> arrays,
+        IEnumerable<FunctionSyntax> functions)
+    {
         return expression switch
         {
             IdentifierSyntax identifier when constants.TryGetValue(identifier.Identifier, out var value) => new ConstantSyntax(value),
@@ -459,31 +519,69 @@ public static class ConstantFolder
             SizeOfSyntax sizeOf => new ConstantSyntax(SizeOfType(sizeOf.Type, typeSizes, sizeOf.Type).ToString(CultureInfo.InvariantCulture)),
             OffsetOfSyntax offsetOf => new ConstantSyntax(OffsetOfField(offsetOf, fieldOffsets, offsetOf.Type).ToString(CultureInfo.InvariantCulture)),
             CountOfSyntax countOf => new ConstantSyntax(CountOfArray(countOf, arrays, countOf.BaseIdentifier).ToString(CultureInfo.InvariantCulture)),
-            AssignmentSyntax assignment => new AssignmentSyntax(FoldLValue(assignment.Left, constants, typeSizes, fieldOffsets, arrays), assignment.OperatorSymbol, FoldExpression(assignment.Right, constants, typeSizes, fieldOffsets, arrays)),
-            PostfixMutationSyntax postfix => FoldExpression(postfix.ToAssignment(), constants, typeSizes, fieldOffsets, arrays),
+            AssignmentSyntax assignment => new AssignmentSyntax(FoldLValue(assignment.Left, constants, typeSizes, fieldOffsets, arrays), assignment.OperatorSymbol, FoldExpression(assignment.Right, constants, typeSizes, fieldOffsets, arrays, functions)),
+            PostfixMutationSyntax postfix => FoldExpression(postfix.ToAssignment(), constants, typeSizes, fieldOffsets, arrays, functions),
             BinaryExpressionSyntax binary => FoldConstantExpression(
                 new BinaryExpressionSyntax(
-                    FoldExpression(binary.Left, constants, typeSizes, fieldOffsets, arrays),
-                    FoldExpression(binary.Right, constants, typeSizes, fieldOffsets, arrays),
+                    FoldExpression(binary.Left, constants, typeSizes, fieldOffsets, arrays, functions),
+                    FoldExpression(binary.Right, constants, typeSizes, fieldOffsets, arrays, functions),
                     binary.Operator),
                 constants,
                 typeSizes,
                 fieldOffsets,
                 arrays),
-            ConditionalExpressionSyntax conditional => FoldConditionalExpression(conditional, constants, typeSizes, fieldOffsets, arrays),
-            ArrayInitializerSyntax arrayInitializer => new ArrayInitializerSyntax(arrayInitializer.Elements.Select(element => FoldExpression(element, constants, typeSizes, fieldOffsets, arrays))),
-            StructInitializerSyntax structInitializer => new StructInitializerSyntax(structInitializer.Fields.Select(field => new StructFieldInitializerSyntax(field.Name, FoldExpression(field.Expression, constants, typeSizes, fieldOffsets, arrays)))),
+            ConditionalExpressionSyntax conditional => FoldConditionalExpression(conditional, constants, typeSizes, fieldOffsets, arrays, functions),
+            SwitchExpressionSyntax switchExpression => FoldExpression(
+                SwitchExpressionLowerer.Lower(new SwitchExpressionSyntax(
+                    FoldExpression(switchExpression.Subject, constants, typeSizes, fieldOffsets, arrays, functions),
+                    switchExpression.Arms
+                        .Select(arm => new SwitchExpressionArmSyntax(
+                            arm.Patterns.Select(pattern => FoldSwitchCasePattern(pattern, constants, typeSizes, fieldOffsets, arrays)).ToList(),
+                            FoldExpression(arm.Value, constants, typeSizes, fieldOffsets, arrays, functions)))
+                        .ToList(),
+                    switchExpression.DefaultValue.Map(expression => FoldExpression(expression, constants, typeSizes, fieldOffsets, arrays, functions)))),
+                constants,
+                typeSizes,
+                fieldOffsets,
+                arrays,
+                functions),
+            PipelineExpressionSyntax pipeline => FoldExpression(
+                PipelineExpressionLowerer.Lower(new PipelineExpressionSyntax(
+                    FoldExpression(pipeline.Value, constants, typeSizes, fieldOffsets, arrays, functions),
+                    pipeline.Steps
+                        .Select(step => new PipelineStepSyntax(
+                            step.FunctionName,
+                            step.Arguments.Select(argument => FoldExpression(argument, constants, typeSizes, fieldOffsets, arrays, functions))))
+                        .ToList())),
+                constants,
+                typeSizes,
+                fieldOffsets,
+                arrays,
+                functions),
+            ArrayInitializerSyntax arrayInitializer => new ArrayInitializerSyntax(arrayInitializer.Elements.Select(element => FoldExpression(element, constants, typeSizes, fieldOffsets, arrays, functions))),
+            StructInitializerSyntax structInitializer => new StructInitializerSyntax(structInitializer.Fields.Select(field => new StructFieldInitializerSyntax(field.Name, FoldExpression(field.Expression, constants, typeSizes, fieldOffsets, arrays, functions)))),
             UnaryExpressionSyntax unary => FoldConstantExpression(
-                new UnaryExpressionSyntax(unary.OperatorSymbol, FoldExpression(unary.Operand, constants, typeSizes, fieldOffsets, arrays)),
+                new UnaryExpressionSyntax(unary.OperatorSymbol, FoldExpression(unary.Operand, constants, typeSizes, fieldOffsets, arrays, functions)),
                 constants,
                 typeSizes,
                 fieldOffsets,
                 arrays),
-            CastSyntax cast => new CastSyntax(cast.Type, FoldExpression(cast.Expression, constants, typeSizes, fieldOffsets, arrays)),
-            FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => FoldExpression(parameter, constants, typeSizes, fieldOffsets, arrays))),
-            NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, FoldExpression(namedArgument.Expression, constants, typeSizes, fieldOffsets, arrays)),
-            MemberAccessSyntax memberAccess => new MemberAccessSyntax(FoldExpression(memberAccess.Target, constants, typeSizes, fieldOffsets, arrays), memberAccess.Member),
-            IndexExpressionSyntax indexExpression => new IndexExpressionSyntax(indexExpression.BaseIdentifier, FoldExpression(indexExpression.Index, constants, typeSizes, fieldOffsets, arrays)),
+            CastSyntax cast => new CastSyntax(cast.Type, FoldExpression(cast.Expression, constants, typeSizes, fieldOffsets, arrays, functions)),
+            SdkDotCallSyntax sdkDotCall => FoldExpression(
+                LowerDotCall(new SdkDotCallSyntax(
+                    sdkDotCall.Module,
+                    sdkDotCall.Method,
+                    sdkDotCall.Parameters.Select(parameter => FoldExpression(parameter, constants, typeSizes, fieldOffsets, arrays, functions))),
+                    functions),
+                constants,
+                typeSizes,
+                fieldOffsets,
+                arrays,
+                functions),
+            FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => FoldExpression(parameter, constants, typeSizes, fieldOffsets, arrays, functions))),
+            NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, FoldExpression(namedArgument.Expression, constants, typeSizes, fieldOffsets, arrays, functions)),
+            MemberAccessSyntax memberAccess => new MemberAccessSyntax(FoldExpression(memberAccess.Target, constants, typeSizes, fieldOffsets, arrays, functions), memberAccess.Member),
+            IndexExpressionSyntax indexExpression => new IndexExpressionSyntax(indexExpression.BaseIdentifier, FoldExpression(indexExpression.Index, constants, typeSizes, fieldOffsets, arrays, functions)),
             _ => expression,
         };
     }
@@ -495,9 +593,20 @@ public static class ConstantFolder
         IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
         IReadOnlyDictionary<string, int> arrays)
     {
-        var foldedCondition = FoldExpression(conditional.Condition, constants, typeSizes, fieldOffsets, arrays);
-        var foldedWhenTrue = FoldExpression(conditional.WhenTrue, constants, typeSizes, fieldOffsets, arrays);
-        var foldedWhenFalse = FoldExpression(conditional.WhenFalse, constants, typeSizes, fieldOffsets, arrays);
+        return FoldConditionalExpression(conditional, constants, typeSizes, fieldOffsets, arrays, []);
+    }
+
+    private static ExpressionSyntax FoldConditionalExpression(
+        ConditionalExpressionSyntax conditional,
+        IReadOnlyDictionary<string, string> constants,
+        IReadOnlyDictionary<string, int> typeSizes,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>> fieldOffsets,
+        IReadOnlyDictionary<string, int> arrays,
+        IEnumerable<FunctionSyntax> functions)
+    {
+        var foldedCondition = FoldExpression(conditional.Condition, constants, typeSizes, fieldOffsets, arrays, functions);
+        var foldedWhenTrue = FoldExpression(conditional.WhenTrue, constants, typeSizes, fieldOffsets, arrays, functions);
+        var foldedWhenFalse = FoldExpression(conditional.WhenFalse, constants, typeSizes, fieldOffsets, arrays, functions);
 
         try
         {
@@ -514,6 +623,21 @@ public static class ConstantFolder
                 fieldOffsets,
                 arrays);
         }
+    }
+
+    private static FunctionCall LowerDotCall(SdkDotCallSyntax call, IEnumerable<FunctionSyntax> functions)
+    {
+        if (ReceiverMethodLowerer.TryLower(call, functions, out var receiverCall))
+        {
+            return receiverCall;
+        }
+
+        if (SdkDotCallLowerer.IsKnownModule(call.Module))
+        {
+            return SdkDotCallLowerer.Lower(call);
+        }
+
+        throw new InvalidOperationException($"Unknown SDK module or receiver method '{call.Module}.{call.Method}'.");
     }
 
     private static ExpressionSyntax FoldConstantExpression(

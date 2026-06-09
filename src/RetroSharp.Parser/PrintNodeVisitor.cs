@@ -157,6 +157,27 @@ public class PrintNodeVisitor : ISyntaxVisitor
         resultBuilder.Append(" }");
     }
 
+    public void VisitSdkDotCall(SdkDotCallSyntax sdkDotCallSyntax)
+    {
+        resultBuilder.Append(sdkDotCallSyntax.Module);
+        resultBuilder.Append(".");
+        resultBuilder.Append(sdkDotCallSyntax.Method);
+        resultBuilder.Append("(");
+        var first = true;
+        foreach (var parameter in sdkDotCallSyntax.Parameters)
+        {
+            if (!first)
+            {
+                resultBuilder.Append(", ");
+            }
+
+            first = false;
+            parameter.Accept(this);
+        }
+
+        resultBuilder.Append(")");
+    }
+
     public void VisitFunctionCall(FunctionCall functionCall)
     {
         resultBuilder.Append(functionCall.Name);
@@ -172,7 +193,7 @@ public class PrintNodeVisitor : ISyntaxVisitor
             first = false;
             parameter.Accept(this);
         }
-        resultBuilder.AppendLine(")");
+        resultBuilder.Append(")");
     }
 
     public void VisitNamedArgument(NamedArgumentSyntax namedArgumentSyntax)
@@ -228,6 +249,16 @@ public class PrintNodeVisitor : ISyntaxVisitor
 
     public void VisitFunction(FunctionSyntax function)
     {
+        if (function.IsInline)
+        {
+            resultBuilder.Append("inline ");
+        }
+
+        if (function.IsPure)
+        {
+            resultBuilder.Append("pure ");
+        }
+
         resultBuilder.Append($"{function.Type} {function.Name}");
         resultBuilder.Append("(");
         for (int i = 0; i < function.Parameters.Count; i++)
@@ -264,6 +295,18 @@ public class PrintNodeVisitor : ISyntaxVisitor
     public void VisitDeclaration(DeclarationSyntax declarationSyntax)
     {
         resultBuilder.Append(new string('\t', indentationLevel));
+        if (declarationSyntax.IsImmutable)
+        {
+            resultBuilder.Append("let " + declarationSyntax.Name);
+            declarationSyntax.Initialization.Execute(init =>
+            {
+                resultBuilder.Append("=");
+                init.Accept(this);
+            });
+            resultBuilder.AppendLine(";");
+            return;
+        }
+
         resultBuilder.Append(declarationSyntax.Type + " " + declarationSyntax.Name);
         declarationSyntax.ArrayLength.Execute(length =>
         {
@@ -281,6 +324,11 @@ public class PrintNodeVisitor : ISyntaxVisitor
 
     public void VisitParameter(ParameterSyntax parameterSyntax)
     {
+        if (parameterSyntax.IsReceiver)
+        {
+            resultBuilder.Append("this ");
+        }
+
         resultBuilder.Append(parameterSyntax.Type + " " + parameterSyntax.Name);
         parameterSyntax.DefaultValue.Execute(defaultValue =>
         {
@@ -387,6 +435,83 @@ public class PrintNodeVisitor : ISyntaxVisitor
         conditionalExpressionSyntax.WhenTrue.Accept(this);
         resultBuilder.Append(":");
         conditionalExpressionSyntax.WhenFalse.Accept(this);
+    }
+
+    public void VisitSwitchExpression(SwitchExpressionSyntax switchExpressionSyntax)
+    {
+        switchExpressionSyntax.Subject.Accept(this);
+        resultBuilder.Append(" switch { ");
+        for (var i = 0; i < switchExpressionSyntax.Arms.Count; i++)
+        {
+            if (i > 0)
+            {
+                resultBuilder.Append(", ");
+            }
+
+            VisitSwitchExpressionArm(switchExpressionSyntax.Arms[i]);
+        }
+
+        switchExpressionSyntax.DefaultValue.Execute(defaultValue =>
+        {
+            if (switchExpressionSyntax.Arms.Count > 0)
+            {
+                resultBuilder.Append(", ");
+            }
+
+            resultBuilder.Append("_=>");
+            defaultValue.Accept(this);
+        });
+        resultBuilder.Append(" }");
+    }
+
+    public void VisitPipelineExpression(PipelineExpressionSyntax pipelineExpressionSyntax)
+    {
+        pipelineExpressionSyntax.Value.Accept(this);
+        foreach (var step in pipelineExpressionSyntax.Steps)
+        {
+            resultBuilder.Append(" |> ");
+            resultBuilder.Append(step.FunctionName);
+            resultBuilder.Append("(");
+            var first = true;
+            foreach (var argument in step.Arguments)
+            {
+                if (!first)
+                {
+                    resultBuilder.Append(", ");
+                }
+
+                first = false;
+                argument.Accept(this);
+            }
+
+            resultBuilder.Append(")");
+        }
+    }
+
+    private void VisitSwitchExpressionArm(SwitchExpressionArmSyntax arm)
+    {
+        for (var i = 0; i < arm.Patterns.Count; i++)
+        {
+            if (i > 0)
+            {
+                resultBuilder.Append(", ");
+            }
+
+            VisitSwitchPattern(arm.Patterns[i]);
+        }
+
+        resultBuilder.Append("=>");
+        arm.Value.Accept(this);
+    }
+
+    private void VisitSwitchPattern(SwitchCasePatternSyntax pattern)
+    {
+        pattern.Start.Accept(this);
+        pattern.End.Execute(end =>
+        {
+            resultBuilder.Append("..");
+            end.Accept(this);
+        });
     }
 
     private void VisitOperand(BinaryExpressionSyntax parent, ExpressionSyntax child)

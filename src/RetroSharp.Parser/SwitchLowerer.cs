@@ -14,29 +14,10 @@ public static class SwitchLowerer
         var elseBlock = switchSyntax.DefaultBlock;
         foreach (var switchCase in switchSyntax.Cases.Reverse())
         {
-            var condition = CaseCondition(switchSyntax.Subject, switchCase);
+            var condition = SwitchPatternConditions.CaseCondition(switchSyntax.Subject, switchCase.Patterns);
             elseBlock = Maybe.From(new BlockSyntax([new IfElseSyntax(condition, switchCase.Block, elseBlock)]));
         }
 
         return (IfElseSyntax)elseBlock.Value.Statements[0];
-    }
-
-    private static ExpressionSyntax CaseCondition(ExpressionSyntax subject, SwitchCaseSyntax switchCase)
-    {
-        return switchCase.Patterns
-            .Select(pattern => PatternCondition(subject, pattern))
-            .Aggregate((left, right) => new BinaryExpressionSyntax(left, right, Operator.Get("||")));
-    }
-
-    private static ExpressionSyntax PatternCondition(ExpressionSyntax subject, SwitchCasePatternSyntax pattern)
-    {
-        return pattern.End.Match(
-            end =>
-            {
-                var lowerBound = new BinaryExpressionSyntax(subject, pattern.Start, Operator.Get(">="));
-                var upperBound = new BinaryExpressionSyntax(subject, end, Operator.Get("<"));
-                return (ExpressionSyntax)new BinaryExpressionSyntax(lowerBound, upperBound, Operator.Get("&&"));
-            },
-            () => new BinaryExpressionSyntax(subject, pattern.Start, Operator.Get("==")));
     }
 }

@@ -233,6 +233,342 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_immutable_let_binding_like_equivalent_local_storage()
+    {
+        const string variableSource = """
+                                      void main() {
+                                          video_init();
+                                          u8 speed = 2;
+                                          u8 next = speed + 1;
+                                          u8 sink = 0;
+                                          sink = next;
+                                      }
+                                      """;
+
+        const string letSource = """
+                                 void main() {
+                                     video_init();
+                                     let speed = 2;
+                                     u8 next = speed + 1;
+                                     u8 sink = 0;
+                                     sink = next;
+                                 }
+                                 """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(variableSource), GameBoyRomCompiler.CompileSource(letSource));
+    }
+
+    [Fact]
+    public void Compiles_inline_pure_helper_contracts_like_equivalent_current_helpers()
+    {
+        const string implicitSource = """
+                                      u8 step(u8 value, u8 amount = 1) => value + amount;
+
+                                      void main() {
+                                          video_init();
+                                          u8 next = step(4);
+                                      }
+                                      """;
+
+        const string explicitSource = """
+                                      inline pure u8 step(u8 value, u8 amount = 1) => value + amount;
+
+                                      void main() {
+                                          video_init();
+                                          u8 next = step(4);
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(implicitSource), GameBoyRomCompiler.CompileSource(explicitSource));
+    }
+
+    [Fact]
+    public void Compiles_switch_expression_like_equivalent_conditional_expression()
+    {
+        const string conditionalSource = """
+                                         void main() {
+                                             video_init();
+                                             u8 state = 2;
+                                             u8 speed = state == 0 ? 0 : state == 1 ? 2 : state >= 2 && state < 5 ? 3 : 1;
+                                             u8 sink = 0;
+                                             sink = speed;
+                                         }
+                                         """;
+
+        const string switchSource = """
+                                    void main() {
+                                        video_init();
+                                        u8 state = 2;
+                                        u8 speed = state switch { 0 => 0, 1 => 2, 2..5 => 3, _ => 1 };
+                                        u8 sink = 0;
+                                        sink = speed;
+                                    }
+                                    """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(conditionalSource), GameBoyRomCompiler.CompileSource(switchSource));
+    }
+
+    [Fact]
+    public void Rejects_game_boy_switch_expression_that_would_re_evaluate_subject()
+    {
+        const string source = """
+                              u8 next(u8 value) => value + 1;
+
+                              void main() {
+                                  video_init();
+                                  u8 speed = next(1) switch { 0 => 0, _ => 1 };
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+        Assert.Equal("switch expression subject must be a simple value expression so lowering cannot re-evaluate a call or side effect.", exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_sdk_namespaced_dot_calls_like_existing_sdk_functions()
+    {
+        const string functionSource = """
+                                      void main() {
+                                          video_init();
+                                          world_column(0, 1, 2);
+                                          world_column(1, 3, 4);
+                                          world_map(2, 10, 2);
+                                          camera_init(2, 10, 2);
+                                          camera_set_position(4, 0);
+                                          video_wait_vblank();
+                                          input_poll();
+                                      }
+                                      """;
+
+        const string dotSource = """
+                                 void main() {
+                                     video.Init();
+                                     world.Column(0, 1, 2);
+                                     world.Column(1, 3, 4);
+                                     world.Map(2, 10, 2);
+                                     camera.Init(2, 10, 2);
+                                     camera.SetPosition(4, 0);
+                                     video.WaitVBlank();
+                                     input.Poll();
+                                 }
+                                 """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(functionSource), GameBoyRomCompiler.CompileSource(dotSource));
+    }
+
+    [Fact]
+    public void Compiles_receiver_method_calls_like_static_helper_calls()
+    {
+        const string staticSource = """
+                                    struct Actor { u8 x; }
+
+                                    inline void Move(this Actor actor, u8 dx) {
+                                        actor.x += dx;
+                                    }
+
+                                    void main() {
+                                        video_init();
+                                        Actor actor;
+                                        Move(actor, 2);
+                                    }
+                                    """;
+
+        const string receiverSource = """
+                                      struct Actor { u8 x; }
+
+                                      inline void Move(this Actor actor, u8 dx) {
+                                          actor.x += dx;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          Actor actor;
+                                          actor.Move(2);
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(staticSource), GameBoyRomCompiler.CompileSource(receiverSource));
+    }
+
+    [Fact]
+    public void Compiles_receiver_method_calls_inside_nested_blocks_and_sdk_name_shadows()
+    {
+        const string staticSource = """
+                                    struct Actor { u8 x; }
+
+                                    inline void Move(this Actor actor, u8 dx) {
+                                        actor.x += dx;
+                                    }
+
+                                    void main() {
+                                        video_init();
+                                        Actor video;
+                                        if (true) {
+                                            Move(video, 2);
+                                        }
+                                    }
+                                    """;
+
+        const string receiverSource = """
+                                      struct Actor { u8 x; }
+
+                                      inline void Move(this Actor actor, u8 dx) {
+                                          actor.x += dx;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          Actor video;
+                                          if (true) {
+                                              video.Move(2);
+                                          }
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(staticSource), GameBoyRomCompiler.CompileSource(receiverSource));
+    }
+
+    [Fact]
+    public void Compiles_pipeline_expression_like_nested_helper_calls()
+    {
+        const string nestedSource = """
+                                    u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
+                                    u8 SnapToTile(u8 value) => value & 0xF8;
+
+                                    void main() {
+                                        video_init();
+                                        u8 value = 130;
+                                        u8 snapped = SnapToTile(Clamp(value, 0, 120));
+                                    }
+                                    """;
+
+        const string pipelineSource = """
+                                      u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
+                                      u8 SnapToTile(u8 value) => value & 0xF8;
+
+                                      void main() {
+                                          video_init();
+                                          u8 value = 130;
+                                          u8 snapped = value |> Clamp(0, 120) |> SnapToTile();
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(nestedSource), GameBoyRomCompiler.CompileSource(pipelineSource));
+    }
+
+    [Fact]
+    public void Compiles_pipeline_expression_with_receiver_and_named_default_arguments()
+    {
+        const string nestedSource = """
+                                    struct Actor { u8 x; }
+                                    u8 X(this Actor actor) => actor.x;
+                                    u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
+
+                                    void main() {
+                                        video_init();
+                                        Actor actor = { x: 130 };
+                                        u8 clamped = Clamp(X(actor), max: 120);
+                                    }
+                                    """;
+
+        const string pipelineSource = """
+                                      struct Actor { u8 x; }
+                                      u8 X(this Actor actor) => actor.x;
+                                      u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
+
+                                      void main() {
+                                          video_init();
+                                          Actor actor = { x: 130 };
+                                          u8 clamped = actor.X() |> Clamp(max: 120);
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(nestedSource), GameBoyRomCompiler.CompileSource(pipelineSource));
+    }
+
+    [Fact]
+    public void Rejects_game_boy_invalid_pure_helper_contracts_before_lowering()
+    {
+        var statementEffect = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource("""
+                                                                                                             pure void draw() {
+                                                                                                                 video_init();
+                                                                                                             }
+
+                                                                                                             void main() {
+                                                                                                                 draw();
+                                                                                                             }
+                                                                                                             """));
+        Assert.Equal("pure helper 'draw' contains side-effecting statements; pure helpers must be a single return expression.", statementEffect.Message);
+
+        var callEffect = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource("""
+                                                                                                        u8 next(u8 value) => value + 1;
+                                                                                                        pure u8 step(u8 value) => next(value);
+
+                                                                                                        void main() {
+                                                                                                            video_init();
+                                                                                                            u8 result = step(4);
+                                                                                                        }
+                                                                                                        """));
+        Assert.Equal("pure helper 'step' return expression contains side-effecting operations.", callEffect.Message);
+    }
+
+    [Fact]
+    public void Rejects_game_boy_explicit_inline_value_helper_when_not_substitutable()
+    {
+        const string source = """
+                              inline u8 step(u8 value) {
+                                  u8 next = value + 1;
+                                  return next;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  u8 result = step(4);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+        Assert.Equal("Game Boy target cannot inline helper 'step' as a value because inline value helpers must be exactly one return expression.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_game_boy_assignment_to_immutable_let_binding()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  let speed = 2;
+                                  speed = 3;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+        Assert.Equal("Cannot assign to immutable local 'speed'.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_game_boy_compound_and_postfix_mutation_of_immutable_let_binding()
+    {
+        var compound = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource("""
+                                                                                                      void main() {
+                                                                                                          video_init();
+                                                                                                          let speed = 2;
+                                                                                                          speed += 1;
+                                                                                                      }
+                                                                                                      """));
+        Assert.Equal("Cannot assign to immutable local 'speed'.", compound.Message);
+
+        var postfix = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource("""
+                                                                                                     void main() {
+                                                                                                         video_init();
+                                                                                                         let speed = 2;
+                                                                                                         speed++;
+                                                                                                     }
+                                                                                                     """));
+        Assert.Equal("Cannot assign to immutable local 'speed'.", postfix.Message);
+    }
+
+    [Fact]
     public void GameBoy_drawing_sample_compiles_with_helper_functions()
     {
         var sourcePath = RepositoryFile("samples/gameboy-drawing/drawing.rs");

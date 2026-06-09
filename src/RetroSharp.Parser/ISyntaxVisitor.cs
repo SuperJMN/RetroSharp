@@ -12,6 +12,7 @@ public interface ISyntaxVisitor
     void VisitStructField(StructFieldSyntax structField);
     void VisitArrayInitializer(ArrayInitializerSyntax arrayInitializerSyntax);
     void VisitStructInitializer(StructInitializerSyntax structInitializerSyntax);
+    void VisitSdkDotCall(SdkDotCallSyntax sdkDotCallSyntax);
     void VisitFunctionCall(FunctionCall functionCall);
     void VisitNamedArgument(NamedArgumentSyntax namedArgumentSyntax);
     void VisitIdentifierLValue(IdentifierLValue identifierLValue);
@@ -36,6 +37,8 @@ public interface ISyntaxVisitor
     void VisitUnaryOperator(UnaryExpressionSyntax unaryExpressionSyntax);
     void VisitBinaryOperator(BinaryExpressionSyntax binaryExpressionSyntax);
     void VisitConditionalExpression(ConditionalExpressionSyntax conditionalExpressionSyntax);
+    void VisitSwitchExpression(SwitchExpressionSyntax switchExpressionSyntax);
+    void VisitPipelineExpression(PipelineExpressionSyntax pipelineExpressionSyntax);
     void VisitIfElse(IfElseSyntax ifElseSyntax);
     void VisitWhile(WhileSyntax whileSyntax);
     void VisitDoWhile(DoWhileSyntax doWhileSyntax);

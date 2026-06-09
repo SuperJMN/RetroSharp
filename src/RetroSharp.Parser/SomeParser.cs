@@ -96,13 +96,29 @@ public class SomeParser
     private FunctionSyntax ParseFunction(FunctionContext functionContext)
     {
         var parameters = ParseParameters(functionContext.parameters()).ToList();
+        var modifiers = functionContext.functionModifier().Select(modifier => modifier.GetText()).ToHashSet(StringComparer.Ordinal);
+        var isInline = modifiers.Contains("inline");
+        var isPure = modifiers.Contains("pure");
         if (functionContext.block() is { } block)
         {
-            return new FunctionSyntax(functionContext.type().GetText(), functionContext.IDENTIFIER().ToString()!, parameters, ParseBlock(block));
+            return new FunctionSyntax(
+                functionContext.type().GetText(),
+                functionContext.IDENTIFIER().ToString()!,
+                parameters,
+                ParseBlock(block),
+                isInline: isInline,
+                isPure: isPure);
         }
 
         var expressionBody = new BlockSyntax([new ReturnSyntax(Maybe.From(ParseExpression(functionContext.expression())))]);
-        return new FunctionSyntax(functionContext.type().GetText(), functionContext.IDENTIFIER().ToString()!, parameters, expressionBody, true);
+        return new FunctionSyntax(
+            functionContext.type().GetText(),
+            functionContext.IDENTIFIER().ToString()!,
+            parameters,
+            expressionBody,
+            true,
+            isInline,
+            isPure);
     }
 
     private IEnumerable<ParameterSyntax> ParseParameters(ParametersContext parameters)
@@ -117,6 +133,15 @@ public class SomeParser
 
     private ParameterSyntax ParseParameter(ParameterContext parameterContext)
     {
+        if (parameterContext.receiverParameter() is { } receiver)
+        {
+            return new ParameterSyntax(
+                receiver.type().GetText(),
+                receiver.IDENTIFIER().GetText(),
+                Maybe<ExpressionSyntax>.None,
+                true);
+        }
+
         var defaultValue = parameterContext.expression() is { } defaultExpression
             ? Maybe.From(ParseExpression(defaultExpression))
             : Maybe<ExpressionSyntax>.None;
@@ -139,6 +164,11 @@ public class SomeParser
         if (statementContext.constDeclaration() is { } constDeclaration)
         {
             return ParseConstDeclaration(constDeclaration);
+        }
+
+        if (statementContext.letDeclaration() is { } letDeclaration)
+        {
+            return ParseLetDeclaration(letDeclaration);
         }
 
         if (statementContext.conditional() is { } conditional)
@@ -202,6 +232,16 @@ public class SomeParser
         }
 
         throw new InvalidOperationException();
+    }
+
+    private DeclarationSyntax ParseLetDeclaration(LetDeclarationContext letDeclaration)
+    {
+        return new DeclarationSyntax(
+            "u8",
+            letDeclaration.IDENTIFIER().GetText(),
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From(ParseExpression(letDeclaration.expression())),
+            true);
     }
 
     private StatementSyntax ParseReturn(ReturnStatementContext returnStatement)
@@ -270,9 +310,12 @@ public class SomeParser
     private ExpressionSyntax ParseFunctionCall(FunctionCallContext functionCall)
     {
         var name = functionCall.IDENTIFIER().ToString()!;
-        var arguments = functionCall.arguments()?.argument()?.Select(ParseArgument) ?? Enumerable.Empty<ExpressionSyntax>();
+        return new FunctionCall(name, ParseArguments(functionCall.arguments()));
+    }
 
-        return new FunctionCall(name, arguments);
+    private IEnumerable<ExpressionSyntax> ParseArguments(ArgumentsContext? arguments)
+    {
+        return arguments?.argument()?.Select(ParseArgument) ?? Enumerable.Empty<ExpressionSyntax>();
     }
 
     private ExpressionSyntax ParseArgument(ArgumentContext argument)
@@ -420,12 +463,63 @@ public class SomeParser
             return ParseAssignment(assignmentContext);
         }
 
+        if (expression.switchExpression() is { } switchExpression)
+        {
+            return ParseSwitchExpression(switchExpression);
+        }
+
+        if (expression.pipelineExpression() is { } pipelineExpression)
+        {
+            return ParsePipelineExpression(pipelineExpression);
+        }
+
         if (expression.conditionalExpression() is { } conditionalExpression)
         {
             return ParseConditionalExpression(conditionalExpression);
         }
 
         throw new NotImplementedException(expression.ToString());
+    }
+
+    private ExpressionSyntax ParsePipelineExpression(PipelineExpressionContext pipelineExpression)
+    {
+        return new PipelineExpressionSyntax(
+            ParseConditionalExpression(pipelineExpression.conditionalExpression()),
+            pipelineExpression.pipelineStep().Select(ParsePipelineStep).ToList());
+    }
+
+    private PipelineStepSyntax ParsePipelineStep(PipelineStepContext pipelineStep)
+    {
+        return new PipelineStepSyntax(
+            pipelineStep.IDENTIFIER().GetText(),
+            ParseArguments(pipelineStep.arguments()));
+    }
+
+    private ExpressionSyntax ParseSwitchExpression(SwitchExpressionContext switchExpression)
+    {
+        var subject = ParseConditionalExpression(switchExpression.conditionalExpression());
+        var arms = new List<SwitchExpressionArmSyntax>();
+        var defaultValue = Maybe<ExpressionSyntax>.None;
+        foreach (var arm in switchExpression.switchExpressionArm())
+        {
+            if (arm.switchExpressionDefaultArm() is { } defaultArm)
+            {
+                if (defaultValue.HasValue)
+                {
+                    throw new InvalidOperationException("Switch expression can only contain one default arm.");
+                }
+
+                defaultValue = Maybe.From(ParseExpression(defaultArm.expression()));
+                continue;
+            }
+
+            var caseArm = arm.switchExpressionCaseArm();
+            arms.Add(new SwitchExpressionArmSyntax(
+                caseArm.switchCasePattern().Select(ParseSwitchCasePattern).ToList(),
+                ParseExpression(caseArm.expression())));
+        }
+
+        return new SwitchExpressionSyntax(subject, arms, defaultValue);
     }
 
     private ExpressionSyntax ParseConditionalExpression(ConditionalExpressionContext conditionalExpression)
@@ -661,6 +755,11 @@ public class SomeParser
             return new CountOfSyntax(countofExpression.IDENTIFIER().GetText());
         }
 
+        if (primary.sdkDotCall() is { } sdkDotCall)
+        {
+            return ParseSdkDotCall(sdkDotCall);
+        }
+
         if (primary.functionCall() is { } functionCall)
         {
             return ParseFunctionCall(functionCall);
@@ -686,6 +785,15 @@ public class SomeParser
             return ParseExpression((ExpressionContext)primary.children[1]);
         }
         throw new NotImplementedException();
+    }
+
+    private ExpressionSyntax ParseSdkDotCall(SdkDotCallContext sdkDotCall)
+    {
+        var identifiers = sdkDotCall.IDENTIFIER();
+        return new SdkDotCallSyntax(
+            identifiers[0].GetText(),
+            identifiers[1].GetText(),
+            ParseArguments(sdkDotCall.arguments()));
     }
 
     private static MemberAccessSyntax ParseMemberAccess(MemberAccessContext memberAccess)
