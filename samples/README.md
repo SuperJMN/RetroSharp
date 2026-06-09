@@ -2,7 +2,9 @@
 
 Samples are classified by architectural layer in `samples/manifest.json`.
 
-Current samples use the active language surface where it helps readability without hiding target cost: symbolic `const` values, enums for tile/flag names, aliases for byte-backed values, immutable `let` locals, `inline`/`pure` helper contracts, SDK dot-calls, receiver methods, `switch` expressions, pipelines, `loop` for intentional infinite loops, and compound mutation syntax for direct state updates.
+Current samples use the active language surface where it helps readability without hiding target cost: symbolic `const` values, enums for tile/flag names and zero-cost constant groups, aliases for byte-backed values, immutable `let` locals, `inline`/`pure` helper contracts, SDK dot-calls, receiver methods, `switch` expressions, pipelines, `loop` for intentional infinite loops, and compound mutation syntax for direct state updates.
+
+Until RetroSharp grows a dedicated `module` or `const group` syntax, samples may group static configuration with enums such as `World.Width` or `Player.ScreenX`. Treat that as a compile-time naming pattern, not runtime object state. Use `struct` plus receiver methods only for mutable state that behaves like a real value, such as `PlayerState.Reset()` or `EnemyState.Step()`. The flat style remains valid when a sample needs to show every local and helper call directly.
 
 | Layer | Meaning |
 | --- | --- |

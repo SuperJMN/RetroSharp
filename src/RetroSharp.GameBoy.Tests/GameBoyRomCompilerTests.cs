@@ -2450,38 +2450,276 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        var rightStart = source.IndexOf("if (button_down(right) != 0)", StringComparison.Ordinal);
+        var movementStart = source.IndexOf("inline void HandleHorizontalInput(this CameraState view, PlayerState player)", StringComparison.Ordinal);
+        var movementEnd = source.IndexOf("inline void Begin(this FrameState frame)", movementStart, StringComparison.Ordinal);
+        Assert.True(movementStart >= 0);
+        Assert.True(movementEnd > movementStart);
+
+        var movementBlock = source[movementStart..movementEnd];
+        var rightStart = movementBlock.IndexOf("if (button_down(right) != 0)", StringComparison.Ordinal);
         Assert.True(rightStart >= 0, "Runner should gate forward movement with the D-pad right button.");
 
-        var leftStart = source.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
+        var leftStart = movementBlock.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
         Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
 
-        var animationStart = source.IndexOf("animTick++;", StringComparison.Ordinal);
-        Assert.True(animationStart > rightStart, "Runner should update movement before animation state.");
+        var movementCall = source.IndexOf("view.HandleHorizontalInput(player);", StringComparison.Ordinal);
+        var animationCall = source.IndexOf("player.UpdateRunAnimation(view);", StringComparison.Ordinal);
+        Assert.True(movementCall >= 0);
+        Assert.True(animationCall > movementCall, "Runner should update movement before animation state.");
 
         Assert.Contains("type Pixel = i16;", source);
-        Assert.Contains("Pixel cameraX = 0;", source);
+        Assert.Contains("CameraState view;", source);
+        Assert.DoesNotContain("Pixel cameraX = 0;", source);
 
-        var movementBlock = source[rightStart..animationStart];
-        Assert.Contains("cameraX += 1;", movementBlock);
-        Assert.Contains("moving = 1;", movementBlock);
-        Assert.Contains("cameraX -= 1;", movementBlock);
-        Assert.Contains("camera.SetPosition(cameraX, 0);", movementBlock);
-        Assert.DoesNotContain("if (cameraX > 0)", movementBlock);
+        Assert.Contains("view.x += 1;", movementBlock);
+        Assert.Contains("view.moving = 1;", movementBlock);
+        Assert.Contains("view.x -= 1;", movementBlock);
+        Assert.Contains("camera.SetPosition(view.x, 0);", movementBlock);
+        Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
-        Assert.Contains("if (moving != 0)", source);
-        Assert.Contains("animTick++;", source);
-        Assert.Contains("animation.Frame(run, animTick)", source);
+        Assert.Contains("if (view.moving != 0)", source);
+        Assert.Contains("player.animTick++;", source);
+        Assert.Contains("animation.Frame(run, player.animTick)", source);
         Assert.DoesNotContain("i16 frame = 0;", source);
         Assert.DoesNotContain("frame = frame + 1;", source);
         Assert.DoesNotContain("if (frame == 3)", source);
         Assert.DoesNotContain("displayFrame = frame + 1;", source);
-        Assert.Equal(1, CountOccurrences(source, "camera.SetPosition(cameraX, 0);"));
-        Assert.Equal(1, CountOccurrences(source, "animTick++;"));
+        Assert.Equal(1, CountOccurrences(source, "camera.SetPosition(view.x, 0);"));
+        Assert.Equal(1, CountOccurrences(source, "player.animTick++;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void Compiles_constant_groups_like_flat_constants()
+    {
+        const string flatSource = """
+                                  const WorldWidth = 16;
+                                  const WorldStreamY = 9;
+                                  const WorldHeight = 5;
+                                  const PlayerScreenX = 72;
+
+                                  void main() {
+                                      video_init();
+                                      world_column(0, 1, 2, 3, 4, 5);
+                                      world_flags(0, 0, 0, 1, 1, 1);
+                                      world_map(WorldWidth, WorldStreamY, WorldHeight);
+                                      camera_init(WorldWidth, WorldStreamY, WorldHeight);
+                                      i16 cameraX = 0;
+                                      i16 playerWorldX = cameraX + PlayerScreenX;
+                                      camera_set_position(cameraX, 0);
+                                  }
+                                  """;
+
+        const string groupedSource = """
+                                     enum World { Width = 16, StreamY = 9, Height = 5 }
+                                     enum Player { ScreenX = 72 }
+
+                                     void main() {
+                                         video_init();
+                                         world_column(0, 1, 2, 3, 4, 5);
+                                         world_flags(0, 0, 0, 1, 1, 1);
+                                         world_map(World.Width, World.StreamY, World.Height);
+                                         camera_init(World.Width, World.StreamY, World.Height);
+                                         i16 cameraX = 0;
+                                         i16 playerWorldX = cameraX + Player.ScreenX;
+                                         camera_set_position(cameraX, 0);
+                                     }
+                                     """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(flatSource), GameBoyRomCompiler.CompileSource(groupedSource));
+    }
+
+    [Fact]
+    public void Compiles_pixel_struct_receiver_helpers_like_flat_state_updates()
+    {
+        const string flatSource = """
+                                  type Pixel = i16;
+                                  enum Player { StartY = 73 }
+
+                                  void main() {
+                                      video_init();
+                                      Pixel playerY = 0;
+                                      Pixel velocityY = 0;
+                                      Pixel grounded = 0;
+                                      Pixel jumping = 0;
+                                      Pixel displayFrame = 0;
+                                      playerY = Player.StartY;
+                                      velocityY = 0;
+                                      grounded = 1;
+                                      displayFrame = 0;
+                                      jumping = 0;
+                                      velocityY += 1;
+                                      playerY += velocityY;
+                                  }
+                                  """;
+
+        const string receiverSource = """
+                                      type Pixel = i16;
+                                      enum Player { StartY = 73 }
+
+                                      struct PlayerState {
+                                          Pixel y;
+                                          Pixel velocityY;
+                                          Pixel grounded;
+                                          Pixel jumping;
+                                          Pixel displayFrame;
+                                      }
+
+                                      inline void Reset(this PlayerState player) {
+                                          player.y = Player.StartY;
+                                          player.velocityY = 0;
+                                          player.grounded = 1;
+                                          player.displayFrame = 0;
+                                          player.jumping = 0;
+                                      }
+
+                                      inline void ApplyGravity(this PlayerState player) {
+                                          player.velocityY += 1;
+                                          player.y += player.velocityY;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          PlayerState player;
+                                          player.Reset();
+                                          player.ApplyGravity();
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(flatSource), GameBoyRomCompiler.CompileSource(receiverSource));
+    }
+
+    [Fact]
+    public void Compiles_camera_state_receiver_helper_like_flat_horizontal_input()
+    {
+        const string flatSource = """
+                                  type Pixel = i16;
+
+                                  void main() {
+                                      video_init();
+                                      world_column(0, 1, 2);
+                                      world_flags(0, 0, 1);
+                                      world_map(1, 10, 2);
+                                      camera_init(1, 10, 2);
+                                      input_poll();
+                                      Pixel cameraX = 0;
+                                      Pixel moving = 0;
+                                      bool displayFlipX = false;
+                                      moving = 0;
+                                      if (button_down(right) != 0) {
+                                          moving = 1;
+                                          displayFlipX = false;
+                                          cameraX += 1;
+                                      }
+                                      if (button_down(left) != 0) {
+                                          moving = 1;
+                                          displayFlipX = true;
+                                          cameraX -= 1;
+                                      }
+                                      if (moving != 0) {
+                                          camera_set_position(cameraX, 0);
+                                      }
+                                  }
+                                  """;
+
+        const string receiverSource = """
+                                      type Pixel = i16;
+
+                                      struct CameraState {
+                                          Pixel x;
+                                          Pixel moving;
+                                      }
+
+                                      struct PlayerState {
+                                          bool displayFlipX;
+                                      }
+
+                                      inline void HandleHorizontalInput(this CameraState view, PlayerState player) {
+                                          view.moving = 0;
+                                          if (button_down(right) != 0) {
+                                              view.moving = 1;
+                                              player.displayFlipX = false;
+                                              view.x += 1;
+                                          }
+                                          if (button_down(left) != 0) {
+                                              view.moving = 1;
+                                              player.displayFlipX = true;
+                                              view.x -= 1;
+                                          }
+                                          if (view.moving != 0) {
+                                              camera_set_position(view.x, 0);
+                                          }
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          world_column(0, 1, 2);
+                                          world_flags(0, 0, 1);
+                                          world_map(1, 10, 2);
+                                          camera_init(1, 10, 2);
+                                          input_poll();
+                                          CameraState view;
+                                          PlayerState player;
+                                          view.HandleHorizontalInput(player);
+                                      }
+                                      """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(flatSource), GameBoyRomCompiler.CompileSource(receiverSource));
+    }
+
+    [Fact]
+    public void GameBoy_runner_uses_constant_groups_and_lightweight_player_state()
+    {
+        var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
+
+        Assert.Contains("enum World", source);
+        Assert.Contains("Width = 16", source);
+        Assert.Contains("enum Player", source);
+        Assert.Contains("ScreenX = 72", source);
+        Assert.Contains("struct PlayerState", source);
+        Assert.Contains("inline void Reset(this PlayerState player)", source);
+        Assert.Contains("inline void ApplyGravity(this PlayerState player)", source);
+        Assert.Contains("PlayerState player;", source);
+        Assert.Contains("player.Reset();", source);
+        Assert.Contains("player.ApplyGravity();", source);
+        Assert.Contains("world.Map(World.Width, World.StreamY, World.Height);", source);
+        Assert.Contains("sprite.Draw(mario_player, Player.ScreenX, player.y", source);
+        Assert.DoesNotContain("const WorldWidth", source);
+        Assert.DoesNotContain("const PlayerScreenX", source);
+        Assert.DoesNotContain("Pixel playerY =", source);
+        Assert.DoesNotContain("Pixel velocityY =", source);
+    }
+
+    [Fact]
+    public void GameBoy_runner_extracts_frame_loop_into_named_inline_helpers()
+    {
+        var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
+
+        Assert.Contains("struct CameraState", source);
+        Assert.Contains("struct FrameState", source);
+        Assert.Contains("inline void PresentFrame(PlayerState player, EnemyState enemy)", source);
+        Assert.Contains("inline void HandleJumpInput(this PlayerState player)", source);
+        Assert.Contains("inline void HandleHorizontalInput(this CameraState view, PlayerState player)", source);
+        Assert.Contains("inline void ResolvePlatformLanding(this FrameState frame, PlayerState player", source);
+        Assert.Contains("inline void ResolveGroundAndHazards(this FrameState frame, PlayerState player", source);
+        Assert.Contains("inline void ResolveFallAndEnemyContact(this FrameState frame, PlayerState player, EnemyState enemy)", source);
+        Assert.Contains("inline void ResolveReset(this FrameState frame, PlayerState player, EnemyState enemy)", source);
+        Assert.Contains("inline void UpdateRunAnimation(this PlayerState player, CameraState view)", source);
+        Assert.Contains("PresentFrame(player, enemy);", source);
+        Assert.Contains("frame.Begin();", source);
+        Assert.Contains("frame.ResolvePlatformLanding(player, footLeftX, footCenterX, footRightX);", source);
+        Assert.Contains("frame.ResolveGroundAndHazards(player, footLeftX, footCenterX, footRightX);", source);
+        Assert.Contains("frame.ResolveFallAndEnemyContact(player, enemy);", source);
+        Assert.Contains("frame.ResolveReset(player, enemy);", source);
+        Assert.Contains("player.HandleJumpInput();", source);
+        Assert.Contains("view.HandleHorizontalInput(player);", source);
+        Assert.Contains("player.UpdateRunAnimation(view);", source);
+        Assert.DoesNotContain("Pixel cameraX = 0;", source);
+        Assert.DoesNotContain("Pixel moving = 0;", source);
+        Assert.DoesNotContain("Pixel resetRequested = 0;", source);
     }
 
     [Fact]
@@ -2495,19 +2733,19 @@ public class GameBoyRomCompilerTests
         Assert.Contains("animation.Clip(run, 1, 6, 6, 6);", source);
         Assert.Contains("animation.Clip(enemy_walk, 0, 12, 12);", source);
         Assert.DoesNotContain("sprites_clear();", source);
-        Assert.Contains("displayFrame = grounded switch", source);
+        Assert.Contains("player.displayFrame = player.grounded switch", source);
         Assert.Contains("0 => 4", source);
-        Assert.Contains("displayFrame = 4;", source);
-        Assert.Contains("_ => animation.Frame(run, animTick)", source);
+        Assert.Contains("player.displayFrame = 4;", source);
+        Assert.Contains("_ => animation.Frame(run, player.animTick)", source);
         Assert.Contains("0 => 0", source);
-        Assert.Contains("enemyFrame = animation.Frame(enemy_walk, enemyTick);", source);
-        Assert.Contains("bool displayFlipX = false;", source);
-        Assert.Contains("displayFlipX = true;", source);
-        Assert.Contains("displayFlipX = false;", source);
+        Assert.Contains("enemy.frame = animation.Frame(enemy_walk, enemy.tick);", source);
+        Assert.Contains("bool displayFlipX;", source);
+        Assert.Contains("player.displayFlipX = true;", source);
+        Assert.Contains("player.displayFlipX = false;", source);
         Assert.DoesNotContain("displayFlags = 32;", source);
-        Assert.Contains("sprite.Draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);", source);
-        Assert.Contains("sprite.Draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);", source);
-        Assert.Contains("sprite.Draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);", source);
+        Assert.Contains("sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);", source);
+        Assert.Contains("sprite.Draw(enemy_slug, enemy.x, Enemy.GroundY, enemy.frame, false, 0);", source);
+        Assert.Contains("sprite.Draw(enemy_slug, Enemy.PlatformX, Enemy.PlatformY, enemy.frame, true, 0);", source);
         Assert.Equal(3, CountOccurrences(source, "sprite.Draw("));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -2566,15 +2804,15 @@ public class GameBoyRomCompilerTests
     {
         var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
 
-        Assert.Contains("Pixel playerY = PlayerStartY;", source);
-        Assert.Contains("Pixel grounded = 1;", source);
+        Assert.Contains("PlayerState player;", source);
+        Assert.Contains("player.Reset();", source);
 
         var vblankStart = source.IndexOf("video.WaitVBlank();", StringComparison.Ordinal);
         var inputPoll = source.IndexOf("input.Poll();", StringComparison.Ordinal);
-        var gravity = source.IndexOf("velocityY += 1;", StringComparison.Ordinal);
-        var draw = source.IndexOf("sprite.Draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);", StringComparison.Ordinal);
-        var firstEnemyDraw = source.IndexOf("sprite.Draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);", StringComparison.Ordinal);
-        var secondEnemyDraw = source.IndexOf("sprite.Draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);", StringComparison.Ordinal);
+        var gravity = source.IndexOf("player.ApplyGravity();", StringComparison.Ordinal);
+        var draw = source.IndexOf("sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
+        var firstEnemyDraw = source.IndexOf("sprite.Draw(enemy_slug, enemy.x, Enemy.GroundY, enemy.frame, false, 0);", StringComparison.Ordinal);
+        var secondEnemyDraw = source.IndexOf("sprite.Draw(enemy_slug, Enemy.PlatformX, Enemy.PlatformY, enemy.frame, true, 0);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
@@ -2817,14 +3055,14 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("Pixel footTile = 0;", source);
-        Assert.Contains("Pixel failTile = 0;", source);
-        Assert.Contains("let playerWorldX = (cameraX + PlayerScreenX) |> WrapWorldX();", source);
+        Assert.Contains("Pixel footTile;", source);
+        Assert.Contains("Pixel failTile;", source);
+        Assert.Contains("let playerWorldX = (view.x + Player.ScreenX) |> WrapWorldX();", source);
         Assert.Contains("let footLeftX = playerWorldX;", source);
         Assert.Contains("let footCenterX = (playerWorldX + 8) |> WrapWorldX();", source);
         Assert.Contains("let footRightX = (playerWorldX + 17) |> WrapWorldX();", source);
-        Assert.Contains("Pixel hazardHit = 0;", source);
-        Assert.Contains("Pixel resetRequested = 0;", source);
+        Assert.Contains("Pixel hazardHit;", source);
+        Assert.Contains("Pixel resetRequested;", source);
 
         Assert.Contains("world.Column(5, 5, 0, 0, 0, 4, 5);", source);
         Assert.Contains("world.Column(7, 5, 0, 0, 0, 3, 5);", source);
@@ -2837,23 +3075,23 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world.Flags(13, 0, 0, 0, 0, 2, 1);", source);
         Assert.Contains("world.Flags(14, 0, 0, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
-        Assert.Contains("inline pure Pixel WrapWorldX(Pixel x) => x >= WorldWrap ? x - WorldWrap : x;", source);
-        Assert.Contains("let playerWorldX = (cameraX + PlayerScreenX) |> WrapWorldX();", source);
+        Assert.Contains("inline pure Pixel WrapWorldX(Pixel x) => x >= World.PixelWrap ? x - World.PixelWrap : x;", source);
+        Assert.Contains("let playerWorldX = (view.x + Player.ScreenX) |> WrapWorldX();", source);
         Assert.Contains("let footCenterX = (playerWorldX + 8) |> WrapWorldX();", source);
         Assert.Contains("let footRightX = (playerWorldX + 17) |> WrapWorldX();", source);
-        Assert.Contains("if (velocityY >= WorldWrap)", source);
-        Assert.Contains("playerY = 0;", source);
-        Assert.Contains("velocityY < WorldWrap", source);
-        Assert.Contains("velocityY != 0", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("if (player.velocityY >= World.PixelWrap)", source);
+        Assert.Contains("player.y = 0;", source);
+        Assert.Contains("player.velocityY < World.PixelWrap", source);
+        Assert.Contains("player.velocityY != 0", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.failTile = collision_aabb_tiles(footLeftX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("frame.failTile = collision_aabb_tiles(footCenterX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("frame.failTile = collision_aabb_tiles(footRightX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footLeftX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footCenterX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footRightX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
@@ -2861,18 +3099,18 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("playerCenterFootColumn", source);
         Assert.DoesNotContain("playerRightFootColumn", source);
         Assert.DoesNotContain("map_tile_at(player", source);
-        Assert.Contains("if (failTile != 0)", source);
-        Assert.Contains("hazardHit = 1;", source);
-        Assert.Contains("if (hazardHit != 0)", source);
-        Assert.Contains("velocityY = HazardBounceVelocity;", source);
-        Assert.Contains("if (enemyX in EnemyHitStartX..EnemyHitEndX)", source);
+        Assert.Contains("if (frame.failTile != 0)", source);
+        Assert.Contains("frame.hazardHit = 1;", source);
+        Assert.Contains("if (frame.hazardHit != 0)", source);
+        Assert.Contains("player.BounceFromHazard();", source);
+        Assert.Contains("if (enemy.x in Enemy.HitStartX..Enemy.HitEndX)", source);
         Assert.DoesNotContain("if (footTile != 3)", source);
-        Assert.Contains("if (grounded == 0)", source);
-        Assert.Contains("if (playerY >= PlayerFallResetY)", source);
-        Assert.Contains("if (resetRequested != 0)", source);
-        Assert.Contains("playerY = PlayerStartY;", source);
-        Assert.Contains("velocityY = 0;", source);
-        Assert.Contains("jumping = 0;", source);
+        Assert.Contains("if (player.grounded == 0)", source);
+        Assert.Contains("if (player.y >= Player.FallResetY)", source);
+        Assert.Contains("if (frame.resetRequested != 0)", source);
+        Assert.Contains("player.Reset();", source);
+        Assert.Contains("player.velocityY = 0;", source);
+        Assert.Contains("player.jumping = 0;", source);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         Assert.Equal(32768, rom.Length);
@@ -2889,7 +3127,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("void draw_background()", source);
         Assert.Contains("tilemap.Set(2, 4, 1);", source);
         Assert.Contains("tilemap.Set(10, 7, 2);", source);
-        Assert.Contains("world.Map(WorldWidth, WorldStreamY, WorldHeight);", source);
+        Assert.Contains("world.Map(World.Width, World.StreamY, World.Height);", source);
         Assert.Contains("world.Column(14, 0, 0, 0, 0, 0, 0);", source);
         Assert.Contains("world.Column(15, 0, 0, 0, 0, 0, 0);", source);
         Assert.Contains("world.Flags(7, 1, 0, 0, 0, 2, 1);", source);
@@ -2899,38 +3137,38 @@ public class GameBoyRomCompilerTests
         Assert.Contains("world.Flags(15, 0, 0, 0, 0, 0, 0);", source);
         Assert.DoesNotContain("map_column(", source);
 
-        Assert.Contains("camera.Init(WorldWidth, WorldStreamY, WorldHeight);", source);
+        Assert.Contains("camera.Init(World.Width, World.StreamY, World.Height);", source);
         Assert.True(
-            source.IndexOf("camera.Init(WorldWidth, WorldStreamY, WorldHeight);", StringComparison.Ordinal) >
-            source.IndexOf("world.Map(WorldWidth, WorldStreamY, WorldHeight);", StringComparison.Ordinal));
+            source.IndexOf("camera.Init(World.Width, World.StreamY, World.Height);", StringComparison.Ordinal) >
+            source.IndexOf("world.Map(World.Width, World.StreamY, World.Height);", StringComparison.Ordinal));
         Assert.Contains("camera.Apply();", source);
-        Assert.Contains("let playerWorldX = (cameraX + PlayerScreenX) |> WrapWorldX();", source);
+        Assert.Contains("let playerWorldX = (view.x + Player.ScreenX) |> WrapWorldX();", source);
         Assert.Contains("let footLeftX = playerWorldX;", source);
         Assert.Contains("let footCenterX = (playerWorldX + 8) |> WrapWorldX();", source);
         Assert.Contains("let footRightX = (playerWorldX + 17) |> WrapWorldX();", source);
-        var topClampStart = source.IndexOf("if (velocityY >= WorldWrap)", StringComparison.Ordinal);
+        var topClampStart = source.IndexOf("if (player.velocityY >= World.PixelWrap)", StringComparison.Ordinal);
         Assert.True(topClampStart >= 0);
         var footProbeStart = source.IndexOf("let footLeftX = playerWorldX;", StringComparison.Ordinal);
         Assert.True(footProbeStart > topClampStart, "Runner should clamp upward Y wrap before collision probes and reset checks.");
         var topClampBlock = source[topClampStart..footProbeStart];
-        Assert.Contains("if (playerY >= WorldWrap)", topClampBlock);
-        Assert.Contains("playerY = 0;", topClampBlock);
-        Assert.Contains("velocityY = 0;", topClampBlock);
-        Assert.Contains("jumping = 0;", topClampBlock);
-        var platformBandStart = source.IndexOf("if (playerY in PlatformProbeStartY..PlatformProbeEndY", StringComparison.Ordinal);
-        var groundBandStart = source.IndexOf("if (playerY >= PlayerGroundY + 1)", StringComparison.Ordinal);
+        Assert.Contains("if (player.y >= World.PixelWrap)", topClampBlock);
+        Assert.Contains("player.y = 0;", topClampBlock);
+        Assert.Contains("player.velocityY = 0;", topClampBlock);
+        Assert.Contains("player.jumping = 0;", topClampBlock);
+        var platformBandStart = source.IndexOf("if (player.y in CollisionProbe.PlatformStartY..CollisionProbe.PlatformEndY", StringComparison.Ordinal);
+        var groundBandStart = source.IndexOf("if (player.y >= Player.GroundY + 1)", StringComparison.Ordinal);
         Assert.True(platformBandStart >= 0);
         Assert.True(groundBandStart > platformBandStart);
         var platformBlock = source[platformBandStart..groundBandStart];
-        Assert.Contains("velocityY < WorldWrap", platformBlock);
-        Assert.Contains("velocityY != 0", platformBlock);
-        Assert.Contains("footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footRightX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("player.velocityY < World.PixelWrap", platformBlock);
+        Assert.Contains("player.velocityY != 0", platformBlock);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footRightX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.failTile = collision_aabb_tiles(footRightX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
-        Assert.Contains("camera.SetPosition(cameraX, 0);", source);
+        Assert.Contains("camera.SetPosition(view.x, 0);", source);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);
@@ -2940,11 +3178,12 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("map_stream_column(streamColumn, rightSourceColumn, 11, 4);", source);
         Assert.DoesNotContain("map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);", source);
 
-        var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
+        var resetStart = source.IndexOf("inline void ResolveReset(this FrameState frame, PlayerState player, EnemyState enemy)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
-        var displayStart = source.IndexOf("displayFrame = grounded switch", resetStart, StringComparison.Ordinal);
-        Assert.True(displayStart > resetStart);
-        var resetBlock = source[resetStart..displayStart];
+        var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
+        Assert.True(resetEnd > resetStart);
+        var resetBlock = source[resetStart..resetEnd];
+        Assert.Contains("if (frame.resetRequested != 0)", resetBlock);
         Assert.DoesNotContain("camera = 0;", resetBlock);
         Assert.DoesNotContain("camera.Init(", resetBlock);
         Assert.DoesNotContain("streamColumn = 20;", resetBlock);
@@ -2981,9 +3220,9 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
-        var jumpStart = source.IndexOf("if (button_just_pressed(a) != 0)", StringComparison.Ordinal);
-        var movementStart = source.IndexOf("moving = 0;", resetStart, StringComparison.Ordinal);
+        var resetStart = source.IndexOf("frame.ResolveReset(player, enemy);", StringComparison.Ordinal);
+        var jumpStart = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
+        var movementStart = source.IndexOf("view.HandleHorizontalInput(player);", StringComparison.Ordinal);
 
         Assert.True(resetStart >= 0);
         Assert.True(jumpStart > resetStart, "Reset should restore safe actor state before jump input is consumed.");
@@ -2999,40 +3238,44 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("const PlayerStartY = 73;", source);
-        Assert.Contains("const PlayerGroundY = 73;", source);
-        Assert.Contains("Pixel playerY = PlayerStartY;", source);
-        Assert.Contains("if (playerY >= PlayerGroundY + 1)", source);
-        Assert.Equal(2, CountOccurrences(source, "playerY = PlayerStartY;"));
-        Assert.Equal(1, CountOccurrences(source, "playerY = PlayerGroundY;"));
-        Assert.DoesNotContain("playerY = 77;", source);
-        Assert.Contains("world.Map(WorldWidth, WorldStreamY, WorldHeight);", source);
+        Assert.Contains("StartY = 73", source);
+        Assert.Contains("GroundY = 73", source);
+        Assert.Contains("player.y = Player.StartY;", source);
+        Assert.Contains("if (player.y >= Player.GroundY + 1)", source);
+        Assert.Equal(1, CountOccurrences(source, "player.y = Player.StartY;"));
+        Assert.Equal(1, CountOccurrences(source, "player.Land(Player.GroundY);"));
+        Assert.DoesNotContain("player.y = 77;", source);
+        Assert.Contains("world.Map(World.Width, World.StreamY, World.Height);", source);
         Assert.Contains("world.Column(0, 0, 0, 2, 0, 4, 5);", source);
         Assert.Contains("world.Column(7, 5, 0, 0, 0, 3, 5);", source);
         Assert.Contains("world.Flags(7, 1, 0, 0, 0, 2, 1);", source);
         Assert.Contains("world.Flags(8, 1, 0, 0, 0, 2, 1);", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("tilemap.Set(7, 13, 3);", source);
-        Assert.Contains("failTile = collision_aabb_tiles(footLeftX, GroundProbeY, 1, 8, CollisionFlag.Hazard);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footCenterX, GroundProbeY, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);", source);
-        Assert.Contains("velocityY < WorldWrap", source);
-        Assert.Contains("velocityY != 0", source);
+        Assert.Contains("frame.failTile = collision_aabb_tiles(footLeftX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footCenterX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);", source);
+        Assert.Contains("player.velocityY < World.PixelWrap", source);
+        Assert.Contains("player.velocityY != 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
-        Assert.Contains("if (failTile != 0)", source);
-        Assert.Contains("if (hazardHit != 0)", source);
+        Assert.Contains("if (frame.failTile != 0)", source);
+        Assert.Contains("if (frame.hazardHit != 0)", source);
         Assert.DoesNotContain("if (footTile != 3)", source);
         Assert.DoesNotContain("if (failTile == 4)", source);
 
-        var resetStart = source.IndexOf("if (resetRequested != 0)", StringComparison.Ordinal);
+        var resetStart = source.IndexOf("inline void ResolveReset(this FrameState frame, PlayerState player, EnemyState enemy)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
-        var jumpStart = source.IndexOf("if (button_just_pressed(a) != 0)", resetStart, StringComparison.Ordinal);
-        Assert.True(jumpStart > resetStart);
-        var resetBlock = source[resetStart..jumpStart];
+        var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
+        Assert.True(resetEnd > resetStart);
+        var resetBlock = source[resetStart..resetEnd];
         Assert.DoesNotContain("frame = 0;", resetBlock);
         Assert.DoesNotContain("displayFlipX = false;", resetBlock);
         Assert.DoesNotContain("animTick = 0;", resetBlock);
-        Assert.DoesNotContain("moving = 0;", resetBlock);
+        Assert.DoesNotContain("view.moving = 0;", resetBlock);
+
+        var resetCall = source.IndexOf("frame.ResolveReset(player, enemy);", StringComparison.Ordinal);
+        var jumpCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
+        Assert.True(jumpCall > resetCall);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         Assert.Equal(32768, rom.Length);

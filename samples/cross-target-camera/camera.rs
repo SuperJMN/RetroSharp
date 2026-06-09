@@ -1,10 +1,13 @@
-type Pixel = i16;
+enum World {
+    Width = 8,
+    StreamY = 10,
+    Height = 4
+}
 
-const WorldWidth = 8;
-const WorldStreamY = 10;
-const WorldHeight = 4;
-const MarkerScreenX = 72;
-const MarkerScreenY = 72;
+enum Marker {
+    ScreenX = 72,
+    ScreenY = 72
+}
 
 void main() {
     video.Init();
@@ -25,8 +28,8 @@ void main() {
     world.Flags(5, 0, 0, 1, 1);
     world.Flags(6, 0, 0, 1, 1);
     world.Flags(7, 0, 0, 1, 1);
-    world.Map(WorldWidth, WorldStreamY, WorldHeight);
-    camera.Init(WorldWidth, WorldStreamY, WorldHeight);
+    world.Map(World.Width, World.StreamY, World.Height);
+    camera.Init(World.Width, World.StreamY, World.Height);
     sprite.Asset(marker, "marker.json");
 
     loop {
@@ -35,6 +38,6 @@ void main() {
         let cameraX = button_hold_ticks(right);
         camera.SetPosition(cameraX, 0);
         camera.Apply();
-        sprite.Draw(marker, MarkerScreenX, MarkerScreenY, 0, false, 0);
+        sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, 0, false, 0);
     }
 }
