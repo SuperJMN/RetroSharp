@@ -1,75 +1,75 @@
 void setup_video() {
-    video_init();
-    palette_set(0, 0);
-    palette_set(1, 1);
-    palette_set(2, 2);
-    palette_set(3, 3);
-    object_palette_set(0, 0);
-    object_palette_set(1, 0);
-    object_palette_set(2, 1);
-    object_palette_set(3, 3);
-    sprite_asset(mario_player, "../assets/mario-player.gb.png", 18, 32);
-    animation_clip(run, 1, 6, 6, 6);
+    video.Init();
+    palette.Set(0, 0);
+    palette.Set(1, 1);
+    palette.Set(2, 2);
+    palette.Set(3, 3);
+    objectPalette.Set(0, 0);
+    objectPalette.Set(1, 0);
+    objectPalette.Set(2, 1);
+    objectPalette.Set(3, 3);
+    sprite.Asset(mario_player, "../assets/mario-player.gb.png", 18, 32);
+    animation.Clip(run, 1, 6, 6, 6);
     return;
 }
 
 void draw_background() {
-    tilemap_set(2, 4, 1);
-    tilemap_set(3, 4, 1);
-    tilemap_set(4, 5, 1);
-    tilemap_set(11, 3, 1);
-    tilemap_set(12, 3, 1);
-    tilemap_set(13, 4, 1);
-    tilemap_set(22, 4, 1);
-    tilemap_set(23, 4, 1);
-    tilemap_set(24, 5, 1);
-    tilemap_set(1, 8, 2);
-    tilemap_set(2, 8, 2);
-    tilemap_set(3, 8, 2);
-    tilemap_set(9, 8, 2);
-    tilemap_set(10, 7, 2);
-    tilemap_set(11, 8, 2);
-    tilemap_set(16, 8, 2);
-    tilemap_set(17, 8, 2);
-    tilemap_set(25, 8, 2);
-    tilemap_set(26, 8, 2);
-    tilemap_set(27, 8, 2);
+    tilemap.Set(2, 4, 1);
+    tilemap.Set(3, 4, 1);
+    tilemap.Set(4, 5, 1);
+    tilemap.Set(11, 3, 1);
+    tilemap.Set(12, 3, 1);
+    tilemap.Set(13, 4, 1);
+    tilemap.Set(22, 4, 1);
+    tilemap.Set(23, 4, 1);
+    tilemap.Set(24, 5, 1);
+    tilemap.Set(1, 8, 2);
+    tilemap.Set(2, 8, 2);
+    tilemap.Set(3, 8, 2);
+    tilemap.Set(9, 8, 2);
+    tilemap.Set(10, 7, 2);
+    tilemap.Set(11, 8, 2);
+    tilemap.Set(16, 8, 2);
+    tilemap.Set(17, 8, 2);
+    tilemap.Set(25, 8, 2);
+    tilemap.Set(26, 8, 2);
+    tilemap.Set(27, 8, 2);
     return;
 }
 
 void define_world() {
-    world_column(0, 0, 0, 0, 0, 4, 5);
-    world_column(1, 0, 0, 0, 0, 4, 5);
-    world_column(2, 0, 0, 0, 0, 4, 5);
-    world_column(3, 0, 0, 0, 0, 4, 5);
-    world_column(4, 0, 0, 0, 0, 4, 5);
-    world_column(5, 0, 0, 0, 0, 4, 5);
-    world_column(6, 0, 0, 0, 0, 4, 5);
-    world_column(7, 0, 0, 0, 0, 4, 5);
-    world_column(8, 0, 0, 0, 0, 4, 5);
-    world_column(9, 0, 0, 0, 0, 4, 5);
-    world_column(10, 0, 0, 0, 0, 4, 5);
-    world_column(11, 0, 0, 0, 0, 4, 5);
-    world_column(12, 0, 0, 0, 0, 4, 5);
-    world_column(13, 0, 0, 0, 0, 4, 5);
-    world_column(14, 0, 0, 0, 0, 4, 5);
-    world_column(15, 0, 0, 0, 0, 4, 5);
-    world_flags(0, 0, 0, 0, 0, 1, 1);
-    world_flags(1, 0, 0, 0, 0, 1, 1);
-    world_flags(2, 0, 0, 0, 0, 1, 1);
-    world_flags(3, 0, 0, 0, 0, 1, 1);
-    world_flags(4, 0, 0, 0, 0, 1, 1);
-    world_flags(5, 0, 0, 0, 0, 1, 1);
-    world_flags(6, 0, 0, 0, 0, 1, 1);
-    world_flags(7, 0, 0, 0, 0, 1, 1);
-    world_flags(8, 0, 0, 0, 0, 1, 1);
-    world_flags(9, 0, 0, 0, 0, 1, 1);
-    world_flags(10, 0, 0, 0, 0, 1, 1);
-    world_flags(11, 0, 0, 0, 0, 1, 1);
-    world_flags(12, 0, 0, 0, 0, 1, 1);
-    world_flags(13, 0, 0, 0, 0, 1, 1);
-    world_flags(14, 0, 0, 0, 0, 1, 1);
-    world_flags(15, 0, 0, 0, 0, 1, 1);
+    world.Column(0, 0, 0, 0, 0, 4, 5);
+    world.Column(1, 0, 0, 0, 0, 4, 5);
+    world.Column(2, 0, 0, 0, 0, 4, 5);
+    world.Column(3, 0, 0, 0, 0, 4, 5);
+    world.Column(4, 0, 0, 0, 0, 4, 5);
+    world.Column(5, 0, 0, 0, 0, 4, 5);
+    world.Column(6, 0, 0, 0, 0, 4, 5);
+    world.Column(7, 0, 0, 0, 0, 4, 5);
+    world.Column(8, 0, 0, 0, 0, 4, 5);
+    world.Column(9, 0, 0, 0, 0, 4, 5);
+    world.Column(10, 0, 0, 0, 0, 4, 5);
+    world.Column(11, 0, 0, 0, 0, 4, 5);
+    world.Column(12, 0, 0, 0, 0, 4, 5);
+    world.Column(13, 0, 0, 0, 0, 4, 5);
+    world.Column(14, 0, 0, 0, 0, 4, 5);
+    world.Column(15, 0, 0, 0, 0, 4, 5);
+    world.Flags(0, 0, 0, 0, 0, 1, 1);
+    world.Flags(1, 0, 0, 0, 0, 1, 1);
+    world.Flags(2, 0, 0, 0, 0, 1, 1);
+    world.Flags(3, 0, 0, 0, 0, 1, 1);
+    world.Flags(4, 0, 0, 0, 0, 1, 1);
+    world.Flags(5, 0, 0, 0, 0, 1, 1);
+    world.Flags(6, 0, 0, 0, 0, 1, 1);
+    world.Flags(7, 0, 0, 0, 0, 1, 1);
+    world.Flags(8, 0, 0, 0, 0, 1, 1);
+    world.Flags(9, 0, 0, 0, 0, 1, 1);
+    world.Flags(10, 0, 0, 0, 0, 1, 1);
+    world.Flags(11, 0, 0, 0, 0, 1, 1);
+    world.Flags(12, 0, 0, 0, 0, 1, 1);
+    world.Flags(13, 0, 0, 0, 0, 1, 1);
+    world.Flags(14, 0, 0, 0, 0, 1, 1);
+    world.Flags(15, 0, 0, 0, 0, 1, 1);
     return;
 }
 
@@ -77,8 +77,8 @@ void main() {
     setup_video();
     draw_background();
     define_world();
-    world_map(16, 9, 6);
-    camera_init(16, 9, 6);
+    world.Map(16, 9, 6);
+    camera.Init(16, 9, 6);
     i16 cameraX = 0;
     i16 playerWorldX = 72;
     i16 footTile = 0;
@@ -94,11 +94,11 @@ void main() {
     i16 resetRequested = 0;
 
     loop {
-        video_wait_vblank();
-        camera_apply();
-        sprite_draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
+        video.WaitVBlank();
+        camera.Apply();
+        sprite.Draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
 
-        input_poll();
+        input.Poll();
 
         resetRequested = 0;
         grounded = 0;
@@ -180,7 +180,7 @@ void main() {
         }
 
         if (moving != 0) {
-            camera_set_position(cameraX, 0);
+            camera.SetPosition(cameraX, 0);
         }
 
         if (moving != 0) {
@@ -193,7 +193,7 @@ void main() {
             displayFrame = 4;
         } else {
             if (moving != 0) {
-                displayFrame = animation_frame(run, animTick);
+                displayFrame = animation.Frame(run, animTick);
             } else {
                 displayFrame = 0;
             }

@@ -27,82 +27,82 @@ const EnemyHitEndX = 91;
 
 enum CollisionFlag { None = 0, Solid = 1, Hazard = 2 }
 
-Pixel wrap_world_x(Pixel x) => x >= WorldWrap ? x - WorldWrap : x;
+inline pure Pixel WrapWorldX(Pixel x) => x >= WorldWrap ? x - WorldWrap : x;
 
 void setup_video() {
-    video_init();
-    palette_set(0, 0);
-    palette_set(1, 1);
-    palette_set(2, 2);
-    palette_set(3, 3);
-    object_palette_set(0, 0);
-    object_palette_set(1, 0);
-    object_palette_set(2, 1);
-    object_palette_set(3, 3);
-    sprite_asset(mario_player, "assets/mario-player.gb.png", 18, 32);
-    sprite_asset(enemy_slug, "assets/enemy-slug.gb.png", 16, 16);
-    animation_clip(run, 1, 6, 6, 6);
-    animation_clip(enemy_walk, 0, 12, 12);
+    video.Init();
+    palette.Set(0, 0);
+    palette.Set(1, 1);
+    palette.Set(2, 2);
+    palette.Set(3, 3);
+    objectPalette.Set(0, 0);
+    objectPalette.Set(1, 0);
+    objectPalette.Set(2, 1);
+    objectPalette.Set(3, 3);
+    sprite.Asset(mario_player, "assets/mario-player.gb.png", 18, 32);
+    sprite.Asset(enemy_slug, "assets/enemy-slug.gb.png", 16, 16);
+    animation.Clip(run, 1, 6, 6, 6);
+    animation.Clip(enemy_walk, 0, 12, 12);
     return;
 }
 
 void draw_background() {
-    tilemap_set(2, 4, 1);
-    tilemap_set(3, 4, 1);
-    tilemap_set(4, 5, 1);
-    tilemap_set(11, 3, 1);
-    tilemap_set(12, 3, 1);
-    tilemap_set(13, 4, 1);
-    tilemap_set(22, 4, 1);
-    tilemap_set(23, 4, 1);
-    tilemap_set(24, 5, 1);
-    tilemap_set(1, 8, 2);
-    tilemap_set(2, 8, 2);
-    tilemap_set(3, 8, 2);
-    tilemap_set(9, 8, 2);
-    tilemap_set(10, 7, 2);
-    tilemap_set(11, 8, 2);
-    tilemap_set(16, 8, 2);
-    tilemap_set(17, 8, 2);
-    tilemap_set(25, 8, 2);
-    tilemap_set(26, 8, 2);
-    tilemap_set(27, 8, 2);
+    tilemap.Set(2, 4, 1);
+    tilemap.Set(3, 4, 1);
+    tilemap.Set(4, 5, 1);
+    tilemap.Set(11, 3, 1);
+    tilemap.Set(12, 3, 1);
+    tilemap.Set(13, 4, 1);
+    tilemap.Set(22, 4, 1);
+    tilemap.Set(23, 4, 1);
+    tilemap.Set(24, 5, 1);
+    tilemap.Set(1, 8, 2);
+    tilemap.Set(2, 8, 2);
+    tilemap.Set(3, 8, 2);
+    tilemap.Set(9, 8, 2);
+    tilemap.Set(10, 7, 2);
+    tilemap.Set(11, 8, 2);
+    tilemap.Set(16, 8, 2);
+    tilemap.Set(17, 8, 2);
+    tilemap.Set(25, 8, 2);
+    tilemap.Set(26, 8, 2);
+    tilemap.Set(27, 8, 2);
     return;
 }
 
 void define_world() {
-    world_column(0, 0, 0, 2, 0, 4, 5);
-    world_column(1, 0, 0, 2, 0, 4, 5);
-    world_column(2, 0, 0, 0, 0, 4, 5);
-    world_column(3, 0, 0, 0, 0, 4, 5);
-    world_column(4, 0, 0, 0, 0, 4, 5);
-    world_column(5, 5, 0, 0, 0, 4, 5);
-    world_column(6, 5, 0, 0, 0, 4, 5);
-    world_column(7, 5, 0, 0, 0, 3, 5);
-    world_column(8, 5, 0, 2, 0, 3, 5);
-    world_column(9, 0, 0, 2, 0, 4, 5);
-    world_column(10, 0, 0, 2, 0, 4, 5);
-    world_column(11, 0, 0, 0, 0, 4, 5);
-    world_column(12, 0, 0, 0, 0, 3, 5);
-    world_column(13, 0, 0, 0, 0, 3, 5);
-    world_column(14, 0, 0, 0, 0, 0, 0);
-    world_column(15, 0, 0, 0, 0, 0, 0);
-    world_flags(0, 0, 0, 0, 0, 1, 1);
-    world_flags(1, 0, 0, 0, 0, 1, 1);
-    world_flags(2, 0, 0, 0, 0, 1, 1);
-    world_flags(3, 0, 0, 0, 0, 1, 1);
-    world_flags(4, 0, 0, 0, 0, 1, 1);
-    world_flags(5, 1, 0, 0, 0, 1, 1);
-    world_flags(6, 1, 0, 0, 0, 1, 1);
-    world_flags(7, 1, 0, 0, 0, 2, 1);
-    world_flags(8, 1, 0, 0, 0, 2, 1);
-    world_flags(9, 0, 0, 0, 0, 1, 1);
-    world_flags(10, 0, 0, 0, 0, 1, 1);
-    world_flags(11, 0, 0, 0, 0, 1, 1);
-    world_flags(12, 0, 0, 0, 0, 2, 1);
-    world_flags(13, 0, 0, 0, 0, 2, 1);
-    world_flags(14, 0, 0, 0, 0, 0, 0);
-    world_flags(15, 0, 0, 0, 0, 0, 0);
+    world.Column(0, 0, 0, 2, 0, 4, 5);
+    world.Column(1, 0, 0, 2, 0, 4, 5);
+    world.Column(2, 0, 0, 0, 0, 4, 5);
+    world.Column(3, 0, 0, 0, 0, 4, 5);
+    world.Column(4, 0, 0, 0, 0, 4, 5);
+    world.Column(5, 5, 0, 0, 0, 4, 5);
+    world.Column(6, 5, 0, 0, 0, 4, 5);
+    world.Column(7, 5, 0, 0, 0, 3, 5);
+    world.Column(8, 5, 0, 2, 0, 3, 5);
+    world.Column(9, 0, 0, 2, 0, 4, 5);
+    world.Column(10, 0, 0, 2, 0, 4, 5);
+    world.Column(11, 0, 0, 0, 0, 4, 5);
+    world.Column(12, 0, 0, 0, 0, 3, 5);
+    world.Column(13, 0, 0, 0, 0, 3, 5);
+    world.Column(14, 0, 0, 0, 0, 0, 0);
+    world.Column(15, 0, 0, 0, 0, 0, 0);
+    world.Flags(0, 0, 0, 0, 0, 1, 1);
+    world.Flags(1, 0, 0, 0, 0, 1, 1);
+    world.Flags(2, 0, 0, 0, 0, 1, 1);
+    world.Flags(3, 0, 0, 0, 0, 1, 1);
+    world.Flags(4, 0, 0, 0, 0, 1, 1);
+    world.Flags(5, 1, 0, 0, 0, 1, 1);
+    world.Flags(6, 1, 0, 0, 0, 1, 1);
+    world.Flags(7, 1, 0, 0, 0, 2, 1);
+    world.Flags(8, 1, 0, 0, 0, 2, 1);
+    world.Flags(9, 0, 0, 0, 0, 1, 1);
+    world.Flags(10, 0, 0, 0, 0, 1, 1);
+    world.Flags(11, 0, 0, 0, 0, 1, 1);
+    world.Flags(12, 0, 0, 0, 0, 2, 1);
+    world.Flags(13, 0, 0, 0, 0, 2, 1);
+    world.Flags(14, 0, 0, 0, 0, 0, 0);
+    world.Flags(15, 0, 0, 0, 0, 0, 0);
     return;
 }
 
@@ -110,13 +110,9 @@ void main() {
     setup_video();
     draw_background();
     define_world();
-    world_map(WorldWidth, WorldStreamY, WorldHeight);
-    camera_init(WorldWidth, WorldStreamY, WorldHeight);
+    world.Map(WorldWidth, WorldStreamY, WorldHeight);
+    camera.Init(WorldWidth, WorldStreamY, WorldHeight);
     Pixel cameraX = 0;
-    Pixel playerWorldX = PlayerScreenX;
-    Pixel footLeftX = PlayerScreenX;
-    Pixel footCenterX = PlayerScreenX + 8;
-    Pixel footRightX = PlayerScreenX + 17;
     Pixel footTile = 0;
     Pixel failTile = 0;
     Pixel hazardHit = 0;
@@ -135,13 +131,13 @@ void main() {
     Pixel enemyTick = 0;
 
     loop {
-        video_wait_vblank();
-        camera_apply();
-        sprite_draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);
-        sprite_draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);
-        sprite_draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);
+        video.WaitVBlank();
+        camera.Apply();
+        sprite.Draw(mario_player, PlayerScreenX, playerY, displayFrame, displayFlipX, 0);
+        sprite.Draw(enemy_slug, enemyX, EnemyGroundY, enemyFrame, false, 0);
+        sprite.Draw(enemy_slug, EnemyPlatformX, EnemyPlatformY, enemyFrame, true, 0);
 
-        input_poll();
+        input.Poll();
 
         resetRequested = 0;
         hazardHit = 0;
@@ -158,10 +154,10 @@ void main() {
 
         footTile = 0;
         failTile = 0;
-        playerWorldX = wrap_world_x(cameraX + PlayerScreenX);
-        footLeftX = playerWorldX;
-        footCenterX = wrap_world_x(playerWorldX + 8);
-        footRightX = wrap_world_x(playerWorldX + 17);
+        let playerWorldX = (cameraX + PlayerScreenX) |> WrapWorldX();
+        let footLeftX = playerWorldX;
+        let footCenterX = (playerWorldX + 8) |> WrapWorldX();
+        let footRightX = (playerWorldX + 17) |> WrapWorldX();
 
         if (playerY in PlatformProbeStartY..PlatformProbeEndY && velocityY < WorldWrap && velocityY != 0) {
             footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);
@@ -274,7 +270,7 @@ void main() {
         }
 
         if (moving != 0) {
-            camera_set_position(cameraX, 0);
+            camera.SetPosition(cameraX, 0);
         }
 
         enemyX--;
@@ -283,7 +279,7 @@ void main() {
         }
 
         enemyTick++;
-        enemyFrame = animation_frame(enemy_walk, enemyTick);
+        enemyFrame = animation.Frame(enemy_walk, enemyTick);
 
         if (moving != 0) {
             animTick++;
@@ -291,15 +287,13 @@ void main() {
             animTick = 0;
         }
 
-        if (grounded == 0) {
-            displayFrame = 4;
-        } else {
-            if (moving != 0) {
-                displayFrame = animation_frame(run, animTick);
-            } else {
-                displayFrame = 0;
+        displayFrame = grounded switch {
+            0 => 4,
+            _ => moving switch {
+                0 => 0,
+                _ => animation.Frame(run, animTick)
             }
-        }
+        };
 
     }
 }

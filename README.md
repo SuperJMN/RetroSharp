@@ -16,7 +16,7 @@ RetroSharp's original path uses a multi-stage compilation pipeline:
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
 - `--target nes`: emits an iNES ROM for static background/tile drawing plus narrow tick-based input, logical sprite, and horizontal camera runtime subsets.
-- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video_wait_vblank()`, tick-based input polling, `scroll_set(...)`, horizontal `camera_*` helpers, `sprite_set(...)`, runtime map column streaming, simple source-map tile queries for collision, and joypad button queries.
+- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, horizontal `camera.*` helpers, `sprite.Set(...)`, runtime map column streaming, simple source-map tile queries for collision, and joypad button queries.
 
 ## What can it do?
 
@@ -100,6 +100,6 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample sources have been migrated to the current language v1 style: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `loop` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
+The sample sources have been migrated to the current language surface: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `let` for immutable frame-local values, `inline`/`pure` helper contracts, SDK dot-calls, receiver methods where they clarify ownership, `switch` expressions, pipelines, `loop` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
 
 See `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.

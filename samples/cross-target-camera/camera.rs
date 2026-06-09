@@ -7,36 +7,34 @@ const MarkerScreenX = 72;
 const MarkerScreenY = 72;
 
 void main() {
-    video_init();
+    video.Init();
 
-    world_column(0, 1, 2, 3, 4);
-    world_column(1, 2, 3, 4, 5);
-    world_column(2, 3, 4, 5, 1);
-    world_column(3, 4, 5, 1, 2);
-    world_column(4, 5, 1, 2, 3);
-    world_column(5, 1, 2, 3, 4);
-    world_column(6, 2, 3, 4, 5);
-    world_column(7, 3, 4, 5, 1);
-    world_flags(0, 0, 0, 1, 1);
-    world_flags(1, 0, 0, 1, 1);
-    world_flags(2, 0, 0, 1, 1);
-    world_flags(3, 0, 0, 1, 1);
-    world_flags(4, 0, 0, 1, 1);
-    world_flags(5, 0, 0, 1, 1);
-    world_flags(6, 0, 0, 1, 1);
-    world_flags(7, 0, 0, 1, 1);
-    world_map(WorldWidth, WorldStreamY, WorldHeight);
-    camera_init(WorldWidth, WorldStreamY, WorldHeight);
-    sprite_asset(marker, "marker.json");
-
-    Pixel cameraX = 0;
+    world.Column(0, 1, 2, 3, 4);
+    world.Column(1, 2, 3, 4, 5);
+    world.Column(2, 3, 4, 5, 1);
+    world.Column(3, 4, 5, 1, 2);
+    world.Column(4, 5, 1, 2, 3);
+    world.Column(5, 1, 2, 3, 4);
+    world.Column(6, 2, 3, 4, 5);
+    world.Column(7, 3, 4, 5, 1);
+    world.Flags(0, 0, 0, 1, 1);
+    world.Flags(1, 0, 0, 1, 1);
+    world.Flags(2, 0, 0, 1, 1);
+    world.Flags(3, 0, 0, 1, 1);
+    world.Flags(4, 0, 0, 1, 1);
+    world.Flags(5, 0, 0, 1, 1);
+    world.Flags(6, 0, 0, 1, 1);
+    world.Flags(7, 0, 0, 1, 1);
+    world.Map(WorldWidth, WorldStreamY, WorldHeight);
+    camera.Init(WorldWidth, WorldStreamY, WorldHeight);
+    sprite.Asset(marker, "marker.json");
 
     loop {
-        video_wait_vblank();
-        input_poll();
-        cameraX = button_hold_ticks(right);
-        camera_set_position(cameraX, 0);
-        camera_apply();
-        sprite_draw(marker, MarkerScreenX, MarkerScreenY, 0, false, 0);
+        video.WaitVBlank();
+        input.Poll();
+        let cameraX = button_hold_ticks(right);
+        camera.SetPosition(cameraX, 0);
+        camera.Apply();
+        sprite.Draw(marker, MarkerScreenX, MarkerScreenY, 0, false, 0);
     }
 }

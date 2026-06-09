@@ -1,6 +1,7 @@
 namespace RetroSharp.Cli.Tests;
 
 using System.Diagnostics;
+using System.Text.Json;
 using Xunit;
 
 public sealed class CrossTargetCliAcceptanceTests
@@ -29,6 +30,29 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void Cli_builds_every_manifest_sample_for_declared_targets()
+    {
+        using var workspace = TemporaryWorkspace();
+        var manifest = LoadManifest();
+
+        foreach (var sample in manifest.Samples)
+        {
+            foreach (var target in sample.Targets)
+            {
+                var extension = target == "nes" ? ".nes" : ".gb";
+                var output = Path.Combine(
+                    workspace.Path,
+                    Path.GetFileNameWithoutExtension(sample.Path).Replace('.', '-') + "-" + target + extension);
+                var result = RunCli("--target", target, "--out", output, RepositoryFile(sample.Path));
+
+                Assert.Equal(0, result.ExitCode);
+                Assert.True(File.Exists(output), result.CombinedOutput);
+                Assert.Equal(ExpectedRomSize(target), new FileInfo(output).Length);
+            }
+        }
+    }
+
+    [Fact]
     public void Cli_reports_unsupported_feature_diagnostics_with_nonzero_exit_code()
     {
         using var workspace = TemporaryWorkspace();
@@ -38,8 +62,8 @@ public sealed class CrossTargetCliAcceptanceTests
             sourcePath,
             """
             void main() {
-                video_init();
-                hud_set_tile(window, 0, 0, 1);
+                video.Init();
+                hud.SetTile(window, 0, 0, 1);
                 return;
             }
             """);
@@ -92,6 +116,27 @@ public sealed class CrossTargetCliAcceptanceTests
         return new TemporaryDirectory(path);
     }
 
+    private static SampleManifest LoadManifest()
+    {
+        var json = File.ReadAllText(RepositoryFile("samples/manifest.json"));
+        var manifest = JsonSerializer.Deserialize<SampleManifest>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+        });
+
+        return manifest ?? throw new InvalidOperationException("samples/manifest.json is empty.");
+    }
+
+    private static int ExpectedRomSize(string target)
+    {
+        return target switch
+        {
+            "gb" => 32768,
+            "nes" => 24592,
+            _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
+        };
+    }
+
     private static string RepositoryFile(string relativePath)
     {
         var path = Path.Combine(RepositoryRoot(), relativePath);
@@ -138,6 +183,10 @@ public sealed class CrossTargetCliAcceptanceTests
     {
         public string CombinedOutput => $"{StandardOutput}{StandardError}";
     }
+
+    private sealed record SampleManifest(SampleEntry[] Samples);
+
+    private sealed record SampleEntry(string Path, string[] Targets);
 
     private sealed class TemporaryDirectory(string path) : IDisposable
     {

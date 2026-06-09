@@ -2,7 +2,7 @@
 
 Samples are classified by architectural layer in `samples/manifest.json`.
 
-Current samples use the language v1 surface where it helps readability without hiding target cost: symbolic `const` values, enums for tile/flag names, aliases for byte-backed values, `loop` for intentional infinite loops, and compound mutation syntax for direct state updates.
+Current samples use the active language surface where it helps readability without hiding target cost: symbolic `const` values, enums for tile/flag names, aliases for byte-backed values, immutable `let` locals, `inline`/`pure` helper contracts, SDK dot-calls, receiver methods, `switch` expressions, pipelines, `loop` for intentional infinite loops, and compound mutation syntax for direct state updates.
 
 | Layer | Meaning |
 | --- | --- |

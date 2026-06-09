@@ -8,13 +8,15 @@ The SDK is portable by capability, not by identical machine behavior. A call is 
 
 ## SDK v1 Surface
 
+The current source spelling is the SDK dot-call form, for example `video.WaitVBlank()` and `camera.SetPosition(x, y)`. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`.
+
 ### Frame and input
 
 | Signature | Semantics |
 | --- | --- |
-| `video_init()` | Initialize the target video path for samples that need explicit setup. This remains a narrow setup call while the SDK frame lifecycle is stabilized. |
-| `video_wait_vblank()` | Wait for the next frame boundary. This maps to `Sdk2DOperation.WaitFrame`. |
-| `input_poll()` | Snapshot controller state for the current tick. Call once per frame before tick-based button helpers. |
+| `video.Init()` | Initialize the target video path for samples that need explicit setup. This remains a narrow setup call while the SDK frame lifecycle is stabilized. |
+| `video.WaitVBlank()` | Wait for the next frame boundary. This maps to `Sdk2DOperation.WaitFrame`. |
+| `input.Poll()` | Snapshot controller state for the current tick. Call once per frame before tick-based button helpers. |
 | `button_down(button)` | Return `1` while the named button is down in the current poll. |
 | `button_just_pressed(button)` | Return `1` only on the up-to-down edge. |
 | `button_just_released(button)` | Return `1` only on the down-to-up edge. |
@@ -26,9 +28,9 @@ Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`
 
 | Signature | Semantics |
 | --- | --- |
-| `world_column(index, tile0, tile1, ...)` | Define one source-level world column of tile ids. |
-| `world_flags(index, flags0, flags1, ...)` | Define matching tile collision flags for a world column. |
-| `world_map(width, streamY, height)` | Build the active `WorldMap2D` resource from declared columns and flags. |
+| `world.Column(index, tile0, tile1, ...)` | Define one source-level world column of tile ids. |
+| `world.Flags(index, flags0, flags1, ...)` | Define matching tile collision flags for a world column. |
+| `world.Map(width, streamY, height)` | Build the active `WorldMap2D` resource from declared columns and flags. |
 | `world_tile_flags_at(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
 
@@ -38,9 +40,9 @@ World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values
 
 | Signature | Semantics |
 | --- | --- |
-| `camera_init(mapWidth, streamY, streamHeight)` | Initialize camera state for the active world map. |
-| `camera_set_position(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
-| `camera_apply()` | Apply the current camera state to the target during the frame. |
+| `camera.Init(mapWidth, streamY, streamHeight)` | Initialize camera state for the active world map. |
+| `camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
+| `camera.Apply()` | Apply the current camera state to the target during the frame. |
 
 Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs.
 
@@ -48,11 +50,11 @@ Targets may lower camera movement differently. The SDK contract is position-base
 
 | Signature | Semantics |
 | --- | --- |
-| `sprite_asset(name, path[, frameWidth, frameHeight])` | Declare a logical sprite asset. PNG sheets use explicit frame dimensions; JSON assets remain a transitional compatibility format. |
+| `sprite.Asset(name, path[, frameWidth, frameHeight])` | Declare a logical sprite asset. PNG sheets use explicit frame dimensions; JSON assets remain a transitional compatibility format. |
 | `sprite_width(name)` | Return the logical sprite width known at compile time. |
-| `sprite_draw(name, x, y, frame[, flipX[, paletteSlot]])` | Draw a logical sprite frame with portable horizontal flip and logical palette-slot selection. |
-| `animation_clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
-| `animation_frame(name, tick)` | Return the frame index for a tick in a declared clip. |
+| `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` | Draw a logical sprite frame with portable horizontal flip and logical palette-slot selection. |
+| `animation.Clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
+| `animation.Frame(name, tick)` | Return the frame index for a tick in a declared clip. |
 
 The `flipX` argument is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a logical sprite palette slot checked against the target descriptor.
 
@@ -60,7 +62,7 @@ The `flipX` argument is a portable boolean, not a raw hardware attribute byte. `
 
 | Signature | Semantics |
 | --- | --- |
-| `hud_set_tile(mode, x, y, tile)` | Declare one static HUD tile for a capability-gated HUD mode. |
+| `hud.SetTile(mode, x, y, tile)` | Declare one static HUD tile for a capability-gated HUD mode. |
 
 Current mode names are `window`, `split_scroll`, `sprite_hud`, and `none`. `none` disables HUD and must compile as a no-op even on targets that declare no HUD support.
 
@@ -77,16 +79,16 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` bef
 | Diagonal camera movement | Combined row plus column write budget must fit one frame or fail explicitly. |
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
-| Collision | `world_map(...)` data and matching flag rows must exist before runtime collision reads. |
+| Collision | `world.Map(...)` data and matching flag rows must exist before runtime collision reads. |
 | HUD | Requested `HudMode` must be declared by the target, except `none`, which is always accepted as disabled HUD. |
 
 ## Target Support
 
 | API group | Game Boy | NES |
 | --- | --- | --- |
-| Frame/input | Supported. `video_wait_vblank()` and `input_poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input_poll()` reads controller port `$4016`. |
-| World map setup | Supported. `world_map(...)` builds initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial visible nametable setup. Runtime streaming is not implemented. |
-| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera_set_position(x, 0)` and `camera_apply()`. |
+| Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
+| World map setup | Supported. `world.Map(...)` builds initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial visible nametable setup. Runtime streaming is not implemented. |
+| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`. |
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for JSON assets with `platforms.nes.frames` in the current spike. |
 | Palette slots | Sprite slots `0..1`. | Sprite slots `0..3`. |
@@ -109,7 +111,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
 
-Calls that expose raw hardware state are outside SDK v1. Examples include `scroll_set(...)`, `sprite_set(...)`, `tilemap_set(...)`, `tilemap_fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette_set(...)`, and `object_palette_set(...)`. They can remain available in target-intrinsic samples while compatibility is needed.
+Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed.
 
 ## Minimal Game Boy/NES Example
 
@@ -117,29 +119,27 @@ This shape is the current smallest portable sample. It uses unified world data, 
 
 ```c
 void main() {
-    video_init();
+    video.Init();
 
-    world_column(0, 1, 2, 3, 4);
-    world_column(1, 2, 3, 4, 5);
-    world_column(2, 3, 4, 5, 1);
-    world_column(3, 4, 5, 1, 2);
-    world_flags(0, 0, 0, 1, 1);
-    world_flags(1, 0, 0, 1, 1);
-    world_flags(2, 0, 0, 1, 1);
-    world_flags(3, 0, 0, 1, 1);
-    world_map(4, 10, 4);
-    camera_init(4, 10, 4);
-    sprite_asset(marker, "marker.json");
+    world.Column(0, 1, 2, 3, 4);
+    world.Column(1, 2, 3, 4, 5);
+    world.Column(2, 3, 4, 5, 1);
+    world.Column(3, 4, 5, 1, 2);
+    world.Flags(0, 0, 0, 1, 1);
+    world.Flags(1, 0, 0, 1, 1);
+    world.Flags(2, 0, 0, 1, 1);
+    world.Flags(3, 0, 0, 1, 1);
+    world.Map(4, 10, 4);
+    camera.Init(4, 10, 4);
+    sprite.Asset(marker, "marker.json");
 
-    i16 cameraX = 0;
-
-    while (true) {
-        video_wait_vblank();
-        input_poll();
-        cameraX = button_hold_ticks(right);
-        camera_set_position(cameraX, 0);
-        camera_apply();
-        sprite_draw(marker, 72, 72, 0, 0, 0);
+    loop {
+        video.WaitVBlank();
+        input.Poll();
+        let cameraX = button_hold_ticks(right);
+        camera.SetPosition(cameraX, 0);
+        camera.Apply();
+        sprite.Draw(marker, 72, 72, 0, false, 0);
     }
 }
 ```
@@ -162,4 +162,4 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite_asset(...)` and `sprite_draw(...)` calls are the portable SDK surface.
+The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite.Asset(...)` and `sprite.Draw(...)` calls are the portable SDK surface.

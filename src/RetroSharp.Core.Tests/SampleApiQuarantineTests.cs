@@ -17,6 +17,12 @@ public sealed class SampleApiQuarantineTests
         "tilemap_fill(",
         "palette_set(",
         "object_palette_set(",
+        "sprite.Set(",
+        "scroll.Set(",
+        "tilemap.Set(",
+        "tilemap.Fill(",
+        "palette.Set(",
+        "objectPalette.Set(",
     ];
 
     [Fact]
