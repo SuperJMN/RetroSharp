@@ -433,6 +433,132 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_static_class_instance_methods_like_struct_receiver_helpers()
+    {
+        const string structSource = """
+                                    struct Actor { u8 x; }
+
+                                    inline void Move(this Actor actor, u8 dx) {
+                                        actor.x += dx;
+                                    }
+
+                                    void main() {
+                                        video_init();
+                                        Actor actor;
+                                        actor.Move(2);
+                                        return;
+                                    }
+                                    """;
+
+        const string classSource = """
+                                   class Actor {
+                                       u8 x;
+
+                                       inline void Move(u8 dx) {
+                                           x += dx;
+                                       }
+                                   }
+
+                                   void main() {
+                                       video_init();
+                                       Actor actor;
+                                       actor.Move(2);
+                                       return;
+                                   }
+                                   """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(structSource), NesRomCompiler.CompileSource(classSource));
+    }
+
+    [Fact]
+    public void Compiles_static_class_self_calls_like_receiver_helper_calls()
+    {
+        const string structSource = """
+                                    struct Actor { u8 x; }
+
+                                    inline void Nudge(this Actor actor) {
+                                        actor.x += 1;
+                                    }
+
+                                    inline void Move(this Actor actor) {
+                                        Nudge(actor);
+                                    }
+
+                                    void main() {
+                                        video_init();
+                                        Actor actor;
+                                        actor.Move();
+                                        return;
+                                    }
+                                    """;
+
+        const string classSource = """
+                                   class Actor {
+                                       u8 x;
+
+                                       inline void Nudge() {
+                                           x += 1;
+                                       }
+
+                                       inline void Move() {
+                                           Nudge();
+                                       }
+                                   }
+
+                                   void main() {
+                                       video_init();
+                                       Actor actor;
+                                       actor.Move();
+                                       return;
+                                   }
+                                   """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(structSource), NesRomCompiler.CompileSource(classSource));
+    }
+
+    [Fact]
+    public void Compiles_static_class_static_methods_constants_and_initializers_like_flat_code()
+    {
+        const string flatSource = """
+                                  const Step = 2;
+
+                                  inline u8 Apply(u8 value) {
+                                      return value + Step;
+                                  }
+
+                                  struct Actor { u8 x; }
+
+                                  void main() {
+                                      video_init();
+                                      Actor actor = { x: Step };
+                                      actor.x = Apply(actor.x);
+                                      return;
+                                  }
+                                  """;
+
+        const string classSource = """
+                                   class Tuning {
+                                       static const Step = 2;
+
+                                       static inline u8 Apply(u8 value) {
+                                           return value + Tuning.Step;
+                                       }
+                                   }
+
+                                   class Actor { u8 x; }
+
+                                   void main() {
+                                       video_init();
+                                       Actor actor = { x: Tuning.Step };
+                                       actor.x = Tuning.Apply(actor.x);
+                                       return;
+                                   }
+                                   """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(flatSource), NesRomCompiler.CompileSource(classSource));
+    }
+
+    [Fact]
     public void Compiles_receiver_method_calls_inside_nested_blocks_and_sdk_name_shadows()
     {
         const string staticSource = """

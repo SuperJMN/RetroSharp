@@ -225,7 +225,7 @@ public class SemanticAnalyzer
         {
             return AnalyzeAssignmentExpression(assignment, scope, types, functions);
         }
-        
+
         if (expression is ConstantSyntax c)
         {
             return new AnalyzeResult<ExpressionNode>(new ConstantNode(c.Value), scope);
@@ -482,6 +482,12 @@ public class SemanticAnalyzer
 
     private SymbolNode GetMemberSymbolNode(Scope scope, MemberAccessSyntax memberAccess, IReadOnlyDictionary<string, SymbolType> types, bool allowEnumMembers)
     {
+        var constant = allowEnumMembers ? scope.Get(MemberAccessName(memberAccess)) : Maybe<Symbol>.None;
+        if (constant.HasValue)
+        {
+            return new KnownSymbolNode(constant.Value);
+        }
+
         if (allowEnumMembers && TryGetEnumMemberSymbolNode(memberAccess, types) is { } enumMember)
         {
             return enumMember;
@@ -535,6 +541,25 @@ public class SemanticAnalyzer
             .Match(
                 field => (fullName, field.Type, new List<string>()),
                 () => (fullName, SymbolType.Unknown, new List<string> { $"Type '{structType.Name}' does not contain field '{memberAccess.Member}'" }));
+    }
+
+    private static string MemberAccessName(MemberAccessSyntax memberAccess)
+    {
+        var parts = new Stack<string>();
+        ExpressionSyntax current = memberAccess;
+        while (current is MemberAccessSyntax member)
+        {
+            parts.Push(member.Member);
+            current = member.Target;
+        }
+
+        if (current is not IdentifierSyntax identifier)
+        {
+            return string.Empty;
+        }
+
+        parts.Push(identifier.Identifier);
+        return string.Join(".", parts);
     }
 
     private SymbolNode GetIndexedSymbolNode(Scope scope, IndexExpressionSyntax indexExpression)

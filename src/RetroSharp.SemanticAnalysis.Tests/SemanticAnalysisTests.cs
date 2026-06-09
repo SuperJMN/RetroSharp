@@ -53,7 +53,7 @@ public class SemanticAnalysisTests
 
         result.Should().BeEquivalentToIgnoringWhitespace(input);
     }
-    
+
     [Fact]
     public void Addition_with_undeclared_vars()
     {
@@ -297,6 +297,27 @@ public class SemanticAnalysisTests
     public void Receiver_method_call_resolves_receiver_and_arguments()
     {
         var input = "struct Actor { u8 x; } inline void Move(this Actor actor, u8 dx){ actor.x += dx; } void main(){ Actor actor; actor.Move(2); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Static_class_methods_resolve_like_struct_receiver_helpers()
+    {
+        var input = "class Actor { u8 x; inline void Move(u8 dx){ x += dx; } } void main(){ Actor actor; actor.Move(2); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Static_class_constants_and_methods_resolve_as_compile_time_members()
+    {
+        var input = "class Tuning { static const Step = 2; static u8 Apply(u8 value){ return value + Tuning.Step; } } void main(){ u8 speed = Tuning.Apply(Tuning.Step); }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Static_class_self_calls_resolve_like_receiver_helper_calls()
+    {
+        var input = "class Actor { u8 x; inline void Nudge(){ x += 1; } inline void Move(){ Nudge(); } } void main(){ Actor actor; actor.Move(); }";
         Errors(input).Should().BeEmpty();
     }
 

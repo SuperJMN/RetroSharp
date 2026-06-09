@@ -337,6 +337,91 @@ public class ParserTests
     }
 
     [Fact]
+    public void Static_class_declaration_lowers_to_struct_and_receiver_helper_ast()
+    {
+        const string source = """
+                              class Actor
+                              {
+                                 u8 x;
+
+                                 inline void Move(u8 dx)
+                                 {
+                                    x += dx;
+                                 }
+                              }
+
+                              void main()
+                              {
+                                 Actor actor;
+                                 actor.Move(2);
+                              }
+                              """;
+
+        const string expected = """
+                                struct Actor
+                                {
+                                 u8 x;
+                                }
+                                inline void Move(this Actor actor, u8 dx)
+                                {
+                                 actor.x += dx;
+                                }
+                                void main()
+                                {
+                                 Actor actor;
+                                 actor.Move(2);
+                                }
+                                """;
+
+        AssertParse(source, expected);
+    }
+
+    [Fact]
+    public void Static_class_self_calls_lower_to_receiver_helper_calls()
+    {
+        const string source = """
+                              class Actor
+                              {
+                                 u8 x;
+
+                                 inline void Nudge()
+                                 {
+                                    x += 1;
+                                 }
+
+                                 inline void Move()
+                                 {
+                                    Nudge();
+                                 }
+                              }
+                              """;
+
+        const string expected = """
+                                struct Actor
+                                {
+                                 u8 x;
+                                }
+                                inline void Nudge(this Actor actor)
+                                {
+                                 actor.x += 1;
+                                }
+                                inline void Move(this Actor actor)
+                                {
+                                 Nudge(actor);
+                                }
+                                """;
+
+        AssertParse(source, expected);
+    }
+
+    [Fact]
+    public void Static_class_rejects_runtime_object_features()
+    {
+        new SomeParser().Parse("class Actor { virtual void Update() { } }")
+            .Should().Fail();
+    }
+
+    [Fact]
     public void Receiver_parameter_is_preserved_in_the_ast()
     {
         var result = new SomeParser().Parse("struct Actor { u8 x; } void Move(this Actor actor, u8 dx){}");

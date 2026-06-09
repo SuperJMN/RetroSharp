@@ -14,7 +14,7 @@ Status: Language v1 preview. Type aliases, top-level and block-local numeric con
 - C#-like surface where it does not hide cost.
 
 Non-goals:
-- Managed features (classes/heap/RTTI) or dynamic features (LINQ/dynamic/reflection).
+- Managed object features (heap-backed class instances, RTTI, implicit object identity) or dynamic features (LINQ/dynamic/reflection).
 
 ---
 
@@ -256,12 +256,21 @@ Iteration 12 adds source ergonomics only when the lowering remains static and pr
 - `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
 - `video.Init()`, `video.WaitVBlank()`, `input.Poll()`, `camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
 - `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
-- Lightweight object-oriented style is limited to plain `struct` state plus receiver methods for real mutable state such as `PlayerState` or `EnemyState`. It is not a class system: no heap allocation, inheritance, method overloading, dynamic dispatch, runtime type identity, or implicit object lifetime is introduced. Constants should stay in zero-cost groups such as the current enum-group pattern or a future `module`/`const group` feature.
+- Lightweight object-oriented style can use restricted `class` declarations for real mutable state such as `PlayerState` or `EnemyState`. A class value lowers to the same fixed storage model as a plain `struct`; instance methods lower to receiver helpers. Plain `struct` plus receiver methods remains the explicit equivalent form.
 - A future `module` or `const group` syntax should provide the clean spelling for static configuration groups, for example `World.Width` and `Player.ScreenX`, while lowering exactly like top-level constants.
 - These forms are optional ergonomics. Authors can keep flat constants, flat locals, and direct helper calls when they want the most explicit source shape; the grouped or receiver-method spelling must lower to equivalent code.
 - `value |> Clamp(0, 120) |> SnapToTile()` rewrites left-to-right to nested static/helper calls and does not create a pipe object, iterator, delegate, or hidden range value.
 
-Traits, constraints, managed objects, closures, delegates, runtime polymorphism, and built-in `Option`/`Result` abstractions are outside this iteration.
+Iteration 13 adds restricted static class syntax. This is source organization over the existing value model, not managed objects:
+
+- `class Actor { u8 x; u8 y; void Move(i8 dx, i8 dy) { ... } }` lowers before target emission to a plain `struct Actor` plus receiver helpers such as `Move(this Actor actor, dx, dy)`.
+- Class fields use the same fixed-layout rules as structs. No object header, vtable pointer, runtime type id, monitor, allocator state, or hidden identity is inserted.
+- Non-virtual instance methods lower to statically resolved helpers or inline substitutions. `this` is the receiver parameter, not a heap object reference.
+- Static methods and constants lower like module helpers and compile-time constants.
+- Class values currently use the same declaration and initializer forms as structs, for example `Actor actor;` or `Actor actor = { x: 10, y: 20 };`. Future constructor-like syntax, if accepted, is only shorthand for zero-fill plus direct field stores or an explicit inline initializer helper. It must not allocate memory.
+- Inheritance, `virtual`, `override`, interfaces, `new` allocation, destructors, RTTI, `dynamic_cast`-style checks, and implicit lifetime management remain rejected unless a later roadmap defines an explicit opt-in cost model.
+
+Traits, constraints, managed objects, closures, delegates, runtime polymorphism, and built-in `Option`/`Result` abstractions are outside these post-v1 iterations unless a later roadmap adds a concrete zero-cost or explicit-cost design.
 
 ---
 

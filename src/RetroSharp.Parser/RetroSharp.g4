@@ -1,7 +1,7 @@
 ﻿grammar RetroSharp;
 
 // We define the main rule that starts parsing the file
-program: (typeAliasDeclaration | constDeclaration | enumDeclaration | structDeclaration | variableDeclaration | externFunction | function)* EOF;
+program: (typeAliasDeclaration | constDeclaration | enumDeclaration | structDeclaration | classDeclaration | variableDeclaration | externFunction | function)* EOF;
 
 enumDeclaration: 'enum' IDENTIFIER '{' enumMember (',' enumMember)* ','? '}';
 enumMember: IDENTIFIER ('=' expression)?;
@@ -10,6 +10,12 @@ typeAliasDeclaration: 'type' IDENTIFIER '=' type ';';
 
 structDeclaration: 'struct' IDENTIFIER '{' structField* '}';
 structField: type IDENTIFIER ';';
+
+classDeclaration: 'class' IDENTIFIER '{' classMember* '}';
+classMember: structField | classConstDeclaration | classStaticFunction | classFunction;
+classConstDeclaration: 'static'? constDeclaration;
+classFunction: functionModifier* attrs type IDENTIFIER '(' parameters? ')' (block | '=>' expression ';');
+classStaticFunction: 'static' functionModifier* attrs type IDENTIFIER '(' parameters? ')' (block | '=>' expression ';');
 
 constDeclaration: 'const' (type IDENTIFIER | IDENTIFIER) '=' expression ';';
 letDeclaration: 'let' IDENTIFIER '=' expression ';';
@@ -202,6 +208,8 @@ DEFAULT: 'default';
 EXTERN: 'extern';
 ENUM: 'enum';
 STRUCT: 'struct';
+CLASS: 'class';
+STATIC: 'static';
 CONST: 'const';
 LET: 'let';
 INLINE: 'inline';

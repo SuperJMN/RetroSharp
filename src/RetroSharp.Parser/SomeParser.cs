@@ -6,6 +6,16 @@ namespace RetroSharp.Parser;
 
 public class SomeParser
 {
+    private sealed record LoweredStaticClass(
+        StructSyntax Struct,
+        IReadOnlyList<ConstDeclarationSyntax> Constants,
+        IReadOnlyList<FunctionSyntax> Functions,
+        IReadOnlyList<StaticClassMethod> StaticMethods);
+
+    private sealed record LoweredClassFunction(string SourceName, FunctionSyntax Function);
+
+    private sealed record StaticClassMethod(string SourceName, string FunctionName);
+
     public Result<ProgramSyntax> Parse(string input) => Tokenize(input)
         .Bind(Parse)
         .Map(ParseProgram);
@@ -46,9 +56,19 @@ public class SomeParser
         var aliases = program.typeAliasDeclaration().Select(ParseTypeAlias);
         var constants = program.constDeclaration().Select(ParseConstDeclaration);
         var enums = program.enumDeclaration().Select(ParseEnum);
+        var classes = program.classDeclaration().Select(ParseStaticClass).ToList();
         var structs = program.structDeclaration().Select(ParseStruct);
         var funcs = program.function().Select(f => ParseFunction(f));
-        return new ProgramSyntax(aliases.ToList(), constants.ToList(), enums.ToList(), structs.ToList(), funcs.ToList());
+        var staticMethods = classes
+            .SelectMany(staticClass => staticClass.StaticMethods)
+            .ToDictionary(method => method.SourceName, method => method.FunctionName, StringComparer.Ordinal);
+        var syntax = new ProgramSyntax(
+            aliases.ToList(),
+            constants.Concat(classes.SelectMany(staticClass => staticClass.Constants)).ToList(),
+            enums.ToList(),
+            structs.Concat(classes.Select(staticClass => staticClass.Struct)).ToList(),
+            classes.SelectMany(staticClass => staticClass.Functions).Concat(funcs).ToList());
+        return StaticClassLowerer.LowerStaticCalls(syntax, staticMethods);
     }
 
     private TypeAliasSyntax ParseTypeAlias(TypeAliasDeclarationContext aliasContext)
@@ -88,6 +108,49 @@ public class SomeParser
         return new StructSyntax(structContext.IDENTIFIER().GetText(), fields);
     }
 
+    private LoweredStaticClass ParseStaticClass(ClassDeclarationContext classContext)
+    {
+        var name = classContext.IDENTIFIER().GetText();
+        var fields = classContext.classMember()
+            .Select(member => member.structField())
+            .Where(field => field is not null)
+            .Select(field => ParseStructField(field!))
+            .ToList();
+        var fieldNames = fields.Select(field => field.Name).ToHashSet(StringComparer.Ordinal);
+
+        var constants = classContext.classMember()
+            .Select(member => member.classConstDeclaration())
+            .Where(constant => constant is not null)
+            .Select(constant => ParseClassConst(name, constant!))
+            .ToList();
+        var parsedInstanceFunctions = classContext.classMember()
+            .Select(member => member.classFunction())
+            .Where(function => function is not null)
+            .Select(function => ParseClassFunction(function!))
+            .ToList();
+        var instanceMethodNames = parsedInstanceFunctions.Select(function => function.Name).ToHashSet(StringComparer.Ordinal);
+        var instanceFunctions = parsedInstanceFunctions
+            .Select(function => StaticClassLowerer.LowerInstanceMethod(name, fieldNames, instanceMethodNames, function))
+            .ToList();
+        var staticFunctions = classContext.classMember()
+            .Select(member => member.classStaticFunction())
+            .Where(function => function is not null)
+            .Select(function => ParseClassStaticFunction(name, function!))
+            .ToList();
+
+        return new LoweredStaticClass(
+            new StructSyntax(name, fields),
+            constants,
+            instanceFunctions.Concat(staticFunctions.Select(function => function.Function)).ToList(),
+            staticFunctions.Select(function => new StaticClassMethod($"{name}.{function.SourceName}", function.Function.Name)).ToList());
+    }
+
+    private ConstDeclarationSyntax ParseClassConst(string className, ClassConstDeclarationContext constContext)
+    {
+        var constant = ParseConstDeclaration(constContext.constDeclaration());
+        return new ConstDeclarationSyntax(constant.TypeAnnotation, $"{className}.{constant.Name}", constant.Value);
+    }
+
     private StructFieldSyntax ParseStructField(StructFieldContext fieldContext)
     {
         return new StructFieldSyntax(fieldContext.type().GetText(), fieldContext.IDENTIFIER().GetText());
@@ -119,6 +182,68 @@ public class SomeParser
             true,
             isInline,
             isPure);
+    }
+
+    private FunctionSyntax ParseClassFunction(ClassFunctionContext functionContext)
+    {
+        var parameters = ParseParameters(functionContext.parameters()).ToList();
+        var modifiers = functionContext.functionModifier().Select(modifier => modifier.GetText()).ToHashSet(StringComparer.Ordinal);
+        var isInline = modifiers.Contains("inline");
+        var isPure = modifiers.Contains("pure");
+        if (functionContext.block() is { } block)
+        {
+            return new FunctionSyntax(
+                functionContext.type().GetText(),
+                functionContext.IDENTIFIER().ToString()!,
+                parameters,
+                ParseBlock(block),
+                isInline: isInline,
+                isPure: isPure);
+        }
+
+        var expressionBody = new BlockSyntax([new ReturnSyntax(Maybe.From(ParseExpression(functionContext.expression())))]);
+        return new FunctionSyntax(
+            functionContext.type().GetText(),
+            functionContext.IDENTIFIER().ToString()!,
+            parameters,
+            expressionBody,
+            true,
+            isInline,
+            isPure);
+    }
+
+    private LoweredClassFunction ParseClassStaticFunction(string className, ClassStaticFunctionContext functionContext)
+    {
+        var parameters = ParseParameters(functionContext.parameters()).ToList();
+        var modifiers = functionContext.functionModifier().Select(modifier => modifier.GetText()).ToHashSet(StringComparer.Ordinal);
+        var isInline = modifiers.Contains("inline");
+        var isPure = modifiers.Contains("pure");
+        var sourceName = functionContext.IDENTIFIER().ToString()!;
+        var functionName = $"{className}_{sourceName}";
+        if (functionContext.block() is { } block)
+        {
+            return new LoweredClassFunction(
+                sourceName,
+                new FunctionSyntax(
+                    functionContext.type().GetText(),
+                    functionName,
+                    parameters,
+                    ParseBlock(block),
+                    isInline: isInline,
+                    isPure: isPure));
+        }
+
+        var expressionBody = new BlockSyntax([new ReturnSyntax(Maybe.From(ParseExpression(functionContext.expression())))]);
+        return new LoweredClassFunction(
+            sourceName,
+            new FunctionSyntax(
+                functionContext.type().GetText(),
+                functionName,
+                parameters,
+                expressionBody,
+                true,
+                isInline,
+                isPure));
     }
 
     private IEnumerable<ParameterSyntax> ParseParameters(ParametersContext parameters)

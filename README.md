@@ -32,6 +32,7 @@ Right now, RetroSharp can compile simple programs with:
 - `countof(array)` folded at compile time for fixed-size local arrays
 - Top-level enums with qualified members folded at compile time
 - Plain local structs with named and shorthand initializer lists plus field access in the current cartridge targets
+- Restricted static classes with fixed-layout fields, instance methods lowered to receiver helpers, and static constants/methods lowered without heap allocation or dispatch
 - Fixed-size local byte arrays with initializer lists, initializer-inferred lengths, constant index access, and byte-backed runtime index access in the current cartridge targets
 - Function calls, including inline helper calls with parameters, named arguments, default parameter values, single-return expression helpers, and `=>` expression-bodied helpers in the current cartridge targets
 - Control flow (`if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, `while`, `do while`, `loop`, `for`, half-open range `for`, `break`, `continue`)
@@ -100,6 +101,6 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample sources have been migrated to the current language surface: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `let` for immutable frame-local values, `inline`/`pure` helper contracts, SDK dot-calls, receiver methods where they clarify ownership, `switch` expressions, pipelines, `loop` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
+The sample sources have been migrated to the current language surface: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `let` for immutable frame-local values, `inline`/`pure` helper contracts, SDK dot-calls, restricted static classes and receiver methods where they clarify ownership, `switch` expressions, pipelines, `loop` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
 
 See `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.

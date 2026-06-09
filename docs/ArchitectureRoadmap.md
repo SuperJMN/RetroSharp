@@ -39,7 +39,7 @@ Language work belongs here:
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
 - Target attributes such as `[target("gb")]` or `[intrinsic]`.
 - Namespaces or modules if needed to separate SDK and intrinsics.
-- Zero-cost high-level ergonomics such as SDK namespaced dot calls, struct receiver methods, immutable `let` locals, switch expressions, static pipeline syntax, and purity/inline contracts, provided they lower to direct calls, branches, local storage, or constants. These features must not require heap allocation, delegates, closure objects, boxing, virtual dispatch, runtime interface tables, or object identity.
+- Zero-cost high-level ergonomics such as SDK namespaced dot calls, struct receiver methods, immutable `let` locals, switch expressions, static pipeline syntax, purity/inline contracts, and restricted class syntax, provided they lower to direct calls, branches, local storage, static helper calls, or constants. These features must not require heap allocation, delegates, closure objects, boxing, virtual dispatch, runtime interface tables, or hidden object identity.
 
 ### Portable 2D SDK
 
@@ -1108,6 +1108,98 @@ Acceptance criteria:
 - SDK namespaced calls and struct receiver methods are represented as distinct concepts in the semantic model even though both use dot-call syntax.
 - Docs explicitly state that this iteration adds high-level source ergonomics, not managed objects or polymorphism.
 - Trait/constraint systems are not part of this iteration.
+
+### Iteration 13: Static Class Syntax Without Runtime Objects
+
+Status: implemented for restricted class declarations, instance/static methods, and static constants. Dedicated constructor-like initializer syntax remains planned.
+
+Purpose: let authors group state and behavior with familiar class-like syntax while preserving the current 8-bit contract: accepted class code must lower to plain structs plus static or inline helper calls before target emission.
+
+This is source organization, not a managed object model. A class value has fixed layout like a struct. An instance method has a statically known receiver that lowers like a helper with the receiver as the first argument. A constructor-like initializer lowers to an explicit initialization helper. Static members lower to module/static helpers or compile-time constants.
+
+Design rules:
+
+- `class` fields use the same fixed-layout rules as plain structs. No hidden object header, vtable pointer, runtime type id, monitor, or allocator state is inserted.
+- Non-virtual instance methods lower to static receiver helpers such as `Move(this Actor actor, dx, dy)` or inline substitutions, using the receiver-method machinery from Iteration 12.
+- `static` methods and constants lower like module functions and constants. They do not require an instance or runtime module object.
+- Constructor syntax, if accepted, is only shorthand for an explicit `Init`-style helper or zero-fill plus field stores. It must not allocate memory.
+- Class variables are value/storage declarations in locals, globals, or explicit pointed storage. There is no implicit `new`, heap allocation, reference identity, copy-on-write, or garbage collection.
+- Any feature that would require virtual dispatch, inheritance layout, interface tables, dynamic type tests, RTTI, destructors, exceptions, closures, or heap-backed lifetime is outside this iteration unless a later roadmap adds an explicit opt-in cost model.
+- Diagnostics must reject unsupported object-oriented forms by naming the hidden cost they would require, for example "virtual method dispatch requires a runtime method table and is not part of static classes."
+
+Example lowering target:
+
+```c
+class Actor {
+    u8 x;
+    u8 y;
+
+    void Move(i8 dx, i8 dy) {
+        x += dx;
+        y += dy;
+    }
+}
+```
+
+is equivalent to:
+
+```c
+struct Actor {
+    u8 x;
+    u8 y;
+}
+
+inline void Move(this Actor actor, i8 dx, i8 dy) {
+    actor.x += dx;
+    actor.y += dy;
+}
+```
+
+Tasks:
+
+#### AR-13.1: Define static class grammar and semantic model
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, semantic declaration model, language docs.
+- Steps:
+  - [x] Parse a restricted `class Name { ... }` declaration with fields, non-virtual instance methods, static methods, and compile-time constants.
+  - [x] Represent accepted classes as fixed-layout value types in semantic analysis, not as heap references.
+  - [ ] Reject inheritance, `virtual`, `override`, `interface`, `new`, destructors, RTTI, and dynamic casts with explicit diagnostics.
+  - [x] Keep class names in the type namespace so `class Actor` can be used anywhere an equivalent `struct Actor` would be valid.
+- Verification:
+  - [x] Parser and semantic tests cover accepted class declarations and the first rejected managed-object form.
+
+#### AR-13.2: Lower fields and methods to struct plus helpers
+
+- Layer: language lowering.
+- Candidate files: semantic lowering, helper resolver, Game Boy/NES target tests.
+- Steps:
+  - [x] Lower class fields to the same layout as a plain struct with the same fields.
+  - [x] Lower non-virtual instance methods to receiver helpers using the same static resolution path as `this Actor actor`.
+  - [x] Lower static methods and constants like module helpers and top-level constants.
+  - [x] Prove method bodies cannot observe object identity or runtime type.
+- Verification:
+  - [x] Game Boy/NES emitted-code tests compare class spelling against equivalent struct plus helper spelling.
+  - [x] Tests prove there is no vtable, heap allocation, object header, dispatch table, or hidden runtime helper.
+
+#### AR-13.3: Add initializer syntax as explicit zero-cost sugar
+
+- Layer: language.
+- Candidate files: parser grammar/syntax, initializer lowering, target tests, docs.
+- Steps:
+  - [ ] Choose the initializer spelling, for example `Actor player = Actor { x: 10, y: 20 };` or a restricted constructor form.
+  - [ ] Lower initializer expressions to zero-fill plus direct field stores or an explicit inline `Init` helper.
+  - [ ] Reject allocation-shaped syntax such as `new Actor(...)` unless a later explicit allocation feature exists.
+  - [ ] Document copy semantics and storage placement clearly.
+- Verification:
+  - [ ] Parser, semantic, and target tests prove initializer syntax emits the same code as explicit struct initialization.
+
+Acceptance criteria:
+
+- Class syntax is demonstrably equivalent to the struct plus helper form for accepted samples.
+- The language docs define "static class" as source sugar and explicitly exclude managed object semantics.
+- Diagnostics make hidden runtime costs visible instead of silently lowering to an expensive fallback.
+- The Game Boy runner state objects are migrated to static class syntax without changing ROM behavior.
 
 ## First Recommended Implementation Slice
 
