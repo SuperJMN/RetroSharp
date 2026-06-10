@@ -53,12 +53,13 @@ public static class GameBoyRomCompiler
 
 internal sealed class GameBoyVideoProgram
 {
-    public const int FirstSpriteTile = 6;
+    public const int FirstGeneratedBackgroundTile = 6;
 
     private readonly List<GameBoyCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, GameBoyCompiledSpriteAsset> spriteAssets = [];
     private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
-    private int nextSpriteTile = FirstSpriteTile;
+    private readonly List<byte> generatedBackgroundTileData = [];
+    private int spriteTileCount;
 
     private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
 
@@ -96,7 +97,13 @@ internal sealed class GameBoyVideoProgram
 
     public IReadOnlyDictionary<string, SpriteAnimationClip> AnimationClips => animationClips;
 
-    public int SpriteTileCount => nextSpriteTile - FirstSpriteTile;
+    public int FirstSpriteTile => AlignToEven(FirstGeneratedBackgroundTile + GeneratedBackgroundTileCount);
+
+    public int GeneratedBackgroundTileCount => generatedBackgroundTileData.Count / 16;
+
+    public byte[] GeneratedBackgroundTileData => generatedBackgroundTileData.ToArray();
+
+    public int SpriteTileCount => spriteTileCount;
 
     public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
 
@@ -296,8 +303,8 @@ internal sealed class GameBoyVideoProgram
         var path = ResolveAssetPath(relativePath);
         var frameWidth = count == 4 ? ConstArg(call, 2, 1, 160) : (int?)null;
         var frameHeight = count == 4 ? ConstArg(call, 3, 1, 160) : (int?)null;
-        var asset = GameBoySpriteAssetCompiler.CompileFromFile(name, path, nextSpriteTile, frameWidth, frameHeight);
-        nextSpriteTile += asset.TileCount;
+        var asset = GameBoySpriteAssetCompiler.CompileFromFile(name, path, FirstSpriteTile + spriteTileCount, frameWidth, frameHeight);
+        spriteTileCount += asset.TileCount;
         spriteAssets.Add(name, asset);
         spriteAssetsInLoadOrder.Add(asset);
     }
@@ -451,7 +458,8 @@ internal sealed class GameBoyVideoProgram
     {
         RequireArity(call, 1);
         var relativePath = StringArg(call, 0);
-        var map = GameBoyTiledMapImporter.Load(ResolveAssetPath(relativePath));
+        var map = GameBoyTiledMapImporter.Load(ResolveAssetPath(relativePath), FirstGeneratedBackgroundTile + GeneratedBackgroundTileCount);
+        AppendGeneratedBackgroundTileData(map.GeneratedTileData);
 
         ApplyBackgroundTiles(map);
         var worldMap = new WorldMap2D(map.Width, map.Height, map.WorldTileIds, map.WorldFlags);
@@ -599,6 +607,46 @@ internal sealed class GameBoyVideoProgram
         }
 
         return (byte)value;
+    }
+
+    private void AppendGeneratedBackgroundTileData(byte[] tileData)
+    {
+        if (tileData.Length == 0)
+        {
+            return;
+        }
+
+        if (tileData.Length % 16 != 0)
+        {
+            throw new InvalidOperationException("Generated Game Boy background tile data must be aligned to 16-byte tiles.");
+        }
+
+        generatedBackgroundTileData.AddRange(tileData);
+        RebaseSpriteTiles();
+    }
+
+    private void RebaseSpriteTiles()
+    {
+        var nextTile = FirstSpriteTile;
+        for (var i = 0; i < spriteAssetsInLoadOrder.Count; i++)
+        {
+            var asset = spriteAssetsInLoadOrder[i].WithFirstTile(nextTile);
+            spriteAssetsInLoadOrder[i] = asset;
+            spriteAssets[asset.Name] = asset;
+            nextTile += asset.TileCount;
+        }
+
+        if (nextTile > 256)
+        {
+            throw new InvalidOperationException("Generated Game Boy tiles exceed the 256 tile VRAM index range.");
+        }
+
+        spriteTileCount = nextTile - FirstSpriteTile;
+    }
+
+    private static int AlignToEven(int value)
+    {
+        return (value & 1) == 0 ? value : value + 1;
     }
 
     private void ApplyWorldMapToTileMap(WorldMap2D worldMap, int streamY)

@@ -177,7 +177,7 @@ Runtime calls:
 
 `world.Column(index, ...)` defines one source-level world tile-id column. `world.Flags(index, ...)` defines the matching collision flag column using `0` for `Empty`, `1` for `Solid`, `2` for `Hazard`, and `4` for `Platform`; flag values can be combined. `world.Map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming and collision flag reads.
 
-`world.Load(path)` imports a finite orthogonal Tiled JSON map (`.tmj`) at compile time and builds the same `WorldMap2D`, source-map ROM rows, collision flags, and initial Game Boy background tilemap. The current importer expects 8x8 tiles, one tileset with `firstgid` 1, unencoded JSON array tile-layer data, a required `world` tile layer, an optional `background` tile layer, and an optional `collision` tile layer. Tiled GIDs on `background` and `world` layers map to Game Boy tile ids by subtracting `firstgid`; GID `0` remains empty. The `collision` layer stores flag values directly: `0` empty, `1` solid, `2` hazard, and `4` platform. The map must include integer custom property `retrosharpStreamY`; optional `retrosharpWorldY` and `retrosharpWorldHeight` properties select the source rows used by the streaming world.
+`world.Load(path)` imports a finite orthogonal Tiled JSON map (`.tmj`) at compile time and builds the same `WorldMap2D`, source-map ROM rows, collision flags, generated Game Boy background tiles, and initial Game Boy background tilemap. The importer accepts unencoded JSON array tile-layer data, a required `world` tile layer, an optional `background` tile layer, and external `.tsj` or `.tsx` tilesets with PNG images. Tiled tile sizes must be positive multiples of 8. Source cells are expanded into Game Boy hardware cells instead of being downscaled: for example, a 16x16 Tiled tile becomes a 2x2 block of generated 8x8 Game Boy tiles. Each generated 8x8 tile is quantized to the four DMG color indexes, and repeated generated patterns are deduplicated. GID `0` remains empty. If there is no explicit `collision` tile layer, tile `objectgroup` rectangles in the tileset become `Solid` flags repeated across every generated sub-tile; optional `retrosharpCollision` or `retrosharpFlags` tile/object properties can name or number `Solid`, `Hazard`, and `Platform` flags. A `collision` layer is still accepted for compact direct flag values: `0` empty, `1` solid, `2` hazard, and `4` platform. The map must include integer custom property `retrosharpStreamY`, expressed in generated Game Boy 8x8 tile rows; optional `retrosharpWorldY` and `retrosharpWorldHeight` properties select source Tiled rows used by the streaming world before expansion.
 
 `map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world.Load(...)` for editable maps, or `world.Column(...)` plus `world.Flags(...)` for compact source-authored maps, so visual setup, streaming data, and collision flags can share the same world resource.
 
@@ -307,7 +307,7 @@ Landed after the camera-runtime pass:
 
 Landed after the Collision V1 pass:
 
-- The runner derives actor collision X from `cameraX + 72`, wraps left/center/right foot probes to the active 16-column world width, and queries generated world flags through narrow `collision_aabb_tiles(...)` probes.
+- The runner derives actor collision X from `cameraX + 72`, uses Game Boy low-byte pixel coordinates over the active 32-column, 256 px world width, derives collision Y from the actor's current screen Y, and queries generated world flags through a `collision_aabb_tiles(...)` probe sized from `sprite_width(mario_player)`.
 - Camera span collision remains available as a transitional helper, but the runner no longer depends on it for foot or failure checks.
 
 Landed after the NES portable spike:
@@ -323,10 +323,9 @@ Landed after the first HUD pass:
 
 Landed after the richer runner scene pass:
 
-- The runner background now uses purpose-built built-in tiles for clouds, distant hills, hazards, ground tops, and bricks while keeping sprite tile indices stable.
-- The runner imports `samples/gameboy-runner/maps/runner.tmj` with `world.Load(...)`, combining editable decorative background tiles, streamable terrain, and collision flags while keeping the runtime inside the current 32 KiB ROM-only target.
-- `samples/gameboy-runner/assets/enemy-slug.gb.png` adds an original two-frame logical enemy sprite. The runner draws one patrolling ground enemy and one raised-platform enemy in the VBlank presentation block.
-- The ground enemy has simple screen-space contact reset logic, while platform, ground, and hazard collision remain world-flag probes.
+- The runner imports `samples/gameboy-runner/maps/runner.tmj` with `world.Load(...)`, combining editable Tiled background/world layers, external `.tsx` tileset data, generated Game Boy background tiles, and collision flags while keeping the runtime inside the current 32 KiB ROM-only target.
+- Tileset `objectgroup` rectangles now provide the runner's solid platform and ground collision flags without a separate hand-authored collision layer.
+- The runner scene focuses on the player, camera, Tiled map streaming, tileset-authored solid collision, fall reset, and variable-height jump so the generated Tiled graphics still fit the ROM-only target.
 
 ## Next Milestones
 

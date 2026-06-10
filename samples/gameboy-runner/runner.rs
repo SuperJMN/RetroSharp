@@ -1,45 +1,31 @@
 type Pixel = i16;
 
 enum World {
-    Width = 16,
+    Width = 32,
     StreamY = 9,
-    Height = 6,
-    PixelWrap = 128
+    Height = 14,
+    SignedVelocityWrap = 128,
+    PixelWidth = 256
 }
 
 enum Player {
     ScreenX = 72,
-    StartY = 73,
-    PlatformY = 41,
-    GroundY = 73,
-    EnemyHitY = 72,
+    StartY = 105,
+    WorldOriginY = 41,
     FallResetY = 116
 }
 
 enum CollisionProbe {
-    PlatformStartY = 42,
-    PlatformEndY = 59,
-    GroundY = 32
+    LandingHeight = 8,
+    TileMask = 248
 }
 
 enum Jump {
     Velocity = 252,
-    HazardBounceVelocity = 248,
     BoostTicks = 12
 }
 
-enum Enemy {
-    StartX = 144,
-    GroundY = 89,
-    PlatformX = 40,
-    PlatformY = 57,
-    WrapAtX = 96,
-    RespawnX = 152,
-    HitStartX = 68,
-    HitEndX = 91
-}
-
-enum CollisionFlag { None = 0, Solid = 1, Hazard = 2 }
+enum CollisionFlag { None = 0, Solid = 1 }
 
 class PlayerState {
     Pixel y;
@@ -50,7 +36,6 @@ class PlayerState {
     Pixel animTick;
     Pixel jumping;
     Pixel jumpTicks;
-    Pixel hitFlashTicks;
 
     inline void Reset() {
         y = Player.StartY;
@@ -59,15 +44,14 @@ class PlayerState {
         displayFrame = 0;
         jumping = 0;
         jumpTicks = 0;
-        hitFlashTicks = 0;
     }
 
     inline void ApplyGravity() {
         grounded = 0;
         velocityY += 1;
         y += velocityY;
-        if (velocityY >= World.PixelWrap) {
-            if (y >= World.PixelWrap) {
+        if (velocityY >= World.SignedVelocityWrap) {
+            if (y >= World.SignedVelocityWrap) {
                 y = 0;
                 velocityY = 0;
                 jumping = 0;
@@ -80,13 +64,6 @@ class PlayerState {
         velocityY = 0;
         grounded = 1;
         jumping = 0;
-    }
-
-    inline void BounceFromHazard() {
-        velocityY = Jump.HazardBounceVelocity;
-        grounded = 0;
-        displayFrame = 4;
-        hitFlashTicks = 12;
     }
 
     inline void StartJump() {
@@ -133,34 +110,7 @@ class PlayerState {
             animTick = 0;
         }
 
-        if (hitFlashTicks != 0) {
-            hitFlashTicks--;
-            displayFrame = 4;
-        } else {
-            SelectDisplayFrame(view.moving);
-        }
-    }
-}
-
-class EnemyState {
-    Pixel x;
-    Pixel frame;
-    Pixel tick;
-
-    inline void Spawn() {
-        x = Enemy.StartX;
-        frame = 0;
-        tick = 0;
-    }
-
-    inline void Step() {
-        x--;
-        if (x <= Enemy.WrapAtX) {
-            x = Enemy.RespawnX;
-        }
-
-        tick++;
-        frame = animation.Frame(enemy_walk, tick);
+        SelectDisplayFrame(view.moving);
     }
 }
 
@@ -190,101 +140,45 @@ class CameraState {
 
 class FrameState {
     Pixel footTile;
-    Pixel failTile;
-    Pixel hazardHit;
-    Pixel impactHit;
     Pixel resetRequested;
 
     inline void Begin() {
         footTile = 0;
-        failTile = 0;
-        hazardHit = 0;
-        impactHit = 0;
         resetRequested = 0;
     }
 
-    inline void ResolvePlatformLanding(PlayerState player, Pixel footLeftX, Pixel footCenterX, Pixel footRightX) {
-        if (player.y in CollisionProbe.PlatformStartY..CollisionProbe.PlatformEndY && player.velocityY < World.PixelWrap && player.velocityY != 0) {
-            footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, CollisionFlag.Solid);
-            if (footTile == 0) {
-                footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, CollisionFlag.Solid);
-            }
-            if (footTile == 0) {
-                footTile = collision_aabb_tiles(footRightX, 0, 1, 8, CollisionFlag.Solid);
-            }
+    inline void ResolveSolidLanding(PlayerState player, Pixel playerWorldX, Pixel footWorldY) {
+        if (player.velocityY < World.SignedVelocityWrap && player.velocityY != 0) {
+            footTile = collision_aabb_tiles(playerWorldX, footWorldY, sprite_width(mario_player), CollisionProbe.LandingHeight, CollisionFlag.Solid);
             if (footTile != 0) {
-                player.Land(Player.PlatformY);
+                let landedWorldY = footWorldY & CollisionProbe.TileMask;
+                player.Land(landedWorldY + Player.WorldOriginY);
             }
         }
     }
 
-    inline void ResolveGroundAndHazards(PlayerState player, Pixel footLeftX, Pixel footCenterX, Pixel footRightX) {
-        if (player.y >= Player.GroundY + 1) {
-            failTile = collision_aabb_tiles(footLeftX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);
-            if (failTile == 0) {
-                failTile = collision_aabb_tiles(footCenterX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);
-            }
-            if (failTile == 0) {
-                failTile = collision_aabb_tiles(footRightX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Hazard);
-            }
-            if (failTile != 0) {
-                resetRequested = 1;
-                hazardHit = 1;
-            }
-
-            footTile = collision_aabb_tiles(footLeftX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);
-            if (footTile == 0) {
-                footTile = collision_aabb_tiles(footCenterX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);
-            }
-            if (footTile == 0) {
-                footTile = collision_aabb_tiles(footRightX, CollisionProbe.GroundY, 1, 8, CollisionFlag.Solid);
-            }
-
-            if (footTile != 0) {
-                player.Land(Player.GroundY);
-            }
-        }
-    }
-
-    inline void ResolveFallAndEnemyContact(PlayerState player, EnemyState enemy) {
+    inline void ResolveFall(PlayerState player) {
         if (player.grounded == 0) {
             if (player.y >= Player.FallResetY) {
                 resetRequested = 1;
             }
         }
-
-        if (enemy.x in Enemy.HitStartX..Enemy.HitEndX) {
-            if (player.y >= Player.EnemyHitY) {
-                resetRequested = 1;
-                impactHit = 1;
-            }
-        }
     }
 
-    inline void ResolveReset(PlayerState player, EnemyState enemy) {
+    inline void ResolveReset(PlayerState player) {
         if (resetRequested != 0) {
             footTile = 0;
-            failTile = 0;
             player.Reset();
-            enemy.Spawn();
-            if (hazardHit != 0) {
-                player.BounceFromHazard();
-            }
-            if (impactHit != 0) {
-                player.BounceFromHazard();
-            }
         }
     }
 }
 
-inline pure Pixel WrapWorldX(Pixel x) => x >= World.PixelWrap ? x - World.PixelWrap : x;
+inline pure Pixel WrapWorldX(Pixel x) => x;
 
-inline void PresentFrame(PlayerState player, EnemyState enemy) {
+inline void PresentFrame(PlayerState player) {
     video.WaitVBlank();
     camera.Apply();
     sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);
-    sprite.Draw(enemy_slug, enemy.x, Enemy.GroundY, enemy.frame, false, 0);
-    sprite.Draw(enemy_slug, Enemy.PlatformX, Enemy.PlatformY, enemy.frame, true, 0);
 }
 
 void setup_video() {
@@ -298,9 +192,7 @@ void setup_video() {
     objectPalette.Set(2, 1);
     objectPalette.Set(3, 3);
     sprite.Asset(mario_player, "assets/mario-player.gb.png", 18, 32);
-    sprite.Asset(enemy_slug, "assets/enemy-slug.gb.png", 16, 16);
     animation.Clip(run, 1, 6, 6, 6);
-    animation.Clip(enemy_walk, 0, 12, 12);
     return;
 }
 
@@ -314,31 +206,25 @@ void main() {
     load_world();
     camera.Init(World.Width, World.StreamY, World.Height);
     PlayerState player;
-    EnemyState enemy;
     CameraState view;
     FrameState frame;
     player.Reset();
-    enemy.Spawn();
 
     loop {
-        PresentFrame(player, enemy);
+        PresentFrame(player);
         input.Poll();
 
         frame.Begin();
         player.ApplyGravity();
 
         let playerWorldX = (view.x + Player.ScreenX) |> WrapWorldX();
-        let footLeftX = playerWorldX;
-        let footCenterX = (playerWorldX + 8) |> WrapWorldX();
-        let footRightX = (playerWorldX + 17) |> WrapWorldX();
+        let footWorldY = player.y - Player.WorldOriginY;
 
-        frame.ResolvePlatformLanding(player, footLeftX, footCenterX, footRightX);
-        frame.ResolveGroundAndHazards(player, footLeftX, footCenterX, footRightX);
-        frame.ResolveFallAndEnemyContact(player, enemy);
-        frame.ResolveReset(player, enemy);
+        frame.ResolveSolidLanding(player, playerWorldX, footWorldY);
+        frame.ResolveFall(player);
+        frame.ResolveReset(player);
         player.HandleJumpInput();
         view.HandleHorizontalInput(player);
-        enemy.Step();
         player.UpdateRunAnimation(view);
 
     }

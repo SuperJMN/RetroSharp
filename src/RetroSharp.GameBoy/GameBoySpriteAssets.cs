@@ -29,6 +29,24 @@ internal sealed class GameBoyCompiledSpriteAsset
     public required IReadOnlyList<GameBoyMetaspritePiece> Pieces { get; init; }
 
     public int TileCount => TileData.Length / 16;
+
+    public GameBoyCompiledSpriteAsset WithFirstTile(int firstTile)
+    {
+        return new GameBoyCompiledSpriteAsset
+        {
+            Name = Name,
+            FirstTile = firstTile,
+            Width = Width,
+            Height = Height,
+            LogicalWidth = LogicalWidth,
+            LogicalHeight = LogicalHeight,
+            FrameCount = FrameCount,
+            Metadata = Metadata,
+            TilesPerFrame = TilesPerFrame,
+            TileData = TileData,
+            Pieces = Pieces,
+        };
+    }
 }
 
 internal readonly record struct GameBoyMetaspritePiece(int XOffset, int YOffset, int TileOffset);

@@ -190,12 +190,13 @@ internal static class GameBoyRomBuilder
 
     private static byte[] BuildTileData(GameBoyVideoProgram program)
     {
-        var tiles = new byte[(GameBoyVideoProgram.FirstSpriteTile + program.SpriteTileCount) * 16];
+        var tiles = new byte[(program.FirstSpriteTile + program.SpriteTileCount) * 16];
         WriteCloudTile(tiles, 1);
         WriteHillTile(tiles, 2);
         WriteSpikeTile(tiles, 3);
         WriteGroundTopTile(tiles, 4);
         WriteBrickTile(tiles, 5);
+        program.GeneratedBackgroundTileData.CopyTo(tiles, GameBoyVideoProgram.FirstGeneratedBackgroundTile * 16);
 
         foreach (var asset in program.SpriteAssetsInLoadOrder)
         {
@@ -1324,21 +1325,27 @@ internal sealed class GameBoyRuntimeCompiler
         var args = call.Parameters.ToList();
         var config = EnsureCameraConfigured(call.Name);
 
-        EmitCameraSetAxisPosition(
-            args[0],
-            CameraXLowAddress,
-            () => EmitCameraMoveLeftStep(config),
-            () => EmitCameraMoveRightStep(config),
-            "camera_set_position_right",
-            "camera_set_position_x_end");
+        if (!IsZeroConstant(args[0]))
+        {
+            EmitCameraSetAxisPosition(
+                args[0],
+                CameraXLowAddress,
+                () => EmitCameraMoveLeftStep(config),
+                () => EmitCameraMoveRightStep(config),
+                "camera_set_position_right",
+                "camera_set_position_x_end");
+        }
 
-        EmitCameraSetAxisPosition(
-            args[1],
-            CameraYLowAddress,
-            () => EmitCameraMoveUpStep(config),
-            () => EmitCameraMoveDownStep(config),
-            "camera_set_position_down",
-            "camera_set_position_y_end");
+        if (!IsZeroConstant(args[1]))
+        {
+            EmitCameraSetAxisPosition(
+                args[1],
+                CameraYLowAddress,
+                () => EmitCameraMoveUpStep(config),
+                () => EmitCameraMoveDownStep(config),
+                "camera_set_position_down",
+                "camera_set_position_y_end");
+        }
     }
 
     private void EmitCameraApply(FunctionCall call)
@@ -2224,6 +2231,25 @@ internal sealed class GameBoyRuntimeCompiler
         var worldMap = WorldMapForFlagQuery(callName);
         var outOfBoundsLabel = builder.CreateLabel("world_tile_flags_oob");
         var endLabel = builder.CreateLabel("world_tile_flags_end");
+        if (TryConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitWorldPixelToTileCoordinate(worldX, worldXOffset);
+            builder.CompareImmediate(worldMap.Width);
+            builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(outOfBoundsLabel);
+            builder.LoadAImmediate(0);
+            builder.Label(endLabel);
+            return;
+        }
 
         EmitWorldPixelToTileCoordinate(worldX, worldXOffset);
         builder.CompareImmediate(worldMap.Width);
@@ -2792,6 +2818,11 @@ internal sealed class GameBoyRuntimeCompiler
 
         value = 0;
         return false;
+    }
+
+    private bool IsZeroConstant(ExpressionSyntax expression)
+    {
+        return TryConst(expression, out var value) && value == 0;
     }
 
     private void EmitRuntimeIndexedAddressToHl(string baseIdentifier, ExpressionSyntax index)
