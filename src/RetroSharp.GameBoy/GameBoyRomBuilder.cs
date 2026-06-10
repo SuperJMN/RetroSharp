@@ -883,6 +883,7 @@ internal sealed class GameBoyRuntimeCompiler
             case "world_column":
             case "world_flags":
             case "world_map":
+            case "world_load":
             case "sprite_asset":
                 break;
             case "animation_clip":

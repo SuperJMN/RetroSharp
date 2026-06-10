@@ -113,6 +113,9 @@ internal static class GameBoySdkOperationCollector
                 case "hud_set_tile":
                     CollectHudSetTile(call);
                     break;
+                case "world_load":
+                    GameBoyVideoProgram.RequireArity(call, 1);
+                    break;
                 default:
                     CollectCallArguments(call);
                     CollectUserFunction(call);

@@ -1,0 +1,15 @@
+{
+  "type": "tileset",
+  "version": "1.10",
+  "tiledversion": "1.10.2",
+  "name": "runner-tiles",
+  "tilewidth": 8,
+  "tileheight": 8,
+  "spacing": 0,
+  "margin": 0,
+  "tilecount": 6,
+  "columns": 6,
+  "image": "runner-tiles.png",
+  "imagewidth": 48,
+  "imageheight": 8
+}

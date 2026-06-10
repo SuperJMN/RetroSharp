@@ -218,6 +218,9 @@ internal sealed class GameBoyVideoProgram
                 case "world_map":
                     ApplyWorldMap(call);
                     break;
+                case "world_load":
+                    ApplyWorldLoad(call);
+                    break;
                 case "sprite_asset":
                     ApplySpriteAsset(call);
                     break;
@@ -441,10 +444,70 @@ internal sealed class GameBoyVideoProgram
             }
         }
 
-        WorldMap = new WorldMap2D(width, height, tileIds, tileFlags);
-        GenerateMapColumnsFromWorldMap(WorldMap);
-        GenerateMapFlagColumnsFromWorldMap(WorldMap);
-        ApplyWorldMapToTileMap(WorldMap, streamY);
+        UseWorldMap(new WorldMap2D(width, height, tileIds, tileFlags), streamY);
+    }
+
+    private void ApplyWorldLoad(FunctionCall call)
+    {
+        RequireArity(call, 1);
+        var relativePath = StringArg(call, 0);
+        var map = GameBoyTiledMapImporter.Load(ResolveAssetPath(relativePath));
+
+        ApplyBackgroundTiles(map);
+        var worldMap = new WorldMap2D(map.Width, map.Height, map.WorldTileIds, map.WorldFlags);
+        PopulateWorldColumnsFromWorldMap(worldMap);
+        UseWorldMap(worldMap, map.StreamY);
+    }
+
+    private void UseWorldMap(WorldMap2D worldMap, int streamY)
+    {
+        WorldMap = worldMap;
+        GenerateMapColumnsFromWorldMap(worldMap);
+        GenerateMapFlagColumnsFromWorldMap(worldMap);
+        ApplyWorldMapToTileMap(worldMap, streamY);
+    }
+
+    private void PopulateWorldColumnsFromWorldMap(WorldMap2D worldMap)
+    {
+        WorldColumns.Clear();
+        WorldColumnHeight = worldMap.Height;
+        WorldFlagColumns.Clear();
+        WorldFlagColumnHeight = worldMap.Height;
+
+        for (var x = 0; x < worldMap.Width; x++)
+        {
+            var tiles = new byte[worldMap.Height];
+            var flags = new WorldTileFlags[worldMap.Height];
+            for (var y = 0; y < worldMap.Height; y++)
+            {
+                tiles[y] = CheckedByteTileId(worldMap.TileIdAt(x, y), x, y);
+                flags[y] = worldMap.FlagsAt(x, y);
+            }
+
+            WorldColumns[x] = tiles;
+            WorldFlagColumns[x] = flags;
+        }
+    }
+
+    private void ApplyBackgroundTiles(GameBoyTiledMap map)
+    {
+        if (map.BackgroundTileIds is null)
+        {
+            return;
+        }
+
+        if (map.BackgroundHeight > 32)
+        {
+            throw new InvalidOperationException("Tiled background layer exceeds the Game Boy background tilemap height.");
+        }
+
+        for (var y = 0; y < map.BackgroundHeight; y++)
+        {
+            for (var x = 0; x < 32; x++)
+            {
+                SetTile(x, y, map.BackgroundTileIds[y * map.BackgroundWidth + x % map.BackgroundWidth]);
+            }
+        }
     }
 
     private (int Index, byte[] Tiles) ParseColumnData(FunctionCall call)

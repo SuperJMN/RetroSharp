@@ -126,6 +126,7 @@ Static setup calls:
 - `world.Flags(index, flags0, flags1, ...)`
 - `map_column(index, tile0, tile1, ...)`
 - `world.Map(width, streamY, height)`
+- `world.Load(path)`
 - `hud.SetTile(window, x, y, tile)`
 - `tilemap.Set(x, y, tile)`
 - `tilemap.Fill(x, y, width, height, tile)`
@@ -174,13 +175,15 @@ Runtime calls:
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
-`world.Column(index, ...)` defines one source-level world tile-id column. `world.Flags(index, ...)` defines the matching collision flag column using `0` for `Empty`, `1` for `Solid`, `2` for `Hazard`, and `4` for `Platform`; flag values can be combined. `world.Map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming and collision flag reads. The Game Boy runner uses this path so the starting scene, streamed terrain, and collision flags share one source.
+`world.Column(index, ...)` defines one source-level world tile-id column. `world.Flags(index, ...)` defines the matching collision flag column using `0` for `Empty`, `1` for `Solid`, `2` for `Hazard`, and `4` for `Platform`; flag values can be combined. `world.Map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming and collision flag reads.
 
-`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world.Column(...)` and `world.Flags(...)` so visual setup, streaming data, and collision flags can share the same world resource.
+`world.Load(path)` imports a finite orthogonal Tiled JSON map (`.tmj`) at compile time and builds the same `WorldMap2D`, source-map ROM rows, collision flags, and initial Game Boy background tilemap. The current importer expects 8x8 tiles, one tileset with `firstgid` 1, unencoded JSON array tile-layer data, a required `world` tile layer, an optional `background` tile layer, and an optional `collision` tile layer. Tiled GIDs on `background` and `world` layers map to Game Boy tile ids by subtracting `firstgid`; GID `0` remains empty. The `collision` layer stores flag values directly: `0` empty, `1` solid, `2` hazard, and `4` platform. The map must include integer custom property `retrosharpStreamY`; optional `retrosharpWorldY` and `retrosharpWorldHeight` properties select the source rows used by the streaming world.
+
+`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world.Load(...)` for editable maps, or `world.Column(...)` plus `world.Flags(...)` for compact source-authored maps, so visual setup, streaming data, and collision flags can share the same world resource.
 
 `map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. `map_flags_at(sourceColumn, row)` reads the generated collision flag byte for the same source coordinate. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_flags_at(column, 2) != 0) { ... }`.
 
-`world_tile_flags_at(worldX, worldY)` reads collision flags by world pixel coordinates. The Game Boy lowering divides each byte-backed coordinate by the 8x8 tile size, reads the generated world flag row table, and returns `0` when the coordinate falls outside the active `world.Map(...)`. The language syntax intentionally omits a `level` argument while this prototype has one active world map; the SDK operation still records `WorldId = "default"` as the future extension point for named maps.
+`world_tile_flags_at(worldX, worldY)` reads collision flags by world pixel coordinates. The Game Boy lowering divides each byte-backed coordinate by the 8x8 tile size, reads the generated world flag row table, and returns `0` when the coordinate falls outside the active world map from `world.Map(...)` or `world.Load(...)`. The language syntax intentionally omits a `level` argument while this prototype has one active world map; the SDK operation still records `WorldId = "default"` as the future extension point for named maps.
 
 `collision_aabb_tiles(x, y, width, height, flags)` returns `1` when any world tile overlapped by the pixel AABB has one of the requested flag bits, otherwise `0`. Width and height are compile-time values in this prototype, with `sprite_width(name)` accepted as a static width source. Zero width, zero height, or a zero flag mask returns `0`. This helper only reports overlap; actor movement and collision resolution remain source-level policy.
 
@@ -321,7 +324,7 @@ Landed after the first HUD pass:
 Landed after the richer runner scene pass:
 
 - The runner background now uses purpose-built built-in tiles for clouds, distant hills, hazards, ground tops, and bricks while keeping sprite tile indices stable.
-- The runner combines static decorative `tilemap.Set(...)` background placement with a compact streamable `world.Map(...)` for playable platforms, holes, ground, and hazard flags so the runtime still fits in the current 32 KiB ROM-only target.
+- The runner imports `samples/gameboy-runner/maps/runner.tmj` with `world.Load(...)`, combining editable decorative background tiles, streamable terrain, and collision flags while keeping the runtime inside the current 32 KiB ROM-only target.
 - `samples/gameboy-runner/assets/enemy-slug.gb.png` adds an original two-frame logical enemy sprite. The runner draws one patrolling ground enemy and one raised-platform enemy in the VBlank presentation block.
 - The ground enemy has simple screen-space contact reset logic, while platform, ground, and hazard collision remain world-flag probes.
 

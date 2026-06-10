@@ -31,6 +31,7 @@ Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`
 | `world.Column(index, tile0, tile1, ...)` | Define one source-level world column of tile ids. |
 | `world.Flags(index, flags0, flags1, ...)` | Define matching tile collision flags for a world column. |
 | `world.Map(width, streamY, height)` | Build the active `WorldMap2D` resource from declared columns and flags. |
+| `world.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `world_tile_flags_at(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
 
@@ -79,7 +80,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` bef
 | Diagonal camera movement | Combined row plus column write budget must fit one frame or fail explicitly. |
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
-| Collision | `world.Map(...)` data and matching flag rows must exist before runtime collision reads. |
+| Collision | `world.Map(...)` or `world.Load(...)` data and matching flag rows must exist before runtime collision reads. |
 | HUD | Requested `HudMode` must be declared by the target, except `none`, which is always accepted as disabled HUD. |
 
 ## Target Support
@@ -87,7 +88,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` bef
 | API group | Game Boy | NES |
 | --- | --- | --- |
 | Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
-| World map setup | Supported. `world.Map(...)` builds initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial visible nametable setup. Runtime streaming is not implemented. |
+| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial visible nametable setup. Runtime streaming is not implemented. |
 | Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`. |
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for JSON assets with `platforms.nes.frames` in the current spike. |
