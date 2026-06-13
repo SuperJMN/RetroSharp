@@ -90,6 +90,16 @@ public static class Sdk2DOperationValidator
 
     private static void RequireCameraMovementBudget(Target2DCapabilities capabilities, ScrollAxes axes)
     {
+        // Targets that cannot write background tiles at runtime do not stream while
+        // scrolling: they fine-scroll the viewport within a pre-loaded background buffer
+        // (for example NES with no runtime column streaming), so a camera position set
+        // costs no background tile writes. Streaming targets must still fit the per-frame
+        // budget for the new column/row revealed by the move.
+        if (capabilities.MaxBackgroundTileWritesPerFrame == 0)
+        {
+            return;
+        }
+
         var columnWrites = axes.HasFlag(ScrollAxes.Horizontal) ? capabilities.ScreenTiles.Height : 0;
         var rowWrites = axes.HasFlag(ScrollAxes.Vertical) ? capabilities.ScreenTiles.Width : 0;
         var requiredWrites = columnWrites + rowWrites;

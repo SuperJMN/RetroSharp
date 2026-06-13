@@ -83,7 +83,7 @@ public sealed class Sdk2DOperationTests
     }
 
     [Fact]
-    public void Validator_rejects_diagonal_camera_movement_when_combined_streaming_exceeds_budget()
+    public void Validator_rejects_diagonal_camera_movement_on_streaming_target_when_combined_streaming_exceeds_budget()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
             Sdk2DOperationValidator.Validate(
@@ -95,6 +95,33 @@ public sealed class Sdk2DOperationTests
 
         Assert.Equal(
             "Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Validator_accepts_horizontal_fine_scroll_camera_on_target_without_streaming_budget()
+    {
+        var fineScrollOnlyTarget = FullCapabilities() with
+        {
+            ScrollAxes = ScrollAxes.Horizontal,
+            MaxBackgroundTileWritesPerFrame = 0,
+        };
+
+        Sdk2DOperationValidator.Validate(
+            fineScrollOnlyTarget,
+            new Sdk2DOperation.SetCameraPosition(X: 32, Y: 0, Axes: ScrollAxes.Horizontal));
+    }
+
+    [Fact]
+    public void Validator_rejects_stream_map_column_when_height_exceeds_budget()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                FullCapabilities(),
+                new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 21)));
+
+        Assert.Equal(
+            "Target 'gb' supports 20 background tile writes per frame, but 21 are required for streaming a visible map column.",
             exception.Message);
     }
 
