@@ -81,6 +81,10 @@ internal sealed class GameBoyVideoProgram
 
     public int MapFlagColumnHeight { get; private set; }
 
+    public SortedDictionary<int, byte[]> BackgroundColumns { get; } = [];
+
+    public int BackgroundStreamHeight { get; private set; }
+
     public SortedDictionary<int, byte[]> WorldColumns { get; } = [];
 
     public int WorldColumnHeight { get; private set; }
@@ -462,6 +466,7 @@ internal sealed class GameBoyVideoProgram
         AppendGeneratedBackgroundTileData(map.GeneratedTileData);
 
         ApplyBackgroundTiles(map);
+        PopulateBackgroundStreamRows(map);
         var worldMap = new WorldMap2D(map.Width, map.Height, map.WorldTileIds, map.WorldFlags);
         PopulateWorldColumnsFromWorldMap(worldMap);
         UseWorldMap(worldMap, map.StreamY);
@@ -522,6 +527,34 @@ internal sealed class GameBoyVideoProgram
                 SetTile(x, targetY, map.BackgroundTileIds[y * map.BackgroundWidth + x % map.BackgroundWidth]);
             }
         }
+    }
+
+    private void PopulateBackgroundStreamRows(GameBoyTiledMap map)
+    {
+        BackgroundColumns.Clear();
+        BackgroundStreamHeight = 0;
+
+        if (map.BackgroundTileIds is null || map.StreamY <= 0)
+        {
+            return;
+        }
+
+        var height = map.StreamY;
+        for (var x = 0; x < map.BackgroundWidth; x++)
+        {
+            var tiles = new byte[height];
+            for (var row = 0; row < height; row++)
+            {
+                var backgroundY = row + map.BackgroundOffsetY;
+                tiles[row] = backgroundY >= 0 && backgroundY < map.BackgroundHeight
+                    ? map.BackgroundTileIds[backgroundY * map.BackgroundWidth + x]
+                    : (byte)0;
+            }
+
+            BackgroundColumns[x] = tiles;
+        }
+
+        BackgroundStreamHeight = height;
     }
 
     private (int Index, byte[] Tiles) ParseColumnData(FunctionCall call)

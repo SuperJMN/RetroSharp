@@ -3281,6 +3281,125 @@ public class GameBoyRomCompilerTests
         Assert.Equal(0, program.TileMap[3 * 32 + 1]);
         Assert.Equal(7, program.MapColumns[0][1]);
         Assert.Equal(0, program.MapColumns[1][1]);
+
+        Assert.Equal(2, program.BackgroundStreamHeight);
+        for (var column = 0; column < 3; column++)
+        {
+            for (var row = 0; row < program.BackgroundStreamHeight; row++)
+            {
+                Assert.Equal(program.TileMap[row * 32 + column], program.BackgroundColumns[column][row]);
+            }
+        }
+    }
+
+    [Fact]
+    public void Camera_streams_background_rows_above_the_world_band_when_scrolling_horizontally()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        WriteTiledTilesheetPng(directory, "runner.png", 8, 8, 1, 2, 3);
+        File.WriteAllText(
+            Path.Combine(directory, "runner.tsj"),
+            """
+            {
+              "type": "tileset",
+              "version": "1.10",
+              "tiledversion": "1.12.2",
+              "name": "runner",
+              "tilewidth": 8,
+              "tileheight": 8,
+              "spacing": 0,
+              "margin": 0,
+              "tilecount": 3,
+              "columns": 3,
+              "image": "runner.png",
+              "imagewidth": 24,
+              "imageheight": 8
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tmj"),
+            """
+            {
+              "type": "map",
+              "version": "1.10",
+              "tiledversion": "1.10.2",
+              "orientation": "orthogonal",
+              "renderorder": "right-down",
+              "width": 3,
+              "height": 6,
+              "tilewidth": 8,
+              "tileheight": 8,
+              "infinite": false,
+              "properties": [
+                { "name": "retrosharpStreamY", "type": "int", "value": 2 },
+                { "name": "retrosharpWorldY", "type": "int", "value": 3 },
+                { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+              ],
+              "layers": [
+                {
+                  "id": 1,
+                  "name": "background",
+                  "type": "tilelayer",
+                  "width": 3,
+                  "height": 6,
+                  "visible": true,
+                  "opacity": 1,
+                  "x": 0,
+                  "y": 0,
+                  "data": [0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0]
+                },
+                {
+                  "id": 2,
+                  "name": "world",
+                  "type": "tilelayer",
+                  "width": 3,
+                  "height": 6,
+                  "visible": true,
+                  "opacity": 1,
+                  "x": 0,
+                  "y": 0,
+                  "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0]
+                }
+              ],
+              "tilesets": [
+                { "firstgid": 1, "source": "runner.tsj" }
+              ]
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  world.Load("level.tmj");
+                                  camera.Init(3, 2, 2);
+                                  loop {
+                                      camera.SetPosition(1, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+
+        // The world band starts at GB row 2 (0x9840). The background region above the band
+        // (GB rows 0..1) must also stream when scrolling, writing GB row 0 at 0x9800.
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0xE4, 0xC0, 0xC6, 0x00, 0x6F, 0x26, 0x98]),
+            "camera_move_right should also stream the background row above the band into GB row 0 (0x9800).");
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x00, 0x6F, 0x26, 0x98]),
+            "camera_move_left should also stream the background row above the band into GB row 0 (0x9800).");
+
+        // The streaming runs late in the frame (after input, physics, collision), so it must
+        // first wait for VBlank (LY >= 144) before touching the background tilemap, otherwise
+        // the writes race active display and tear the top background rows while scrolling.
+        // The gate (LDH A,($44); CP $90; JR C,-6) must sit immediately before the band column
+        // load (LD A,($C0E6) for the right step, LD A,($C0E7) for the left step).
+        Assert.True(
+            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE6, 0xC0]),
+            "camera_move_right should wait for VBlank before streaming the next column into the background tilemap.");
+        Assert.True(
+            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE7, 0xC0]),
+            "camera_move_left should wait for VBlank before streaming the next column into the background tilemap.");
     }
 
     [Fact]

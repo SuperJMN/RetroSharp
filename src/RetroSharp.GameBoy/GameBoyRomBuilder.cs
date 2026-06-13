@@ -129,6 +129,16 @@ internal static class GameBoyRomBuilder
             }
         }
 
+        for (var row = 0; row < program.BackgroundStreamHeight; row++)
+        {
+            builder.Label(BackgroundRowLabel(row));
+            for (var column = 0; column < columnCount; column++)
+            {
+                var tile = program.BackgroundColumns.TryGetValue(column, out var tiles) ? tiles[row] : (byte)0;
+                builder.Emit(tile);
+            }
+        }
+
         if (program.MapFlagColumnHeight == 0)
         {
             return;
@@ -147,6 +157,8 @@ internal static class GameBoyRomBuilder
     }
 
     internal static string MapRowLabel(int row) => $"map_row_{row}";
+
+    internal static string BackgroundRowLabel(int row) => $"background_stream_row_{row}";
 
     internal static string MapFlagRowLabel(int row) => $"map_flags_row_{row}";
 
@@ -1409,7 +1421,9 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineXAddress);
+        EmitWaitForVBlankBeforeStream();
         EmitMapStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress, config.StreamY, config.StreamHeight);
+        EmitBackgroundStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress);
         EmitIncrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitIncrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
         EmitIncrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
@@ -1439,7 +1453,9 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(7);
         builder.StoreA(CameraFineXAddress);
+        EmitWaitForVBlankBeforeStream();
         EmitMapStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress, config.StreamY, config.StreamHeight);
+        EmitBackgroundStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress);
         EmitDecrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitDecrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
         EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
@@ -1462,6 +1478,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineYAddress);
+        EmitWaitForVBlankBeforeStream();
         EmitMapStreamRowFromSourceRowAddress(CameraBottomBackgroundRowAddress, CameraBottomSourceRowAddress, config);
         EmitIncrementAddressModulo(CameraTopBackgroundRowAddress, 32);
         EmitIncrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
@@ -1484,6 +1501,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(7);
         builder.StoreA(CameraFineYAddress);
+        EmitWaitForVBlankBeforeStream();
         EmitDecrementAddressModulo(CameraTopBackgroundRowAddress, 32);
         EmitDecrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
         EmitDecrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
@@ -1493,14 +1511,33 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitWaitForVBlankBeforeStream()
+    {
+        // Camera tile streaming writes the background tilemap mid-frame, after input,
+        // physics, and collision have run. Without synchronization those writes race
+        // the PPU and tear the top background rows (e.g. floating blocks) while scrolling.
+        // Park the CPU until the PPU reaches VBlank so the whole column/row batch lands
+        // in a VRAM-accessible window.
+        var label = builder.CreateLabel("camera_stream_wait_vblank");
+        builder.Label(label);
+        builder.Emit(0xF0, 0x44);          // LDH A,($44)  ; A = LY
+        builder.Emit(0xFE, 0x90);          // CP $90        ; first VBlank line (144)
+        builder.JumpRelative(0x38, label); // JR C,label    ; wait while LY < 144 (active display)
+    }
+
     private void EmitMapStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, int y, int height)
+    {
+        EmitMapStreamColumnFromAddresses(targetColumnAddress, sourceColumnAddress, y, height, GameBoyRomBuilder.MapRowLabel);
+    }
+
+    private void EmitMapStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, int y, int height, Func<int, string> rowLabel)
     {
         for (var row = 0; row < height; row++)
         {
             builder.LoadA(sourceColumnAddress);
             builder.LoadEFromA();
             builder.LoadDImmediate(0);
-            builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
+            builder.LoadHl(rowLabel(row));
             builder.AddHlDe();
             builder.LoadAFromHl();
             builder.LoadBFromA();
@@ -1513,6 +1550,16 @@ internal sealed class GameBoyRuntimeCompiler
             builder.LoadAFromB();
             builder.StoreHlA();
         }
+    }
+
+    private void EmitBackgroundStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress)
+    {
+        if (program.BackgroundStreamHeight <= 0)
+        {
+            return;
+        }
+
+        EmitMapStreamColumnFromAddresses(targetColumnAddress, sourceColumnAddress, 0, program.BackgroundStreamHeight, GameBoyRomBuilder.BackgroundRowLabel);
     }
 
     private void EmitMapStreamRowFromSourceRowAddress(ushort targetRowAddress, ushort sourceRowAddress, CameraConfig config)
