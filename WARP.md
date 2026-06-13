@@ -2,6 +2,8 @@
 
 This file provides guidance to WARP (warp.dev) when working with code in this repository.
 
+Generic AI CLI agents should read `AGENTS.md` first. `docs/AgentContext.md` contains memory-derived project context, known traps, recent changes, and reliable validation commands.
+
 Repository type: .NET 10 multi-project solution (C#) for RetroSharp - a modern C#-like language that compiles to 8-bit architectures. The original compiler path emits intermediate 3-address code and targets Zilog Z80. Experimental cartridge targets also emit NES iNES and Game Boy ROMs from a constrained video/runtime subset.
 
 Common commands
@@ -9,21 +11,24 @@ Common commands
   - Debug: dotnet build RetroSharp.sln -c Debug
   - Release: dotnet build RetroSharp.sln -c Release
 - Run all tests (xUnit)
-  - dotnet test RetroSharp.sln -c Debug --no-build
+  - dotnet test RetroSharp.sln -m:1
 - Run tests for a single project
   - dotnet test src/RetroSharp.Parser.Tests/RetroSharp.Parser.Tests.csproj -c Debug --no-build
 - Run a single test
   - By fully-qualified name: dotnet test --filter "FullyQualifiedName~Namespace.ClassName.MethodName"
   - By class: dotnet test --filter "ClassName=Namespace.ClassName"
-- Code formatting/linting (uses .NET analyzers/formatting)
-  - Fix: dotnet format RetroSharp.sln
-  - Check only (CI-friendly): dotnet format RetroSharp.sln --verify-no-changes
+- Code formatting/linting
+  - Whitespace check: git diff --check
+  - Prefer targeted `dotnet format` includes for touched files; whole-solution format verification can be noisy because of older or vendored whitespace debt.
 - Run the CLI (compile a source file and print IL and Z80 assembly)
   - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- path/to/source.rs
 - Build sample cartridges
   - NES: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/nes-drawing/drawing.nes samples/nes-drawing/drawing.rs
   - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-drawing/drawing.gb samples/gameboy-drawing/drawing.rs
   - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-runner/runner.gb samples/gameboy-runner/runner.rs
+- Regenerate tracked Game Boy sample ROMs
+  - tools/gameboy/generate_sample_roms.py --dry-run
+  - tools/gameboy/generate_sample_roms.py
 - Optional: collect coverage (coverlet collector is referenced in test projects)
   - dotnet test RetroSharp.sln --collect "XPlat Code Coverage"
 
@@ -65,6 +70,8 @@ The solution started as a classic compiler pipeline with clear stage separation 
 
 Game Boy planning
 - `docs/GameBoyTarget.md` is the source of truth for the currently supported subset and short-term checklist. Keep it updated when adding runtime intrinsics or raising the supported language surface.
+- `docs/AgentContext.md` records recent Game Boy runner lessons, Tiled map pipeline behavior, validation expectations, and publication proof conventions for agents.
+- `docs/GameBoyRunnerDebugging.md` documents the normal runner-first debugging workflow, including diagnostic samples, emulator cross-checks, and layer selection.
 
 - External projects included in the solution
   - libs/Z80DotNet/*: Z80 processor simulator and tests (e.g., Zexall). Used as a real-world Z80 reference/executor for validation.

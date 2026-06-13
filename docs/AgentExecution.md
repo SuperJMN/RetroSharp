@@ -1,13 +1,17 @@
 # Autonomous Agent Execution
 
 Status: operational guide.
-Last updated: 2026-06-08.
+Last updated: 2026-06-13.
 
 This document explains how to turn `docs/ArchitectureRoadmap.md` into GitHub milestones, labels, and issues that agents can execute with minimal coordination overhead.
+
+For generic repo orientation, read `../AGENTS.md` first. For memory-derived context, known traps, recent changes, and validation commands, read `AgentContext.md`.
 
 ## Source Of Truth
 
 - Architecture and task backlog: `docs/ArchitectureRoadmap.md`
+- Agent entrypoint: `AGENTS.md`
+- Agent memory/context: `docs/AgentContext.md`
 - Issue seeding script: `tools/roadmap/seed_github_issues.py`
 - Issue template: `.github/ISSUE_TEMPLATE/agent-roadmap-task.yml`
 - Pull request template: `.github/PULL_REQUEST_TEMPLATE.md`

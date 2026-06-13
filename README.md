@@ -47,8 +47,8 @@ Right now, RetroSharp can compile simple programs with:
 Example program:
 ```csharp
 i16 main()
-{ 
-    return 2 * 3 * 4; 
+{
+    return 2 * 3 * 4;
 }
 ```
 
@@ -102,5 +102,9 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 ```
 
 The sample sources have been migrated to the current language surface: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `let` for immutable frame-local values, `inline`/`pure` helper contracts, SDK dot-calls, restricted static classes and receiver methods where they clarify ownership, `switch` expressions, pipelines, `loop` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
+
+## AI agent orientation
+
+AI CLI agents should start with `AGENTS.md`. `llms.txt` provides a compact index, and `docs/AgentContext.md` preserves recent project memory, known traps, reliable commands, and publication expectations.
 
 See `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.

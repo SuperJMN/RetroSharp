@@ -1,0 +1,48 @@
+# RetroSharp
+> A small C#-like language and compiler for 8-bit targets, with classic Z80 output and experimental NES/Game Boy ROM targets.
+
+## Agent Entry Points
+- [AGENTS.md](AGENTS.md): generic AI CLI agent rules, read order, validation, and publication workflow.
+- [docs/AgentContext.md](docs/AgentContext.md): memory-derived project context, known traps, recent changes, and reliable commands.
+- [WARP.md](WARP.md): Warp-specific repository guide.
+- [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.
+
+## Core Documentation
+- [README.md](README.md): project overview and examples.
+- [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
+- [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
+- [docs/RetroSharp.Language.md](docs/RetroSharp.Language.md): language surface.
+- [docs/GameBoyTarget.md](docs/GameBoyTarget.md): current Game Boy target subset and runner milestones.
+- [docs/GameBoyRunnerDebugging.md](docs/GameBoyRunnerDebugging.md): normal debugging workflow with the Game Boy runner as GB test app.
+- [docs/NesTarget.md](docs/NesTarget.md): current NES target subset.
+- [samples/README.md](samples/README.md): sample classification and ROM regeneration.
+- [samples/manifest.json](samples/manifest.json): machine-readable sample metadata.
+
+## Core Source Paths
+- [src/RetroSharp.Cli/Program.cs](src/RetroSharp.Cli/Program.cs): CLI option parsing and target dispatch.
+- [src/RetroSharp.Core/](src/RetroSharp.Core/): shared compiler/SDK concepts.
+- [src/RetroSharp.GameBoy/](src/RetroSharp.GameBoy/): direct Game Boy ROM compiler and runtime lowering.
+- [src/RetroSharp.NES/](src/RetroSharp.NES/): direct NES ROM compiler and runtime lowering.
+- [src/RetroSharp.Parser/](src/RetroSharp.Parser/): parser.
+- [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
+- [src/RetroSharp.Z80/](src/RetroSharp.Z80/): Z80 backend.
+- [samples/gameboy-runner/runner.rs](samples/gameboy-runner/runner.rs): current Game Boy target-acceptance sample.
+- [samples/gameboy-runner/maps/runner.tmj](samples/gameboy-runner/maps/runner.tmj): editable Tiled runner map.
+- [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked Game Boy sample ROM regeneration script.
+
+## Reliable Commands
+```bash
+git status --short --branch
+git submodule status --recursive
+git diff --check
+dotnet test RetroSharp.sln -m:1
+tools/gameboy/generate_sample_roms.py --dry-run
+tools/gameboy/generate_sample_roms.py
+PYTHONPATH=/tmp/retrosharp-pyboy-site python3 tools/gameboy/runner_diagnostics.py
+```
+
+## Key Concepts
+- Keep language, portable 2D SDK, and target intrinsics separate.
+- Portable SDK calls must be checked against target capabilities before lowering.
+- Game Boy runner behavior is important acceptance evidence, but target-acceptance samples are not automatically portable SDK evidence.
+- High-level syntax must remain zero-cost: no heap, GC, RTTI, boxing, closures, delegates, or virtual dispatch.
