@@ -364,6 +364,26 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Explicit_cast_of_constant_exceeding_target_bit_width_is_rejected()
+    {
+        Errors("void main(){ u8 narrowed = (u8)300; }")
+            .Should().ContainMatch("*does not fit target type 'u8'*");
+    }
+
+    [Fact]
+    public void Explicit_cast_of_negative_constant_below_target_bit_width_is_rejected()
+    {
+        Errors("void main(){ u8 narrowed = (u8)-200; }")
+            .Should().ContainMatch("*does not fit target type 'u8'*");
+    }
+
+    [Fact]
+    public void Explicit_cast_of_bit_pattern_constant_within_target_width_is_allowed()
+    {
+        Errors("void main(){ i8 value = (i8)200; }").Should().BeEmpty();
+    }
+
+    [Fact]
     public void Increment_and_decrement_resolve_declared_lvalue()
     {
         var input = "void main(){ u8 x = 1; x++; x--; }";

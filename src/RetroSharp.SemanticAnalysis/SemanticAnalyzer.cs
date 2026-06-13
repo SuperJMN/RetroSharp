@@ -647,13 +647,61 @@ public class SemanticAnalyzer
     private AnalyzeResult<ExpressionNode> AnalyzeCastExpression(CastSyntax castExpression, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
         var expression = AnalyzeExpression(castExpression.Expression, scope, types, functions);
-        var errors = TrySizeOfType(castExpression.Type, types, out _)
-            ? []
-            : new[] { $"Cannot cast to unknown type '{castExpression.Type}'" };
+        var errors = new List<string>();
+        if (!TrySizeOfType(castExpression.Type, types, out _))
+        {
+            errors.Add($"Cannot cast to unknown type '{castExpression.Type}'");
+        }
+        else if (TryEvaluateConstantInteger(castExpression.Expression, out var constantValue)
+                 && TryGetIntegerTypeBitRange(castExpression.Type, out var min, out var max)
+                 && (constantValue < min || constantValue > max))
+        {
+            errors.Add($"Constant {constantValue} does not fit target type '{castExpression.Type}' (allowed {min}..{max})");
+        }
+
         return new AnalyzeResult<ExpressionNode>(new CastExpressionNode(castExpression.Type, expression.Node)
         {
             Errors = errors
         }, scope);
+    }
+
+    private static bool TryEvaluateConstantInteger(ExpressionSyntax expression, out int value)
+    {
+        switch (expression)
+        {
+            case ConstantSyntax constant:
+                return IntegerLiteral.TryParse(Convert.ToString(constant.Value), out value);
+            case UnaryExpressionSyntax { OperatorSymbol: "-", Operand: var operand }
+                when TryEvaluateConstantInteger(operand, out var inner):
+                value = -inner;
+                return true;
+            case UnaryExpressionSyntax { OperatorSymbol: "+", Operand: var operand }:
+                return TryEvaluateConstantInteger(operand, out value);
+            default:
+                value = 0;
+                return false;
+        }
+    }
+
+    private static bool TryGetIntegerTypeBitRange(string type, out int min, out int max)
+    {
+        switch (type)
+        {
+            case "u8":
+            case "i8":
+                min = sbyte.MinValue;
+                max = byte.MaxValue;
+                return true;
+            case "u16":
+            case "i16":
+                min = short.MinValue;
+                max = ushort.MaxValue;
+                return true;
+            default:
+                min = 0;
+                max = 0;
+                return false;
+        }
     }
 
     private AnalyzeResult<ExpressionNode> AnalyzeAssignmentExpression(AssignmentSyntax assignment, Scope scope, IReadOnlyDictionary<string, SymbolType> types)

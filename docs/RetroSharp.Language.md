@@ -44,6 +44,7 @@ Literals:
 - Without suffix, the default can be target-defined (e.g., u16).
 - Minimize implicit promotions; require explicit casts when width/sign changes.
 - Explicit casts use `(type)expr`. In the current cartridge targets they are validated against byte-backed local types and then lower as zero-cost expression markers: they do not add helper calls, temporaries, sign extension, or truncation code in this prototype.
+- Casting a compile-time integer constant (or negated constant) to `u8`/`i8`/`u16`/`i16` is a semantic error when the value does not fit the target type's bit width (allowed `-128..255` for 8-bit, `-32768..65535` for 16-bit). Bit-pattern casts that fit the width, such as `(i8)200`, remain allowed; runtime-valued casts are unchecked.
 
 ---
 
