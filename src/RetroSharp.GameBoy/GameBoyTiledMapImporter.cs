@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using System.Xml.Linq;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Sdk.Tiled;
 
 namespace RetroSharp.GameBoy;
 
@@ -108,7 +109,7 @@ internal static class GameBoyTiledMapImporter
                 var tileIds = resolver.TileIdsFromTiledGid(worldData[sourceIndex], tileScaleX, tileScaleY, context);
                 var flags = collisionData is null
                     ? resolver.FlagsFromTiledGid(worldData[sourceIndex], $"{displayName} world layer tile ({x}, {sourceY})")
-                    : FlagsFromCollisionGid(collisionData[sourceIndex], $"{displayName} collision layer tile ({x}, {sourceY})");
+                    : TiledCollisionFlags.FlagsFromCollisionGid(collisionData[sourceIndex], $"{displayName} collision layer tile ({x}, {sourceY})");
 
                 for (var tileY = 0; tileY < tileScaleY; tileY++)
                 {
@@ -274,18 +275,6 @@ internal static class GameBoyTiledMapImporter
         return result;
     }
 
-    private static WorldTileFlags FlagsFromCollisionGid(uint gid, string context)
-    {
-        var cleanGid = CleanTiledGid(gid, context);
-        var allowedFlags = (uint)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
-        if ((cleanGid & ~allowedFlags) != 0)
-        {
-            throw new InvalidOperationException($"{context} contains unsupported collision flag bits.");
-        }
-
-        return (WorldTileFlags)cleanGid;
-    }
-
     private static uint CleanTiledGid(uint gid, string context)
     {
         if ((gid & TiledFlipFlagsMask) != 0)
@@ -434,7 +423,7 @@ internal static class GameBoyTiledMapImporter
             ValidateTileSize(tileWidth, tileHeight, displayName, name);
 
             var image = LoadImage(StringPropertyOrDefault(root, "image", ""), baseDirectory);
-            return new TiledTileset(firstGid, name, tileWidth, tileHeight, tileCount, columns, image, ReadJsonTileFlags(root));
+            return new TiledTileset(firstGid, name, tileWidth, tileHeight, tileCount, columns, image, TiledCollisionFlags.ReadJsonTileFlags(root));
         }
 
         public IReadOnlyList<byte[]> BuildGameBoyTiles(int localId, int tilesWide, int tilesHigh, string context)
@@ -519,7 +508,7 @@ internal static class GameBoyTiledMapImporter
 
             var imageSource = root.Element("image")?.Attribute("source")?.Value ?? "";
             var image = LoadImage(imageSource, baseDirectory);
-            return new TiledTileset(firstGid, name, tileWidth, tileHeight, tileCount, columns, image, ReadXmlTileFlags(root));
+            return new TiledTileset(firstGid, name, tileWidth, tileHeight, tileCount, columns, image, TiledCollisionFlags.ReadXmlTileFlags(root));
         }
 
         private static GameBoyPngImage? LoadImage(string imageSource, string baseDirectory)
@@ -538,195 +527,6 @@ internal static class GameBoyTiledMapImporter
             {
                 throw new InvalidOperationException($"Tiled map '{displayName}' tileset '{tilesetName}' must use tile sizes that are positive multiples of 8.");
             }
-        }
-
-        private static Dictionary<int, WorldTileFlags> ReadJsonTileFlags(JsonElement root)
-        {
-            var result = new Dictionary<int, WorldTileFlags>();
-            if (!root.TryGetProperty("tiles", out var tiles) || tiles.ValueKind != JsonValueKind.Array)
-            {
-                return result;
-            }
-
-            foreach (var tile in tiles.EnumerateArray())
-            {
-                var id = IntProperty(tile, "id", "tileset tile");
-                var flags = FlagsFromJsonProperties(tile);
-                if (flags == WorldTileFlags.Empty)
-                {
-                    flags = FlagsFromJsonObjectGroup(tile);
-                }
-
-                if (flags != WorldTileFlags.Empty)
-                {
-                    result[id] = flags;
-                }
-            }
-
-            return result;
-        }
-
-        private static Dictionary<int, WorldTileFlags> ReadXmlTileFlags(XElement root)
-        {
-            var result = new Dictionary<int, WorldTileFlags>();
-            foreach (var tile in root.Elements("tile"))
-            {
-                var id = PositiveIntAttribute(tile, "id", "tileset tile");
-                var flags = FlagsFromXmlProperties(tile);
-                if (flags == WorldTileFlags.Empty)
-                {
-                    flags = FlagsFromXmlObjectGroup(tile);
-                }
-
-                if (flags != WorldTileFlags.Empty)
-                {
-                    result[id] = flags;
-                }
-            }
-
-            return result;
-        }
-
-        private static WorldTileFlags FlagsFromJsonObjectGroup(JsonElement tile)
-        {
-            if (!tile.TryGetProperty("objectgroup", out var objectGroup) ||
-                !objectGroup.TryGetProperty("objects", out var objects) ||
-                objects.ValueKind != JsonValueKind.Array)
-            {
-                return WorldTileFlags.Empty;
-            }
-
-            var hasCollisionObject = false;
-            foreach (var obj in objects.EnumerateArray())
-            {
-                var explicitFlags = FlagsFromJsonProperties(obj);
-                if (explicitFlags != WorldTileFlags.Empty)
-                {
-                    return explicitFlags;
-                }
-
-                var width = NumberPropertyOrDefault(obj, "width", 0);
-                var height = NumberPropertyOrDefault(obj, "height", 0);
-                hasCollisionObject |= width > 0 && height > 0;
-            }
-
-            return hasCollisionObject ? WorldTileFlags.Solid : WorldTileFlags.Empty;
-        }
-
-        private static WorldTileFlags FlagsFromXmlObjectGroup(XElement tile)
-        {
-            var objectGroup = tile.Element("objectgroup");
-            if (objectGroup is null)
-            {
-                return WorldTileFlags.Empty;
-            }
-
-            var hasCollisionObject = false;
-            foreach (var obj in objectGroup.Elements("object"))
-            {
-                var explicitFlags = FlagsFromXmlProperties(obj);
-                if (explicitFlags != WorldTileFlags.Empty)
-                {
-                    return explicitFlags;
-                }
-
-                var width = NumberAttributeOrDefault(obj, "width", 0);
-                var height = NumberAttributeOrDefault(obj, "height", 0);
-                hasCollisionObject |= width > 0 && height > 0;
-            }
-
-            return hasCollisionObject ? WorldTileFlags.Solid : WorldTileFlags.Empty;
-        }
-
-        private static WorldTileFlags FlagsFromJsonProperties(JsonElement element)
-        {
-            if (!element.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array)
-            {
-                return WorldTileFlags.Empty;
-            }
-
-            foreach (var property in properties.EnumerateArray())
-            {
-                var name = StringPropertyOrDefault(property, "name", "");
-                if (!IsCollisionFlagProperty(name) || !property.TryGetProperty("value", out var value))
-                {
-                    continue;
-                }
-
-                return value.ValueKind switch
-                {
-                    JsonValueKind.Number when value.TryGetInt32(out var number) => CheckedWorldFlags(number, $"Tiled custom property '{name}'"),
-                    JsonValueKind.String => ParseWorldFlags(value.GetString() ?? "", $"Tiled custom property '{name}'"),
-                    _ => throw new InvalidOperationException($"Tiled custom property '{name}' must be a collision flag value."),
-                };
-            }
-
-            return WorldTileFlags.Empty;
-        }
-
-        private static WorldTileFlags FlagsFromXmlProperties(XElement element)
-        {
-            var properties = element.Element("properties");
-            if (properties is null)
-            {
-                return WorldTileFlags.Empty;
-            }
-
-            foreach (var property in properties.Elements("property"))
-            {
-                var name = AttributeOrDefault(property, "name", "");
-                if (!IsCollisionFlagProperty(name))
-                {
-                    continue;
-                }
-
-                var value = AttributeOrDefault(property, "value", property.Value);
-                return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number)
-                    ? CheckedWorldFlags(number, $"Tiled custom property '{name}'")
-                    : ParseWorldFlags(value, $"Tiled custom property '{name}'");
-            }
-
-            return WorldTileFlags.Empty;
-        }
-
-        private static bool IsCollisionFlagProperty(string name)
-        {
-            return name.Equals("retrosharpCollision", StringComparison.OrdinalIgnoreCase) ||
-                   name.Equals("retrosharpFlags", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static WorldTileFlags ParseWorldFlags(string value, string context)
-        {
-            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numeric))
-            {
-                return CheckedWorldFlags(numeric, context);
-            }
-
-            var result = WorldTileFlags.Empty;
-            foreach (var part in value.Split([',', '|', ';', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                result |= part.ToLowerInvariant() switch
-                {
-                    "none" or "empty" => WorldTileFlags.Empty,
-                    "solid" => WorldTileFlags.Solid,
-                    "hazard" => WorldTileFlags.Hazard,
-                    "platform" => WorldTileFlags.Platform,
-                    _ => throw new InvalidOperationException($"{context} contains unsupported collision flag '{part}'."),
-                };
-            }
-
-            return result;
-        }
-
-        private static WorldTileFlags CheckedWorldFlags(int value, string context)
-        {
-            var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
-            if (value < 0 || (value & ~allowedFlags) != 0)
-            {
-                throw new InvalidOperationException($"{context} contains unsupported collision flag bits.");
-            }
-
-            return (WorldTileFlags)value;
         }
 
         private static int QuantizedGameBoyColor(GameBoyPngImage image, int xStart, int xEnd, int yStart, int yEnd)
@@ -800,20 +600,6 @@ internal static class GameBoyTiledMapImporter
             }
 
             return value;
-        }
-
-        private static double NumberPropertyOrDefault(JsonElement element, string name, double fallback)
-        {
-            return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Number && property.TryGetDouble(out var value)
-                ? value
-                : fallback;
-        }
-
-        private static double NumberAttributeOrDefault(XElement element, string name, double fallback)
-        {
-            return double.TryParse(element.Attribute(name)?.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
-                ? value
-                : fallback;
         }
     }
 
