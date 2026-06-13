@@ -393,7 +393,7 @@ public class NesRomCompilerTests
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
-        Assert.Contains("Target 'nes' supports only horizontal camera_set_position(x, 0)", exception.Message);
+        Assert.Contains("Target 'nes' does not support vertical scrolling.", exception.Message);
     }
 
     [Fact]
@@ -1978,7 +1978,7 @@ public class NesRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
-        Assert.Contains("Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.", exception.Message);
+        Assert.Contains("Target 'nes' does not support vertical scrolling.", exception.Message);
     }
 
     private static string RepositoryFile(string relativePath)

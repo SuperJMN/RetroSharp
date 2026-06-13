@@ -27,7 +27,7 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Sprite transforms | Flip X and Flip Y hardware flags |
 | HUD modes | None declared portable support yet |
 
-The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented only for the current JSON logical sprite spike. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, so portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code.
+The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented only for the current JSON logical sprite spike. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, so portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code. NES compilation now runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement or HUD tiles) are rejected by the same capability checks the Game Boy target uses. Horizontal `camera.SetPosition(x, 0)` validates because NES fine-scrolls within its pre-loaded nametable without streaming background tiles.
 
 ## Supported Video API
 

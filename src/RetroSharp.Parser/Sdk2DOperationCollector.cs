@@ -1,19 +1,24 @@
-namespace RetroSharp.GameBoy;
+namespace RetroSharp.Parser;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
-using RetroSharp.Parser;
 
-internal static class GameBoySdkOperationCollector
+// Target-neutral collector that walks a parsed main block and inlined user
+// functions to produce the portable Sdk2DOperation list before any target lowers
+// it. Targets share this so the portable boundary is not Game Boy-only.
+public static class Sdk2DOperationCollector
 {
-    public static IReadOnlyList<Sdk2DOperation> Collect(BlockSyntax mainBlock, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    public static IReadOnlyList<Sdk2DOperation> Collect(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName)
     {
-        var collector = new Collector(functions);
+        var collector = new Collector(functions, targetName);
         collector.CollectBlock(mainBlock);
         return collector.Operations;
     }
 
-    private sealed class Collector(IReadOnlyDictionary<string, FunctionSyntax> functions)
+    private sealed class Collector(IReadOnlyDictionary<string, FunctionSyntax> functions, string targetName)
     {
         private readonly List<Sdk2DOperation> operations = [];
         private readonly HashSet<string> userFunctionCallStack = [];
@@ -100,11 +105,11 @@ internal static class GameBoySdkOperationCollector
             switch (call.Name)
             {
                 case "video_wait_vblank":
-                    GameBoyVideoProgram.RequireArity(call, 0);
+                    SdkCallReader.RequireArity(call, 0);
                     operations.Add(new Sdk2DOperation.WaitFrame());
                     break;
                 case "input_poll":
-                    GameBoyVideoProgram.RequireArity(call, 0);
+                    SdkCallReader.RequireArity(call, 0);
                     operations.Add(new Sdk2DOperation.PollInput());
                     break;
                 case "camera_set_position":
@@ -114,7 +119,7 @@ internal static class GameBoySdkOperationCollector
                     CollectHudSetTile(call);
                     break;
                 case "world_load":
-                    GameBoyVideoProgram.RequireArity(call, 1);
+                    SdkCallReader.RequireArity(call, 1);
                     break;
                 default:
                     CollectCallArguments(call);
@@ -125,7 +130,7 @@ internal static class GameBoySdkOperationCollector
 
         private void CollectCameraSetPosition(FunctionCall call)
         {
-            GameBoyVideoProgram.RequireArity(call, 2);
+            SdkCallReader.RequireArity(call, 2);
             var args = call.Parameters.ToList();
             var x = ByteExpression(args[0], "camera_set_position argument 1");
             var y = ByteExpression(args[1], "camera_set_position argument 2");
@@ -134,9 +139,9 @@ internal static class GameBoySdkOperationCollector
 
         private void CollectHudSetTile(FunctionCall call)
         {
-            GameBoyVideoProgram.RequireArity(call, 4);
+            SdkCallReader.RequireArity(call, 4);
             var args = call.Parameters.ToList();
-            var mode = GameBoyVideoProgram.HudModeArg(args[0], "hud_set_tile argument 1");
+            var mode = SdkCallReader.HudModeArg(args[0], "hud_set_tile argument 1");
             var x = ConstRange(args[1], 0, 31, "hud_set_tile argument 2");
             var y = ConstRange(args[2], 0, 31, "hud_set_tile argument 3");
             var tile = ConstRange(args[3], 0, 255, "hud_set_tile argument 4");
@@ -213,7 +218,7 @@ internal static class GameBoySdkOperationCollector
 
         private void CollectWorldTileFlagsAt(FunctionCall call)
         {
-            GameBoyVideoProgram.RequireArity(call, 2);
+            SdkCallReader.RequireArity(call, 2);
             var args = call.Parameters.ToList();
             var worldX = ByteExpression(args[0], "world_tile_flags_at argument 1");
             var worldY = ByteExpression(args[1], "world_tile_flags_at argument 2");
@@ -233,7 +238,7 @@ internal static class GameBoySdkOperationCollector
             switch (expression)
             {
                 case ConstantSyntax:
-                    return new SdkByteExpression.Constant(CheckedByte(GameBoyVideoProgram.ConstValue(expression, context), context));
+                    return new SdkByteExpression.Constant(CheckedByte(SdkCallReader.ConstValue(expression, context), context));
                 case IdentifierSyntax { Identifier: "true" }:
                     return new SdkByteExpression.Constant(1);
                 case IdentifierSyntax { Identifier: "false" }:
@@ -241,7 +246,7 @@ internal static class GameBoySdkOperationCollector
                 case IdentifierSyntax identifier:
                     return new SdkByteExpression.Variable(identifier.Identifier);
                 case MemberAccessSyntax memberAccess:
-                    return new SdkByteExpression.Variable(GameBoyVideoProgram.MemberAccessName(memberAccess));
+                    return new SdkByteExpression.Variable(SdkCallReader.MemberAccessName(memberAccess));
                 case IndexExpressionSyntax indexExpression:
                     return new SdkByteExpression.Variable(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, context));
                 case CastSyntax cast:
@@ -253,7 +258,7 @@ internal static class GameBoySdkOperationCollector
 
         private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
         {
-            var value = CheckedByte(GameBoyVideoProgram.ConstValue(index, context), context);
+            var value = CheckedByte(SdkCallReader.ConstValue(index, context), context);
             return $"{baseIdentifier}[{value}]";
         }
 
@@ -269,7 +274,7 @@ internal static class GameBoySdkOperationCollector
 
         private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
         {
-            var value = GameBoyVideoProgram.ConstValue(expression, context);
+            var value = SdkCallReader.ConstValue(expression, context);
             if (value < min || value > max)
             {
                 throw new InvalidOperationException($"{context} must be between {min} and {max}.");
@@ -304,12 +309,12 @@ internal static class GameBoySdkOperationCollector
 
             if (!userFunctionCallStack.Add(function.Name))
             {
-                throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+                throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
             }
 
             try
             {
-                CollectBlock(ParameterSubstitution.Substitute(function, call, "Game Boy"));
+                CollectBlock(ParameterSubstitution.Substitute(function, call, targetName));
             }
             finally
             {
@@ -326,12 +331,12 @@ internal static class GameBoySdkOperationCollector
 
             if (!userFunctionCallStack.Add(function.Name))
             {
-                throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+                throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
             }
 
             try
             {
-                CollectExpression(ParameterSubstitution.SubstituteReturnExpression(function, call, "Game Boy"));
+                CollectExpression(ParameterSubstitution.SubstituteReturnExpression(function, call, targetName));
             }
             finally
             {

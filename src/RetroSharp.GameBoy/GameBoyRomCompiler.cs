@@ -136,7 +136,7 @@ internal sealed class GameBoyVideoProgram
             Enums = enums,
             Structs = structs,
             MainBlock = main.Block,
-            SdkOperations = GameBoySdkOperationCollector.Collect(main.Block, functions),
+            SdkOperations = Sdk2DOperationCollector.Collect(main.Block, functions, "Game Boy"),
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);

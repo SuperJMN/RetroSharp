@@ -19,7 +19,17 @@ public static class NesRomCompiler
 
         ValidateFunctionContracts(parse.Value);
         var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        ValidateSdkOperations(videoProgram);
         return NesRomBuilder.Build(videoProgram);
+    }
+
+    private static void ValidateSdkOperations(NesVideoProgram videoProgram)
+    {
+        var operations = Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        foreach (var operation in operations)
+        {
+            Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
+        }
     }
 
     private static void ValidateFunctionContracts(ProgramSyntax program)
