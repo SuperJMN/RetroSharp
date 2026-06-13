@@ -1307,11 +1307,11 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraFineXAddress);
         builder.StoreA(CameraScreenLeftColumnAddress);
 
-        builder.LoadAImmediate(VisibleScreenTileWidth);
+        builder.LoadAImmediate(VisibleScreenTileWidth + 1);
         builder.StoreA(CameraRightBackgroundColumnAddress);
         builder.LoadAImmediate(31);
         builder.StoreA(CameraLeftBackgroundColumnAddress);
-        builder.LoadAImmediate(VisibleScreenTileWidth % mapWidth);
+        builder.LoadAImmediate((VisibleScreenTileWidth + 1) % mapWidth);
         builder.StoreA(CameraRightSourceColumnAddress);
         builder.LoadAImmediate(mapWidth - 1);
         builder.StoreA(CameraLeftSourceColumnAddress);
@@ -2189,6 +2189,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "collision_aabb_tiles":
                 EmitCollisionAabbTiles(call);
                 break;
+            case "camera_aabb_tiles":
+                EmitCameraAabbTiles(call);
+                break;
             case "button_pressed":
                 EmitButtonPressed(call);
                 break;
@@ -2376,6 +2379,118 @@ internal sealed class GameBoyRuntimeCompiler
         builder.JumpAbsolute(endLabel);
         builder.Label(foundLabel);
         builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraAabbTiles(FunctionCall call)
+    {
+        GameBoyVideoProgram.RequireArity(call, 5);
+        var config = EnsureCameraConfigured(call.Name);
+        _ = WorldMapForFlagQuery(call.Name);
+        var args = call.Parameters.ToList();
+        var screenX = CheckedRange(ConstRuntimeValue(args[0], "camera_aabb_tiles argument 1"), 0, 159, "camera_aabb_tiles argument 1");
+        var width = CheckedRange(ConstRuntimeValue(args[2], "camera_aabb_tiles argument 3"), 0, 160, "camera_aabb_tiles argument 3");
+        var height = CheckedRange(ConstRuntimeValue(args[3], "camera_aabb_tiles argument 4"), 0, 255, "camera_aabb_tiles argument 4");
+        var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
+        var flags = CheckedRange(GameBoyVideoProgram.ConstValue(args[4], "camera_aabb_tiles argument 5"), 0, allowedFlags, "camera_aabb_tiles argument 5");
+        if (width == 0 || height == 0 || flags == 0)
+        {
+            builder.LoadAImmediate(0);
+            return;
+        }
+
+        if (screenX + width > 160)
+        {
+            throw new InvalidOperationException("camera_aabb_tiles screen span must fit within the visible Game Boy width.");
+        }
+
+        var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
+        var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
+        foreach (var yOffset in AabbSampleOffsets(height))
+        {
+            foreach (var xOffset in AabbSampleOffsets(width))
+            {
+                EmitCameraTileFlagsAt(screenX + xOffset, args[1], yOffset, config, call.Name);
+                builder.AndImmediate(flags);
+                builder.CompareImmediate(0);
+                builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
+            }
+        }
+
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(foundLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraTileFlagsAt(int screenPixelX, ExpressionSyntax worldY, int worldYOffset, CameraConfig config, string callName)
+    {
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
+        var endLabel = builder.CreateLabel("camera_tile_flags_end");
+        if (TryConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(row);
+            return;
+        }
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadCFromA();
+
+        EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
+        builder.LoadBFromA();
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
+            builder.LoadAFromC();
+            builder.CompareImmediate(row);
+            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
+            builder.LoadAFromB();
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
+    {
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+
+        builder.LoadA(CameraFineXAddress);
+        if (screenPixelX != 0)
+        {
+            builder.AddAImmediate(screenPixelX);
+        }
+
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.LoadBFromA();
+        builder.LoadA(CameraScreenLeftColumnAddress);
+        builder.AddAFromB();
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+        builder.SubtractAImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
     }
 

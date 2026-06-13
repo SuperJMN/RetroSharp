@@ -77,7 +77,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
 - Short-circuit `&&`/`||` and unary `!` in branch conditions built from the supported condition forms, and as byte-backed 0/1 value expressions
 - Conditional value expressions (`condition ? whenTrue : whenFalse`) over byte-backed branch expressions
-- `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, and `collision_aabb_tiles(...)` as value expressions for runtime map queries
+- `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, `collision_aabb_tiles(...)`, and `camera_aabb_tiles(...)` as value expressions for runtime map queries
 - `button_pressed(...)` as a value expression for joypad queries
 - `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` as tick-based input value expressions
 - `true` and `false`
@@ -146,6 +146,7 @@ Runtime calls:
 - `camera_span_tile_at(screenX, widthPx, row)`
 - `camera_span_has_tile(screenX, widthPx, row, tile)`
 - `camera_span_has_flags(screenX, widthPx, row, flags)`
+- `camera.AabbTiles(screenX, worldY, width, height, flags)`
 - `sprite_width(name)`
 - `sprite.Set(id, x, y, tile, flags)`
 - `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])`
@@ -172,6 +173,8 @@ Runtime calls:
 `camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel. When horizontal movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. The same column step also streams the background rows above the world band (GB rows `0..streamY-1`) from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. Every tile-boundary column or row stream first parks the CPU until the PPU reaches VBlank (`LY >= 144`) before touching the background tilemap, because the stream runs late in the frame (after input, physics, and collision). Without that gate the writes race active display and tear the top background rows; the gate keeps the whole batch inside a VRAM-accessible window. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite.Asset(...)`.
+
+`camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX`, `width`, `height`, and `flags` are compile-time values in this prototype; `worldY` can be a byte-backed runtime expression. `width` can use `sprite_width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
@@ -291,6 +294,7 @@ Landed after the initial runner loop:
 - `animation.Clip(...)` and `animation.Frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
 - `world_tile_flags_at(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
 - `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.
+- `camera.AabbTiles(...)` reports collision for fixed-screen actors against the current camera view, including fine-scroll X alignment.
 
 Landed after the playable-loop pass:
 
@@ -307,8 +311,8 @@ Landed after the camera-runtime pass:
 
 Landed after the Collision V1 pass:
 
-- The runner derives actor collision X from `cameraX + 72`, uses Game Boy low-byte pixel coordinates over the active 32-column, 256 px world width, derives collision Y from the actor's current screen Y, and queries generated world flags through a `collision_aabb_tiles(...)` probe sized from `sprite_width(mario_player)`.
-- Camera span collision remains available as a transitional helper, but the runner no longer depends on it for foot or failure checks.
+- The runner keeps the actor at a fixed screen X, derives collision X from the camera runtime through `camera.AabbTiles(...)`, derives collision Y from the actor's current screen Y, and probes generated world flags with the logical width from `sprite_width(mario_player)`.
+- Camera span collision and world-space `collision_aabb_tiles(...)` remain available, but the runner uses the camera-relative AABB helper so long maps stay aligned after the camera scrolls beyond the source-local byte range.
 
 Landed after the NES portable spike:
 

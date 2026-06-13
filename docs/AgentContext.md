@@ -56,7 +56,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - `sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
-- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)` and `collision_aabb_tiles(...)`.
+- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; fixed-screen runner actors should use `camera.AabbTiles(...)` so X stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.

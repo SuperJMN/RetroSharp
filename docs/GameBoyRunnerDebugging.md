@@ -125,7 +125,7 @@ Use this table to avoid fixing the wrong layer:
 | Background shifted or missing under terrain | `GameBoyTiledMapImporter`, `GameBoyRomCompiler` initial tilemap fill, `retrosharpWorldY`, `retrosharpStreamY`. |
 | Background decorations above the band ghost/repeat every ~32 tiles while scrolling | Background-row streaming in `GameBoyRomBuilder` camera right/left steps and `PopulateBackgroundStreamRows`. |
 | Background blocks tear/glitch only while crossing a tile boundary (especially on heavy frames such as landing on a platform) | Camera tile streaming writing VRAM during active display; confirm the VBlank gate (`EmitWaitForVBlankBeforeStream`, `LY >= 144`) runs before the column/row writes. Read `0xFF44` directly for `LY`; some debug bridges report a stale `LY` in compact PPU state. |
-| Collision does not match visible tiles | World flags, tileset `objectgroup`, explicit collision layer, `collision_aabb_tiles(...)`, actor world coordinates. |
+| Collision does not match visible tiles | World flags, tileset `objectgroup`, explicit collision layer, `camera.AabbTiles(...)` vs `collision_aabb_tiles(...)`, actor camera/world coordinates. |
 | Player cannot jump in one zone | Frame order, reset before input, collision state clearing, `button_just_pressed(...)`. |
 | Player snaps to platform while rising | Landing should be gated by descent, for example `velocityY < World.SignedVelocityWrap` and non-zero velocity. |
 | Player teleports from top to ground | Byte-backed Y wrap; clamp before collision/reset checks. |

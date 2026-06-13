@@ -98,7 +98,8 @@ Intrinsic work belongs here:
 | `camera_tile_column_at(...)` | Transitional SDK helper | Move collision and map reads to world coordinates. |
 | `camera_span_tile_at(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_tile(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
-| `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge; runner now uses world-coordinate collision. |
+| `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge. |
+| `camera_aabb_tiles(...)` | Transitional SDK helper | Camera-relative AABB bridge for fixed-screen actors until source-level world X can exceed one byte. |
 | `map_column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `world_column(...)` now. |
 | `map_tile_at(...)` | Portable SDK candidate | Reads generated world tile-id rows. |
 | `map_flags_at(...)` | Portable SDK candidate | Reads generated world flag rows. |
@@ -376,6 +377,7 @@ Tasks:
 
 - Add `world_tile_flags_at(worldX, worldY)` while the prototype has one active world map.
 - Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
+- Add `camera_aabb_tiles(screenX, worldY, width, height, flags)` as a camera-relative bridge for long scrolling maps while source locals are still byte-backed.
 - Support tile/AABB overlap checks against map flags.
 - Keep resolution helpers optional and separate from queries.
 - Migrate runner ground, hole, and hazard checks away from camera span APIs.
@@ -822,6 +824,7 @@ Status: landed 2026-06-08.
 - Candidate files: collision helper lowering, tests.
 - Steps:
   - Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
+  - Add `camera_aabb_tiles(screenX, worldY, width, height, flags)` for camera-relative fixed-screen actor checks on long maps.
   - Check every tile overlapped by the AABB.
   - Return a simple boolean: `1` when any overlapped tile matches the requested flag mask, otherwise `0`.
   - Keep collision resolution outside this helper.
