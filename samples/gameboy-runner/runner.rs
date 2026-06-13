@@ -1,11 +1,11 @@
 type Pixel = i16;
 
 enum World {
-    Width = 32,
+    Width = 68,
     StreamY = 9,
     Height = 14,
     SignedVelocityWrap = 128,
-    PixelWidth = 256
+    PixelWidth = 544
 }
 
 enum Player {
@@ -17,6 +17,12 @@ enum Player {
 
 enum CollisionProbe {
     LandingHeight = 8,
+    LandingPointHeight = 1,
+    LandingBottomOffset = 7,
+    TileSize = 8,
+    TileSize2 = 16,
+    TileSize3 = 24,
+    TileSize4 = 32,
     TileMask = 248
 }
 
@@ -151,7 +157,28 @@ class FrameState {
         if (player.velocityY < World.SignedVelocityWrap && player.velocityY != 0) {
             footTile = collision_aabb_tiles(playerWorldX, footWorldY, sprite_width(mario_player), CollisionProbe.LandingHeight, CollisionFlag.Solid);
             if (footTile != 0) {
-                let landedWorldY = footWorldY & CollisionProbe.TileMask;
+                Pixel landedWorldY = (footWorldY + CollisionProbe.LandingBottomOffset) & CollisionProbe.TileMask;
+                footTile = collision_aabb_tiles(playerWorldX, footWorldY, sprite_width(mario_player), CollisionProbe.LandingPointHeight, CollisionFlag.Solid);
+                if (footTile != 0) {
+                    landedWorldY = footWorldY & CollisionProbe.TileMask;
+                    footTile = collision_aabb_tiles(playerWorldX, footWorldY - CollisionProbe.TileSize, sprite_width(mario_player), CollisionProbe.LandingPointHeight, CollisionFlag.Solid);
+                    if (footTile != 0) {
+                        landedWorldY = (footWorldY - CollisionProbe.TileSize) & CollisionProbe.TileMask;
+                    }
+                    footTile = collision_aabb_tiles(playerWorldX, footWorldY - CollisionProbe.TileSize2, sprite_width(mario_player), CollisionProbe.LandingPointHeight, CollisionFlag.Solid);
+                    if (footTile != 0) {
+                        landedWorldY = (footWorldY - CollisionProbe.TileSize2) & CollisionProbe.TileMask;
+                    }
+                    footTile = collision_aabb_tiles(playerWorldX, footWorldY - CollisionProbe.TileSize3, sprite_width(mario_player), CollisionProbe.LandingPointHeight, CollisionFlag.Solid);
+                    if (footTile != 0) {
+                        landedWorldY = (footWorldY - CollisionProbe.TileSize3) & CollisionProbe.TileMask;
+                    }
+                    footTile = collision_aabb_tiles(playerWorldX, footWorldY - CollisionProbe.TileSize4, sprite_width(mario_player), CollisionProbe.LandingPointHeight, CollisionFlag.Solid);
+                    if (footTile != 0) {
+                        landedWorldY = (footWorldY - CollisionProbe.TileSize4) & CollisionProbe.TileMask;
+                    }
+                }
+
                 player.Land(landedWorldY + Player.WorldOriginY);
             }
         }

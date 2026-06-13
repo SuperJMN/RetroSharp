@@ -511,9 +511,15 @@ internal sealed class GameBoyVideoProgram
 
         for (var y = 0; y < map.BackgroundHeight; y++)
         {
+            var targetY = y - map.BackgroundOffsetY;
+            if (targetY is < 0 or >= 32)
+            {
+                continue;
+            }
+
             for (var x = 0; x < 32; x++)
             {
-                SetTile(x, y, map.BackgroundTileIds[y * map.BackgroundWidth + x % map.BackgroundWidth]);
+                SetTile(x, targetY, map.BackgroundTileIds[y * map.BackgroundWidth + x % map.BackgroundWidth]);
             }
         }
     }

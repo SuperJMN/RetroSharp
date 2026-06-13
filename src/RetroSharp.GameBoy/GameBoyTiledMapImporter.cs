@@ -11,6 +11,7 @@ internal sealed record GameBoyTiledMap(
     int StreamY,
     int BackgroundWidth,
     int BackgroundHeight,
+    int BackgroundOffsetY,
     byte[]? BackgroundTileIds,
     int[] WorldTileIds,
     WorldTileFlags[] WorldFlags,
@@ -63,8 +64,10 @@ internal static class GameBoyTiledMapImporter
 
         var expandedWidth = checked(width * tileScaleX);
         var expandedMapHeight = checked(mapHeight * tileScaleY);
+        var expandedWorldY = checked(worldY * tileScaleY);
         var expandedStreamY = streamY;
         var expandedHeight = checked(height * tileScaleY);
+        var backgroundOffsetY = expandedWorldY - expandedStreamY;
 
         if (expandedStreamY is < 0 or > 31)
         {
@@ -114,14 +117,24 @@ internal static class GameBoyTiledMapImporter
                         var targetX = x * tileScaleX + tileX;
                         var targetY = y * tileScaleY + tileY;
                         var targetIndex = targetY * expandedWidth + targetX;
-                        worldTileIds[targetIndex] = tileIds[tileY * tileScaleX + tileX];
+                        var tileId = tileIds[tileY * tileScaleX + tileX];
+                        if (tileId == 0 && backgroundTiles is not null)
+                        {
+                            var backgroundY = expandedWorldY + targetY;
+                            if (backgroundY >= 0 && backgroundY < expandedMapHeight)
+                            {
+                                tileId = backgroundTiles[backgroundY * expandedWidth + targetX];
+                            }
+                        }
+
+                        worldTileIds[targetIndex] = tileId;
                         worldFlags[targetIndex] = flags;
                     }
                 }
             }
         }
 
-        return new GameBoyTiledMap(expandedWidth, expandedHeight, expandedStreamY, expandedWidth, expandedMapHeight, backgroundTiles, worldTileIds, worldFlags, resolver.GeneratedTileData);
+        return new GameBoyTiledMap(expandedWidth, expandedHeight, expandedStreamY, expandedWidth, expandedMapHeight, backgroundOffsetY, backgroundTiles, worldTileIds, worldFlags, resolver.GeneratedTileData);
     }
 
     private static IReadOnlyList<TiledTileset> LoadTilesets(JsonElement root, string mapPath, string displayName)

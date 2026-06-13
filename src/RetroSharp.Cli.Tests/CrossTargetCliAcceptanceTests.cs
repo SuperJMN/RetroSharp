@@ -53,6 +53,20 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void GameBoy_sample_rom_script_dry_run_lists_tracked_rom_outputs_by_default()
+    {
+        var result = RunProcess("python3", RepositoryFile("tools/gameboy/generate_sample_roms.py"), "--dry-run");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("samples/gameboy-drawing/drawing.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/gameboy-drawing/drawing.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/gameboy-runner/runner.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/gameboy-runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("samples/gameboy-hud/hud.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("samples/gameboy-runner/diagnostics/00-static-background.rs", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Cli_reports_unsupported_feature_diagnostics_with_nonzero_exit_code()
     {
         using var workspace = TemporaryWorkspace();
@@ -83,15 +97,20 @@ public sealed class CrossTargetCliAcceptanceTests
         };
         processArgs.AddRange(args);
 
+        return RunProcess("dotnet", processArgs.ToArray());
+    }
+
+    private static CliResult RunProcess(string fileName, params string[] args)
+    {
         using var process = new Process();
-        process.StartInfo = new ProcessStartInfo("dotnet")
+        process.StartInfo = new ProcessStartInfo(fileName)
         {
             WorkingDirectory = RepositoryRoot(),
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
 
-        foreach (var arg in processArgs)
+        foreach (var arg in args)
         {
             process.StartInfo.ArgumentList.Add(arg);
         }
@@ -103,7 +122,7 @@ public sealed class CrossTargetCliAcceptanceTests
         if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
         {
             process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"dotnet CLI command timed out: {string.Join(" ", processArgs)}");
+            throw new TimeoutException($"{fileName} command timed out: {string.Join(" ", args)}");
         }
 
         return new CliResult(process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
