@@ -169,9 +169,27 @@ Portable 2D calls should be represented as semantic operations before target low
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The initial boundary recognizes `video_wait_vblank()` as `WaitFrame` and `input_poll()` as `PollInput`; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, camera helpers, and tilemap writes remain on the direct Game Boy path until later roadmap tasks move them deliberately.
 
-The collector itself is target-neutral: `RetroSharp.Parser.Sdk2DOperationCollector` (with `RetroSharp.Parser.SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only. NES previously bypassed the validator entirely; it now shares the same operation collection and capability validation pass.
+The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only.
 
-`GameBoySdkOperationLowerer` lowers the first shared operation to Game Boy bytes: `Sdk2DOperation.WaitFrame` emits the existing VBlank edge wait routine used by `video_wait_vblank()`. `PollInput` remains on the direct Game Boy path until its stateful input lowering can be moved without broadening this slice.
+Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera` (Game Boy also lowers `WaitFrame`/`PollInput`/camera this way). Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable.Name` is the exact key into a target's local variable map, so the lowerer resolves operands byte-faithfully without the IR gaining syntax structure. Remaining game operations (sprite draw, streaming) are pending migration; see epic #106.
+
+## Layer Boundary and Golden Rule
+
+`Sdk2DOperation` is an opinionated 2D-game framework model (camera, sprites, tilemap streaming, HUD) used as an intermediate representation on the cartridge path. It is deliberately **isolated** in `RetroSharp.Core.Sdk`. The language and its classic intermediate code (`RetroSharp.Generation.Intermediate`) stay framework-neutral: they must not gain cameras, sprites, scroll, tilemaps, or controller concepts.
+
+Golden rule for anyone extending this area:
+
+1. The language and its classic IR never gain framework concepts. Game-facing concepts live in the SDK layer or in target intrinsics, never in the grammar, AST typing, ABI, or classic IR.
+2. `Sdk2DOperation` must not become a dumping ground. Before adding a new operation, ask whether the feature is genuinely a shared portable primitive or whether it should be a target intrinsic plus a library helper. Genre-specific operations are a warning sign.
+3. The operand IR (`SdkByteExpression`) stays at the level of "immediate value" or "storage location". Do not add `Index`, `Member`, or `BinaryOp` cases: that would pull source syntax into the portable IR. The target resolves a `Variable` name to an address.
+4. End-state: the 2D SDK should migrate from compiler-recognized operations toward a library written in the language over per-target intrinsics, so the framework becomes optional and replaceable. Until the language has per-target intrinsics and modules, the operation model is the accepted pragmatic bridge.
+
+Where each piece lives:
+
+- Source syntax and AST: `RetroSharp.Parser` (language assembly, framework-neutral).
+- Operation collection from source: `RetroSharp.Sdk.Frontend` (SDK-frontend assembly).
+- Portable operation records, validator, capabilities, world/Tiled model: `RetroSharp.Core.Sdk` and `RetroSharp.Core.Targeting`.
+- Per-target lowering: `GameBoySdkOperationLowerer` / `NesSdkOperationLowerer` and the target runtime compilers.
 
 ## Shared World Map Resource
 
