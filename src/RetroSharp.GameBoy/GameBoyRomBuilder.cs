@@ -917,7 +917,7 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitCameraInit(call);
                 break;
             case "camera_set_position":
-                EmitCameraSetPosition(call);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
                 break;
             case "camera_apply":
                 EmitCameraApply(call);
@@ -1335,16 +1335,14 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraBottomSourceRowAddress);
     }
 
-    private void EmitCameraSetPosition(FunctionCall call)
+    internal void EmitSetCameraPosition(Sdk2DOperation.SetCameraPosition operation)
     {
-        GameBoyVideoProgram.RequireArity(call, 2);
-        var args = call.Parameters.ToList();
-        var config = EnsureCameraConfigured(call.Name);
+        var config = EnsureCameraConfigured("camera_set_position");
 
-        if (!IsZeroConstant(args[0]))
+        if (operation.X is not SdkByteExpression.Constant { Value: 0 })
         {
             EmitCameraSetAxisPosition(
-                args[0],
+                () => EmitSdkByteExpressionToA(operation.X),
                 CameraXLowAddress,
                 () => EmitCameraMoveLeftStep(config),
                 () => EmitCameraMoveRightStep(config),
@@ -1352,15 +1350,30 @@ internal sealed class GameBoyRuntimeCompiler
                 "camera_set_position_x_end");
         }
 
-        if (!IsZeroConstant(args[1]))
+        if (operation.Y is not SdkByteExpression.Constant { Value: 0 })
         {
             EmitCameraSetAxisPosition(
-                args[1],
+                () => EmitSdkByteExpressionToA(operation.Y),
                 CameraYLowAddress,
                 () => EmitCameraMoveUpStep(config),
                 () => EmitCameraMoveDownStep(config),
                 "camera_set_position_down",
                 "camera_set_position_y_end");
+        }
+    }
+
+    private void EmitSdkByteExpressionToA(SdkByteExpression expression)
+    {
+        switch (expression)
+        {
+            case SdkByteExpression.Constant constant:
+                builder.LoadAImmediate(constant.Value);
+                break;
+            case SdkByteExpression.Variable variable:
+                builder.LoadA(VariableAddress(variable.Name));
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
         }
     }
 
@@ -1376,7 +1389,7 @@ internal sealed class GameBoyRuntimeCompiler
     }
 
     private void EmitCameraSetAxisPosition(
-        ExpressionSyntax requestedPosition,
+        Action emitRequestedPositionToA,
         ushort currentLowAddress,
         Action moveNegative,
         Action movePositive,
@@ -1386,7 +1399,7 @@ internal sealed class GameBoyRuntimeCompiler
         var movePositiveLabel = builder.CreateLabel(positiveLabelName);
         var endLabel = builder.CreateLabel(endLabelName);
 
-        EmitExpressionToA(requestedPosition);
+        emitRequestedPositionToA();
         builder.LoadBFromA();
         builder.LoadA(currentLowAddress);
         builder.LoadCFromA();
@@ -2984,11 +2997,6 @@ internal sealed class GameBoyRuntimeCompiler
 
         value = 0;
         return false;
-    }
-
-    private bool IsZeroConstant(ExpressionSyntax expression)
-    {
-        return TryConst(expression, out var value) && value == 0;
     }
 
     private void EmitRuntimeIndexedAddressToHl(string baseIdentifier, ExpressionSyntax index)

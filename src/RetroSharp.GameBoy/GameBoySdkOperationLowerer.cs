@@ -18,6 +18,9 @@ internal static class GameBoySdkOperationLowerer
             case Sdk2DOperation.PollInput:
                 compiler.EmitPollInput();
                 break;
+            case Sdk2DOperation.SetCameraPosition camera:
+                compiler.EmitSetCameraPosition(camera);
+                break;
             default:
                 throw new NotSupportedException($"Game Boy SDK lowering does not support {operation.GetType().Name} yet.");
         }

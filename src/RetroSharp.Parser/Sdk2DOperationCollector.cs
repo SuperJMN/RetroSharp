@@ -18,6 +18,73 @@ public static class Sdk2DOperationCollector
         return collector.Operations;
     }
 
+    // Shared reader so a target lowering a camera position drives emission from
+    // the same operation the collector produces, instead of re-deriving it.
+    public static Sdk2DOperation.SetCameraPosition ReadSetCameraPosition(FunctionCall call)
+    {
+        SdkCallReader.RequireArity(call, 2);
+        var args = call.Parameters.ToList();
+        var x = ReadByteExpression(args[0], "camera_set_position argument 1");
+        var y = ReadByteExpression(args[1], "camera_set_position argument 2");
+        return new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y));
+    }
+
+    public static SdkByteExpression ReadByteExpression(ExpressionSyntax expression, string context)
+    {
+        switch (expression)
+        {
+            case ConstantSyntax:
+                return new SdkByteExpression.Constant(CheckedByte(SdkCallReader.ConstValue(expression, context), context));
+            case IdentifierSyntax { Identifier: "true" }:
+                return new SdkByteExpression.Constant(1);
+            case IdentifierSyntax { Identifier: "false" }:
+                return new SdkByteExpression.Constant(0);
+            case IdentifierSyntax identifier:
+                return new SdkByteExpression.Variable(identifier.Identifier);
+            case MemberAccessSyntax memberAccess:
+                return new SdkByteExpression.Variable(SdkCallReader.MemberAccessName(memberAccess));
+            case IndexExpressionSyntax indexExpression:
+                return new SdkByteExpression.Variable(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, context));
+            case CastSyntax cast:
+                return ReadByteExpression(cast.Expression, context);
+            default:
+                throw new InvalidOperationException($"{context} must be a byte constant or local variable.");
+        }
+    }
+
+    private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
+    {
+        var value = CheckedByte(SdkCallReader.ConstValue(index, context), context);
+        return $"{baseIdentifier}[{value}]";
+    }
+
+    private static int CheckedByte(int value, string context)
+    {
+        if (value is < 0 or > 255)
+        {
+            throw new InvalidOperationException($"{context} must be between 0 and 255.");
+        }
+
+        return value;
+    }
+
+    private static ScrollAxes AxesFor(SdkByteExpression x, SdkByteExpression y)
+    {
+        var axes = ScrollAxes.None;
+
+        if (x is not SdkByteExpression.Constant { Value: 0 })
+        {
+            axes |= ScrollAxes.Horizontal;
+        }
+
+        if (y is not SdkByteExpression.Constant { Value: 0 })
+        {
+            axes |= ScrollAxes.Vertical;
+        }
+
+        return axes;
+    }
+
     private sealed class Collector(IReadOnlyDictionary<string, FunctionSyntax> functions, string targetName)
     {
         private readonly List<Sdk2DOperation> operations = [];
@@ -130,11 +197,7 @@ public static class Sdk2DOperationCollector
 
         private void CollectCameraSetPosition(FunctionCall call)
         {
-            SdkCallReader.RequireArity(call, 2);
-            var args = call.Parameters.ToList();
-            var x = ByteExpression(args[0], "camera_set_position argument 1");
-            var y = ByteExpression(args[1], "camera_set_position argument 2");
-            operations.Add(new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y)));
+            operations.Add(ReadSetCameraPosition(call));
         }
 
         private void CollectHudSetTile(FunctionCall call)
@@ -220,8 +283,8 @@ public static class Sdk2DOperationCollector
         {
             SdkCallReader.RequireArity(call, 2);
             var args = call.Parameters.ToList();
-            var worldX = ByteExpression(args[0], "world_tile_flags_at argument 1");
-            var worldY = ByteExpression(args[1], "world_tile_flags_at argument 2");
+            var worldX = ReadByteExpression(args[0], "world_tile_flags_at argument 1");
+            var worldY = ReadByteExpression(args[1], "world_tile_flags_at argument 2");
             operations.Add(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
         }
 
@@ -235,41 +298,7 @@ public static class Sdk2DOperationCollector
 
         private static SdkByteExpression ByteExpression(ExpressionSyntax expression, string context)
         {
-            switch (expression)
-            {
-                case ConstantSyntax:
-                    return new SdkByteExpression.Constant(CheckedByte(SdkCallReader.ConstValue(expression, context), context));
-                case IdentifierSyntax { Identifier: "true" }:
-                    return new SdkByteExpression.Constant(1);
-                case IdentifierSyntax { Identifier: "false" }:
-                    return new SdkByteExpression.Constant(0);
-                case IdentifierSyntax identifier:
-                    return new SdkByteExpression.Variable(identifier.Identifier);
-                case MemberAccessSyntax memberAccess:
-                    return new SdkByteExpression.Variable(SdkCallReader.MemberAccessName(memberAccess));
-                case IndexExpressionSyntax indexExpression:
-                    return new SdkByteExpression.Variable(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, context));
-                case CastSyntax cast:
-                    return ByteExpression(cast.Expression, context);
-                default:
-                    throw new InvalidOperationException($"{context} must be a byte constant or local variable.");
-            }
-        }
-
-        private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
-        {
-            var value = CheckedByte(SdkCallReader.ConstValue(index, context), context);
-            return $"{baseIdentifier}[{value}]";
-        }
-
-        private static int CheckedByte(int value, string context)
-        {
-            if (value is < 0 or > 255)
-            {
-                throw new InvalidOperationException($"{context} must be between 0 and 255.");
-            }
-
-            return value;
+            return ReadByteExpression(expression, context);
         }
 
         private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
@@ -281,23 +310,6 @@ public static class Sdk2DOperationCollector
             }
 
             return value;
-        }
-
-        private static ScrollAxes AxesFor(SdkByteExpression x, SdkByteExpression y)
-        {
-            var axes = ScrollAxes.None;
-
-            if (x is not SdkByteExpression.Constant { Value: 0 })
-            {
-                axes |= ScrollAxes.Horizontal;
-            }
-
-            if (y is not SdkByteExpression.Constant { Value: 0 })
-            {
-                axes |= ScrollAxes.Vertical;
-            }
-
-            return axes;
         }
 
         private void CollectUserFunction(FunctionCall call)
