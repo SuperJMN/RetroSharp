@@ -1,5 +1,6 @@
 using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
 
 namespace RetroSharp.NES;
@@ -777,10 +778,11 @@ internal sealed class NesRuntimeCompiler
                 EmitCameraInit(call);
                 break;
             case "camera_set_position":
-                EmitCameraSetPosition(call);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
                 break;
             case "camera_apply":
-                EmitCameraApply(call);
+                NesVideoProgram.RequireArity(call, 0);
+                EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
                 break;
             case "video_wait_vblank":
                 NesVideoProgram.RequireArity(call, 0);
@@ -1275,29 +1277,40 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(CameraXAddress);
     }
 
-    private void EmitCameraSetPosition(FunctionCall call)
+    internal void EmitSetCameraPosition(Sdk2DOperation.SetCameraPosition operation)
     {
-        NesVideoProgram.RequireArity(call, 2);
-        EnsureCameraConfigured(call.Name);
-        if (!TryConst(call.Parameters.ElementAt(1), out var y) || y != 0)
-        {
-            throw new InvalidOperationException("Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.");
-        }
+        EnsureCameraConfigured("camera_set_position");
 
-        EmitExpressionToA(call.Parameters.ElementAt(0));
+        // The shared validator rejects any non-zero vertical axis for NES
+        // (horizontal-only fine scroll), so only the X position is applied here.
+        EmitSdkByteExpressionToA(operation.X);
         builder.StoreAZeroPage(CameraXAddress);
     }
 
-    private void EmitCameraApply(FunctionCall call)
+    internal void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)
     {
-        NesVideoProgram.RequireArity(call, 0);
-        EnsureCameraConfigured(call.Name);
+        EnsureCameraConfigured("camera_apply");
 
         builder.LoadAAbsolute(0x2002);              // reset PPU scroll latch
         builder.LoadAZeroPage(CameraXAddress);
         builder.StoreAAbsolute(0x2005);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(0x2005);
+    }
+
+    private void EmitSdkByteExpressionToA(SdkByteExpression expression)
+    {
+        switch (expression)
+        {
+            case SdkByteExpression.Constant constant:
+                builder.LoadAImmediate(constant.Value);
+                break;
+            case SdkByteExpression.Variable variable:
+                builder.LoadAZeroPage(VariableAddress(variable.Name));
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
     }
 
     private void EnsureCameraConfigured(string callName)

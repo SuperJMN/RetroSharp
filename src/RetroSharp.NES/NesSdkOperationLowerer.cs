@@ -17,6 +17,12 @@ internal static class NesSdkOperationLowerer
             case Sdk2DOperation.PollInput:
                 compiler.EmitPollInput();
                 break;
+            case Sdk2DOperation.SetCameraPosition camera:
+                compiler.EmitSetCameraPosition(camera);
+                break;
+            case Sdk2DOperation.ApplyCamera applyCamera:
+                compiler.EmitApplyCamera(applyCamera);
+                break;
             default:
                 throw new NotSupportedException($"NES SDK lowering does not support {operation.GetType().Name} yet.");
         }
