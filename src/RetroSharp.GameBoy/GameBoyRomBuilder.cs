@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
 
 namespace RetroSharp.GameBoy;
@@ -920,7 +921,8 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
                 break;
             case "camera_apply":
-                EmitCameraApply(call);
+                GameBoyVideoProgram.RequireArity(call, 0);
+                EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal | ScrollAxes.Vertical));
                 break;
             case "camera_move_right":
                 EmitCameraMoveRight(call);
@@ -1377,10 +1379,9 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
-    private void EmitCameraApply(FunctionCall call)
+    internal void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)
     {
-        GameBoyVideoProgram.RequireArity(call, 0);
-        EnsureCameraConfigured(call.Name);
+        EnsureCameraConfigured("camera_apply");
 
         builder.LoadA(CameraXLowAddress);
         builder.StoreHighRamA(0x43);
