@@ -1,4 +1,5 @@
 using RetroSharp.Core;
+using RetroSharp.Core.Sdk;
 using RetroSharp.Parser;
 
 namespace RetroSharp.NES;
@@ -783,10 +784,11 @@ internal sealed class NesRuntimeCompiler
                 break;
             case "video_wait_vblank":
                 NesVideoProgram.RequireArity(call, 0);
-                EmitWaitVBlank();
+                EmitSdkOperation(new Sdk2DOperation.WaitFrame());
                 break;
             case "input_poll":
-                EmitInputPoll(call);
+                NesVideoProgram.RequireArity(call, 0);
+                EmitSdkOperation(new Sdk2DOperation.PollInput());
                 break;
             case "sprite_draw":
                 EmitSpriteDraw(call);
@@ -1167,7 +1169,12 @@ internal sealed class NesRuntimeCompiler
         };
     }
 
-    private void EmitWaitVBlank()
+    private void EmitSdkOperation(Sdk2DOperation operation)
+    {
+        NesSdkOperationLowerer.Emit(this, operation);
+    }
+
+    internal void EmitWaitFrame()
     {
         var label = builder.CreateLabel("vblank");
         builder.Label(label);
@@ -1175,10 +1182,8 @@ internal sealed class NesRuntimeCompiler
         builder.BranchRelative(0x10, label);        // BPL label
     }
 
-    private void EmitInputPoll(FunctionCall call)
+    internal void EmitPollInput()
     {
-        NesVideoProgram.RequireArity(call, 0);
-
         builder.LoadAZeroPage(InputCurrentAddress);
         builder.StoreAZeroPage(InputPreviousAddress);
 
