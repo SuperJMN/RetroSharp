@@ -76,20 +76,35 @@ Operation-driven lowering pattern (already proven, replicate it):
 Progress (2026-06-14):
 - Done: PL-A1 #107 (GB camera apply), PL-B1 #111 (NES lowerer wait/poll),
   PL-B2 #112 (NES camera via shared model), PL-D1 #117 (cross-target scroll acceptance
-  in `CrossTargetScrollAcceptanceTests`). Earlier groundwork: #101/#102/#103/#105.
+  in `CrossTargetScrollAcceptanceTests`), PL-C1 #114 (collector moved to
+  `RetroSharp.Sdk.Frontend`, out of the language assembly), PL-C3 #116 (layer boundary +
+  golden rule documented in ArchitectureRoadmap). Earlier groundwork: #101/#102/#103/#105.
 - Blocked on design: PL-A2 #108 and PL-B3 #113 (sprite). `Sdk2DOperation.DrawLogicalSprite`
   carries `int X/Y/Frame` + static `SpriteTransform`, but the runner draws with runtime
-  operands (`player.y`, `player.displayFrame`, `player.displayFlipX`). Migrating needs a
-  portable sprite-model decision: runtime operands via `SdkByteExpression`, and how to
-  keep static transform capability checks while allowing runtime flipX. See #108 comment.
-- Pending (clean): PL-A3 #109 (streaming), PL-A4 #110 (builder iterates operations
-  instead of re-walking the AST; depends on A1-A3), PL-C1 #114 (move collector/SdkCallReader
-  out of the language assembly), PL-C2 #115 (harden operand contract), PL-C3 #116 (document
-  boundary + golden rule), PL-E1 #118 (per-target intrinsics + SDK-as-library prototype).
+  operands (`player.y`, `player.displayFrame`, `player.displayFlipX`).
+  **DESIGN DECISION TAKEN (owner, 2026-06-14), now unblocked — spec in #108 comment:**
+  - X/Y/Frame become `SdkByteExpression` (runtime), like the camera migration.
+  - Add a nullable `SdkByteExpression? FlipX` operand (runtime value). Capability check:
+    if FlipX is present, statically require the target supports `SpriteTransform.FlipX`
+    as a feature; the value stays runtime. Static transforms (FlipY) keep static validation.
+  - `PaletteSlot` stays a constant int (validated statically; runner uses 0).
+  - Remove `LogicalSize` from the portable record: metasprite geometry is target asset data
+    resolved by the lowerer from `SpriteId` (via `program.SpriteAssets`), not carried by the
+    target-neutral collector. Add `ReadDrawLogicalSprite` mirroring `ReadSetCameraPosition`.
+  - GB lowerer must reproduce `EmitSpriteDraw` byte-for-byte; verify runner ROM byte-identical.
+- Pending: PL-A2 #108 / PL-B3 #113 (sprite — design decided, ready to implement, see above),
+  PL-A3 #109 (streaming/tilemap via lowerer; sensitive: vblank/columns), PL-A4 #110 (builder
+  iterates operations instead of re-walking the AST; depends on A1-A3), PL-C2 #115 (harden
+  operand contract), PL-E1 #118 (per-target intrinsics + SDK-as-library prototype).
 
-Suggested next steps: PL-C1/PL-C3 (clean, byte-neutral) or resolve the sprite model
-decision to unblock PL-A2/PL-B3. PL-A4 is the conceptual close of the boundary once the
-data-carrying operations are migrated.
+Suggested next steps for the next agent, in order:
+1. PL-A2 #108 then PL-B3 #113 (sprite) — design is decided (spec above and in #108); this is
+   the highest-value remaining work because it makes the sprite path operation-driven on both
+   targets, same as the camera. Implement GB first, verify runner ROM byte-identical, then NES.
+2. PL-A3 #109 (streaming) — clean but byte-sensitive; migrate incrementally.
+3. PL-A4 #110 — conceptual close of the boundary: the GB builder consumes
+   `program.SdkOperations` instead of re-walking the AST. Depends on A2/A3 being migrated.
+4. PL-C2 #115 (optional hardening) and PL-E1 #118 (long-term vision).
 
 ## Game Boy Runner Lessons
 
