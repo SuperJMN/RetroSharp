@@ -4,6 +4,7 @@ using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.Parser;
+using RetroSharp.Sdk;
 
 namespace RetroSharp.NES;
 

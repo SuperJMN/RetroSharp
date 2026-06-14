@@ -1,8 +1,9 @@
-namespace RetroSharp.Parser;
+namespace RetroSharp.Sdk;
 
 using System.Globalization;
 using RetroSharp.Core;
 using RetroSharp.Core.Targeting;
+using RetroSharp.Parser;
 
 // Target-neutral readers for SDK call arguments shared by the portable operation
 // collector across targets. These contain no target-specific knowledge: only

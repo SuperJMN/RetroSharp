@@ -1,7 +1,8 @@
-namespace RetroSharp.Parser;
+namespace RetroSharp.Sdk;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
+using RetroSharp.Parser;
 
 // Target-neutral collector that walks a parsed main block and inlined user
 // functions to produce the portable Sdk2DOperation list before any target lowers
