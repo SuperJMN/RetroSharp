@@ -27,7 +27,7 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Sprite transforms | Flip X and Flip Y hardware flags |
 | HUD modes | None declared portable support yet |
 
-The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented only for the current JSON logical sprite spike. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, so portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code. NES compilation now runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement or HUD tiles) are rejected by the same capability checks the Game Boy target uses. Horizontal `camera.SetPosition(x, 0)` validates because NES fine-scrolls within its pre-loaded nametable without streaming background tiles.
+The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented for the current JSON logical sprite spike through `Sdk2DOperation.DrawLogicalSprite`. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, so portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code. NES compilation now runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement or HUD tiles) are rejected by the same capability checks the Game Boy target uses. Horizontal `camera.SetPosition(x, 0)` validates because NES fine-scrolls within its pre-loaded nametable without streaming background tiles.
 
 ## Supported Video API
 
@@ -90,7 +90,7 @@ Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct 6
 
 `sprite.Asset(name, path)` currently loads a JSON asset with a `platforms.nes.frames` variant. Each frame is an array of rows using NES color indexes `0`, `1`, `2`, and `3`. The compiler pads frames to 8x8 hardware cells, writes their tiles into CHR ROM starting at tile `6`, and rejects assets that need more than 64 hardware sprites or exceed the one-byte pattern-table tile index range.
 
-`sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite through the NES OAM shadow page and performs OAM DMA. In this spike, `frame`, `flipX`, and `paletteSlot` are compile-time values. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` must fit the NES sprite palette slots `0..3`.
+`sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite through the NES OAM shadow page and performs OAM DMA. `x`, `y`, `frame`, and `flipX` can be byte-backed constants or storage locations in the shared SDK operation model. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` remains a compile-time logical sprite palette slot and must fit the NES sprite palette slots `0..3`.
 
 `world.Column(...)`, `world.Flags(...)`, and `world.Map(width, streamY, height)` build the initial visible nametable from unified world resources. In this spike, `width` must fit the visible 32-column nametable because runtime column streaming is not implemented.
 

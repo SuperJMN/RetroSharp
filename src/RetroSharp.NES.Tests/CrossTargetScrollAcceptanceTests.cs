@@ -5,7 +5,7 @@ using RetroSharp.GameBoy;
 using RetroSharp.NES;
 using Xunit;
 
-// Acceptance: one source program of horizontal scroll produces the SAME shared
+// Acceptance: one source program of horizontal scroll and logical sprite drawing produces the SAME shared
 // portable operations and lowers (validates + builds) on both Game Boy and NES,
 // through the shared Sdk2DOperation model rather than parallel target paths.
 public sealed class CrossTargetScrollAcceptanceTests
@@ -15,6 +15,11 @@ public sealed class CrossTargetScrollAcceptanceTests
             Width = 8,
             StreamY = 10,
             Height = 4
+        }
+
+        enum Marker {
+            ScreenX = 72,
+            ScreenY = 72
         }
 
         void main() {
@@ -30,13 +35,17 @@ public sealed class CrossTargetScrollAcceptanceTests
             world.Column(7, 3, 4, 5, 1);
             world.Map(World.Width, World.StreamY, World.Height);
             camera.Init(World.Width, World.StreamY, World.Height);
+            sprite.Asset(marker, "samples/cross-target-camera/marker.json");
 
             loop {
                 video.WaitVBlank();
                 input.Poll();
                 let cameraX = button_hold_ticks(right);
+                u8 frame = 0;
+                bool flipX = false;
                 camera.SetPosition(cameraX, 0);
                 camera.Apply();
+                sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, frame, flipX, 0);
             }
         }
         """;
@@ -44,8 +53,9 @@ public sealed class CrossTargetScrollAcceptanceTests
     [Fact]
     public void Same_source_collects_identical_shared_operations_for_both_targets()
     {
-        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(HorizontalScrollSource);
-        var nesOperations = NesRomCompiler.CollectSdkOperations(HorizontalScrollSource);
+        var baseDirectory = RepoRoot();
+        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(HorizontalScrollSource, baseDirectory);
+        var nesOperations = NesRomCompiler.CollectSdkOperations(HorizontalScrollSource, baseDirectory);
 
         var gbTypes = gbOperations.Select(operation => operation.GetType()).ToArray();
         var nesTypes = nesOperations.Select(operation => operation.GetType()).ToArray();
@@ -54,13 +64,15 @@ public sealed class CrossTargetScrollAcceptanceTests
         Assert.Contains(typeof(Sdk2DOperation.WaitFrame), gbTypes);
         Assert.Contains(typeof(Sdk2DOperation.PollInput), gbTypes);
         Assert.Contains(typeof(Sdk2DOperation.SetCameraPosition), gbTypes);
+        Assert.Contains(typeof(Sdk2DOperation.DrawLogicalSprite), gbTypes);
     }
 
     [Fact]
     public void Same_source_lowers_to_a_rom_on_both_targets()
     {
-        var gbRom = GameBoyRomCompiler.CompileSource(HorizontalScrollSource);
-        var nesRom = NesRomCompiler.CompileSource(HorizontalScrollSource);
+        var baseDirectory = RepoRoot();
+        var gbRom = GameBoyRomCompiler.CompileSource(HorizontalScrollSource, baseDirectory);
+        var nesRom = NesRomCompiler.CompileSource(HorizontalScrollSource, baseDirectory);
 
         Assert.Equal(32768, gbRom.Length);
         Assert.NotEmpty(nesRom);
@@ -89,5 +101,17 @@ public sealed class CrossTargetScrollAcceptanceTests
         // NES is horizontal-only: the shared validator rejects the vertical axis.
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(verticalSource));
         Assert.Contains("does not support vertical scrolling", exception.Message);
+    }
+
+    private static string RepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName
+               ?? throw new InvalidOperationException("Could not locate RetroSharp repository root.");
     }
 }

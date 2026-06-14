@@ -36,8 +36,10 @@ void main() {
         video.WaitVBlank();
         input.Poll();
         let cameraX = button_hold_ticks(right);
+        u8 frame = 0;
+        bool flipX = false;
         camera.SetPosition(cameraX, 0);
         camera.Apply();
-        sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, 0, false, 0);
+        sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, frame, flipX, 0);
     }
 }

@@ -22,7 +22,9 @@ internal static class StaticClassLowerer
             body,
             method.IsExpressionBodied,
             method.IsInline,
-            method.IsPure);
+            method.IsPure,
+            method.IsExtern,
+            method.Attributes);
     }
 
     public static ProgramSyntax LowerStaticCalls(
@@ -48,7 +50,9 @@ internal static class StaticClassLowerer
                 RewriteStaticBlock(function.Block, staticMethods),
                 function.IsExpressionBodied,
                 function.IsInline,
-                function.IsPure))
+                function.IsPure,
+                function.IsExtern,
+                function.Attributes))
             .ToList();
 
         return new ProgramSyntax(program.TypeAliases, constants, program.Enums, program.Structs, functions);

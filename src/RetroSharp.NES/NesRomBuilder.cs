@@ -198,6 +198,7 @@ internal sealed class NesRuntimeCompiler
     private const byte FirstVariableAddress = 0x00;
     private const byte RuntimeReservedStateAddress = 0xE0;
     private const byte CameraXAddress = 0xE0;
+    private const byte SpriteFrameScratchAddress = 0xE1;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -794,9 +795,14 @@ internal sealed class NesRuntimeCompiler
                 EmitSdkOperation(new Sdk2DOperation.PollInput());
                 break;
             case "sprite_draw":
-                EmitSpriteDraw(call);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadDrawLogicalSprite(call));
                 break;
             default:
+                if (TryEmitTargetIntrinsic(call))
+                {
+                    break;
+                }
+
                 if (TryEmitUserFunction(call))
                 {
                     break;
@@ -809,6 +815,11 @@ internal sealed class NesRuntimeCompiler
     private bool TryEmitUserFunction(FunctionCall call)
     {
         if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
         {
             return false;
         }
@@ -833,6 +844,11 @@ internal sealed class NesRuntimeCompiler
     private bool TryEmitUserValueFunction(FunctionCall call)
     {
         if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
         {
             return false;
         }
@@ -1185,6 +1201,61 @@ internal sealed class NesRuntimeCompiler
         builder.BranchRelative(0x10, label);        // BPL label
     }
 
+    private bool TryEmitTargetIntrinsic(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function) || !function.IsExtern)
+        {
+            return false;
+        }
+
+        var intrinsic = TargetIntrinsicName(function, "nes", "NES");
+        switch (intrinsic)
+        {
+            case "wait_frame":
+                NesVideoProgram.RequireArity(call, 0);
+                EmitWaitFrame();
+                return true;
+            default:
+                throw new InvalidOperationException($"Unsupported NES intrinsic '{intrinsic}' on extern function '{function.Name}'.");
+        }
+    }
+
+    private static string TargetIntrinsicName(FunctionSyntax function, string targetId, string targetName)
+    {
+        var intrinsic = AttributeString(function, "intrinsic")
+                        ?? throw new InvalidOperationException($"Extern function '{function.Name}' must declare an intrinsic attribute.");
+        var target = AttributeString(function, "target")
+                     ?? throw new InvalidOperationException($"Extern intrinsic '{function.Name}' must declare a target attribute.");
+        if (!string.Equals(target, targetId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Extern intrinsic '{function.Name}' targets '{target}', not {targetName}.");
+        }
+
+        return intrinsic;
+    }
+
+    private static string? AttributeString(FunctionSyntax function, string name)
+    {
+        var attribute = function.Attributes.FirstOrDefault(attr => attr.Name == name);
+        if (attribute is null)
+        {
+            return null;
+        }
+
+        if (attribute.Arguments is not [ConstantSyntax constant])
+        {
+            throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
+        }
+
+        var text = constant.Value.ToString() ?? "";
+        if (text.Length >= 2 && text[0] == '"' && text[^1] == '"')
+        {
+            return text[1..^1];
+        }
+
+        throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
+    }
+
     internal void EmitPollInput()
     {
         builder.LoadAZeroPage(InputCurrentAddress);
@@ -1307,7 +1378,7 @@ internal sealed class NesRuntimeCompiler
                 builder.LoadAImmediate(constant.Value);
                 break;
             case SdkByteExpression.Variable variable:
-                builder.LoadAZeroPage(VariableAddress(variable.Name));
+                builder.LoadAZeroPage(VariableAddress(StorageKey(variable.Location)));
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
@@ -1322,23 +1393,13 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
-    private void EmitSpriteDraw(FunctionCall call)
+    internal void EmitDrawLogicalSprite(Sdk2DOperation.DrawLogicalSprite operation)
     {
-        var args = call.Parameters.ToList();
-        if (args.Count is not 4 and not 5 and not 6)
+        if (!program.SpriteAssets.TryGetValue(operation.SpriteId, out var asset))
         {
-            throw new InvalidOperationException($"sprite_draw expects 4, 5, or 6 arguments, got {args.Count}.");
+            throw new InvalidOperationException($"Unknown NES sprite asset '{operation.SpriteId}'. Declare it with sprite_asset(...).");
         }
 
-        var assetName = NesVideoProgram.IdentifierArg(args[0], "sprite_draw argument 1");
-        if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
-        {
-            throw new InvalidOperationException($"Unknown NES sprite asset '{assetName}'. Declare it with sprite_asset(...).");
-        }
-
-        var frame = SpriteDrawFrameArgument(args, asset);
-        var flipX = SpriteDrawFlipXArgument(args);
-        var paletteSlot = SpriteDrawPaletteSlotArgument(args);
         var firstHardwareSprite = nextHardwareSprite;
         if (firstHardwareSprite + asset.Pieces.Count > NesTarget.Capabilities.SpriteCount)
         {
@@ -1350,82 +1411,141 @@ internal sealed class NesRuntimeCompiler
         {
             var piece = asset.Pieces[pieceIndex];
             var oamAddress = (ushort)(OamShadowAddress + (firstHardwareSprite + pieceIndex) * 4);
-            var xOffset = flipX ? asset.LogicalWidth - 8 - piece.XOffset : piece.XOffset;
-            var attributes = paletteSlot | (flipX ? 0x40 : 0);
 
-            EmitSpriteDrawY(args[2], piece.YOffset, oamAddress);
+            EmitSpriteDrawY(operation.Y, piece.YOffset, oamAddress);
 
-            builder.LoadAImmediate(asset.FirstTile + frame * asset.TilesPerFrame + piece.TileOffset);
+            EmitSpriteTile(operation.Frame, asset, piece.TileOffset);
             builder.StoreAAbsolute((ushort)(oamAddress + 1));
 
-            builder.LoadAImmediate(attributes);
-            builder.StoreAAbsolute((ushort)(oamAddress + 2));
+            EmitSpriteDrawAttributes(operation.FlipX, operation.PaletteSlot, (ushort)(oamAddress + 2));
 
-            EmitSpriteDrawX(args[1], xOffset, (ushort)(oamAddress + 3));
+            EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 3));
         }
 
         EmitOamDma();
     }
 
-    private int SpriteDrawFrameArgument(IReadOnlyList<ExpressionSyntax> args, NesCompiledSpriteAsset asset)
+    private void EmitSpriteDrawY(SdkByteExpression yExpression, int offset, ushort oamAddress)
     {
-        if (!TryConst(args[3], out var frame))
-        {
-            throw new InvalidOperationException("sprite_draw argument 4 must be a constant frame index for the current NES sprite spike.");
-        }
-
-        if (frame < 0 || frame >= asset.FrameCount)
-        {
-            throw new InvalidOperationException($"sprite_draw argument 4 must be between 0 and {asset.FrameCount - 1}.");
-        }
-
-        return frame;
-    }
-
-    private bool SpriteDrawFlipXArgument(IReadOnlyList<ExpressionSyntax> args)
-    {
-        if (args.Count < 5)
-        {
-            return false;
-        }
-
-        if (!TryConst(args[4], out var flipX) || flipX is not 0 and not 1)
-        {
-            throw new InvalidOperationException("sprite_draw argument 5 is portable flipX and must be 0, 1, true, or false for the current NES sprite spike.");
-        }
-
-        return flipX != 0;
-    }
-
-    private static int SpriteDrawPaletteSlotArgument(IReadOnlyList<ExpressionSyntax> args)
-    {
-        if (args.Count < 6)
-        {
-            return 0;
-        }
-
-        var slot = NesVideoProgram.ConstValue(args[5], "sprite_draw argument 6");
-        if (slot < 0 || slot >= NesTarget.Capabilities.SpritePaletteSlots)
-        {
-            throw new InvalidOperationException(
-                $"Target '{NesTarget.Capabilities.Name}' supports sprite palette slots 0..{NesTarget.Capabilities.SpritePaletteSlots - 1}, but slot {slot} was requested.");
-        }
-
-        return slot;
-    }
-
-    private void EmitSpriteDrawY(ExpressionSyntax yExpression, int offset, ushort oamAddress)
-    {
-        EmitExpressionToA(yExpression);
+        EmitSdkByteExpressionToA(yExpression);
         EmitAddSignedImmediate(offset - 1);
         builder.StoreAAbsolute(oamAddress);
     }
 
-    private void EmitSpriteDrawX(ExpressionSyntax xExpression, int offset, ushort oamAddress)
+    private void EmitSpriteTile(SdkByteExpression frameExpression, NesCompiledSpriteAsset asset, int pieceTileOffset)
     {
-        EmitExpressionToA(xExpression);
+        if (frameExpression is SdkByteExpression.Constant constant)
+        {
+            if (constant.Value < 0 || constant.Value >= asset.FrameCount)
+            {
+                throw new InvalidOperationException($"sprite_draw argument 4 must be between 0 and {asset.FrameCount - 1}.");
+            }
+
+            builder.LoadAImmediate(asset.FirstTile + constant.Value * asset.TilesPerFrame + pieceTileOffset);
+            return;
+        }
+
+        EmitSdkByteExpressionToA(frameExpression);
+        EmitMultiplyAByConstant(asset.TilesPerFrame);
+        EmitAddSignedImmediate(asset.FirstTile + pieceTileOffset);
+    }
+
+    private void EmitSpriteDrawX(
+        SdkByteExpression xExpression,
+        SdkByteExpression? flipXExpression,
+        NesCompiledSpriteAsset asset,
+        NesMetaspritePiece piece,
+        ushort oamAddress)
+    {
+        var normalOffset = piece.XOffset;
+        var flippedOffset = asset.LogicalWidth - 8 - piece.XOffset;
+        if (flipXExpression is null || normalOffset == flippedOffset)
+        {
+            EmitSpriteDrawXAtOffset(xExpression, normalOffset, oamAddress);
+            return;
+        }
+
+        var normalLabel = builder.CreateLabel("sprite_x_normal");
+        var endLabel = builder.CreateLabel("sprite_x_end");
+
+        EmitSdkByteExpressionToA(flipXExpression);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, normalLabel); // BEQ normalLabel
+
+        EmitSpriteDrawXAtOffset(xExpression, flippedOffset, oamAddress);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(normalLabel);
+        EmitSpriteDrawXAtOffset(xExpression, normalOffset, oamAddress);
+        builder.Label(endLabel);
+    }
+
+    private void EmitSpriteDrawXAtOffset(SdkByteExpression xExpression, int offset, ushort oamAddress)
+    {
+        EmitSdkByteExpressionToA(xExpression);
         EmitAddSignedImmediate(offset);
         builder.StoreAAbsolute(oamAddress);
+    }
+
+    private void EmitSpriteDrawAttributes(SdkByteExpression? flipXExpression, int paletteSlot, ushort oamAddress)
+    {
+        if (flipXExpression is null || (TrySdkConst(flipXExpression, out var constant) && constant == 0))
+        {
+            builder.LoadAImmediate(paletteSlot);
+            builder.StoreAAbsolute(oamAddress);
+            return;
+        }
+
+        if (TrySdkConst(flipXExpression, out _))
+        {
+            builder.LoadAImmediate(paletteSlot | 0x40);
+            builder.StoreAAbsolute(oamAddress);
+            return;
+        }
+
+        var noFlipLabel = builder.CreateLabel("sprite_flags_no_flip");
+        var storeLabel = builder.CreateLabel("sprite_flags_store");
+
+        EmitSdkByteExpressionToA(flipXExpression);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xF0, noFlipLabel); // BEQ noFlipLabel
+
+        builder.LoadAImmediate(paletteSlot | 0x40);
+        builder.JumpAbsolute(storeLabel);
+
+        builder.Label(noFlipLabel);
+        builder.LoadAImmediate(paletteSlot);
+
+        builder.Label(storeLabel);
+        builder.StoreAAbsolute(oamAddress);
+    }
+
+    private void EmitMultiplyAByConstant(int factor)
+    {
+        if (factor == 1)
+        {
+            return;
+        }
+
+        builder.StoreAZeroPage(SpriteFrameScratchAddress);
+        builder.LoadAImmediate(0);
+        for (var i = 0; i < factor; i++)
+        {
+            builder.ClearCarry();
+            builder.AddZeroPage(SpriteFrameScratchAddress);
+        }
+    }
+
+    private static bool TrySdkConst(SdkByteExpression expression, out int value)
+    {
+        if (expression is SdkByteExpression.Constant constant)
+        {
+            value = constant.Value;
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private void EmitAddSignedImmediate(int offset)
@@ -1893,6 +2013,17 @@ internal sealed class NesRuntimeCompiler
     private static string IndexedElementName(string baseIdentifier, int index)
     {
         return $"{baseIdentifier}[{index}]";
+    }
+
+    private static string StorageKey(SdkStorageLocation location)
+    {
+        return location switch
+        {
+            SdkStorageLocation.Local local => local.Name,
+            SdkStorageLocation.Field field => $"{StorageKey(field.Target)}.{field.FieldName}",
+            SdkStorageLocation.IndexedElement indexed => IndexedElementName(indexed.BaseName, indexed.Index),
+            _ => throw new InvalidOperationException($"Unsupported SDK storage location '{location.GetType().Name}'."),
+        };
     }
 
     private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)

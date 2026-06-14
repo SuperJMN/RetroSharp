@@ -68,9 +68,10 @@ Operation-driven lowering pattern (already proven, replicate it):
 - A per-target lowerer (`GameBoySdkOperationLowerer`, `NesSdkOperationLowerer`) maps an
   operation to target emission. The runtime compiler routes a source call via
   `EmitSdkOperation(op)` instead of re-deriving it from the AST.
-- Operand IR is `SdkByteExpression` (`Constant | Variable`). `Variable.Name` is the
-  exact key into a target's `variables` dict (e.g. `actor.x`, `tabla[2]`), so the
-  target resolves it byte-faithfully. Do NOT add Index/Member/BinaryOp cases to the IR.
+- Operand IR is `SdkByteExpression` (`Constant | Variable`). `Variable` carries a typed
+  `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`); targets convert that
+  descriptor to their runtime local-map key only at the backend boundary. Do NOT add general
+  expression tree cases such as `BinaryOp` to the IR.
 - Every step must keep tracked ROMs byte-identical and the full suite green.
 
 Progress (2026-06-14):
@@ -78,33 +79,40 @@ Progress (2026-06-14):
   PL-B2 #112 (NES camera via shared model), PL-D1 #117 (cross-target scroll acceptance
   in `CrossTargetScrollAcceptanceTests`), PL-C1 #114 (collector moved to
   `RetroSharp.Sdk.Frontend`, out of the language assembly), PL-C3 #116 (layer boundary +
-  golden rule documented in ArchitectureRoadmap). Earlier groundwork: #101/#102/#103/#105.
-- Blocked on design: PL-A2 #108 and PL-B3 #113 (sprite). `Sdk2DOperation.DrawLogicalSprite`
-  carries `int X/Y/Frame` + static `SpriteTransform`, but the runner draws with runtime
-  operands (`player.y`, `player.displayFrame`, `player.displayFlipX`).
-  **DESIGN DECISION TAKEN (owner, 2026-06-14), now unblocked — spec in #108 comment:**
-  - X/Y/Frame become `SdkByteExpression` (runtime), like the camera migration.
-  - Add a nullable `SdkByteExpression? FlipX` operand (runtime value). Capability check:
-    if FlipX is present, statically require the target supports `SpriteTransform.FlipX`
-    as a feature; the value stays runtime. Static transforms (FlipY) keep static validation.
-  - `PaletteSlot` stays a constant int (validated statically; runner uses 0).
-  - Remove `LogicalSize` from the portable record: metasprite geometry is target asset data
-    resolved by the lowerer from `SpriteId` (via `program.SpriteAssets`), not carried by the
-    target-neutral collector. Add `ReadDrawLogicalSprite` mirroring `ReadSetCameraPosition`.
-  - GB lowerer must reproduce `EmitSpriteDraw` byte-for-byte; verify runner ROM byte-identical.
-- Pending: PL-A2 #108 / PL-B3 #113 (sprite — design decided, ready to implement, see above),
-  PL-A3 #109 (streaming/tilemap via lowerer; sensitive: vblank/columns), PL-A4 #110 (builder
-  iterates operations instead of re-walking the AST; depends on A1-A3), PL-C2 #115 (harden
-  operand contract), PL-E1 #118 (per-target intrinsics + SDK-as-library prototype).
+  golden rule documented in ArchitectureRoadmap), PL-A2 #108 / PL-B3 #113 (sprite draw now
+  collected as `DrawLogicalSprite` and lowered through GB/NES SDK lowerers), PL-A3 #109
+  (Game Boy `map_stream_column(...)` now collected as `StreamMapColumn` and lowered through
+  `GameBoySdkOperationLowerer`), PL-A4 #110 (Game Boy runtime lowering now consumes
+  `program.SdkOperations` instead of rebuilding migrated operations from AST calls), PL-C2 #115
+  (`SdkByteExpression.Variable` now carries a typed storage descriptor instead of an opaque
+  formatted string), PL-E1 #118 (parser preserves target/intrinsic extern metadata and GB/NES
+  prove a `wait_frame` source helper can lower through target intrinsics with identical bytes).
+  Earlier groundwork: #101/#102/#103/#105.
+- Sprite operation decision implemented 2026-06-14: X/Y/Frame are `SdkByteExpression`, FlipX
+  is nullable `SdkByteExpression?`, PaletteSlot stays a constant int validated against target
+  capabilities, and target lowerers resolve metasprite geometry from `SpriteId` and asset data
+  instead of carrying `LogicalSize` in the portable record. `ReadDrawLogicalSprite` mirrors
+  `ReadSetCameraPosition`, and the cross-target acceptance now includes logical sprite drawing.
+- Stream column operation decision implemented 2026-06-14: target/source columns are
+  `SdkByteExpression`, Y/Height remain constants, and Game Boy lowering preserves the existing
+  map row table and VRAM write byte shape. This does not add NES runtime nametable streaming.
+- Operation stream decision implemented 2026-06-14: `GameBoyRuntimeCompiler` walks the collected
+  operation list with a cursor for migrated statement calls and `world_tile_flags_at(...)`; it
+  fails if the next operation type does not match the source call or if operations remain
+  unconsumed after runtime emission.
+- Operand contract decision implemented 2026-06-14: SDK byte variables preserve the
+  value-or-location IR boundary while replacing collector/target string formatting conventions
+  with typed `Local`, recursive `Field`, and `IndexedElement` descriptors.
+- Intrinsics prototype implemented 2026-06-14: `[target("gb"|"nes")] [intrinsic("wait_frame")]`
+  extern functions are preserved by the parser and lower through target runtime compilers.
+  Source helpers over those externs emit the same bytes as the current `WaitFrame` SDK
+  operation. Full SDK migration still needs module packaging, portable target selection, and
+  a broader intrinsic catalog.
+- Pending in the edited #106 slice: none known after PL-E1.
 
 Suggested next steps for the next agent, in order:
-1. PL-A2 #108 then PL-B3 #113 (sprite) — design is decided (spec above and in #108); this is
-   the highest-value remaining work because it makes the sprite path operation-driven on both
-   targets, same as the camera. Implement GB first, verify runner ROM byte-identical, then NES.
-2. PL-A3 #109 (streaming) — clean but byte-sensitive; migrate incrementally.
-3. PL-A4 #110 — conceptual close of the boundary: the GB builder consumes
-   `program.SdkOperations` instead of re-walking the AST. Depends on A2/A3 being migrated.
-4. PL-C2 #115 (optional hardening) and PL-E1 #118 (long-term vision).
+1. If continuing #106 beyond this slice, open new focused issues for module packaging, portable
+   target selection, and the remaining intrinsic catalog before migrating more SDK calls.
 
 ## Game Boy Runner Lessons
 

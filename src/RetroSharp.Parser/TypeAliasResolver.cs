@@ -32,7 +32,9 @@ public static class TypeAliasResolver
                 ResolveBlock(function.Block, aliases),
                 function.IsExpressionBodied,
                 function.IsInline,
-                function.IsPure))
+                function.IsPure,
+                function.IsExtern,
+                function.Attributes))
             .ToList();
 
         return new ProgramSyntax([], constants, program.Enums, structs, functions);

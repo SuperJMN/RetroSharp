@@ -32,6 +32,8 @@ public static class Sdk2DOperationValidator
                 RequireAxes(capabilities, camera.Axes);
                 return;
             case Sdk2DOperation.StreamMapColumn column:
+                ValidateByteExpression(column.TargetColumn, "stream map target column");
+                ValidateByteExpression(column.SourceColumn, "stream map source column");
                 TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Horizontal);
                 RequireBackgroundTileWriteBudget(capabilities, column.Height, "streaming a visible map column");
                 return;
@@ -49,13 +51,22 @@ public static class Sdk2DOperationValidator
 
     private static void ValidateDrawLogicalSprite(Target2DCapabilities capabilities, Sdk2DOperation.DrawLogicalSprite draw)
     {
+        ValidateByteExpression(draw.X, "sprite X");
+        ValidateByteExpression(draw.Y, "sprite Y");
+        ValidateByteExpression(draw.Frame, "sprite frame");
+        if (draw.FlipX is not null)
+        {
+            ValidateByteExpression(draw.FlipX, "sprite FlipX");
+            TargetCapabilityChecks.RequireSpriteTransform(capabilities, SpriteTransform.FlipX);
+        }
+
         if (draw.PaletteSlot < 0 || draw.PaletteSlot >= capabilities.SpritePaletteSlots)
         {
             throw new InvalidOperationException(
                 $"Target '{capabilities.Name}' supports sprite palette slots 0..{capabilities.SpritePaletteSlots - 1}, but slot {draw.PaletteSlot} was requested.");
         }
 
-        TargetCapabilityChecks.RequireSpriteTransform(capabilities, draw.Transform);
+        TargetCapabilityChecks.RequireSpriteTransform(capabilities, draw.StaticTransform);
     }
 
     private static void ValidateByteExpression(SdkByteExpression expression, string context)
@@ -66,12 +77,38 @@ public static class Sdk2DOperationValidator
                 throw new InvalidOperationException($"{context} constant must be between 0 and 255, got {constant.Value}.");
             case SdkByteExpression.Constant:
                 return;
-            case SdkByteExpression.Variable { Name: { Length: > 0 } }:
+            case SdkByteExpression.Variable variable:
+                ValidateStorageLocation(variable.Location, context);
                 return;
-            case SdkByteExpression.Variable:
-                throw new InvalidOperationException($"{context} variable name must not be empty.");
             default:
                 throw new InvalidOperationException($"{context} uses unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private static void ValidateStorageLocation(SdkStorageLocation location, string context)
+    {
+        switch (location)
+        {
+            case SdkStorageLocation.Local { Name.Length: > 0 }:
+                return;
+            case SdkStorageLocation.Local:
+                throw new InvalidOperationException($"{context} local storage name must not be empty.");
+            case SdkStorageLocation.Field field:
+                ValidateStorageLocation(field.Target, context);
+                if (field.FieldName.Length == 0)
+                {
+                    throw new InvalidOperationException($"{context} field name must not be empty.");
+                }
+
+                return;
+            case SdkStorageLocation.IndexedElement { BaseName.Length: > 0, Index: >= 0 and <= 255 }:
+                return;
+            case SdkStorageLocation.IndexedElement { BaseName.Length: 0 }:
+                throw new InvalidOperationException($"{context} indexed storage base name must not be empty.");
+            case SdkStorageLocation.IndexedElement indexed:
+                throw new InvalidOperationException($"{context} indexed storage index must be between 0 and 255, got {indexed.Index}.");
+            default:
+                throw new InvalidOperationException($"{context} uses unsupported SDK storage location '{location.GetType().Name}'.");
         }
     }
 

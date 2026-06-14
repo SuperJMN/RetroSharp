@@ -357,6 +357,32 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_wait_frame_library_helper_over_game_boy_intrinsic_like_sdk_operation()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     video_wait_vblank();
+                                 }
+                                 """;
+
+        const string intrinsicSource = """
+                                       [target("gb")]
+                                       [intrinsic("wait_frame")]
+                                       extern void gb_wait_frame();
+
+                                       inline void wait_frame() {
+                                           gb_wait_frame();
+                                       }
+
+                                       void main() {
+                                           wait_frame();
+                                       }
+                                       """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(sdkSource), GameBoyRomCompiler.CompileSource(intrinsicSource));
+    }
+
+    [Fact]
     public void Compiles_receiver_method_calls_like_static_helper_calls()
     {
         const string staticSource = """

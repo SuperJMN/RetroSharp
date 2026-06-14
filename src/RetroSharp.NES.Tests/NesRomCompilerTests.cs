@@ -378,6 +378,32 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_wait_frame_library_helper_over_nes_intrinsic_like_sdk_operation()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     video_wait_vblank();
+                                 }
+                                 """;
+
+        const string intrinsicSource = """
+                                       [target("nes")]
+                                       [intrinsic("wait_frame")]
+                                       extern void nes_wait_frame();
+
+                                       inline void wait_frame() {
+                                           nes_wait_frame();
+                                       }
+
+                                       void main() {
+                                           wait_frame();
+                                       }
+                                       """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(sdkSource), NesRomCompiler.CompileSource(intrinsicSource));
+    }
+
+    [Fact]
     public void Nes_sdk_dot_calls_keep_existing_capability_errors()
     {
         const string source = """

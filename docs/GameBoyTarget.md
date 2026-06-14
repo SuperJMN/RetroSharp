@@ -34,9 +34,13 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `video.WaitVBlank()` as `Sdk2DOperation.WaitFrame`
 - `input.Poll()` as `Sdk2DOperation.PollInput`
 - `camera.SetPosition(x, 0)` as `Sdk2DOperation.SetCameraPosition`
+- `camera.Apply()` as `Sdk2DOperation.ApplyCamera`
+- `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` as `Sdk2DOperation.DrawLogicalSprite`
+- `map_stream_column(targetColumn, sourceColumn, y, height)` as `Sdk2DOperation.StreamMapColumn`
+- `world_tile_flags_at(worldX, worldY)` as `Sdk2DOperation.ReadWorldTileFlags`
 - `hud.SetTile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
 
-`Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video.WaitVBlank()`.
+`Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video.WaitVBlank()`. Logical sprite draw and explicit map-column streaming also lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge.
 
 Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
@@ -168,7 +172,7 @@ Runtime calls:
 
 `camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`camera.SetPosition(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants or local variables. The current Game Boy lowering compares the requested low byte with the current camera low byte as an unsigned modular delta, then moves at most one pixel per axis toward the shortest step direction on each call. This keeps continuous horizontal movement stable across the Game Boy `SCX` byte wrap at 255 -> 0 while the runtime still maintains the internal 16-bit camera counters used by streaming. X tile-boundary crossings reuse the existing column streaming paths. Y tile-boundary crossings stream one visible row up or down from the generated world-map row data, writing 20 background tiles per streamed row to stay within the Game Boy target budget. A camera operation that can move both axes in the same frame is rejected for Game Boy until a scheduler or split-frame policy can keep the combined column-and-row writes within budget.
+`camera.SetPosition(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants, locals, struct fields, or constant-index array elements. The current Game Boy lowering compares the requested low byte with the current camera low byte as an unsigned modular delta, then moves at most one pixel per axis toward the shortest step direction on each call. This keeps continuous horizontal movement stable across the Game Boy `SCX` byte wrap at 255 -> 0 while the runtime still maintains the internal 16-bit camera counters used by streaming. X tile-boundary crossings reuse the existing column streaming paths. Y tile-boundary crossings stream one visible row up or down from the generated world-map row data, writing 20 background tiles per streamed row to stay within the Game Boy target budget. A camera operation that can move both axes in the same frame is rejected for Game Boy until a scheduler or split-frame policy can keep the combined column-and-row writes within budget.
 
 `camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel. When horizontal movement crosses an 8 px tile boundary, the backend streams the next source map column into the circular Game Boy background map. The same column step also streams the background rows above the world band (GB rows `0..streamY-1`) from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. Every tile-boundary column or row stream first parks the CPU until the PPU reaches VBlank (`LY >= 144`) before touching the background tilemap, because the stream runs late in the frame (after input, physics, and collision). Without that gate the writes race active display and tear the top background rows; the gate keeps the whole batch inside a VRAM-accessible window. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
@@ -262,6 +266,7 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 - [x] Extend camera position state and `camera.Apply()` to vertical scroll.
 - [x] Stream visible background rows when vertical camera movement crosses tile boundaries.
 - [x] Preserve logical sprite metadata for loaded Game Boy sprite assets.
+- [x] Consume the collected SDK operation stream during Game Boy runtime lowering.
 - [x] Replace raw `sprite.Draw` flags with a portable `flipX` boolean.
 - [x] Add logical sprite palette slot selection to `sprite.Draw`.
 - [x] Add animation clip data and looping `animation.Frame(...)` lookup.

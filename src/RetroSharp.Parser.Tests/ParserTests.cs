@@ -1178,6 +1178,27 @@ public class ParserTests
             .Should().Fail();
     }
 
+    [Fact]
+    public void Extern_target_intrinsic_attributes_are_preserved()
+    {
+        var result = new SomeParser().Parse(
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void gb_wait_frame();
+
+            void main() { }
+            """);
+
+        result.Should().Succeed();
+        var intrinsic = result.Value.Functions.Single(function => function.Name == "gb_wait_frame");
+
+        intrinsic.IsExtern.Should().BeTrue();
+        intrinsic.Attributes.Select(attribute => attribute.Name).Should().Equal("target", "intrinsic");
+        Assert.Equal("\"gb\"", Assert.IsType<ConstantSyntax>(intrinsic.Attributes[0].Arguments.Single()).Value);
+        Assert.Equal("\"wait_frame\"", Assert.IsType<ConstantSyntax>(intrinsic.Attributes[1].Arguments.Single()).Value);
+    }
+
     private static void AssertParse(string source)
     {
         AssertParse(source, source);

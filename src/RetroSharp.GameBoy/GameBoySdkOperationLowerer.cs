@@ -24,6 +24,12 @@ internal static class GameBoySdkOperationLowerer
             case Sdk2DOperation.ApplyCamera applyCamera:
                 compiler.EmitApplyCamera(applyCamera);
                 break;
+            case Sdk2DOperation.DrawLogicalSprite draw:
+                compiler.EmitDrawLogicalSprite(draw);
+                break;
+            case Sdk2DOperation.StreamMapColumn column:
+                compiler.EmitStreamMapColumn(column);
+                break;
             default:
                 throw new NotSupportedException($"Game Boy SDK lowering does not support {operation.GetType().Name} yet.");
         }

@@ -124,6 +124,22 @@ Portable core (examples):
 
 Platform-specific (examples): Spectrum out/in/map_bank, GameBoy oam_dma/ppu_*, NES ppu_*/nmi_enable.
 
+Implemented prototype: top-level extern functions can carry target-intrinsic metadata:
+
+```c
+[target("gb")]
+[intrinsic("wait_frame")]
+extern void gb_wait_frame();
+
+inline void WaitFrame() {
+    gb_wait_frame();
+}
+```
+
+The current Game Boy and NES cartridge targets recognize `intrinsic("wait_frame")` on an extern declaration whose `target(...)` matches the backend (`"gb"` or `"nes"`). Calling a source helper over that extern emits the same bytes as the current `Sdk2DOperation.WaitFrame` path, with no call ABI, stack setup, helper thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline helpers: if a target does not recognize the declared intrinsic, compilation fails instead of emitting an empty function.
+
+This is a minimal bridge toward moving SDK functions into source libraries over per-target intrinsics. The full design still needs module/library packaging, target selection for portable helper bodies, more intrinsic names and signatures, and diagnostics for unsupported target variants.
+
 ---
 
 ## 8. Grammar updates (EBNF excerpt)

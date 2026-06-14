@@ -10,12 +10,31 @@ public abstract record Sdk2DOperation
 
     public sealed record DrawLogicalSprite(
         string SpriteId,
-        Size2D LogicalSize,
-        int X,
-        int Y,
-        int Frame,
+        SdkByteExpression X,
+        SdkByteExpression Y,
+        SdkByteExpression Frame,
+        SdkByteExpression? FlipX,
         int PaletteSlot,
-        SpriteTransform Transform) : Sdk2DOperation;
+        SpriteTransform StaticTransform) : Sdk2DOperation
+    {
+        public DrawLogicalSprite(
+            string SpriteId,
+            int X,
+            int Y,
+            int Frame,
+            int PaletteSlot,
+            SpriteTransform StaticTransform)
+            : this(
+                SpriteId,
+                new SdkByteExpression.Constant(X),
+                new SdkByteExpression.Constant(Y),
+                new SdkByteExpression.Constant(Frame),
+                null,
+                PaletteSlot,
+                StaticTransform)
+        {
+        }
+    }
 
     public sealed record SetCameraPosition(
         SdkByteExpression X,
@@ -32,10 +51,24 @@ public abstract record Sdk2DOperation
         ScrollAxes Axes) : Sdk2DOperation;
 
     public sealed record StreamMapColumn(
-        int TargetColumn,
-        int SourceColumn,
+        SdkByteExpression TargetColumn,
+        SdkByteExpression SourceColumn,
         int Y,
-        int Height) : Sdk2DOperation;
+        int Height) : Sdk2DOperation
+    {
+        public StreamMapColumn(
+            int TargetColumn,
+            int SourceColumn,
+            int Y,
+            int Height)
+            : this(
+                new SdkByteExpression.Constant(TargetColumn),
+                new SdkByteExpression.Constant(SourceColumn),
+                Y,
+                Height)
+        {
+        }
+    }
 
     public sealed record StreamMapRow(
         int TargetRow,

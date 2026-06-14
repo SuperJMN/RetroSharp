@@ -1,7 +1,7 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-06-09.
+Last updated: 2026-06-14.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
@@ -167,11 +167,13 @@ Portable 2D calls should be represented as semantic operations before target low
 
 `Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels. `SetCameraPosition` charges a background-tile-write budget only on targets that stream background tiles at runtime (`MaxBackgroundTileWritesPerFrame > 0`): for them horizontal movement can require one visible column, vertical movement one visible row, and diagonal movement must fit the combined write count. Targets that cannot write background tiles at runtime (`MaxBackgroundTileWritesPerFrame == 0`, for example NES with no runtime column streaming) fine-scroll the viewport within a pre-loaded background buffer and are charged no streaming cost for a camera position set. The explicit streaming operations (`StreamMapColumn`, `StreamMapRow`) are always budget-checked. Frame-level validation of combined column+row streaming in a single frame remains future work.
 
-`GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The initial boundary recognizes `video_wait_vblank()` as `WaitFrame` and `input_poll()` as `PollInput`; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, camera helpers, and tilemap writes remain on the direct Game Boy path until later roadmap tasks move them deliberately.
+`GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The boundary recognizes frame/input, camera, HUD tile, world flag reads, logical sprite draw, and map-column streaming operations; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, direction-specific camera helpers, and raw tilemap writes remain on the direct target path until later roadmap tasks move them deliberately.
 
 The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only.
 
-Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera` (Game Boy also lowers `WaitFrame`/`PollInput`/camera this way). Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable.Name` is the exact key into a target's local variable map, so the lowerer resolves operands byte-faithfully without the IR gaining syntax structure. Remaining game operations (sprite draw, streaming) are pending migration; see epic #106.
+Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, and `DrawLogicalSprite`. Game Boy also routes the transitional `map_stream_column(...)` helper through `StreamMapColumn`; NES still has no runtime nametable streaming support. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. Game Boy runtime lowering now consumes `program.SdkOperations` with a cursor for migrated statement calls and `ReadWorldTileFlags` value calls; it fails if a source call and the next collected operation disagree, or if collected operations remain after emission.
+
+The first SDK-as-library prototype is also in place. The parser preserves attributes on extern prototypes, and Game Boy/NES recognize `[target("gb"|"nes")] [intrinsic("wait_frame")] extern void ...();` as a target intrinsic. A source helper that calls that extern emits the same wait-frame bytes as the current `Sdk2DOperation.WaitFrame` lowering. This proves the zero-cost direction for migrating compiler-recognized SDK calls into source libraries, while leaving module packaging, portable target selection, and the rest of the intrinsic catalog as future work.
 
 ## Layer Boundary and Golden Rule
 
@@ -181,7 +183,7 @@ Golden rule for anyone extending this area:
 
 1. The language and its classic IR never gain framework concepts. Game-facing concepts live in the SDK layer or in target intrinsics, never in the grammar, AST typing, ABI, or classic IR.
 2. `Sdk2DOperation` must not become a dumping ground. Before adding a new operation, ask whether the feature is genuinely a shared portable primitive or whether it should be a target intrinsic plus a library helper. Genre-specific operations are a warning sign.
-3. The operand IR (`SdkByteExpression`) stays at the level of "immediate value" or "storage location". Do not add `Index`, `Member`, or `BinaryOp` cases: that would pull source syntax into the portable IR. The target resolves a `Variable` name to an address.
+3. The operand IR (`SdkByteExpression`) stays at the level of "immediate value" or "storage location". Typed storage descriptors such as `Local`, `Field`, and `IndexedElement` are acceptable because they describe storage, not expression evaluation. Do not add `BinaryOp` or other general expression-tree cases: that would pull source syntax into the portable IR.
 4. End-state: the 2D SDK should migrate from compiler-recognized operations toward a library written in the language over per-target intrinsics, so the framework becomes optional and replaceable. Until the language has per-target intrinsics and modules, the operation model is the accepted pragmatic bridge.
 
 Where each piece lives:
@@ -286,6 +288,7 @@ Tasks:
 - Keep the current Game Boy compiler behavior working while introducing the shared model.
 - Add a lowering boundary so Game Boy concepts do not originate in `GameBoyRomBuilder`.
 - Add tests that inspect operation creation separately from Game Boy byte emission.
+- Make Game Boy runtime lowering consume the collected operation stream instead of rebuilding migrated operations from AST calls.
 
 Acceptance criteria:
 

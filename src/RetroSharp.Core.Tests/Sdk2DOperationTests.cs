@@ -15,15 +15,19 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.PollInput(),
             new Sdk2DOperation.DrawLogicalSprite(
                 SpriteId: "player",
-                LogicalSize: new Size2D(16, 27),
-                X: 72,
-                Y: 80,
-                Frame: 1,
+                X: new SdkByteExpression.Constant(72),
+                Y: Field("player", "y"),
+                Frame: Field("player", "frame"),
+                FlipX: Field("player", "flipX"),
                 PaletteSlot: 1,
-                Transform: SpriteTransform.FlipX),
+                StaticTransform: SpriteTransform.None),
             new Sdk2DOperation.SetCameraPosition(X: 128, Y: 32, Axes: ScrollAxes.Horizontal | ScrollAxes.Vertical),
             new Sdk2DOperation.ApplyCamera(Axes: ScrollAxes.Horizontal),
-            new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 18),
+            new Sdk2DOperation.StreamMapColumn(
+                TargetColumn: Local("targetColumn"),
+                SourceColumn: Local("sourceColumn"),
+                Y: 0,
+                Height: 18),
             new Sdk2DOperation.StreamMapRow(TargetRow: 29, SourceRow: 40, X: 0, Width: 20),
             new Sdk2DOperation.ReadWorldTile(WorldId: "level1", WorldX: 16, WorldY: 24),
             new Sdk2DOperation.ReadWorldTileFlags(WorldId: "level1", WorldX: 16, WorldY: 24),
@@ -34,11 +38,16 @@ public sealed class Sdk2DOperationTests
         Assert.IsType<Sdk2DOperation.PollInput>(operations[1]);
         var sprite = Assert.IsType<Sdk2DOperation.DrawLogicalSprite>(operations[2]);
         Assert.Equal("player", sprite.SpriteId);
-        Assert.Equal(new Size2D(16, 27), sprite.LogicalSize);
-        Assert.Equal(SpriteTransform.FlipX, sprite.Transform);
+        Assert.Equal(new SdkByteExpression.Constant(72), sprite.X);
+        Assert.Equal(Field("player", "y"), sprite.Y);
+        Assert.Equal(Field("player", "frame"), sprite.Frame);
+        Assert.Equal(Field("player", "flipX"), sprite.FlipX);
+        Assert.Equal(SpriteTransform.None, sprite.StaticTransform);
         Assert.IsType<Sdk2DOperation.SetCameraPosition>(operations[3]);
         Assert.IsType<Sdk2DOperation.ApplyCamera>(operations[4]);
-        Assert.IsType<Sdk2DOperation.StreamMapColumn>(operations[5]);
+        var column = Assert.IsType<Sdk2DOperation.StreamMapColumn>(operations[5]);
+        Assert.Equal(Local("targetColumn"), column.TargetColumn);
+        Assert.Equal(Local("sourceColumn"), column.SourceColumn);
         Assert.IsType<Sdk2DOperation.StreamMapRow>(operations[6]);
         Assert.IsType<Sdk2DOperation.ReadWorldTile>(operations[7]);
         Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operations[8]);
@@ -53,8 +62,15 @@ public sealed class Sdk2DOperationTests
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.WaitFrame());
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.PollInput());
         Sdk2DOperationValidator.Validate(
-            capabilities,
-            new Sdk2DOperation.DrawLogicalSprite("player", new Size2D(16, 27), X: 72, Y: 80, Frame: 0, PaletteSlot: 1, Transform: SpriteTransform.FlipX));
+                capabilities,
+                new Sdk2DOperation.DrawLogicalSprite(
+                    "player",
+                X: Field("player", "x"),
+                Y: Field("player", "y"),
+                Frame: Field("player", "frame"),
+                FlipX: Field("player", "flipX"),
+                PaletteSlot: 1,
+                StaticTransform: SpriteTransform.None));
         Sdk2DOperationValidator.Validate(
             capabilities,
             new Sdk2DOperation.SetCameraPosition(X: 32, Y: 0, Axes: ScrollAxes.Horizontal));
@@ -62,7 +78,13 @@ public sealed class Sdk2DOperationTests
             capabilities,
             new Sdk2DOperation.SetCameraPosition(X: 0, Y: 16, Axes: ScrollAxes.Vertical));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
-        Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 18));
+        Sdk2DOperationValidator.Validate(
+                capabilities,
+                new Sdk2DOperation.StreamMapColumn(
+                TargetColumn: Local("targetColumn"),
+                SourceColumn: Local("sourceColumn"),
+                Y: 0,
+                Height: 18));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.StreamMapRow(TargetRow: 29, SourceRow: 40, X: 0, Width: 20));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.ReadWorldTile("level1", WorldX: 16, WorldY: 24));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.ReadWorldTileFlags("level1", WorldX: 16, WorldY: 24));
@@ -89,8 +111,8 @@ public sealed class Sdk2DOperationTests
             Sdk2DOperationValidator.Validate(
                 FullCapabilities(),
                 new Sdk2DOperation.SetCameraPosition(
-                    new SdkByteExpression.Variable("cameraX"),
-                    new SdkByteExpression.Variable("cameraY"),
+                    Local("cameraX"),
+                    Local("cameraY"),
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
@@ -145,5 +167,18 @@ public sealed class Sdk2DOperationTests
             BackgroundPaletteSlots: 1,
             SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
             HudModes: HudMode.Window | HudMode.Sprite);
+    }
+
+    private static SdkByteExpression.Variable Local(string name)
+    {
+        return new SdkByteExpression.Variable(new SdkStorageLocation.Local(name));
+    }
+
+    private static SdkByteExpression.Variable Field(string baseName, string fieldName)
+    {
+        return new SdkByteExpression.Variable(
+            new SdkStorageLocation.Field(
+                new SdkStorageLocation.Local(baseName),
+                fieldName));
     }
 }

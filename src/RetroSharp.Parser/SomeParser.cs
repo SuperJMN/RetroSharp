@@ -59,6 +59,7 @@ public class SomeParser
         var classes = program.classDeclaration().Select(ParseStaticClass).ToList();
         var structs = program.structDeclaration().Select(ParseStruct);
         var funcs = program.function().Select(f => ParseFunction(f));
+        var externs = program.externFunction().Select(ParseExternFunction);
         var staticMethods = classes
             .SelectMany(staticClass => staticClass.StaticMethods)
             .ToDictionary(method => method.SourceName, method => method.FunctionName, StringComparer.Ordinal);
@@ -67,7 +68,7 @@ public class SomeParser
             constants.Concat(classes.SelectMany(staticClass => staticClass.Constants)).ToList(),
             enums.ToList(),
             structs.Concat(classes.Select(staticClass => staticClass.Struct)).ToList(),
-            classes.SelectMany(staticClass => staticClass.Functions).Concat(funcs).ToList());
+            classes.SelectMany(staticClass => staticClass.Functions).Concat(externs).Concat(funcs).ToList());
         return StaticClassLowerer.LowerStaticCalls(syntax, staticMethods);
     }
 
@@ -162,6 +163,7 @@ public class SomeParser
         var modifiers = functionContext.functionModifier().Select(modifier => modifier.GetText()).ToHashSet(StringComparer.Ordinal);
         var isInline = modifiers.Contains("inline");
         var isPure = modifiers.Contains("pure");
+        var attributes = ParseAttributes(functionContext.attrs());
         if (functionContext.block() is { } block)
         {
             return new FunctionSyntax(
@@ -170,7 +172,8 @@ public class SomeParser
                 parameters,
                 ParseBlock(block),
                 isInline: isInline,
-                isPure: isPure);
+                isPure: isPure,
+                attributes: attributes);
         }
 
         var expressionBody = new BlockSyntax([new ReturnSyntax(Maybe.From(ParseExpression(functionContext.expression())))]);
@@ -181,7 +184,8 @@ public class SomeParser
             expressionBody,
             true,
             isInline,
-            isPure);
+            isPure,
+            attributes: attributes);
     }
 
     private FunctionSyntax ParseClassFunction(ClassFunctionContext functionContext)
@@ -190,6 +194,7 @@ public class SomeParser
         var modifiers = functionContext.functionModifier().Select(modifier => modifier.GetText()).ToHashSet(StringComparer.Ordinal);
         var isInline = modifiers.Contains("inline");
         var isPure = modifiers.Contains("pure");
+        var attributes = ParseAttributes(functionContext.attrs());
         if (functionContext.block() is { } block)
         {
             return new FunctionSyntax(
@@ -198,7 +203,8 @@ public class SomeParser
                 parameters,
                 ParseBlock(block),
                 isInline: isInline,
-                isPure: isPure);
+                isPure: isPure,
+                attributes: attributes);
         }
 
         var expressionBody = new BlockSyntax([new ReturnSyntax(Maybe.From(ParseExpression(functionContext.expression())))]);
@@ -209,7 +215,8 @@ public class SomeParser
             expressionBody,
             true,
             isInline,
-            isPure);
+            isPure,
+            attributes: attributes);
     }
 
     private LoweredClassFunction ParseClassStaticFunction(string className, ClassStaticFunctionContext functionContext)
@@ -218,6 +225,7 @@ public class SomeParser
         var modifiers = functionContext.functionModifier().Select(modifier => modifier.GetText()).ToHashSet(StringComparer.Ordinal);
         var isInline = modifiers.Contains("inline");
         var isPure = modifiers.Contains("pure");
+        var attributes = ParseAttributes(functionContext.attrs());
         var sourceName = functionContext.IDENTIFIER().ToString()!;
         var functionName = $"{className}_{sourceName}";
         if (functionContext.block() is { } block)
@@ -230,7 +238,8 @@ public class SomeParser
                     parameters,
                     ParseBlock(block),
                     isInline: isInline,
-                    isPure: isPure));
+                    isPure: isPure,
+                    attributes: attributes));
         }
 
         var expressionBody = new BlockSyntax([new ReturnSyntax(Maybe.From(ParseExpression(functionContext.expression())))]);
@@ -243,7 +252,42 @@ public class SomeParser
                 expressionBody,
                 true,
                 isInline,
-                isPure));
+                isPure,
+                attributes: attributes));
+    }
+
+    private FunctionSyntax ParseExternFunction(ExternFunctionContext functionContext)
+    {
+        return new FunctionSyntax(
+            functionContext.type().GetText(),
+            functionContext.IDENTIFIER().ToString()!,
+            ParseParameters(functionContext.parameters()).ToList(),
+            new BlockSyntax([]),
+            isExtern: true,
+            attributes: ParseAttributes(functionContext.attrs()));
+    }
+
+    private IReadOnlyList<FunctionAttributeSyntax> ParseAttributes(AttrsContext attrs)
+    {
+        var attributes = new List<FunctionAttributeSyntax>();
+        for (var i = 0; i < attrs.ChildCount; i++)
+        {
+            if (attrs.GetChild(i).GetText() != "[")
+            {
+                continue;
+            }
+
+            var name = attrs.GetChild(i + 1).GetText();
+            var arguments = new List<ExpressionSyntax>();
+            if (i + 3 < attrs.ChildCount && attrs.GetChild(i + 2).GetText() == "(" && attrs.GetChild(i + 3) is ArgumentsContext args)
+            {
+                arguments.AddRange(ParseArguments(args));
+            }
+
+            attributes.Add(new FunctionAttributeSyntax(name, arguments));
+        }
+
+        return attributes;
     }
 
     private IEnumerable<ParameterSyntax> ParseParameters(ParametersContext parameters)

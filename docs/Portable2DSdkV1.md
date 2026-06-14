@@ -57,7 +57,7 @@ Targets may lower camera movement differently. The SDK contract is position-base
 | `animation.Clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
 | `animation.Frame(name, tick)` | Return the frame index for a tick in a declared clip. |
 
-The `flipX` argument is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a logical sprite palette slot checked against the target descriptor.
+The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
 ### Optional HUD
 

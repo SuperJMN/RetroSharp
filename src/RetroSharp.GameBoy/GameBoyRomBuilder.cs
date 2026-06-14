@@ -415,6 +415,7 @@ internal sealed class GameBoyRuntimeCompiler
 
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
+    private readonly IReadOnlyList<Sdk2DOperation> sdkOperations;
     private readonly Dictionary<string, ushort> variables = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
@@ -422,6 +423,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly Stack<LoopTarget> loopTargets = [];
     private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
+    private int nextSdkOperation;
     private int? cameraMapWidth;
     private int? cameraStreamY;
     private int? cameraStreamHeight;
@@ -430,12 +432,14 @@ internal sealed class GameBoyRuntimeCompiler
     {
         this.builder = builder;
         this.program = program;
+        sdkOperations = program.SdkOperations;
     }
 
     public void Emit(BlockSyntax block)
     {
         EmitInputStateInitialization();
         EmitBlock(block);
+        EnsureAllSdkOperationsConsumed();
     }
 
     private void EmitInputStateInitialization()
@@ -904,26 +908,25 @@ internal sealed class GameBoyRuntimeCompiler
             case "animation_clip":
                 break;
             case "hud_set_tile":
+                _ = ConsumeSdkOperation<Sdk2DOperation.SetHudTile>(call.Name);
                 break;
             case "input_poll":
-                GameBoyVideoProgram.RequireArity(call, 0);
-                EmitSdkOperation(new Sdk2DOperation.PollInput());
+                EmitNextSdkOperation<Sdk2DOperation.PollInput>(call.Name);
                 break;
             case "tilemap_fill_column":
                 EmitTilemapFillColumn(call);
                 break;
             case "map_stream_column":
-                EmitMapStreamColumn(call);
+                EmitNextSdkOperation<Sdk2DOperation.StreamMapColumn>(call.Name);
                 break;
             case "camera_init":
                 EmitCameraInit(call);
                 break;
             case "camera_set_position":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
+                EmitNextSdkOperation<Sdk2DOperation.SetCameraPosition>(call.Name);
                 break;
             case "camera_apply":
-                GameBoyVideoProgram.RequireArity(call, 0);
-                EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal | ScrollAxes.Vertical));
+                EmitNextSdkOperation<Sdk2DOperation.ApplyCamera>(call.Name);
                 break;
             case "camera_move_right":
                 EmitCameraMoveRight(call);
@@ -932,19 +935,23 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitCameraMoveLeft(call);
                 break;
             case "video_wait_vblank":
-                GameBoyVideoProgram.RequireArity(call, 0);
-                EmitSdkOperation(new Sdk2DOperation.WaitFrame());
+                EmitNextSdkOperation<Sdk2DOperation.WaitFrame>(call.Name);
                 break;
             case "sprite_set":
                 EmitSpriteSet(call);
                 break;
             case "sprite_draw":
-                EmitSpriteDraw(call);
+                EmitNextSdkOperation<Sdk2DOperation.DrawLogicalSprite>(call.Name);
                 break;
             case "scroll_set":
                 EmitScrollSet(call);
                 break;
             default:
+                if (TryEmitTargetIntrinsic(call))
+                {
+                    break;
+                }
+
                 if (TryEmitUserFunction(call))
                 {
                     break;
@@ -959,14 +966,110 @@ internal sealed class GameBoyRuntimeCompiler
         GameBoySdkOperationLowerer.Emit(this, operation);
     }
 
+    private void EmitNextSdkOperation<T>(string callName)
+        where T : Sdk2DOperation
+    {
+        EmitSdkOperation(ConsumeSdkOperation<T>(callName));
+    }
+
+    private T ConsumeSdkOperation<T>(string callName)
+        where T : Sdk2DOperation
+    {
+        if (nextSdkOperation >= sdkOperations.Count)
+        {
+            throw new InvalidOperationException($"Game Boy SDK call '{callName}' has no collected SDK operation.");
+        }
+
+        var operation = sdkOperations[nextSdkOperation++];
+        if (operation is T typed)
+        {
+            return typed;
+        }
+
+        throw new InvalidOperationException(
+            $"Game Boy SDK call '{callName}' expected collected operation {typeof(T).Name}, got {operation.GetType().Name}.");
+    }
+
+    private void EnsureAllSdkOperationsConsumed()
+    {
+        if (nextSdkOperation == sdkOperations.Count)
+        {
+            return;
+        }
+
+        var operation = sdkOperations[nextSdkOperation];
+        throw new InvalidOperationException(
+            $"Game Boy runtime consumed {nextSdkOperation} of {sdkOperations.Count} SDK operations; next operation is {operation.GetType().Name}.");
+    }
+
     internal void EmitWaitFrame()
     {
         GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
     }
 
+    private bool TryEmitTargetIntrinsic(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function) || !function.IsExtern)
+        {
+            return false;
+        }
+
+        var intrinsic = TargetIntrinsicName(function, "gb", "Game Boy");
+        switch (intrinsic)
+        {
+            case "wait_frame":
+                GameBoyVideoProgram.RequireArity(call, 0);
+                EmitWaitFrame();
+                return true;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy intrinsic '{intrinsic}' on extern function '{function.Name}'.");
+        }
+    }
+
+    private static string TargetIntrinsicName(FunctionSyntax function, string targetId, string targetName)
+    {
+        var intrinsic = AttributeString(function, "intrinsic")
+                        ?? throw new InvalidOperationException($"Extern function '{function.Name}' must declare an intrinsic attribute.");
+        var target = AttributeString(function, "target")
+                     ?? throw new InvalidOperationException($"Extern intrinsic '{function.Name}' must declare a target attribute.");
+        if (!string.Equals(target, targetId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Extern intrinsic '{function.Name}' targets '{target}', not {targetName}.");
+        }
+
+        return intrinsic;
+    }
+
+    private static string? AttributeString(FunctionSyntax function, string name)
+    {
+        var attribute = function.Attributes.FirstOrDefault(attr => attr.Name == name);
+        if (attribute is null)
+        {
+            return null;
+        }
+
+        if (attribute.Arguments is not [ConstantSyntax constant])
+        {
+            throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
+        }
+
+        var text = constant.Value.ToString() ?? "";
+        if (text.Length >= 2 && text[0] == '"' && text[^1] == '"')
+        {
+            return text[1..^1];
+        }
+
+        throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
+    }
+
     private bool TryEmitUserFunction(FunctionCall call)
     {
         if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
         {
             return false;
         }
@@ -991,6 +1094,11 @@ internal sealed class GameBoyRuntimeCompiler
     private bool TryEmitUserValueFunction(FunctionCall call)
     {
         if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
         {
             return false;
         }
@@ -1074,21 +1182,13 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitSpriteDraw(FunctionCall call)
+    internal void EmitDrawLogicalSprite(Sdk2DOperation.DrawLogicalSprite operation)
     {
-        var args = call.Parameters.ToList();
-        if (args.Count is not 4 and not 5 and not 6)
+        if (!program.SpriteAssets.TryGetValue(operation.SpriteId, out var asset))
         {
-            throw new InvalidOperationException($"sprite_draw expects 4, 5, or 6 arguments, got {args.Count}.");
+            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{operation.SpriteId}'. Declare it with sprite_asset(...).");
         }
 
-        var assetName = GameBoyVideoProgram.IdentifierArg(args[0], "sprite_draw argument 1");
-        if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
-        {
-            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{assetName}'. Declare it with sprite_asset(...).");
-        }
-
-        var options = SpriteDrawOptionsFromArguments(args);
         var firstHardwareSprite = nextHardwareSprite;
         if (firstHardwareSprite + asset.Pieces.Count > 40)
         {
@@ -1101,64 +1201,24 @@ internal sealed class GameBoyRuntimeCompiler
             var piece = asset.Pieces[pieceIndex];
             var oamAddress = (ushort)(0xFE00 + (firstHardwareSprite + pieceIndex) * 4);
 
-            EmitExpressionToA(args[2]);
+            EmitSdkByteExpressionToA(operation.Y);
             builder.AddAImmediate(16 + piece.YOffset);
             builder.StoreA(oamAddress);
 
-            EmitSpriteDrawX(args[1], options.FlipX, asset, piece, (ushort)(oamAddress + 1));
+            EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 1));
 
-            EmitExpressionToA(args[3]);
+            EmitSdkByteExpressionToA(operation.Frame);
             EmitMultiplyAByConstant(asset.TilesPerFrame);
             builder.AddAImmediate(asset.FirstTile + piece.TileOffset);
             builder.StoreA((ushort)(oamAddress + 2));
 
-            EmitSpriteDrawAttributes(options.FlipX, options.PaletteSlot, (ushort)(oamAddress + 3));
+            EmitSpriteDrawAttributes(operation.FlipX, operation.PaletteSlot, (ushort)(oamAddress + 3));
         }
-    }
-
-    private SpriteDrawOptions SpriteDrawOptionsFromArguments(IReadOnlyList<ExpressionSyntax> args)
-    {
-        return new SpriteDrawOptions(
-            FlipX: SpriteDrawFlipXArgument(args),
-            PaletteSlot: SpriteDrawPaletteSlotArgument(args));
-    }
-
-    private ExpressionSyntax? SpriteDrawFlipXArgument(IReadOnlyList<ExpressionSyntax> args)
-    {
-        if (args.Count == 4)
-        {
-            return null;
-        }
-
-        var flipX = args[4];
-        if (TryConst(flipX, out var value) && value is not 0 and not 1)
-        {
-            throw new InvalidOperationException("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.");
-        }
-
-        return flipX;
-    }
-
-    private static int SpriteDrawPaletteSlotArgument(IReadOnlyList<ExpressionSyntax> args)
-    {
-        if (args.Count < 6)
-        {
-            return 0;
-        }
-
-        var slot = GameBoyVideoProgram.ConstValue(args[5], "sprite_draw argument 6");
-        if (slot < 0 || slot >= GameBoyTarget.Capabilities.SpritePaletteSlots)
-        {
-            throw new InvalidOperationException(
-                $"Target '{GameBoyTarget.Capabilities.Name}' supports sprite palette slots 0..{GameBoyTarget.Capabilities.SpritePaletteSlots - 1}, but slot {slot} was requested.");
-        }
-
-        return slot;
     }
 
     private void EmitSpriteDrawX(
-        ExpressionSyntax xExpression,
-        ExpressionSyntax? flipXExpression,
+        SdkByteExpression xExpression,
+        SdkByteExpression? flipXExpression,
         GameBoyCompiledSpriteAsset asset,
         GameBoyMetaspritePiece piece,
         ushort oamAddress)
@@ -1174,7 +1234,7 @@ internal sealed class GameBoyRuntimeCompiler
         var normalLabel = builder.CreateLabel("sprite_x_normal");
         var endLabel = builder.CreateLabel("sprite_x_end");
 
-        EmitExpressionToA(flipXExpression);
+        EmitSdkByteExpressionToA(flipXExpression);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, normalLabel); // JP Z,normalLabel
 
@@ -1186,17 +1246,17 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitSpriteDrawAttributes(ExpressionSyntax? flipXExpression, int paletteSlot, ushort oamAddress)
+    private void EmitSpriteDrawAttributes(SdkByteExpression? flipXExpression, int paletteSlot, ushort oamAddress)
     {
         var paletteAttribute = SpritePaletteAttribute(paletteSlot);
-        if (flipXExpression is null || (TryConst(flipXExpression, out var constant) && constant == 0))
+        if (flipXExpression is null || (TrySdkConst(flipXExpression, out var constant) && constant == 0))
         {
             builder.LoadAImmediate(paletteAttribute);
             builder.StoreA(oamAddress);
             return;
         }
 
-        if (TryConst(flipXExpression, out _))
+        if (TrySdkConst(flipXExpression, out _))
         {
             builder.LoadAImmediate(paletteAttribute | 0x20);
             builder.StoreA(oamAddress);
@@ -1206,7 +1266,7 @@ internal sealed class GameBoyRuntimeCompiler
         var noFlipLabel = builder.CreateLabel("sprite_flags_no_flip");
         var storeLabel = builder.CreateLabel("sprite_flags_store");
 
-        EmitExpressionToA(flipXExpression);
+        EmitSdkByteExpressionToA(flipXExpression);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, noFlipLabel); // JP Z,noFlipLabel
 
@@ -1225,11 +1285,21 @@ internal sealed class GameBoyRuntimeCompiler
         return (paletteSlot & 0x01) << 4;
     }
 
-    private readonly record struct SpriteDrawOptions(ExpressionSyntax? FlipX, int PaletteSlot);
-
-    private void EmitSpriteDrawXAtOffset(ExpressionSyntax xExpression, int offset, ushort oamAddress)
+    private static bool TrySdkConst(SdkByteExpression expression, out int value)
     {
-        EmitExpressionToA(xExpression);
+        if (expression is SdkByteExpression.Constant constant)
+        {
+            value = constant.Value;
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private void EmitSpriteDrawXAtOffset(SdkByteExpression xExpression, int offset, ushort oamAddress)
+    {
+        EmitSdkByteExpressionToA(xExpression);
         builder.AddAImmediate(8 + offset);
         builder.StoreA(oamAddress);
     }
@@ -1249,21 +1319,19 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
-    private void EmitMapStreamColumn(FunctionCall call)
+    internal void EmitStreamMapColumn(Sdk2DOperation.StreamMapColumn operation)
     {
-        GameBoyVideoProgram.RequireArity(call, 4);
         if (program.MapColumnHeight == 0)
         {
             throw new InvalidOperationException("map_stream_column requires at least one map_column declaration.");
         }
 
-        var args = call.Parameters.ToList();
-        var y = CheckedRange(GameBoyVideoProgram.ConstValue(args[2], "map_stream_column argument 3"), 0, 31, "map_stream_column argument 3");
-        var height = CheckedRange(GameBoyVideoProgram.ConstValue(args[3], "map_stream_column argument 4"), 1, program.MapColumnHeight, "map_stream_column argument 4");
+        var y = CheckedRange(operation.Y, 0, 31, "map_stream_column argument 3");
+        var height = CheckedRange(operation.Height, 1, program.MapColumnHeight, "map_stream_column argument 4");
 
         for (var row = 0; row < height; row++)
         {
-            EmitExpressionToA(args[1]);
+            EmitSdkByteExpressionToA(operation.SourceColumn);
             builder.LoadEFromA();
             builder.LoadDImmediate(0);
             builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
@@ -1272,7 +1340,7 @@ internal sealed class GameBoyRuntimeCompiler
             builder.LoadBFromA();
 
             var rowAddress = 0x9800 + (y + row) * 32;
-            EmitExpressionToA(args[0]);
+            EmitSdkByteExpressionToA(operation.TargetColumn);
             builder.AddAImmediate(rowAddress & 0xFF);
             builder.LoadLFromA();
             builder.LoadHImmediate(rowAddress >> 8);
@@ -1373,7 +1441,7 @@ internal sealed class GameBoyRuntimeCompiler
                 builder.LoadAImmediate(constant.Value);
                 break;
             case SdkByteExpression.Variable variable:
-                builder.LoadA(VariableAddress(variable.Name));
+                builder.LoadA(VariableAddress(StorageKey(variable.Location)));
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
@@ -2203,7 +2271,7 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitMapFlagsAt(call);
                 break;
             case "world_tile_flags_at":
-                EmitWorldTileFlagsAt(call);
+                EmitReadWorldTileFlags(ConsumeSdkOperation<Sdk2DOperation.ReadWorldTileFlags>(call.Name));
                 break;
             case "collision_aabb_tiles":
                 EmitCollisionAabbTiles(call);
@@ -2295,12 +2363,74 @@ internal sealed class GameBoyRuntimeCompiler
         EmitWorldTileFlagsAt(args[0], 0, args[1], 0, call.Name);
     }
 
+    private void EmitReadWorldTileFlags(Sdk2DOperation.ReadWorldTileFlags operation)
+    {
+        if (operation.WorldId != "default")
+        {
+            throw new InvalidOperationException($"Unsupported Game Boy world id '{operation.WorldId}'.");
+        }
+
+        EmitWorldTileFlagsAt(operation.WorldX, 0, operation.WorldY, 0, "world_tile_flags_at");
+    }
+
     private void EmitWorldTileFlagsAt(ExpressionSyntax worldX, int worldXOffset, ExpressionSyntax worldY, int worldYOffset, string callName)
     {
         var worldMap = WorldMapForFlagQuery(callName);
         var outOfBoundsLabel = builder.CreateLabel("world_tile_flags_oob");
         var endLabel = builder.CreateLabel("world_tile_flags_end");
         if (TryConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitWorldPixelToTileCoordinate(worldX, worldXOffset);
+            builder.CompareImmediate(worldMap.Width);
+            builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(outOfBoundsLabel);
+            builder.LoadAImmediate(0);
+            builder.Label(endLabel);
+            return;
+        }
+
+        EmitWorldPixelToTileCoordinate(worldX, worldXOffset);
+        builder.CompareImmediate(worldMap.Width);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadBFromA();
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadCFromA();
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("world_tile_flags_next_row");
+            builder.LoadAFromC();
+            builder.CompareImmediate(row);
+            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
+            builder.LoadAFromB();
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitWorldTileFlagsAt(SdkByteExpression worldX, int worldXOffset, SdkByteExpression worldY, int worldYOffset, string callName)
+    {
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("world_tile_flags_oob");
+        var endLabel = builder.CreateLabel("world_tile_flags_end");
+        if (TrySdkConst(worldY, out var constantWorldY))
         {
             var row = (constantWorldY + worldYOffset) / 8;
             if (row < 0 || row >= worldMap.Height)
@@ -2356,6 +2486,19 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitWorldPixelToTileCoordinate(ExpressionSyntax expression, int offset)
     {
         EmitExpressionToA(expression);
+        if (offset != 0)
+        {
+            builder.AddAImmediate(offset);
+        }
+
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+    }
+
+    private void EmitWorldPixelToTileCoordinate(SdkByteExpression expression, int offset)
+    {
+        EmitSdkByteExpressionToA(expression);
         if (offset != 0)
         {
             builder.AddAImmediate(offset);
@@ -3057,6 +3200,17 @@ internal sealed class GameBoyRuntimeCompiler
     private static string IndexedElementName(string baseIdentifier, int index)
     {
         return $"{baseIdentifier}[{index}]";
+    }
+
+    private static string StorageKey(SdkStorageLocation location)
+    {
+        return location switch
+        {
+            SdkStorageLocation.Local local => local.Name,
+            SdkStorageLocation.Field field => $"{StorageKey(field.Target)}.{field.FieldName}",
+            SdkStorageLocation.IndexedElement indexed => IndexedElementName(indexed.BaseName, indexed.Index),
+            _ => throw new InvalidOperationException($"Unsupported SDK storage location '{location.GetType().Name}'."),
+        };
     }
 
     private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)

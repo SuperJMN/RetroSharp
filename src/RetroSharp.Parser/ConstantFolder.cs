@@ -35,7 +35,9 @@ public static class ConstantFolder
             FoldBlock(function.Block, constants, typeSizes, fieldOffsets, new Dictionary<string, int>(StringComparer.Ordinal), functionIndex.Values),
             function.IsExpressionBodied,
             function.IsInline,
-            function.IsPure)).ToList();
+            function.IsPure,
+            function.IsExtern,
+            function.Attributes)).ToList();
 
         return new ProgramSyntax(program.TypeAliases, program.Constants, program.Enums, program.Structs, functions);
     }

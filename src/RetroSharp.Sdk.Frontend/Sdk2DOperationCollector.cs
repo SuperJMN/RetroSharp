@@ -30,6 +30,44 @@ public static class Sdk2DOperationCollector
         return new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y));
     }
 
+    public static Sdk2DOperation.DrawLogicalSprite ReadDrawLogicalSprite(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count is not 4 and not 5 and not 6)
+        {
+            throw new InvalidOperationException($"sprite_draw expects 4, 5, or 6 arguments, got {args.Count}.");
+        }
+
+        var spriteId = SdkCallReader.IdentifierArg(args[0], "sprite_draw argument 1");
+        var x = ReadByteExpression(args[1], "sprite_draw argument 2");
+        var y = ReadByteExpression(args[2], "sprite_draw argument 3");
+        var frame = ReadByteExpression(args[3], "sprite_draw argument 4");
+        var flipX = ReadFlipXExpression(args);
+        var paletteSlot = args.Count < 6
+            ? 0
+            : SdkCallReader.ConstValue(args[5], "sprite_draw argument 6");
+
+        return new Sdk2DOperation.DrawLogicalSprite(
+            spriteId,
+            x,
+            y,
+            frame,
+            flipX,
+            paletteSlot,
+            SpriteTransform.None);
+    }
+
+    public static Sdk2DOperation.StreamMapColumn ReadStreamMapColumn(FunctionCall call)
+    {
+        SdkCallReader.RequireArity(call, 4);
+        var args = call.Parameters.ToList();
+        var targetColumn = ReadByteExpression(args[0], "map_stream_column argument 1");
+        var sourceColumn = ReadByteExpression(args[1], "map_stream_column argument 2");
+        var y = SdkCallReader.ConstValue(args[2], "map_stream_column argument 3");
+        var height = SdkCallReader.ConstValue(args[3], "map_stream_column argument 4");
+        return new Sdk2DOperation.StreamMapColumn(targetColumn, sourceColumn, y, height);
+    }
+
     public static SdkByteExpression ReadByteExpression(ExpressionSyntax expression, string context)
     {
         switch (expression)
@@ -41,11 +79,11 @@ public static class Sdk2DOperationCollector
             case IdentifierSyntax { Identifier: "false" }:
                 return new SdkByteExpression.Constant(0);
             case IdentifierSyntax identifier:
-                return new SdkByteExpression.Variable(identifier.Identifier);
+                return new SdkByteExpression.Variable(new SdkStorageLocation.Local(identifier.Identifier));
             case MemberAccessSyntax memberAccess:
-                return new SdkByteExpression.Variable(SdkCallReader.MemberAccessName(memberAccess));
+                return new SdkByteExpression.Variable(ReadStorageLocation(memberAccess, context));
             case IndexExpressionSyntax indexExpression:
-                return new SdkByteExpression.Variable(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, context));
+                return new SdkByteExpression.Variable(IndexedElementLocation(indexExpression.BaseIdentifier, indexExpression.Index, context));
             case CastSyntax cast:
                 return ReadByteExpression(cast.Expression, context);
             default:
@@ -53,10 +91,22 @@ public static class Sdk2DOperationCollector
         }
     }
 
-    private static string IndexedElementName(string baseIdentifier, ExpressionSyntax index, string context)
+    private static SdkStorageLocation ReadStorageLocation(ExpressionSyntax expression, string context)
+    {
+        return expression switch
+        {
+            IdentifierSyntax identifier => new SdkStorageLocation.Local(identifier.Identifier),
+            MemberAccessSyntax memberAccess => new SdkStorageLocation.Field(
+                ReadStorageLocation(memberAccess.Target, context),
+                memberAccess.Member),
+            _ => throw new InvalidOperationException($"{context} member access currently requires an identifier base."),
+        };
+    }
+
+    private static SdkStorageLocation IndexedElementLocation(string baseIdentifier, ExpressionSyntax index, string context)
     {
         var value = CheckedByte(SdkCallReader.ConstValue(index, context), context);
-        return $"{baseIdentifier}[{value}]";
+        return new SdkStorageLocation.IndexedElement(baseIdentifier, value);
     }
 
     private static int CheckedByte(int value, string context)
@@ -67,6 +117,39 @@ public static class Sdk2DOperationCollector
         }
 
         return value;
+    }
+
+    private static SdkByteExpression? ReadFlipXExpression(IReadOnlyList<ExpressionSyntax> args)
+    {
+        if (args.Count < 5)
+        {
+            return null;
+        }
+
+        var flipX = args[4];
+        if (TryConstValue(flipX, out var value) && value is not 0 and not 1)
+        {
+            throw new InvalidOperationException("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.");
+        }
+
+        return ReadByteExpression(flipX, "sprite_draw argument 5");
+    }
+
+    private static bool TryConstValue(ExpressionSyntax expression, out int value)
+    {
+        if (expression is CastSyntax cast)
+        {
+            return TryConstValue(cast.Expression, out value);
+        }
+
+        if (expression is ConstantSyntax)
+        {
+            value = SdkCallReader.ConstValue(expression, "constant");
+            return true;
+        }
+
+        value = 0;
+        return false;
     }
 
     private static ScrollAxes AxesFor(SdkByteExpression x, SdkByteExpression y)
@@ -183,6 +266,15 @@ public static class Sdk2DOperationCollector
                 case "camera_set_position":
                     CollectCameraSetPosition(call);
                     break;
+                case "camera_apply":
+                    CollectCameraApply(call);
+                    break;
+                case "sprite_draw":
+                    CollectDrawLogicalSprite(call);
+                    break;
+                case "map_stream_column":
+                    CollectStreamMapColumn(call);
+                    break;
                 case "hud_set_tile":
                     CollectHudSetTile(call);
                     break;
@@ -199,6 +291,25 @@ public static class Sdk2DOperationCollector
         private void CollectCameraSetPosition(FunctionCall call)
         {
             operations.Add(ReadSetCameraPosition(call));
+        }
+
+        private void CollectCameraApply(FunctionCall call)
+        {
+            SdkCallReader.RequireArity(call, 0);
+            var axes = targetName == "NES"
+                ? ScrollAxes.Horizontal
+                : ScrollAxes.Horizontal | ScrollAxes.Vertical;
+            operations.Add(new Sdk2DOperation.ApplyCamera(axes));
+        }
+
+        private void CollectDrawLogicalSprite(FunctionCall call)
+        {
+            operations.Add(ReadDrawLogicalSprite(call));
+        }
+
+        private void CollectStreamMapColumn(FunctionCall call)
+        {
+            operations.Add(ReadStreamMapColumn(call));
         }
 
         private void CollectHudSetTile(FunctionCall call)
