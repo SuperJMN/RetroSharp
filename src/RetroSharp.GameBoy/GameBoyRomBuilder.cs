@@ -904,7 +904,8 @@ internal sealed class GameBoyRuntimeCompiler
             case "hud_set_tile":
                 break;
             case "input_poll":
-                EmitInputPoll(call);
+                GameBoyVideoProgram.RequireArity(call, 0);
+                EmitSdkOperation(new Sdk2DOperation.PollInput());
                 break;
             case "tilemap_fill_column":
                 EmitTilemapFillColumn(call);
@@ -952,7 +953,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitSdkOperation(Sdk2DOperation operation)
     {
-        GameBoySdkOperationLowerer.Emit(builder, operation);
+        GameBoySdkOperationLowerer.Emit(this, operation);
+    }
+
+    internal void EmitWaitFrame()
+    {
+        GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
     }
 
     private bool TryEmitUserFunction(FunctionCall call)
@@ -1003,10 +1009,8 @@ internal sealed class GameBoyRuntimeCompiler
         return true;
     }
 
-    private void EmitInputPoll(FunctionCall call)
+    internal void EmitPollInput()
     {
-        GameBoyVideoProgram.RequireArity(call, 0);
-
         builder.LoadA(InputCurrentAddress);
         builder.StoreA(InputPreviousAddress);
 

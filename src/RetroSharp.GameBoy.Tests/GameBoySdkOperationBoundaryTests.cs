@@ -3,6 +3,7 @@ namespace RetroSharp.GameBoy.Tests;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
+using RetroSharp.Parser;
 using Xunit;
 
 public sealed class GameBoySdkOperationBoundaryTests
@@ -11,12 +12,32 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
     {
         var builder = new GbBuilder();
+        var compiler = CreateRuntimeCompiler(builder);
 
-        GameBoySdkOperationLowerer.Emit(builder, new Sdk2DOperation.WaitFrame());
+        GameBoySdkOperationLowerer.Emit(compiler, new Sdk2DOperation.WaitFrame());
 
         Assert.Equal(
             [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA],
             builder.Build());
+    }
+
+    [Fact]
+    public void Lowers_poll_input_operation_to_deterministic_game_boy_bytes()
+    {
+        var viaOperation = new GbBuilder();
+        GameBoySdkOperationLowerer.Emit(CreateRuntimeCompiler(viaOperation), new Sdk2DOperation.PollInput());
+
+        var viaDirect = new GbBuilder();
+        CreateRuntimeCompiler(viaDirect).EmitPollInput();
+
+        Assert.NotEmpty(viaOperation.Build());
+        Assert.Equal(viaDirect.Build(), viaOperation.Build());
+    }
+
+    private static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder)
+    {
+        var program = GameBoyVideoProgram.FromProgram(new SomeParser().Parse("void main() { }").Value);
+        return new GameBoyRuntimeCompiler(builder, program);
     }
 
     [Fact]
