@@ -23,6 +23,19 @@ public static class NesRomCompiler
         return NesRomBuilder.Build(videoProgram);
     }
 
+    public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(string source, string? baseDirectory = null)
+    {
+        var parse = new SomeParser().Parse(source);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        ValidateFunctionContracts(parse.Value);
+        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        return Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+    }
+
     private static void ValidateSdkOperations(NesVideoProgram videoProgram)
     {
         var operations = Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
