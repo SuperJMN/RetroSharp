@@ -47,6 +47,50 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - SDK dot calls such as `video.Init()`, `input.Poll()`, and `camera.SetPosition(x, y)` are static grouping syntax, not object instances.
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
 
+## Portability Lowering Roadmap (epic #106)
+
+Goal: one source program runs the same 2D scroll on Game Boy and NES, with the
+language and its classic IR (`RetroSharp.Generation.Intermediate`) framework-neutral,
+the 2D framework isolated in `RetroSharp.Core.Sdk` (`Sdk2DOperation`), and on a path
+to becoming a library over per-target intrinsics. GitHub epic #106 is the source of
+truth; child issues are `PL-A*`/`PL-B*`/`PL-C*`/`PL-D*`/`PL-E*`.
+
+Golden rule (do not violate):
+- The language and its classic IR never gain framework concepts (camera/sprite/scroll).
+- `Sdk2DOperation` must not grow into a dumping ground; a genre-specific operation
+  should be questioned as an intrinsic+library before a compiler-recognized operation.
+- End-state: the 2D SDK becomes a library over per-target intrinsics.
+
+Operation-driven lowering pattern (already proven, replicate it):
+- The shared collector `RetroSharp.Parser.Sdk2DOperationCollector` turns source calls
+  into target-neutral `Sdk2DOperation` records; `Sdk2DOperationValidator` checks them
+  against each target's `Target2DCapabilities` before lowering.
+- A per-target lowerer (`GameBoySdkOperationLowerer`, `NesSdkOperationLowerer`) maps an
+  operation to target emission. The runtime compiler routes a source call via
+  `EmitSdkOperation(op)` instead of re-deriving it from the AST.
+- Operand IR is `SdkByteExpression` (`Constant | Variable`). `Variable.Name` is the
+  exact key into a target's `variables` dict (e.g. `actor.x`, `tabla[2]`), so the
+  target resolves it byte-faithfully. Do NOT add Index/Member/BinaryOp cases to the IR.
+- Every step must keep tracked ROMs byte-identical and the full suite green.
+
+Progress (2026-06-14):
+- Done: PL-A1 #107 (GB camera apply), PL-B1 #111 (NES lowerer wait/poll),
+  PL-B2 #112 (NES camera via shared model), PL-D1 #117 (cross-target scroll acceptance
+  in `CrossTargetScrollAcceptanceTests`). Earlier groundwork: #101/#102/#103/#105.
+- Blocked on design: PL-A2 #108 and PL-B3 #113 (sprite). `Sdk2DOperation.DrawLogicalSprite`
+  carries `int X/Y/Frame` + static `SpriteTransform`, but the runner draws with runtime
+  operands (`player.y`, `player.displayFrame`, `player.displayFlipX`). Migrating needs a
+  portable sprite-model decision: runtime operands via `SdkByteExpression`, and how to
+  keep static transform capability checks while allowing runtime flipX. See #108 comment.
+- Pending (clean): PL-A3 #109 (streaming), PL-A4 #110 (builder iterates operations
+  instead of re-walking the AST; depends on A1-A3), PL-C1 #114 (move collector/SdkCallReader
+  out of the language assembly), PL-C2 #115 (harden operand contract), PL-C3 #116 (document
+  boundary + golden rule), PL-E1 #118 (per-target intrinsics + SDK-as-library prototype).
+
+Suggested next steps: PL-C1/PL-C3 (clean, byte-neutral) or resolve the sprite model
+decision to unblock PL-A2/PL-B3. PL-A4 is the conceptual close of the boundary once the
+data-carrying operations are migrated.
+
 ## Game Boy Runner Lessons
 
 - Normal runner debugging should start with the full app, then use `tools/gameboy/runner_diagnostics.py` to find the first failing diagnostic step before editing code.
