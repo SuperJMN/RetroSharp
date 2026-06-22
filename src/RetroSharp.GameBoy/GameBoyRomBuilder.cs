@@ -1602,15 +1602,10 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitWaitForVBlankBeforeStream()
     {
         // Camera tile streaming writes the background tilemap mid-frame, after input,
-        // physics, and collision have run. Without synchronization those writes race
-        // the PPU and tear the top background rows (e.g. floating blocks) while scrolling.
-        // Park the CPU until the PPU reaches VBlank so the whole column/row batch lands
-        // in a VRAM-accessible window.
-        var label = builder.CreateLabel("camera_stream_wait_vblank");
-        builder.Label(label);
-        builder.Emit(0xF0, 0x44);          // LDH A,($44)  ; A = LY
-        builder.Emit(0xFE, 0x90);          // CP $90        ; first VBlank line (144)
-        builder.JumpRelative(0x38, label); // JR C,label    ; wait while LY < 144 (active display)
+        // physics, and collision have run. A jump/landing-heavy frame can reach this
+        // path late in VBlank, so wait for a fresh VBlank edge rather than accepting
+        // the tail of the current one.
+        GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("camera_stream_wait_vblank"));
     }
 
     private void EmitMapStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, int y, int height)

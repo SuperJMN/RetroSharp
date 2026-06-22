@@ -3417,16 +3417,17 @@ public class GameBoyRomCompilerTests
             "camera_move_left should also stream the background row above the band into GB row 0 (0x9800).");
 
         // The streaming runs late in the frame (after input, physics, collision), so it must
-        // first wait for VBlank (LY >= 144) before touching the background tilemap, otherwise
-        // the writes race active display and tear the top background rows while scrolling.
-        // The gate (LDH A,($44); CP $90; JR C,-6) must sit immediately before the band column
-        // load (LD A,($C0E6) for the right step, LD A,($C0E7) for the left step).
+        // wait for a fresh VBlank edge before touching the background tilemap, otherwise
+        // a jump/landing-heavy frame can enter this path late in the current VBlank and tear
+        // the top background rows while scrolling. The edge wait
+        // (wait while LY >= 144, then wait while LY < 144) must sit immediately before the
+        // band column load (LD A,($C0E6) for the right step, LD A,($C0E7) for the left step).
         Assert.True(
-            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE6, 0xC0]),
-            "camera_move_right should wait for VBlank before streaming the next column into the background tilemap.");
+            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE6, 0xC0]),
+            "camera_move_right should wait for a fresh VBlank edge before streaming the next column into the background tilemap.");
         Assert.True(
-            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE7, 0xC0]),
-            "camera_move_left should wait for VBlank before streaming the next column into the background tilemap.");
+            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE7, 0xC0]),
+            "camera_move_left should wait for a fresh VBlank edge before streaming the next column into the background tilemap.");
     }
 
     [Fact]
