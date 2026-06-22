@@ -2598,7 +2598,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        var movementStart = source.IndexOf("inline void HandleHorizontalInput(PlayerState player)", StringComparison.Ordinal);
+        var movementStart = source.IndexOf("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", StringComparison.Ordinal);
         var movementEnd = source.IndexOf("class FrameState", movementStart, StringComparison.Ordinal);
         Assert.True(movementStart >= 0);
         Assert.True(movementEnd > movementStart);
@@ -2610,7 +2610,7 @@ public class GameBoyRomCompilerTests
         var leftStart = movementBlock.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
         Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
 
-        var movementCall = source.IndexOf("view.HandleHorizontalInput(player);", StringComparison.Ordinal);
+        var movementCall = source.IndexOf("view.HandleHorizontalInput(player, movementFootWorldY);", StringComparison.Ordinal);
         var animationCall = source.IndexOf("player.UpdateRunAnimation(view);", StringComparison.Ordinal);
         Assert.True(movementCall >= 0);
         Assert.True(animationCall > movementCall, "Runner should update movement before animation state.");
@@ -2854,7 +2854,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("class FrameState", source);
         Assert.Contains("inline void PresentFrame(PlayerState player)", source);
         Assert.Contains("inline void HandleJumpInput()", source);
-        Assert.Contains("inline void HandleHorizontalInput(PlayerState player)", source);
+        Assert.Contains("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", source);
         Assert.Contains("inline void ResolveSolidLanding(PlayerState player", source);
         Assert.Contains("inline void ResolveFall(PlayerState player)", source);
         Assert.Contains("inline void ResolveReset(PlayerState player)", source);
@@ -2865,7 +2865,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("frame.ResolveFall(player);", source);
         Assert.Contains("frame.ResolveReset(player);", source);
         Assert.Contains("player.HandleJumpInput();", source);
-        Assert.Contains("view.HandleHorizontalInput(player);", source);
+        Assert.Contains("let movementFootWorldY = player.y - Player.WorldOriginY;", source);
+        Assert.Contains("view.HandleHorizontalInput(player, movementFootWorldY);", source);
         Assert.Contains("player.UpdateRunAnimation(view);", source);
         Assert.DoesNotContain("Pixel cameraX = 0;", source);
         Assert.DoesNotContain("Pixel moving = 0;", source);
@@ -3843,6 +3844,27 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void GameBoy_runner_blocks_horizontal_camera_motion_against_tall_solids()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("LeftWallProbeX = 71", source);
+        Assert.Contains("RightWallProbeX = 73", source);
+        Assert.Contains("WallProbeHeight = 8", source);
+        Assert.Contains("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", source);
+        Assert.Contains("let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;", source);
+        Assert.Contains("camera.AabbTiles(Player.RightWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
+        Assert.Contains("camera.AabbTiles(Player.LeftWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
+        Assert.Contains("let movementFootWorldY = player.y - Player.WorldOriginY;", source);
+        Assert.Contains("view.HandleHorizontalInput(player, movementFootWorldY);", source);
+        Assert.DoesNotContain("view.HandleHorizontalInput(player);", source);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
@@ -3997,7 +4019,7 @@ public class GameBoyRomCompilerTests
 
         var resetStart = source.IndexOf("frame.ResolveReset(player);", StringComparison.Ordinal);
         var jumpStart = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
-        var movementStart = source.IndexOf("view.HandleHorizontalInput(player);", StringComparison.Ordinal);
+        var movementStart = source.IndexOf("view.HandleHorizontalInput(player, movementFootWorldY);", StringComparison.Ordinal);
 
         Assert.True(resetStart >= 0);
         Assert.True(jumpStart > resetStart, "Reset should restore safe actor state before jump input is consumed.");

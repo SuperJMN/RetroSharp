@@ -10,6 +10,8 @@ enum World {
 
 enum Player {
     ScreenX = 72,
+    LeftWallProbeX = 71,
+    RightWallProbeX = 73,
     StartY = 105,
     WorldOriginY = 41,
     FallResetY = 116
@@ -19,6 +21,7 @@ enum CollisionProbe {
     LandingHeight = 8,
     LandingPointHeight = 1,
     LandingBottomOffset = 7,
+    WallProbeHeight = 8,
     TileSize = 8,
     TileSize2 = 16,
     TileSize3 = 24,
@@ -124,18 +127,23 @@ class CameraState {
     Pixel x;
     Pixel moving;
 
-    inline void HandleHorizontalInput(PlayerState player) {
+    inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY) {
         moving = 0;
+        let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
         if (button_down(right) != 0) {
-            moving = 1;
             player.displayFlipX = false;
-            x += 1;
+            if (camera.AabbTiles(Player.RightWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+                moving = 1;
+                x += 1;
+            }
         }
 
         if (button_down(left) != 0) {
-            moving = 1;
             player.displayFlipX = true;
-            x -= 1;
+            if (camera.AabbTiles(Player.LeftWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+                moving = 1;
+                x -= 1;
+            }
         }
 
         if (moving != 0) {
@@ -248,7 +256,8 @@ void main() {
         frame.ResolveFall(player);
         frame.ResolveReset(player);
         player.HandleJumpInput();
-        view.HandleHorizontalInput(player);
+        let movementFootWorldY = player.y - Player.WorldOriginY;
+        view.HandleHorizontalInput(player, movementFootWorldY);
         player.UpdateRunAnimation(view);
 
     }

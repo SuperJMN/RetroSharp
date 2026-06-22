@@ -127,6 +127,7 @@ Use this table to avoid fixing the wrong layer:
 | Background blocks tear/glitch only while crossing a tile boundary (especially on heavy frames such as jumping or landing on a platform) | Camera tile streaming writing VRAM during active display, starting too late in the current VBlank, or trying to stream too many rows in one VBlank; confirm `EmitWaitForVBlankBeforeStream` waits for a fresh VBlank edge before the column/row writes and that horizontal streaming is capped to visible rows. Read `0xFF44` directly for `LY`; some debug bridges report a stale `LY` in compact PPU state. |
 | Collision does not match visible tiles | World flags, tileset `objectgroup`, explicit collision layer, `camera.AabbTiles(...)` vs `collision_aabb_tiles(...)`, actor camera/world coordinates. |
 | Player cannot jump in one zone | Frame order, reset before input, collision state clearing, `button_just_pressed(...)`. |
+| Player walks into a pipe and snaps onto its top | Horizontal movement is missing or bypassing a lower-body wall probe; block camera motion before vertical landing resolution can reinterpret the side overlap as floor. |
 | Player snaps to platform while rising | Landing should be gated by descent, for example `velocityY < World.SignedVelocityWrap` and non-zero velocity. |
 | Player teleports from top to ground | Byte-backed Y wrap; clamp before collision/reset checks. |
 | D-pad triggers A/B behavior on hardware | `JOYP` row settling in backend input lowering. |
