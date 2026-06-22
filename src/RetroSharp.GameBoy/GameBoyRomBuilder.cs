@@ -109,6 +109,7 @@ internal static class GameBoyRomBuilder
         }
 
         EmitMapData(builder, program);
+        EmitMusicData(builder, program);
 
         return builder;
     }
@@ -163,6 +164,17 @@ internal static class GameBoyRomBuilder
     internal static string BackgroundRowLabel(int row) => $"background_stream_row_{row}";
 
     internal static string MapFlagRowLabel(int row) => $"map_flags_row_{row}";
+
+    internal static string MusicLabel(string name) => $"music_{name}";
+
+    private static void EmitMusicData(GbBuilder builder, GameBoyVideoProgram program)
+    {
+        foreach (var asset in program.MusicAssetsInLoadOrder)
+        {
+            builder.Label(MusicLabel(asset.Name));
+            builder.Emit(asset.Data);
+        }
+    }
 
     internal static void EmitWaitVBlank(GbBuilder builder, string label)
     {
@@ -397,6 +409,22 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort InputCurrentAddress = 0xC0F0;
     private const ushort InputPreviousAddress = 0xC0F1;
     private const ushort InputHoldTicksStartAddress = 0xC0F2;
+    private const ushort MusicActiveAddress = 0xC0FA;
+    private const ushort MusicRowAddress = 0xC0FB;
+    private const ushort MusicTickAddress = 0xC0FC;
+    private const ushort MusicDataPointerLowAddress = 0xC0FD;
+    private const ushort MusicDataPointerHighAddress = 0xC0FE;
+    private const ushort MusicCurrentPointerLowAddress = 0xC0FF;
+    private const ushort MusicCurrentPointerHighAddress = 0xC100;
+    private const ushort MusicScratchPointerLowAddress = 0xC101;
+    private const ushort MusicScratchPointerHighAddress = 0xC102;
+    private const ushort MusicTicksPerRowAddress = 0xC103;
+    private const ushort MusicRowHighAddress = 0xC104;
+    private const ushort MusicRowMaskAddress = 0xC105;
+    private const ushort MusicRowCacheStartAddress = 0xC106;
+    private const int MusicHeaderLength = 3;
+    private const int MusicWaveTableBytes = 16 * 16;
+    private const int MusicRowCacheLength = 15;
     private const int VisibleScreenTileWidth = 20;
     private const int VisibleScreenTileHeight = 18;
     private const byte JoypadDeselect = 0x30;
@@ -417,6 +445,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly IReadOnlyList<Sdk2DOperation> sdkOperations;
+    private readonly IReadOnlyList<SdkAudioOperation> sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
@@ -425,6 +454,7 @@ internal sealed class GameBoyRuntimeCompiler
     private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
     private int nextSdkOperation;
+    private int nextSdkAudioOperation;
     private int? cameraMapWidth;
     private int? cameraStreamY;
     private int? cameraStreamHeight;
@@ -434,6 +464,7 @@ internal sealed class GameBoyRuntimeCompiler
         this.builder = builder;
         this.program = program;
         sdkOperations = program.SdkOperations;
+        sdkAudioOperations = program.SdkAudioOperations;
     }
 
     public void Emit(BlockSyntax block)
@@ -441,6 +472,7 @@ internal sealed class GameBoyRuntimeCompiler
         EmitInputStateInitialization();
         EmitBlock(block);
         EnsureAllSdkOperationsConsumed();
+        EnsureAllSdkAudioOperationsConsumed();
     }
 
     private void EmitInputStateInitialization()
@@ -905,6 +937,7 @@ internal sealed class GameBoyRuntimeCompiler
             case "world_map":
             case "world_load":
             case "sprite_asset":
+            case "music_asset":
                 break;
             case "animation_clip":
                 break;
@@ -913,6 +946,18 @@ internal sealed class GameBoyRuntimeCompiler
                 break;
             case "input_poll":
                 EmitNextSdkOperation<Sdk2DOperation.PollInput>(call.Name);
+                break;
+            case "audio_init":
+                EmitNextSdkAudioOperation<SdkAudioOperation.InitializeAudio>(call.Name);
+                break;
+            case "audio_update":
+                EmitNextSdkAudioOperation<SdkAudioOperation.UpdateAudio>(call.Name);
+                break;
+            case "music_play":
+                EmitNextSdkAudioOperation<SdkAudioOperation.PlayMusic>(call.Name);
+                break;
+            case "music_stop":
+                EmitNextSdkAudioOperation<SdkAudioOperation.StopMusic>(call.Name);
                 break;
             case "tilemap_fill_column":
                 EmitTilemapFillColumn(call);
@@ -967,6 +1012,11 @@ internal sealed class GameBoyRuntimeCompiler
         GameBoySdkOperationLowerer.Emit(this, operation);
     }
 
+    private void EmitSdkAudioOperation(SdkAudioOperation operation)
+    {
+        GameBoySdkAudioOperationLowerer.Emit(this, operation);
+    }
+
     private void EmitNextSdkOperation<T>(string callName)
         where T : Sdk2DOperation
     {
@@ -991,6 +1041,30 @@ internal sealed class GameBoyRuntimeCompiler
             $"Game Boy SDK call '{callName}' expected collected operation {typeof(T).Name}, got {operation.GetType().Name}.");
     }
 
+    private void EmitNextSdkAudioOperation<T>(string callName)
+        where T : SdkAudioOperation
+    {
+        EmitSdkAudioOperation(ConsumeSdkAudioOperation<T>(callName));
+    }
+
+    private T ConsumeSdkAudioOperation<T>(string callName)
+        where T : SdkAudioOperation
+    {
+        if (nextSdkAudioOperation >= sdkAudioOperations.Count)
+        {
+            throw new InvalidOperationException($"Game Boy SDK audio call '{callName}' has no collected SDK audio operation.");
+        }
+
+        var operation = sdkAudioOperations[nextSdkAudioOperation++];
+        if (operation is T typed)
+        {
+            return typed;
+        }
+
+        throw new InvalidOperationException(
+            $"Game Boy SDK audio call '{callName}' expected collected operation {typeof(T).Name}, got {operation.GetType().Name}.");
+    }
+
     private void EnsureAllSdkOperationsConsumed()
     {
         if (nextSdkOperation == sdkOperations.Count)
@@ -1003,9 +1077,307 @@ internal sealed class GameBoyRuntimeCompiler
             $"Game Boy runtime consumed {nextSdkOperation} of {sdkOperations.Count} SDK operations; next operation is {operation.GetType().Name}.");
     }
 
+    private void EnsureAllSdkAudioOperationsConsumed()
+    {
+        if (nextSdkAudioOperation == sdkAudioOperations.Count)
+        {
+            return;
+        }
+
+        var operation = sdkAudioOperations[nextSdkAudioOperation];
+        throw new InvalidOperationException(
+            $"Game Boy runtime consumed {nextSdkAudioOperation} of {sdkAudioOperations.Count} SDK audio operations; next operation is {operation.GetType().Name}.");
+    }
+
     internal void EmitWaitFrame()
     {
         GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
+    }
+
+    internal void EmitInitializeAudio()
+    {
+        builder.LoadAImmediate(0x80);
+        builder.StoreHighRamA(0x26);                // NR52: enable APU
+        builder.LoadAImmediate(0xFF);
+        builder.StoreHighRamA(0x25);                // NR51: route channels
+        builder.LoadAImmediate(0x77);
+        builder.StoreHighRamA(0x24);                // NR50: balanced master volume
+
+        builder.LoadAImmediate(0);
+        builder.StoreA(MusicActiveAddress);
+        builder.StoreA(MusicRowAddress);
+        builder.StoreA(MusicTickAddress);
+        builder.StoreA(MusicDataPointerLowAddress);
+        builder.StoreA(MusicDataPointerHighAddress);
+        builder.StoreA(MusicCurrentPointerLowAddress);
+        builder.StoreA(MusicCurrentPointerHighAddress);
+        builder.StoreA(MusicScratchPointerLowAddress);
+        builder.StoreA(MusicScratchPointerHighAddress);
+        builder.StoreA(MusicTicksPerRowAddress);
+        builder.StoreA(MusicRowHighAddress);
+        EmitClearMusicRowCache();
+    }
+
+    internal void EmitPlayMusic(SdkAudioOperation.PlayMusic operation)
+    {
+        if (!program.MusicAssets.ContainsKey(operation.ThemeId))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy music asset '{operation.ThemeId}'. Declare it with music.Asset(...).");
+        }
+
+        builder.LoadHl(GameBoyRomBuilder.MusicLabel(operation.ThemeId));
+        builder.Emit(0x7D);                         // LD A,L
+        builder.StoreA(MusicDataPointerLowAddress);
+        builder.Emit(0x7C);                         // LD A,H
+        builder.StoreA(MusicDataPointerHighAddress);
+        builder.LoadAImmediate(1);
+        builder.StoreA(MusicActiveAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreA(MusicRowAddress);
+        builder.StoreA(MusicRowHighAddress);
+        builder.StoreA(MusicTickAddress);
+        EmitResetMusicRowPointer();
+    }
+
+    internal void EmitStopMusic()
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreA(MusicActiveAddress);
+        builder.StoreHighRamA(0x12);                // NR12: silence CH1 envelope
+        builder.StoreHighRamA(0x17);                // NR22: silence CH2 envelope
+        builder.StoreHighRamA(0x1A);                // NR30: disable CH3
+        builder.StoreHighRamA(0x21);                // NR42: silence CH4 envelope
+    }
+
+    internal void EmitUpdateAudio()
+    {
+        var endLabel = builder.CreateLabel("audio_update_end");
+        var loadRowLabel = builder.CreateLabel("audio_update_load_row");
+        var rowReadyLabel = builder.CreateLabel("audio_update_row_ready");
+        var rowHighMatchesLabel = builder.CreateLabel("audio_update_row_high_matches");
+        var resetRowLabel = builder.CreateLabel("audio_update_reset_row");
+        var rowIncrementDoneLabel = builder.CreateLabel("audio_update_row_increment_done");
+
+        builder.LoadA(MusicActiveAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, endLabel);       // JP Z,endLabel
+
+        builder.LoadA(MusicTickAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, loadRowLabel);   // JP Z,loadRowLabel
+        builder.SubtractAImmediate(1);
+        builder.StoreA(MusicTickAddress);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(loadRowLabel);
+        EmitLoadMusicPointerToHl();
+        builder.LoadAFromHl();                      // ticks per row
+        builder.StoreA(MusicTicksPerRowAddress);
+        builder.Emit(0x23);                         // INC HL
+        builder.LoadAFromHl();                      // row count low
+        builder.LoadCFromA();
+        builder.Emit(0x23);                         // INC HL
+        builder.LoadAFromHl();                      // row count high
+        builder.LoadBFromA();
+
+        builder.LoadA(MusicRowHighAddress);
+        builder.CompareB();
+        builder.JumpAbsolute(0xDA, rowReadyLabel);  // JP C,rowReadyLabel
+        builder.JumpAbsolute(0xCA, rowHighMatchesLabel); // JP Z,rowHighMatchesLabel
+        builder.JumpAbsolute(resetRowLabel);
+
+        builder.Label(rowHighMatchesLabel);
+        builder.LoadA(MusicRowAddress);
+        builder.Emit(0xB9);                         // CP C
+        builder.JumpAbsolute(0xDA, rowReadyLabel);  // JP C,rowReadyLabel
+        builder.Label(resetRowLabel);
+        builder.LoadAImmediate(0);
+        builder.StoreA(MusicRowAddress);
+        builder.StoreA(MusicRowHighAddress);
+        EmitResetMusicRowPointer();
+
+        builder.Label(rowReadyLabel);
+        EmitLoadMusicRowEventsToCache();
+        builder.LoadHl(MusicRowCacheStartAddress);
+
+        EmitWriteMusicRegister(0x11);
+        EmitWriteMusicRegister(0x12);
+        EmitWriteMusicRegister(0x13);
+        EmitWriteMusicRegister(0x14);
+        EmitWriteMusicRegister(0x16);
+        EmitWriteMusicRegister(0x17);
+        EmitWriteMusicRegister(0x18);
+        EmitWriteMusicRegister(0x19);
+        EmitWriteWaveChannelFromRow();
+        EmitWriteMusicRegister(0x21);
+        EmitWriteMusicRegister(0x22);
+        EmitWriteMusicRegister(0x23);
+
+        EmitClearMusicRowTriggerBits();
+
+        builder.LoadA(MusicRowAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(MusicRowAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, rowIncrementDoneLabel); // JP NZ,rowIncrementDoneLabel
+        builder.LoadA(MusicRowHighAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(MusicRowHighAddress);
+        builder.Label(rowIncrementDoneLabel);
+
+        builder.LoadA(MusicTicksPerRowAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(MusicTickAddress);
+
+        builder.Label(endLabel);
+    }
+
+    private void EmitLoadMusicRowEventsToCache()
+    {
+        EmitLoadMusicCurrentPointerToHl();
+        builder.LoadAFromHl();                      // row event mask
+        builder.StoreA(MusicRowMaskAddress);
+        builder.Emit(0x23);                         // INC HL
+
+        EmitCopyMusicChannelEventToCache(0x01, MusicRowCacheStartAddress, 4);
+        EmitCopyMusicChannelEventToCache(0x02, (ushort)(MusicRowCacheStartAddress + 4), 4);
+        EmitCopyMusicChannelEventToCache(0x04, (ushort)(MusicRowCacheStartAddress + 8), 4);
+        EmitCopyMusicChannelEventToCache(0x08, (ushort)(MusicRowCacheStartAddress + 12), 3);
+
+        EmitStoreHlToMusicCurrentPointer();
+    }
+
+    private void EmitCopyMusicChannelEventToCache(byte mask, ushort cacheAddress, int byteCount)
+    {
+        var skipLabel = builder.CreateLabel("audio_row_event_skip");
+        builder.LoadA(MusicRowMaskAddress);
+        builder.AndImmediate(mask);
+        builder.JumpAbsolute(0xCA, skipLabel);      // JP Z,skipLabel
+        for (var i = 0; i < byteCount; i++)
+        {
+            builder.LoadAFromHl();
+            builder.StoreA((ushort)(cacheAddress + i));
+            builder.Emit(0x23);                     // INC HL
+        }
+
+        builder.Label(skipLabel);
+    }
+
+    private void EmitClearMusicRowTriggerBits()
+    {
+        EmitClearMusicTriggerBit((ushort)(MusicRowCacheStartAddress + 3));
+        EmitClearMusicTriggerBit((ushort)(MusicRowCacheStartAddress + 7));
+        EmitClearMusicTriggerBit((ushort)(MusicRowCacheStartAddress + 11));
+        EmitClearMusicTriggerBit((ushort)(MusicRowCacheStartAddress + 14));
+    }
+
+    private void EmitClearMusicTriggerBit(ushort address)
+    {
+        builder.LoadA(address);
+        builder.AndImmediate(0x7F);
+        builder.StoreA(address);
+    }
+
+    private void EmitClearMusicRowCache()
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreA(MusicRowMaskAddress);
+        for (var i = 0; i < MusicRowCacheLength; i++)
+        {
+            builder.StoreA((ushort)(MusicRowCacheStartAddress + i));
+        }
+    }
+
+    private void EmitLoadMusicPointerToHl()
+    {
+        builder.LoadA(MusicDataPointerLowAddress);
+        builder.LoadLFromA();
+        builder.LoadA(MusicDataPointerHighAddress);
+        builder.Emit(0x67);                         // LD H,A
+    }
+
+    private void EmitLoadMusicCurrentPointerToHl()
+    {
+        builder.LoadA(MusicCurrentPointerLowAddress);
+        builder.LoadLFromA();
+        builder.LoadA(MusicCurrentPointerHighAddress);
+        builder.Emit(0x67);                         // LD H,A
+    }
+
+    private void EmitResetMusicRowPointer()
+    {
+        EmitLoadMusicPointerToHl();
+        builder.LoadBc(MusicHeaderLength + MusicWaveTableBytes);
+        builder.AddHlBc();
+        EmitStoreHlToMusicCurrentPointer();
+        EmitClearMusicRowCache();
+    }
+
+    private void EmitStoreHlToMusicCurrentPointer()
+    {
+        builder.Emit(0x7D);                         // LD A,L
+        builder.StoreA(MusicCurrentPointerLowAddress);
+        builder.Emit(0x7C);                         // LD A,H
+        builder.StoreA(MusicCurrentPointerHighAddress);
+    }
+
+    private void EmitStoreHlToMusicScratchPointer()
+    {
+        builder.Emit(0x7D);                         // LD A,L
+        builder.StoreA(MusicScratchPointerLowAddress);
+        builder.Emit(0x7C);                         // LD A,H
+        builder.StoreA(MusicScratchPointerHighAddress);
+    }
+
+    private void EmitLoadMusicScratchPointerToHl()
+    {
+        builder.LoadA(MusicScratchPointerLowAddress);
+        builder.LoadLFromA();
+        builder.LoadA(MusicScratchPointerHighAddress);
+        builder.Emit(0x67);                         // LD H,A
+    }
+
+    private void EmitWriteMusicRegister(byte register)
+    {
+        builder.LoadAFromHl();
+        builder.StoreHighRamA(register);
+        builder.Emit(0x23);                         // INC HL
+    }
+
+    private void EmitWriteWaveChannelFromRow()
+    {
+        builder.LoadAFromHl();                      // wave index
+        builder.LoadBFromA();
+        builder.Emit(0x23);                         // INC HL
+        EmitStoreHlToMusicScratchPointer();
+
+        builder.LoadAImmediate(0);
+        builder.StoreHighRamA(0x1A);                // NR30: disable CH3 before wave RAM writes
+        EmitLoadMusicPointerToHl();
+        builder.LoadBc(MusicHeaderLength);
+        builder.AddHlBc();
+        builder.LoadAFromB();
+        builder.SwapA();
+        builder.AndImmediate(0xF0);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+        for (var i = 0; i < 16; i++)
+        {
+            builder.LoadAFromHl();
+            builder.StoreHighRamA((byte)(0x30 + i));
+            builder.Emit(0x23);                     // INC HL
+        }
+
+        builder.LoadAImmediate(0x80);
+        builder.StoreHighRamA(0x1A);                // NR30: enable CH3
+        builder.LoadAImmediate(0);
+        builder.StoreHighRamA(0x1B);                // NR31: full length
+
+        EmitLoadMusicScratchPointerToHl();
+        EmitWriteMusicRegister(0x1C);
+        EmitWriteMusicRegister(0x1D);
+        EmitWriteMusicRegister(0x1E);
     }
 
     private bool TryEmitTargetIntrinsic(FunctionCall call)
@@ -3487,6 +3859,11 @@ internal sealed class GbBuilder
     public void AddHlDe()
     {
         Emit(0x19);
+    }
+
+    public void AddHlBc()
+    {
+        Emit(0x09);
     }
 
     public void LoadAFromHl()

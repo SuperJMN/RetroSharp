@@ -4,6 +4,11 @@ using RetroSharp.Core.Targeting;
 
 public static class NesTarget
 {
+    public static TargetAudioCapabilities AudioCapabilities { get; } = new(
+        Name: "nes",
+        SupportsBgm: false,
+        SupportedMusicFormats: []);
+
     public static Target2DCapabilities Capabilities { get; } = new(
         Name: "nes",
         ScreenPixels: new Size2D(256, 240),

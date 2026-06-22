@@ -23,6 +23,8 @@ public static class SdkModuleRegistry
         ["hud"] = "hud",
         ["scroll"] = "scroll",
         ["animation"] = "animation",
+        ["audio"] = "audio",
+        ["music"] = "music",
     };
 
     private static readonly Dictionary<string, string> MethodNames = new(StringComparer.Ordinal)

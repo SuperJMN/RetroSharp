@@ -8,7 +8,7 @@ See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separa
 
 ## Target Capabilities
 
-The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capability checks.
+The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capability checks and `GameBoyTarget.AudioCapabilities` for audio capability checks.
 
 | Capability | Value |
 | --- | --- |
@@ -26,6 +26,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Background palettes | 1 background palette slot |
 | Sprite transforms | Flip X and Flip Y |
 | HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
+| BGM formats | hUGETracker `.uge` |
 
 ## SDK Operation Boundary
 
@@ -39,6 +40,13 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `map_stream_column(targetColumn, sourceColumn, y, height)` as `Sdk2DOperation.StreamMapColumn`
 - `world_tile_flags_at(worldX, worldY)` as `Sdk2DOperation.ReadWorldTileFlags`
 - `hud.SetTile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
+
+`GameBoyRomCompiler.CollectSdkAudioOperations(...)` exposes the parallel audio boundary where portable audio calls become semantic `SdkAudioOperation` records. The current boundary recognizes:
+
+- `audio.Init()` as `SdkAudioOperation.InitializeAudio`
+- `music.Play(name)` as `SdkAudioOperation.PlayMusic`
+- `audio.Update()` as `SdkAudioOperation.UpdateAudio`
+- `music.Stop()` as `SdkAudioOperation.StopMusic`
 
 `Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video.WaitVBlank()`. Logical sprite draw and explicit map-column streaming also lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge.
 
@@ -123,6 +131,7 @@ The preferred source spelling is SDK dot-calls such as `video.Init()` and `camer
 Static setup calls:
 
 - `video.Init()`
+- `music.Asset(name, path)`
 - `palette.Set(index, color)`
 - `objectPalette.Set(index, color)`
 - `sprite.Asset(name, path[, frameWidth, frameHeight])`
@@ -139,6 +148,10 @@ Static setup calls:
 Runtime calls:
 
 - `video.WaitVBlank()`
+- `audio.Init()`
+- `audio.Update()`
+- `music.Play(name)`
+- `music.Stop()`
 - `input.Poll()`
 - `scroll.Set(x, y)`
 - `camera.Init(mapWidth, streamY, streamHeight)`
@@ -169,6 +182,10 @@ Runtime calls:
 - `button_hold_ticks(button)`
 
 `scroll.Set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
+
+`music.Asset(name, path)` declares a BGM resource. `path` can point directly to a hUGETracker `.uge` file or to a `retrosharp.music.v1` JSON envelope whose `platforms.gb` entry has `format: "uge"` and a relative `.uge` path. The current Game Boy BGM runtime accepts `.uge` v6 songs with duty, wave, and noise channel rows, fixed ticks-per-row timing, compact wavetable data, and compact per-row channel event data. Effect `Cxy` is lowered as a row-level volume override; effects `2xx`, `3xx`, `Bxx`, and `Exx` are currently accepted as best-effort no-ops so real tracker songs can compile, but they do not yet reproduce hUGEDriver pitch slides, jumps, or note cuts exactly. Timer-based tempo, routine jump command values, tempo changes, panning, arpeggio, and other hUGETracker effects fail explicitly or remain unsupported because this runtime is frame-update driven through `audio.Update()`.
+
+`audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM runtime state. `music.Play(name)` points the runtime at the compiled song data and starts from row 0. `audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a row is due. Call it once per frame after `video.WaitVBlank()`. `music.Stop()` disables BGM playback and silences the active audio channels.
 
 `camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 

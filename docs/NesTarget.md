@@ -8,7 +8,7 @@ See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separa
 
 ## Target Capabilities
 
-The NES target exposes `NesTarget.Capabilities` for portable 2D capability checks.
+The NES target exposes `NesTarget.Capabilities` for portable 2D capability checks and `NesTarget.AudioCapabilities` for audio capability checks.
 
 | Capability | Value |
 | --- | --- |
@@ -26,8 +26,11 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Background palettes | 4 background palette slots |
 | Sprite transforms | Flip X and Flip Y hardware flags |
 | HUD modes | None declared portable support yet |
+| BGM formats | None yet |
 
 The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented for the current JSON logical sprite spike through `Sdk2DOperation.DrawLogicalSprite`. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, so portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, or HUD support must fail capability checks before reaching NES backend code. NES compilation now runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement or HUD tiles) are rejected by the same capability checks the Game Boy target uses. Horizontal `camera.SetPosition(x, 0)` validates because NES fine-scrolls within its pre-loaded nametable without streaming background tiles.
+
+NES also runs the shared `SdkAudioOperationCollector` and validates audio operations through `SdkAudioOperationValidator` against `NesTarget.AudioCapabilities`. `music.Play(...)` currently fails with `Target 'nes' does not support BGM playback yet.` until an NES music format and runtime lowering are implemented.
 
 ## Supported Video API
 

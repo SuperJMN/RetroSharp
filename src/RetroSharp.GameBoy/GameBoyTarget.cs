@@ -4,6 +4,11 @@ using RetroSharp.Core.Targeting;
 
 public static class GameBoyTarget
 {
+    public static TargetAudioCapabilities AudioCapabilities { get; } = new(
+        Name: "gb",
+        SupportsBgm: true,
+        SupportedMusicFormats: ["uge"]);
+
     public static Target2DCapabilities Capabilities { get; } = new(
         Name: "gb",
         ScreenPixels: new Size2D(160, 144),

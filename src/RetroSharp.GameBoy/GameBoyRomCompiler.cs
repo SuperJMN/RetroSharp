@@ -14,12 +14,18 @@ public static class GameBoyRomCompiler
     {
         var videoProgram = ParseVideoProgram(source, baseDirectory);
         ValidateSdkOperations(videoProgram.SdkOperations);
+        ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.Build(videoProgram);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(string source, string? baseDirectory = null)
     {
         return ParseVideoProgram(source, baseDirectory).SdkOperations;
+    }
+
+    public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(string source, string? baseDirectory = null)
+    {
+        return ParseVideoProgram(source, baseDirectory).SdkAudioOperations;
     }
 
     private static GameBoyVideoProgram ParseVideoProgram(string source, string? baseDirectory)
@@ -50,6 +56,14 @@ public static class GameBoyRomCompiler
             Sdk2DOperationValidator.Validate(GameBoyTarget.Capabilities, operation);
         }
     }
+
+    private static void ValidateSdkAudioOperations(IEnumerable<SdkAudioOperation> operations)
+    {
+        foreach (var operation in operations)
+        {
+            SdkAudioOperationValidator.Validate(GameBoyTarget.AudioCapabilities, operation);
+        }
+    }
 }
 
 internal sealed class GameBoyVideoProgram
@@ -58,6 +72,8 @@ internal sealed class GameBoyVideoProgram
 
     private readonly List<GameBoyCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, GameBoyCompiledSpriteAsset> spriteAssets = [];
+    private readonly List<GameBoyCompiledMusicAsset> musicAssetsInLoadOrder = [];
+    private readonly Dictionary<string, GameBoyCompiledMusicAsset> musicAssets = [];
     private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
     private readonly List<byte> generatedBackgroundTileData = [];
     private int spriteTileCount;
@@ -100,6 +116,10 @@ internal sealed class GameBoyVideoProgram
 
     public IReadOnlyDictionary<string, GameBoyCompiledSpriteAsset> SpriteAssets => spriteAssets;
 
+    public IReadOnlyList<GameBoyCompiledMusicAsset> MusicAssetsInLoadOrder => musicAssetsInLoadOrder;
+
+    public IReadOnlyDictionary<string, GameBoyCompiledMusicAsset> MusicAssets => musicAssets;
+
     public IReadOnlyDictionary<string, SpriteAnimationClip> AnimationClips => animationClips;
 
     public int FirstSpriteTile => AlignToEven(FirstGeneratedBackgroundTile + GeneratedBackgroundTileCount);
@@ -120,6 +140,8 @@ internal sealed class GameBoyVideoProgram
 
     public required IReadOnlyList<Sdk2DOperation> SdkOperations { get; init; }
 
+    public required IReadOnlyList<SdkAudioOperation> SdkAudioOperations { get; init; }
+
     public static GameBoyVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
         program = ConstantFolder.Fold(program);
@@ -138,6 +160,7 @@ internal sealed class GameBoyVideoProgram
             Structs = structs,
             MainBlock = main.Block,
             SdkOperations = Sdk2DOperationCollector.Collect(main.Block, functions, "Game Boy"),
+            SdkAudioOperations = SdkAudioOperationCollector.Collect(main.Block, functions, "Game Boy"),
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
@@ -236,6 +259,9 @@ internal sealed class GameBoyVideoProgram
                 case "sprite_asset":
                     ApplySpriteAsset(call);
                     break;
+                case "music_asset":
+                    ApplyMusicAsset(call);
+                    break;
                 case "animation_clip":
                     ApplyAnimationClip(call);
                     break;
@@ -312,6 +338,21 @@ internal sealed class GameBoyVideoProgram
         spriteTileCount += asset.TileCount;
         spriteAssets.Add(name, asset);
         spriteAssetsInLoadOrder.Add(asset);
+    }
+
+    private void ApplyMusicAsset(FunctionCall call)
+    {
+        RequireArity(call, 2);
+        var name = IdentifierArg(call.Parameters.ElementAt(0), "music_asset argument 1");
+        if (musicAssets.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Music asset '{name}' is already declared.");
+        }
+
+        var path = ResolveAssetPath(StringArg(call, 1));
+        var asset = GameBoyMusicAssetCompiler.CompileFromFile(name, path);
+        musicAssets.Add(name, asset);
+        musicAssetsInLoadOrder.Add(asset);
     }
 
     private void ApplyAnimationClip(FunctionCall call)

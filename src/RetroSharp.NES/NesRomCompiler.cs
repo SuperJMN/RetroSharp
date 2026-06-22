@@ -37,12 +37,31 @@ public static class NesRomCompiler
         return Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
     }
 
+    public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(string source, string? baseDirectory = null)
+    {
+        var parse = new SomeParser().Parse(source);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        ValidateFunctionContracts(parse.Value);
+        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+    }
+
     private static void ValidateSdkOperations(NesVideoProgram videoProgram)
     {
         var operations = Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
         foreach (var operation in operations)
         {
             Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
+        }
+
+        var audioOperations = SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        foreach (var operation in audioOperations)
+        {
+            SdkAudioOperationValidator.Validate(NesTarget.AudioCapabilities, operation);
         }
     }
 
@@ -221,6 +240,17 @@ internal sealed class NesVideoProgram
                 break;
             case "sprite_asset":
                 ApplySpriteAsset(call);
+                break;
+            case "music_asset":
+                RequireArity(call, 2);
+                break;
+            case "audio_init":
+            case "audio_update":
+            case "music_stop":
+                RequireArity(call, 0);
+                break;
+            case "music_play":
+                RequireArity(call, 1);
                 break;
             case "hud_set_tile":
                 ValidateHudSetTile(call);

@@ -773,6 +773,16 @@ internal sealed class NesRuntimeCompiler
             case "sprite_asset":
                 NesVideoProgram.RequireArity(call, 2);
                 break;
+            case "music_asset":
+                NesVideoProgram.RequireArity(call, 2);
+                break;
+            case "audio_init":
+            case "audio_update":
+            case "music_stop":
+                NesVideoProgram.RequireArity(call, 0);
+                break;
+            case "music_play":
+                throw new InvalidOperationException("Target 'nes' does not support BGM playback yet.");
             case "hud_set_tile":
                 NesVideoProgram.ValidateHudSetTile(call);
                 break;

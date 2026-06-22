@@ -2982,6 +2982,36 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void GameBoy_runner_declares_and_ticks_background_music()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var baseDirectory = Path.GetDirectoryName(sourcePath);
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("""music.Asset(runner_theme, "music/free_06_delight.uge");""", source);
+        Assert.Contains("audio.Init();", source);
+        Assert.Contains("music.Play(runner_theme);", source);
+
+        var vblankStart = source.IndexOf("video.WaitVBlank();", StringComparison.Ordinal);
+        var audioUpdate = source.IndexOf("audio.Update();", StringComparison.Ordinal);
+        var cameraApply = source.IndexOf("camera.Apply();", StringComparison.Ordinal);
+        Assert.True(vblankStart >= 0);
+        Assert.True(audioUpdate > vblankStart, "Runner should tick the music runtime once after VBlank starts.");
+        Assert.True(cameraApply > audioUpdate, "Runner should tick music before camera/sprite presentation work consumes VBlank time.");
+
+        var operations = GameBoyRomCompiler.CollectSdkAudioOperations(source, baseDirectory);
+        Assert.Contains(operations, operation => operation is SdkAudioOperation.InitializeAudio);
+        Assert.Contains(operations, operation => operation is SdkAudioOperation.PlayMusic { ThemeId: "runner_theme" });
+        Assert.Contains(operations, operation => operation is SdkAudioOperation.UpdateAudio);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x80, 0xE0, 0x26]), "Runner BGM should enable NR52.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x12]), "Runner BGM should write CH1 envelope data during audio.Update.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x14]), "Runner BGM should trigger CH1 notes during audio.Update.");
+    }
+
+    [Fact]
     public void World_map_generates_initial_visible_tilemap_from_map_columns()
     {
         const string source = """
@@ -3859,6 +3889,44 @@ public class GameBoyRomCompilerTests
         Assert.Contains("let movementFootWorldY = player.y - Player.WorldOriginY;", source);
         Assert.Contains("view.HandleHorizontalInput(player, movementFootWorldY);", source);
         Assert.DoesNotContain("view.HandleHorizontalInput(player);", source);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_uses_lower_gravity_with_compensated_jump_height()
+    {
+        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("Velocity = 253", source);
+        Assert.Contains("BoostTicks = 12", source);
+        Assert.Contains("GravityFrames = 2", source);
+        Assert.Contains("BoostTickMask = 1", source);
+        Assert.Contains("Pixel gravityTick;", source);
+        Assert.Contains("gravityTick = 0;", source);
+
+        var gravityStart = source.IndexOf("inline void ApplyGravity()", StringComparison.Ordinal);
+        var landStart = source.IndexOf("inline void Land(Pixel targetY)", StringComparison.Ordinal);
+        Assert.True(gravityStart >= 0);
+        Assert.True(landStart > gravityStart);
+        var gravityBlock = source[gravityStart..landStart];
+        Assert.Contains("gravityTick++;", gravityBlock);
+        Assert.Contains("if (gravityTick >= Jump.GravityFrames)", gravityBlock);
+        Assert.Contains("velocityY += 1;", gravityBlock);
+        Assert.Contains("if (velocityY != 0)", gravityBlock);
+        Assert.Contains("grounded = 0;", gravityBlock);
+        Assert.Contains("y += velocityY;", gravityBlock);
+        Assert.DoesNotContain("grounded = 0;\n        gravityTick++;", gravityBlock);
+
+        var jumpStart = source.IndexOf("inline void HandleJumpInput()", StringComparison.Ordinal);
+        var animationStart = source.IndexOf("inline void UpdateRunAnimation(CameraState view)", StringComparison.Ordinal);
+        Assert.True(jumpStart >= 0);
+        Assert.True(animationStart > jumpStart);
+        var jumpBlock = source[jumpStart..animationStart];
+        Assert.Contains("if ((jumpTicks & Jump.BoostTickMask) != 0)", jumpBlock);
+        Assert.Contains("velocityY -= 1;", jumpBlock);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         Assert.Equal(32768, rom.Length);

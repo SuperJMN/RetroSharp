@@ -30,8 +30,10 @@ enum CollisionProbe {
 }
 
 enum Jump {
-    Velocity = 252,
-    BoostTicks = 12
+    Velocity = 253,
+    BoostTicks = 12,
+    GravityFrames = 2,
+    BoostTickMask = 1
 }
 
 enum CollisionFlag { None = 0, Solid = 1 }
@@ -45,6 +47,7 @@ class PlayerState {
     Pixel animTick;
     Pixel jumping;
     Pixel jumpTicks;
+    Pixel gravityTick;
 
     inline void Reset() {
         y = Player.StartY;
@@ -53,12 +56,19 @@ class PlayerState {
         displayFrame = 0;
         jumping = 0;
         jumpTicks = 0;
+        gravityTick = 0;
     }
 
     inline void ApplyGravity() {
-        grounded = 0;
-        velocityY += 1;
-        y += velocityY;
+        gravityTick++;
+        if (gravityTick >= Jump.GravityFrames) {
+            gravityTick = 0;
+            velocityY += 1;
+        }
+        if (velocityY != 0) {
+            grounded = 0;
+            y += velocityY;
+        }
         if (velocityY >= World.SignedVelocityWrap) {
             if (y >= World.SignedVelocityWrap) {
                 y = 0;
@@ -73,12 +83,14 @@ class PlayerState {
         velocityY = 0;
         grounded = 1;
         jumping = 0;
+        gravityTick = 0;
     }
 
     inline void StartJump() {
         velocityY = Jump.Velocity;
         grounded = 0;
         jumping = 1;
+        gravityTick = 0;
     }
 
     inline void SelectDisplayFrame(Pixel moving) {
@@ -102,7 +114,9 @@ class PlayerState {
             jumpTicks = button_hold_ticks(a);
             if (button_down(a) != 0) {
                 if (jumpTicks < Jump.BoostTicks) {
-                    velocityY -= 1;
+                    if ((jumpTicks & Jump.BoostTickMask) != 0) {
+                        velocityY -= 1;
+                    }
                 }
             }
 
@@ -210,6 +224,7 @@ class FrameState {
 
 inline void PresentFrame(PlayerState player) {
     video.WaitVBlank();
+    audio.Update();
     camera.Apply();
     sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);
 }
@@ -229,6 +244,13 @@ void setup_video() {
     return;
 }
 
+void setup_audio() {
+    music.Asset(runner_theme, "music/free_06_delight.uge");
+    audio.Init();
+    music.Play(runner_theme);
+    return;
+}
+
 void load_world() {
     world.Load("maps/runner.tmj");
     return;
@@ -236,6 +258,7 @@ void load_world() {
 
 void main() {
     setup_video();
+    setup_audio();
     load_world();
     camera.Init(World.Width, World.StreamY, World.Height);
     PlayerState player;

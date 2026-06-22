@@ -24,6 +24,30 @@ The current source spelling is the SDK dot-call form, for example `video.WaitVBl
 
 Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down`.
 
+### Audio and music
+
+| Signature | Semantics |
+| --- | --- |
+| `audio.Init()` | Initialize the target audio path and reset portable BGM playback state. |
+| `music.Asset(name, path)` | Declare a music resource. The portable envelope format is `retrosharp.music.v1`, with per-platform variants such as a Game Boy `.uge` file. |
+| `music.Play(name)` | Start the declared BGM resource. This maps to `SdkAudioOperation.PlayMusic` and is capability-checked through `TargetAudioCapabilities`. |
+| `music.Stop()` | Stop BGM playback. |
+| `audio.Update()` | Advance the target audio runtime once. Call it once per frame after the frame boundary for targets whose BGM runtime is tick-driven. |
+
+The resource envelope intentionally allows one source-level theme to carry different target variants:
+
+```json
+{
+  "format": "retrosharp.music.v1",
+  "platforms": {
+    "gb": { "format": "uge", "path": "theme.uge" },
+    "nes": { "format": "future", "path": "theme.nes.json" }
+  }
+}
+```
+
+Game Boy currently accepts hUGETracker `.uge` v6 resources directly or through the envelope. NES recognizes the source-level audio calls for validation, but BGM playback is not implemented yet.
+
 ### World data and collision
 
 | Signature | Semantics |
@@ -69,11 +93,12 @@ Current mode names are `window`, `split_scroll`, `sprite_hud`, and `none`. `none
 
 ## Capability Requirements
 
-The compiler must validate portable SDK calls against `Target2DCapabilities` before target lowering.
+The compiler must validate portable SDK calls against `Target2DCapabilities` and `TargetAudioCapabilities` before target lowering.
 
 | SDK area | Required capabilities |
 | --- | --- |
 | Frame/input | Target runtime support for frame wait and controller polling. |
+| Audio/BGM | Target BGM support and a music resource format listed by the target descriptor. |
 | World map | Active world dimensions must fit the target's static setup or streaming path. |
 | Camera X | `ScrollAxes.Horizontal`, fine-scroll support as required by target lowering, and enough background tile writes for any streamed column. |
 | Camera Y | `ScrollAxes.Vertical`, fine-scroll support as required by target lowering, and enough background tile writes for any streamed row. |
@@ -93,6 +118,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` bef
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for JSON assets with `platforms.nes.frames` in the current spike. |
 | Palette slots | Sprite slots `0..1`. | Sprite slots `0..3`. |
+| BGM | Supported for hUGETracker `.uge` v6 songs using duty, wave, and noise channels in the current runtime. | Not implemented; `music.Play(...)` fails capability validation. |
 | Animation helpers | Supported on Game Boy runner path. | Runtime animation is not part of the current NES spike. |
 | World collision queries | Supported on Game Boy runner path. | Not implemented in the current NES spike. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
@@ -109,6 +135,8 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | NES Window HUD | `Target 'nes' does not support Window HUD. Use disable HUD for this target.` |
 | NES vertical camera position | `Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.` |
 | Game Boy diagonal camera movement over budget | `Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).` |
+| NES BGM playback | `Target 'nes' does not support BGM playback yet.` |
+| Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
 
