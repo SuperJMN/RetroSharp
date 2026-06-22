@@ -398,6 +398,7 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort InputPreviousAddress = 0xC0F1;
     private const ushort InputHoldTicksStartAddress = 0xC0F2;
     private const int VisibleScreenTileWidth = 20;
+    private const int VisibleScreenTileHeight = 18;
     private const byte JoypadDeselect = 0x30;
     private const int JoypadSettleReadCount = 4;
 
@@ -1509,7 +1510,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineXAddress);
         EmitWaitForVBlankBeforeStream();
-        EmitMapStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress, config.StreamY, config.StreamHeight);
+        EmitVisibleWorldStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress, config);
         EmitBackgroundStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress);
         EmitIncrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitIncrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
@@ -1541,7 +1542,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadAImmediate(7);
         builder.StoreA(CameraFineXAddress);
         EmitWaitForVBlankBeforeStream();
-        EmitMapStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress, config.StreamY, config.StreamHeight);
+        EmitVisibleWorldStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress, config);
         EmitBackgroundStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress);
         EmitDecrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitDecrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
@@ -1641,12 +1642,24 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitBackgroundStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress)
     {
-        if (program.BackgroundStreamHeight <= 0)
+        var visibleBackgroundRows = Math.Min(program.BackgroundStreamHeight, VisibleScreenTileHeight);
+        if (visibleBackgroundRows <= 0)
         {
             return;
         }
 
-        EmitMapStreamColumnFromAddresses(targetColumnAddress, sourceColumnAddress, 0, program.BackgroundStreamHeight, GameBoyRomBuilder.BackgroundRowLabel);
+        EmitMapStreamColumnFromAddresses(targetColumnAddress, sourceColumnAddress, 0, visibleBackgroundRows, GameBoyRomBuilder.BackgroundRowLabel);
+    }
+
+    private void EmitVisibleWorldStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, CameraConfig config)
+    {
+        var visibleWorldRows = Math.Max(0, Math.Min(config.StreamHeight, VisibleScreenTileHeight - config.StreamY));
+        if (visibleWorldRows == 0)
+        {
+            return;
+        }
+
+        EmitMapStreamColumnFromAddresses(targetColumnAddress, sourceColumnAddress, config.StreamY, visibleWorldRows);
     }
 
     private void EmitMapStreamRowFromSourceRowAddress(ushort targetRowAddress, ushort sourceRowAddress, CameraConfig config)

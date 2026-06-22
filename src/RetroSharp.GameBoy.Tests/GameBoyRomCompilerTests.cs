@@ -3430,6 +3430,36 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Camera_horizontal_streaming_skips_world_rows_below_the_visible_screen()
+    {
+        const string source = """
+                              void define_world() {
+                                  world_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+                                  world_column(1, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28);
+                                  return;
+                              }
+
+                              void main() {
+                                  define_world();
+                                  world_map(2, 9, 14);
+                                  camera.Init(2, 9, 14);
+                                  loop {
+                                      camera.SetPosition(8, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.True(
+            ContainsSequence(rom, [0xC6, 0x20, 0x6F, 0x26, 0x9A, 0x78, 0x77]),
+            "camera horizontal streaming should still update the last visible world row (GB row 17).");
+        Assert.False(
+            ContainsSequence(rom, [0xC6, 0x40, 0x6F, 0x26, 0x9A, 0x78, 0x77]),
+            "camera horizontal streaming should not spend VBlank time on off-screen world row 18.");
+    }
+
+    [Fact]
     public void World_load_imports_tiled_external_tilesets_images_and_object_collisions()
     {
         var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
