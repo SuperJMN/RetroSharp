@@ -63,6 +63,15 @@ Game Boy currently accepts hUGETracker `.uge` v6 resources directly or through t
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
+### Logical palettes
+
+| Signature | Semantics |
+| --- | --- |
+| `palette.Background(slot, c0, c1, c2, c3)` | Declare one logical background palette slot with four target color values. |
+| `palette.Sprite(slot, c0, c1, c2, c3)` | Declare one logical sprite palette slot with four target color values. |
+
+The slot is logical and capability-checked against the target descriptor. The four color values are still target palette indexes in this prototype: Game Boy accepts `0..3`, while NES accepts `0..63`. Raw `palette.Set(...)` and `objectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
+
 ### Camera
 
 | Signature | Semantics |
@@ -105,6 +114,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 | Camera X | `ScrollAxes.Horizontal`, fine-scroll support as required by target lowering, and enough background tile writes for any streamed column. |
 | Camera Y | `ScrollAxes.Vertical`, fine-scroll support as required by target lowering, and enough background tile writes for any streamed row. |
 | Diagonal camera movement | Combined row plus column write budget must fit one frame or fail explicitly. |
+| Logical palettes | Palette declarations must provide exactly four colors and the requested background or sprite slot must fit the target descriptor. |
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
 | Collision | `world.Map(...)` or `world.Load(...)` data and matching flag rows must exist before runtime collision reads. |
@@ -120,7 +130,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 | Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`. |
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for JSON assets with `platforms.nes.frames` in the current spike. |
-| Palette slots | Sprite slots `0..1`. | Sprite slots `0..3`. |
+| Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs using duty, wave, and noise channels in the current runtime. | Not implemented; `music.Play(...)` fails capability validation. |
 | Animation helpers | Supported on Game Boy runner path. | Runtime animation is not part of the current NES spike. |
 | World collision queries | Supported on Game Boy runner path. | Not implemented in the current NES spike. |
@@ -140,13 +150,14 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | NES vertical camera position | `Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.` |
 | Game Boy diagonal camera movement over budget | `Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).` |
 | NES BGM playback | `Target 'nes' does not support BGM playback yet.` |
+| Game Boy sprite palette slot overflow | `Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.` |
 | NES camera-relative AABB collision | `Target 'nes' does not support camera-relative AABB collision queries.` |
 | NES camera-relative AABB hit-top collision | `Target 'nes' does not support camera-relative AABB hit-top queries.` |
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
 
-Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed.
+Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped palette declarations.
 
 ## Current Stabilization Gaps
 
@@ -154,7 +165,7 @@ SDK v1 is usable for the current cross-target camera sample, but the runner-shap
 
 - `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are now capability-gated SDK queries for fixed-screen actors. Game Boy supports both; NES rejects both until a collision-query lowering exists.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when a fixed-screen actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
-- Logical sprite drawing has palette-slot selection, but palette data declaration still uses raw target calls such as `palette.Set(...)` and `objectPalette.Set(...)`. Issue #121 tracks logical palette resources or an equivalent asset contract.
+- Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are still target palette indexes; a future asset pipeline can lift them into named color resources if needed.
 - `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. Runner-shaped collision is covered by an explicit NES capability diagnostic in `CrossTargetScrollAcceptanceTests` until NES grows collision-query lowering.
 
 ## Minimal Game Boy/NES Example

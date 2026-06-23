@@ -57,7 +57,7 @@ Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Se
 
 ## Sample Classification
 
-Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/gameboy-runner/runner.rs` is a Game Boy `target-acceptance` sample while it still depends on Game Boy-specific setup calls such as `objectPalette.Set(...)`.
+Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/gameboy-runner/runner.rs` remains a Game Boy `target-acceptance` sample because it exercises Game Boy-specific runtime, Tiled, audio, and runner behavior beyond the shared NES subset.
 
 ## Supported Runtime Subset
 
@@ -137,6 +137,8 @@ Static setup calls:
 - `music.Asset(name, path)`
 - `palette.Set(index, color)`
 - `objectPalette.Set(index, color)`
+- `palette.Background(slot, c0, c1, c2, c3)`
+- `palette.Sprite(slot, c0, c1, c2, c3)`
 - `sprite.Asset(name, path[, frameWidth, frameHeight])`
 - `world.Column(index, tile0, tile1, ...)`
 - `world.Flags(index, flags0, flags1, ...)`
@@ -202,6 +204,8 @@ Runtime calls:
 `camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX`, `width`, `height`, and `flags` are compile-time values in this prototype; `worldY` can be a byte-backed runtime expression. `width` can use `sprite_width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
 
 `camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the top world-pixel Y of the first overlapped tile whose flags match, or `255` when there is no hit. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
+
+`palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `palette.Set(...)` and `objectPalette.Set(...)` remain available as target-intrinsic compatibility calls.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
@@ -319,6 +323,7 @@ Landed after the initial runner loop:
 - The runner's horizontal scroll, column streaming, and run animation now advance while D-pad right or left is held; when no horizontal input is active, the sprite returns to its idle frame.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
 - `sprite.Draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
+- `palette.Background(...)` and `palette.Sprite(...)` declare logical palette slots for SDK-shaped samples; the runner uses them instead of raw `palette.Set(...)` and `objectPalette.Set(...)`.
 - `animation.Clip(...)` and `animation.Frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
 - `world_tile_flags_at(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
 - `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.
@@ -367,6 +372,4 @@ Landed after the richer runner scene pass:
 
 ## Current Framework Backlog
 
-The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The current Game Boy target backlog is the narrower stabilization work needed to keep runner-shaped behavior from looking more portable than it is:
-
-1. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.
+The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The #106 stabilization backlog items for runner-shaped collision, cross-target diagnostics, and logical palette declarations have landed. New work in this area should be filed as narrower follow-up issues rather than reusing the closed stabilization backlog.

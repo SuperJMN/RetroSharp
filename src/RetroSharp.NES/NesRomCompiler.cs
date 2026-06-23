@@ -213,6 +213,12 @@ internal sealed class NesVideoProgram
                 RequireArity(call, 2);
                 Palette[ConstArg(call, 0, 0, 31)] = (byte)ConstArg(call, 1, 0, 63);
                 break;
+            case "palette_background":
+                ApplyLogicalPalette(call, PaletteKind.Background);
+                break;
+            case "palette_sprite":
+                ApplyLogicalPalette(call, PaletteKind.Sprite);
+                break;
             case "tilemap_set":
                 RequireArity(call, 3);
                 SetTile(ConstArg(call, 0, 0, 31), ConstArg(call, 1, 0, 29), ConstArg(call, 2, 0, 255));
@@ -258,6 +264,25 @@ internal sealed class NesVideoProgram
             default:
                 ApplyStaticUserFunction(call, callStack);
                 break;
+        }
+    }
+
+    private void ApplyLogicalPalette(FunctionCall call, PaletteKind kind)
+    {
+        RequireArity(call, 5);
+        var slot = ConstArg(call, 0, 0, 255);
+        var colors = call.Parameters.Skip(1)
+            .Select((_, index) => ConstArg(call, index + 1, 0, 63))
+            .ToArray();
+
+        SdkPaletteValidator.Validate(NesTarget.Capabilities, kind, slot, colors.Length);
+
+        var baseIndex = kind == PaletteKind.Background
+            ? slot * 4
+            : 16 + (slot * 4);
+        for (var i = 0; i < colors.Length; i++)
+        {
+            Palette[baseIndex + i] = (byte)colors[i];
         }
     }
 

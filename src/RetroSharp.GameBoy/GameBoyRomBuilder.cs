@@ -59,6 +59,8 @@ internal static class GameBoyRomBuilder
         builder.Emit(0xE0, 0x47);                   // LDH ($47),A
         builder.Emit(0x3E, program.ObjectPalette);
         builder.Emit(0xE0, 0x48);                   // LDH ($48),A
+        builder.Emit(0x3E, program.ObjectPalette1);
+        builder.Emit(0xE0, 0x49);                   // LDH ($49),A
         builder.Emit(0xAF);                         // XOR A
         builder.Emit(0xE0, 0x42);                   // LDH ($42),A
         builder.Emit(0xE0, 0x43);                   // LDH ($43),A
@@ -929,6 +931,8 @@ internal sealed class GameBoyRuntimeCompiler
             case "video_present":
             case "palette_set":
             case "object_palette_set":
+            case "palette_background":
+            case "palette_sprite":
             case "tilemap_set":
             case "tilemap_fill":
             case "map_column":

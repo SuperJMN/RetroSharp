@@ -204,14 +204,8 @@ inline void PresentFrame(PlayerState player) {
 
 void setup_video() {
     video.Init();
-    palette.Set(0, 0);
-    palette.Set(1, 1);
-    palette.Set(2, 2);
-    palette.Set(3, 3);
-    objectPalette.Set(0, 0);
-    objectPalette.Set(1, 0);
-    objectPalette.Set(2, 1);
-    objectPalette.Set(3, 3);
+    palette.Background(0, 0, 1, 2, 3);
+    palette.Sprite(0, 0, 0, 1, 3);
     sprite.Asset(mario_player, "assets/mario-player.gb.png", 18, 32);
     animation.Clip(run, 1, 6, 6, 6);
     return;

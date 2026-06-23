@@ -759,6 +759,10 @@ internal sealed class NesRuntimeCompiler
             case "palette_set":
                 NesVideoProgram.RequireArity(call, 2);
                 break;
+            case "palette_background":
+            case "palette_sprite":
+                NesVideoProgram.RequireArity(call, 5);
+                break;
             case "tilemap_set":
                 NesVideoProgram.RequireArity(call, 3);
                 break;

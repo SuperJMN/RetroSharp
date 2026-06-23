@@ -43,6 +43,39 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Logical_palette_declarations_lower_to_nes_palette_slots()
+    {
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  palette.Background(2, 15, 16, 32, 48);
+                                  palette.Sprite(3, 15, 17, 34, 51);
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(24592, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x0F, 0x10, 0x20, 0x30]), "palette.Background slot 2 should write the third NES background palette.");
+        Assert.True(ContainsSequence(rom, [0x0F, 0x11, 0x22, 0x33]), "palette.Sprite slot 3 should write the fourth NES sprite palette.");
+    }
+
+    [Fact]
+    public void Rejects_logical_palette_sprite_slots_outside_nes_capabilities()
+    {
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  palette.Sprite(4, 15, 17, 34, 51);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("Target 'nes' supports sprite palette slots 0..3, but palette slot 4 was requested.", exception.Message);
+    }
+
+    [Fact]
     public void Compiles_parameterless_user_functions_like_inline_video_blocks()
     {
         const string directSource = """

@@ -84,6 +84,8 @@ internal sealed class GameBoyVideoProgram
 
     public byte ObjectPalette { get; private set; } = 0xE4;
 
+    public byte ObjectPalette1 { get; private set; } = 0xE4;
+
     public byte[] TileMap { get; } = new byte[1024];
 
     public byte[] WindowTileMap { get; } = new byte[1024];
@@ -227,6 +229,12 @@ internal sealed class GameBoyVideoProgram
                 case "object_palette_set":
                     RequireArity(call, 2);
                     SetObjectPaletteColor(ConstArg(call, 0, 0, 3), ConstArg(call, 1, 0, 3));
+                    break;
+                case "palette_background":
+                    ApplyLogicalPalette(call, PaletteKind.Background);
+                    break;
+                case "palette_sprite":
+                    ApplyLogicalPalette(call, PaletteKind.Sprite);
                     break;
                 case "tilemap_set":
                     RequireArity(call, 3);
@@ -749,8 +757,41 @@ internal sealed class GameBoyVideoProgram
 
     private void SetObjectPaletteColor(int index, int color)
     {
+        SetObjectPaletteColor(0, index, color);
+    }
+
+    private void SetObjectPaletteColor(int slot, int index, int color)
+    {
         var shift = index * 2;
-        ObjectPalette = (byte)((ObjectPalette & ~(0x03 << shift)) | ((color & 0x03) << shift));
+        if (slot == 0)
+        {
+            ObjectPalette = (byte)((ObjectPalette & ~(0x03 << shift)) | ((color & 0x03) << shift));
+            return;
+        }
+
+        ObjectPalette1 = (byte)((ObjectPalette1 & ~(0x03 << shift)) | ((color & 0x03) << shift));
+    }
+
+    private void ApplyLogicalPalette(FunctionCall call, PaletteKind kind)
+    {
+        RequireArity(call, 5);
+        var slot = ConstArg(call, 0, 0, 255);
+        var colors = call.Parameters.Skip(1)
+            .Select((_, index) => ConstArg(call, index + 1, 0, 3))
+            .ToArray();
+
+        SdkPaletteValidator.Validate(GameBoyTarget.Capabilities, kind, slot, colors.Length);
+
+        for (var i = 0; i < colors.Length; i++)
+        {
+            if (kind == PaletteKind.Background)
+            {
+                SetPaletteColor(i, colors[i]);
+                continue;
+            }
+
+            SetObjectPaletteColor(slot, i, colors[i]);
+        }
     }
 
     private void SetTile(int x, int y, int tile)

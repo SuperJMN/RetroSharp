@@ -44,6 +44,41 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Logical_palette_declarations_lower_to_game_boy_palette_registers()
+    {
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  palette.Background(0, 0, 1, 2, 3);
+                                  palette.Sprite(0, 0, 0, 1, 3);
+                                  palette.Sprite(1, 0, 3, 2, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0xE4, 0xE0, 0x47]), "palette.Background should lower slot 0 to BGP.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "palette.Sprite slot 0 should lower to OBP0.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x6C, 0xE0, 0x49]), "palette.Sprite slot 1 should lower to OBP1.");
+    }
+
+    [Fact]
+    public void Rejects_logical_sprite_palette_slots_outside_game_boy_capabilities()
+    {
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  palette.Sprite(2, 0, 1, 2, 3);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.", exception.Message);
+    }
+
+    [Fact]
     public void Compiles_parameterless_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
@@ -2926,10 +2961,10 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("objectPalette.Set(0, 0);", source);
-        Assert.Contains("objectPalette.Set(1, 0);", source);
-        Assert.Contains("objectPalette.Set(2, 1);", source);
-        Assert.Contains("objectPalette.Set(3, 3);", source);
+        Assert.Contains("palette.Background(0, 0, 1, 2, 3);", source);
+        Assert.Contains("palette.Sprite(0, 0, 0, 1, 3);", source);
+        Assert.DoesNotContain("palette.Set(", source);
+        Assert.DoesNotContain("objectPalette.Set(", source);
         Assert.DoesNotContain("objectPalette.Set(1, 1);", source);
         Assert.DoesNotContain("objectPalette.Set(2, 2);", source);
         Assert.DoesNotContain("objectPalette.Set(1, 2);", source);

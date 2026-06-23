@@ -41,6 +41,8 @@ Static setup calls:
 
 - `video.Init()`
 - `palette.Set(index, color)`
+- `palette.Background(slot, c0, c1, c2, c3)`
+- `palette.Sprite(slot, c0, c1, c2, c3)`
 - `tilemap.Set(x, y, tile)`
 - `tilemap.Fill(x, y, width, height, tile)`
 - `video.Present()`
@@ -95,6 +97,8 @@ Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct 6
 `sprite.Asset(name, path)` currently loads a JSON asset with a `platforms.nes.frames` variant. Each frame is an array of rows using NES color indexes `0`, `1`, `2`, and `3`. The compiler pads frames to 8x8 hardware cells, writes their tiles into CHR ROM starting at tile `6`, and rejects assets that need more than 64 hardware sprites or exceed the one-byte pattern-table tile index range.
 
 `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite through the NES OAM shadow page and performs OAM DMA. `x`, `y`, `frame`, and `flipX` can be byte-backed constants or storage locations in the shared SDK operation model. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` remains a compile-time logical sprite palette slot and must fit the NES sprite palette slots `0..3`.
+
+`palette.Background(slot, c0, c1, c2, c3)` and `palette.Sprite(slot, c0, c1, c2, c3)` declare logical palette slots. NES supports background slots `0..3` and sprite slots `0..3`; the lowering writes background slots to palette indexes `0..15` and sprite slots to indexes `16..31`. Color values are NES palette indexes `0..63`. Raw `palette.Set(index, color)` remains available for target-intrinsic samples.
 
 `world.Column(...)`, `world.Flags(...)`, and `world.Map(width, streamY, height)` build the initial visible nametable from unified world resources. In this spike, `width` must fit the visible 32-column nametable because runtime column streaming is not implemented.
 

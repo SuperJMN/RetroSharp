@@ -14,7 +14,7 @@ The #106 portability-lowering slice is complete: SDK operation collection lives 
 The active SDK v1 stabilization backlog is now narrower than the original #106 epic:
 
 - #120 landed as `camera.AabbHitTop(...)`, a reusable tile-hit collision fact for landing resolution that stays below "platformer physics engine" scope.
-- #121 designs logical palette resources or an equivalent asset contract so portable samples do not depend on raw Game Boy palette writes.
+- #121 landed as logical `palette.Background(...)` and `palette.Sprite(...)` declarations so SDK-shaped samples do not depend on raw Game Boy palette writes.
 - #122 adds a runner-shaped cross-target validation sample, or a precise NES capability diagnostic when the runner-shaped slice is not portable yet.
 
 Separate design debts remain valid outside that stabilization slice: #103 tracks language/SDK dot-call and receiver-lowering boundaries, #104 tracks type-system soundness, and #105 tracks the remaining Tiled import/world-flattening coupling.
@@ -122,6 +122,8 @@ Intrinsic work belongs here:
 | `tilemap_fill_column(...)` | Target intrinsic/transitional | Camera streaming implementation detail. |
 | `palette_set(...)` | Target intrinsic/transitional | Portable SDK should use logical palette slots. |
 | `object_palette_set(...)` | Game Boy intrinsic/transitional | Exposes GB object palette model. |
+| `palette_background(...)` | Portable SDK capability-gated declaration | Declares a logical background palette slot with four target color values. |
+| `palette_sprite(...)` | Portable SDK capability-gated declaration | Declares a logical sprite palette slot with four target color values. |
 
 ## Capability Model
 
@@ -473,7 +475,7 @@ Acceptance criteria:
 
 Purpose: decide what becomes SDK v1 and what remains transitional.
 
-Status: partially landed. `docs/Portable2DSdkV1.md` is the current SDK v1 reference and `samples/cross-target-camera/camera.rs` is the current portable sample. Camera-relative AABB collision and hit-top landing facts are now capability-gated SDK queries for fixed-screen actors. The remaining work is to quarantine or replace transitional APIs that still matter to runner-shaped workflows, especially palette declaration and broader cross-target validation coverage.
+Status: partially landed. `docs/Portable2DSdkV1.md` is the current SDK v1 reference and `samples/cross-target-camera/camera.rs` is the current portable sample. Camera-relative AABB collision, hit-top landing facts, and logical palette declarations are now capability-gated SDK surfaces for runner-shaped work. The remaining work is to quarantine or replace any future transitional APIs through narrower follow-up issues rather than the closed #106 stabilization backlog.
 
 Tasks:
 

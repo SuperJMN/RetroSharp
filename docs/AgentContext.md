@@ -111,8 +111,8 @@ Progress (2026-06-14):
   operation. Full SDK migration still needs module packaging, portable target selection, and
   a broader intrinsic catalog.
 - Pending in the edited #106 slice: none known after PL-E1.
-- Active SDK v1 stabilization backlog after #106:
-  - #121: replace raw Game Boy palette setup with logical palette resources or an asset contract.
+- Active SDK v1 stabilization backlog after #106: none known after the collision, cross-target
+  diagnostic, and logical palette slices landed.
 - Camera-relative AABB decision implemented after #106: `camera.AabbTiles(...)` is a
   capability-gated SDK query for fixed-screen actors. Game Boy declares and lowers it through
   `Sdk2DOperation.CameraAabbTiles`; NES declares no collision-query support and rejects it.
@@ -125,11 +125,15 @@ Progress (2026-06-14):
 - Runner-shaped cross-target validation decision after #106: `CrossTargetScrollAcceptanceTests`
   includes an explicit NES diagnostic for camera-relative AABB collision instead of pretending the
   runner-shaped collision slice is portable today.
+- Logical palette decision implemented after #106: `palette.Background(slot, c0, c1, c2, c3)`
+  and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
+  Game Boy lowers background slot `0` to `BGP`, sprite slots `0..1` to `OBP0/OBP1`, and NES
+  lowers background/sprite slots `0..3` into its 32-byte palette table. The runner now uses
+  `palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
+  `objectPalette.Set(...)`.
 
 Suggested next steps for the next agent, in order:
-1. Treat #121 as the palette/resource slice that can eventually remove raw palette setup from
-   target-acceptance samples.
-2. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
+1. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
    portable target selection, and the remaining intrinsic catalog before migrating more SDK calls.
 
 ## Game Boy Runner Lessons

@@ -47,6 +47,8 @@ public sealed class SdkV1ReferenceTests
         "music.Play(name)",
         "music.Stop()",
         "audio.Update()",
+        "palette.Background(slot, c0, c1, c2, c3)",
+        "palette.Sprite(slot, c0, c1, c2, c3)",
         "world.Column(index, tile0, tile1, ...)",
         "world.Flags(index, flags0, flags1, ...)",
         "world.Map(width, streamY, height)",
