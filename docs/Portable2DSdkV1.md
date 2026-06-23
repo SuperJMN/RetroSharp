@@ -106,6 +106,8 @@ Current mode names are `window`, `split_scroll`, `sprite_hud`, and `none`. `none
 
 The compiler must validate portable SDK calls against `Target2DCapabilities` and `TargetAudioCapabilities` before target lowering.
 
+Static enforcement is per-operation. The shared operation list is flattened across control flow (loop bodies appear once; both `if`/`else` branches are collected), so it is neither an upper nor a lower bound on runtime activity. Aggregate per-frame budgets — concurrent on-screen sprite count, per-scanline sprite limits, and cross-operation vblank write budgets across multiple explicit stream calls in one frame — are therefore **not** statically enforced today and remain the author's and runtime's responsibility. Adding sound static enforcement requires a control-flow-aware frame model; an unsound count over the flattened list would reject valid programs (false positives on conditionals) and is intentionally avoided. See issue #102.
+
 | SDK area | Required capabilities |
 | --- | --- |
 | Frame/input | Target runtime support for frame wait and controller polling. |
