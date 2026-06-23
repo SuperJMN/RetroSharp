@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-13.
+Last updated: 2026-06-23.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -52,8 +52,9 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 Goal: one source program runs the same 2D scroll on Game Boy and NES, with the
 language and its classic IR (`RetroSharp.Generation.Intermediate`) framework-neutral,
 the 2D framework isolated in `RetroSharp.Core.Sdk` (`Sdk2DOperation`), and on a path
-to becoming a library over per-target intrinsics. GitHub epic #106 is the source of
-truth; child issues are `PL-A*`/`PL-B*`/`PL-C*`/`PL-D*`/`PL-E*`.
+to becoming a library over per-target intrinsics. The GitHub epic #106 implementation
+slice is complete after PL-E1; use the newer stabilization issues #119-#122 for the
+active framework backlog.
 
 Golden rule (do not violate):
 - The language and its classic IR never gain framework concepts (camera/sprite/scroll).
@@ -62,7 +63,7 @@ Golden rule (do not violate):
 - End-state: the 2D SDK becomes a library over per-target intrinsics.
 
 Operation-driven lowering pattern (already proven, replicate it):
-- The shared collector `RetroSharp.Parser.Sdk2DOperationCollector` turns source calls
+- The shared collector `RetroSharp.Sdk.Sdk2DOperationCollector` turns source calls
   into target-neutral `Sdk2DOperation` records; `Sdk2DOperationValidator` checks them
   against each target's `Target2DCapabilities` before lowering.
 - A per-target lowerer (`GameBoySdkOperationLowerer`, `NesSdkOperationLowerer`) maps an
@@ -87,7 +88,8 @@ Progress (2026-06-14):
   (`SdkByteExpression.Variable` now carries a typed storage descriptor instead of an opaque
   formatted string), PL-E1 #118 (parser preserves target/intrinsic extern metadata and GB/NES
   prove a `wait_frame` source helper can lower through target intrinsics with identical bytes).
-  Earlier groundwork: #101/#102/#103/#105.
+  Earlier groundwork and audit context came from #101-#105. #103, #104, and #105 remain
+  separately tracked design debt rather than open work inside #106.
 - Sprite operation decision implemented 2026-06-14: X/Y/Frame are `SdkByteExpression`, FlipX
   is nullable `SdkByteExpression?`, PaletteSlot stays a constant int validated against target
   capabilities, and target lowerers resolve metasprite geometry from `SpriteId` and asset data
@@ -109,10 +111,19 @@ Progress (2026-06-14):
   operation. Full SDK migration still needs module packaging, portable target selection, and
   a broader intrinsic catalog.
 - Pending in the edited #106 slice: none known after PL-E1.
+- Active SDK v1 stabilization backlog after #106:
+  - #119: decide and document the camera-relative collision contract used by the runner.
+  - #120: add a reusable tile-hit query/helper for landing resolution without owning physics.
+  - #121: replace raw Game Boy palette setup with logical palette resources or an asset contract.
+  - #122: add a runner-shaped cross-target validation sample or an explicit NES diagnostic.
 
 Suggested next steps for the next agent, in order:
-1. If continuing #106 beyond this slice, open new focused issues for module packaging, portable
-   target selection, and the remaining intrinsic catalog before migrating more SDK calls.
+1. If continuing framework stabilization, start with #119 before #120 or #122, because the
+   runner-shaped collision contract affects both landing helpers and portable validation.
+2. Treat #121 as the palette/resource slice that can eventually remove raw palette setup from
+   target-acceptance samples.
+3. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
+   portable target selection, and the remaining intrinsic catalog before migrating more SDK calls.
 
 ## Game Boy Runner Lessons
 

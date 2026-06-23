@@ -353,6 +353,11 @@ Landed after the richer runner scene pass:
 - Tileset `objectgroup` rectangles now provide the runner's solid platform and ground collision flags without a separate hand-authored collision layer.
 - The runner scene focuses on the player, camera, Tiled map streaming, tileset-authored solid collision, fall reset, and variable-height jump so the generated Tiled graphics still fit the ROM-only target.
 
-## Next Milestones
+## Current Framework Backlog
 
-1. Start API stabilization: quarantine transitional APIs and write the SDK v1 reference.
+The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The current Game Boy target backlog is the narrower stabilization work needed to keep runner-shaped behavior from looking more portable than it is:
+
+1. Stabilize the camera-relative collision contract (#119). Today `camera.AabbTiles(...)` is a documented Game Boy runner bridge: screen-relative X is combined with the Game Boy camera state and fine scroll. Decide whether that bridge becomes a capability-checked SDK contract or whether the runner moves to a world-coordinate API that can represent long-map X safely.
+2. Add a reusable landing collision fact (#120). `collision_aabb_tiles(...)` and `camera.AabbTiles(...)` report overlap only; landing snap policy should stay in source, but samples should not need repeated tile-offset probe ladders to discover the contacted edge.
+3. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.
+4. Add runner-shaped cross-target validation (#122). The current portable sample proves horizontal camera, input, world setup, and logical sprite drawing; it deliberately does not prove runner collision, runtime animation, Tiled loading, HUD, or palette declaration across Game Boy and NES.

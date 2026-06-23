@@ -1,11 +1,24 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-06-14.
+Last updated: 2026-06-23.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
 The project is viable if portability means "shared contract with explicit target capabilities, compile-time limits, and predictable lowering." It is not viable if the SDK promises identical graphics behavior, cost, and limits across every 8-bit machine.
+
+## Current Roadmap State
+
+The #106 portability-lowering slice is complete: SDK operation collection lives outside the language assembly, Game Boy and NES validate the shared operation stream before lowering, logical sprite drawing lowers through per-target lowerers, Game Boy map-column streaming is operation-driven, typed SDK storage descriptors replace opaque operand strings, and the first target-intrinsic prototype proves the SDK-as-library direction for `wait_frame`.
+
+The active SDK v1 stabilization backlog is now narrower than the original #106 epic:
+
+- #119 decides whether the runner's camera-relative AABB helper remains a Game Boy bridge or becomes a capability-checked SDK contract.
+- #120 adds a reusable tile-hit collision fact for landing resolution if it can stay below "platformer physics engine" scope.
+- #121 designs logical palette resources or an equivalent asset contract so portable samples do not depend on raw Game Boy palette writes.
+- #122 adds a runner-shaped cross-target validation sample, or a precise NES capability diagnostic when the runner-shaped slice is not portable yet.
+
+Separate design debts remain valid outside that stabilization slice: #103 tracks language/SDK dot-call and receiver-lowering boundaries, #104 tracks type-system soundness, and #105 tracks the remaining Tiled import/world-flattening coupling.
 
 ## Goals
 
@@ -457,6 +470,8 @@ Acceptance criteria:
 ### Iteration 11: API Stabilization
 
 Purpose: decide what becomes SDK v1 and what remains transitional.
+
+Status: partially landed. `docs/Portable2DSdkV1.md` is the current SDK v1 reference and `samples/cross-target-camera/camera.rs` is the current portable sample. The remaining work is to quarantine or replace transitional APIs that still matter to runner-shaped workflows, especially camera-relative collision, landing collision facts, palette declaration, and cross-target validation coverage.
 
 Tasks:
 

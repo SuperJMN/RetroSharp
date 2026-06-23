@@ -142,6 +142,15 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 
 Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed.
 
+## Current Stabilization Gaps
+
+SDK v1 is usable for the current cross-target camera sample, but the runner-shaped framework contract is not fully portable yet.
+
+- `camera.AabbTiles(...)` is a Game Boy runner bridge, not SDK v1. Issue #119 tracks whether to promote it into a capability-checked contract or replace the runner path with a world-coordinate collision API that can represent long-map X coordinates safely.
+- `collision_aabb_tiles(...)` reports overlap only. Issue #120 tracks a reusable tile-hit or snapped-edge fact for actor landing while keeping movement resolution in source.
+- Logical sprite drawing has palette-slot selection, but palette data declaration still uses raw target calls such as `palette.Set(...)` and `objectPalette.Set(...)`. Issue #121 tracks logical palette resources or an equivalent asset contract.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. Issue #122 tracks a small runner-shaped cross-target sample or an explicit NES capability diagnostic for the missing part.
+
 ## Minimal Game Boy/NES Example
 
 This shape is the current smallest portable sample. It uses unified world data, tick input, horizontal camera positioning, and logical sprite drawing while avoiding raw target calls.
