@@ -1,3 +1,4 @@
+using RetroSharp.Core.Imaging;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Sdk.Tiled;
 
@@ -194,7 +195,7 @@ internal static class GameBoyTiledMapImporter
 
     private sealed class GameBoyTileset
     {
-        private GameBoyTileset(int firstGid, string name, int tileWidth, int tileHeight, int tileCount, int columns, GameBoyPngImage? image)
+        private GameBoyTileset(int firstGid, string name, int tileWidth, int tileHeight, int tileCount, int columns, PngImage? image)
         {
             FirstGid = firstGid;
             Name = name;
@@ -217,109 +218,47 @@ internal static class GameBoyTiledMapImporter
 
         public int Columns { get; }
 
-        public GameBoyPngImage? Image { get; }
+        public PngImage? Image { get; }
 
         public static GameBoyTileset FromLogical(LogicalTileset tileset)
         {
-            var image = tileset.ImagePath is null ? null : GameBoyPngImage.Read(tileset.ImagePath);
+            var image = tileset.ImagePath is null ? null : PngImage.Read(tileset.ImagePath);
             return new GameBoyTileset(tileset.FirstGid, tileset.Name, tileset.TileWidth, tileset.TileHeight, tileset.TileCount, tileset.Columns, image);
         }
 
         public IReadOnlyList<byte[]> BuildGameBoyTiles(int localId, int tilesWide, int tilesHigh, string context)
         {
-            if (localId < 0 || localId >= TileCount)
-            {
-                throw new InvalidOperationException($"{context} references tile id {localId}, which is outside tileset '{Name}'.");
-            }
-
             if (Image is null)
             {
                 throw new InvalidOperationException($"{context} references tileset '{Name}', but it has no image source.");
             }
 
-            var sourceX = localId % Columns * TileWidth;
-            var sourceY = localId / Columns * TileHeight;
-            if (sourceX + TileWidth > Image.Width || sourceY + TileHeight > Image.Height)
-            {
-                throw new InvalidOperationException($"{context} references tile id {localId}, which exceeds tileset image '{Name}'.");
-            }
-
-            var targetPixelWidth = tilesWide * 8;
-            var targetPixelHeight = tilesHigh * 8;
-            var tiles = new List<byte[]>(tilesWide * tilesHigh);
-            for (var tileY = 0; tileY < tilesHigh; tileY++)
-            {
-                for (var tileX = 0; tileX < tilesWide; tileX++)
-                {
-                    var tile = new byte[16];
-                    for (var outY = 0; outY < 8; outY++)
-                    {
-                        var plane0 = 0;
-                        var plane1 = 0;
-                        var targetY = tileY * 8 + outY;
-                        var yStart = sourceY + targetY * TileHeight / targetPixelHeight;
-                        var yEnd = sourceY + Math.Min(TileHeight, Math.Max((targetY + 1) * TileHeight / targetPixelHeight, targetY * TileHeight / targetPixelHeight + 1));
-                        for (var outX = 0; outX < 8; outX++)
-                        {
-                            var targetX = tileX * 8 + outX;
-                            var xStart = sourceX + targetX * TileWidth / targetPixelWidth;
-                            var xEnd = sourceX + Math.Min(TileWidth, Math.Max((targetX + 1) * TileWidth / targetPixelWidth, targetX * TileWidth / targetPixelWidth + 1));
-                            var color = QuantizedGameBoyColor(Image, xStart, xEnd, yStart, yEnd);
-                            var bit = 7 - outX;
-                            if ((color & 1) != 0) plane0 |= 1 << bit;
-                            if ((color & 2) != 0) plane1 |= 1 << bit;
-                        }
-
-                        tile[outY * 2] = (byte)plane0;
-                        tile[outY * 2 + 1] = (byte)plane1;
-                    }
-
-                    tiles.Add(tile);
-                }
-            }
-
-            return tiles;
+            var canonical = CanonicalTileGenerator.BuildTiles(Image, localId, TileCount, Columns, TileWidth, TileHeight, tilesWide, tilesHigh, context);
+            return canonical.Select(EncodeGameBoyTile).ToArray();
         }
 
-        private static int QuantizedGameBoyColor(GameBoyPngImage image, int xStart, int xEnd, int yStart, int yEnd)
+        // Encodes a canonical 8x8 four-tone pattern into the Game Boy 2bpp tile byte
+        // layout (two interleaved bit planes per row).
+        private static byte[] EncodeGameBoyTile(byte[] pattern)
         {
-            var totalR = 0;
-            var totalG = 0;
-            var totalB = 0;
-            var count = 0;
-            for (var y = yStart; y < yEnd; y++)
+            var tile = new byte[16];
+            for (var row = 0; row < 8; row++)
             {
-                for (var x = xStart; x < xEnd; x++)
+                var plane0 = 0;
+                var plane1 = 0;
+                for (var col = 0; col < 8; col++)
                 {
-                    var offset = image.PixelOffset(x, y);
-                    if (image.RgbaPixels[offset + 3] < 128)
-                    {
-                        continue;
-                    }
-
-                    totalR += image.RgbaPixels[offset];
-                    totalG += image.RgbaPixels[offset + 1];
-                    totalB += image.RgbaPixels[offset + 2];
-                    count++;
+                    var tone = pattern[row * 8 + col];
+                    var bit = 7 - col;
+                    if ((tone & 1) != 0) plane0 |= 1 << bit;
+                    if ((tone & 2) != 0) plane1 |= 1 << bit;
                 }
+
+                tile[row * 2] = (byte)plane0;
+                tile[row * 2 + 1] = (byte)plane1;
             }
 
-            if (count == 0)
-            {
-                return 0;
-            }
-
-            var r = totalR / count;
-            var g = totalG / count;
-            var b = totalB / count;
-            var luminance = (r * 299 + g * 587 + b * 114) / 1000;
-            return luminance switch
-            {
-                >= 192 => 0,
-                >= 128 => 1,
-                >= 64 => 2,
-                _ => 3,
-            };
+            return tile;
         }
     }
 }

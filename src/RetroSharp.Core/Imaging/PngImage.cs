@@ -1,9 +1,12 @@
 using System.Buffers.Binary;
 using System.IO.Compression;
 
-namespace RetroSharp.GameBoy;
+namespace RetroSharp.Core.Imaging;
 
-internal sealed class GameBoyPngImage
+// Target-neutral PNG decoder. Produces RGBA pixels for tileset and sprite-sheet
+// import. It carries no Game Boy or NES specifics; each target quantizes the RGBA
+// pixels into its own tile format.
+public sealed class PngImage
 {
     private static readonly byte[] Signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
@@ -13,7 +16,7 @@ internal sealed class GameBoyPngImage
 
     public required byte[] RgbaPixels { get; init; }
 
-    public static GameBoyPngImage Read(string path)
+    public static PngImage Read(string path)
     {
         var bytes = File.ReadAllBytes(path);
         if (bytes.Length < Signature.Length || !bytes.AsSpan(0, Signature.Length).SequenceEqual(Signature))
@@ -110,7 +113,7 @@ internal sealed class GameBoyPngImage
         }
 
         var pixels = Unfilter(raw, width.Value, height.Value, bytesPerPixel);
-        return new GameBoyPngImage
+        return new PngImage
         {
             Width = width.Value,
             Height = height.Value,
