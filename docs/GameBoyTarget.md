@@ -361,4 +361,3 @@ The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The current Ga
 
 1. Add a reusable landing collision fact (#120). `collision_aabb_tiles(...)` and `camera.AabbTiles(...)` report overlap only; landing snap policy should stay in source, but samples should not need repeated tile-offset probe ladders to discover the contacted edge.
 2. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.
-3. Add runner-shaped cross-target validation (#122). The current portable sample proves horizontal camera, input, world setup, and logical sprite drawing; it deliberately does not prove runner collision, runtime animation, Tiled loading, HUD, or palette declaration across Game Boy and NES.

@@ -103,6 +103,30 @@ public sealed class CrossTargetScrollAcceptanceTests
         Assert.Contains("does not support vertical scrolling", exception.Message);
     }
 
+    [Fact]
+    public void Runner_shaped_camera_collision_is_rejected_on_nes_with_explicit_capability_diagnostic()
+    {
+        const string collisionSource = """
+            void main() {
+                world.Column(0, 1, 2);
+                world.Flags(0, 0, 1);
+                world.Map(1, 10, 2);
+                camera.Init(1, 10, 2);
+                loop {
+                    video.WaitVBlank();
+                    u8 footY = 8;
+                    u8 hit = camera.AabbTiles(72, footY, 16, 8, 1);
+                }
+            }
+            """;
+
+        var gbRom = GameBoyRomCompiler.CompileSource(collisionSource);
+        Assert.Equal(32768, gbRom.Length);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(collisionSource));
+        Assert.Equal("Target 'nes' does not support camera-relative AABB collision queries.", exception.Message);
+    }
+
     private static string RepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

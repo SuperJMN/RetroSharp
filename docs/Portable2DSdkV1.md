@@ -153,7 +153,7 @@ SDK v1 is usable for the current cross-target camera sample, but the runner-shap
 - `camera.AabbTiles(...)` is now a capability-gated SDK query for fixed-screen actors. Game Boy supports it; NES rejects it until a collision-query lowering exists.
 - `collision_aabb_tiles(...)` reports overlap only. Issue #120 tracks a reusable tile-hit or snapped-edge fact for actor landing while keeping movement resolution in source.
 - Logical sprite drawing has palette-slot selection, but palette data declaration still uses raw target calls such as `palette.Set(...)` and `objectPalette.Set(...)`. Issue #121 tracks logical palette resources or an equivalent asset contract.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. Issue #122 tracks a small runner-shaped cross-target sample or an explicit NES capability diagnostic for the missing part.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. Runner-shaped collision is covered by an explicit NES capability diagnostic in `CrossTargetScrollAcceptanceTests` until NES grows collision-query lowering.
 
 ## Minimal Game Boy/NES Example
 

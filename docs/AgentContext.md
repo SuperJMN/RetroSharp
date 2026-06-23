@@ -114,10 +114,12 @@ Progress (2026-06-14):
 - Active SDK v1 stabilization backlog after #106:
   - #120: add a reusable tile-hit query/helper for landing resolution without owning physics.
   - #121: replace raw Game Boy palette setup with logical palette resources or an asset contract.
-  - #122: add a runner-shaped cross-target validation sample or an explicit NES diagnostic.
 - Camera-relative AABB decision implemented after #106: `camera.AabbTiles(...)` is a
   capability-gated SDK query for fixed-screen actors. Game Boy declares and lowers it through
   `Sdk2DOperation.CameraAabbTiles`; NES declares no collision-query support and rejects it.
+- Runner-shaped cross-target validation decision after #106: `CrossTargetScrollAcceptanceTests`
+  includes an explicit NES diagnostic for camera-relative AABB collision instead of pretending the
+  runner-shaped collision slice is portable today.
 
 Suggested next steps for the next agent, in order:
 1. If continuing framework stabilization, #120 is the next collision slice: expose a reusable
