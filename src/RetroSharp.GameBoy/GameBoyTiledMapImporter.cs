@@ -1,6 +1,3 @@
-using System.Globalization;
-using System.Text.Json;
-using System.Xml.Linq;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Sdk.Tiled;
 
@@ -18,98 +15,50 @@ internal sealed record GameBoyTiledMap(
     WorldTileFlags[] WorldFlags,
     byte[] GeneratedTileData);
 
+// Game Boy lowering of an imported Tiled map. The target-neutral structure
+// (parsing, tilesets, geometry, world slice, and collision flags) is produced by
+// RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter. This stage owns only the
+// Game Boy specifics: decoding tileset images, generating and deduplicating 2bpp
+// tile patterns, expanding source tiles into 8x8 cells, and composing the
+// background under blank world cells.
 internal static class GameBoyTiledMapImporter
 {
-    private const uint TiledFlipFlagsMask = 0xF0000000;
-    private const uint TiledGidMask = 0x0FFFFFFF;
-
     public static GameBoyTiledMap Load(string path, int firstGeneratedTileId = 6)
     {
-        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
-        var root = document.RootElement;
+        var logical = LogicalTiledMapImporter.Load(path);
+        var geometry = logical.Geometry;
         var displayName = Path.GetFileName(path);
 
-        if (StringPropertyOrDefault(root, "type", "map") != "map")
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' must have type 'map'.");
-        }
-
-        if (StringPropertyOrDefault(root, "orientation", "") != "orthogonal")
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' must be orthogonal for the Game Boy target.");
-        }
-
-        if (BoolPropertyOrDefault(root, "infinite", false))
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' must be finite; infinite maps are not supported yet.");
-        }
-
-        var width = PositiveIntProperty(root, "width", displayName);
-        var mapHeight = PositiveIntProperty(root, "height", displayName);
-        var mapTileWidth = IntProperty(root, "tilewidth", displayName);
-        var mapTileHeight = IntProperty(root, "tileheight", displayName);
-        if (mapTileWidth < 8 || mapTileHeight < 8 || mapTileWidth % 8 != 0 || mapTileHeight % 8 != 0)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' must use tile sizes that are positive multiples of 8 for the Game Boy target.");
-        }
-
-        var tileScaleX = mapTileWidth / 8;
-        var tileScaleY = mapTileHeight / 8;
-        var tilesets = LoadTilesets(root, path, displayName);
-        var resolver = new TiledTilesetResolver(tilesets, firstGeneratedTileId);
-
-        var streamY = CustomIntProperty(root, "retrosharpStreamY")
-            ?? throw new InvalidOperationException($"Tiled map '{displayName}' requires an integer custom property named 'retrosharpStreamY'.");
-        var worldY = CustomIntProperty(root, "retrosharpWorldY") ?? streamY;
-        var height = CustomIntProperty(root, "retrosharpWorldHeight") ?? mapHeight - worldY;
-
-        var expandedWidth = checked(width * tileScaleX);
-        var expandedMapHeight = checked(mapHeight * tileScaleY);
-        var expandedWorldY = checked(worldY * tileScaleY);
-        var expandedStreamY = streamY;
-        var expandedHeight = checked(height * tileScaleY);
-        var backgroundOffsetY = expandedWorldY - expandedStreamY;
-
-        if (expandedStreamY is < 0 or > 31)
+        if (geometry.StreamY is < 0 or > 31)
         {
             throw new InvalidOperationException($"Tiled map '{displayName}' property 'retrosharpStreamY' must be between 0 and 31.");
         }
 
-        if (worldY < 0 || height <= 0 || worldY + height > mapHeight)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' world slice must fit inside the map height.");
-        }
-
-        if (expandedStreamY + expandedHeight > 32)
+        if (geometry.StreamY + geometry.Height > 32)
         {
             throw new InvalidOperationException($"Tiled map '{displayName}' world slice exceeds the Game Boy background tilemap height.");
         }
 
-        var worldLayer = FindTileLayer(root, "world")
-            ?? throw new InvalidOperationException($"Tiled map '{displayName}' requires a tile layer named 'world'.");
-        var worldData = ReadTileLayerData(worldLayer, width, mapHeight, displayName);
+        var tilesets = logical.Tilesets.Select(GameBoyTileset.FromLogical).ToArray();
+        var resolver = new GameBoyTileResolver(tilesets, firstGeneratedTileId);
 
-        var collisionLayer = FindTileLayer(root, "collision");
-        var collisionData = collisionLayer.HasValue ? ReadTileLayerData(collisionLayer.Value, width, mapHeight, displayName) : null;
+        var expandedWidth = geometry.Width;
+        var tileScaleX = geometry.TileScaleX;
+        var tileScaleY = geometry.TileScaleY;
 
-        var backgroundLayer = FindTileLayer(root, "background");
-        var backgroundTiles = backgroundLayer.HasValue
-            ? ReadBackgroundTiles(backgroundLayer.Value, width, mapHeight, tileScaleX, tileScaleY, displayName, resolver)
-            : null;
+        var backgroundTiles = logical.BackgroundGids is null
+            ? null
+            : GenerateBackgroundTiles(logical.BackgroundGids, geometry, displayName, resolver);
 
-        var worldTileIds = new int[expandedWidth * expandedHeight];
-        var worldFlags = new WorldTileFlags[expandedWidth * expandedHeight];
-        for (var y = 0; y < height; y++)
+        var worldTileIds = new int[expandedWidth * geometry.Height];
+        for (var y = 0; y < geometry.WorldHeight; y++)
         {
-            var sourceY = worldY + y;
-            for (var x = 0; x < width; x++)
+            var sourceY = geometry.WorldY + y;
+            for (var x = 0; x < geometry.SourceWidth; x++)
             {
-                var sourceIndex = sourceY * width + x;
+                var sourceIndex = sourceY * geometry.SourceWidth + x;
                 var context = $"{displayName} world layer tile ({x}, {sourceY})";
-                var tileIds = resolver.TileIdsFromTiledGid(worldData[sourceIndex], tileScaleX, tileScaleY, context);
-                var flags = collisionData is null
-                    ? resolver.FlagsFromTiledGid(worldData[sourceIndex], $"{displayName} world layer tile ({x}, {sourceY})")
-                    : TiledCollisionFlags.FlagsFromCollisionGid(collisionData[sourceIndex], $"{displayName} collision layer tile ({x}, {sourceY})");
+                var tileIds = resolver.TileIdsFromTiledGid(logical.WorldGids[sourceIndex], tileScaleX, tileScaleY, context);
 
                 for (var tileY = 0; tileY < tileScaleY; tileY++)
                 {
@@ -121,60 +70,46 @@ internal static class GameBoyTiledMapImporter
                         var tileId = tileIds[tileY * tileScaleX + tileX];
                         if (tileId == 0 && backgroundTiles is not null)
                         {
-                            var backgroundY = expandedWorldY + targetY;
-                            if (backgroundY >= 0 && backgroundY < expandedMapHeight)
+                            var backgroundY = geometry.ExpandedWorldY + targetY;
+                            if (backgroundY >= 0 && backgroundY < geometry.BackgroundHeight)
                             {
                                 tileId = backgroundTiles[backgroundY * expandedWidth + targetX];
                             }
                         }
 
                         worldTileIds[targetIndex] = tileId;
-                        worldFlags[targetIndex] = flags;
                     }
                 }
             }
         }
 
-        return new GameBoyTiledMap(expandedWidth, expandedHeight, expandedStreamY, expandedWidth, expandedMapHeight, backgroundOffsetY, backgroundTiles, worldTileIds, worldFlags, resolver.GeneratedTileData);
+        return new GameBoyTiledMap(
+            geometry.Width,
+            geometry.Height,
+            geometry.StreamY,
+            geometry.BackgroundWidth,
+            geometry.BackgroundHeight,
+            geometry.BackgroundOffsetY,
+            backgroundTiles,
+            worldTileIds,
+            logical.WorldFlags,
+            resolver.GeneratedTileData);
     }
 
-    private static IReadOnlyList<TiledTileset> LoadTilesets(JsonElement root, string mapPath, string displayName)
+    private static byte[] GenerateBackgroundTiles(uint[] backgroundGids, LogicalTiledMapGeometry geometry, string displayName, GameBoyTileResolver resolver)
     {
-        if (!root.TryGetProperty("tilesets", out var tilesets) || tilesets.ValueKind != JsonValueKind.Array)
-        {
-            return [];
-        }
-
-        var result = new List<TiledTileset>();
-        var mapDirectory = Path.GetDirectoryName(mapPath) ?? Directory.GetCurrentDirectory();
-        foreach (var tileset in tilesets.EnumerateArray())
-        {
-            var firstGid = PositiveIntProperty(tileset, "firstgid", displayName);
-            var source = StringPropertyOrDefault(tileset, "source", "");
-            if (string.IsNullOrWhiteSpace(source))
-            {
-                result.Add(TiledTileset.FromJson(tileset, mapDirectory, firstGid, displayName));
-                continue;
-            }
-
-            var path = Path.GetFullPath(Path.Combine(mapDirectory, source));
-            result.Add(TiledTileset.Load(path, firstGid, displayName));
-        }
-
-        return result.OrderBy(tileset => tileset.FirstGid).ToArray();
-    }
-
-    private static byte[] ReadBackgroundTiles(JsonElement layer, int width, int height, int tileScaleX, int tileScaleY, string displayName, TiledTilesetResolver resolver)
-    {
-        var data = ReadTileLayerData(layer, width, height, displayName);
-        var expandedWidth = checked(width * tileScaleX);
-        var tiles = new byte[expandedWidth * height * tileScaleY];
+        var width = geometry.SourceWidth;
+        var height = geometry.SourceHeight;
+        var tileScaleX = geometry.TileScaleX;
+        var tileScaleY = geometry.TileScaleY;
+        var expandedWidth = geometry.BackgroundWidth;
+        var tiles = new byte[expandedWidth * geometry.BackgroundHeight];
         for (var y = 0; y < height; y++)
         {
             for (var x = 0; x < width; x++)
             {
                 var sourceIndex = y * width + x;
-                var tileIds = resolver.TileIdsFromTiledGid(data[sourceIndex], tileScaleX, tileScaleY, $"{displayName} background layer tile ({x}, {y})");
+                var tileIds = resolver.TileIdsFromTiledGid(backgroundGids[sourceIndex], tileScaleX, tileScaleY, $"{displayName} background layer tile ({x}, {y})");
                 for (var tileY = 0; tileY < tileScaleY; tileY++)
                 {
                     for (var tileX = 0; tileX < tileScaleX; tileX++)
@@ -190,102 +125,7 @@ internal static class GameBoyTiledMapImporter
         return tiles;
     }
 
-    private static JsonElement? FindTileLayer(JsonElement root, string name)
-    {
-        if (!root.TryGetProperty("layers", out var layers) || layers.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var layer in EnumerateLayers(layers))
-        {
-            if (StringPropertyOrDefault(layer, "type", "") == "tilelayer" &&
-                string.Equals(StringPropertyOrDefault(layer, "name", ""), name, StringComparison.OrdinalIgnoreCase))
-            {
-                return layer;
-            }
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<JsonElement> EnumerateLayers(JsonElement layers)
-    {
-        foreach (var layer in layers.EnumerateArray())
-        {
-            if (StringPropertyOrDefault(layer, "type", "") == "group" &&
-                layer.TryGetProperty("layers", out var childLayers) &&
-                childLayers.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var childLayer in EnumerateLayers(childLayers))
-                {
-                    yield return childLayer;
-                }
-            }
-            else
-            {
-                yield return layer;
-            }
-        }
-    }
-
-    private static uint[] ReadTileLayerData(JsonElement layer, int width, int height, string displayName)
-    {
-        var layerName = StringPropertyOrDefault(layer, "name", "<unnamed>");
-        var layerWidth = IntProperty(layer, "width", displayName);
-        var layerHeight = IntProperty(layer, "height", displayName);
-        if (layerWidth != width || layerHeight != height)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' layer '{layerName}' must match the fixed map size.");
-        }
-
-        if (StringPropertyOrDefault(layer, "type", "") != "tilelayer")
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' layer '{layerName}' must be a tile layer.");
-        }
-
-        if (!layer.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' layer '{layerName}' must use unencoded JSON array data.");
-        }
-
-        var expectedLength = width * height;
-        var result = new uint[expectedLength];
-        var index = 0;
-        foreach (var element in data.EnumerateArray())
-        {
-            if (index >= expectedLength)
-            {
-                throw new InvalidOperationException($"Tiled map '{displayName}' layer '{layerName}' has too many tiles.");
-            }
-
-            if (!element.TryGetUInt32(out var value))
-            {
-                throw new InvalidOperationException($"Tiled map '{displayName}' layer '{layerName}' contains a non-GID tile value.");
-            }
-
-            result[index++] = value;
-        }
-
-        if (index != expectedLength)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' layer '{layerName}' must contain exactly {expectedLength} tiles.");
-        }
-
-        return result;
-    }
-
-    private static uint CleanTiledGid(uint gid, string context)
-    {
-        if ((gid & TiledFlipFlagsMask) != 0)
-        {
-            throw new InvalidOperationException($"{context} uses flipped or rotated Tiled tiles, which are not supported yet.");
-        }
-
-        return gid & TiledGidMask;
-    }
-
-    private sealed class TiledTilesetResolver(IReadOnlyList<TiledTileset> tilesets, int firstGeneratedTileId)
+    private sealed class GameBoyTileResolver(IReadOnlyList<GameBoyTileset> tilesets, int firstGeneratedTileId)
     {
         private readonly Dictionary<string, int> generatedTileIds = [];
         private readonly List<byte> generatedTileData = [];
@@ -299,7 +139,7 @@ internal static class GameBoyTiledMapImporter
                 throw new InvalidOperationException($"{context} must expand to at least one Game Boy tile.");
             }
 
-            var cleanGid = CleanTiledGid(gid, context);
+            var cleanGid = LogicalTiledMapImporter.CleanTiledGid(gid, context);
             if (cleanGid == 0)
             {
                 return new int[tilesWide * tilesHigh];
@@ -336,20 +176,7 @@ internal static class GameBoyTiledMapImporter
             return tileId;
         }
 
-        public WorldTileFlags FlagsFromTiledGid(uint gid, string context)
-        {
-            var cleanGid = CleanTiledGid(gid, context);
-            if (cleanGid == 0)
-            {
-                return WorldTileFlags.Empty;
-            }
-
-            var tileset = FindTileset(cleanGid, context);
-            var localId = checked((int)cleanGid - tileset.FirstGid);
-            return tileset.FlagsForTile(localId);
-        }
-
-        private TiledTileset FindTileset(uint cleanGid, string context)
+        private GameBoyTileset FindTileset(uint cleanGid, string context)
         {
             for (var i = tilesets.Count - 1; i >= 0; i--)
             {
@@ -361,21 +188,13 @@ internal static class GameBoyTiledMapImporter
                 }
             }
 
-            throw new InvalidOperationException($"{context} references GID {cleanGid}, but no Tiled tileset contains it.");
+            throw new InvalidOperationException($"{context} references tile gid {cleanGid}, which is outside every tileset.");
         }
     }
 
-    private sealed class TiledTileset
+    private sealed class GameBoyTileset
     {
-        private TiledTileset(
-            int firstGid,
-            string name,
-            int tileWidth,
-            int tileHeight,
-            int tileCount,
-            int columns,
-            GameBoyPngImage? image,
-            Dictionary<int, WorldTileFlags> tileFlags)
+        private GameBoyTileset(int firstGid, string name, int tileWidth, int tileHeight, int tileCount, int columns, GameBoyPngImage? image)
         {
             FirstGid = firstGid;
             Name = name;
@@ -384,10 +203,7 @@ internal static class GameBoyTiledMapImporter
             TileCount = tileCount;
             Columns = columns;
             Image = image;
-            this.tileFlags = tileFlags;
         }
-
-        private readonly Dictionary<int, WorldTileFlags> tileFlags;
 
         public int FirstGid { get; }
 
@@ -403,27 +219,10 @@ internal static class GameBoyTiledMapImporter
 
         public GameBoyPngImage? Image { get; }
 
-        public static TiledTileset Load(string path, int firstGid, string displayName)
+        public static GameBoyTileset FromLogical(LogicalTileset tileset)
         {
-            return Path.GetExtension(path).ToLowerInvariant() switch
-            {
-                ".tsx" => FromTsx(path, firstGid, displayName),
-                ".tsj" or ".json" => FromJsonFile(path, firstGid, displayName),
-                _ => throw new InvalidOperationException($"Tiled map '{displayName}' references unsupported tileset file '{Path.GetFileName(path)}'."),
-            };
-        }
-
-        public static TiledTileset FromJson(JsonElement root, string baseDirectory, int firstGid, string displayName)
-        {
-            var name = StringPropertyOrDefault(root, "name", "<inline>");
-            var tileWidth = PositiveIntProperty(root, "tilewidth", displayName);
-            var tileHeight = PositiveIntProperty(root, "tileheight", displayName);
-            var tileCount = PositiveIntProperty(root, "tilecount", displayName);
-            var columns = PositiveIntProperty(root, "columns", displayName);
-            ValidateTileSize(tileWidth, tileHeight, displayName, name);
-
-            var image = LoadImage(StringPropertyOrDefault(root, "image", ""), baseDirectory);
-            return new TiledTileset(firstGid, name, tileWidth, tileHeight, tileCount, columns, image, TiledCollisionFlags.ReadJsonTileFlags(root));
+            var image = tileset.ImagePath is null ? null : GameBoyPngImage.Read(tileset.ImagePath);
+            return new GameBoyTileset(tileset.FirstGid, tileset.Name, tileset.TileWidth, tileset.TileHeight, tileset.TileCount, tileset.Columns, image);
         }
 
         public IReadOnlyList<byte[]> BuildGameBoyTiles(int localId, int tilesWide, int tilesHigh, string context)
@@ -482,53 +281,6 @@ internal static class GameBoyTiledMapImporter
             return tiles;
         }
 
-        public WorldTileFlags FlagsForTile(int localId)
-        {
-            return tileFlags.GetValueOrDefault(localId, WorldTileFlags.Empty);
-        }
-
-        private static TiledTileset FromJsonFile(string path, int firstGid, string displayName)
-        {
-            using var document = JsonDocument.Parse(File.ReadAllBytes(path));
-            var baseDirectory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
-            return FromJson(document.RootElement, baseDirectory, firstGid, displayName);
-        }
-
-        private static TiledTileset FromTsx(string path, int firstGid, string displayName)
-        {
-            var document = XDocument.Load(path);
-            var root = document.Root ?? throw new InvalidOperationException($"Tiled tileset '{Path.GetFileName(path)}' is empty.");
-            var baseDirectory = Path.GetDirectoryName(path) ?? Directory.GetCurrentDirectory();
-            var name = AttributeOrDefault(root, "name", Path.GetFileNameWithoutExtension(path));
-            var tileWidth = PositiveIntAttribute(root, "tilewidth", displayName);
-            var tileHeight = PositiveIntAttribute(root, "tileheight", displayName);
-            var tileCount = PositiveIntAttribute(root, "tilecount", displayName);
-            var columns = PositiveIntAttribute(root, "columns", displayName);
-            ValidateTileSize(tileWidth, tileHeight, displayName, name);
-
-            var imageSource = root.Element("image")?.Attribute("source")?.Value ?? "";
-            var image = LoadImage(imageSource, baseDirectory);
-            return new TiledTileset(firstGid, name, tileWidth, tileHeight, tileCount, columns, image, TiledCollisionFlags.ReadXmlTileFlags(root));
-        }
-
-        private static GameBoyPngImage? LoadImage(string imageSource, string baseDirectory)
-        {
-            if (string.IsNullOrWhiteSpace(imageSource))
-            {
-                return null;
-            }
-
-            return GameBoyPngImage.Read(Path.GetFullPath(Path.Combine(baseDirectory, imageSource)));
-        }
-
-        private static void ValidateTileSize(int tileWidth, int tileHeight, string displayName, string tilesetName)
-        {
-            if (tileWidth < 8 || tileHeight < 8 || tileWidth % 8 != 0 || tileHeight % 8 != 0)
-            {
-                throw new InvalidOperationException($"Tiled map '{displayName}' tileset '{tilesetName}' must use tile sizes that are positive multiples of 8.");
-            }
-        }
-
         private static int QuantizedGameBoyColor(GameBoyPngImage image, int xStart, int xEnd, int yStart, int yEnd)
         {
             var totalR = 0;
@@ -569,97 +321,5 @@ internal static class GameBoyTiledMapImporter
                 _ => 3,
             };
         }
-
-        private static string AttributeOrDefault(XElement element, string name, string fallback)
-        {
-            return element.Attribute(name)?.Value ?? fallback;
-        }
-
-        private static int PositiveIntAttribute(XElement element, string name, string displayName)
-        {
-            var value = IntAttribute(element, name, displayName);
-            if (value < 0 && name == "id")
-            {
-                throw new InvalidOperationException($"Tiled map '{displayName}' attribute '{name}' must be non-negative.");
-            }
-
-            if (value <= 0 && name != "id")
-            {
-                throw new InvalidOperationException($"Tiled map '{displayName}' attribute '{name}' must be positive.");
-            }
-
-            return value;
-        }
-
-        private static int IntAttribute(XElement element, string name, string displayName)
-        {
-            var text = element.Attribute(name)?.Value;
-            if (!int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
-            {
-                throw new InvalidOperationException($"Tiled map '{displayName}' attribute '{name}' must be an integer.");
-            }
-
-            return value;
-        }
-    }
-
-    private static int PositiveIntProperty(JsonElement element, string name, string displayName)
-    {
-        var value = IntProperty(element, name, displayName);
-        if (value <= 0)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' property '{name}' must be positive.");
-        }
-
-        return value;
-    }
-
-    private static int IntProperty(JsonElement element, string name, string displayName)
-    {
-        if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number || !property.TryGetInt32(out var value))
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' property '{name}' must be an integer.");
-        }
-
-        return value;
-    }
-
-    private static int? CustomIntProperty(JsonElement element, string name)
-    {
-        if (!element.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array)
-        {
-            return null;
-        }
-
-        foreach (var property in properties.EnumerateArray())
-        {
-            if (StringPropertyOrDefault(property, "name", "") != name || !property.TryGetProperty("value", out var value))
-            {
-                continue;
-            }
-
-            return value.ValueKind switch
-            {
-                JsonValueKind.Number when value.TryGetInt32(out var number) => number,
-                JsonValueKind.String when int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) => number,
-                _ => throw new InvalidOperationException($"Tiled custom property '{name}' must be an integer."),
-            };
-        }
-
-        return null;
-    }
-
-    private static bool BoolPropertyOrDefault(JsonElement element, string name, bool fallback)
-    {
-        return element.TryGetProperty(name, out var property) && property.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? property.GetBoolean()
-            : fallback;
-    }
-
-    private static string StringPropertyOrDefault(JsonElement element, string name, string fallback)
-    {
-        return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
-            ? property.GetString() ?? fallback
-            : fallback;
     }
 }

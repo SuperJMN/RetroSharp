@@ -154,6 +154,21 @@ Suggested next steps for the next agent, in order:
 
 The runner's editable level lives at `samples/gameboy-runner/maps/runner.tmj` and uses `samples/gameboy-runner/maps/Super Mario Land 2.tsx`.
 
+Pipeline shape (two phases, after #105 partial extraction):
+
+- Target-neutral phase: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter.Load(path)` parses the
+  Tiled JSON/TSX, resolves tileset descriptors (metadata + image path, no decoded pixels),
+  computes geometry and the playable world slice, and resolves collision into portable
+  `WorldTileFlags`. It yields a `LogicalTiledMap` of source-tile GID references only.
+- Game Boy phase: `GameBoyTiledMapImporter` consumes the `LogicalTiledMap`, enforces GB-specific
+  limits (`retrosharpStreamY` 0..31, slice <= 32 rows), decodes tileset PNGs, generates and
+  deduplicates 2bpp tile patterns, expands source tiles into 8x8 cells, and composes the
+  background under blank world cells. Pixel-level composition stays here because the "blank cell"
+  decision depends on the generated pattern.
+- Still target-coupled (open in #105): per-pixel layer flattening and GB tile generation/dedup.
+  `WorldMap2D` still stores already-lowered target tile ids; NES does not yet consume the neutral
+  `LogicalTiledMap`.
+
 Important current behavior:
 
 - `world.Load(path)` imports finite orthogonal Tiled JSON maps.
