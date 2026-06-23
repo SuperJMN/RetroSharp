@@ -314,20 +314,18 @@ public class SemanticAnalyzer
 
         if (expression is SdkDotCallSyntax sdkDotCall)
         {
-            if (scope.Get(sdkDotCall.Module).HasValue)
+            switch (SdkDotCallResolver.Resolve(SdkDotCallLowerer.IsKnownModule(sdkDotCall.Module), scope.Get(sdkDotCall.Module).HasValue))
             {
-                return AnalyzeReceiverDotCall(sdkDotCall, scope, types, functions);
+                case SdkDotCallKind.SdkModule:
+                    return AnalyzeExpression(SdkDotCallLowerer.Lower(sdkDotCall), scope, types, functions);
+                case SdkDotCallKind.Receiver:
+                    return AnalyzeReceiverDotCall(sdkDotCall, scope, types, functions);
+                default:
+                    return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+                    {
+                        Errors = [$"Unknown SDK module or receiver method '{sdkDotCall.Module}.{sdkDotCall.Method}'"]
+                    }, scope);
             }
-
-            if (SdkDotCallLowerer.IsKnownModule(sdkDotCall.Module))
-            {
-                return AnalyzeExpression(SdkDotCallLowerer.Lower(sdkDotCall), scope, types, functions);
-            }
-
-            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
-            {
-                Errors = [$"Unknown SDK module or receiver method '{sdkDotCall.Module}.{sdkDotCall.Method}'"]
-            }, scope);
         }
 
         if (expression is PipelineExpressionSyntax pipeline)

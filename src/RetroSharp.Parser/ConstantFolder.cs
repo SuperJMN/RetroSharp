@@ -629,17 +629,13 @@ public static class ConstantFolder
 
     private static FunctionCall LowerDotCall(SdkDotCallSyntax call, IEnumerable<FunctionSyntax> functions)
     {
-        if (ReceiverMethodLowerer.TryLower(call, functions, out var receiverCall))
+        var hasReceiver = ReceiverMethodLowerer.TryLower(call, functions, out var receiverCall);
+        return SdkDotCallResolver.Resolve(SdkDotCallLowerer.IsKnownModule(call.Module), hasReceiver) switch
         {
-            return receiverCall;
-        }
-
-        if (SdkDotCallLowerer.IsKnownModule(call.Module))
-        {
-            return SdkDotCallLowerer.Lower(call);
-        }
-
-        throw new InvalidOperationException($"Unknown SDK module or receiver method '{call.Module}.{call.Method}'.");
+            SdkDotCallKind.SdkModule => SdkDotCallLowerer.Lower(call),
+            SdkDotCallKind.Receiver => receiverCall,
+            _ => throw new InvalidOperationException($"Unknown SDK module or receiver method '{call.Module}.{call.Method}'."),
+        };
     }
 
     private static ExpressionSyntax FoldConstantExpression(

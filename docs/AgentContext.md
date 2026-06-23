@@ -45,6 +45,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - Restricted `class` syntax is source organization over fixed-layout values and static/receiver lowering; it is not managed-object semantics.
 - Future receiver-method ergonomics should stay in the plain-struct world, for example `actor.Move(dx, dy)` lowering to a statically resolved helper.
 - SDK dot calls such as `video.Init()`, `input.Poll()`, and `camera.SetPosition(x, y)` are static grouping syntax, not object instances.
+- Dot-call precedence is single-sourced in `RetroSharp.Parser.SdkDotCallResolver`: a receiver in scope shadows a same-named SDK module (lexical scoping), otherwise a known SDK module resolves as an SDK call. Constant folding and semantic analysis both consume it; the folder detects receivers by method signature because it has no variable scope.
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
 
 ## Portability Lowering Roadmap (epic #106)
