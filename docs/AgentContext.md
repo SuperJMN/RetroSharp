@@ -160,15 +160,20 @@ Pipeline shape (two phases, after #105 partial extraction):
 - Target-neutral phase: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter.Load(path)` parses the
   Tiled JSON/TSX, resolves tileset descriptors (metadata + image path, no decoded pixels),
   computes geometry and the playable world slice, and resolves collision into portable
-  `WorldTileFlags`. It yields a `LogicalTiledMap` of source-tile GID references only.
-- Game Boy phase: `GameBoyTiledMapImporter` consumes the `LogicalTiledMap`, enforces GB-specific
-  limits (`retrosharpStreamY` 0..31, slice <= 32 rows), decodes tileset PNGs, generates and
-  deduplicates 2bpp tile patterns, expands source tiles into 8x8 cells, and composes the
-  background under blank world cells. Pixel-level composition stays here because the "blank cell"
-  decision depends on the generated pattern.
-- Still target-coupled (open in #105): per-pixel layer flattening and GB tile generation/dedup.
-  `WorldMap2D` still stores already-lowered target tile ids; NES does not yet consume the neutral
-  `LogicalTiledMap`.
+  `WorldTileFlags`. It yields a `LogicalTiledMap` of source-tile GID references only. PNG decoding
+  (`RetroSharp.Core.Imaging.PngImage`) and luminance quantization into canonical 8x8 four-tone
+  patterns (`RetroSharp.Core.Imaging.CanonicalTileGenerator`) are also shared in Core.
+- Per-target phase: `GameBoyTiledMapImporter` and `NesTiledWorldImporter` both consume the
+  `LogicalTiledMap`, decode tileset PNGs, build canonical four-tone patterns, and encode them into
+  their own 2bpp tile byte layout (Game Boy interleaved planes; NES planar planes), deduplicating
+  and composing the background under blank world cells. `world.Load(path)` therefore lowers on both
+  Game Boy and NES from the same source.
+- NES limitations: the Tiled map must fit the visible 32x30 nametable (no runtime streaming yet),
+  and the four canonical tones map to a single fixed grayscale background palette (per-region
+  attribute palettes are future work).
+- Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
+  and per-pixel layer flattening stays per target because the blank-cell decision depends on the
+  generated pattern.
 
 Important current behavior:
 

@@ -145,6 +145,17 @@ internal static class NesRomBuilder
             asset.TileData.CopyTo(chr, offset);
         }
 
+        foreach (var background in program.GeneratedBackgroundTiles)
+        {
+            var offset = background.FirstTile * 16;
+            if (offset + background.Data.Length > chr.Length)
+            {
+                throw new InvalidOperationException("NES world.Load background tiles exceed CHR ROM size.");
+            }
+
+            background.Data.CopyTo(chr, offset);
+        }
+
         return chr;
     }
 
@@ -773,6 +784,9 @@ internal sealed class NesRuntimeCompiler
             case "world_column":
             case "world_flags":
             case "world_map":
+                break;
+            case "world_load":
+                NesVideoProgram.RequireArity(call, 1);
                 break;
             case "sprite_asset":
                 NesVideoProgram.RequireArity(call, 2);

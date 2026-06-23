@@ -81,6 +81,7 @@ internal sealed class NesVideoProgram
 
     private readonly List<NesCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, NesCompiledSpriteAsset> spriteAssets = [];
+    private readonly List<(int FirstTile, byte[] Data)> generatedBackgroundTiles = [];
     private readonly SortedDictionary<int, byte[]> mapColumns = [];
     private readonly SortedDictionary<int, byte[]> worldColumns = [];
     private readonly SortedDictionary<int, WorldTileFlags[]> worldFlagColumns = [];
@@ -113,6 +114,8 @@ internal sealed class NesVideoProgram
     public IReadOnlyList<NesCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, NesCompiledSpriteAsset> SpriteAssets => spriteAssets;
+
+    public IReadOnlyList<(int FirstTile, byte[] Data)> GeneratedBackgroundTiles => generatedBackgroundTiles;
 
     public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
 
@@ -244,6 +247,9 @@ internal sealed class NesVideoProgram
             case "world_map":
                 ApplyWorldMap(call);
                 break;
+            case "world_load":
+                ApplyWorldLoad(call);
+                break;
             case "sprite_asset":
                 ApplySpriteAsset(call);
                 break;
@@ -354,6 +360,41 @@ internal sealed class NesVideoProgram
         }
 
         worldFlagColumns[index] = flags;
+    }
+
+    private void ApplyWorldLoad(FunctionCall call)
+    {
+        RequireArity(call, 1);
+        var path = ResolveAssetPath(StringArg(call, 0));
+        var world = NesTiledWorldImporter.Load(path, nextSpriteTile);
+
+        var generatedCount = world.GeneratedTileData.Length / 16;
+        if (nextSpriteTile + generatedCount > 256)
+        {
+            throw new InvalidOperationException("NES world.Load background tiles exceed the available CHR pattern table.");
+        }
+
+        if (generatedCount > 0)
+        {
+            generatedBackgroundTiles.Add((nextSpriteTile, world.GeneratedTileData));
+            nextSpriteTile += generatedCount;
+        }
+
+        // Map the four canonical luminance tones (0 lightest .. 3 darkest) to NES grays.
+        Palette[0] = 0x30;
+        Palette[1] = 0x10;
+        Palette[2] = 0x00;
+        Palette[3] = 0x0F;
+
+        for (var y = 0; y < world.Height; y++)
+        {
+            for (var x = 0; x < world.Width; x++)
+            {
+                SetTile(x, world.StreamY + y, world.WorldTileIds[y * world.Width + x]);
+            }
+        }
+
+        WorldMap = new WorldMap2D(world.Width, world.Height, world.WorldTileIds, world.WorldFlags);
     }
 
     private void ApplyWorldMap(FunctionCall call)

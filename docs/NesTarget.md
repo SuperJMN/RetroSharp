@@ -102,6 +102,8 @@ Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct 6
 
 `world.Column(...)`, `world.Flags(...)`, and `world.Map(width, streamY, height)` build the initial visible nametable from unified world resources. In this spike, `width` must fit the visible 32-column nametable because runtime column streaming is not implemented.
 
+`world.Load(path)` imports a Tiled map through the same target-neutral `RetroSharp.Core.Sdk.Tiled.LogicalTiledMap` the Game Boy target consumes. NES owns its lowering: it decodes the tileset image, quantizes it into the shared canonical 8x8 four-tone patterns, encodes them into NES 2bpp planar CHR tiles, deduplicates them, and writes the visible nametable plus a `WorldMap2D`. Generated background tiles share the pattern table with sprites through the same CHR tile allocator. Current limitations: the map must fit the visible 32x30 nametable (no runtime streaming), and the four canonical tones map to a single fixed grayscale background palette (per-region attribute palettes are future work). The same `world.Load("level.tmj")` source therefore lowers on both Game Boy and NES.
+
 `camera.Init(mapWidth, streamY, streamHeight)` enables the horizontal camera path for the current world map. `camera.SetPosition(x, 0)` stores the horizontal scroll byte, and `camera.Apply()` writes horizontal scroll followed by zero vertical scroll to `$2005`. Any non-zero or runtime Y position is rejected with a NES capability error until vertical movement and streaming have a budgeted lowering.
 
 ## HUD Decision
