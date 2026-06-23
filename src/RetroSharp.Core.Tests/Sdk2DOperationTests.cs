@@ -31,6 +31,13 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.StreamMapRow(TargetRow: 29, SourceRow: 40, X: 0, Width: 20),
             new Sdk2DOperation.ReadWorldTile(WorldId: "level1", WorldX: 16, WorldY: 24),
             new Sdk2DOperation.ReadWorldTileFlags(WorldId: "level1", WorldX: 16, WorldY: 24),
+            new Sdk2DOperation.CameraAabbTiles(
+                WorldId: "level1",
+                ScreenX: 72,
+                WorldY: Field("player", "footY"),
+                Width: 16,
+                Height: 8,
+                Flags: WorldTileFlags.Solid),
             new Sdk2DOperation.SetHudTile(Mode: HudMode.Window, X: 1, Y: 0, Tile: 42),
         ];
 
@@ -51,7 +58,12 @@ public sealed class Sdk2DOperationTests
         Assert.IsType<Sdk2DOperation.StreamMapRow>(operations[6]);
         Assert.IsType<Sdk2DOperation.ReadWorldTile>(operations[7]);
         Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operations[8]);
-        Assert.IsType<Sdk2DOperation.SetHudTile>(operations[9]);
+        var cameraAabb = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operations[9]);
+        Assert.Equal(72, cameraAabb.ScreenX);
+        Assert.Equal(Field("player", "footY"), cameraAabb.WorldY);
+        Assert.Equal(new SdkAabbExtent.Constant(16), cameraAabb.Width);
+        Assert.Equal(WorldTileFlags.Solid, cameraAabb.Flags);
+        Assert.IsType<Sdk2DOperation.SetHudTile>(operations[10]);
     }
 
     [Fact]
@@ -88,7 +100,60 @@ public sealed class Sdk2DOperationTests
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.StreamMapRow(TargetRow: 29, SourceRow: 40, X: 0, Width: 20));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.ReadWorldTile("level1", WorldX: 16, WorldY: 24));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.ReadWorldTileFlags("level1", WorldX: 16, WorldY: 24));
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.CameraAabbTiles(
+                WorldId: "level1",
+                ScreenX: 72,
+                WorldY: Field("player", "footY"),
+                Width: 16,
+                Height: 8,
+                Flags: WorldTileFlags.Solid));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.SetHudTile(HudMode.Window, X: 1, Y: 0, Tile: 42));
+    }
+
+    [Fact]
+    public void Validator_rejects_camera_aabb_span_outside_screen_width()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                FullCapabilities(),
+                new Sdk2DOperation.CameraAabbTiles(
+                    WorldId: "level1",
+                    ScreenX: 150,
+                    WorldY: Field("player", "footY"),
+                    Width: 16,
+                    Height: 8,
+                    Flags: WorldTileFlags.Solid)));
+
+        Assert.Equal(
+            "camera AABB screen span must fit within target 'gb' visible width 160.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Validator_rejects_camera_aabb_when_target_has_no_collision_query_support()
+    {
+        var capabilities = FullCapabilities() with
+        {
+            Name = "nes",
+            CollisionQueries = CollisionQueryMode.None,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                capabilities,
+                new Sdk2DOperation.CameraAabbTiles(
+                    WorldId: "level1",
+                    ScreenX: 72,
+                    WorldY: Field("player", "footY"),
+                    Width: 16,
+                    Height: 8,
+                    Flags: WorldTileFlags.Solid)));
+
+        Assert.Equal(
+            "Target 'nes' does not support camera-relative AABB collision queries.",
+            exception.Message);
     }
 
     [Fact]
@@ -166,7 +231,8 @@ public sealed class Sdk2DOperationTests
             SpritePaletteSlots: 2,
             BackgroundPaletteSlots: 1,
             SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
-            HudModes: HudMode.Window | HudMode.Sprite);
+            HudModes: HudMode.Window | HudMode.Sprite,
+            CollisionQueries: CollisionQueryMode.WorldTileFlags | CollisionQueryMode.WorldAabb | CollisionQueryMode.CameraRelativeAabb);
     }
 
     private static SdkByteExpression.Variable Local(string name)

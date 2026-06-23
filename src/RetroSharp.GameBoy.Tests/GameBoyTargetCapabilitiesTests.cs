@@ -35,6 +35,9 @@ public sealed class GameBoyTargetCapabilitiesTests
         Assert.True(capabilities.SupportsHudMode(HudMode.Window));
         Assert.True(capabilities.SupportsHudMode(HudMode.Sprite));
         Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.WorldTileFlags));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.WorldAabb));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb));
     }
 
     [Fact]

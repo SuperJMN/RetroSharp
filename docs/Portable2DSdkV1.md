@@ -58,6 +58,7 @@ Game Boy currently accepts hUGETracker `.uge` v6 resources directly or through t
 | `world.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `world_tile_flags_at(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
+| `camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a fixed-screen actor AABB overlaps requested world flags at the current camera position. This is capability-gated and intended for long scrolling maps where the actor stays at a screen X. |
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
@@ -106,6 +107,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
 | Collision | `world.Map(...)` or `world.Load(...)` data and matching flag rows must exist before runtime collision reads. |
+| Camera-relative collision | Target must declare `CameraRelativeAabb` collision-query support, and the screen span must fit the visible target width. |
 | HUD | Requested `HudMode` must be declared by the target, except `none`, which is always accepted as disabled HUD. |
 
 ## Target Support
@@ -121,6 +123,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 | BGM | Supported for hUGETracker `.uge` v6 songs using duty, wave, and noise channels in the current runtime. | Not implemented; `music.Play(...)` fails capability validation. |
 | Animation helpers | Supported on Game Boy runner path. | Runtime animation is not part of the current NES spike. |
 | World collision queries | Supported on Game Boy runner path. | Not implemented in the current NES spike. |
+| Camera-relative collision | Supported through `camera.AabbTiles(...)` for fixed-screen actors. | Not implemented; the target declares no collision-query support. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
 
 Use `samples/manifest.json` to identify which samples are portable. Currently `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample and builds for both Game Boy and NES.
@@ -136,6 +139,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | NES vertical camera position | `Target 'nes' supports only horizontal camera_set_position(x, 0) in the current camera spike.` |
 | Game Boy diagonal camera movement over budget | `Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).` |
 | NES BGM playback | `Target 'nes' does not support BGM playback yet.` |
+| NES camera-relative AABB collision | `Target 'nes' does not support camera-relative AABB collision queries.` |
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
@@ -146,7 +150,7 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 SDK v1 is usable for the current cross-target camera sample, but the runner-shaped framework contract is not fully portable yet.
 
-- `camera.AabbTiles(...)` is a Game Boy runner bridge, not SDK v1. Issue #119 tracks whether to promote it into a capability-checked contract or replace the runner path with a world-coordinate collision API that can represent long-map X coordinates safely.
+- `camera.AabbTiles(...)` is now a capability-gated SDK query for fixed-screen actors. Game Boy supports it; NES rejects it until a collision-query lowering exists.
 - `collision_aabb_tiles(...)` reports overlap only. Issue #120 tracks a reusable tile-hit or snapped-edge fact for actor landing while keeping movement resolution in source.
 - Logical sprite drawing has palette-slot selection, but palette data declaration still uses raw target calls such as `palette.Set(...)` and `objectPalette.Set(...)`. Issue #121 tracks logical palette resources or an equivalent asset contract.
 - `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. Issue #122 tracks a small runner-shaped cross-target sample or an explicit NES capability diagnostic for the missing part.

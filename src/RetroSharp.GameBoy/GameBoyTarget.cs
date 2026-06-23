@@ -26,5 +26,6 @@ public static class GameBoyTarget
         SpritePaletteSlots: 2,
         BackgroundPaletteSlots: 1,
         SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
-        HudModes: HudMode.Window | HudMode.Sprite);
+        HudModes: HudMode.Window | HudMode.Sprite,
+        CollisionQueries: CollisionQueryMode.WorldTileFlags | CollisionQueryMode.WorldAabb | CollisionQueryMode.CameraRelativeAabb);
 }

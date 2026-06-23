@@ -26,6 +26,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Background palettes | 1 background palette slot |
 | Sprite transforms | Flip X and Flip Y |
 | HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
+| Collision queries | World tile flags, world AABB, and camera-relative AABB |
 | BGM formats | hUGETracker `.uge` |
 
 ## SDK Operation Boundary
@@ -39,6 +40,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` as `Sdk2DOperation.DrawLogicalSprite`
 - `map_stream_column(targetColumn, sourceColumn, y, height)` as `Sdk2DOperation.StreamMapColumn`
 - `world_tile_flags_at(worldX, worldY)` as `Sdk2DOperation.ReadWorldTileFlags`
+- `camera.AabbTiles(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbTiles`
 - `hud.SetTile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
 
 `GameBoyRomCompiler.CollectSdkAudioOperations(...)` exposes the parallel audio boundary where portable audio calls become semantic `SdkAudioOperation` records. The current boundary recognizes:
@@ -48,7 +50,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `audio.Update()` as `SdkAudioOperation.UpdateAudio`
 - `music.Stop()` as `SdkAudioOperation.StopMusic`
 
-`Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video.WaitVBlank()`. Logical sprite draw and explicit map-column streaming also lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge.
+`Sdk2DOperation.WaitFrame` now lowers through `GameBoySdkOperationLowerer` to the same VBlank edge wait routine previously emitted directly by `video.WaitVBlank()`. Logical sprite draw, explicit map-column streaming, and camera-relative AABB collision also lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge.
 
 Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
@@ -357,7 +359,6 @@ Landed after the richer runner scene pass:
 
 The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The current Game Boy target backlog is the narrower stabilization work needed to keep runner-shaped behavior from looking more portable than it is:
 
-1. Stabilize the camera-relative collision contract (#119). Today `camera.AabbTiles(...)` is a documented Game Boy runner bridge: screen-relative X is combined with the Game Boy camera state and fine scroll. Decide whether that bridge becomes a capability-checked SDK contract or whether the runner moves to a world-coordinate API that can represent long-map X safely.
-2. Add a reusable landing collision fact (#120). `collision_aabb_tiles(...)` and `camera.AabbTiles(...)` report overlap only; landing snap policy should stay in source, but samples should not need repeated tile-offset probe ladders to discover the contacted edge.
-3. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.
-4. Add runner-shaped cross-target validation (#122). The current portable sample proves horizontal camera, input, world setup, and logical sprite drawing; it deliberately does not prove runner collision, runtime animation, Tiled loading, HUD, or palette declaration across Game Boy and NES.
+1. Add a reusable landing collision fact (#120). `collision_aabb_tiles(...)` and `camera.AabbTiles(...)` report overlap only; landing snap policy should stay in source, but samples should not need repeated tile-offset probe ladders to discover the contacted edge.
+2. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.
+3. Add runner-shaped cross-target validation (#122). The current portable sample proves horizontal camera, input, world setup, and logical sprite drawing; it deliberately does not prove runner collision, runtime animation, Tiled loading, HUD, or palette declaration across Game Boy and NES.

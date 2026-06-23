@@ -20,6 +20,8 @@ public class Target2DCapabilitiesTests
         Assert.True(capabilities.SupportsSpriteTransform(SpriteTransform.FlipX));
         Assert.True(capabilities.SupportsHudMode(HudMode.Window));
         Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb));
+        Assert.False(capabilities.SupportsCollisionQuery(CollisionQueryMode.None));
     }
 
     [Fact]
@@ -51,6 +53,7 @@ public class Target2DCapabilitiesTests
             SpritePaletteSlots: 2,
             BackgroundPaletteSlots: 1,
             SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
-            HudModes: hudModes);
+            HudModes: hudModes,
+            CollisionQueries: CollisionQueryMode.WorldTileFlags | CollisionQueryMode.WorldAabb | CollisionQueryMode.CameraRelativeAabb);
     }
 }

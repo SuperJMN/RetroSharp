@@ -68,6 +68,30 @@ public static class Sdk2DOperationCollector
         return new Sdk2DOperation.StreamMapColumn(targetColumn, sourceColumn, y, height);
     }
 
+    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(FunctionCall call)
+    {
+        SdkCallReader.RequireArity(call, 5);
+        var args = call.Parameters.ToList();
+        var screenX = ConstRange(args[0], 0, 255, "camera_aabb_tiles argument 1");
+        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_tiles argument 2");
+        var width = ReadAabbExtent(args[2], "camera_aabb_tiles argument 3");
+        var height = ConstRange(args[3], 0, 255, "camera_aabb_tiles argument 4");
+        var flags = (WorldTileFlags)ConstRange(
+            args[4],
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_aabb_tiles argument 5");
+
+        return new Sdk2DOperation.CameraAabbTiles(
+            WorldId: "default",
+            ScreenX: screenX,
+            WorldY: worldY,
+            WorldYOffset: worldYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
     public static SdkByteExpression ReadByteExpression(ExpressionSyntax expression, string context)
     {
         switch (expression)
@@ -117,6 +141,52 @@ public static class Sdk2DOperationCollector
         }
 
         return value;
+    }
+
+    private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
+    {
+        var value = SdkCallReader.ConstValue(expression, context);
+        if (value < min || value > max)
+        {
+            throw new InvalidOperationException($"{context} must be between {min} and {max}.");
+        }
+
+        return value;
+    }
+
+    private static SdkAabbExtent ReadAabbExtent(ExpressionSyntax expression, string context)
+    {
+        if (expression is FunctionCall { Name: "sprite_width" } spriteWidthCall)
+        {
+            SdkCallReader.RequireArity(spriteWidthCall, 1);
+            return new SdkAabbExtent.SpriteWidth(SdkCallReader.IdentifierArg(spriteWidthCall.Parameters.ElementAt(0), "sprite_width argument 1"));
+        }
+
+        return new SdkAabbExtent.Constant(ConstRange(expression, 0, 255, context));
+    }
+
+    private static (SdkByteExpression Expression, int Offset) ReadByteExpressionWithConstantOffset(ExpressionSyntax expression, string context)
+    {
+        if (expression is BinaryExpressionSyntax { Operator.Symbol: "+" } plus)
+        {
+            if (TryConstValue(plus.Right, out var rightOffset))
+            {
+                return (ReadByteExpression(plus.Left, context), rightOffset);
+            }
+
+            if (TryConstValue(plus.Left, out var leftOffset))
+            {
+                return (ReadByteExpression(plus.Right, context), leftOffset);
+            }
+        }
+
+        if (expression is BinaryExpressionSyntax { Operator.Symbol: "-" } minus
+            && TryConstValue(minus.Right, out var offset))
+        {
+            return (ReadByteExpression(minus.Left, context), -offset);
+        }
+
+        return (ReadByteExpression(expression, context), 0);
     }
 
     private static SdkByteExpression? ReadFlipXExpression(IReadOnlyList<ExpressionSyntax> args)
@@ -379,6 +449,9 @@ public static class Sdk2DOperationCollector
                 case "world_tile_flags_at":
                     CollectWorldTileFlagsAt(call);
                     break;
+                case "camera_aabb_tiles":
+                    CollectCameraAabbTiles(call);
+                    break;
                 default:
                     if (CollectUserValueFunction(call))
                     {
@@ -400,6 +473,11 @@ public static class Sdk2DOperationCollector
             operations.Add(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
         }
 
+        private void CollectCameraAabbTiles(FunctionCall call)
+        {
+            operations.Add(ReadCameraAabbTiles(call));
+        }
+
         private void CollectCallArguments(FunctionCall call)
         {
             foreach (var parameter in call.Parameters)
@@ -411,17 +489,6 @@ public static class Sdk2DOperationCollector
         private static SdkByteExpression ByteExpression(ExpressionSyntax expression, string context)
         {
             return ReadByteExpression(expression, context);
-        }
-
-        private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
-        {
-            var value = SdkCallReader.ConstValue(expression, context);
-            if (value < min || value > max)
-            {
-                throw new InvalidOperationException($"{context} must be between {min} and {max}.");
-            }
-
-            return value;
         }
 
         private void CollectUserFunction(FunctionCall call)

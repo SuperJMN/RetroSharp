@@ -263,12 +263,80 @@ public sealed class GameBoySdkOperationBoundaryTests
                               }
                               """;
 
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
         var flags = Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operation);
 
         Assert.Equal("default", flags.WorldId);
         Assert.Equal(Local("worldX"), flags.WorldX);
         Assert.Equal(new SdkByteExpression.Constant(8), flags.WorldY);
+    }
+
+    [Fact]
+    public void Collects_camera_aabb_tiles_query_with_byte_backed_world_y()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 11, 2);
+                                  camera_init(1, 11, 2);
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(72, footY, 16, 8, 1);
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
+        var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
+
+        Assert.Equal("default", query.WorldId);
+        Assert.Equal(72, query.ScreenX);
+        Assert.Equal(Local("footY"), query.WorldY);
+        Assert.Equal(0, query.WorldYOffset);
+        Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
+        Assert.Equal(8, query.Height);
+        Assert.Equal(WorldTileFlags.Solid, query.Flags);
+    }
+
+    [Fact]
+    public void Collects_camera_aabb_tiles_query_with_sprite_width_extent()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 11, 2);
+                                  camera_init(1, 11, 2);
+                                  sprite_asset(player_run, "player.sprite.json");
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(72, footY, sprite_width(player_run), 8, 1);
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
+        var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
+
+        Assert.Equal(new SdkAabbExtent.SpriteWidth("player_run"), query.Width);
+    }
+
+    [Fact]
+    public void Collects_camera_aabb_tiles_query_with_constant_world_y_offset()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 11, 2);
+                                  camera_init(1, 11, 2);
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(72, footY - 8, 16, 8, 1);
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
+        var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
+
+        Assert.Equal(Local("footY"), query.WorldY);
+        Assert.Equal(-8, query.WorldYOffset);
     }
 
     [Fact]

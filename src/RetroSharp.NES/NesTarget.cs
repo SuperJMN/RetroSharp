@@ -26,5 +26,6 @@ public static class NesTarget
         SpritePaletteSlots: 4,
         BackgroundPaletteSlots: 4,
         SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
-        HudModes: HudMode.None);
+        HudModes: HudMode.None,
+        CollisionQueries: CollisionQueryMode.None);
 }

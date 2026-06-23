@@ -98,6 +98,27 @@ public abstract record Sdk2DOperation
         }
     }
 
+    public sealed record CameraAabbTiles(
+        string WorldId,
+        int ScreenX,
+        SdkByteExpression WorldY,
+        int WorldYOffset,
+        SdkAabbExtent Width,
+        int Height,
+        WorldTileFlags Flags) : Sdk2DOperation
+    {
+        public CameraAabbTiles(
+            string WorldId,
+            int ScreenX,
+            SdkByteExpression WorldY,
+            int Width,
+            int Height,
+            WorldTileFlags Flags)
+            : this(WorldId, ScreenX, WorldY, 0, new SdkAabbExtent.Constant(Width), Height, Flags)
+        {
+        }
+    }
+
     public sealed record SetHudTile(
         HudMode Mode,
         int X,

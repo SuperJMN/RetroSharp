@@ -112,14 +112,16 @@ Progress (2026-06-14):
   a broader intrinsic catalog.
 - Pending in the edited #106 slice: none known after PL-E1.
 - Active SDK v1 stabilization backlog after #106:
-  - #119: decide and document the camera-relative collision contract used by the runner.
   - #120: add a reusable tile-hit query/helper for landing resolution without owning physics.
   - #121: replace raw Game Boy palette setup with logical palette resources or an asset contract.
   - #122: add a runner-shaped cross-target validation sample or an explicit NES diagnostic.
+- Camera-relative AABB decision implemented after #106: `camera.AabbTiles(...)` is a
+  capability-gated SDK query for fixed-screen actors. Game Boy declares and lowers it through
+  `Sdk2DOperation.CameraAabbTiles`; NES declares no collision-query support and rejects it.
 
 Suggested next steps for the next agent, in order:
-1. If continuing framework stabilization, start with #119 before #120 or #122, because the
-   runner-shaped collision contract affects both landing helpers and portable validation.
+1. If continuing framework stabilization, #120 is the next collision slice: expose a reusable
+   tile-hit or snapped-edge fact without moving landing policy into the SDK.
 2. Treat #121 as the palette/resource slice that can eventually remove raw palette setup from
    target-acceptance samples.
 3. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,

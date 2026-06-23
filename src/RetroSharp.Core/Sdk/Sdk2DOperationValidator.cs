@@ -19,6 +19,9 @@ public static class Sdk2DOperationValidator
                 ValidateByteExpression(flags.WorldX, "world tile flags X");
                 ValidateByteExpression(flags.WorldY, "world tile flags Y");
                 return;
+            case Sdk2DOperation.CameraAabbTiles cameraAabb:
+                ValidateCameraAabbTiles(capabilities, cameraAabb);
+                return;
             case Sdk2DOperation.DrawLogicalSprite draw:
                 ValidateDrawLogicalSprite(capabilities, draw);
                 return;
@@ -67,6 +70,60 @@ public static class Sdk2DOperationValidator
         }
 
         TargetCapabilityChecks.RequireSpriteTransform(capabilities, draw.StaticTransform);
+    }
+
+    private static void ValidateCameraAabbTiles(Target2DCapabilities capabilities, Sdk2DOperation.CameraAabbTiles cameraAabb)
+    {
+        if (!capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb))
+        {
+            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support camera-relative AABB collision queries.");
+        }
+
+        if (cameraAabb.ScreenX < 0 || cameraAabb.ScreenX >= capabilities.ScreenPixels.Width)
+        {
+            throw new InvalidOperationException($"camera AABB screen X must be between 0 and {capabilities.ScreenPixels.Width - 1} for target '{capabilities.Name}'.");
+        }
+
+        ValidateAabbWidth(capabilities, cameraAabb);
+
+        if (cameraAabb.Height < 0 || cameraAabb.Height > 255)
+        {
+            throw new InvalidOperationException($"camera AABB height must be between 0 and 255 for target '{capabilities.Name}'.");
+        }
+
+        ValidateByteExpression(cameraAabb.WorldY, "camera AABB world Y");
+        ValidateCollisionFlags(cameraAabb.Flags, "camera AABB flags");
+    }
+
+    private static void ValidateAabbWidth(Target2DCapabilities capabilities, Sdk2DOperation.CameraAabbTiles cameraAabb)
+    {
+        switch (cameraAabb.Width)
+        {
+            case SdkAabbExtent.Constant constant when constant.Value < 0 || constant.Value > capabilities.ScreenPixels.Width:
+                throw new InvalidOperationException($"camera AABB width must be between 0 and {capabilities.ScreenPixels.Width} for target '{capabilities.Name}'.");
+            case SdkAabbExtent.Constant constant:
+                if (cameraAabb.ScreenX + constant.Value > capabilities.ScreenPixels.Width)
+                {
+                    throw new InvalidOperationException($"camera AABB screen span must fit within target '{capabilities.Name}' visible width {capabilities.ScreenPixels.Width}.");
+                }
+
+                return;
+            case SdkAabbExtent.SpriteWidth { SpriteId.Length: > 0 }:
+                return;
+            case SdkAabbExtent.SpriteWidth:
+                throw new InvalidOperationException("camera AABB sprite width asset id must not be empty.");
+            default:
+                throw new InvalidOperationException($"camera AABB width uses unsupported SDK extent '{cameraAabb.Width.GetType().Name}'.");
+        }
+    }
+
+    private static void ValidateCollisionFlags(WorldTileFlags flags, string context)
+    {
+        const WorldTileFlags allowed = WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform;
+        if ((flags & ~allowed) != 0)
+        {
+            throw new InvalidOperationException($"{context} contains unsupported collision flags '{flags}'.");
+        }
     }
 
     private static void ValidateByteExpression(SdkByteExpression expression, string context)

@@ -17,7 +17,8 @@ public sealed record Target2DCapabilities(
     int SpritePaletteSlots,
     int BackgroundPaletteSlots,
     SpriteTransform SupportedSpriteTransforms,
-    HudMode HudModes)
+    HudMode HudModes,
+    CollisionQueryMode CollisionQueries)
 {
     public bool SupportsScrollAxis(ScrollAxes axis)
     {
@@ -37,5 +38,10 @@ public sealed record Target2DCapabilities(
     public bool SupportsHudMode(HudMode mode)
     {
         return mode != HudMode.None && HudModes.HasFlag(mode);
+    }
+
+    public bool SupportsCollisionQuery(CollisionQueryMode mode)
+    {
+        return mode != CollisionQueryMode.None && CollisionQueries.HasFlag(mode);
     }
 }
