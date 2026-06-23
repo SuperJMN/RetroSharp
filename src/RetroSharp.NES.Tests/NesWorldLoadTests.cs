@@ -140,6 +140,68 @@ public sealed class NesWorldLoadTests : IDisposable
         Assert.Equal((byte)'N', nesRom[0]);
     }
 
+    [Fact]
+    public void World_load_feeds_the_camera_scroll_path_on_both_targets()
+    {
+        WriteTilesheetPng(Path.Combine(directory, "tiles.png"), blackThenWhite: true);
+        File.WriteAllText(Path.Combine(directory, "level.tmj"), """
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 2,
+          "height": 3,
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldY", "type": "int", "value": 1 },
+            { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+          ],
+          "tilesets": [
+            {
+              "firstgid": 1,
+              "name": "tiles",
+              "tilewidth": 8,
+              "tileheight": 8,
+              "tilecount": 2,
+              "columns": 2,
+              "image": "tiles.png",
+              "imagewidth": 16,
+              "imageheight": 8
+            }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "world", "width": 2, "height": 3, "data": [0, 0, 1, 0, 0, 1] }
+          ]
+        }
+        """);
+
+        // A world imported with world.Load feeds the same camera scroll path that
+        // world.Map does, so the camera lowers on both targets from one source.
+        const string source = """
+            void main() {
+                video.Init();
+                world.Load("level.tmj");
+                camera.Init(2, 0, 2);
+                loop {
+                    video.WaitVBlank();
+                    input.Poll();
+                    let cx = button_hold_ticks(right);
+                    camera.SetPosition(cx, 0);
+                    camera.Apply();
+                }
+            }
+            """;
+
+        var gbRom = GameBoy.GameBoyRomCompiler.CompileSource(source, directory);
+        var nesRom = NesRomCompiler.CompileSource(source, directory);
+
+        Assert.NotEmpty(gbRom);
+        Assert.Equal(24592, nesRom.Length);
+        Assert.Equal((byte)'N', nesRom[0]);
+    }
+
     private NesVideoProgram BuildProgram(string source)
     {
         var parse = new SomeParser().Parse(source);
