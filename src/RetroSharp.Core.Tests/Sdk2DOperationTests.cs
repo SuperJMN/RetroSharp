@@ -38,6 +38,13 @@ public sealed class Sdk2DOperationTests
                 Width: 16,
                 Height: 8,
                 Flags: WorldTileFlags.Solid),
+            new Sdk2DOperation.CameraAabbHitTop(
+                WorldId: "level1",
+                ScreenX: 72,
+                WorldY: Field("player", "footY"),
+                Width: 16,
+                Height: 40,
+                Flags: WorldTileFlags.Solid),
             new Sdk2DOperation.SetHudTile(Mode: HudMode.Window, X: 1, Y: 0, Tile: 42),
         ];
 
@@ -63,7 +70,10 @@ public sealed class Sdk2DOperationTests
         Assert.Equal(Field("player", "footY"), cameraAabb.WorldY);
         Assert.Equal(new SdkAabbExtent.Constant(16), cameraAabb.Width);
         Assert.Equal(WorldTileFlags.Solid, cameraAabb.Flags);
-        Assert.IsType<Sdk2DOperation.SetHudTile>(operations[10]);
+        var cameraHitTop = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operations[10]);
+        Assert.Equal(40, cameraHitTop.Height);
+        Assert.Equal(WorldTileFlags.Solid, cameraHitTop.Flags);
+        Assert.IsType<Sdk2DOperation.SetHudTile>(operations[11]);
     }
 
     [Fact]
@@ -109,6 +119,15 @@ public sealed class Sdk2DOperationTests
                 Width: 16,
                 Height: 8,
                 Flags: WorldTileFlags.Solid));
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.CameraAabbHitTop(
+                WorldId: "level1",
+                ScreenX: 72,
+                WorldY: Field("player", "footY"),
+                Width: 16,
+                Height: 40,
+                Flags: WorldTileFlags.Solid));
         Sdk2DOperationValidator.Validate(capabilities, new Sdk2DOperation.SetHudTile(HudMode.Window, X: 1, Y: 0, Tile: 42));
     }
 
@@ -153,6 +172,31 @@ public sealed class Sdk2DOperationTests
 
         Assert.Equal(
             "Target 'nes' does not support camera-relative AABB collision queries.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Validator_rejects_camera_aabb_hit_top_when_target_has_no_hit_query_support()
+    {
+        var capabilities = FullCapabilities() with
+        {
+            Name = "nes",
+            CollisionQueries = CollisionQueryMode.CameraRelativeAabb,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                capabilities,
+                new Sdk2DOperation.CameraAabbHitTop(
+                    WorldId: "level1",
+                    ScreenX: 72,
+                    WorldY: Field("player", "footY"),
+                    Width: 16,
+                    Height: 40,
+                    Flags: WorldTileFlags.Solid)));
+
+        Assert.Equal(
+            "Target 'nes' does not support camera-relative AABB hit-top queries.",
             exception.Message);
     }
 
@@ -232,7 +276,7 @@ public sealed class Sdk2DOperationTests
             BackgroundPaletteSlots: 1,
             SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
             HudModes: HudMode.Window | HudMode.Sprite,
-            CollisionQueries: CollisionQueryMode.WorldTileFlags | CollisionQueryMode.WorldAabb | CollisionQueryMode.CameraRelativeAabb);
+            CollisionQueries: CollisionQueryMode.WorldTileFlags | CollisionQueryMode.WorldAabb | CollisionQueryMode.CameraRelativeAabb | CollisionQueryMode.CameraRelativeAabbHitTop);
     }
 
     private static SdkByteExpression.Variable Local(string name)

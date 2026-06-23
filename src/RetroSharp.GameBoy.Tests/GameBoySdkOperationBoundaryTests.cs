@@ -340,6 +340,33 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Collects_camera_aabb_hit_top_query_with_sprite_width_and_search_offset()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 11, 2);
+                                  camera_init(1, 11, 2);
+                                  sprite_asset(player_run, "player.sprite.json");
+                                  i16 footY = 40;
+                                  i16 hitTop = camera.AabbHitTop(72, footY - 32, sprite_width(player_run), 40, 1);
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
+        var query = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operation);
+
+        Assert.Equal("default", query.WorldId);
+        Assert.Equal(72, query.ScreenX);
+        Assert.Equal(Local("footY"), query.WorldY);
+        Assert.Equal(-32, query.WorldYOffset);
+        Assert.Equal(new SdkAabbExtent.SpriteWidth("player_run"), query.Width);
+        Assert.Equal(40, query.Height);
+        Assert.Equal(WorldTileFlags.Solid, query.Flags);
+    }
+
+    [Fact]
     public void Collects_sprite_draw_with_runtime_operands()
     {
         const string source = """

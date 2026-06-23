@@ -26,7 +26,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Background palettes | 1 background palette slot |
 | Sprite transforms | Flip X and Flip Y |
 | HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
-| Collision queries | World tile flags, world AABB, and camera-relative AABB |
+| Collision queries | World tile flags, world AABB, camera-relative AABB, and camera-relative AABB hit-top |
 | BGM formats | hUGETracker `.uge` |
 
 ## SDK Operation Boundary
@@ -41,6 +41,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 - `map_stream_column(targetColumn, sourceColumn, y, height)` as `Sdk2DOperation.StreamMapColumn`
 - `world_tile_flags_at(worldX, worldY)` as `Sdk2DOperation.ReadWorldTileFlags`
 - `camera.AabbTiles(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbTiles`
+- `camera.AabbHitTop(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbHitTop`
 - `hud.SetTile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
 
 `GameBoyRomCompiler.CollectSdkAudioOperations(...)` exposes the parallel audio boundary where portable audio calls become semantic `SdkAudioOperation` records. The current boundary recognizes:
@@ -91,7 +92,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - `==`, `!=`, `<`, `<=`, `>`, and `>=` conditions when one side is constant
 - Short-circuit `&&`/`||` and unary `!` in branch conditions built from the supported condition forms, and as byte-backed 0/1 value expressions
 - Conditional value expressions (`condition ? whenTrue : whenFalse`) over byte-backed branch expressions
-- `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, `collision_aabb_tiles(...)`, and `camera_aabb_tiles(...)` as value expressions for runtime map queries
+- `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, `collision_aabb_tiles(...)`, `camera_aabb_tiles(...)`, and `camera_aabb_hit_top(...)` as value expressions for runtime map queries
 - `button_pressed(...)` as a value expression for joypad queries
 - `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` as tick-based input value expressions
 - `true` and `false`
@@ -166,6 +167,7 @@ Runtime calls:
 - `camera_span_has_tile(screenX, widthPx, row, tile)`
 - `camera_span_has_flags(screenX, widthPx, row, flags)`
 - `camera.AabbTiles(screenX, worldY, width, height, flags)`
+- `camera.AabbHitTop(screenX, worldY, width, height, flags)`
 - `sprite_width(name)`
 - `sprite.Set(id, x, y, tile, flags)`
 - `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])`
@@ -198,6 +200,8 @@ Runtime calls:
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite.Asset(...)`.
 
 `camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX`, `width`, `height`, and `flags` are compile-time values in this prototype; `worldY` can be a byte-backed runtime expression. `width` can use `sprite_width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
+
+`camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the top world-pixel Y of the first overlapped tile whose flags match, or `255` when there is no hit. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
@@ -319,6 +323,7 @@ Landed after the initial runner loop:
 - `world_tile_flags_at(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
 - `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.
 - `camera.AabbTiles(...)` reports collision for fixed-screen actors against the current camera view, including fine-scroll X alignment.
+- `camera.AabbHitTop(...)` reports the contacted tile's top world Y for a caller-defined camera-relative search AABB, using `255` as the no-hit sentinel.
 
 Landed after the playable-loop pass:
 
@@ -337,6 +342,11 @@ Landed after the Collision V1 pass:
 
 - The runner keeps the actor at a fixed screen X, derives collision X from the camera runtime through `camera.AabbTiles(...)`, derives collision Y from the actor's current screen Y, and probes generated world flags with the logical width from `sprite_width(mario_player)`.
 - Camera span collision and world-space `collision_aabb_tiles(...)` remain available, but the runner uses the camera-relative AABB helper so long maps stay aligned after the camera scrolls beyond the source-local byte range.
+
+Landed after the landing-query pass:
+
+- The runner uses `camera.AabbHitTop(...)` to query the top edge of the first solid tile in a caller-defined landing search window, so descending actors can snap to stacked or multi-tile solids without copying a ladder of one-pixel probes.
+- Landing policy remains source-owned: the runner still gates the query on downward velocity and calls `player.Land(...)` only when the query returns something other than `CollisionProbe.NoTileHit`.
 
 Landed after the NES portable spike:
 
@@ -359,5 +369,4 @@ Landed after the richer runner scene pass:
 
 The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The current Game Boy target backlog is the narrower stabilization work needed to keep runner-shaped behavior from looking more portable than it is:
 
-1. Add a reusable landing collision fact (#120). `collision_aabb_tiles(...)` and `camera.AabbTiles(...)` report overlap only; landing snap policy should stay in source, but samples should not need repeated tile-offset probe ladders to discover the contacted edge.
-2. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.
+1. Design logical palette resources (#121). `sprite.Draw(..., paletteSlot)` is already logical, but `palette.Set(...)` and `objectPalette.Set(...)` are still raw Game Boy setup calls.

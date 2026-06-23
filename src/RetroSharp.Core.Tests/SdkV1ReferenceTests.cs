@@ -61,6 +61,7 @@ public sealed class SdkV1ReferenceTests
         "world_tile_flags_at(worldX, worldY)",
         "collision_aabb_tiles(x, y, width, height, flags)",
         "camera.AabbTiles(screenX, worldY, width, height, flags)",
+        "camera.AabbHitTop(screenX, worldY, width, height, flags)",
         "hud.SetTile(mode, x, y, tile)",
     ];
 

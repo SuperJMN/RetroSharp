@@ -22,6 +22,9 @@ public static class Sdk2DOperationValidator
             case Sdk2DOperation.CameraAabbTiles cameraAabb:
                 ValidateCameraAabbTiles(capabilities, cameraAabb);
                 return;
+            case Sdk2DOperation.CameraAabbHitTop cameraAabb:
+                ValidateCameraAabbHitTop(capabilities, cameraAabb);
+                return;
             case Sdk2DOperation.DrawLogicalSprite draw:
                 ValidateDrawLogicalSprite(capabilities, draw);
                 return;
@@ -79,30 +82,63 @@ public static class Sdk2DOperationValidator
             throw new InvalidOperationException($"Target '{capabilities.Name}' does not support camera-relative AABB collision queries.");
         }
 
-        if (cameraAabb.ScreenX < 0 || cameraAabb.ScreenX >= capabilities.ScreenPixels.Width)
+        ValidateCameraAabbGeometry(
+            capabilities,
+            cameraAabb.ScreenX,
+            cameraAabb.Width,
+            cameraAabb.Height,
+            cameraAabb.WorldY,
+            cameraAabb.Flags);
+    }
+
+    private static void ValidateCameraAabbHitTop(Target2DCapabilities capabilities, Sdk2DOperation.CameraAabbHitTop cameraAabb)
+    {
+        if (!capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabbHitTop))
+        {
+            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support camera-relative AABB hit-top queries.");
+        }
+
+        ValidateCameraAabbGeometry(
+            capabilities,
+            cameraAabb.ScreenX,
+            cameraAabb.Width,
+            cameraAabb.Height,
+            cameraAabb.WorldY,
+            cameraAabb.Flags);
+    }
+
+    private static void ValidateCameraAabbGeometry(
+        Target2DCapabilities capabilities,
+        int screenX,
+        SdkAabbExtent width,
+        int height,
+        SdkByteExpression worldY,
+        WorldTileFlags flags)
+    {
+        if (screenX < 0 || screenX >= capabilities.ScreenPixels.Width)
         {
             throw new InvalidOperationException($"camera AABB screen X must be between 0 and {capabilities.ScreenPixels.Width - 1} for target '{capabilities.Name}'.");
         }
 
-        ValidateAabbWidth(capabilities, cameraAabb);
+        ValidateAabbWidth(capabilities, screenX, width);
 
-        if (cameraAabb.Height < 0 || cameraAabb.Height > 255)
+        if (height < 0 || height > 255)
         {
             throw new InvalidOperationException($"camera AABB height must be between 0 and 255 for target '{capabilities.Name}'.");
         }
 
-        ValidateByteExpression(cameraAabb.WorldY, "camera AABB world Y");
-        ValidateCollisionFlags(cameraAabb.Flags, "camera AABB flags");
+        ValidateByteExpression(worldY, "camera AABB world Y");
+        ValidateCollisionFlags(flags, "camera AABB flags");
     }
 
-    private static void ValidateAabbWidth(Target2DCapabilities capabilities, Sdk2DOperation.CameraAabbTiles cameraAabb)
+    private static void ValidateAabbWidth(Target2DCapabilities capabilities, int screenX, SdkAabbExtent width)
     {
-        switch (cameraAabb.Width)
+        switch (width)
         {
             case SdkAabbExtent.Constant constant when constant.Value < 0 || constant.Value > capabilities.ScreenPixels.Width:
                 throw new InvalidOperationException($"camera AABB width must be between 0 and {capabilities.ScreenPixels.Width} for target '{capabilities.Name}'.");
             case SdkAabbExtent.Constant constant:
-                if (cameraAabb.ScreenX + constant.Value > capabilities.ScreenPixels.Width)
+                if (screenX + constant.Value > capabilities.ScreenPixels.Width)
                 {
                     throw new InvalidOperationException($"camera AABB screen span must fit within target '{capabilities.Name}' visible width {capabilities.ScreenPixels.Width}.");
                 }
@@ -113,7 +149,7 @@ public static class Sdk2DOperationValidator
             case SdkAabbExtent.SpriteWidth:
                 throw new InvalidOperationException("camera AABB sprite width asset id must not be empty.");
             default:
-                throw new InvalidOperationException($"camera AABB width uses unsupported SDK extent '{cameraAabb.Width.GetType().Name}'.");
+                throw new InvalidOperationException($"camera AABB width uses unsupported SDK extent '{width.GetType().Name}'.");
         }
     }
 

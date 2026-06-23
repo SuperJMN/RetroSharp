@@ -112,21 +112,24 @@ Progress (2026-06-14):
   a broader intrinsic catalog.
 - Pending in the edited #106 slice: none known after PL-E1.
 - Active SDK v1 stabilization backlog after #106:
-  - #120: add a reusable tile-hit query/helper for landing resolution without owning physics.
   - #121: replace raw Game Boy palette setup with logical palette resources or an asset contract.
 - Camera-relative AABB decision implemented after #106: `camera.AabbTiles(...)` is a
   capability-gated SDK query for fixed-screen actors. Game Boy declares and lowers it through
   `Sdk2DOperation.CameraAabbTiles`; NES declares no collision-query support and rejects it.
+- Landing tile-hit decision implemented after #106: `camera.AabbHitTop(...)` is a
+  capability-gated SDK query that returns the top world-pixel Y of the first matching tile in a
+  caller-defined fixed-screen actor AABB, or `255` when none hit. Game Boy lowers it through
+  `Sdk2DOperation.CameraAabbHitTop`; NES rejects it explicitly until collision-query lowering
+  exists. The runner uses it to remove the old repeated tile-offset landing probe ladder while
+  keeping the downward-velocity gate and `player.Land(...)` policy in source.
 - Runner-shaped cross-target validation decision after #106: `CrossTargetScrollAcceptanceTests`
   includes an explicit NES diagnostic for camera-relative AABB collision instead of pretending the
   runner-shaped collision slice is portable today.
 
 Suggested next steps for the next agent, in order:
-1. If continuing framework stabilization, #120 is the next collision slice: expose a reusable
-   tile-hit or snapped-edge fact without moving landing policy into the SDK.
-2. Treat #121 as the palette/resource slice that can eventually remove raw palette setup from
+1. Treat #121 as the palette/resource slice that can eventually remove raw palette setup from
    target-acceptance samples.
-3. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
+2. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
    portable target selection, and the remaining intrinsic catalog before migrating more SDK calls.
 
 ## Game Boy Runner Lessons
@@ -138,7 +141,7 @@ Suggested next steps for the next agent, in order:
 - `sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
-- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; fixed-screen runner actors should use `camera.AabbTiles(...)` so X stays aligned with the visible camera after long scrolls.
+- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; fixed-screen runner actors should use `camera.AabbTiles(...)` for boolean overlap and `camera.AabbHitTop(...)` for landing tile-edge facts so X stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.

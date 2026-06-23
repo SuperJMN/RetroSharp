@@ -7,4 +7,5 @@ public enum CollisionQueryMode
     WorldTileFlags = 1,
     WorldAabb = 2,
     CameraRelativeAabb = 4,
+    CameraRelativeAabbHitTop = 8,
 }

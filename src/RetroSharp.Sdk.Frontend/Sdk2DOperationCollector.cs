@@ -92,6 +92,30 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
+    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(FunctionCall call)
+    {
+        SdkCallReader.RequireArity(call, 5);
+        var args = call.Parameters.ToList();
+        var screenX = ConstRange(args[0], 0, 255, "camera_aabb_hit_top argument 1");
+        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_hit_top argument 2");
+        var width = ReadAabbExtent(args[2], "camera_aabb_hit_top argument 3");
+        var height = ConstRange(args[3], 0, 255, "camera_aabb_hit_top argument 4");
+        var flags = (WorldTileFlags)ConstRange(
+            args[4],
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_aabb_hit_top argument 5");
+
+        return new Sdk2DOperation.CameraAabbHitTop(
+            WorldId: "default",
+            ScreenX: screenX,
+            WorldY: worldY,
+            WorldYOffset: worldYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
     public static SdkByteExpression ReadByteExpression(ExpressionSyntax expression, string context)
     {
         switch (expression)
@@ -452,6 +476,9 @@ public static class Sdk2DOperationCollector
                 case "camera_aabb_tiles":
                     CollectCameraAabbTiles(call);
                     break;
+                case "camera_aabb_hit_top":
+                    CollectCameraAabbHitTop(call);
+                    break;
                 default:
                     if (CollectUserValueFunction(call))
                     {
@@ -476,6 +503,11 @@ public static class Sdk2DOperationCollector
         private void CollectCameraAabbTiles(FunctionCall call)
         {
             operations.Add(ReadCameraAabbTiles(call));
+        }
+
+        private void CollectCameraAabbHitTop(FunctionCall call)
+        {
+            operations.Add(ReadCameraAabbHitTop(call));
         }
 
         private void CollectCallArguments(FunctionCall call)

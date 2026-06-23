@@ -112,6 +112,6 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 
 The sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scroll.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `map_stream_column(...)`, and `objectPalette.Set(...)`. It does not imply support for NES vertical camera movement, runtime nametable streaming, collision queries, runtime animation, or HUD APIs yet.
 
-Runner-shaped collision validation is represented by an explicit diagnostic test rather than a portable sample today: NES rejects `camera.AabbTiles(...)` with `Target 'nes' does not support camera-relative AABB collision queries.` until a collision-query lowering exists.
+Runner-shaped collision validation is represented by explicit diagnostic tests rather than a portable sample today: NES rejects `camera.AabbTiles(...)` with `Target 'nes' does not support camera-relative AABB collision queries.` and `camera.AabbHitTop(...)` with `Target 'nes' does not support camera-relative AABB hit-top queries.` until collision-query lowerings exist.
 
 Sample portability is tracked in `samples/manifest.json`. The NES drawing sample is classified as `target-intrinsic`, not as a portable SDK sample, because it demonstrates raw static `tilemap_*` setup calls for this target.

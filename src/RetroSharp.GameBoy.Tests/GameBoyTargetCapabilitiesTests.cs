@@ -38,6 +38,7 @@ public sealed class GameBoyTargetCapabilitiesTests
         Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.WorldTileFlags));
         Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.WorldAabb));
         Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabbHitTop));
     }
 
     [Fact]

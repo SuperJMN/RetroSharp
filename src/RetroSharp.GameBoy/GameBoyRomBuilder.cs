@@ -2659,6 +2659,9 @@ internal sealed class GameBoyRuntimeCompiler
             case "camera_aabb_tiles":
                 EmitCameraAabbTiles(ConsumeSdkOperation<Sdk2DOperation.CameraAabbTiles>(call.Name));
                 break;
+            case "camera_aabb_hit_top":
+                EmitCameraAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraAabbHitTop>(call.Name));
+                break;
             case "button_pressed":
                 EmitButtonPressed(call);
                 break;
@@ -2889,6 +2892,17 @@ internal sealed class GameBoyRuntimeCompiler
         builder.ShiftRightLogicalA();
     }
 
+    private void EmitWorldPixelTileTop(SdkByteExpression expression, int offset)
+    {
+        EmitSdkByteExpressionToA(expression);
+        if (offset != 0)
+        {
+            builder.AddAImmediate(offset);
+        }
+
+        builder.AndImmediate(0xF8);
+    }
+
     private void EmitCollisionAabbTiles(FunctionCall call)
     {
         GameBoyVideoProgram.RequireArity(call, 5);
@@ -3005,6 +3019,50 @@ internal sealed class GameBoyRuntimeCompiler
         builder.JumpAbsolute(endLabel);
         builder.Label(foundLabel);
         builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    internal void EmitCameraAabbHitTop(Sdk2DOperation.CameraAabbHitTop operation)
+    {
+        if (operation.WorldId != "default")
+        {
+            throw new InvalidOperationException($"Unsupported Game Boy world id '{operation.WorldId}'.");
+        }
+
+        var callName = "camera_aabb_hit_top";
+        var config = EnsureCameraConfigured(callName);
+        _ = WorldMapForFlagQuery(callName);
+        var width = CameraAabbWidth(operation.Width);
+        var flags = (int)operation.Flags;
+        if (width == 0 || operation.Height == 0 || flags == 0)
+        {
+            builder.LoadAImmediate(255);
+            return;
+        }
+
+        if (operation.ScreenX + width > 160)
+        {
+            throw new InvalidOperationException("camera_aabb_hit_top screen span must fit within the visible Game Boy width.");
+        }
+
+        var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
+        foreach (var yOffset in AabbSampleOffsets(operation.Height))
+        {
+            foreach (var xOffset in AabbSampleOffsets(width))
+            {
+                var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
+                var hitTopOffset = operation.WorldYOffset + yOffset;
+                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, hitTopOffset, config, callName);
+                builder.AndImmediate(flags);
+                builder.CompareImmediate(0);
+                builder.JumpAbsolute(0xCA, nextProbeLabel); // JP Z,nextProbeLabel
+                EmitWorldPixelTileTop(operation.WorldY, hitTopOffset);
+                builder.JumpAbsolute(endLabel);
+                builder.Label(nextProbeLabel);
+            }
+        }
+
+        builder.LoadAImmediate(255);
         builder.Label(endLabel);
     }
 
