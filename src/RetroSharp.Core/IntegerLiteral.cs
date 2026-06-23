@@ -72,6 +72,30 @@ public static class IntegerLiteral
         return value;
     }
 
+    // Returns the explicit width-suffix type ("u8"/"i8"/"u16"/"i16") of a valid
+    // integer literal, when present. Used to make width suffixes load-bearing for
+    // type inference instead of erasing them.
+    public static bool TryGetSuffixType(string? text, out string suffixType)
+    {
+        suffixType = string.Empty;
+        if (!TryParse(text, out _))
+        {
+            return false;
+        }
+
+        var span = text.AsSpan().Trim();
+        foreach (var suffix in new[] { "u16", "i16", "u8", "i8" })
+        {
+            if (span.EndsWith(suffix.AsSpan(), StringComparison.Ordinal))
+            {
+                suffixType = suffix;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static ReadOnlySpan<char> StripSuffix(ReadOnlySpan<char> span)
     {
         foreach (var suffix in new[] { "u16", "i16", "u8", "i8" })

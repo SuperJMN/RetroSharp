@@ -83,10 +83,16 @@ public class SomeParser
             ? Maybe.From(typeContext.GetText())
             : Maybe<string>.None;
         var name = constContext.IDENTIFIER().GetText();
+        var value = ParseExpression(constContext.expression());
+        if (type.HasNoValue && TryInferLiteralSuffixType(value, out var suffixType))
+        {
+            type = Maybe.From(suffixType);
+        }
+
         return new ConstDeclarationSyntax(
             type,
             name,
-            ParseExpression(constContext.expression()));
+            value);
     }
 
     private EnumSyntax ParseEnum(EnumDeclarationContext enumContext)
@@ -405,12 +411,32 @@ public class SomeParser
 
     private DeclarationSyntax ParseLetDeclaration(LetDeclarationContext letDeclaration)
     {
+        var expression = ParseExpression(letDeclaration.expression());
+        var type = TryInferLiteralSuffixType(expression, out var suffixType) ? suffixType : "u8";
         return new DeclarationSyntax(
-            "u8",
+            type,
             letDeclaration.IDENTIFIER().GetText(),
             Maybe<ExpressionSyntax>.None,
-            Maybe.From(ParseExpression(letDeclaration.expression())),
+            Maybe.From(expression),
             true);
+    }
+
+    // Makes integer-literal width suffixes load-bearing: an unannotated `let` or
+    // `const` initialized with a single suffixed integer literal (optionally signed)
+    // infers its width from the suffix instead of defaulting to u8. Unsuffixed
+    // literals keep the zero-cost u8 default.
+    private static bool TryInferLiteralSuffixType(ExpressionSyntax expression, out string type)
+    {
+        switch (expression)
+        {
+            case ConstantSyntax constant:
+                return IntegerLiteral.TryGetSuffixType(Convert.ToString(constant.Value), out type);
+            case UnaryExpressionSyntax { OperatorSymbol: "-" or "+", Operand: var operand }:
+                return TryInferLiteralSuffixType(operand, out type);
+            default:
+                type = "u8";
+                return false;
+        }
     }
 
     private StatementSyntax ParseReturn(ReturnStatementContext returnStatement)

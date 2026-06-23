@@ -150,6 +150,26 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Width_suffix_widens_unannotated_let_and_const_inference()
+    {
+        // A u16 suffix makes the declaration u16, so a value above the u8 range is accepted.
+        var input = "const Big = 1000u16; void main(){ let distance = 300u16; let near = 5u8; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Unsuffixed_let_keeps_zero_cost_u8_default_and_rejects_overflow()
+    {
+        Errors("void main(){ let value = 300; }").Should().ContainMatch("*does not fit*u8*");
+    }
+
+    [Fact]
+    public void Width_suffix_still_enforces_its_own_range()
+    {
+        Errors("void main(){ let value = 256u8; }").Should().ContainMatch("*does not fit*u8*");
+    }
+
+    [Fact]
     public void Local_const_identifier_resolves_in_block_scope()
     {
         var input = "void main(){ const u8 StartX = 40; const u8 Copy = StartX; u8 x; x = Copy; }";

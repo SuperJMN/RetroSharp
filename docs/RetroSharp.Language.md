@@ -45,7 +45,7 @@ Literals:
 - Minimize implicit promotions; require explicit casts when width/sign changes.
 - Explicit casts use `(type)expr`. In the current cartridge targets they are validated against byte-backed local types and then lower as zero-cost expression markers: they do not add helper calls, temporaries, sign extension, or truncation code in this prototype.
 - Casting a compile-time integer constant (or negated constant) to `u8`/`i8`/`u16`/`i16` is a semantic error when the value does not fit the target type's bit width (allowed `-128..255` for 8-bit, `-32768..65535` for 16-bit). Bit-pattern casts that fit the width, such as `(i8)200`, remain allowed; runtime-valued casts are unchecked.
-- Initializing a declared integer local, `let`, or `const` with a compile-time integer constant uses the same bit-width check. `let` and untyped `const` still default to `u8` in the current prototype; wider inference and signedness-aware diagnostics remain future language work.
+- Initializing a declared integer local, `let`, or `const` with a compile-time integer constant uses the same bit-width check. An unannotated `let` or `const` initialized with a single width-suffixed integer literal (optionally signed), such as `let distance = 300u16;` or `const Big = 1000u16;`, infers its type from the suffix; the suffixed value is still range-checked against that width. Without a suffix, `let` and untyped `const` keep the zero-cost `u8` default, so `let value = 300;` is still rejected. Signedness-aware diagnostics for non-constant expressions remain future language work.
 
 ---
 
