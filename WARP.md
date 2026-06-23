@@ -25,7 +25,7 @@ Common commands
 - Build sample cartridges
   - NES: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/nes-drawing/drawing.nes samples/nes-drawing/drawing.rs
   - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-drawing/drawing.gb samples/gameboy-drawing/drawing.rs
-  - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-runner/runner.gb samples/gameboy-runner/runner.rs
+  - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/runner/runner.gb samples/runner/runner.rs
 - Regenerate tracked Game Boy sample ROMs
   - tools/gameboy/generate_sample_roms.py --dry-run
   - tools/gameboy/generate_sample_roms.py

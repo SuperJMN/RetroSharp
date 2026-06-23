@@ -339,7 +339,7 @@ internal sealed class GameBoyVideoProgram
         }
 
         var relativePath = StringArg(call, 1);
-        var path = ResolveAssetPath(relativePath);
+        var path = PlatformAssetPathResolver.ResolvePngVariant(ResolveAssetPath(relativePath), "gb");
         var frameWidth = count == 4 ? ConstArg(call, 2, 1, 160) : (int?)null;
         var frameHeight = count == 4 ? ConstArg(call, 3, 1, 160) : (int?)null;
         var asset = GameBoySpriteAssetCompiler.CompileFromFile(name, path, FirstSpriteTile + spriteTileCount, frameWidth, frameHeight);

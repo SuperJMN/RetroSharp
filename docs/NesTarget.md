@@ -2,7 +2,7 @@
 
 Status: experimental, intentionally narrow.
 
-The NES target currently compiles a constrained static drawing subset directly to an iNES ROM and supports the first tick-based input, logical sprite, and horizontal camera runtime helpers. It does not yet support vertical camera movement, full Game Boy runner parity, or frame-by-frame background streaming.
+The NES target currently compiles a constrained static drawing subset directly to an iNES ROM and supports the first tick-based input, logical sprite, and horizontal camera runtime helpers. It can stream horizontal background columns across a two-nametable buffer, but it does not yet support vertical camera movement, full Game Boy runner parity, collision queries, HUD, or per-region background attribute streaming.
 
 See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics, and `Portable2DSdkV1.md` for the current SDK v1 reference.
 
@@ -16,9 +16,9 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Screen pixels | 256x240 |
 | Visible tile grid | 32x30 |
 | Tile size | 8x8 |
-| Background buffer | 32x30 tiles for the current static drawing path |
+| Background buffer | 64x30 tiles across two horizontal nametables |
 | Fine scroll | Horizontal only |
-| Background tile write budget | 0 runtime tile writes per frame |
+| Background tile write budget | 30 runtime tile writes per frame |
 | Attribute write budget | 0 runtime attribute writes per frame |
 | Hardware sprites | 64 total, 8 per scanline |
 | Sprite size modes | 8x8 and 8x16 hardware modes |
@@ -29,7 +29,7 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Collision queries | None declared portable support yet |
 | BGM formats | None yet |
 
-The descriptor records NES sprite, palette, and horizontal fine-scroll support. Runtime sprite lowering is implemented for the current JSON logical sprite spike through `Sdk2DOperation.DrawLogicalSprite`. The current camera path can update horizontal scroll but cannot stream new nametable columns yet, and collision queries are not lowered yet. Portable SDK operations that need vertical scroll, per-frame nametable writes, attribute writes, collision queries, or HUD support must fail capability checks before reaching NES backend code. NES compilation now runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement, camera-relative AABB collision, or HUD tiles) are rejected by the same capability checks the Game Boy target uses. Horizontal `camera.SetPosition(x, 0)` validates because NES fine-scrolls within its pre-loaded nametable without streaming background tiles.
+The descriptor records NES sprite, palette, horizontal fine-scroll, and horizontal background-column streaming support. Runtime sprite lowering is implemented for logical PNG sprite sheets and transitional JSON assets through `Sdk2DOperation.DrawLogicalSprite`. The camera path updates horizontal scroll and streams the next world-map column into the off-screen nametable as the camera crosses 8-pixel tile boundaries. Collision queries are not lowered yet. Portable SDK operations that need vertical scroll, attribute writes, collision queries, or HUD support must fail capability checks before reaching NES backend code. NES compilation now runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement, camera-relative AABB collision, or HUD tiles) are rejected by the same capability checks the Game Boy target uses.
 
 NES also runs the shared `SdkAudioOperationCollector` and validates audio operations through `SdkAudioOperationValidator` against `NesTarget.AudioCapabilities`. `music.Play(...)` currently fails with `Target 'nes' does not support BGM playback yet.` until an NES music format and runtime lowering are implemented.
 
@@ -49,7 +49,7 @@ Static setup calls:
 
 Helper functions can group those calls; parameters are substituted inline before lowering. Helpers whose body is exactly one `return expr;` can also be used as value expressions and are expanded before NES code generation. Expression-bodied helpers written as `Ret name(args) => expr;` normalize to that same single-return shape. Named arguments are matched to helper parameters, and default parameter values are filled at the call site before lowering.
 
-The current target stores one visible 32x30 nametable shape and uploads it during startup. `tilemap.Fill(...)` rejects rectangles outside that visible area.
+The current target uploads two horizontal nametables during startup for SDK world maps. Raw `tilemap.Fill(...)` remains a visible-screen setup primitive and rejects rectangles outside the 32x30 visible area.
 
 ## Supported Runtime API
 
@@ -94,17 +94,17 @@ Logical `&&` and `||` in conditions lower to short-circuit branches using the sa
 
 Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct 6502 branches using the same condition lowering as `if`. Only the selected branch expression is emitted on each path, then the selected byte is stored by the surrounding assignment or call argument. There is no helper call, hidden zero-page local, or eager evaluation of both values.
 
-`sprite.Asset(name, path)` currently loads a JSON asset with a `platforms.nes.frames` variant. Each frame is an array of rows using NES color indexes `0`, `1`, `2`, and `3`. The compiler pads frames to 8x8 hardware cells, writes their tiles into CHR ROM starting at tile `6`, and rejects assets that need more than 64 hardware sprites or exceed the one-byte pattern-table tile index range.
+`sprite.Asset(name, path[, frameWidth, frameHeight])` loads a logical sprite asset. PNG sheets require explicit frame dimensions and are quantized into NES sprite colors where transparent pixels become color `0` and opaque pixels become tones `1..3`; JSON assets remain supported through `platforms.nes.frames`, with rows using NES color indexes `0`, `1`, `2`, and `3`. For PNG paths, the compiler first looks for a platform variant next to the requested file: `Mario.png` resolves to `Mario.nes.png`/`Mario.NES.png` when present, then falls back to `Mario.png`. If the source still names another platform variant such as `Mario.gb.png`, NES strips that suffix while looking for the matching NES variant. The compiler pads frames to 8x8 hardware cells, writes their tiles into CHR ROM starting at tile `6`, and rejects assets that need more than 64 hardware sprites or exceed the one-byte pattern-table tile index range.
 
 `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite through the NES OAM shadow page and performs OAM DMA. `x`, `y`, `frame`, and `flipX` can be byte-backed constants or storage locations in the shared SDK operation model. `flipX` is portable boolean data, not raw OAM flags. `paletteSlot` remains a compile-time logical sprite palette slot and must fit the NES sprite palette slots `0..3`.
 
 `palette.Background(slot, c0, c1, c2, c3)` and `palette.Sprite(slot, c0, c1, c2, c3)` declare logical palette slots. NES supports background slots `0..3` and sprite slots `0..3`; the lowering writes background slots to palette indexes `0..15` and sprite slots to indexes `16..31`. Color values are NES palette indexes `0..63`. Raw `palette.Set(index, color)` remains available for target-intrinsic samples.
 
-`world.Column(...)`, `world.Flags(...)`, and `world.Map(width, streamY, height)` build the initial visible nametable from unified world resources. In this spike, `width` must fit the visible 32-column nametable because runtime column streaming is not implemented.
+`world.Column(...)`, `world.Flags(...)`, and `world.Map(width, streamY, height)` build the active `WorldMap2D` from unified world resources and seed the initial two-nametable horizontal buffer. In this spike, `width` must fit the current 64-column NES streaming buffer. Runtime camera movement streams the next source column into the off-screen nametable when the horizontal camera crosses an 8-pixel tile boundary.
 
-`world.Load(path)` imports a Tiled map through the same target-neutral `RetroSharp.Core.Sdk.Tiled.LogicalTiledMap` the Game Boy target consumes. NES owns its lowering: it decodes the tileset image, quantizes it into the shared canonical 8x8 four-tone patterns, encodes them into NES 2bpp planar CHR tiles, deduplicates them, and writes the visible nametable plus a `WorldMap2D`. Generated background tiles share the pattern table with sprites through the same CHR tile allocator. Current limitations: the map must fit the visible 32x30 nametable (no runtime streaming), and the four canonical tones map to a single fixed grayscale background palette (per-region attribute palettes are future work). The same `world.Load("level.tmj")` source therefore lowers on both Game Boy and NES.
+`world.Load(path)` imports a Tiled map through the same target-neutral `RetroSharp.Core.Sdk.Tiled.LogicalTiledMap` the Game Boy target consumes. NES owns its lowering: it decodes the tileset image, quantizes it into the shared canonical 8x8 four-tone patterns, encodes them into NES 2bpp planar CHR tiles, deduplicates them, and writes the initial two-nametable buffer plus a `WorldMap2D`. Generated background tiles share the pattern table with sprites through the same CHR tile allocator. Current limitations: the map must fit the current 64-column horizontal streaming buffer and the visible 30-row height, and the four canonical tones map to a single fixed grayscale background palette (per-region attribute palettes are future work). The same `world.Load("level.tmj")` source therefore lowers on both Game Boy and NES when it stays inside those limits.
 
-`camera.Init(mapWidth, streamY, streamHeight)` enables the horizontal camera path for the current world map. `camera.SetPosition(x, 0)` stores the horizontal scroll byte, and `camera.Apply()` writes horizontal scroll followed by zero vertical scroll to `$2005`. Any non-zero or runtime Y position is rejected with a NES capability error until vertical movement and streaming have a budgeted lowering.
+`camera.Init(mapWidth, streamY, streamHeight)` enables the horizontal camera path for the current world map. `camera.SetPosition(x, 0)` stores the horizontal scroll byte and, for maps wider than 32 columns, streams the next source column into the two-nametable buffer during VBlank. `camera.Apply()` writes horizontal scroll followed by zero vertical scroll to `$2005`. Any non-zero or runtime Y position is rejected with a NES capability error until vertical movement and row streaming have a budgeted lowering.
 
 ## HUD Decision
 
@@ -116,7 +116,9 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.
 
-The sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scroll.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `map_stream_column(...)`, and `objectPalette.Set(...)`. It does not imply support for NES vertical camera movement, runtime nametable streaming, collision queries, runtime animation, or HUD APIs yet.
+`samples/runner/runner.nes.rs` is a NES acceptance slice for the runner path. It uses the same generic `assets/mario-player.png` source asset reference as the Game Boy runner, resolved to `assets/mario-player.nes.png` for NES, but it deliberately omits audio, runtime animation, and collision queries until those target capabilities exist.
+
+The cross-target sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scroll.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `map_stream_column(...)`, and `objectPalette.Set(...)`. It does not imply support for NES vertical camera movement, collision queries, runtime animation, or HUD APIs yet.
 
 Runner-shaped collision validation is represented by explicit diagnostic tests rather than a portable sample today: NES rejects `camera.AabbTiles(...)` with `Target 'nes' does not support camera-relative AABB collision queries.` and `camera.AabbHitTop(...)` with `Target 'nes' does not support camera-relative AABB hit-top queries.` until collision-query lowerings exist.
 

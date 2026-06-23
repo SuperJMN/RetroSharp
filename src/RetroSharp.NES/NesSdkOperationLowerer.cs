@@ -26,6 +26,9 @@ internal static class NesSdkOperationLowerer
             case Sdk2DOperation.DrawLogicalSprite draw:
                 compiler.EmitDrawLogicalSprite(draw);
                 break;
+            case Sdk2DOperation.StreamMapColumn column:
+                compiler.EmitStreamMapColumn(column);
+                break;
             default:
                 throw new NotSupportedException($"NES SDK lowering does not support {operation.GetType().Name} yet.");
         }

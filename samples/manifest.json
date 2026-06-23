@@ -19,38 +19,44 @@
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-runner/runner.rs",
-      "readme": "samples/gameboy-runner/README.md",
+      "path": "samples/runner/runner.rs",
+      "readme": "samples/runner/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-runner/diagnostics/00-static-background.rs",
-      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "path": "samples/runner/runner.nes.rs",
+      "readme": "samples/runner/README.md",
+      "layer": "target-acceptance",
+      "targets": ["nes"]
+    },
+    {
+      "path": "samples/runner/diagnostics/00-static-background.rs",
+      "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-runner/diagnostics/01-world-platforms.rs",
-      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "path": "samples/runner/diagnostics/01-world-platforms.rs",
+      "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-runner/diagnostics/02-flat-ground-camera.rs",
-      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "path": "samples/runner/diagnostics/02-flat-ground-camera.rs",
+      "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-runner/diagnostics/02-player-camera.rs",
-      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "path": "samples/runner/diagnostics/02-player-camera.rs",
+      "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-runner/diagnostics/03-enemy-sprites.rs",
-      "readme": "samples/gameboy-runner/diagnostics/README.md",
+      "path": "samples/runner/diagnostics/03-enemy-sprites.rs",
+      "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },

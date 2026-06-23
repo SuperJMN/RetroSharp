@@ -83,8 +83,8 @@ Build the Game Boy runner sample from source:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/gameboy-runner/runner.gb \
-  samples/gameboy-runner/runner.rs
+  --out samples/runner/runner.gb \
+  samples/runner/runner.rs
 ```
 
 Build the first cross-target camera sample for both cartridge targets:

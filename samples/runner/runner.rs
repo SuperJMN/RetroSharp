@@ -206,7 +206,7 @@ void setup_video() {
     video.Init();
     palette.Background(0, 0, 1, 2, 3);
     palette.Sprite(0, 0, 0, 1, 3);
-    sprite.Asset(mario_player, "assets/mario-player.gb.png", 18, 32);
+    sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
     animation.Clip(run, 1, 6, 6, 6);
     return;
 }

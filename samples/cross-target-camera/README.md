@@ -23,6 +23,6 @@ The sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scr
 Current unsupported optional features:
 
 - NES accepts only horizontal `camera.SetPosition(x, 0)` in this spike; vertical camera movement is a capability error.
-- NES seeds the visible nametable from `world.Map(...)` but does not stream new columns or rows at runtime yet.
+- NES seeds a two-nametable horizontal buffer from `world.Map(...)` and streams new columns at runtime; vertical row streaming is not supported yet.
 - NES `sprite.Draw(...)` accepts byte-backed frame and flip operands; palette slot remains a compile-time logical slot.
 - This sample does not use collision queries, runtime animation, or HUD APIs; those remain separate roadmap items.

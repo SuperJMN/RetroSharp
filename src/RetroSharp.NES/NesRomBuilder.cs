@@ -23,6 +23,7 @@ internal static class NesRomBuilder
         rom[3] = 0x1A;
         rom[4] = 1;
         rom[5] = 1;
+        rom[6] = 0x01;
 
         prg.CopyTo(rom, 16);
         chr.CopyTo(rom, 16 + PrgRomSize);
@@ -47,7 +48,7 @@ internal static class NesRomBuilder
         EmitWaitVBlank(builder, "vblank1");
         EmitWaitVBlank(builder, "vblank2");
         EmitPaletteUpload(builder);
-        EmitNameTableUpload(builder);
+        EmitNameTableUpload(builder, program.NameTable.Length);
 
         var runtimeCompiler = new NesRuntimeCompiler(builder, program);
         runtimeCompiler.EmitInitialization();
@@ -68,6 +69,7 @@ internal static class NesRomBuilder
         builder.Emit(program.Palette);
         builder.Label("nametable");
         builder.Emit(program.NameTable);
+        EmitWorldMapRows(builder, program.WorldMap);
 
         var prg = new byte[PrgRomSize];
         var code = builder.Build();
@@ -106,7 +108,7 @@ internal static class NesRomBuilder
         builder.BranchRelative(0xD0, "palette_loop"); // BNE palette_loop
     }
 
-    private static void EmitNameTableUpload(PrgBuilder builder)
+    private static void EmitNameTableUpload(PrgBuilder builder, int byteCount)
     {
         builder.Emit(0xAD, 0x02, 0x20);             // LDA $2002
         builder.Emit(0xA9, 0x20);                   // LDA #$20
@@ -114,7 +116,12 @@ internal static class NesRomBuilder
         builder.Emit(0xA9, 0x00);                   // LDA #$00
         builder.Emit(0x8D, 0x06, 0x20);             // STA $2006
 
-        for (var page = 0; page < 4; page++)
+        if (byteCount % 256 != 0)
+        {
+            throw new InvalidOperationException("NES nametable upload size must be page-aligned.");
+        }
+
+        for (var page = 0; page < byteCount / 256; page++)
         {
             builder.Emit(0xA2, 0x00);               // LDX #$00
             var label = $"nametable_loop_{page}";
@@ -125,6 +132,31 @@ internal static class NesRomBuilder
             builder.BranchRelative(0xD0, label);    // BNE label
         }
     }
+
+    private static void EmitWorldMapRows(PrgBuilder builder, WorldMap2D? worldMap)
+    {
+        if (worldMap is null)
+        {
+            return;
+        }
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            builder.Label(WorldMapRowLabel(row));
+            for (var column = 0; column < worldMap.Width; column++)
+            {
+                var tileId = worldMap.TileIdAt(column, row);
+                if (tileId is < 0 or > 255)
+                {
+                    throw new InvalidOperationException("NES world map tile ids must fit one byte.");
+                }
+
+                builder.Emit((byte)tileId);
+            }
+        }
+    }
+
+    internal static string WorldMapRowLabel(int row) => $"world_map_row_{row}";
 
     private static byte[] BuildChrRom(NesVideoProgram program)
     {
@@ -209,7 +241,10 @@ internal sealed class NesRuntimeCompiler
     private const byte FirstVariableAddress = 0x00;
     private const byte RuntimeReservedStateAddress = 0xE0;
     private const byte CameraXAddress = 0xE0;
-    private const byte SpriteFrameScratchAddress = 0xE1;
+    private const byte CameraTileColumnAddress = 0xE1;
+    private const byte CameraTargetColumnAddress = 0xE2;
+    private const byte CameraSourceColumnAddress = 0xE3;
+    private const byte SpriteFrameScratchAddress = 0xE4;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -259,7 +294,7 @@ internal sealed class NesRuntimeCompiler
     private readonly Stack<LoopTarget> loopTargets = [];
     private byte nextVariableAddress = FirstVariableAddress;
     private int nextHardwareSprite;
-    private bool cameraConfigured;
+    private NesCameraConfig? cameraConfig;
 
     public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program)
     {
@@ -283,6 +318,10 @@ internal sealed class NesRuntimeCompiler
     {
         builder.LoadAImmediate(0);
         builder.StoreAZeroPage(CameraXAddress);
+        builder.StoreAZeroPage(CameraTargetColumnAddress);
+        builder.StoreAZeroPage(CameraSourceColumnAddress);
+        builder.LoadAImmediate(0xFF);
+        builder.StoreAZeroPage(CameraTileColumnAddress);
     }
 
     private void EmitInputStateInitialization()
@@ -785,11 +824,19 @@ internal sealed class NesRuntimeCompiler
             case "world_flags":
             case "world_map":
                 break;
+            case "map_stream_column":
+                EmitSdkOperation(Sdk2DOperationCollector.ReadStreamMapColumn(call));
+                break;
             case "world_load":
                 NesVideoProgram.RequireArity(call, 1);
                 break;
             case "sprite_asset":
-                NesVideoProgram.RequireArity(call, 2);
+                var count = call.Parameters.Count();
+                if (count is not 2 and not 4)
+                {
+                    throw new InvalidOperationException($"sprite_asset expects 2 or 4 arguments, got {count}.");
+                }
+
                 break;
             case "music_asset":
                 NesVideoProgram.RequireArity(call, 2);
@@ -1350,9 +1397,9 @@ internal sealed class NesRuntimeCompiler
         var worldMap = program.WorldMap
                        ?? throw new InvalidOperationException("camera_init requires world_map(...) data for the NES target.");
         var mapWidth = NesVideoProgram.ConstValue(call.Parameters.ElementAt(0), "camera_init argument 1");
-        if (mapWidth is < 1 or > 32)
+        if (mapWidth is < 1 or > 64)
         {
-            throw new InvalidOperationException("NES camera_init map width must fit the visible 32-column nametable until runtime streaming lands.");
+            throw new InvalidOperationException("NES camera_init map width must fit the current two-nametable 64-column horizontal streaming buffer.");
         }
 
         if (mapWidth > worldMap.Width)
@@ -1372,19 +1419,27 @@ internal sealed class NesRuntimeCompiler
             throw new InvalidOperationException("camera_init stream area must fit within the NES visible nametable height.");
         }
 
-        cameraConfigured = true;
+        cameraConfig = new NesCameraConfig(mapWidth, streamY, height);
         builder.LoadAImmediate(0);
         builder.StoreAZeroPage(CameraXAddress);
+        builder.StoreAZeroPage(CameraTargetColumnAddress);
+        builder.StoreAZeroPage(CameraSourceColumnAddress);
+        builder.LoadAImmediate(0xFF);
+        builder.StoreAZeroPage(CameraTileColumnAddress);
     }
 
     internal void EmitSetCameraPosition(Sdk2DOperation.SetCameraPosition operation)
     {
-        EnsureCameraConfigured("camera_set_position");
+        var config = EnsureCameraConfigured("camera_set_position");
 
         // The shared validator rejects any non-zero vertical axis for NES
         // (horizontal-only fine scroll), so only the X position is applied here.
         EmitSdkByteExpressionToA(operation.X);
         builder.StoreAZeroPage(CameraXAddress);
+        if (config.MapWidth > 32)
+        {
+            EmitStreamColumnForCameraPosition(config);
+        }
     }
 
     internal void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)
@@ -1413,12 +1468,118 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
-    private void EnsureCameraConfigured(string callName)
+    internal void EmitStreamMapColumn(Sdk2DOperation.StreamMapColumn operation)
     {
-        if (!cameraConfigured)
+        var worldMap = program.WorldMap
+                       ?? throw new InvalidOperationException("map_stream_column requires world_map(...) data for the NES target.");
+        var y = CheckedRange(operation.Y, 0, 29, "map_stream_column argument 3");
+        var height = CheckedRange(operation.Height, 1, worldMap.Height, "map_stream_column argument 4");
+        if (y + height > 30)
+        {
+            throw new InvalidOperationException("map_stream_column stream area must fit within the NES visible nametable height.");
+        }
+
+        Sdk2DOperationValidator.Validate(
+            NesTarget.Capabilities,
+            new Sdk2DOperation.StreamMapColumn(TargetColumn: 0, SourceColumn: 0, Y: y, Height: height));
+
+        EmitSdkByteExpressionToA(operation.TargetColumn);
+        builder.StoreAZeroPage(CameraTargetColumnAddress);
+        EmitSdkByteExpressionToA(operation.SourceColumn);
+        builder.StoreAZeroPage(CameraSourceColumnAddress);
+        EmitWaitFrame();
+        EmitStreamColumnFromAddresses(new NesCameraConfig(worldMap.Width, y, height));
+    }
+
+    private void EmitStreamColumnForCameraPosition(NesCameraConfig config)
+    {
+        var endLabel = builder.CreateLabel("nes_camera_stream_end");
+        var changedLabel = builder.CreateLabel("nes_camera_stream_changed");
+        var noWrapLabel = builder.CreateLabel("nes_camera_stream_no_wrap");
+
+        builder.LoadAZeroPage(CameraXAddress);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.CompareZeroPage(CameraTileColumnAddress);
+        builder.BranchRelative(0xD0, changedLabel); // BNE changedLabel
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(changedLabel);
+        builder.StoreAZeroPage(CameraTileColumnAddress);
+
+        builder.ClearCarry();
+        builder.AddImmediate(32);
+        builder.StoreAZeroPage(CameraTargetColumnAddress);
+        builder.StoreAZeroPage(CameraSourceColumnAddress);
+        builder.CompareImmediate(config.MapWidth);
+        builder.BranchRelative(0x90, noWrapLabel);  // BCC noWrapLabel
+        builder.SetCarry();
+        builder.SubtractImmediate(config.MapWidth);
+        builder.StoreAZeroPage(CameraSourceColumnAddress);
+
+        builder.Label(noWrapLabel);
+        EmitWaitFrame();
+        EmitStreamColumnFromAddresses(config);
+        builder.Label(endLabel);
+    }
+
+    private void EmitStreamColumnFromAddresses(NesCameraConfig config)
+    {
+        Sdk2DOperationValidator.Validate(
+            NesTarget.Capabilities,
+            new Sdk2DOperation.StreamMapColumn(TargetColumn: 0, SourceColumn: 0, Y: config.StreamY, Height: config.StreamHeight));
+
+        builder.LoadAAbsolute(0x2002);              // reset PPU address latch
+        for (var row = 0; row < config.StreamHeight; row++)
+        {
+            EmitStreamColumnRow(row, config.StreamY + row);
+        }
+    }
+
+    private void EmitStreamColumnRow(int sourceRow, int targetY)
+    {
+        var rightNameTableLabel = builder.CreateLabel("nes_stream_right_nt");
+        var writeTileLabel = builder.CreateLabel("nes_stream_write_tile");
+        var rowAddress = 0x2000 + targetY * 32;
+
+        builder.LoadAZeroPage(CameraTargetColumnAddress);
+        builder.CompareImmediate(32);
+        builder.BranchRelative(0xB0, rightNameTableLabel); // BCS rightNameTableLabel
+
+        builder.LoadAImmediate(rowAddress >> 8);
+        builder.StoreAAbsolute(0x2006);
+        builder.LoadAZeroPage(CameraTargetColumnAddress);
+        builder.ClearCarry();
+        builder.AddImmediate(rowAddress & 0xFF);
+        builder.StoreAAbsolute(0x2006);
+        builder.JumpAbsolute(writeTileLabel);
+
+        builder.Label(rightNameTableLabel);
+        builder.LoadAImmediate((rowAddress >> 8) + 4);
+        builder.StoreAAbsolute(0x2006);
+        builder.LoadAZeroPage(CameraTargetColumnAddress);
+        builder.SetCarry();
+        builder.SubtractImmediate(32);
+        builder.ClearCarry();
+        builder.AddImmediate(rowAddress & 0xFF);
+        builder.StoreAAbsolute(0x2006);
+
+        builder.Label(writeTileLabel);
+        builder.LoadAZeroPage(CameraSourceColumnAddress);
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowLabel(sourceRow));
+        builder.StoreAAbsolute(0x2007);
+    }
+
+    private NesCameraConfig EnsureCameraConfigured(string callName)
+    {
+        if (cameraConfig is not { } config)
         {
             throw new InvalidOperationException($"{callName} requires camera_init(...) to be emitted first.");
         }
+
+        return config;
     }
 
     internal void EmitDrawLogicalSprite(Sdk2DOperation.DrawLogicalSprite operation)
@@ -2082,6 +2243,8 @@ internal sealed class NesRuntimeCompiler
 
     private readonly record struct NesButton(string Name, byte SnapshotMask, byte HoldTicksAddress);
 
+    private readonly record struct NesCameraConfig(int MapWidth, int StreamY, int StreamHeight);
+
     private readonly record struct LoopTarget(string BreakLabel, string ContinueLabel);
 }
 
@@ -2132,6 +2295,8 @@ internal sealed class PrgBuilder
 
     public void CompareImmediate(int value) => Emit(0xC9, CheckedByte(value));
 
+    public void CompareZeroPage(byte address) => Emit(0xC5, address);
+
     public void ClearCarry() => Emit(0x18);
 
     public void SetCarry() => Emit(0x38);
@@ -2149,6 +2314,8 @@ internal sealed class PrgBuilder
     public void IncrementX() => Emit(0xE8);
 
     public void TransferAToX() => Emit(0xAA);
+
+    public void ShiftRightA() => Emit(0x4A);
 
     public void LdaAbsoluteX(string label, int addend = 0)
     {

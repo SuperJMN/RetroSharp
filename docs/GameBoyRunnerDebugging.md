@@ -3,7 +3,7 @@
 Status: operational debugging guide.
 Last updated: 2026-06-13.
 
-Use this workflow when debugging Game Boy runtime behavior with `samples/gameboy-runner/runner.rs` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
+Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.rs` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
 ## Goal
 
@@ -36,8 +36,8 @@ Build only the runner when you need a quick local ROM:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/gameboy-runner/runner.gb \
-  samples/gameboy-runner/runner.rs
+  --out samples/runner/runner.gb \
+  samples/runner/runner.rs
 ```
 
 ## Reproduce
@@ -59,7 +59,7 @@ Preview the full runner directly with PyBoy:
 mkdir -p artifacts
 PYTHONPATH=/tmp/retrosharp-pyboy-site python3 - <<'PY'
 from pyboy import PyBoy
-pyboy = PyBoy("samples/gameboy-runner/runner.gb", window="null")
+pyboy = PyBoy("samples/runner/runner.gb", window="null")
 for _ in range(180):
     pyboy.tick()
 pyboy.screen.image.save("artifacts/runner-pyboy.png")
@@ -75,14 +75,14 @@ flatpak run --command=retroarch org.libretro.RetroArch \
   -L ~/.var/app/org.libretro.RetroArch/config/retroarch/cores/gambatte_libretro.so \
   --max-frames=180 --max-frames-ss \
   --max-frames-ss-path=artifacts/runner-retroarch.png \
-  samples/gameboy-runner/runner.gb
+  samples/runner/runner.gb
 ```
 
 Use original DMG hardware reports as backend evidence, not as sample quirks. Input bugs that reproduce only on hardware can still be target-runtime bugs, especially around `JOYP` row settling.
 
 ## Diagnostic Ladder
 
-The diagnostic samples under `samples/gameboy-runner/diagnostics/` isolate the runner in layers:
+The diagnostic samples under `samples/runner/diagnostics/` isolate the runner in layers:
 
 | Step | Source | Use it to isolate |
 | --- | --- | --- |
@@ -139,8 +139,8 @@ Use this table to avoid fixing the wrong layer:
 
 Prefer the smallest layer that explains the first failing diagnostic:
 
-- Source gameplay policy: `samples/gameboy-runner/runner.rs`.
-- Editable map data: `samples/gameboy-runner/maps/runner.tmj` and `samples/gameboy-runner/maps/Super Mario Land 2.tsx`.
+- Source gameplay policy: `samples/runner/runner.rs`.
+- Editable map data: `samples/runner/maps/runner.tmj` and `samples/runner/maps/Super Mario Land 2.tsx`.
 - Tiled import: `src/RetroSharp.GameBoy/GameBoyTiledMapImporter.cs`.
 - Game Boy ROM lowering/runtime: `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs` and nearby target code.
 - CLI/sample tooling: `src/RetroSharp.Cli/Program.cs` and `tools/gameboy/`.

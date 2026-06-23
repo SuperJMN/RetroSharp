@@ -21,7 +21,7 @@ def repo_root() -> Path:
 
 
 def variants(root: Path) -> list[Variant]:
-    sample = root / "samples" / "gameboy-runner"
+    sample = root / "samples" / "runner"
     diagnostics = sample / "diagnostics"
     return [
         Variant("00-static-background", diagnostics / "00-static-background.rs", ("idle",)),

@@ -68,7 +68,7 @@ __pycache__/
 *.py[cod]
 
 # Generated emulator screenshots
-samples/gameboy-runner/*.png
+samples/runner/*.png
 
 # ASP.NET Scaffolding
 ScaffoldingReadMe.txt

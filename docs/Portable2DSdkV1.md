@@ -92,6 +92,8 @@ Targets may lower camera movement differently. The SDK contract is position-base
 | `animation.Clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
 | `animation.Frame(name, tick)` | Return the frame index for a tick in a declared clip. |
 
+For PNG assets, a generic path can be specialized per target without changing source. If source asks for `Mario.png`, the selected target first looks for `Mario.gb.png`/`Mario.GameBoy.png` or `Mario.nes.png`/`Mario.NES.png` next to it, then falls back to `Mario.png`. Existing platform-suffixed source paths are normalized while searching for the selected target variant, so a transitional `Mario.gb.png` reference can still pick `Mario.nes.png` when compiling NES.
+
 The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
 ### Optional HUD
@@ -128,10 +130,10 @@ Static enforcement is per-operation. The shared operation list is flattened acro
 | API group | Game Boy | NES |
 | --- | --- | --- |
 | Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
-| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial visible nametable setup. Runtime streaming is not implemented. |
-| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`. |
+| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial two-nametable horizontal setup, with a current 64-column map width limit. |
+| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with runtime column streaming into the off-screen nametable for maps wider than 32 columns. |
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
-| Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for JSON assets with `platforms.nes.frames` in the current spike. |
+| Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs using duty, wave, and noise channels in the current runtime. | Not implemented; `music.Play(...)` fails capability validation. |
 | Animation helpers | Supported on Game Boy runner path. | Runtime animation is not part of the current NES spike. |

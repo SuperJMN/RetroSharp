@@ -8,6 +8,12 @@ Build a `.gb` ROM from RetroSharp source that executes a real loop on the Game B
 dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out runner.gb runner.rs
 ```
 
+Build the current NES acceptance slice without audio, runtime animation, or collision queries:
+
+```bash
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out runner.nes runner.nes.rs
+```
+
 Preview with RetroArch Flatpak:
 
 ```bash
@@ -40,7 +46,7 @@ PYTHONPATH=/tmp/retrosharp-pyboy-site python3 ../../tools/gameboy/runner_diagnos
 
 For the full debugging process used by agents, including how to classify symptoms, cross-check emulator/debug-tool output, and choose the correct layer to fix, see `../../docs/GameBoyRunnerDebugging.md`.
 
-This sample uses parameterless helper functions, declarations, assignment, enum-backed constant groups such as `World.Width` and `Player.ScreenX`, a `type` alias for pixel-like byte-backed values, an enum for collision flags, restricted static class state with methods such as `player.Reset()`, immutable `let` locals, a pipeline for camera-relative collision probes, a `switch` expression for the display frame, `loop`, `if`, `&&`, half-open range membership, compound assignments, statement-only `++`/`--`, relational conditions, `video.WaitVBlank()`, `input.Poll()`, `palette.Background(...)`, `palette.Sprite(...)`, `camera.Init(...)`, `camera.Apply()`, `camera.SetPosition(...)`, `camera.AabbTiles(...)`, `camera.AabbHitTop(...)`, `sprite.Asset(...)`, `sprite.Draw(...)`, `animation.Clip(...)`, `animation.Frame(...)`, `world.Load(...)`, and tick-based button helpers. The actor keeps a fixed screen X while the camera moves through the Game Boy `SCX` register, derives collision X from the camera runtime so it stays aligned beyond the source-local byte range, streams the compact playable map from ROM while D-pad right or left is held, flips the same player sheet horizontally through portable `flipX` when facing left, selects sprite palette slot `0` explicitly, declares that sprite palette through the logical palette API, advances the run frames through an explicit `animTick` plus a portable animation clip, clamps upward movement at the top of the scene before byte-backed Y can wrap, lands on any solid Tiled collision tile while descending by querying the top edge of the first matching tile in a caller-defined search AABB, blocks horizontal camera motion when the actor's lower body would overlap a solid Tiled collision tile, resets the actor on falls without rebasing the scrolled background, and jumps with variable height plus lower-gravity airtime when the Game Boy A button is pressed.
+This sample uses parameterless helper functions, declarations, assignment, enum-backed constant groups such as `World.Width` and `Player.ScreenX`, a `type` alias for pixel-like byte-backed values, an enum for collision flags, restricted static class state with methods such as `player.Reset()`, immutable `let` locals, a pipeline for camera-relative collision probes, a `switch` expression for the display frame, `loop`, `if`, `&&`, half-open range membership, compound assignments, statement-only `++`/`--`, relational conditions, `video.WaitVBlank()`, `input.Poll()`, `palette.Background(...)`, `palette.Sprite(...)`, `camera.Init(...)`, `camera.Apply()`, `camera.SetPosition(...)`, `camera.AabbTiles(...)`, `camera.AabbHitTop(...)`, `sprite.Asset(...)`, `sprite.Draw(...)`, `animation.Clip(...)`, `animation.Frame(...)`, `world.Load(...)`, and tick-based button helpers. The Game Boy actor keeps a fixed screen X while the camera moves through the Game Boy `SCX` register, derives collision X from the camera runtime so it stays aligned beyond the source-local byte range, streams the compact playable map from ROM while D-pad right or left is held, flips the same player sheet horizontally through portable `flipX` when facing left, selects sprite palette slot `0` explicitly, declares that sprite palette through the logical palette API, advances the run frames through an explicit `animTick` plus a portable animation clip, clamps upward movement at the top of the scene before byte-backed Y can wrap, lands on any solid Tiled collision tile while descending by querying the top edge of the first matching tile in a caller-defined search AABB, blocks horizontal camera motion when the actor's lower body would overlap a solid Tiled collision tile, resets the actor on falls without rebasing the scrolled background, and jumps with variable height plus lower-gravity airtime when the Game Boy A button is pressed.
 
 The constant groups are compile-time enum members in the current language. They are used for readability and fold like numeric constants; they do not allocate state. The class methods are source-level inline helpers over fixed-layout value storage, so the runner keeps a lightweight object-oriented shape without heap allocation, vtables, dynamic dispatch, or hidden calls.
 
@@ -58,7 +64,7 @@ The runner sprite sources are `assets/mario-idle.aseprite`, `assets/mario-run.as
 /home/jmn/Repos/Aseprite/build/bin/aseprite -b assets/mario-jump.aseprite --sheet assets/mario-jump.gb.png --sheet-type horizontal
 ```
 
-Combine the state exports into `assets/mario-player.gb.png` as five 18x32 frames: idle, three run frames, and jump. The runner uses that single sheet so the same OAM slots are updated every frame:
+Combine the state exports into `assets/mario-player.gb.png` as five 18x32 frames: idle, three run frames, and jump. The runner source asks for `assets/mario-player.png`; Game Boy resolves that to `assets/mario-player.gb.png`, and NES resolves it to `assets/mario-player.nes.png` when present. The runner uses that single sheet so the same OAM slots are updated every frame:
 
 ```bash
 tmpdir=$(mktemp -d)

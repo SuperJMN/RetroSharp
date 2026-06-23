@@ -182,13 +182,13 @@ Portable 2D calls should be represented as semantic operations before target low
 - `Sdk2DOperation.CameraAabbHitTop`
 - `Sdk2DOperation.SetHudTile`
 
-`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels. `SetCameraPosition` charges a background-tile-write budget only on targets that stream background tiles at runtime (`MaxBackgroundTileWritesPerFrame > 0`): for them horizontal movement can require one visible column, vertical movement one visible row, and diagonal movement must fit the combined write count. Targets that cannot write background tiles at runtime (`MaxBackgroundTileWritesPerFrame == 0`, for example NES with no runtime column streaming) fine-scroll the viewport within a pre-loaded background buffer and are charged no streaming cost for a camera position set. The explicit streaming operations (`StreamMapColumn`, `StreamMapRow`) are always budget-checked. Frame-level validation of combined column+row streaming in a single frame remains future work.
+`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels. `SetCameraPosition` charges a background-tile-write budget only on targets that stream background tiles at runtime (`MaxBackgroundTileWritesPerFrame > 0`): for them horizontal movement can require one visible column, vertical movement one visible row, and diagonal movement must fit the combined write count. Targets that cannot write background tiles at runtime (`MaxBackgroundTileWritesPerFrame == 0`) fine-scroll the viewport within a pre-loaded background buffer and are charged no streaming cost for a camera position set. The explicit streaming operations (`StreamMapColumn`, `StreamMapRow`) are always budget-checked. Frame-level validation of combined column+row streaming in a single frame remains future work.
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The boundary recognizes frame/input, camera, HUD tile, world flag reads, logical sprite draw, and map-column streaming operations; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, direction-specific camera helpers, and raw tilemap writes remain on the direct target path until later roadmap tasks move them deliberately.
 
 The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only.
 
-Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, and `DrawLogicalSprite`. Game Boy also routes the transitional `map_stream_column(...)` helper through `StreamMapColumn` and the capability-gated fixed-screen actor queries `camera_aabb_tiles(...)` and `camera_aabb_hit_top(...)` through `CameraAabbTiles` and `CameraAabbHitTop`; NES still has no runtime nametable streaming or collision-query support. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries a constant screen X, runtime world Y, constant or `sprite_width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy runtime lowering now consumes `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `ReadWorldTileFlags`, `CameraAabbTiles`, and `CameraAabbHitTop`; it fails if a source call and the next collected operation disagree, or if collected operations remain after emission.
+Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, and horizontal `StreamMapColumn`. Game Boy also routes the capability-gated fixed-screen actor queries `camera_aabb_tiles(...)` and `camera_aabb_hit_top(...)` through `CameraAabbTiles` and `CameraAabbHitTop`; NES still has no collision-query support. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries a constant screen X, runtime world Y, constant or `sprite_width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy runtime lowering now consumes `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `ReadWorldTileFlags`, `CameraAabbTiles`, and `CameraAabbHitTop`; it fails if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
 The first SDK-as-library prototype is also in place. The parser preserves attributes on extern prototypes, and Game Boy/NES recognize `[target("gb"|"nes")] [intrinsic("wait_frame")] extern void ...();` as a target intrinsic. A source helper that calls that extern emits the same wait-frame bytes as the current `Sdk2DOperation.WaitFrame` lowering. This proves the zero-cost direction for migrating compiler-recognized SDK calls into source libraries, while leaving module packaging, portable target selection, and the rest of the intrinsic catalog as future work.
 
@@ -236,7 +236,7 @@ Every implementation task must include:
 - Layer decision: language, portable SDK, or target intrinsic.
 - Candidate files: expected code/docs/tests to inspect or edit.
 - Verification: exact build, unit test, ROM build, or sample check.
-- Compatibility check: whether `samples/gameboy-runner/runner.rs` still builds.
+- Compatibility check: whether `samples/runner/runner.rs` still builds.
 - Documentation check: update this roadmap or target docs if public API changes.
 
 General rules for agents:
@@ -615,7 +615,7 @@ Status: landed 2026-06-08.
   - Leave direct target calls untouched.
 - Verification:
   - Game Boy compiler tests still pass.
-  - `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/gameboy-runner/runner.rs`
+  - `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/runner/runner.rs`
 
 ### Iteration 3 Tasks: Unified World Map Resource
 
@@ -652,7 +652,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: portable SDK camera/resource integration.
-- Candidate files: Game Boy map-column generation, `samples/gameboy-runner/runner.rs`, tests.
+- Candidate files: Game Boy map-column generation, `samples/runner/runner.rs`, tests.
 - Steps:
   - Replace separate `map_column(...)` source data with generated map columns from the unified world map.
   - Keep source-map column ROM tables equivalent for the current runner.
@@ -709,7 +709,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
-- Candidate files: `samples/gameboy-runner/runner.rs`, Game Boy runner tests.
+- Candidate files: `samples/runner/runner.rs`, Game Boy runner tests.
 - Steps:
   - Add a source variable for camera/world X.
   - Update input handling to mutate camera/world X.
@@ -781,7 +781,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: portable SDK sprites.
-- Candidate files: `samples/gameboy-runner/runner.rs`, Game Boy sprite draw lowering, tests.
+- Candidate files: `samples/runner/runner.rs`, Game Boy sprite draw lowering, tests.
 - Steps:
   - Add named `flipX` and optionally `flipY` values or booleans.
   - Lower `flipX` to the Game Boy OAM X-flip bit internally.
@@ -837,7 +837,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
-- Candidate files: `samples/gameboy-runner/runner.rs`, runner tests.
+- Candidate files: `samples/runner/runner.rs`, runner tests.
 - Steps:
   - Replace manual frame cycle constants where the animation helper can express the same behavior.
   - Keep jump/idle/run state explicit in source.
@@ -880,7 +880,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
-- Candidate files: `samples/gameboy-runner/runner.rs`, Game Boy runner tests.
+- Candidate files: `samples/runner/runner.rs`, Game Boy runner tests.
 - Steps:
   - Replace `camera_span_tile_at(...)` and `camera_span_has_tile(...)` in runner collision.
   - Use world coordinates plus sprite hitbox or logical width.

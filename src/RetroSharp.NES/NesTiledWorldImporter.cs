@@ -16,8 +16,9 @@ internal sealed record NesTiledWorld(
 // RetroSharp.Core.Sdk.Tiled.LogicalTiledMap (shared with the Game Boy path) and
 // owns the NES specifics: decoding tileset images, generating and deduplicating
 // 2bpp planar CHR tiles, expanding source tiles into 8x8 cells, and composing the
-// background under blank world cells. The visible NES nametable is fixed, so this
-// only supports worlds that fit the 32x30 visible area; runtime streaming is future.
+// background under blank world cells. The current NES runtime streams horizontal
+// worlds across a two-nametable 64-column buffer; vertical streaming remains out
+// of scope.
 internal static class NesTiledWorldImporter
 {
     public static NesTiledWorld Load(string path, int firstGeneratedTile)
@@ -26,9 +27,9 @@ internal static class NesTiledWorldImporter
         var geometry = logical.Geometry;
         var displayName = Path.GetFileName(path);
 
-        if (geometry.Width > 32)
+        if (geometry.Width > 64)
         {
-            throw new InvalidOperationException($"Tiled map '{displayName}' width must fit the visible 32-column NES nametable until runtime streaming lands.");
+            throw new InvalidOperationException($"Tiled map '{displayName}' width must fit the current two-nametable 64-column NES streaming buffer.");
         }
 
         if (geometry.StreamY < 0 || geometry.StreamY + geometry.Height > 30)

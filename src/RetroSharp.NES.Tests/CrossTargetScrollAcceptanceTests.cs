@@ -79,6 +79,18 @@ public sealed class CrossTargetScrollAcceptanceTests
     }
 
     [Fact]
+    public void Nes_streams_columns_for_world_maps_wider_than_one_visible_nametable()
+    {
+        var source = WideHorizontalScrollSource(width: 40, streamY: 0, height: 30);
+
+        var rom = NesRomCompiler.CompileSource(source, RepoRoot());
+        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+
+        Assert.Equal(0x01, rom[6] & 0x01);
+        Assert.True(CountOccurrences(prg, [0x8D, 0x07, 0x20]) >= 32, "NES should emit runtime PPUDATA writes for a full streamed map column, beyond palette and startup nametable upload.");
+    }
+
+    [Fact]
     public void Vertical_camera_is_rejected_on_nes_but_accepted_on_game_boy_via_shared_capabilities()
     {
         const string verticalSource = """
@@ -161,5 +173,55 @@ public sealed class CrossTargetScrollAcceptanceTests
 
         return directory?.FullName
                ?? throw new InvalidOperationException("Could not locate RetroSharp repository root.");
+    }
+
+    private static string WideHorizontalScrollSource(int width, int streamY, int height)
+    {
+        var columns = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, width).Select(index =>
+                $"            world.Column({index}, {WideColumnTiles(index, height)});"));
+
+        return $$"""
+            enum World {
+                Width = {{width}},
+                StreamY = {{streamY}},
+                Height = {{height}}
+            }
+
+            void main() {
+                video.Init();
+            {{columns}}
+                world.Map(World.Width, World.StreamY, World.Height);
+                camera.Init(World.Width, World.StreamY, World.Height);
+
+                loop {
+                    video.WaitVBlank();
+                    input.Poll();
+                    let cameraX = button_hold_ticks(right);
+                    camera.SetPosition(cameraX, 0);
+                    camera.Apply();
+                }
+            }
+            """;
+    }
+
+    private static string WideColumnTiles(int column, int height)
+    {
+        return string.Join(", ", Enumerable.Range(0, height).Select(row => ((column + row) % 5) + 1));
+    }
+
+    private static int CountOccurrences(byte[] haystack, byte[] needle)
+    {
+        var count = 0;
+        for (var index = 0; index <= haystack.Length - needle.Length; index++)
+        {
+            if (haystack.AsSpan(index, needle.Length).SequenceEqual(needle))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 }

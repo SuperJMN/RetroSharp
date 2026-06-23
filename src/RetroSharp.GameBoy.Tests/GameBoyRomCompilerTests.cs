@@ -1145,6 +1145,33 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_png_sprite_sheet_using_game_boy_platform_variant()
+    {
+        var baseDirectory = WriteSpritePng(
+            "player-run.gb.png",
+            8,
+            16,
+            Rows(8, 16, "11111111"));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player_run, "player-run.png", 8, 16);
+                                  sprite_draw(player_run, 72, 80, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+        var program = CompileVideoProgram(source, baseDirectory);
+        var asset = program.SpriteAssets["player_run"];
+
+        Assert.Equal(32768, rom.Length);
+        Assert.Equal(8, asset.LogicalWidth);
+        Assert.Equal(16, asset.LogicalHeight);
+        Assert.Equal(1, asset.FrameCount);
+    }
+
+    [Fact]
     public void Compiles_png_sprite_sheet_with_non_hardware_height_by_padding()
     {
         var baseDirectory = WriteSpritePng(
@@ -2630,7 +2657,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_drives_scroll_and_run_animation_from_dpad()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         var movementStart = source.IndexOf("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", StringComparison.Ordinal);
@@ -2856,7 +2883,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_constant_groups_and_lightweight_player_state()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
+        var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
 
         Assert.Contains("enum World", source);
         Assert.Contains("Width = 68", source);
@@ -2883,7 +2910,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_extracts_frame_loop_into_named_inline_helpers()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
+        var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
 
         Assert.Contains("class CameraState", source);
         Assert.Contains("class FrameState", source);
@@ -2911,10 +2938,10 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_player_spritesheet_for_playable_scene()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("""sprite.Asset(mario_player, "assets/mario-player.gb.png", 18, 32);""", source);
+        Assert.Contains("""sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);""", source);
         Assert.Contains("animation.Clip(run, 1, 6, 6, 6);", source);
         Assert.DoesNotContain("animation.Clip(enemy_walk", source);
         Assert.DoesNotContain("sprites_clear();", source);
@@ -2937,7 +2964,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_sprite_asset_preserves_portable_metadata()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         var program = CompileVideoProgram(source, Path.GetDirectoryName(sourcePath));
@@ -2958,7 +2985,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_lighter_object_palette_for_player_sprite()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("palette.Background(0, 0, 1, 2, 3);", source);
@@ -2979,7 +3006,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_keeps_layout_readable_and_gives_hit_feedback()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("Player.ScreenX", source);
@@ -3000,7 +3027,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_presents_sprites_immediately_after_vblank()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/gameboy-runner/runner.rs"));
+        var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
 
         Assert.Contains("PlayerState player;", source);
         Assert.Contains("player.Reset();", source);
@@ -3019,7 +3046,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_declares_and_ticks_background_music()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var baseDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
@@ -3909,7 +3936,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_dynamic_world_y_for_tiled_solid_landing()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("LandingSearchTopOffset = 32", source);
@@ -3934,7 +3961,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_blocks_horizontal_camera_motion_against_tall_solids()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("LeftWallProbeX = 71", source);
@@ -3955,7 +3982,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_lower_gravity_with_compensated_jump_height()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("Velocity = 253", source);
@@ -3993,7 +4020,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("Pixel footTile;", source);
@@ -4040,7 +4067,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_keeps_visible_map_collision_and_streaming_cursors_in_sync()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.DoesNotContain("void draw_starting_scene()", source);
@@ -4049,9 +4076,9 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("tilemap.Set(", source);
         Assert.Contains("void load_world()", source);
         Assert.Contains("""world.Load("maps/runner.tmj");""", source);
-        Assert.True(File.Exists(RepositoryFile("samples/gameboy-runner/maps/runner.tmj")));
-        Assert.True(File.Exists(RepositoryFile("samples/gameboy-runner/maps/runner-tiles.tsj")));
-        Assert.True(File.Exists(RepositoryFile("samples/gameboy-runner/maps/runner-tiles.png")));
+        Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner.tmj")));
+        Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner-tiles.tsj")));
+        Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner-tiles.png")));
         Assert.DoesNotContain("world.Column(", source);
         Assert.DoesNotContain("world.Flags(", source);
         Assert.DoesNotContain("world.Map(", source);
@@ -4136,7 +4163,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_applies_reset_before_consuming_jump_input()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         var resetStart = source.IndexOf("frame.ResolveReset(player);", StringComparison.Ordinal);
@@ -4154,7 +4181,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_keeps_ground_alignment_and_reset_animation_state()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-runner/runner.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("StartY = 105", source);

@@ -26,8 +26,8 @@
 - [src/RetroSharp.Parser/](src/RetroSharp.Parser/): parser.
 - [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
 - [src/RetroSharp.Z80/](src/RetroSharp.Z80/): Z80 backend.
-- [samples/gameboy-runner/runner.rs](samples/gameboy-runner/runner.rs): current Game Boy target-acceptance sample.
-- [samples/gameboy-runner/maps/runner.tmj](samples/gameboy-runner/maps/runner.tmj): editable Tiled runner map.
+- [samples/runner/runner.rs](samples/runner/runner.rs): current Game Boy target-acceptance sample.
+- [samples/runner/maps/runner.tmj](samples/runner/maps/runner.tmj): editable Tiled runner map.
 - [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked Game Boy sample ROM regeneration script.
 
 ## Reliable Commands

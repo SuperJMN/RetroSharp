@@ -101,7 +101,7 @@ internal sealed class NesVideoProgram
         0x0F, 0x09, 0x19, 0x29,
     ];
 
-    public byte[] NameTable { get; } = new byte[1024];
+    public byte[] NameTable { get; } = new byte[2048];
 
     public int MapColumnHeight { get; private set; }
 
@@ -388,7 +388,7 @@ internal sealed class NesVideoProgram
 
         for (var y = 0; y < world.Height; y++)
         {
-            for (var x = 0; x < world.Width; x++)
+            for (var x = 0; x < Math.Min(world.Width, 64); x++)
             {
                 SetTile(x, world.StreamY + y, world.WorldTileIds[y * world.Width + x]);
             }
@@ -408,9 +408,9 @@ internal sealed class NesVideoProgram
         }
 
         var width = ConstArg(call, 0, 1, 255);
-        if (width > 32)
+        if (width > 64)
         {
-            throw new InvalidOperationException("NES world_map width must fit the visible 32-column nametable until runtime streaming lands.");
+            throw new InvalidOperationException("NES world_map width must fit the current two-nametable 64-column horizontal streaming buffer.");
         }
 
         var streamY = ConstArg(call, 1, 0, 29);
@@ -436,7 +436,10 @@ internal sealed class NesVideoProgram
                 var tile = column is null ? (byte)0 : column[y];
                 tileIds[y * width + x] = tile;
                 tileFlags[y * width + x] = flagColumn is null ? WorldTileFlags.Empty : flagColumn[y];
-                SetTile(x, streamY + y, tile);
+                if (x < 64)
+                {
+                    SetTile(x, streamY + y, tile);
+                }
             }
         }
 
@@ -483,9 +486,9 @@ internal sealed class NesVideoProgram
     private void ApplySpriteAsset(FunctionCall call)
     {
         var count = call.Parameters.Count();
-        if (count != 2)
+        if (count is not 2 and not 4)
         {
-            throw new InvalidOperationException($"NES sprite_asset expects 2 arguments for the current JSON sprite spike, got {count}.");
+            throw new InvalidOperationException($"NES sprite_asset expects 2 or 4 arguments, got {count}.");
         }
 
         var name = IdentifierArg(call.Parameters.ElementAt(0), "sprite_asset argument 1");
@@ -494,8 +497,10 @@ internal sealed class NesVideoProgram
             throw new InvalidOperationException($"Sprite asset '{name}' is already declared.");
         }
 
-        var path = ResolveAssetPath(StringArg(call, 1));
-        var asset = NesSpriteAssetCompiler.CompileFromFile(name, path, nextSpriteTile);
+        var path = PlatformAssetPathResolver.ResolvePngVariant(ResolveAssetPath(StringArg(call, 1)), "nes");
+        var frameWidth = count == 4 ? ConstArg(call, 2, 1, 256) : (int?)null;
+        var frameHeight = count == 4 ? ConstArg(call, 3, 1, 240) : (int?)null;
+        var asset = NesSpriteAssetCompiler.CompileFromFile(name, path, nextSpriteTile, frameWidth, frameHeight);
         nextSpriteTile += asset.TileCount;
         spriteAssets.Add(name, asset);
         spriteAssetsInLoadOrder.Add(asset);
@@ -503,7 +508,7 @@ internal sealed class NesVideoProgram
 
     private void SetTile(int x, int y, int tile)
     {
-        NameTable[y * 32 + x] = (byte)tile;
+        NameTable[NameTableTileOffset(x, y)] = (byte)tile;
     }
 
     private void FillTiles(int x, int y, int width, int height, int tile)
@@ -520,6 +525,22 @@ internal sealed class NesVideoProgram
                 SetTile(xx, yy, tile);
             }
         }
+    }
+
+    private static int NameTableTileOffset(int x, int y)
+    {
+        if (x is < 0 or > 63)
+        {
+            throw new InvalidOperationException("NES nametable tile X must be between 0 and 63.");
+        }
+
+        if (y is < 0 or > 29)
+        {
+            throw new InvalidOperationException("NES nametable tile Y must be between 0 and 29.");
+        }
+
+        var nameTableBase = x < 32 ? 0 : 1024;
+        return nameTableBase + (y * 32) + (x % 32);
     }
 
     internal static void RequireArity(FunctionCall call, int expected)

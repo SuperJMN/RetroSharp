@@ -1,4 +1,5 @@
 using System.Text.Json;
+using RetroSharp.Core.Imaging;
 
 namespace RetroSharp.NES;
 
@@ -36,19 +37,20 @@ internal static class NesSpriteAssetCompiler
         PropertyNameCaseInsensitive = true,
     };
 
-    public static NesCompiledSpriteAsset CompileFromFile(string name, string path, int firstTile)
+    public static NesCompiledSpriteAsset CompileFromFile(string name, string path, int firstTile, int? frameWidth = null, int? frameHeight = null)
     {
         if (!File.Exists(path))
         {
             throw new InvalidOperationException($"NES sprite asset file '{path}' does not exist.");
         }
 
-        if (!Path.GetExtension(path).Equals(".json", StringComparison.OrdinalIgnoreCase))
+        var frames = Path.GetExtension(path).ToLowerInvariant() switch
         {
-            throw new InvalidOperationException($"NES sprite asset '{path}' must be a .json file for the current sprite spike.");
-        }
+            ".json" => ReadJsonFrames(path),
+            ".png" => ReadPngFrames(path, frameWidth, frameHeight),
+            _ => throw new InvalidOperationException($"NES sprite asset '{path}' must be a .json or .png file."),
+        };
 
-        var frames = ReadJsonFrames(path);
         var frameCount = frames.Count;
         var logicalWidth = frames[0][0].Length;
         var logicalHeight = frames[0].Count;
@@ -113,6 +115,76 @@ internal static class NesSpriteAssetCompiler
         }
 
         return ValidateFrames(platform.Frames, path);
+    }
+
+    private static List<List<string>> ReadPngFrames(string path, int? frameWidth, int? frameHeight)
+    {
+        if (frameWidth is null || frameHeight is null)
+        {
+            throw new InvalidOperationException($"PNG sprite asset '{path}' requires frame width and height arguments.");
+        }
+
+        if (frameWidth <= 0 || frameHeight <= 0)
+        {
+            throw new InvalidOperationException("PNG sprite frame dimensions must be positive.");
+        }
+
+        var image = PngImage.Read(path);
+        if (image.Width % frameWidth.Value != 0)
+        {
+            throw new InvalidOperationException($"PNG sprite sheet '{path}' width must be a multiple of the frame width.");
+        }
+
+        if (image.Height != frameHeight.Value)
+        {
+            throw new InvalidOperationException($"PNG sprite sheet '{path}' height must match the frame height.");
+        }
+
+        var frameCount = image.Width / frameWidth.Value;
+        if (frameCount == 0)
+        {
+            throw new InvalidOperationException($"PNG sprite sheet '{path}' must contain at least one frame.");
+        }
+
+        var frames = new List<List<string>>();
+        for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
+        {
+            var frame = new List<string>();
+            for (var y = 0; y < frameHeight.Value; y++)
+            {
+                var row = new char[frameWidth.Value];
+                for (var x = 0; x < frameWidth.Value; x++)
+                {
+                    row[x] = (char)('0' + SpriteTone(image, frameIndex * frameWidth.Value + x, y));
+                }
+
+                frame.Add(new string(row));
+            }
+
+            frames.Add(frame);
+        }
+
+        return ValidateFrames(frames, path);
+    }
+
+    private static int SpriteTone(PngImage image, int x, int y)
+    {
+        var offset = image.PixelOffset(x, y);
+        if (image.RgbaPixels[offset + 3] < 128)
+        {
+            return 0;
+        }
+
+        var r = image.RgbaPixels[offset];
+        var g = image.RgbaPixels[offset + 1];
+        var b = image.RgbaPixels[offset + 2];
+        var luminance = (r * 299 + g * 587 + b * 114) / 1000;
+        return luminance switch
+        {
+            >= 192 => 1,
+            >= 96 => 2,
+            _ => 3,
+        };
     }
 
     private static List<List<string>> ValidateFrames(List<List<string>>? frames, string path)

@@ -23,4 +23,4 @@ Run this from the repository root to refresh the tracked Game Boy sample ROMs:
 tools/gameboy/generate_sample_roms.py
 ```
 
-By default the script rebuilds only manifest samples that target Game Boy and already have a sibling `.gb` output tracked by Git. Use `--dry-run` to inspect the commands, `--all` to build every manifest sample that declares the `gb` target, or pass explicit sample paths such as `samples/gameboy-runner/runner.rs`.
+By default the script rebuilds only manifest samples that target Game Boy and already have a sibling `.gb` output tracked by Git. Use `--dry-run` to inspect the commands, `--all` to build every manifest sample that declares the `gb` target, or pass explicit sample paths such as `samples/runner/runner.rs`.

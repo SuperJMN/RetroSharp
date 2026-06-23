@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-23.
+Last updated: 2026-06-24.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -96,9 +96,10 @@ Progress (2026-06-14):
   capabilities, and target lowerers resolve metasprite geometry from `SpriteId` and asset data
   instead of carrying `LogicalSize` in the portable record. `ReadDrawLogicalSprite` mirrors
   `ReadSetCameraPosition`, and the cross-target acceptance now includes logical sprite drawing.
-- Stream column operation decision implemented 2026-06-14: target/source columns are
-  `SdkByteExpression`, Y/Height remain constants, and Game Boy lowering preserves the existing
-  map row table and VRAM write byte shape. This does not add NES runtime nametable streaming.
+- Stream column operation decision implemented 2026-06-14 and extended on NES in #124:
+  target/source columns are `SdkByteExpression`, Y/Height remain constants, Game Boy lowering
+  preserves the existing map row table and VRAM write byte shape, and NES lowers horizontal
+  column streaming into `$2006`/`$2007` writes across a two-nametable buffer.
 - Operation stream decision implemented 2026-06-14: `GameBoyRuntimeCompiler` walks the collected
   operation list with a cursor for migrated statement calls and `world_tile_flags_at(...)`; it
   fails if the next operation type does not match the source call or if operations remain
@@ -144,6 +145,7 @@ Suggested next steps for the next agent, in order:
 - `button_hold_ticks` saturates at `255` and is the accepted seam for variable-height jump timing.
 - On original DMG hardware, `JOYP` row selection must settle. The backend should select a row, read it several times, use the final sample, and deselect both rows with `0x30`.
 - `sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
+- Sprite PNG paths can be generic. `sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
 - Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; fixed-screen runner actors should use `camera.AabbTiles(...)` for boolean overlap and `camera.AabbHitTop(...)` for landing tile-edge facts so X stays aligned with the visible camera after long scrolls.
@@ -153,7 +155,7 @@ Suggested next steps for the next agent, in order:
 
 ## Tiled Map Pipeline
 
-The runner's editable level lives at `samples/gameboy-runner/maps/runner.tmj` and uses `samples/gameboy-runner/maps/Super Mario Land 2.tsx`.
+The runner's editable level lives at `samples/runner/maps/runner.tmj` and uses `samples/runner/maps/Super Mario Land 2.tsx`.
 
 Pipeline shape (two phases, after #105 partial extraction):
 
@@ -168,9 +170,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   their own 2bpp tile byte layout (Game Boy interleaved planes; NES planar planes), deduplicating
   and composing the background under blank world cells. `world.Load(path)` therefore lowers on both
   Game Boy and NES from the same source.
-- NES limitations: the Tiled map must fit the visible 32x30 nametable (no runtime streaming yet),
-  and the four canonical tones map to a single fixed grayscale background palette (per-region
-  attribute palettes are future work).
+- NES limitations: the Tiled map must fit the current 64-column horizontal streaming buffer and
+  visible 30-row height, vertical streaming is not supported yet, and the four canonical tones map
+  to a single fixed grayscale background palette (per-region attribute palettes are future work).
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.
@@ -190,7 +192,7 @@ Important current behavior:
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.
 
-When `runner.rs`, `runner.tmj`, the tileset, or asset lowering changes, rebuild `samples/gameboy-runner/runner.gb`.
+When `runner.rs`, `runner.tmj`, the tileset, or asset lowering changes, rebuild `samples/runner/runner.gb`. When `runner.nes.rs` or NES sprite/background lowering changes, rebuild `samples/runner/runner.nes`.
 
 ## Known Traps
 
@@ -201,7 +203,7 @@ When `runner.rs`, `runner.tmj`, the tileset, or asset lowering changes, rebuild 
 | Ignoring submodules before publication | Check `git submodule status --recursive`; current submodules are `libs/6502DotNet` and `libs/Z80DotNet`. |
 | Broad formatting-only runs touching old/vendored files | Use targeted formatting and `git diff --check`. |
 | Editing generated Game Boy ROMs by hand | Regenerate from source using `tools/gameboy/generate_sample_roms.py`. |
-| Treating generated screenshots as source artifacts | Leave `samples/gameboy-runner/*.png` alone unless explicitly requested. |
+| Treating generated screenshots as source artifacts | Leave `samples/runner/*.png` alone unless explicitly requested. |
 | Fixing emulator/hardware mismatches only in samples | Check backend/runtime behavior first, especially input and LCD/PPU state. |
 | Adding portable APIs without diagnostics | Add or reuse target capability checks before lowering. |
 | Debugging the full runner without isolation | Run `tools/gameboy/runner_diagnostics.py` and report the first failing step and scenario. |
@@ -229,8 +231,8 @@ Build individual ROM samples:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/gameboy-runner/runner.gb \
-  samples/gameboy-runner/runner.rs
+  --out samples/runner/runner.gb \
+  samples/runner/runner.rs
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \

@@ -60,10 +60,10 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("samples/gameboy-drawing/drawing.rs", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("samples/gameboy-drawing/drawing.gb", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains("samples/gameboy-runner/runner.rs", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains("samples/gameboy-runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/runner/runner.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("samples/gameboy-hud/hud.rs", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain("samples/gameboy-runner/diagnostics/00-static-background.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("samples/runner/diagnostics/00-static-background.rs", result.CombinedOutput, StringComparison.Ordinal);
     }
 
     [Fact]

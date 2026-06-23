@@ -15,7 +15,7 @@ public sealed class NesTargetCapabilitiesTests
         Assert.Equal(new Size2D(256, 240), capabilities.ScreenPixels);
         Assert.Equal(new Size2D(32, 30), capabilities.ScreenTiles);
         Assert.Equal(new Size2D(8, 8), capabilities.TileSize);
-        Assert.Equal(new Size2D(32, 30), capabilities.BackgroundBufferTiles);
+        Assert.Equal(new Size2D(64, 30), capabilities.BackgroundBufferTiles);
         Assert.Equal(64, capabilities.SpriteCount);
         Assert.True(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite8x8));
         Assert.True(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite8x16));
@@ -36,9 +36,9 @@ public sealed class NesTargetCapabilitiesTests
         Assert.False(capabilities.SupportsScrollAxis(ScrollAxes.Vertical));
         Assert.True(capabilities.SupportsFineScrollX);
         Assert.False(capabilities.SupportsFineScrollY);
-        Assert.Equal(0, capabilities.MaxBackgroundTileWritesPerFrame);
+        Assert.Equal(30, capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(0, capabilities.MaxAttributeWritesPerFrame);
-        Assert.False(CanStreamVisibleColumn(capabilities));
+        Assert.True(CanStreamVisibleColumn(capabilities));
         Assert.False(CanStreamVisibleRow(capabilities));
         Assert.False(capabilities.SupportsHudMode(HudMode.Window));
         Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));

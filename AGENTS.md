@@ -35,7 +35,7 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 - Keep changes scoped to the requested layer and behavior.
 - If public behavior, supported syntax, SDK calls, target capabilities, or sample workflows change, update the matching docs in the same patch.
 - Treat generated Game Boy ROMs as tracked artifacts when their source sample changes. Regenerate them deliberately.
-- Generated screenshots under `samples/gameboy-runner/*.png` are not source artifacts unless a task explicitly asks for them.
+- Generated screenshots under `samples/runner/*.png` are not source artifacts unless a task explicitly asks for them.
 
 ## Architecture Rules
 
@@ -67,8 +67,8 @@ Build representative samples:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/gameboy-runner/runner.gb \
-  samples/gameboy-runner/runner.rs
+  --out samples/runner/runner.gb \
+  samples/runner/runner.rs
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target nes \
@@ -82,10 +82,10 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 
 ## Game Boy Runner Notes
 
-- `samples/gameboy-runner/runner.rs` is a target-acceptance sample, not proof that every API it uses is portable.
+- `samples/runner/runner.rs` is a target-acceptance sample, not proof that every API it uses is portable.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
-- The runner now uses `world.Load(...)` over `samples/gameboy-runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
+- The runner now uses `world.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
 - Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
 - Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
 - `input.Poll()` is the tick boundary. Prefer `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks` over direct `button_pressed` for new gameplay code.

@@ -57,7 +57,7 @@ Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Se
 
 ## Sample Classification
 
-Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/gameboy-runner/runner.rs` remains a Game Boy `target-acceptance` sample because it exercises Game Boy-specific runtime, Tiled, audio, and runner behavior beyond the shared NES subset.
+Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/runner/runner.rs` remains a Game Boy `target-acceptance` sample because it exercises Game Boy-specific runtime, Tiled, audio, and runner behavior beyond the shared NES subset.
 
 ## Supported Runtime Subset
 
@@ -366,7 +366,7 @@ Landed after the first HUD pass:
 
 Landed after the richer runner scene pass:
 
-- The runner imports `samples/gameboy-runner/maps/runner.tmj` with `world.Load(...)`, combining editable Tiled background/world layers, external `.tsx` tileset data, generated Game Boy background tiles, and collision flags while keeping the runtime inside the current 32 KiB ROM-only target.
+- The runner imports `samples/runner/maps/runner.tmj` with `world.Load(...)`, combining editable Tiled background/world layers, external `.tsx` tileset data, generated Game Boy background tiles, and collision flags while keeping the runtime inside the current 32 KiB ROM-only target.
 - Tileset `objectgroup` rectangles now provide the runner's solid platform and ground collision flags without a separate hand-authored collision layer.
 - The runner scene focuses on the player, camera, Tiled map streaming, tileset-authored solid collision, fall reset, and variable-height jump so the generated Tiled graphics still fit the ROM-only target.
 
