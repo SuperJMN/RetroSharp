@@ -16,6 +16,7 @@ public static class Sdk2DOperationValidator
                 ValidateByteExpression(tile.WorldY, "world tile Y");
                 return;
             case Sdk2DOperation.ReadWorldTileFlags flags:
+                RequireCollisionQuery(capabilities, CollisionQueryMode.WorldTileFlags, "world tile flag");
                 ValidateByteExpression(flags.WorldX, "world tile flags X");
                 ValidateByteExpression(flags.WorldY, "world tile flags Y");
                 return;
@@ -77,10 +78,7 @@ public static class Sdk2DOperationValidator
 
     private static void ValidateCameraAabbTiles(Target2DCapabilities capabilities, Sdk2DOperation.CameraAabbTiles cameraAabb)
     {
-        if (!capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb))
-        {
-            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support camera-relative AABB collision queries.");
-        }
+        RequireCollisionQuery(capabilities, CollisionQueryMode.CameraRelativeAabb, "camera-relative AABB collision");
 
         ValidateCameraAabbGeometry(
             capabilities,
@@ -93,10 +91,7 @@ public static class Sdk2DOperationValidator
 
     private static void ValidateCameraAabbHitTop(Target2DCapabilities capabilities, Sdk2DOperation.CameraAabbHitTop cameraAabb)
     {
-        if (!capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabbHitTop))
-        {
-            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support camera-relative AABB hit-top queries.");
-        }
+        RequireCollisionQuery(capabilities, CollisionQueryMode.CameraRelativeAabbHitTop, "camera-relative AABB hit-top");
 
         ValidateCameraAabbGeometry(
             capabilities,
@@ -129,6 +124,14 @@ public static class Sdk2DOperationValidator
 
         ValidateByteExpression(worldY, "camera AABB world Y");
         ValidateCollisionFlags(flags, "camera AABB flags");
+    }
+
+    private static void RequireCollisionQuery(Target2DCapabilities capabilities, CollisionQueryMode mode, string queryName)
+    {
+        if (!capabilities.SupportsCollisionQuery(mode))
+        {
+            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support {queryName} queries.");
+        }
     }
 
     private static void ValidateAabbWidth(Target2DCapabilities capabilities, int screenX, SdkAabbExtent width)

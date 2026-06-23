@@ -151,6 +151,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy diagonal camera movement over budget | `Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).` |
 | NES BGM playback | `Target 'nes' does not support BGM playback yet.` |
 | Game Boy sprite palette slot overflow | `Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.` |
+| NES world tile flag query | `Target 'nes' does not support world tile flag queries.` |
 | NES camera-relative AABB collision | `Target 'nes' does not support camera-relative AABB collision queries.` |
 | NES camera-relative AABB hit-top collision | `Target 'nes' does not support camera-relative AABB hit-top queries.` |
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |

@@ -11,7 +11,8 @@ public class SemanticAnalyzer
     {
         node = TypeAliasResolver.Resolve(node);
         var types = BuildTypeTable(node.Enums, node.Structs);
-        scope = DeclareConstants(node.Constants, scope, types);
+        var constantsResult = DeclareConstants(node.Constants, scope, types);
+        scope = constantsResult.Scope;
         var functionIndex = node.Functions.ToDictionary(function => function.Name, StringComparer.Ordinal);
         var functions = new List<FunctionNode>();
         foreach (var function in node.Functions)
@@ -21,13 +22,18 @@ public class SemanticAnalyzer
             functions.Add(functionResult.Node);
         }
 
-        return new AnalyzeResult<SemanticNode>(new ProgramNode(functions), scope);
+        return new AnalyzeResult<SemanticNode>(new ProgramNode(functions)
+        {
+            Errors = constantsResult.Errors
+        }, scope);
     }
 
-    private static Scope DeclareConstants(IEnumerable<ConstDeclarationSyntax> constants, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
+    private static (Scope Scope, IReadOnlyList<string> Errors) DeclareConstants(IEnumerable<ConstDeclarationSyntax> constants, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
+        var errors = new List<string>();
         foreach (var constant in constants)
         {
+            errors.AddRange(ConstantInitializerErrors(constant.Type, constant.Value));
             var result = scope.TryDeclare(new Symbol(constant.Name, ResolveType(constant.Type, types)));
             if (result.IsSuccess)
             {
@@ -35,7 +41,7 @@ public class SemanticAnalyzer
             }
         }
 
-        return scope;
+        return (scope, errors);
     }
 
     private static IReadOnlyDictionary<string, SymbolType> BuildTypeTable(IEnumerable<EnumSyntax> enums, IEnumerable<StructSyntax> structs)
@@ -751,13 +757,19 @@ public class SemanticAnalyzer
     private AnalyzeResult<StatementNode> AnalyzeConstDeclaration(ConstDeclarationSyntax constDeclaration, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
         var value = AnalyzeExpression(constDeclaration.Value, scope, types);
+        var initializerErrors = value.Node.AllErrors
+            .Concat(ConstantInitializerErrors(constDeclaration.Type, constDeclaration.Value))
+            .ToList();
         var result = scope
             .TryDeclare(new Symbol(constDeclaration.Name, ResolveType(constDeclaration.Type, types)))
             .Match(
-                s => new AnalyzeResult<StatementNode>(new ConstDeclarationNode(constDeclaration.Name, s, value.Node), s),
+                s => new AnalyzeResult<StatementNode>(new ConstDeclarationNode(constDeclaration.Name, s, value.Node)
+                {
+                    Errors = initializerErrors
+                }, s),
                 _ => new AnalyzeResult<StatementNode>(new ConstDeclarationNode(constDeclaration.Name, scope, value.Node)
                 {
-                    Errors = [$"Constant {constDeclaration.Name} is already declared"]
+                    Errors = initializerErrors.Concat([$"Constant {constDeclaration.Name} is already declared"])
                 }, scope));
 
         return result;
@@ -822,9 +834,20 @@ public class SemanticAnalyzer
         }
 
         var expressionErrors = AnalyzeExpression(initialization, scope, types, functions).Node.AllErrors;
+        var constantInitializerErrors = ConstantInitializerErrors(declaration.Type, initialization);
         return declaration.ArrayLength.HasValue
-            ? expressionErrors.Concat([$"Fixed-size array '{declaration.Name}' requires an array initializer"])
-            : expressionErrors;
+            ? expressionErrors.Concat(constantInitializerErrors).Concat([$"Fixed-size array '{declaration.Name}' requires an array initializer"])
+            : expressionErrors.Concat(constantInitializerErrors);
+    }
+
+    private static IEnumerable<string> ConstantInitializerErrors(string typeName, ExpressionSyntax expression)
+    {
+        if (TryEvaluateConstantInteger(expression, out var constantValue)
+            && TryGetIntegerTypeBitRange(typeName, out var min, out var max)
+            && (constantValue < min || constantValue > max))
+        {
+            yield return $"Constant {constantValue} does not fit target type '{typeName}' (allowed {min}..{max})";
+        }
     }
 
     private IEnumerable<string> AnalyzeStructInitializer(

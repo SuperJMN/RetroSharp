@@ -176,6 +176,25 @@ public sealed class Sdk2DOperationTests
     }
 
     [Fact]
+    public void Validator_rejects_world_tile_flags_when_target_has_no_flag_query_support()
+    {
+        var capabilities = FullCapabilities() with
+        {
+            Name = "nes",
+            CollisionQueries = CollisionQueryMode.None,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                capabilities,
+                new Sdk2DOperation.ReadWorldTileFlags("level1", WorldX: 16, WorldY: 24)));
+
+        Assert.Equal(
+            "Target 'nes' does not support world tile flag queries.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Validator_rejects_camera_aabb_hit_top_when_target_has_no_hit_query_support()
     {
         var capabilities = FullCapabilities() with
