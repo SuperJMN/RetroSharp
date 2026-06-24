@@ -28,12 +28,13 @@ public class SemanticAnalyzer
         }, scope);
     }
 
-    private static (Scope Scope, IReadOnlyList<string> Errors) DeclareConstants(IEnumerable<ConstDeclarationSyntax> constants, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
+    private (Scope Scope, IReadOnlyList<string> Errors) DeclareConstants(IEnumerable<ConstDeclarationSyntax> constants, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
         var errors = new List<string>();
         foreach (var constant in constants)
         {
             errors.AddRange(ConstantInitializerErrors(constant.Type, constant.Value));
+            errors.AddRange(KnownInitializerTypeErrors(constant.Type, constant.Value, scope, types));
             var result = scope.TryDeclare(new Symbol(constant.Name, ResolveType(constant.Type, types)));
             if (result.IsSuccess)
             {
@@ -757,6 +758,7 @@ public class SemanticAnalyzer
         var value = AnalyzeExpression(constDeclaration.Value, scope, types);
         var initializerErrors = value.Node.AllErrors
             .Concat(ConstantInitializerErrors(constDeclaration.Type, constDeclaration.Value))
+            .Concat(KnownInitializerTypeErrors(constDeclaration.Type, constDeclaration.Value, scope, types))
             .ToList();
         var result = scope
             .TryDeclare(new Symbol(constDeclaration.Name, ResolveType(constDeclaration.Type, types)))
@@ -833,18 +835,112 @@ public class SemanticAnalyzer
 
         var expressionErrors = AnalyzeExpression(initialization, scope, types, functions).Node.AllErrors;
         var constantInitializerErrors = ConstantInitializerErrors(declaration.Type, initialization);
+        var knownTypeInitializerErrors = KnownInitializerTypeErrors(declaration.Type, initialization, scope, types);
         return declaration.ArrayLength.HasValue
-            ? expressionErrors.Concat(constantInitializerErrors).Concat([$"Fixed-size array '{declaration.Name}' requires an array initializer"])
-            : expressionErrors.Concat(constantInitializerErrors);
+            ? expressionErrors.Concat(constantInitializerErrors).Concat(knownTypeInitializerErrors).Concat([$"Fixed-size array '{declaration.Name}' requires an array initializer"])
+            : expressionErrors.Concat(constantInitializerErrors).Concat(knownTypeInitializerErrors);
     }
 
     private static IEnumerable<string> ConstantInitializerErrors(string typeName, ExpressionSyntax expression)
     {
+        if (TryGetIntegerLiteralSuffixType(expression, out var suffixType)
+            && TryGetIntegerTypeBitRange(typeName, out _, out _)
+            && !string.Equals(suffixType, typeName, StringComparison.Ordinal))
+        {
+            yield return $"Integer literal suffix type '{suffixType}' does not match declared type '{typeName}'.";
+        }
+
         if (TryEvaluateConstantInteger(expression, out var constantValue)
             && TryGetIntegerTypeBitRange(typeName, out var min, out var max)
             && (constantValue < min || constantValue > max))
         {
             yield return $"Constant {constantValue} does not fit target type '{typeName}' (allowed {min}..{max})";
+        }
+    }
+
+    private IEnumerable<string> KnownInitializerTypeErrors(string typeName, ExpressionSyntax expression, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
+    {
+        if (TryGetIntegerTypeBitRange(typeName, out _, out _)
+            && TryGetKnownIntegerExpressionType(expression, scope, types, out var initializerType)
+            && !string.Equals(initializerType, typeName, StringComparison.Ordinal))
+        {
+            yield return $"Initializer type '{initializerType}' does not match declared type '{typeName}'.";
+        }
+    }
+
+    private bool TryGetKnownIntegerExpressionType(
+        ExpressionSyntax expression,
+        Scope scope,
+        IReadOnlyDictionary<string, SymbolType> types,
+        out string typeName)
+    {
+        switch (expression)
+        {
+            case IdentifierSyntax identifier:
+                var symbol = scope.Get(identifier.Identifier);
+                if (symbol.HasValue)
+                {
+                    return TryGetIntegerTypeName(symbol.Value.Type, out typeName);
+                }
+
+                typeName = string.Empty;
+                return false;
+            case MemberAccessSyntax memberAccess:
+                var memberSymbol = scope.Get(MemberAccessName(memberAccess));
+                if (memberSymbol.HasValue)
+                {
+                    return TryGetIntegerTypeName(memberSymbol.Value.Type, out typeName);
+                }
+
+                var (_, memberType, memberErrors) = ResolveMember(scope, memberAccess);
+                if (memberErrors.Count == 0 && TryGetIntegerTypeName(memberType, out typeName))
+                {
+                    return true;
+                }
+
+                typeName = string.Empty;
+                return false;
+            case IndexExpressionSyntax indexExpression:
+                var (_, elementType, indexErrors) = ResolveIndexedSymbol(scope, indexExpression.BaseIdentifier, indexExpression.Index);
+                if (indexErrors.Count == 0 && TryGetIntegerTypeName(elementType, out typeName))
+                {
+                    return true;
+                }
+
+                typeName = string.Empty;
+                return false;
+            case CastSyntax cast:
+                if (TryGetIntegerTypeBitRange(cast.Type, out _, out _))
+                {
+                    typeName = cast.Type;
+                    return true;
+                }
+
+                typeName = string.Empty;
+                return false;
+            default:
+                typeName = string.Empty;
+                return false;
+        }
+    }
+
+    private static bool TryGetIntegerTypeName(SymbolType type, out string typeName)
+    {
+        typeName = type.Name;
+        return TryGetIntegerTypeBitRange(typeName, out _, out _);
+    }
+
+    private static bool TryGetIntegerLiteralSuffixType(ExpressionSyntax expression, out string suffixType)
+    {
+        switch (expression)
+        {
+            case ConstantSyntax constant:
+                return IntegerLiteral.TryGetSuffixType(Convert.ToString(constant.Value), out suffixType);
+            case UnaryExpressionSyntax { OperatorSymbol: "-" or "+", Operand: var operand }:
+                return TryGetIntegerLiteralSuffixType(operand, out suffixType);
+            default:
+                suffixType = string.Empty;
+                return false;
         }
     }
 

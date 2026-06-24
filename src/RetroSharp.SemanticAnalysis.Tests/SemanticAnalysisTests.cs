@@ -170,6 +170,34 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Declared_initializer_suffix_must_match_explicit_type()
+    {
+        Errors("void main(){ u8 value = 5u16; }")
+            .Should().ContainMatch("*suffix type 'u16'*declared type 'u8'*");
+    }
+
+    [Fact]
+    public void Const_initializer_suffix_must_match_explicit_type()
+    {
+        Errors("const u8 Value = 5u16; void main(){ }")
+            .Should().ContainMatch("*suffix type 'u16'*declared type 'u8'*");
+    }
+
+    [Fact]
+    public void Declared_initializer_symbol_type_must_match_explicit_type()
+    {
+        Errors("const Big = 300u16; void main(){ u8 value = Big; }")
+            .Should().ContainMatch("*Initializer type 'u16'*declared type 'u8'*");
+    }
+
+    [Fact]
+    public void Let_initializer_symbol_type_must_match_default_type()
+    {
+        Errors("const Big = 300u16; void main(){ let value = Big; }")
+            .Should().ContainMatch("*Initializer type 'u16'*declared type 'u8'*");
+    }
+
+    [Fact]
     public void Local_const_identifier_resolves_in_block_scope()
     {
         var input = "void main(){ const u8 StartX = 40; const u8 Copy = StartX; u8 x; x = Copy; }";
