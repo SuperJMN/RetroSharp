@@ -25,7 +25,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
         Assert.Equal(0, nes.ExitCode);
         Assert.True(File.Exists(nesRom), nes.CombinedOutput);
-        Assert.Equal(24592, new FileInfo(nesRom).Length);
+        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesRom).Length);
         Assert.Contains("Wrote NES ROM:", nes.CombinedOutput, StringComparison.Ordinal);
     }
 
@@ -151,7 +151,7 @@ public sealed class CrossTargetCliAcceptanceTests
         return target switch
         {
             "gb" => 32768,
-            "nes" => 24592,
+            "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
         };
     }

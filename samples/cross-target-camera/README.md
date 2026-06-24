@@ -25,4 +25,4 @@ Current unsupported optional features:
 - NES accepts only horizontal `camera.SetPosition(x, 0)` in this spike; vertical camera movement is a capability error.
 - NES seeds a two-nametable horizontal buffer from `world.Map(...)` and streams new columns at runtime; vertical row streaming is not supported yet.
 - NES `sprite.Draw(...)` accepts byte-backed frame and flip operands; palette slot remains a compile-time logical slot.
-- This sample does not use collision queries, runtime animation, or HUD APIs; those remain separate roadmap items.
+- This sample does not use collision queries, runtime animation, audio, or HUD APIs. Runner-shaped camera-relative collision and runtime animation are covered by `samples/runner/runner.nes.rs`; HUD, audio, vertical camera movement, and generic world-space collision remain outside this sample.

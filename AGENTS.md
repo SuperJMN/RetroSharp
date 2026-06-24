@@ -34,7 +34,7 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 - Inspect the real source path before editing; candidate file names in docs are guidance, not a substitute for reading code.
 - Keep changes scoped to the requested layer and behavior.
 - If public behavior, supported syntax, SDK calls, target capabilities, or sample workflows change, update the matching docs in the same patch.
-- Treat generated Game Boy ROMs as tracked artifacts when their source sample changes. Regenerate them deliberately.
+- Treat generated Game Boy and NES runner ROMs as tracked artifacts when their source sample changes. Regenerate them deliberately.
 - Generated screenshots under `samples/runner/*.png` are not source artifacts unless a task explicitly asks for them.
 
 ## Architecture Rules
@@ -72,17 +72,18 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target nes \
-  --out /tmp/cross-camera.nes \
-  samples/cross-target-camera/camera.rs
+  --out samples/runner/runner.nes \
+  samples/runner/runner.nes.rs
 ```
 
 The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md`, `WARP.md`, or `src/RetroSharp.Cli/Program.cs`.
 
 Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln --verify-no-changes --no-restore` has been noisy in this repo because of older or vendored whitespace debt; prefer targeted formatting for touched files plus `git diff --check`.
 
-## Game Boy Runner Notes
+## Runner Notes
 
 - `samples/runner/runner.rs` is a target-acceptance sample, not proof that every API it uses is portable.
+- `samples/runner/runner.nes.rs` tracks the Game Boy runner except for audio. It should keep the same gameplay, map, collision, and animation path.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
 - The runner now uses `world.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.

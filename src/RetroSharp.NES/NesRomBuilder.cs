@@ -8,7 +8,7 @@ namespace RetroSharp.NES;
 
 internal static class NesRomBuilder
 {
-    private const int PrgRomSize = 16 * 1024;
+    private const int PrgRomSize = 32 * 1024;
     private const int ChrRomSize = 8 * 1024;
 
     public static byte[] Build(NesVideoProgram program)
@@ -21,7 +21,7 @@ internal static class NesRomBuilder
         rom[1] = (byte)'E';
         rom[2] = (byte)'S';
         rom[3] = 0x1A;
-        rom[4] = 1;
+        rom[4] = PrgRomSize / (16 * 1024);
         rom[5] = 1;
         rom[6] = 0x01;
 
@@ -70,6 +70,7 @@ internal static class NesRomBuilder
         builder.Label("nametable");
         builder.Emit(program.NameTable);
         EmitWorldMapRows(builder, program.WorldMap);
+        EmitWorldMapFlagRows(builder, program.WorldMap);
 
         var prg = new byte[PrgRomSize];
         var code = builder.Build();
@@ -79,9 +80,9 @@ internal static class NesRomBuilder
         }
 
         code.CopyTo(prg, 0);
-        SetVector(prg, 0x3FFA, 0xC000);
-        SetVector(prg, 0x3FFC, 0xC000);
-        SetVector(prg, 0x3FFE, 0xC000);
+        SetVector(prg, PrgRomSize - 6, PrgBuilder.BaseAddress);
+        SetVector(prg, PrgRomSize - 4, PrgBuilder.BaseAddress);
+        SetVector(prg, PrgRomSize - 2, PrgBuilder.BaseAddress);
         return prg;
     }
 
@@ -157,6 +158,25 @@ internal static class NesRomBuilder
     }
 
     internal static string WorldMapRowLabel(int row) => $"world_map_row_{row}";
+
+    private static void EmitWorldMapFlagRows(PrgBuilder builder, WorldMap2D? worldMap)
+    {
+        if (worldMap is null)
+        {
+            return;
+        }
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            builder.Label(WorldMapFlagRowLabel(row));
+            for (var column = 0; column < worldMap.Width; column++)
+            {
+                builder.Emit((byte)worldMap.FlagsAt(column, row));
+            }
+        }
+    }
+
+    internal static string WorldMapFlagRowLabel(int row) => $"world_map_flags_row_{row}";
 
     private static byte[] BuildChrRom(NesVideoProgram program)
     {
@@ -245,6 +265,8 @@ internal sealed class NesRuntimeCompiler
     private const byte CameraTargetColumnAddress = 0xE2;
     private const byte CameraSourceColumnAddress = 0xE3;
     private const byte SpriteFrameScratchAddress = 0xE4;
+    private const byte CollisionColumnScratchAddress = 0xE5;
+    private const byte CollisionRowScratchAddress = 0xE6;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -838,6 +860,13 @@ internal sealed class NesRuntimeCompiler
                 }
 
                 break;
+            case "animation_clip":
+                if (call.Parameters.Count() < 3)
+                {
+                    throw new InvalidOperationException($"animation_clip expects at least 3 arguments, got {call.Parameters.Count()}.");
+                }
+
+                break;
             case "music_asset":
                 NesVideoProgram.RequireArity(call, 2);
                 break;
@@ -1041,10 +1070,16 @@ internal sealed class NesRuntimeCompiler
 
     private bool EmitIf(IfElseSyntax ifElseSyntax)
     {
+        var trueLabel = builder.CreateLabel("if_true");
+        var falseTrampolineLabel = builder.CreateLabel("if_false_trampoline");
         var falseLabel = builder.CreateLabel("if_false");
         var endLabel = builder.CreateLabel("if_end");
 
-        EmitConditionFalseJump(ifElseSyntax.Condition, falseLabel);
+        EmitConditionFalseJump(ifElseSyntax.Condition, falseTrampolineLabel);
+        builder.JumpAbsolute(trueLabel);
+        builder.Label(falseTrampolineLabel);
+        builder.JumpAbsolute(falseLabel);
+        builder.Label(trueLabel);
         var thenTerminates = EmitBlock(ifElseSyntax.ThenBlock);
         if (ifElseSyntax.ElseBlock.HasValue)
         {
@@ -1397,9 +1432,9 @@ internal sealed class NesRuntimeCompiler
         var worldMap = program.WorldMap
                        ?? throw new InvalidOperationException("camera_init requires world_map(...) data for the NES target.");
         var mapWidth = NesVideoProgram.ConstValue(call.Parameters.ElementAt(0), "camera_init argument 1");
-        if (mapWidth is < 1 or > 64)
+        if (mapWidth is < 1 or > 255)
         {
-            throw new InvalidOperationException("NES camera_init map width must fit the current two-nametable 64-column horizontal streaming buffer.");
+            throw new InvalidOperationException("NES camera_init map width must fit one byte in the current horizontal streaming runtime.");
         }
 
         if (mapWidth > worldMap.Width)
@@ -1570,6 +1605,298 @@ internal sealed class NesRuntimeCompiler
         builder.TransferAToX();
         builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowLabel(sourceRow));
         builder.StoreAAbsolute(0x2007);
+    }
+
+    internal void EmitCameraAabbTiles(Sdk2DOperation.CameraAabbTiles operation)
+    {
+        if (operation.WorldId != "default")
+        {
+            throw new InvalidOperationException($"Unsupported NES world id '{operation.WorldId}'.");
+        }
+
+        var config = EnsureCameraConfigured("camera_aabb_tiles");
+        _ = WorldMapForFlagQuery("camera_aabb_tiles");
+        var width = CameraAabbWidth(operation.Width);
+        var flags = (int)operation.Flags;
+        if (width == 0 || operation.Height == 0 || flags == 0)
+        {
+            builder.LoadAImmediate(0);
+            return;
+        }
+
+        if (operation.ScreenX + width > NesTarget.Capabilities.ScreenPixels.Width)
+        {
+            throw new InvalidOperationException("camera_aabb_tiles screen span must fit within the visible NES width.");
+        }
+
+        var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
+        var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
+        foreach (var yOffset in AabbSampleOffsets(operation.Height))
+        {
+            foreach (var xOffset in AabbSampleOffsets(width))
+            {
+                var nextProbeLabel = builder.CreateLabel("camera_aabb_tiles_next");
+                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                builder.AndImmediate(flags);
+                builder.CompareImmediate(0);
+                builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
+                builder.JumpAbsolute(foundLabel);
+                builder.Label(nextProbeLabel);
+            }
+        }
+
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(foundLabel);
+        builder.LoadAImmediate(1);
+        builder.Label(endLabel);
+    }
+
+    internal void EmitCameraAabbHitTop(Sdk2DOperation.CameraAabbHitTop operation)
+    {
+        if (operation.WorldId != "default")
+        {
+            throw new InvalidOperationException($"Unsupported NES world id '{operation.WorldId}'.");
+        }
+
+        var callName = "camera_aabb_hit_top";
+        var config = EnsureCameraConfigured(callName);
+        _ = WorldMapForFlagQuery(callName);
+        var width = CameraAabbWidth(operation.Width);
+        var flags = (int)operation.Flags;
+        if (width == 0 || operation.Height == 0 || flags == 0)
+        {
+            builder.LoadAImmediate(255);
+            return;
+        }
+
+        if (operation.ScreenX + width > NesTarget.Capabilities.ScreenPixels.Width)
+        {
+            throw new InvalidOperationException("camera_aabb_hit_top screen span must fit within the visible NES width.");
+        }
+
+        var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
+        foreach (var yOffset in AabbSampleOffsets(operation.Height))
+        {
+            foreach (var xOffset in AabbSampleOffsets(width))
+            {
+                var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
+                var hitTopOffset = operation.WorldYOffset + yOffset;
+                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, hitTopOffset, config, callName);
+                builder.AndImmediate(flags);
+                builder.CompareImmediate(0);
+                builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
+                EmitWorldPixelTileTop(operation.WorldY, hitTopOffset);
+                builder.JumpAbsolute(endLabel);
+                builder.Label(nextProbeLabel);
+            }
+        }
+
+        builder.LoadAImmediate(255);
+        builder.Label(endLabel);
+    }
+
+    private void EmitCameraTileFlagsAt(int screenPixelX, SdkByteExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
+    {
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
+        var endLabel = builder.CreateLabel("camera_tile_flags_end");
+        if (TrySdkConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(row);
+            return;
+        }
+
+        EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        var inBoundsLabel = builder.CreateLabel("camera_tile_flags_in_bounds");
+        builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
+        builder.JumpAbsolute(outOfBoundsLabel);
+        builder.Label(inBoundsLabel);
+        builder.StoreAZeroPage(CollisionRowScratchAddress);
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
+            builder.LoadAZeroPage(CollisionRowScratchAddress);
+            builder.CompareImmediate(row);
+            builder.BranchRelative(0xD0, nextRowLabel); // BNE nextRowLabel
+            builder.LoadAZeroPage(CollisionColumnScratchAddress);
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
+    private void EmitMapFlagsAtSourceColumnInA(int row)
+    {
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(NesRomBuilder.WorldMapFlagRowLabel(row));
+    }
+
+    private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
+    {
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+
+        builder.LoadAZeroPage(CameraXAddress);
+        if (screenPixelX != 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(screenPixelX);
+        }
+
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.BranchRelative(0x90, endLabel); // BCC endLabel
+        builder.SetCarry();
+        builder.SubtractImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
+        builder.Label(endLabel);
+    }
+
+    private void EmitWorldPixelToTileCoordinate(SdkByteExpression expression, int offset)
+    {
+        EmitSdkByteExpressionToA(expression);
+        EmitAddSignedImmediate(offset);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+    }
+
+    private void EmitWorldPixelTileTop(SdkByteExpression expression, int offset)
+    {
+        EmitSdkByteExpressionToA(expression);
+        EmitAddSignedImmediate(offset);
+        builder.AndImmediate(0xF8);
+    }
+
+    private WorldMap2D WorldMapForFlagQuery(string callName)
+    {
+        return program.WorldMap
+               ?? throw new InvalidOperationException($"{callName} requires world_map collision flag data.");
+    }
+
+    private int CameraAabbWidth(SdkAabbExtent width)
+    {
+        return width switch
+        {
+            SdkAabbExtent.Constant constant => constant.Value,
+            SdkAabbExtent.SpriteWidth spriteWidth => SpriteWidth(spriteWidth.SpriteId),
+            _ => throw new InvalidOperationException($"Unsupported camera AABB width '{width.GetType().Name}'."),
+        };
+    }
+
+    private int SpriteWidth(string assetName)
+    {
+        if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES sprite asset '{assetName}'. Declare it with sprite_asset(...).");
+        }
+
+        return asset.LogicalWidth;
+    }
+
+    private void EmitSpriteWidth(FunctionCall call)
+    {
+        builder.LoadAImmediate(SpriteWidth(call));
+    }
+
+    private int SpriteWidth(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 1);
+        var assetName = NesVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "sprite_width argument 1");
+        return SpriteWidth(assetName);
+    }
+
+    private void EmitAnimationFrame(FunctionCall call)
+    {
+        NesVideoProgram.RequireArity(call, 2);
+        var clip = AnimationClipArg(call);
+        var tickExpression = call.Parameters.ElementAt(1);
+        if (TryConst(tickExpression, out var tick))
+        {
+            builder.LoadAImmediate(clip.FrameAtTick(tick % clip.DurationTicks));
+            return;
+        }
+
+        EmitExpressionToA(tickExpression);
+        EmitAnimationFrameFromTickInA(clip);
+    }
+
+    private void EmitAnimationFrameFromTickInA(SpriteAnimationClip clip)
+    {
+        var moduloLabel = builder.CreateLabel("animation_frame_modulo");
+        var afterModuloLabel = builder.CreateLabel("animation_frame_after_modulo");
+        var endLabel = builder.CreateLabel("animation_frame_end");
+
+        builder.Label(moduloLabel);
+        builder.CompareImmediate(clip.DurationTicks);
+        builder.BranchRelative(0x90, afterModuloLabel); // BCC afterModuloLabel
+        builder.SetCarry();
+        builder.SubtractImmediate(clip.DurationTicks);
+        builder.JumpAbsolute(moduloLabel);
+
+        builder.Label(afterModuloLabel);
+        for (var i = 0; i < clip.FrameCount - 1; i++)
+        {
+            var nextFrameLabel = builder.CreateLabel("animation_frame_next");
+            builder.CompareImmediate(clip.FrameStartTicks[i + 1]);
+            builder.BranchRelative(0xB0, nextFrameLabel); // BCS nextFrameLabel
+            builder.LoadAImmediate(clip.FrameIndices[i]);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextFrameLabel);
+        }
+
+        builder.LoadAImmediate(clip.FrameIndices[^1]);
+        builder.Label(endLabel);
+    }
+
+    private SpriteAnimationClip AnimationClipArg(FunctionCall call)
+    {
+        var clipName = NesVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "animation_frame argument 1");
+        if (!program.AnimationClips.TryGetValue(clipName, out var clip))
+        {
+            throw new InvalidOperationException($"Unknown animation clip '{clipName}'. Declare it with animation_clip(...).");
+        }
+
+        return clip;
+    }
+
+    private static IReadOnlyList<int> AabbSampleOffsets(int size)
+    {
+        var offsets = new List<int>();
+        for (var offset = 0; offset < size; offset += 8)
+        {
+            offsets.Add(offset);
+        }
+
+        var lastOffset = size - 1;
+        if (!offsets.Contains(lastOffset))
+        {
+            offsets.Add(lastOffset);
+        }
+
+        return offsets;
     }
 
     private NesCameraConfig EnsureCameraConfigured(string callName)
@@ -2069,6 +2396,18 @@ internal sealed class NesRuntimeCompiler
             case "button_hold_ticks":
                 EmitButtonHoldTicks(call);
                 break;
+            case "camera_aabb_tiles":
+                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbTiles(call));
+                break;
+            case "camera_aabb_hit_top":
+                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(call));
+                break;
+            case "animation_frame":
+                EmitAnimationFrame(call);
+                break;
+            case "sprite_width":
+                EmitSpriteWidth(call);
+                break;
             default:
                 if (TryEmitUserValueFunction(call))
                 {
@@ -2250,7 +2589,7 @@ internal sealed class NesRuntimeCompiler
 
 internal sealed class PrgBuilder
 {
-    private const int BaseAddress = 0xC000;
+    public const ushort BaseAddress = 0x8000;
     private readonly List<byte> bytes = [];
     private readonly Dictionary<string, int> labels = [];
     private readonly List<(int Offset, string Label, int Addend)> absoluteFixups = [];

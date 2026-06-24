@@ -45,8 +45,8 @@ public sealed class NesTargetCapabilitiesTests
         Assert.False(capabilities.SupportsHudMode(HudMode.Sprite));
         Assert.False(capabilities.SupportsCollisionQuery(CollisionQueryMode.WorldTileFlags));
         Assert.False(capabilities.SupportsCollisionQuery(CollisionQueryMode.WorldAabb));
-        Assert.False(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb));
-        Assert.False(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabbHitTop));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabb));
+        Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabbHitTop));
     }
 
     private static bool CanStreamVisibleColumn(Target2DCapabilities capabilities)

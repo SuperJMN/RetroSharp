@@ -83,7 +83,7 @@ public sealed class NesWorldLoadTests : IDisposable
         Assert.Equal(6, program.NameTable[0]);
 
         var rom = NesRomCompiler.CompileSource(source, directory);
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.Equal((byte)'N', rom[0]);
     }
 
@@ -136,7 +136,7 @@ public sealed class NesWorldLoadTests : IDisposable
         var nesRom = NesRomCompiler.CompileSource(source, directory);
 
         Assert.NotEmpty(gbRom);
-        Assert.Equal(24592, nesRom.Length);
+        Assert.Equal(40976, nesRom.Length);
         Assert.Equal((byte)'N', nesRom[0]);
     }
 
@@ -198,7 +198,7 @@ public sealed class NesWorldLoadTests : IDisposable
         var nesRom = NesRomCompiler.CompileSource(source, directory);
 
         Assert.NotEmpty(gbRom);
-        Assert.Equal(24592, nesRom.Length);
+        Assert.Equal(40976, nesRom.Length);
         Assert.Equal((byte)'N', nesRom[0]);
     }
 

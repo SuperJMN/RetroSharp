@@ -15,7 +15,7 @@ RetroSharp's original path uses a multi-stage compilation pipeline:
 
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
-- `--target nes`: emits an iNES ROM for static background/tile drawing plus narrow tick-based input, logical sprite, and horizontal camera runtime subsets.
+- `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and camera-relative runner collision. NES BGM, vertical camera movement, HUD, and generic world-space collision are still not implemented.
 - `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, horizontal `camera.*` helpers, `sprite.Set(...)`, runtime map column streaming, simple source-map tile queries for collision, and joypad button queries.
 
 ## What can it do?

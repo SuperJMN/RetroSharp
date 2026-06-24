@@ -115,18 +115,19 @@ Progress (2026-06-14):
 - Pending in the edited #106 slice: none known after PL-E1.
 - Active SDK v1 stabilization backlog after #106: none known after the collision, cross-target
   diagnostic, and logical palette slices landed.
-- Camera-relative AABB decision implemented after #106: `camera.AabbTiles(...)` is a
-  capability-gated SDK query for fixed-screen actors. Game Boy declares and lowers it through
-  `Sdk2DOperation.CameraAabbTiles`; NES declares no collision-query support and rejects it.
+- Camera-relative AABB decision implemented after #106 and extended to NES runner parity:
+  `camera.AabbTiles(...)` is a capability-gated SDK query for fixed-screen actors. Game Boy and
+  NES both declare and lower it through `Sdk2DOperation.CameraAabbTiles`.
 - Landing tile-hit decision implemented after #106: `camera.AabbHitTop(...)` is a
   capability-gated SDK query that returns the top world-pixel Y of the first matching tile in a
-  caller-defined fixed-screen actor AABB, or `255` when none hit. Game Boy lowers it through
-  `Sdk2DOperation.CameraAabbHitTop`; NES rejects it explicitly until collision-query lowering
-  exists. The runner uses it to remove the old repeated tile-offset landing probe ladder while
-  keeping the downward-velocity gate and `player.Land(...)` policy in source.
-- Runner-shaped cross-target validation decision after #106: `CrossTargetScrollAcceptanceTests`
-  includes an explicit NES diagnostic for camera-relative AABB collision instead of pretending the
-  runner-shaped collision slice is portable today.
+  caller-defined fixed-screen actor AABB, or `255` when none hit. Game Boy and NES lower it
+  through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
+  tile-offset landing probe ladder while keeping the downward-velocity gate and
+  `player.Land(...)` policy in source.
+- Runner-shaped NES parity decision: `samples/runner/runner.nes.rs` tracks the Game Boy runner
+  source except for audio setup and per-frame audio update. `NesRunnerAcceptanceTests` enforces
+  that source relationship and the runner ROM build, while `CrossTargetScrollAcceptanceTests`
+  verifies that runner-shaped camera-relative collision lowers on both targets.
 - Logical palette decision implemented after #106: `palette.Background(slot, c0, c1, c2, c3)`
   and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
   Game Boy lowers background slot `0` to `BGP`, sprite slots `0..1` to `OBP0/OBP1`, and NES
@@ -170,9 +171,11 @@ Pipeline shape (two phases, after #105 partial extraction):
   their own 2bpp tile byte layout (Game Boy interleaved planes; NES planar planes), deduplicating
   and composing the background under blank world cells. `world.Load(path)` therefore lowers on both
   Game Boy and NES from the same source.
-- NES limitations: the Tiled map must fit the current 64-column horizontal streaming buffer and
-  visible 30-row height, vertical streaming is not supported yet, and the four canonical tones map
-  to a single fixed grayscale background palette (per-region attribute palettes are future work).
+- NES limitations: the Tiled source map width must fit the one-byte horizontal streaming runtime,
+  the current visible/off-screen buffer is still two nametables wide, the streamed slice must fit
+  the visible 30-row height, vertical streaming is not supported yet, and the four canonical tones
+  map to a single fixed grayscale background palette (per-region attribute palettes are future
+  work).
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.

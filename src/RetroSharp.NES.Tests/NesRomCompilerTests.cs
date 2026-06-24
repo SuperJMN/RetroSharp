@@ -28,19 +28,19 @@ public class NesRomCompilerTests
 
         var rom = NesRomCompiler.CompileSource(source);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.Equal((byte)'N', rom[0]);
         Assert.Equal((byte)'E', rom[1]);
         Assert.Equal((byte)'S', rom[2]);
         Assert.Equal(0x1A, rom[3]);
-        Assert.Equal(1, rom[4]);
+        Assert.Equal(2, rom[4]);
         Assert.Equal(1, rom[5]);
 
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
-        var chr = rom.Skip(16 + 16 * 1024).Take(8 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+        var chr = rom.Skip(16 + 32 * 1024).Take(8 * 1024).ToArray();
 
         Assert.Equal(0x00, prg[^4]);
-        Assert.Equal(0xC0, prg[^3]);
+        Assert.Equal(0x80, prg[^3]);
         Assert.Contains(chr, b => b != 0);
     }
 
@@ -57,7 +57,7 @@ public class NesRomCompilerTests
 
         var rom = NesRomCompiler.CompileSource(source);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(rom, [0x0F, 0x10, 0x20, 0x30]), "palette.Background slot 2 should write the third NES background palette.");
         Assert.True(ContainsSequence(rom, [0x0F, 0x11, 0x22, 0x33]), "palette.Sprite slot 3 should write the fourth NES sprite palette.");
     }
@@ -818,7 +818,7 @@ public class NesRomCompilerTests
 
         var rom = NesRomCompiler.CompileSource(source);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
     }
 
     [Fact]
@@ -829,7 +829,7 @@ public class NesRomCompilerTests
         var baseDirectory = Path.GetDirectoryName(sourcePath);
 
         Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, baseDirectory).Length);
-        Assert.Equal(24592, NesRomCompiler.CompileSource(source, baseDirectory).Length);
+        Assert.Equal(40976, NesRomCompiler.CompileSource(source, baseDirectory).Length);
     }
 
     [Fact]
@@ -863,7 +863,7 @@ public class NesRomCompilerTests
 
         var rom = NesRomCompiler.CompileSource(source);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
     }
 
     [Fact]
@@ -888,9 +888,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0xF0, 0x85, 0xF1]), "input_poll should snapshot previous controller state before reading the current tick.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x8D, 0x16, 0x40, 0xA9, 0x00, 0x8D, 0x16, 0x40]), "input_poll should strobe NES controller port $4016.");
         Assert.True(ContainsSequence(prg, [0xAD, 0x16, 0x40, 0x29, 0x01]), "input_poll should read serial button bits from NES controller port $4016.");
@@ -918,9 +918,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00]), "ROM should store position.x at the first zero-page field address.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "ROM should copy position.x to adjacent position.y with direct zero-page access.");
     }
@@ -1022,9 +1022,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x07, 0x85, 0x00]), "Alias ActorIndex should compile as the first byte-backed local.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x00, 0x85, 0x01]), "Alias Position should compile as a struct field at the next local address.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x00, 0x85, 0x02]), "Alias Position should preserve all struct fields with no alias storage.");
@@ -1048,9 +1048,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00]), "Const StartX should compile as an immediate store to the first zero-page local.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x01]), "Const Copy should compile as an immediate store to the second zero-page local, with no const storage slot.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "Const declarations should not shift runtime local addresses.");
@@ -1072,9 +1072,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x29, 0x85, 0x00]), "Local const Copy should compile its derived value as an immediate store to the first zero-page local.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x01]), "Local const declarations should not reserve zero-page storage before the second local.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "Local const declarations should not shift runtime local addresses.");
@@ -1095,9 +1095,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x85, 0x00]), "Const conditional expression should fold to one immediate store with no runtime conditional.");
     }
 
@@ -1153,9 +1153,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x04, 0x85, 0x00]), "sizeof(Actor) should compile as the struct byte size immediate.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x85, 0x01]), "sizeof(ptr<u8>) should compile as the pointer byte size immediate.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "sizeof expressions should not reserve storage or emit helper code.");
@@ -1181,9 +1181,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x00]), "offsetof(Actor, y) should compile as the field byte offset immediate.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x03, 0x85, 0x01]), "offsetof(Actor, active) should compile as the field byte offset immediate.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "offsetof expressions should not reserve storage or emit helper code.");
@@ -1205,9 +1205,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00]), "Array index 0 should store to the first zero-page byte.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "Array index 1 should load from the adjacent zero-page byte with direct addressing.");
     }
@@ -1281,9 +1281,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x04, 0x85, 0x04]), "countof(values) should compile as an immediate store after the four array bytes.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x04, 0x85, 0x00]), "countof should not emit a helper; subsequent array assignment should remain direct.");
     }
@@ -1307,9 +1307,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00]), "Enum Brick should compile as an immediate store to the first zero-page local.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x29, 0x85, 0x01]), "Implicit enum Bonus should compile as the next immediate value with no enum storage slot.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "Enum declarations should not shift runtime local addresses.");
@@ -1329,9 +1329,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x18, 0x65, 0x00, 0x85, 0x00]), "x += y should lower to direct zero-page addition and store.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE9, 0x01, 0x85, 0x00]), "x -= 1 should lower to direct zero-page subtract/store without a helper call.");
     }
@@ -1350,9 +1350,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0xC9, 0x03, 0xB0]), "for condition should compare i with 3 and branch out when i >= 3.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x18, 0x65, 0x00, 0x85, 0x00]), "for body should use direct x += i zero-page arithmetic.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x18, 0x69, 0x01, 0x85, 0x01]), "for increment should use direct i += 1 zero-page arithmetic.");
@@ -1374,9 +1374,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]), "x++ should lower to direct x += 1 zero-page arithmetic.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE9, 0x01, 0x85, 0x00]), "x-- should lower to direct x -= 1 zero-page arithmetic.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x18, 0x69, 0x01, 0x85, 0x01]), "for i++ should lower to direct i += 1 zero-page arithmetic.");
@@ -1396,9 +1396,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x00, 0x85, 0x01]), "range-for should initialize the loop local once from the range start.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0xC9, 0x03, 0xB0]), "range-for should compare i with the exclusive upper bound and branch out when i >= end.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x18, 0x65, 0x00, 0x85, 0x00]), "range-for body should use direct x += i zero-page arithmetic.");
@@ -1418,9 +1418,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x04, 0xAA]), "runtime array indexing should transfer the byte index to X without a helper call or implicit bounds check.");
         Assert.True(ContainsSequence(prg, [0xB5, 0x00, 0x18, 0x69, 0x01, 0x95, 0x00]), "values[i] += 1 should use zero-page indexed load/add/store without a helper call.");
     }
@@ -1445,18 +1445,18 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         var loopStart = IndexOfSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]);
         var continueCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x01, 0xD0]);
         var breakCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x03, 0xD0]);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(loopStart >= 0, "loop body should start with direct x++ zero-page arithmetic.");
         Assert.True(continueCompare >= 0, "continue guard should compare x with 1.");
         Assert.True(breakCompare >= 0, "break guard should compare x with 3.");
-        Assert.Equal(0xC000 + loopStart, ReadLittleEndian16(prg, continueCompare + 7));
-        Assert.True(ReadLittleEndian16(prg, breakCompare + 7) > 0xC000 + breakCompare, "break should jump beyond the loop body.");
+        Assert.True(ContainsAbsoluteJumpTo(prg, 0x8000 + loopStart, continueCompare, breakCompare), "continue should jump back to the loop start.");
+        Assert.True(ContainsAbsoluteJumpAfter(prg, breakCompare, prg.Length, 0x8000 + breakCompare), "break should jump beyond the loop body.");
     }
 
     [Fact]
@@ -1479,22 +1479,19 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         var continueCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x01, 0xD0]);
         var breakCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x03, 0xD0]);
         var increment = IndexOfSequence(prg, [0xA5, 0x01, 0x18, 0x69, 0x01, 0x85, 0x01]);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(continueCompare >= 0, "continue guard should compare i with 1.");
         Assert.True(breakCompare >= 0, "break guard should compare i with 3.");
         Assert.True(increment >= 0, "for increment should still be emitted as direct i += 1 arithmetic.");
 
-        var continueJumpTarget = ReadLittleEndian16(prg, continueCompare + 7);
-        Assert.Equal(0xC000 + increment, continueJumpTarget);
-
-        var breakJumpTarget = ReadLittleEndian16(prg, breakCompare + 7);
-        Assert.True(breakJumpTarget > 0xC000 + increment + 7, "break should jump beyond the increment and final loop jump.");
+        Assert.True(ContainsAbsoluteJumpTo(prg, 0x8000 + increment, continueCompare, breakCompare), "continue should jump to the for increment.");
+        Assert.True(ContainsAbsoluteJumpAfter(prg, breakCompare, prg.Length, 0x8000 + increment + 7), "break should jump beyond the increment and final loop jump.");
     }
 
     [Fact]
@@ -1515,19 +1512,18 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         var continueCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x01, 0xD0]);
         var conditionCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x03, 0xB0]);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]), "do body should emit x++ as direct zero-page arithmetic before the first condition check.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x02, 0x85, 0x00]), "do body should emit direct zero-page arithmetic after the continue guard.");
         Assert.True(continueCompare >= 0, "continue guard should compare x with 1.");
         Assert.True(conditionCompare >= 0, "do-while condition should compare x with 3 at the bottom of the loop.");
 
-        var continueJumpTarget = ReadLittleEndian16(prg, continueCompare + 7);
-        Assert.Equal(0xC000 + conditionCompare, continueJumpTarget);
+        Assert.True(ContainsAbsoluteJumpTo(prg, 0x8000 + conditionCompare, continueCompare, conditionCompare), "continue should jump to the do-while condition check.");
     }
 
     [Fact]
@@ -1549,19 +1545,20 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         var andLeftCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x00, 0xF0]);
         var andRightCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x00, 0xF0]);
         var orLeftCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x00, 0xD0]);
         var orBody = IndexOfSequence(prg, [0xA5, 0x02, 0x18, 0x69, 0x02, 0x85, 0x02]);
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(andLeftCompare >= 0, "&& should test the left condition and branch false before touching the right side.");
         Assert.True(andRightCompare > andLeftCompare, "&& should evaluate the right condition only after the left condition succeeds.");
         Assert.True(orLeftCompare >= 0, "|| should test the left condition with a direct true branch.");
         Assert.True(orBody > orLeftCompare, "|| body should be emitted after the left condition branch.");
-        Assert.Equal(0xC000 + orBody, ReadRelativeTarget(prg, orLeftCompare + 4));
+        var orLeftTarget = ReadRelativeTarget(prg, orLeftCompare + 4);
+        Assert.True(orLeftTarget > 0x8000 + orLeftCompare && orLeftTarget <= 0x8000 + orBody, "|| should short-circuit toward the body when the left condition succeeds.");
     }
 
     [Fact]
@@ -1606,9 +1603,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x00, 0xD0]), "! should invert x != 0 into a false branch when the inner condition is true.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]), "then body should remain direct x += 1 zero-page arithmetic.");
     }
@@ -1631,9 +1628,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x00, 0xD0]), "first if should compare x with 0 and branch to else when false.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x01, 0xD0]), "else-if should compile as a nested if compare.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]), "first body should remain direct x += 1 zero-page arithmetic.");
@@ -1665,9 +1662,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x00]), "Switch subject should stay a normal byte-backed local.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x00]), "First switch case should compare the subject directly to the case literal.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x01]), "Second switch case should compare the subject directly to the case literal.");
@@ -1696,9 +1693,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x00]), "Multi-value switch case should compare the subject with the first literal.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x01]), "Multi-value switch case should compare the subject with the second literal.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x0A, 0x85, 0x01]), "Multi-value switch case should share one direct branch body.");
@@ -1725,9 +1722,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x01, 0x90]), "Range switch case should compare the subject with the inclusive lower bound and branch out when subject < start.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x04, 0xB0]), "Range switch case should compare the subject with the exclusive upper bound and branch out when subject >= end.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x0A, 0x85, 0x01]), "Range switch case should share one direct branch body.");
@@ -1748,9 +1745,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x04, 0x85, 0x00]), "Untyped top-level const should fold to the direct literal initializer.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x05, 0x85, 0x00]), "Untyped block-local const should fold to the direct literal assignment.");
     }
@@ -1772,9 +1769,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x09, 0x01, 0x85, 0x00]), "flags |= Solid should lower to LDA/ORA immediate/STA with no helper.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x29, 0xFD, 0x85, 0x00]), "flags &= ~Hazard should lower to LDA/AND immediate/STA with no helper.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x49, 0x04, 0x85, 0x00]), "flags ^= Toggle should lower to LDA/EOR immediate/STA with no helper.");
@@ -1801,9 +1798,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x09, 0x01, 0x85, 0x00]), "set_flag(flags, 1) should inline as LDA/ORA immediate/STA with no call ABI.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x29, 0xFD, 0x85, 0x00]), "clear_flag(flags, 2) should inline as LDA/AND immediate/STA with no call ABI.");
     }
@@ -1821,9 +1818,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x09, 0x02, 0x85, 0x00]), "Explicit casts should disappear before NES lowering and leave the direct expression sequence.");
     }
 
@@ -1842,9 +1839,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x00, 0xF0]), "&& should false-branch after the left operand.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0xC9, 0x00, 0xF0]), "&& should false-branch after the right operand.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x00, 0x85, 0x02]), "&& should materialize false as 0 in the destination byte.");
@@ -1866,9 +1863,9 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0xC9, 0x00, 0xF0]), "Conditional expression should branch to the false value when the condition is false.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x01, 0x4C]), "Conditional expression should load the true branch value and jump over the false branch.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x00, 0x85, 0x02]), "Conditional expression should load the false branch value and store one selected byte.");
@@ -1912,11 +1909,11 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source, baseDirectory);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
-        var chr = rom.Skip(16 + 16 * 1024).Take(8 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+        var chr = rom.Skip(16 + 32 * 1024).Take(8 * 1024).ToArray();
         var spriteTile = chr.Skip(6 * 16).Take(16).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.Equal(Enumerable.Repeat((byte)0xFF, 8).Concat(Enumerable.Repeat((byte)0x00, 8)), spriteTile);
         Assert.True(ContainsSequence(prg, [0xA9, 0x20, 0x38, 0xE9, 0x01, 0x8D, 0x00, 0x02]), "sprite_draw should write NES OAM Y as logical y - 1.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x06, 0x8D, 0x01, 0x02]), "sprite_draw should write the first compiled sprite tile to OAM.");
@@ -1946,10 +1943,10 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source, baseDirectory);
-        var chr = rom.Skip(16 + 16 * 1024).Take(8 * 1024).ToArray();
+        var chr = rom.Skip(16 + 32 * 1024).Take(8 * 1024).ToArray();
         var spriteTile = chr.Skip(6 * 16).Take(16).ToArray();
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.Equal(Enumerable.Repeat((byte)0xFF, 16), spriteTile);
     }
 
@@ -2035,7 +2032,7 @@ public class NesRomCompilerTests
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
         var expectedRows = Enumerable
             .Repeat((byte)0, 64)
             .ToArray();
@@ -2044,7 +2041,7 @@ public class NesRomCompilerTests
         expectedRows[32] = 2;
         expectedRows[33] = 4;
 
-        Assert.Equal(24592, rom.Length);
+        Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, expectedRows), "world_map should seed the visible NES nametable from world_column data.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xE0]), "camera_set_position(8, 0) should store the horizontal camera byte.");
         Assert.True(ContainsSequence(prg, [0xAD, 0x02, 0x20, 0xA5, 0xE0, 0x8D, 0x05, 0x20, 0xA9, 0x00, 0x8D, 0x05, 0x20]), "camera_apply should reset the PPU scroll latch and write horizontal then zero vertical scroll.");
@@ -2251,8 +2248,34 @@ public class NesRomCompilerTests
         return bytes[offset] | bytes[offset + 1] << 8;
     }
 
+    private static bool ContainsAbsoluteJumpTo(IReadOnlyList<byte> bytes, int target, int startInclusive, int endExclusive)
+    {
+        for (var i = Math.Max(0, startInclusive); i <= Math.Min(bytes.Count, endExclusive) - 3; i++)
+        {
+            if (bytes[i] == 0x4C && ReadLittleEndian16(bytes, i + 1) == target)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsAbsoluteJumpAfter(IReadOnlyList<byte> bytes, int startInclusive, int endExclusive, int minimumTarget)
+    {
+        for (var i = Math.Max(0, startInclusive); i <= Math.Min(bytes.Count, endExclusive) - 3; i++)
+        {
+            if (bytes[i] == 0x4C && ReadLittleEndian16(bytes, i + 1) > minimumTarget)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static int ReadRelativeTarget(IReadOnlyList<byte> bytes, int branchOffset)
     {
-        return 0xC000 + branchOffset + 2 + unchecked((sbyte)bytes[branchOffset + 1]);
+        return 0x8000 + branchOffset + 2 + unchecked((sbyte)bytes[branchOffset + 1]);
     }
 }

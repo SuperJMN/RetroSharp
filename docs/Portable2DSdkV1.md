@@ -130,15 +130,15 @@ Static enforcement is per-operation. The shared operation list is flattened acro
 | API group | Game Boy | NES |
 | --- | --- | --- |
 | Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
-| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for initial two-nametable horizontal setup, with a current 64-column map width limit. |
+| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. |
 | Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with runtime column streaming into the off-screen nametable for maps wider than 32 columns. |
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs using duty, wave, and noise channels in the current runtime. | Not implemented; `music.Play(...)` fails capability validation. |
-| Animation helpers | Supported on Game Boy runner path. | Runtime animation is not part of the current NES spike. |
-| World collision queries | Supported on Game Boy runner path. | Not implemented in the current NES spike. |
-| Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors. | Not implemented; the target declares no collision-query support. |
+| Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
+| World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
+| Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors on horizontal maps. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
 
 Use `samples/manifest.json` to identify which samples are portable. Currently `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample and builds for both Game Boy and NES.
@@ -156,8 +156,6 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | NES BGM playback | `Target 'nes' does not support BGM playback yet.` |
 | Game Boy sprite palette slot overflow | `Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.` |
 | NES world tile flag query | `Target 'nes' does not support world tile flag queries.` |
-| NES camera-relative AABB collision | `Target 'nes' does not support camera-relative AABB collision queries.` |
-| NES camera-relative AABB hit-top collision | `Target 'nes' does not support camera-relative AABB hit-top queries.` |
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
@@ -166,12 +164,12 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 ## Current Stabilization Gaps
 
-SDK v1 is usable for the current cross-target camera sample, but the runner-shaped framework contract is not fully portable yet.
+SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because NES audio/BGM remains unimplemented and several broader world/HUD contracts are still missing.
 
-- `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are now capability-gated SDK queries for fixed-screen actors. Game Boy supports both; NES rejects both until a collision-query lowering exists.
+- `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for fixed-screen actors. Game Boy and NES both support the runner-shaped horizontal form.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when a fixed-screen actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are still target palette indexes; a future asset pipeline can lift them into named color resources if needed.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. Runner-shaped collision is covered by an explicit NES capability diagnostic in `CrossTargetScrollAcceptanceTests` until NES grows collision-query lowering.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` and `samples/runner/runner.nes.rs` remain `target-acceptance` samples; the NES version tracks the Game Boy runner except for audio.
 
 ## Minimal Game Boy/NES Example
 

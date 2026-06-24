@@ -24,3 +24,9 @@ tools/gameboy/generate_sample_roms.py
 ```
 
 By default the script rebuilds only manifest samples that target Game Boy and already have a sibling `.gb` output tracked by Git. Use `--dry-run` to inspect the commands, `--all` to build every manifest sample that declares the `gb` target, or pass explicit sample paths such as `samples/runner/runner.rs`.
+
+The NES runner ROM is also tracked. Regenerate it directly when `samples/runner/runner.nes.rs` or NES runner lowering changes:
+
+```sh
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/runner.nes samples/runner/runner.nes.rs
+```

@@ -29,6 +29,12 @@ internal static class NesSdkOperationLowerer
             case Sdk2DOperation.StreamMapColumn column:
                 compiler.EmitStreamMapColumn(column);
                 break;
+            case Sdk2DOperation.CameraAabbTiles cameraAabb:
+                compiler.EmitCameraAabbTiles(cameraAabb);
+                break;
+            case Sdk2DOperation.CameraAabbHitTop cameraAabb:
+                compiler.EmitCameraAabbHitTop(cameraAabb);
+                break;
             default:
                 throw new NotSupportedException($"NES SDK lowering does not support {operation.GetType().Name} yet.");
         }

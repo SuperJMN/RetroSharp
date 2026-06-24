@@ -84,7 +84,7 @@ public sealed class CrossTargetScrollAcceptanceTests
         var source = WideHorizontalScrollSource(width: 40, streamY: 0, height: 30);
 
         var rom = NesRomCompiler.CompileSource(source, RepoRoot());
-        var prg = rom.Skip(16).Take(16 * 1024).ToArray();
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         Assert.Equal(0x01, rom[6] & 0x01);
         Assert.True(CountOccurrences(prg, [0x8D, 0x07, 0x20]) >= 32, "NES should emit runtime PPUDATA writes for a full streamed map column, beyond palette and startup nametable upload.");
@@ -116,7 +116,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     }
 
     [Fact]
-    public void Runner_shaped_camera_collision_is_rejected_on_nes_with_explicit_capability_diagnostic()
+    public void Runner_shaped_camera_collision_lowers_on_nes()
     {
         const string collisionSource = """
             void main() {
@@ -135,12 +135,12 @@ public sealed class CrossTargetScrollAcceptanceTests
         var gbRom = GameBoyRomCompiler.CompileSource(collisionSource);
         Assert.Equal(32768, gbRom.Length);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(collisionSource));
-        Assert.Equal("Target 'nes' does not support camera-relative AABB collision queries.", exception.Message);
+        var nesRom = NesRomCompiler.CompileSource(collisionSource);
+        Assert.NotEmpty(nesRom);
     }
 
     [Fact]
-    public void Runner_shaped_camera_hit_top_is_rejected_on_nes_with_explicit_capability_diagnostic()
+    public void Runner_shaped_camera_hit_top_lowers_on_nes()
     {
         const string collisionSource = """
             void main() {
@@ -159,8 +159,8 @@ public sealed class CrossTargetScrollAcceptanceTests
         var gbRom = GameBoyRomCompiler.CompileSource(collisionSource);
         Assert.Equal(32768, gbRom.Length);
 
-        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(collisionSource));
-        Assert.Equal("Target 'nes' does not support camera-relative AABB hit-top queries.", exception.Message);
+        var nesRom = NesRomCompiler.CompileSource(collisionSource);
+        Assert.NotEmpty(nesRom);
     }
 
     private static string RepoRoot()

@@ -27,6 +27,7 @@
 - [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
 - [src/RetroSharp.Z80/](src/RetroSharp.Z80/): Z80 backend.
 - [samples/runner/runner.rs](samples/runner/runner.rs): current Game Boy target-acceptance sample.
+- [samples/runner/runner.nes.rs](samples/runner/runner.nes.rs): NES target-acceptance runner that tracks the Game Boy runner except for audio.
 - [samples/runner/maps/runner.tmj](samples/runner/maps/runner.tmj): editable Tiled runner map.
 - [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked Game Boy sample ROM regeneration script.
 
@@ -38,6 +39,7 @@ git diff --check
 dotnet test RetroSharp.sln -m:1
 tools/gameboy/generate_sample_roms.py --dry-run
 tools/gameboy/generate_sample_roms.py
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/runner.nes samples/runner/runner.nes.rs
 PYTHONPATH=/tmp/retrosharp-pyboy-site python3 tools/gameboy/runner_diagnostics.py
 ```
 

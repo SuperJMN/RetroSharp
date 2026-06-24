@@ -357,7 +357,7 @@ Landed after the NES portable spike:
 
 - NES now supports the first shared tick-input, logical sprite, unified world-map, and horizontal camera-scroll subset.
 - `samples/cross-target-camera/camera.rs` builds for both Game Boy and NES without raw sprite, scroll, tilemap, or target-palette calls.
-- The cross-target sample deliberately excludes vertical camera movement, runtime map streaming on NES, collision queries, runtime animation, and HUD until those features have explicit capability-gated support on both targets.
+- Later NES runner work added horizontal runtime map streaming, camera-relative collision queries, and runtime animation for the runner-shaped path. The cross-target sample still deliberately excludes vertical camera movement, audio, generic world-space collision, and HUD until those features have explicit capability-gated support on both targets.
 
 Landed after the first HUD pass:
 

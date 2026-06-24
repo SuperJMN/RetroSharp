@@ -82,6 +82,7 @@ internal sealed class NesVideoProgram
     private readonly List<NesCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, NesCompiledSpriteAsset> spriteAssets = [];
     private readonly List<(int FirstTile, byte[] Data)> generatedBackgroundTiles = [];
+    private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
     private readonly SortedDictionary<int, byte[]> mapColumns = [];
     private readonly SortedDictionary<int, byte[]> worldColumns = [];
     private readonly SortedDictionary<int, WorldTileFlags[]> worldFlagColumns = [];
@@ -116,6 +117,8 @@ internal sealed class NesVideoProgram
     public IReadOnlyDictionary<string, NesCompiledSpriteAsset> SpriteAssets => spriteAssets;
 
     public IReadOnlyList<(int FirstTile, byte[] Data)> GeneratedBackgroundTiles => generatedBackgroundTiles;
+
+    public IReadOnlyDictionary<string, SpriteAnimationClip> AnimationClips => animationClips;
 
     public required IReadOnlyDictionary<string, FunctionSyntax> Functions { get; init; }
 
@@ -252,6 +255,9 @@ internal sealed class NesVideoProgram
                 break;
             case "sprite_asset":
                 ApplySpriteAsset(call);
+                break;
+            case "animation_clip":
+                ApplyAnimationClip(call);
                 break;
             case "music_asset":
                 RequireArity(call, 2);
@@ -408,11 +414,6 @@ internal sealed class NesVideoProgram
         }
 
         var width = ConstArg(call, 0, 1, 255);
-        if (width > 64)
-        {
-            throw new InvalidOperationException("NES world_map width must fit the current two-nametable 64-column horizontal streaming buffer.");
-        }
-
         var streamY = ConstArg(call, 1, 0, 29);
         var height = ConstArg(call, 2, 1, sourceHeight);
         if (streamY + height > 30)
@@ -504,6 +505,39 @@ internal sealed class NesVideoProgram
         nextSpriteTile += asset.TileCount;
         spriteAssets.Add(name, asset);
         spriteAssetsInLoadOrder.Add(asset);
+    }
+
+    private void ApplyAnimationClip(FunctionCall call)
+    {
+        var args = call.Parameters.ToList();
+        if (args.Count < 3)
+        {
+            throw new InvalidOperationException($"animation_clip expects at least 3 arguments, got {args.Count}.");
+        }
+
+        var name = IdentifierArg(args[0], "animation_clip argument 1");
+        if (animationClips.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Animation clip '{name}' is already declared.");
+        }
+
+        var firstFrame = CheckedRange(ConstValue(args[1], "animation_clip argument 2"), 0, 255, "animation_clip argument 2");
+        var durations = args
+            .Skip(2)
+            .Select((arg, i) => CheckedRange(ConstValue(arg, $"animation_clip argument {i + 3}"), 1, 255, $"animation_clip argument {i + 3}"))
+            .ToArray();
+        var clip = new SpriteAnimationClip(name, firstFrame, durations);
+        if (clip.FrameIndices[^1] > 255)
+        {
+            throw new InvalidOperationException($"Animation clip '{name}' frame indices must fit in one byte for the NES target.");
+        }
+
+        if (clip.DurationTicks > 255)
+        {
+            throw new InvalidOperationException($"Animation clip '{name}' total duration must be 255 ticks or less for the NES target.");
+        }
+
+        animationClips.Add(name, clip);
     }
 
     private void SetTile(int x, int y, int tile)
