@@ -130,8 +130,10 @@ Progress (2026-06-14):
   verifies that runner-shaped camera-relative collision lowers on both targets.
 - Logical palette decision implemented after #106: `palette.Background(slot, c0, c1, c2, c3)`
   and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
-  Game Boy lowers background slot `0` to `BGP`, sprite slots `0..1` to `OBP0/OBP1`, and NES
-  lowers background/sprite slots `0..3` into its 32-byte palette table. The runner now uses
+  Color values are logical tones `0..3`. Game Boy lowers background slot `0` to `BGP` and sprite
+  slots `0..1` to `OBP0/OBP1`; NES lowers background/sprite slots `0..3` into fixed grayscale
+  entries by default, and PNG sprite assets can derive the hardware sprite palette for the draw
+  slot that uses them while preserving the background universal color. The runner now uses
   `palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
   `objectPalette.Set(...)`.
 
@@ -171,11 +173,10 @@ Pipeline shape (two phases, after #105 partial extraction):
   their own 2bpp tile byte layout (Game Boy interleaved planes; NES planar planes), deduplicating
   and composing the background under blank world cells. `world.Load(path)` therefore lowers on both
   Game Boy and NES from the same source.
-- NES limitations: the Tiled source map width must fit the one-byte horizontal streaming runtime,
-  the current visible/off-screen buffer is still two nametables wide, the streamed slice must fit
-  the visible 30-row height, vertical streaming is not supported yet, and the four canonical tones
-  map to a single fixed grayscale background palette (per-region attribute palettes are future
-  work).
+- NES limitations: the Tiled source map width must fit the one-byte source-column runtime, the
+  current visible/off-screen buffer is still two nametables wide, the streamed slice must fit the
+  visible 30-row height, vertical streaming is not supported yet, and the four canonical tones map
+  to a single fixed grayscale background palette (per-region attribute palettes are future work).
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.

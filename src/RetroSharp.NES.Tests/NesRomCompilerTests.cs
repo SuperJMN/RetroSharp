@@ -45,21 +45,21 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Logical_palette_declarations_lower_to_nes_palette_slots()
+    public void Logical_palette_declarations_map_tones_to_nes_grayscale_palette_slots()
     {
         const string source = """
                               void main() {
                                   video.Init();
-                                  palette.Background(2, 15, 16, 32, 48);
-                                  palette.Sprite(3, 15, 17, 34, 51);
+                                  palette.Background(2, 0, 1, 2, 3);
+                                  palette.Sprite(3, 0, 0, 1, 3);
                               }
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
 
         Assert.Equal(40976, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x0F, 0x10, 0x20, 0x30]), "palette.Background slot 2 should write the third NES background palette.");
-        Assert.True(ContainsSequence(rom, [0x0F, 0x11, 0x22, 0x33]), "palette.Sprite slot 3 should write the fourth NES sprite palette.");
+        Assert.True(ContainsSequence(rom, [0x30, 0x10, 0x00, 0x0F]), "palette.Background should map logical light-to-dark tones to NES grayscale colors.");
+        Assert.True(ContainsSequence(rom, [0x30, 0x30, 0x10, 0x0F]), "palette.Sprite should map the runner's logical sprite tones to NES grayscale colors.");
     }
 
     [Fact]
@@ -1951,6 +1951,52 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Colored_png_sprite_sheet_applies_derived_nes_sprite_palette_to_draw_slot()
+    {
+        var baseDirectory = WriteSpritePng(
+            "hero.nes.png",
+            8,
+            8,
+            [
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+                (R: (byte)0xFC, G: (byte)0xBC, B: (byte)0xB0, A: (byte)0xFF),
+                (R: (byte)0xD8, G: (byte)0x28, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+            ],
+            Rows(
+                8,
+                8,
+                "11112222",
+                "11112222",
+                "11112222",
+                "11112222",
+                "33333333",
+                "33333333",
+                "33333333",
+                "33333333"));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  palette.Background(0, 0, 1, 2, 3);
+                                  palette.Sprite(0, 0, 0, 1, 3);
+                                  sprite_asset(hero, "hero.png", 8, 8);
+                                  while (true) {
+                                      video_wait_vblank();
+                                      sprite_draw(hero, 24, 32, 0, 0, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(
+            ContainsSequence(rom, [0x30, 0x36, 0x16, 0x0F]),
+            "colored NES PNG sprite assets should drive the sprite palette slot without overwriting the universal background color.");
+    }
+
+    [Fact]
     public void Rejects_logical_sprite_palette_slots_outside_nes_capabilities()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -1979,6 +2025,29 @@ public class NesRomCompilerTests
         const string source = """
                               void main() {
                                   sprite_asset(hero, "hero.nes.json");
+                                  while (true) {
+                                      sprite_draw(hero, 24, 32, 0, 0, 4);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Contains("Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_png_sprite_palette_slots_outside_nes_capabilities_before_palette_derivation()
+    {
+        var baseDirectory = WriteSpritePng(
+            "hero.nes.png",
+            8,
+            8,
+            Rows(8, 8, Enumerable.Repeat("33333333", 8).ToArray()));
+
+        const string source = """
+                              void main() {
+                                  sprite_asset(hero, "hero.nes.png", 8, 8);
                                   while (true) {
                                       sprite_draw(hero, 24, 32, 0, 0, 4);
                                   }
@@ -2043,8 +2112,37 @@ public class NesRomCompilerTests
 
         Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, expectedRows), "world_map should seed the visible NES nametable from world_column data.");
-        Assert.True(ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xE0]), "camera_set_position(8, 0) should store the horizontal camera byte.");
-        Assert.True(ContainsSequence(prg, [0xAD, 0x02, 0x20, 0xA5, 0xE0, 0x8D, 0x05, 0x20, 0xA9, 0x00, 0x8D, 0x05, 0x20]), "camera_apply should reset the PPU scroll latch and write horizontal then zero vertical scroll.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xE7, 0xA5, 0xE7, 0x85, 0xE0]), "camera_set_position(8, 0) should store the requested horizontal camera byte after the movement check.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xE7, 0x4A, 0x4A, 0x4A, 0x85, 0xE1]), "camera_set_position(8, 0) should derive the absolute camera tile on short maps too.");
+        Assert.True(ContainsSequence(prg, [0xAD, 0x02, 0x20, 0xA5, 0xE1, 0x29, 0x20]), "camera_apply should derive the horizontal nametable bit from the absolute camera tile.");
+        Assert.True(ContainsSequence(prg, [0x8D, 0x00, 0x20, 0xA5, 0xE0, 0x8D, 0x05, 0x20, 0xA9, 0x00, 0x8D, 0x05, 0x20]), "camera_apply should write PPUCTRL before horizontal and zero vertical scroll.");
+    }
+
+    [Fact]
+    public void Camera_relative_collision_uses_absolute_camera_tile_after_scroll_wrap()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 1, 2);
+                                  world_flags(0, 0, 1);
+                                  world_map(68, 10, 2);
+                                  camera_init(68, 10, 2);
+                                  while (true) {
+                                      video_wait_vblank();
+                                      u8 x = button_hold_ticks(right);
+                                      camera_set_position(x, 0);
+                                      u8 hit = camera.AabbTiles(72, 8, 16, 8, 1);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(
+            ContainsSequence(prg, [0xA5, 0xE0, 0x29, 0x07, 0x18, 0x69, 0x48, 0x4A, 0x4A, 0x4A, 0x18, 0x65, 0xE1]),
+            "camera.AabbTiles should combine camera fine X with the absolute source tile, not the wrapped scroll byte.");
     }
 
     [Fact]
@@ -2094,12 +2192,6 @@ public class NesRomCompilerTests
 
     private static string WriteSpritePng(string fileName, int frameWidth, int frameHeight, params string[][] frames)
     {
-        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.NES.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-
-        var width = frameWidth * frames.Length;
-        var height = frameHeight;
-        var rgba = new byte[width * height * 4];
         var palette = new[]
         {
             (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
@@ -2107,6 +2199,23 @@ public class NesRomCompilerTests
             (R: (byte)0xB8, G: (byte)0xB8, B: (byte)0xB8, A: (byte)0xFF),
             (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
         };
+
+        return WriteSpritePng(fileName, frameWidth, frameHeight, palette, frames);
+    }
+
+    private static string WriteSpritePng(
+        string fileName,
+        int frameWidth,
+        int frameHeight,
+        IReadOnlyList<(byte R, byte G, byte B, byte A)> palette,
+        params string[][] frames)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.NES.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+
+        var width = frameWidth * frames.Length;
+        var height = frameHeight;
+        var rgba = new byte[width * height * 4];
 
         for (var frameIndex = 0; frameIndex < frames.Length; frameIndex++)
         {

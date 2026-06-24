@@ -67,10 +67,10 @@ World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values
 
 | Signature | Semantics |
 | --- | --- |
-| `palette.Background(slot, c0, c1, c2, c3)` | Declare one logical background palette slot with four target color values. |
-| `palette.Sprite(slot, c0, c1, c2, c3)` | Declare one logical sprite palette slot with four target color values. |
+| `palette.Background(slot, c0, c1, c2, c3)` | Declare one logical background palette slot with four logical luminance tones `0..3`. |
+| `palette.Sprite(slot, c0, c1, c2, c3)` | Declare one logical sprite palette slot with four logical luminance tones `0..3`. |
 
-The slot is logical and capability-checked against the target descriptor. The four color values are still target palette indexes in this prototype: Game Boy accepts `0..3`, while NES accepts `0..63`. Raw `palette.Set(...)` and `objectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
+The slot is logical and capability-checked against the target descriptor. The four color values are target-independent luminance tones `0..3`; each backend maps them to its hardware palette representation. NES sprite PNG assets can derive a hardware sprite palette for the draw slot that uses the asset, while preserving the universal background color in sprite palette entry `0`. Raw `palette.Set(...)` and `objectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
 
 ### Camera
 
@@ -131,7 +131,7 @@ Static enforcement is per-operation. The shared operation list is flattened acro
 | --- | --- | --- |
 | Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
 | World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. |
-| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with runtime column streaming into the off-screen nametable for maps wider than 32 columns. |
+| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for maps wider than 32 columns. |
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
@@ -160,7 +160,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
 
-Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped palette declarations.
+Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
 
 ## Current Stabilization Gaps
 
@@ -168,7 +168,7 @@ SDK v1 is usable for the current cross-target camera sample, and the runner-shap
 
 - `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for fixed-screen actors. Game Boy and NES both support the runner-shaped horizontal form.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when a fixed-screen actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
-- Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are still target palette indexes; a future asset pipeline can lift them into named color resources if needed.
+- Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
 - `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` and `samples/runner/runner.nes.rs` remain `target-acceptance` samples; the NES version tracks the Game Boy runner except for audio.
 
 ## Minimal Game Boy/NES Example

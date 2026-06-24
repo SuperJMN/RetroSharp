@@ -25,13 +25,77 @@ internal sealed class NesCompiledSpriteAsset
 
     public required IReadOnlyList<NesMetaspritePiece> Pieces { get; init; }
 
+    public required byte[]? SuggestedPalette { get; init; }
+
     public int TileCount => TileData.Length / 16;
 }
 
 internal readonly record struct NesMetaspritePiece(int XOffset, int YOffset, int TileOffset);
 
+internal readonly record struct NesPaletteColor(byte Index, byte R, byte G, byte B);
+
 internal static class NesSpriteAssetCompiler
 {
+    private static readonly NesPaletteColor[] HardwarePalette =
+    [
+        new(0x00, 0x75, 0x75, 0x75),
+        new(0x01, 0x27, 0x1B, 0x8F),
+        new(0x02, 0x00, 0x00, 0xAB),
+        new(0x03, 0x47, 0x00, 0x9F),
+        new(0x04, 0x8F, 0x00, 0x77),
+        new(0x05, 0xAB, 0x00, 0x13),
+        new(0x06, 0xA7, 0x00, 0x00),
+        new(0x07, 0x7F, 0x0B, 0x00),
+        new(0x08, 0x43, 0x2F, 0x00),
+        new(0x09, 0x00, 0x47, 0x00),
+        new(0x0A, 0x00, 0x51, 0x00),
+        new(0x0B, 0x00, 0x3F, 0x17),
+        new(0x0C, 0x1B, 0x3F, 0x5F),
+        new(0x0F, 0x00, 0x00, 0x00),
+        new(0x10, 0xBC, 0xBC, 0xBC),
+        new(0x11, 0x00, 0x73, 0xEF),
+        new(0x12, 0x23, 0x3B, 0xEF),
+        new(0x13, 0x83, 0x00, 0xF3),
+        new(0x14, 0xBF, 0x00, 0xBF),
+        new(0x15, 0xE7, 0x00, 0x5B),
+        new(0x16, 0xD8, 0x28, 0x00),
+        new(0x17, 0xC8, 0x4C, 0x0C),
+        new(0x18, 0x88, 0x70, 0x00),
+        new(0x19, 0x00, 0x97, 0x00),
+        new(0x1A, 0x00, 0xAB, 0x00),
+        new(0x1B, 0x00, 0x93, 0x3B),
+        new(0x1C, 0x00, 0x83, 0x8B),
+        new(0x1D, 0x00, 0x00, 0x00),
+        new(0x20, 0xFF, 0xFF, 0xFF),
+        new(0x21, 0x3F, 0xBF, 0xFF),
+        new(0x22, 0x5F, 0x97, 0xFF),
+        new(0x23, 0xA7, 0x8B, 0xFD),
+        new(0x24, 0xF7, 0x7B, 0xFF),
+        new(0x25, 0xFF, 0x77, 0xB7),
+        new(0x26, 0xFC, 0x74, 0x60),
+        new(0x27, 0xFF, 0x9B, 0x3B),
+        new(0x28, 0xF3, 0xBF, 0x3F),
+        new(0x29, 0x83, 0xD3, 0x13),
+        new(0x2A, 0x4F, 0xDF, 0x4B),
+        new(0x2B, 0x58, 0xF8, 0x98),
+        new(0x2C, 0x00, 0xEB, 0xDB),
+        new(0x2D, 0x00, 0x00, 0x00),
+        new(0x30, 0xFF, 0xFF, 0xFF),
+        new(0x31, 0xAB, 0xE7, 0xFF),
+        new(0x32, 0xC7, 0xD7, 0xFF),
+        new(0x33, 0xD7, 0xCB, 0xFF),
+        new(0x34, 0xFF, 0xC7, 0xFF),
+        new(0x35, 0xFF, 0xC7, 0xDB),
+        new(0x36, 0xFC, 0xBC, 0xB0),
+        new(0x37, 0xFF, 0xDB, 0xAB),
+        new(0x38, 0xFF, 0xE7, 0xA3),
+        new(0x39, 0xE3, 0xFF, 0xA3),
+        new(0x3A, 0xAB, 0xF3, 0xBF),
+        new(0x3B, 0xB3, 0xFF, 0xCF),
+        new(0x3C, 0x9F, 0xFF, 0xF3),
+        new(0x3D, 0x00, 0x00, 0x00),
+    ];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -44,13 +108,14 @@ internal static class NesSpriteAssetCompiler
             throw new InvalidOperationException($"NES sprite asset file '{path}' does not exist.");
         }
 
-        var frames = Path.GetExtension(path).ToLowerInvariant() switch
+        var sprite = Path.GetExtension(path).ToLowerInvariant() switch
         {
-            ".json" => ReadJsonFrames(path),
+            ".json" => new SpriteSource(ReadJsonFrames(path), null),
             ".png" => ReadPngFrames(path, frameWidth, frameHeight),
             _ => throw new InvalidOperationException($"NES sprite asset '{path}' must be a .json or .png file."),
         };
 
+        var frames = sprite.Frames;
         var frameCount = frames.Count;
         var logicalWidth = frames[0][0].Length;
         var logicalHeight = frames[0].Count;
@@ -91,6 +156,7 @@ internal static class NesSpriteAssetCompiler
             TilesPerFrame = tilesPerFrame,
             TileData = tileData,
             Pieces = pieces,
+            SuggestedPalette = sprite.SuggestedPalette,
         };
     }
 
@@ -117,7 +183,7 @@ internal static class NesSpriteAssetCompiler
         return ValidateFrames(platform.Frames, path);
     }
 
-    private static List<List<string>> ReadPngFrames(string path, int? frameWidth, int? frameHeight)
+    private static SpriteSource ReadPngFrames(string path, int? frameWidth, int? frameHeight)
     {
         if (frameWidth is null || frameHeight is null)
         {
@@ -146,6 +212,7 @@ internal static class NesSpriteAssetCompiler
             throw new InvalidOperationException($"PNG sprite sheet '{path}' must contain at least one frame.");
         }
 
+        var colorMap = BuildPngColorMap(image);
         var frames = new List<List<string>>();
         for (var frameIndex = 0; frameIndex < frameCount; frameIndex++)
         {
@@ -155,7 +222,7 @@ internal static class NesSpriteAssetCompiler
                 var row = new char[frameWidth.Value];
                 for (var x = 0; x < frameWidth.Value; x++)
                 {
-                    row[x] = (char)('0' + SpriteTone(image, frameIndex * frameWidth.Value + x, y));
+                    row[x] = (char)('0' + SpriteTone(image, frameIndex * frameWidth.Value + x, y, colorMap));
                 }
 
                 frame.Add(new string(row));
@@ -164,10 +231,100 @@ internal static class NesSpriteAssetCompiler
             frames.Add(frame);
         }
 
-        return ValidateFrames(frames, path);
+        return new SpriteSource(ValidateFrames(frames, path), colorMap?.SuggestedPalette);
     }
 
-    private static int SpriteTone(PngImage image, int x, int y)
+    private static PngColorMap? BuildPngColorMap(PngImage image)
+    {
+        var colorCounts = new Dictionary<int, ColorCount>();
+        for (var y = 0; y < image.Height; y++)
+        {
+            for (var x = 0; x < image.Width; x++)
+            {
+                var offset = image.PixelOffset(x, y);
+                if (image.RgbaPixels[offset + 3] < 128)
+                {
+                    continue;
+                }
+
+                var color = new SpriteColor(
+                    image.RgbaPixels[offset],
+                    image.RgbaPixels[offset + 1],
+                    image.RgbaPixels[offset + 2]);
+                var key = color.ToRgbKey();
+                colorCounts[key] = colorCounts.TryGetValue(key, out var count)
+                    ? count.Increment()
+                    : new ColorCount(color, 1);
+            }
+        }
+
+        if (colorCounts.Count == 0)
+        {
+            return null;
+        }
+
+        var representatives = colorCounts.Values
+            .OrderByDescending(color => color.Count)
+            .ThenBy(color => color.Color.ToRgbKey())
+            .Take(3)
+            .Select(color => color.Color)
+            .ToList();
+
+        var indexes = AssignSpritePaletteIndexes(representatives);
+        var suggestedPalette = new byte[] { 0x0F, 0x30, 0x10, 0x0F };
+        foreach (var (representative, index) in indexes)
+        {
+            suggestedPalette[index] = NearestNesPaletteIndex(representative);
+        }
+
+        var allColorIndexes = colorCounts.Values.ToDictionary(
+            color => color.Color.ToRgbKey(),
+            color => indexes[NearestColor(color.Color, representatives)]);
+
+        return new PngColorMap(allColorIndexes, suggestedPalette);
+    }
+
+    private static Dictionary<SpriteColor, int> AssignSpritePaletteIndexes(IReadOnlyList<SpriteColor> colors)
+    {
+        if (colors.Count == 1)
+        {
+            var color = colors[0];
+            return new Dictionary<SpriteColor, int>
+            {
+                [color] = Luminance(color) switch
+                {
+                    >= 192 => 1,
+                    >= 96 => 2,
+                    _ => 3,
+                },
+            };
+        }
+
+        return colors
+            .OrderByDescending(Luminance)
+            .ThenBy(color => color.ToRgbKey())
+            .Select((color, index) => (color, paletteIndex: index + 1))
+            .ToDictionary(item => item.color, item => item.paletteIndex);
+    }
+
+    private static SpriteColor NearestColor(SpriteColor color, IReadOnlyList<SpriteColor> candidates)
+    {
+        return candidates
+            .OrderBy(candidate => ColorDistanceSquared(color, candidate))
+            .ThenBy(candidate => candidate.ToRgbKey())
+            .First();
+    }
+
+    private static byte NearestNesPaletteIndex(SpriteColor color)
+    {
+        return HardwarePalette
+            .OrderBy(candidate => ColorDistanceSquared(color, candidate))
+            .ThenBy(candidate => candidate.Index)
+            .First()
+            .Index;
+    }
+
+    private static int SpriteTone(PngImage image, int x, int y, PngColorMap? colorMap)
     {
         var offset = image.PixelOffset(x, y);
         if (image.RgbaPixels[offset + 3] < 128)
@@ -175,11 +332,17 @@ internal static class NesSpriteAssetCompiler
             return 0;
         }
 
-        var r = image.RgbaPixels[offset];
-        var g = image.RgbaPixels[offset + 1];
-        var b = image.RgbaPixels[offset + 2];
-        var luminance = (r * 299 + g * 587 + b * 114) / 1000;
-        return luminance switch
+        var color = new SpriteColor(
+            image.RgbaPixels[offset],
+            image.RgbaPixels[offset + 1],
+            image.RgbaPixels[offset + 2]);
+
+        if (colorMap is not null && colorMap.ColorIndexes.TryGetValue(color.ToRgbKey(), out var index))
+        {
+            return index;
+        }
+
+        return Luminance(color) switch
         {
             >= 192 => 1,
             >= 96 => 2,
@@ -316,5 +479,40 @@ internal static class NesSpriteAssetCompiler
     private sealed class SpriteAssetPlatform
     {
         public List<List<string>>? Frames { get; set; }
+    }
+
+    private sealed record SpriteSource(List<List<string>> Frames, byte[]? SuggestedPalette);
+
+    private sealed record PngColorMap(IReadOnlyDictionary<int, int> ColorIndexes, byte[] SuggestedPalette);
+
+    private readonly record struct ColorCount(SpriteColor Color, int Count)
+    {
+        public ColorCount Increment() => this with { Count = Count + 1 };
+    }
+
+    private readonly record struct SpriteColor(byte R, byte G, byte B)
+    {
+        public int ToRgbKey() => (R << 16) | (G << 8) | B;
+    }
+
+    private static int Luminance(SpriteColor color)
+    {
+        return (color.R * 299 + color.G * 587 + color.B * 114) / 1000;
+    }
+
+    private static int ColorDistanceSquared(SpriteColor left, SpriteColor right)
+    {
+        var r = left.R - right.R;
+        var g = left.G - right.G;
+        var b = left.B - right.B;
+        return (r * r) + (g * g) + (b * b);
+    }
+
+    private static int ColorDistanceSquared(SpriteColor left, NesPaletteColor right)
+    {
+        var r = left.R - right.R;
+        var g = left.G - right.G;
+        var b = left.B - right.B;
+        return (r * r) + (g * g) + (b * b);
     }
 }

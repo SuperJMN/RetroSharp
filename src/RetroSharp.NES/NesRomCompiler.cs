@@ -86,6 +86,7 @@ internal sealed class NesVideoProgram
     private readonly SortedDictionary<int, byte[]> mapColumns = [];
     private readonly SortedDictionary<int, byte[]> worldColumns = [];
     private readonly SortedDictionary<int, WorldTileFlags[]> worldFlagColumns = [];
+    private readonly HashSet<int> rawPaletteIndexes = [];
     private int nextSpriteTile = FirstSpriteTile;
 
     private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
@@ -148,6 +149,7 @@ internal sealed class NesVideoProgram
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
+        result.ApplyDerivedSpritePalettes();
         return result;
     }
 
@@ -217,7 +219,9 @@ internal sealed class NesVideoProgram
                 break;
             case "palette_set":
                 RequireArity(call, 2);
-                Palette[ConstArg(call, 0, 0, 31)] = (byte)ConstArg(call, 1, 0, 63);
+                var index = ConstArg(call, 0, 0, 31);
+                Palette[index] = (byte)ConstArg(call, 1, 0, 63);
+                rawPaletteIndexes.Add(index);
                 break;
             case "palette_background":
                 ApplyLogicalPalette(call, PaletteKind.Background);
@@ -283,11 +287,12 @@ internal sealed class NesVideoProgram
     {
         RequireArity(call, 5);
         var slot = ConstArg(call, 0, 0, 255);
-        var colors = call.Parameters.Skip(1)
-            .Select((_, index) => ConstArg(call, index + 1, 0, 63))
-            .ToArray();
+        const int colorCount = 4;
+        SdkPaletteValidator.Validate(NesTarget.Capabilities, kind, slot, colorCount);
 
-        SdkPaletteValidator.Validate(NesTarget.Capabilities, kind, slot, colors.Length);
+        var colors = call.Parameters.Skip(1)
+            .Select((_, index) => LogicalPaletteToneToNesGray(ConstArg(call, index + 1, 0, 3)))
+            .ToArray();
 
         var baseIndex = kind == PaletteKind.Background
             ? slot * 4
@@ -296,6 +301,61 @@ internal sealed class NesVideoProgram
         {
             Palette[baseIndex + i] = (byte)colors[i];
         }
+    }
+
+    private void ApplyDerivedSpritePalettes()
+    {
+        var appliedPalettes = new Dictionary<int, byte[]>();
+        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES");
+        foreach (var operation in operations.OfType<Sdk2DOperation.DrawLogicalSprite>())
+        {
+            if (!spriteAssets.TryGetValue(operation.SpriteId, out var asset)
+                || asset.SuggestedPalette is null
+                || operation.PaletteSlot < 0
+                || operation.PaletteSlot >= NesTarget.Capabilities.SpritePaletteSlots
+                || SpritePaletteSlotHasRawOverrides(operation.PaletteSlot))
+            {
+                continue;
+            }
+
+            if (appliedPalettes.TryGetValue(operation.PaletteSlot, out var existingPalette)
+                && !existingPalette.SequenceEqual(asset.SuggestedPalette))
+            {
+                throw new InvalidOperationException(
+                    $"NES sprite palette slot {operation.PaletteSlot} is used by multiple PNG sprite assets with different derived palettes. Use palette.Set(...) or draw them with different palette slots.");
+            }
+
+            ApplySpritePalette(operation.PaletteSlot, asset.SuggestedPalette);
+            appliedPalettes[operation.PaletteSlot] = asset.SuggestedPalette;
+        }
+    }
+
+    private bool SpritePaletteSlotHasRawOverrides(int slot)
+    {
+        var baseIndex = 16 + (slot * 4);
+        return Enumerable.Range(baseIndex, 4).Any(rawPaletteIndexes.Contains);
+    }
+
+    private void ApplySpritePalette(int slot, IReadOnlyList<byte> colors)
+    {
+        var baseIndex = 16 + (slot * 4);
+        Palette[baseIndex] = Palette[0];
+        for (var i = 1; i < colors.Count; i++)
+        {
+            Palette[baseIndex + i] = colors[i];
+        }
+    }
+
+    private static int LogicalPaletteToneToNesGray(int tone)
+    {
+        return tone switch
+        {
+            0 => 0x30,
+            1 => 0x10,
+            2 => 0x00,
+            3 => 0x0F,
+            _ => throw new InvalidOperationException("NES logical palette tones must be between 0 and 3."),
+        };
     }
 
     private void ApplyStaticUserFunction(FunctionCall call, HashSet<string> callStack)
