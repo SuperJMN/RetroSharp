@@ -6,18 +6,15 @@ using Xunit;
 public sealed class NesRunnerAcceptanceTests
 {
     [Fact]
-    public void Nes_runner_source_tracks_game_boy_runner_except_audio()
+    public void Nes_runner_uses_the_shared_runner_source()
     {
-        var gameBoySource = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
-        var nesSource = File.ReadAllText(RepositoryFile("samples/runner/runner.nes.rs"));
-
-        Assert.Equal(NormalizeForNesRunner(gameBoySource), Normalize(nesSource));
+        Assert.False(File.Exists(RepositoryFileOrNull("samples/runner/runner.nes.rs")));
     }
 
     [Fact]
-    public void Nes_runner_sample_compiles_without_audio()
+    public void Nes_runner_sample_compiles_with_audio_as_noop()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.nes.rs");
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
         var rom = NesRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
 
@@ -48,54 +45,6 @@ public sealed class NesRunnerAcceptanceTests
         Assert.NotEmpty(rom);
     }
 
-    private static string NormalizeForNesRunner(string source)
-    {
-        source = RemoveFunction(source, "setup_audio");
-        source = source.Replace("    audio.Update();\n", string.Empty, StringComparison.Ordinal);
-        source = source.Replace("    setup_audio();\n", string.Empty, StringComparison.Ordinal);
-        return Normalize(source);
-    }
-
-    private static string Normalize(string source)
-    {
-        return source.ReplaceLineEndings("\n").Trim();
-    }
-
-    private static string RemoveFunction(string source, string functionName)
-    {
-        source = source.ReplaceLineEndings("\n");
-        var start = source.IndexOf($"void {functionName}()", StringComparison.Ordinal);
-        if (start < 0)
-        {
-            return source;
-        }
-
-        var depth = 0;
-        for (var index = start; index < source.Length; index++)
-        {
-            if (source[index] == '{')
-            {
-                depth++;
-            }
-            else if (source[index] == '}')
-            {
-                depth--;
-                if (depth == 0)
-                {
-                    var end = index + 1;
-                    while (end < source.Length && source[end] == '\n')
-                    {
-                        end++;
-                    }
-
-                    return string.Concat(source.AsSpan(0, start), source.AsSpan(end));
-                }
-            }
-        }
-
-        throw new InvalidOperationException($"Could not remove function '{functionName}'.");
-    }
-
     private static string RepositoryFile(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -111,6 +60,23 @@ public sealed class NesRunnerAcceptanceTests
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private static string? RepositoryFileOrNull(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
     private static string RepoRoot()

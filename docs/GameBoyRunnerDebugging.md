@@ -24,7 +24,7 @@ git status --short --branch
 git submodule status --recursive
 ```
 
-If runner source, Tiled maps, tilesets, sprite assets, or Game Boy lowering changed, rebuild the tracked Game Boy sample ROMs:
+If runner source, Tiled maps, tilesets, sprite assets, or cartridge lowering changed, rebuild the tracked sample ROMs:
 
 ```bash
 tools/gameboy/generate_sample_roms.py --dry-run
@@ -159,7 +159,7 @@ dotnet test src/RetroSharp.Cli.Tests/RetroSharp.Cli.Tests.csproj -m:1
 dotnet test RetroSharp.sln -m:1
 ```
 
-Regenerate tracked Game Boy ROMs when source or lowering changes:
+Regenerate tracked sample ROMs when source or lowering changes:
 
 ```bash
 tools/gameboy/generate_sample_roms.py

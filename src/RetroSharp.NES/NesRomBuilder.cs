@@ -877,7 +877,8 @@ internal sealed class NesRuntimeCompiler
                 NesVideoProgram.RequireArity(call, 0);
                 break;
             case "music_play":
-                throw new InvalidOperationException("Target 'nes' does not support BGM playback yet.");
+                NesVideoProgram.RequireArity(call, 1);
+                break;
             case "hud_set_tile":
                 NesVideoProgram.ValidateHudSetTile(call);
                 break;

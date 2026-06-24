@@ -57,7 +57,7 @@ Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Se
 
 ## Sample Classification
 
-Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/runner/runner.rs` remains a Game Boy `target-acceptance` sample because it exercises Game Boy-specific runtime, Tiled, audio, and runner behavior beyond the shared NES subset.
+Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample because it exercises richer runner behavior than the stable portable SDK sample. NES accepts its audio calls as no-ops until real BGM lowering exists.
 
 ## Supported Runtime Subset
 
@@ -357,7 +357,7 @@ Landed after the NES portable spike:
 
 - NES now supports the first shared tick-input, logical sprite, unified world-map, and horizontal camera-scroll subset.
 - `samples/cross-target-camera/camera.rs` builds for both Game Boy and NES without raw sprite, scroll, tilemap, or target-palette calls.
-- Later NES runner work added horizontal runtime map streaming, camera-relative collision queries, and runtime animation for the runner-shaped path. The cross-target sample still deliberately excludes vertical camera movement, audio, generic world-space collision, and HUD until those features have explicit capability-gated support on both targets.
+- Later NES runner work added horizontal runtime map streaming, camera-relative collision queries, runtime animation, and no-op audio acceptance for the runner-shaped path. The cross-target sample still deliberately excludes vertical camera movement, real audio playback, generic world-space collision, and HUD until those features have explicit capability-gated support on both targets.
 
 Landed after the first HUD pass:
 

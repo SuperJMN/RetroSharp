@@ -2,7 +2,7 @@
 
 Status: experimental, intentionally narrow.
 
-The NES target currently compiles a constrained cartridge subset directly to an iNES mapper 0 ROM. It supports tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and the camera-relative collision queries needed by the runner. The NES runner tracks the Game Boy runner source except for audio. NES still does not support vertical camera movement, BGM playback, HUD, generic world-space collision queries, or per-region background attribute streaming.
+The NES target currently compiles a constrained cartridge subset directly to an iNES mapper 0 ROM. It supports tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and the camera-relative collision queries needed by the shared runner. NES accepts runner audio calls as no-ops until BGM lowering exists. NES still does not support vertical camera movement, real BGM playback, HUD, generic world-space collision queries, or per-region background attribute streaming.
 
 See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics, and `Portable2DSdkV1.md` for the current SDK v1 reference.
 
@@ -27,13 +27,13 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | Sprite transforms | Flip X and Flip Y hardware flags |
 | HUD modes | None declared portable support yet |
 | Collision queries | Camera-relative AABB and camera-relative AABB hit-top |
-| BGM formats | None yet |
+| BGM formats | None yet; BGM calls can be accepted as no-ops |
 
 The descriptor records NES sprite, palette, horizontal fine-scroll, horizontal background-column streaming, and camera-relative collision-query support. Runtime sprite lowering is implemented for logical PNG sprite sheets and transitional JSON assets through `Sdk2DOperation.DrawLogicalSprite`. The camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and streams the next world-map column into the off-screen nametable as the camera crosses 8-pixel tile boundaries. Camera-relative `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` lower against the active world flag rows using that same absolute camera tile plus fine X, so collision stays aligned after the scroll byte wraps. Portable SDK operations that still need vertical scroll, attribute writes, generic world tile/world AABB collision queries, or HUD support must fail capability checks before reaching NES backend code. NES compilation runs the shared `Sdk2DOperationCollector` and validates each operation through `Sdk2DOperationValidator` against `NesTarget.Capabilities` before lowering, so unsupported operations (for example vertical camera movement, `world_tile_flags_at(...)`, or HUD tiles) are rejected by the same capability checks the Game Boy target uses.
 
 The current ROM shape is NROM-256: two 16 KiB PRG banks plus one 8 KiB CHR bank.
 
-NES also runs the shared `SdkAudioOperationCollector` and validates audio operations through `SdkAudioOperationValidator` against `NesTarget.AudioCapabilities`. `music.Play(...)` currently fails with `Target 'nes' does not support BGM playback yet.` until an NES music format and runtime lowering are implemented.
+NES also runs the shared `SdkAudioOperationCollector` and validates audio operations through `SdkAudioOperationValidator` against `NesTarget.AudioCapabilities`. `audio.Init()`, `music.Play(...)`, `audio.Update()`, and `music.Stop()` currently lower as no-ops because `NesTarget.AudioCapabilities` allows BGM no-op handling without declaring real BGM support.
 
 ## Supported Video API
 
@@ -122,10 +122,10 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.
 
-`samples/runner/runner.nes.rs` is a NES acceptance sample for the runner path. It tracks `samples/runner/runner.rs` except for the Game Boy audio setup and per-frame `audio.Update()` call. It uses the same Tiled map, camera-relative collision helpers, runtime animation clip, jump/reset logic, and generic `assets/mario-player.png` source asset reference as the Game Boy runner; the asset resolves to `assets/mario-player.nes.png` for NES.
+`samples/runner/runner.rs` is the shared Game Boy/NES acceptance sample for the runner path. It uses the same Tiled map, camera-relative collision helpers, runtime animation clip, jump/reset logic, audio calls, and generic `assets/mario-player.png` source asset reference for both targets; the asset resolves to `assets/mario-player.nes.png` for NES.
 
 The cross-target sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scroll.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `map_stream_column(...)`, and `objectPalette.Set(...)`. It does not exercise NES vertical camera movement, generic world-space collision queries, audio, or HUD APIs. Runner-specific NES coverage lives in the runner acceptance tests instead.
 
-Runner-shaped NES parity is covered by `NesRunnerAcceptanceTests`: the NES runner source must equal the Game Boy runner after removing audio, the NES runner ROM must compile, and runtime animation must lower. `CrossTargetScrollAcceptanceTests` also verifies that runner-shaped `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` lower on both Game Boy and NES.
+Runner-shaped NES parity is covered by `NesRunnerAcceptanceTests`: the shared runner source must compile for NES with audio as no-op, and runtime animation must lower. `CrossTargetScrollAcceptanceTests` also verifies that runner-shaped `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` lower on both Game Boy and NES.
 
 Sample portability is tracked in `samples/manifest.json`. The NES drawing sample is classified as `target-intrinsic`, not as a portable SDK sample, because it demonstrates raw static `tilemap_*` setup calls for this target.

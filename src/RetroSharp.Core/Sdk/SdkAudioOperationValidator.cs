@@ -18,7 +18,7 @@ public static class SdkAudioOperationValidator
                     throw new InvalidOperationException("music.Play theme id must not be empty.");
                 }
 
-                if (!capabilities.SupportsBgm)
+                if (!capabilities.SupportsBgm && !capabilities.AllowsBgmNoOp)
                 {
                     throw new InvalidOperationException($"Target '{capabilities.Name}' does not support BGM playback yet.");
                 }

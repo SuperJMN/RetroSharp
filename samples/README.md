@@ -15,18 +15,12 @@ Until RetroSharp grows a dedicated `module` or `const group` syntax, samples may
 
 The portable quarantine check in `RetroSharp.Core.Tests` reads the manifest and rejects transitional or target-intrinsic calls inside `portable-sdk` samples.
 
-## Regenerating Game Boy ROMs
+## Regenerating ROMs
 
-Run this from the repository root to refresh the tracked Game Boy sample ROMs:
+Run this from the repository root to refresh the tracked sample ROMs:
 
 ```sh
 tools/gameboy/generate_sample_roms.py
 ```
 
-By default the script rebuilds only manifest samples that target Game Boy and already have a sibling `.gb` output tracked by Git. Use `--dry-run` to inspect the commands, `--all` to build every manifest sample that declares the `gb` target, or pass explicit sample paths such as `samples/runner/runner.rs`.
-
-The NES runner ROM is also tracked. Regenerate it directly when `samples/runner/runner.nes.rs` or NES runner lowering changes:
-
-```sh
-dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/runner.nes samples/runner/runner.nes.rs
-```
+By default the script rebuilds manifest sample/target pairs that already have tracked sibling ROM outputs such as `.gb` or `.nes`. Use `--dry-run` to inspect the commands, `--all` to build every declared manifest target, or pass explicit sample paths such as `samples/runner/runner.rs`.

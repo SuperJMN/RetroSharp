@@ -124,10 +124,11 @@ Progress (2026-06-14):
   through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
   tile-offset landing probe ladder while keeping the downward-velocity gate and
   `player.Land(...)` policy in source.
-- Runner-shaped NES parity decision: `samples/runner/runner.nes.rs` tracks the Game Boy runner
-  source except for audio setup and per-frame audio update. `NesRunnerAcceptanceTests` enforces
-  that source relationship and the runner ROM build, while `CrossTargetScrollAcceptanceTests`
-  verifies that runner-shaped camera-relative collision lowers on both targets.
+- Runner-shaped NES parity decision: `samples/runner/runner.rs` is the shared Game Boy/NES runner
+  source. NES accepts the audio setup, `music.Play(...)`, and per-frame audio update as no-ops
+  until real BGM lowering exists. `NesRunnerAcceptanceTests` enforces that the shared source
+  builds for NES, while `CrossTargetScrollAcceptanceTests` verifies that runner-shaped
+  camera-relative collision lowers on both targets.
 - Logical palette decision implemented after #106: `palette.Background(slot, c0, c1, c2, c3)`
   and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
   Color values are logical tones `0..3`. Game Boy lowers background slot `0` to `BGP` and sprite
@@ -201,7 +202,7 @@ Important current behavior:
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.
 
-When `runner.rs`, `runner.tmj`, the tileset, or asset lowering changes, rebuild `samples/runner/runner.gb`. When `runner.nes.rs` or NES sprite/background lowering changes, rebuild `samples/runner/runner.nes`.
+When `runner.rs`, `runner.tmj`, the tileset, or GB/NES asset lowering changes, rebuild the tracked runner ROMs with `tools/gameboy/generate_sample_roms.py`.
 
 ## Known Traps
 
@@ -228,7 +229,7 @@ git diff --check
 dotnet test RetroSharp.sln -m:1
 ```
 
-Regenerate tracked Game Boy sample ROMs:
+Regenerate tracked sample ROMs:
 
 ```bash
 tools/gameboy/generate_sample_roms.py --dry-run

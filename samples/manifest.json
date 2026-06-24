@@ -22,13 +22,7 @@
       "path": "samples/runner/runner.rs",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",
-      "targets": ["gb"]
-    },
-    {
-      "path": "samples/runner/runner.nes.rs",
-      "readme": "samples/runner/README.md",
-      "layer": "target-acceptance",
-      "targets": ["nes"]
+      "targets": ["gb", "nes"]
     },
     {
       "path": "samples/runner/diagnostics/00-static-background.rs",

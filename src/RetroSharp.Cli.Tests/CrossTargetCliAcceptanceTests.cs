@@ -53,7 +53,7 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
-    public void GameBoy_sample_rom_script_dry_run_lists_tracked_rom_outputs_by_default()
+    public void Sample_rom_script_dry_run_lists_tracked_rom_outputs_by_default()
     {
         var result = RunProcess("python3", RepositoryFile("tools/gameboy/generate_sample_roms.py"), "--dry-run");
 
@@ -62,6 +62,8 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains("samples/gameboy-drawing/drawing.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("samples/runner/runner.rs", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("samples/runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("--target nes", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/runner/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("samples/gameboy-hud/hud.rs", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("samples/runner/diagnostics/00-static-background.rs", result.CombinedOutput, StringComparison.Ordinal);
     }

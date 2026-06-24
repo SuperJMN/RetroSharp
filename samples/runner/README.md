@@ -2,16 +2,16 @@
 
 Sample Layer: `target-acceptance`
 
-Build a `.gb` ROM from RetroSharp source that executes a real loop on the Game Boy CPU:
+Build the Game Boy acceptance runner from the shared source:
 
 ```bash
 dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out runner.gb runner.rs
 ```
 
-Build the NES acceptance runner. It tracks the Game Boy runner source except for audio:
+Build the NES acceptance runner from the same source. NES accepts the audio calls as no-ops until NES BGM lowering exists:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out runner.nes runner.nes.rs
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out runner.nes runner.rs
 ```
 
 Preview with RetroArch Flatpak:
@@ -50,9 +50,9 @@ This sample uses parameterless helper functions, declarations, assignment, enum-
 
 The constant groups are compile-time enum members in the current language. They are used for readability and fold like numeric constants; they do not allocate state. The class methods are source-level inline helpers over fixed-layout value storage, so the runner keeps a lightweight object-oriented shape without heap allocation, vtables, dynamic dispatch, or hidden calls.
 
-The frame loop is intentionally narrow: `PresentFrame(...)` owns VBlank and draws sprites, the Game Boy source also ticks `audio.Update()`, `frame.Begin()` clears transient collision state, `player.ApplyGravity()` advances physics, `frame.ResolveSolidLanding(...)`, `frame.ResolveFall(...)`, and `frame.ResolveReset(...)` handle collision outcomes, `player.HandleJumpInput()` and `view.HandleHorizontalInput(player, movementFootWorldY)` consume input, and `player.UpdateRunAnimation(view)` derives the displayed frame. The helper boundaries are chosen around gameplay responsibilities, not around individual opcodes, so the source remains readable while still lowering to inline target code.
+The frame loop is intentionally narrow: `PresentFrame(...)` owns VBlank, ticks `audio.Update()`, applies the camera, and draws sprites; `frame.Begin()` clears transient collision state, `player.ApplyGravity()` advances physics, `frame.ResolveSolidLanding(...)`, `frame.ResolveFall(...)`, and `frame.ResolveReset(...)` handle collision outcomes, `player.HandleJumpInput()` and `view.HandleHorizontalInput(player, movementFootWorldY)` consume input, and `player.UpdateRunAnimation(view)` derives the displayed frame. The helper boundaries are chosen around gameplay responsibilities, not around individual opcodes, so the source remains readable while still lowering to inline target code.
 
-The background music is `music/free_06_delight.uge`, used directly as a Game Boy BGM resource through `music.Asset(...)`, `audio.Init()`, `music.Play(...)`, and the per-frame `audio.Update()` call. The NES runner deliberately omits audio until NES BGM has its own implementation. The track is from Tronimal's Free Game Boy Music Pack and is licensed `CC-BY 2025`.
+The background music is `music/free_06_delight.uge`, used directly as a Game Boy BGM resource through `music.Asset(...)`, `audio.Init()`, `music.Play(...)`, and the per-frame `audio.Update()` call. NES validates those calls and lowers them as no-ops until NES BGM has its own implementation. The track is from Tronimal's Free Game Boy Music Pack and is licensed `CC-BY 2025`.
 
 The editable level lives at `maps/runner.tmj` and can be opened in Tiled together with `maps/Super Mario Land 2.tsx`. The `background` layer draws decorative source tiles, and the `world` layer draws streamable terrain. Game Boy still has one scrolling background tilemap, so the importer flattens those authoring layers: `background` is the visual base, non-empty `world` cells draw over it, and empty `world` cells keep the background tile underneath. When `retrosharpWorldY` and `retrosharpStreamY` move the playable world slice vertically on screen, the background layer uses that same offset so the Tiled layers stay aligned. Collision remains separate from that visual composition and comes from the tileset's object rectangles; tiles with an `objectgroup` become solid in the generated world flags. The importer resolves external `.tsj`/`.tsx` tilesets and can substitute target PNG variants for their image source: Tiled edits the shared baseline `tilesheets.png`, while Game Boy uses `tilesheets.gb.png` and NES uses `tilesheets.nes.png` when those files are present. NES derives a universal background color, up to four background palette slots, and the initial attribute table from the placed tiles in `tilesheets.nes.png`, so the runner can keep the cyan sky, white clouds, yellow terrain, and green grass/tubes in the initial two-nametable buffer. The importer then expands each 16x16 source cell into target 8x8 tiles, maps source colors to target palette indexes, deduplicates repeated generated tiles, and stores the result in the ROM. The map custom property `retrosharpStreamY` is expressed in generated Game Boy 8x8 tile rows; `retrosharpWorldY` and `retrosharpWorldHeight` select the source Tiled rows imported into the active streaming world before expansion.
 

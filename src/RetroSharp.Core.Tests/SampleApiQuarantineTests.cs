@@ -58,6 +58,19 @@ public sealed class SampleApiQuarantineTests
     }
 
     [Fact]
+    public void Runner_sample_is_single_source_for_game_boy_and_nes()
+    {
+        var manifest = LoadManifest();
+        var runnerSamples = manifest.Samples
+            .Where(sample => sample.Path.StartsWith("samples/runner/runner", StringComparison.Ordinal))
+            .ToArray();
+
+        var runner = Assert.Single(runnerSamples);
+        Assert.Equal("samples/runner/runner.rs", runner.Path);
+        Assert.Equal(new[] { "gb", "nes" }, runner.Targets);
+    }
+
+    [Fact]
     public void Sample_readmes_mark_their_layer()
     {
         var manifest = LoadManifest();
@@ -140,5 +153,5 @@ public sealed class SampleApiQuarantineTests
 
     private sealed record SampleManifest(SampleManifestEntry[] Samples);
 
-    private sealed record SampleManifestEntry(string Path, string Readme, string Layer);
+    private sealed record SampleManifestEntry(string Path, string Readme, string Layer, string[] Targets);
 }

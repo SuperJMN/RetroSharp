@@ -55,7 +55,7 @@ dotnet test RetroSharp.sln -m:1
 git diff --check
 ```
 
-Regenerate tracked Game Boy sample ROMs:
+Regenerate tracked sample ROMs:
 
 ```bash
 tools/gameboy/generate_sample_roms.py --dry-run
@@ -73,7 +73,7 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target nes \
   --out samples/runner/runner.nes \
-  samples/runner/runner.nes.rs
+  samples/runner/runner.rs
 ```
 
 The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md`, `WARP.md`, or `src/RetroSharp.Cli/Program.cs`.
@@ -82,8 +82,8 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 
 ## Runner Notes
 
-- `samples/runner/runner.rs` is a target-acceptance sample, not proof that every API it uses is portable.
-- `samples/runner/runner.nes.rs` tracks the Game Boy runner except for audio. It should keep the same gameplay, map, collision, and animation path.
+- `samples/runner/runner.rs` is the shared Game Boy/NES runner target-acceptance sample, not proof that every API it uses is portable.
+- NES accepts the runner audio calls as no-ops until NES BGM lowering exists; do not treat that as real NES audio support.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
 - The runner now uses `world.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.

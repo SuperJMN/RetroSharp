@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerate Game Boy ROMs for RetroSharp samples."""
+"""Regenerate tracked RetroSharp sample ROMs."""
 
 from __future__ import annotations
 
@@ -14,17 +14,18 @@ from pathlib import Path
 @dataclass(frozen=True)
 class SampleBuild:
     source: Path
+    target: str
     output: Path
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        description="Regenerate .gb ROMs for RetroSharp Game Boy samples.",
+        description="Regenerate tracked RetroSharp sample ROMs.",
     )
     parser.add_argument(
         "--all",
         action="store_true",
-        help="build every manifest sample that declares the gb target, including diagnostics and cross-target samples",
+        help="build every manifest sample for every declared target, including diagnostics and cross-target samples",
     )
     parser.add_argument(
         "--dry-run",
@@ -34,14 +35,14 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "samples",
         nargs="*",
-        help="optional sample .rs paths to build instead of the default tracked .gb outputs",
+        help="optional sample .rs paths to build instead of the default tracked ROM outputs",
     )
     args = parser.parse_args(argv)
 
     repo_root = Path(__file__).resolve().parents[2]
     builds = select_builds(repo_root, args.all, args.samples)
     if not builds:
-        print("No Game Boy sample ROMs selected.", file=sys.stderr)
+        print("No sample ROMs selected.", file=sys.stderr)
         return 1
 
     cli_project = repo_root / "src" / "RetroSharp.Cli" / "RetroSharp.Cli.csproj"
@@ -54,7 +55,7 @@ def main(argv: list[str]) -> int:
             "--no-launch-profile",
             "--",
             "--target",
-            "gb",
+            build.target,
             "--out",
             str(build.output.relative_to(repo_root)),
             str(build.source.relative_to(repo_root)),
@@ -68,39 +69,53 @@ def main(argv: list[str]) -> int:
 
 def select_builds(repo_root: Path, include_all: bool, requested_samples: list[str]) -> list[SampleBuild]:
     manifest = load_manifest(repo_root)
-    gb_sources = [
-        repo_root / sample["path"]
+    manifest_builds = [
+        SampleBuild(
+            source=repo_root / sample["path"],
+            target=target,
+            output=(repo_root / sample["path"]).with_suffix(target_extension(target)),
+        )
         for sample in manifest["samples"]
-        if "gb" in sample.get("targets", [])
+        for target in sample.get("targets", [])
     ]
 
     if requested_samples:
         requested = {normalize_sample_path(repo_root, sample) for sample in requested_samples}
-        unknown = sorted(requested - set(gb_sources))
+        known_sources = {build.source for build in manifest_builds}
+        unknown = sorted(requested - known_sources)
         if unknown:
-            known = "\n".join(str(path.relative_to(repo_root)) for path in gb_sources)
+            known = "\n".join(str(path.relative_to(repo_root)) for path in sorted(known_sources))
             raise SystemExit(
-                "Unknown Game Boy sample(s): "
+                "Unknown sample(s): "
                 + ", ".join(str(path.relative_to(repo_root)) for path in unknown)
-                + "\nKnown Game Boy samples:\n"
+                + "\nKnown samples:\n"
                 + known
             )
 
-        sources = [source for source in gb_sources if source in requested]
+        builds = [build for build in manifest_builds if build.source in requested]
     elif include_all:
-        sources = gb_sources
+        builds = manifest_builds
     else:
         tracked_files = load_tracked_files(repo_root)
         if tracked_files is None:
-            sources = [source for source in gb_sources if source.with_suffix(".gb").exists()]
+            builds = [build for build in manifest_builds if build.output.exists()]
         else:
-            sources = [
-                source
-                for source in gb_sources
-                if source.with_suffix(".gb").relative_to(repo_root).as_posix() in tracked_files
+            builds = [
+                build
+                for build in manifest_builds
+                if build.output.relative_to(repo_root).as_posix() in tracked_files
             ]
 
-    return [SampleBuild(source=source, output=source.with_suffix(".gb")) for source in sources]
+    return builds
+
+
+def target_extension(target: str) -> str:
+    if target == "gb":
+        return ".gb"
+    if target == "nes":
+        return ".nes"
+
+    raise SystemExit(f"Unsupported sample target '{target}'.")
 
 
 def load_manifest(repo_root: Path) -> dict:
