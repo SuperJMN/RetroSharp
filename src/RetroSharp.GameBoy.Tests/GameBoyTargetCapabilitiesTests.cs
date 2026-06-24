@@ -8,6 +8,15 @@ using Xunit;
 public sealed class GameBoyTargetCapabilitiesTests
 {
     [Fact]
+    public void Descriptor_reports_supported_music_formats()
+    {
+        var capabilities = GameBoyTarget.AudioCapabilities;
+
+        Assert.True(capabilities.SupportsBgm);
+        Assert.Equal(["uge", "gbapu"], capabilities.SupportedMusicFormats);
+    }
+
+    [Fact]
     public void Descriptor_reports_dmg_2d_hardware_limits()
     {
         var capabilities = GameBoyTarget.Capabilities;

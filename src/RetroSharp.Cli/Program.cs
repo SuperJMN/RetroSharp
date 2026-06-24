@@ -162,9 +162,114 @@ static (string? InputPath, string? OutputPath, string Target) ParseCommandLine(s
     return (inputPath, outputPath, target);
 }
 
+static RetroSharp.GameBoy.GameBoyGbsToGbApuOptions ParseGbsToGbApuCommandLine(string[] args)
+{
+    string? inputPath = null;
+    string? outputPath = null;
+    var subsong = 1;
+    var seconds = 60;
+    long loopCycle = 0;
+    var gbsPlayPath = "gbsplay";
+
+    for (var i = 0; i < args.Length; i++)
+    {
+        switch (args[i])
+        {
+            case "--in":
+                if (i + 1 >= args.Length) throw new ArgumentException("--in requires a value.");
+                inputPath = args[++i];
+                break;
+            case "--out":
+            case "-o":
+                if (i + 1 >= args.Length) throw new ArgumentException($"{args[i]} requires a value.");
+                outputPath = args[++i];
+                break;
+            case "--subsong":
+                if (i + 1 >= args.Length) throw new ArgumentException("--subsong requires a value.");
+                subsong = ParsePositiveInt(args[++i], "--subsong");
+                break;
+            case "--seconds":
+                if (i + 1 >= args.Length) throw new ArgumentException("--seconds requires a value.");
+                seconds = ParsePositiveInt(args[++i], "--seconds");
+                break;
+            case "--loop-cycle":
+                if (i + 1 >= args.Length) throw new ArgumentException("--loop-cycle requires a value.");
+                loopCycle = ParseNonNegativeLong(args[++i], "--loop-cycle");
+                break;
+            case "--gbsplay":
+                if (i + 1 >= args.Length) throw new ArgumentException("--gbsplay requires a value.");
+                gbsPlayPath = args[++i];
+                break;
+            default:
+                throw new ArgumentException($"Unknown gbs-to-gbapu option '{args[i]}'.");
+        }
+    }
+
+    if (inputPath is null)
+    {
+        throw new ArgumentException("GBS to GBAPU export requires --in <file.gbs>.");
+    }
+
+    if (outputPath is null)
+    {
+        throw new ArgumentException("GBS to GBAPU export requires --out <file.gbapu.json>.");
+    }
+
+    return new RetroSharp.GameBoy.GameBoyGbsToGbApuOptions(
+        inputPath,
+        outputPath,
+        subsong,
+        seconds,
+        loopCycle,
+        gbsPlayPath);
+}
+
+static int ParsePositiveInt(string value, string option)
+{
+    if (!int.TryParse(value, out var parsed) || parsed < 1)
+    {
+        throw new ArgumentException($"{option} requires a positive integer.");
+    }
+
+    return parsed;
+}
+
+static long ParseNonNegativeLong(string value, string option)
+{
+    if (!long.TryParse(value, out var parsed) || parsed < 0)
+    {
+        throw new ArgumentException($"{option} requires a non-negative integer.");
+    }
+
+    return parsed;
+}
+
 if (args.Length < 1)
 {
     Console.Error.WriteLine("No source file has been specified");
+    return 1;
+}
+
+if (args[0] == "gbs-to-gbapu")
+{
+    try
+    {
+        var exportOptions = ParseGbsToGbApuCommandLine(args[1..]);
+        var result = RetroSharp.GameBoy.GameBoyGbsToGbApuExporter.Export(exportOptions);
+        Console.Error.WriteLine(
+            $"Wrote Game Boy APU trace: {exportOptions.OutputPath} ({result.EventCount} events, loop cycle {result.LoopCycle})");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        PrintError(ex.Message);
+        return 1;
+    }
+}
+
+if (args[0].StartsWith("gbs-to-", StringComparison.Ordinal))
+{
+    PrintError($"Unknown command '{args[0]}'.");
     return 1;
 }
 

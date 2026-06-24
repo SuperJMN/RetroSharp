@@ -16,7 +16,7 @@ RetroSharp's original path uses a multi-stage compilation pipeline:
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
 - `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and camera-relative runner collision. NES BGM, vertical camera movement, HUD, and generic world-space collision are still not implemented.
-- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, horizontal `camera.*` helpers, `sprite.Set(...)`, runtime map column streaming, simple source-map tile queries for collision, and joypad button queries.
+- `--target gb`: emits a 32 KiB Game Boy ROM. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, horizontal `camera.*` helpers, `sprite.Set(...)`, runtime map column streaming, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, and `.gbapu.json` APU trace playback.
 
 ## What can it do?
 
@@ -86,6 +86,22 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --out samples/runner/runner.gb \
   samples/runner/runner.rs
 ```
+
+Export a GBS subsong into a Game Boy APU trace when you want faithful playback of the original register writes:
+
+```bash
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  gbs-to-gbapu \
+  --in path/to/theme.gbs \
+  --subsong 1 \
+  --seconds 60 \
+  --loop-cycle 0 \
+  --out path/to/theme.gbapu.json
+```
+
+Use the resulting `.gbapu.json` directly with `music.Asset(...)`. The source file keeps cycle deltas for every supported APU register write; the ROM compiler packs those writes into frame groups, removes redundant non-trigger writes, and stores full Wave RAM uploads as compact block commands for `audio.Update()` playback.
+
+The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. GBS files are not loaded directly by `music.Asset(...)`. See [`docs/GameBoyApuTraceFormat.md`](docs/GameBoyApuTraceFormat.md) for the format shape, runtime use, limitations, and future alternatives.
 
 Build the first cross-target camera sample for both cartridge targets:
 

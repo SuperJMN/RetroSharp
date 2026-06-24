@@ -27,7 +27,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Sprite transforms | Flip X and Flip Y |
 | HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
 | Collision queries | World tile flags, world AABB, camera-relative AABB, and camera-relative AABB hit-top |
-| BGM formats | hUGETracker `.uge` |
+| BGM formats | hUGETracker `.uge`; `.gbapu.json` APU traces; `.gbs` can be exported to `.gbapu.json` with the CLI helper |
 
 ## SDK Operation Boundary
 
@@ -189,9 +189,25 @@ Runtime calls:
 
 `scroll.Set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
-`music.Asset(name, path)` declares a BGM resource. `path` can point directly to a hUGETracker `.uge` file or to a `retrosharp.music.v1` JSON envelope whose `platforms.gb` entry has `format: "uge"` and a relative `.uge` path. The current Game Boy BGM runtime accepts `.uge` v6 songs with duty, wave, and noise channel rows, fixed ticks-per-row timing, compact wavetable data, and compact per-row channel event data. Effect `Cxy` is lowered as a row-level volume override; effects `2xx`, `3xx`, `Bxx`, and `Exx` are currently accepted as best-effort no-ops so real tracker songs can compile, but they do not yet reproduce hUGEDriver pitch slides, jumps, or note cuts exactly. Timer-based tempo, routine jump command values, tempo changes, panning, arpeggio, and other hUGETracker effects fail explicitly or remain unsupported because this runtime is frame-update driven through `audio.Update()`.
+`music.Asset(name, path)` declares a BGM resource. `path` can point directly to a hUGETracker `.uge` file, directly to a `retrosharp.gbapu.v1` `.gbapu.json` APU trace, or to a `retrosharp.music.v1` JSON envelope whose `platforms.gb` entry has `format: "uge"` or `format: "gbapu"` and a relative path. The current Game Boy BGM runtime accepts `.uge` v6 songs with duty, wave, and noise channel rows, fixed ticks-per-row timing, compact wavetable data, and compact per-row channel event data. Effect `Cxy` is lowered as a row-level volume override; effects `2xx`, `3xx`, `Bxx`, and `Exx` are currently accepted as best-effort no-ops so real tracker songs can compile, but they do not yet reproduce hUGEDriver pitch slides, jumps, or note cuts exactly. Timer-based tempo, routine jump command values, tempo changes, panning, arpeggio, and other hUGETracker effects fail explicitly or remain unsupported because this runtime is frame-update driven through `audio.Update()`.
 
-`audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM runtime state. `music.Play(name)` points the runtime at the compiled song data and starts from row 0. `audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a row is due. Call it once per frame after `video.WaitVBlank()`. `music.Stop()` disables BGM playback and silences the active audio channels.
+`.gbapu.json` is the lossless-by-intent Game Boy audio asset path. It is not PCM and not a tracker module: it stores timed writes to the DMG APU registers `NR10`..`NR52` and wave RAM `$FF30`..`$FF3F`, with cycle deltas preserved in the source JSON. The current ROM compiler packs that trace into frame groups, removes redundant non-trigger writes, and stores contiguous 16-byte Wave RAM uploads as block commands. The runtime replays all due commands from `audio.Update()`, so playback is currently frame-scheduled even though the source keeps finer timing for future runtimes. See `GameBoyApuTraceFormat.md` for the JSON schema, generation flow, runtime packing, limitations, and alternatives to evaluate.
+
+GBS files are not loaded directly by `music.Asset(...)`. Use an explicit export helper before compilation. For faithful playback, export the post-driver APU register trace:
+
+```bash
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  gbs-to-gbapu \
+  --in path/to/theme.gbs \
+  --subsong 1 \
+  --seconds 60 \
+  --loop-cycle 0 \
+  --out path/to/theme.gbapu.json
+```
+
+The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. It captures `gbsplay -o iodumper` APU register writes and preserves supported writes as a `retrosharp.gbapu.v1` trace. RetroSharp does not load `.gbs` directly.
+
+`audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM runtime state. `music.Play(name)` points the runtime at the compiled song data and starts from row 0 or the first APU trace group. `audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a UGE row is due. For `.gbapu.json`, `audio.Update()` replays all due APU register commands for the current frame and then waits the compiled frame delay before the next command group. Call it once per frame after `video.WaitVBlank()`. `music.Stop()` disables BGM playback and silences the active audio channels.
 
 `camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. Call it after declaring the source map and before `camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
