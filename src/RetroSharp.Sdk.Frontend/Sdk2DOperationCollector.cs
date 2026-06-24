@@ -19,6 +19,16 @@ public static class Sdk2DOperationCollector
         return collector.Operations;
     }
 
+    public static IReadOnlyList<Sdk2DFrameBudget> CollectFrameBudgets(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget = null)
+    {
+        var collector = new FrameBudgetCollector(functions, targetName, drawSpriteBudget);
+        return collector.Collect(mainBlock);
+    }
+
     // Shared reader so a target lowering a camera position drives emission from
     // the same operation the collector produces, instead of re-deriving it.
     public static Sdk2DOperation.SetCameraPosition ReadSetCameraPosition(FunctionCall call)
@@ -567,6 +577,344 @@ public static class Sdk2DOperationCollector
             }
 
             return true;
+        }
+    }
+
+    private sealed class FrameBudgetCollector(
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget)
+    {
+        private const int MaxLoopIterationsToAnalyze = 64;
+
+        private readonly HashSet<string> userFunctionCallStack = [];
+
+        public IReadOnlyList<Sdk2DFrameBudget> Collect(BlockSyntax block)
+        {
+            return CollectBlock(FrameBudgetState.Empty, block).CloseOpenFrames().FrameBudgets;
+        }
+
+        private FrameBudgetState CollectBlock(FrameBudgetState state, BlockSyntax block)
+        {
+            foreach (var statement in block.Statements)
+            {
+                state = CollectStatement(state, statement);
+            }
+
+            return state;
+        }
+
+        private FrameBudgetState CollectStatement(FrameBudgetState state, StatementSyntax statement)
+        {
+            switch (statement)
+            {
+                case DeclarationSyntax declaration:
+                    if (declaration.ArrayLength.HasValue)
+                    {
+                        state = CollectExpression(state, declaration.ArrayLength.Value);
+                    }
+
+                    if (declaration.Initialization.HasValue)
+                    {
+                        state = CollectExpression(state, declaration.Initialization.Value);
+                    }
+
+                    return state;
+                case ExpressionStatementSyntax { Expression: FunctionCall call }:
+                    return CollectCall(state, call);
+                case ExpressionStatementSyntax { Expression: AssignmentSyntax assignment }:
+                    state = CollectLValue(state, assignment.Left);
+                    return CollectExpression(state, assignment.Right);
+                case WhileSyntax loop:
+                    state = CollectExpression(state, loop.Condition);
+                    return CollectLoop(state, loop.Body);
+                case DoWhileSyntax loop:
+                    state = CollectLoop(state, loop.Body);
+                    return CollectExpression(state, loop.Condition);
+                case LoopSyntax loop:
+                    return CollectLoop(state, loop.Body);
+                case RangeForSyntax loop:
+                    return CollectStatement(state, RangeForLowerer.Lower(loop));
+                case ForSyntax loop:
+                    if (loop.Initializer.HasValue)
+                    {
+                        state = CollectStatement(state, loop.Initializer.Value);
+                    }
+
+                    if (loop.Condition.HasValue)
+                    {
+                        state = CollectExpression(state, loop.Condition.Value);
+                    }
+
+                    state = CollectLoop(state, loop.Body);
+                    if (loop.Increment.HasValue)
+                    {
+                        state = CollectExpression(state, loop.Increment.Value);
+                    }
+
+                    return state;
+                case IfElseSyntax branch:
+                    return CollectBranch(state, branch);
+                default:
+                    return state;
+            }
+        }
+
+        private FrameBudgetState CollectLoop(FrameBudgetState state, BlockSyntax body)
+        {
+            var frameBudgets = new List<Sdk2DFrameBudget>(state.FrameBudgets);
+            var possibleOpenBudgets = state.OpenBudgets.ToList();
+            var iterationInputs = state.OpenBudgets.ToList();
+            var sawBoundary = state.SawBoundary;
+
+            for (var iteration = 0; iteration < MaxLoopIterationsToAnalyze; iteration++)
+            {
+                var iterationState = CollectBlock(
+                    new FrameBudgetState(iterationInputs, [], sawBoundary: false),
+                    body);
+
+                frameBudgets.AddRange(iterationState.FrameBudgets);
+                sawBoundary |= iterationState.SawBoundary;
+
+                var updatedOpenBudgets = DistinctBudgets(possibleOpenBudgets.Concat(iterationState.OpenBudgets)).ToList();
+                var changed = !BudgetsEqual(possibleOpenBudgets, updatedOpenBudgets);
+                possibleOpenBudgets = updatedOpenBudgets;
+
+                if (!changed && BudgetsEqual(iterationInputs, iterationState.OpenBudgets))
+                {
+                    break;
+                }
+
+                iterationInputs = iterationState.OpenBudgets.ToList();
+            }
+
+            return new FrameBudgetState(possibleOpenBudgets, frameBudgets, sawBoundary);
+        }
+
+        private FrameBudgetState CollectBranch(FrameBudgetState state, IfElseSyntax branch)
+        {
+            state = CollectExpression(state, branch.Condition);
+
+            var branchStart = new FrameBudgetState(
+                state.OpenBudgets,
+                [],
+                sawBoundary: false);
+            var thenState = CollectBlock(branchStart, branch.ThenBlock);
+            var elseState = branch.ElseBlock.HasValue
+                ? CollectBlock(branchStart, branch.ElseBlock.Value)
+                : branchStart;
+
+            return new FrameBudgetState(
+                thenState.OpenBudgets.Concat(elseState.OpenBudgets),
+                state.FrameBudgets.Concat(thenState.FrameBudgets).Concat(elseState.FrameBudgets),
+                state.SawBoundary || thenState.SawBoundary || elseState.SawBoundary);
+        }
+
+        private FrameBudgetState CollectCall(FrameBudgetState state, FunctionCall call)
+        {
+            switch (call.Name)
+            {
+                case "video_wait_vblank":
+                    SdkCallReader.RequireArity(call, 0);
+                    return state.CloseOpenFrames();
+                case "input_poll":
+                    SdkCallReader.RequireArity(call, 0);
+                    return state.CloseOpenFrames();
+                case "map_stream_column":
+                    return state.AddBudget(new Sdk2DFrameBudget(backgroundTileWrites: ReadStreamMapColumn(call).Height));
+                case "sprite_draw":
+                    var draw = ReadDrawLogicalSprite(call);
+                    return state.AddBudget(drawSpriteBudget?.Invoke(draw) ?? Sdk2DFrameBudget.Empty);
+                default:
+                    state = CollectCallArguments(state, call);
+                    return CollectUserFunction(state, call);
+            }
+        }
+
+        private FrameBudgetState CollectExpression(FrameBudgetState state, ExpressionSyntax expression)
+        {
+            switch (expression)
+            {
+                case FunctionCall call:
+                    return CollectValueCall(state, call);
+                case NamedArgumentSyntax namedArgument:
+                    return CollectExpression(state, namedArgument.Expression);
+                case ArrayInitializerSyntax arrayInitializer:
+                    foreach (var element in arrayInitializer.Elements)
+                    {
+                        state = CollectExpression(state, element);
+                    }
+
+                    return state;
+                case StructInitializerSyntax structInitializer:
+                    foreach (var field in structInitializer.Fields)
+                    {
+                        state = CollectExpression(state, field.Expression);
+                    }
+
+                    return state;
+                case BinaryExpressionSyntax binary:
+                    state = CollectExpression(state, binary.Left);
+                    return CollectExpression(state, binary.Right);
+                case ConditionalExpressionSyntax conditional:
+                    state = CollectExpression(state, conditional.Condition);
+                    var branchStart = new FrameBudgetState(state.OpenBudgets, [], sawBoundary: false);
+                    var trueState = CollectExpression(branchStart, conditional.WhenTrue);
+                    var falseState = CollectExpression(branchStart, conditional.WhenFalse);
+                    return new FrameBudgetState(
+                        trueState.OpenBudgets.Concat(falseState.OpenBudgets),
+                        state.FrameBudgets.Concat(trueState.FrameBudgets).Concat(falseState.FrameBudgets),
+                        state.SawBoundary || trueState.SawBoundary || falseState.SawBoundary);
+                case CastSyntax cast:
+                    return CollectExpression(state, cast.Expression);
+                case IndexExpressionSyntax indexExpression:
+                    return CollectExpression(state, indexExpression.Index);
+                default:
+                    return state;
+            }
+        }
+
+        private FrameBudgetState CollectValueCall(FrameBudgetState state, FunctionCall call)
+        {
+            state = CollectCallArguments(state, call);
+            return CollectUserValueFunction(state, call);
+        }
+
+        private FrameBudgetState CollectCallArguments(FrameBudgetState state, FunctionCall call)
+        {
+            foreach (var parameter in call.Parameters)
+            {
+                state = CollectExpression(state, parameter);
+            }
+
+            return state;
+        }
+
+        private FrameBudgetState CollectLValue(FrameBudgetState state, LValue lValue)
+        {
+            return lValue is IndexLValue index
+                ? CollectExpression(state, index.Index)
+                : state;
+        }
+
+        private FrameBudgetState CollectUserFunction(FrameBudgetState state, FunctionCall call)
+        {
+            if (!functions.TryGetValue(call.Name, out var function))
+            {
+                return state;
+            }
+
+            if (!userFunctionCallStack.Add(function.Name))
+            {
+                throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
+            }
+
+            try
+            {
+                return CollectBlock(state, ParameterSubstitution.Substitute(function, call, targetName));
+            }
+            finally
+            {
+                userFunctionCallStack.Remove(function.Name);
+            }
+        }
+
+        private FrameBudgetState CollectUserValueFunction(FrameBudgetState state, FunctionCall call)
+        {
+            if (!functions.TryGetValue(call.Name, out var function))
+            {
+                return state;
+            }
+
+            if (!userFunctionCallStack.Add(function.Name))
+            {
+                throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
+            }
+
+            try
+            {
+                return CollectExpression(state, ParameterSubstitution.SubstituteReturnExpression(function, call, targetName));
+            }
+            finally
+            {
+                userFunctionCallStack.Remove(function.Name);
+            }
+        }
+
+        private static IReadOnlyList<Sdk2DFrameBudget> DistinctBudgets(IEnumerable<Sdk2DFrameBudget> budgets)
+        {
+            return budgets
+                .GroupBy(BudgetKey, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToArray();
+        }
+
+        private static bool BudgetsEqual(IReadOnlyList<Sdk2DFrameBudget> left, IReadOnlyList<Sdk2DFrameBudget> right)
+        {
+            return left.Select(BudgetKey).Order(StringComparer.Ordinal).SequenceEqual(
+                right.Select(BudgetKey).Order(StringComparer.Ordinal),
+                StringComparer.Ordinal);
+        }
+
+        private static string BudgetKey(Sdk2DFrameBudget budget)
+        {
+            var scanlines = string.Join(
+                ",",
+                budget.HardwareSpritesByScanline
+                    .OrderBy(pair => pair.Key)
+                    .Select(pair => $"{pair.Key}:{pair.Value}"));
+
+            return $"{budget.BackgroundTileWrites}|{budget.HardwareSprites}|{budget.SpriteSizeModes}|{scanlines}";
+        }
+    }
+
+    private sealed class FrameBudgetState(
+        IEnumerable<Sdk2DFrameBudget> openBudgets,
+        IEnumerable<Sdk2DFrameBudget> frameBudgets,
+        bool sawBoundary)
+    {
+        public static FrameBudgetState Empty { get; } = new([Sdk2DFrameBudget.Empty], [], sawBoundary: false);
+
+        public IReadOnlyList<Sdk2DFrameBudget> OpenBudgets { get; } = DistinctBudgets(openBudgets);
+
+        public IReadOnlyList<Sdk2DFrameBudget> FrameBudgets { get; } = frameBudgets.ToArray();
+
+        public bool SawBoundary { get; } = sawBoundary;
+
+        public FrameBudgetState AddBudget(Sdk2DFrameBudget budget)
+        {
+            return new FrameBudgetState(
+                OpenBudgets.Select(openBudget => openBudget.Add(budget)),
+                FrameBudgets,
+                SawBoundary);
+        }
+
+        public FrameBudgetState CloseOpenFrames()
+        {
+            return new FrameBudgetState(
+                [Sdk2DFrameBudget.Empty],
+                FrameBudgets.Concat(
+                    OpenBudgets.Where(budget => !budget.IsEmpty)),
+                sawBoundary: true);
+        }
+
+        private static IReadOnlyList<Sdk2DFrameBudget> DistinctBudgets(IEnumerable<Sdk2DFrameBudget> budgets)
+        {
+            return budgets
+                .GroupBy(BudgetKey, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .ToArray();
+        }
+
+        private static string BudgetKey(Sdk2DFrameBudget budget)
+        {
+            var scanlines = string.Join(
+                ",",
+                budget.HardwareSpritesByScanline
+                    .OrderBy(pair => pair.Key)
+                    .Select(pair => $"{pair.Key}:{pair.Value}"));
+
+            return $"{budget.BackgroundTileWrites}|{budget.HardwareSprites}|{budget.SpriteSizeModes}|{scanlines}";
         }
     }
 }

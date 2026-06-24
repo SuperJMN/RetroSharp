@@ -13,7 +13,7 @@ public static class GameBoyRomCompiler
     public static byte[] CompileSource(string source, string? baseDirectory = null)
     {
         var videoProgram = ParseVideoProgram(source, baseDirectory);
-        ValidateSdkOperations(videoProgram.SdkOperations);
+        ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.Build(videoProgram);
     }
@@ -49,12 +49,64 @@ public static class GameBoyRomCompiler
         }
     }
 
-    private static void ValidateSdkOperations(IEnumerable<Sdk2DOperation> operations)
+    private static void ValidateSdkOperations(GameBoyVideoProgram videoProgram)
     {
-        foreach (var operation in operations)
+        foreach (var operation in videoProgram.SdkOperations)
         {
             Sdk2DOperationValidator.Validate(GameBoyTarget.Capabilities, operation);
         }
+
+        var frameBudgets = Sdk2DOperationCollector.CollectFrameBudgets(
+            videoProgram.MainBlock,
+            videoProgram.Functions,
+            "Game Boy",
+            draw => DrawSpriteBudget(videoProgram, draw));
+        foreach (var budget in frameBudgets)
+        {
+            Sdk2DOperationValidator.ValidateFrameBudget(GameBoyTarget.Capabilities, budget);
+        }
+    }
+
+    private static Sdk2DFrameBudget DrawSpriteBudget(GameBoyVideoProgram videoProgram, Sdk2DOperation.DrawLogicalSprite draw)
+    {
+        if (!videoProgram.SpriteAssets.TryGetValue(draw.SpriteId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{draw.SpriteId}'. Declare it with sprite_asset(...).");
+        }
+
+        return new Sdk2DFrameBudget(
+            hardwareSprites: asset.Pieces.Count,
+            spriteSizeModes: SpriteSizeMode.Sprite8x16,
+            hardwareSpritesByScanline: HardwareSpriteScanlineCounts(
+                draw.Y,
+                asset.Pieces.Select(piece => piece.YOffset),
+                spriteHeight: 16,
+                screenHeight: GameBoyTarget.Capabilities.ScreenPixels.Height));
+    }
+
+    private static IReadOnlyDictionary<int, int> HardwareSpriteScanlineCounts(
+        SdkByteExpression y,
+        IEnumerable<int> pieceOffsets,
+        int spriteHeight,
+        int screenHeight)
+    {
+        if (y is not SdkByteExpression.Constant constant)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var result = new Dictionary<int, int>();
+        foreach (var offset in pieceOffsets)
+        {
+            var top = constant.Value + offset;
+            var bottom = top + spriteHeight;
+            for (var scanline = Math.Max(0, top); scanline < Math.Min(screenHeight, bottom); scanline++)
+            {
+                result[scanline] = result.GetValueOrDefault(scanline) + 1;
+            }
+        }
+
+        return result;
     }
 
     private static void ValidateSdkAudioOperations(IEnumerable<SdkAudioOperation> operations)

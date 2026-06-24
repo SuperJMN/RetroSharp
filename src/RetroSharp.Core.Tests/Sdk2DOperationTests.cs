@@ -263,6 +263,24 @@ public sealed class Sdk2DOperationTests
     }
 
     [Fact]
+    public void Validator_rejects_camera_position_when_target_lacks_required_fine_scroll()
+    {
+        var target = FullCapabilities() with
+        {
+            SupportsFineScrollX = false,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                target,
+                new Sdk2DOperation.SetCameraPosition(X: 32, Y: 0, Axes: ScrollAxes.Horizontal)));
+
+        Assert.Equal(
+            "Target 'gb' does not support horizontal fine scrolling.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Validator_rejects_stream_map_column_when_height_exceeds_budget()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
@@ -272,6 +290,57 @@ public sealed class Sdk2DOperationTests
 
         Assert.Equal(
             "Target 'gb' supports 20 background tile writes per frame, but 21 are required for streaming a visible map column.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Frame_validator_accepts_combined_background_streaming_at_budget()
+    {
+        Sdk2DOperationValidator.ValidateFrame(
+            FullCapabilities(),
+            [
+                new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 12),
+                new Sdk2DOperation.StreamMapRow(TargetRow: 17, SourceRow: 48, X: 0, Width: 8),
+            ]);
+    }
+
+    [Fact]
+    public void Frame_validator_rejects_combined_background_streaming_that_exceeds_budget()
+    {
+        var frameOperations = new Sdk2DOperation[]
+        {
+            new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 12),
+            new Sdk2DOperation.StreamMapRow(TargetRow: 17, SourceRow: 48, X: 0, Width: 10),
+        };
+
+        foreach (var operation in frameOperations)
+        {
+            Sdk2DOperationValidator.Validate(FullCapabilities(), operation);
+        }
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.ValidateFrame(FullCapabilities(), frameOperations));
+
+        Assert.Equal(
+            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Frame_validator_rejects_unsupported_sprite_size_modes()
+    {
+        var target = FullCapabilities() with
+        {
+            SpriteSizeModes = SpriteSizeMode.Sprite8x8,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.ValidateFrameBudget(
+                target,
+                new Sdk2DFrameBudget(spriteSizeModes: SpriteSizeMode.Sprite8x16)));
+
+        Assert.Equal(
+            "Target 'gb' does not support 8x16 sprite size mode.",
             exception.Message);
     }
 

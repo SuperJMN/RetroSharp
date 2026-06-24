@@ -433,6 +433,103 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Compilation_rejects_combined_streaming_that_exceeds_one_frame_budget()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                                  i16 targetColumn = 20;
+                                  i16 sourceColumn = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      map_stream_column(targetColumn, sourceColumn, 0, 12);
+                                      map_stream_column(targetColumn, sourceColumn, 0, 10);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Compilation_validates_branch_alternatives_as_exclusive_frame_paths()
+    {
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                                  i16 targetColumn = 20;
+                                  i16 sourceColumn = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      if (targetColumn == 20) {
+                                          map_stream_column(targetColumn, sourceColumn, 0, 12);
+                                      } else {
+                                          map_stream_column(targetColumn, sourceColumn, 0, 10);
+                                      }
+                                  }
+                              }
+                              """;
+
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+    }
+
+    [Fact]
+    public void Compilation_rejects_sprite_draws_that_exceed_one_frame_hardware_sprite_budget()
+    {
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 41).Select(index => $"        sprite_draw(player_run, {index % 20}, {(index % 4) * 20}, 0);"));
+        var source = """
+                     void main() {
+                         video_init();
+                         sprite_asset(player_run, "player.sprite.json");
+                         while (true) {
+                             video_wait_vblank();
+
+                     """ + draws + """
+                         }
+                     }
+                     """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, WriteSpriteAsset()));
+
+        Assert.Equal(
+            "Target 'gb' supports 40 hardware sprites per frame, but 41 are required for drawing logical sprites in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Compilation_rejects_constant_y_sprite_draws_that_exceed_scanline_budget()
+    {
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 11).Select(index => $"        sprite_draw(player_run, {index * 8}, 16, 0);"));
+        var source = """
+                     void main() {
+                         video_init();
+                         sprite_asset(player_run, "player.sprite.json");
+                         while (true) {
+                             video_wait_vblank();
+
+                     """ + draws + """
+                         }
+                     }
+                     """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, WriteSpriteAsset()));
+
+        Assert.Equal(
+            "Target 'gb' supports 10 hardware sprites per scanline, but 11 are required on scanline 16 for drawing logical sprites in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Camera_set_position_rejects_diagonal_movement_that_exceeds_game_boy_budget()
     {
         const string source = """

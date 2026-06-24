@@ -4,6 +4,85 @@ using RetroSharp.Core.Targeting;
 
 public static class Sdk2DOperationValidator
 {
+    public static void ValidateFrame(Target2DCapabilities capabilities, IEnumerable<Sdk2DOperation> operations)
+    {
+        var backgroundTileWrites = 0;
+        foreach (var operation in operations)
+        {
+            Validate(capabilities, operation);
+            backgroundTileWrites += BackgroundTileWrites(operation);
+        }
+
+        ValidateFrameBudget(capabilities, new Sdk2DFrameBudget(backgroundTileWrites));
+    }
+
+    public static void ValidateFrameBudget(Target2DCapabilities capabilities, Sdk2DFrameBudget budget)
+    {
+        RequireBackgroundTileWriteBudget(
+            capabilities,
+            budget.BackgroundTileWrites,
+            "streaming background tiles in one frame");
+
+        if (budget.HardwareSprites > capabilities.SpriteCount)
+        {
+            throw new InvalidOperationException(
+                $"Target '{capabilities.Name}' supports {capabilities.SpriteCount} hardware sprites per frame, but {budget.HardwareSprites} are required for drawing logical sprites in one frame.");
+        }
+
+        RequireSpriteSizeModes(capabilities, budget.SpriteSizeModes);
+
+        var maxScanline = budget.HardwareSpritesByScanline
+            .OrderBy(pair => pair.Key)
+            .FirstOrDefault(pair => pair.Value > capabilities.MaxSpritesPerScanline);
+        if (maxScanline.Value > capabilities.MaxSpritesPerScanline)
+        {
+            throw new InvalidOperationException(
+                $"Target '{capabilities.Name}' supports {capabilities.MaxSpritesPerScanline} hardware sprites per scanline, but {maxScanline.Value} are required on scanline {maxScanline.Key} for drawing logical sprites in one frame.");
+        }
+    }
+
+    private static void RequireSpriteSizeModes(Target2DCapabilities capabilities, SpriteSizeMode modes)
+    {
+        foreach (var mode in SpriteSizeModes(modes))
+        {
+            if (capabilities.SupportsSpriteSize(mode))
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support {FormatSpriteSizeMode(mode)} sprite size mode.");
+        }
+    }
+
+    private static IEnumerable<SpriteSizeMode> SpriteSizeModes(SpriteSizeMode modes)
+    {
+        if (modes.HasFlag(SpriteSizeMode.Sprite8x8))
+        {
+            yield return SpriteSizeMode.Sprite8x8;
+        }
+
+        if (modes.HasFlag(SpriteSizeMode.Sprite8x16))
+        {
+            yield return SpriteSizeMode.Sprite8x16;
+        }
+
+        if (modes.HasFlag(SpriteSizeMode.Sprite16x16))
+        {
+            yield return SpriteSizeMode.Sprite16x16;
+        }
+    }
+
+    private static string FormatSpriteSizeMode(SpriteSizeMode mode)
+    {
+        return mode switch
+        {
+            SpriteSizeMode.Sprite8x8 => "8x8",
+            SpriteSizeMode.Sprite8x16 => "8x16",
+            SpriteSizeMode.Sprite16x16 => "16x16",
+            _ => mode.ToString(),
+        };
+    }
+
     public static void Validate(Target2DCapabilities capabilities, Sdk2DOperation operation)
     {
         switch (operation)
@@ -33,6 +112,7 @@ public static class Sdk2DOperationValidator
                 ValidateByteExpression(camera.X, "camera X");
                 ValidateByteExpression(camera.Y, "camera Y");
                 RequireAxes(capabilities, camera.Axes);
+                RequireFineScroll(capabilities, camera.Axes);
                 RequireCameraMovementBudget(capabilities, camera.Axes);
                 return;
             case Sdk2DOperation.ApplyCamera camera:
@@ -221,6 +301,19 @@ public static class Sdk2DOperationValidator
         }
     }
 
+    private static void RequireFineScroll(Target2DCapabilities capabilities, ScrollAxes axes)
+    {
+        if (axes.HasFlag(ScrollAxes.Horizontal) && !capabilities.SupportsFineScrollX)
+        {
+            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support horizontal fine scrolling.");
+        }
+
+        if (axes.HasFlag(ScrollAxes.Vertical) && !capabilities.SupportsFineScrollY)
+        {
+            throw new InvalidOperationException($"Target '{capabilities.Name}' does not support vertical fine scrolling.");
+        }
+    }
+
     private static void RequireCameraMovementBudget(Target2DCapabilities capabilities, ScrollAxes axes)
     {
         // Targets that cannot write background tiles at runtime do not stream while
@@ -268,5 +361,15 @@ public static class Sdk2DOperationValidator
 
         throw new InvalidOperationException(
             $"Target '{capabilities.Name}' supports {capabilities.MaxBackgroundTileWritesPerFrame} background tile writes per frame, but {requiredWrites} are required for {operationDescription}.");
+    }
+
+    private static int BackgroundTileWrites(Sdk2DOperation operation)
+    {
+        return operation switch
+        {
+            Sdk2DOperation.StreamMapColumn column => column.Height,
+            Sdk2DOperation.StreamMapRow row => row.Width,
+            _ => 0,
+        };
     }
 }

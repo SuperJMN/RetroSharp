@@ -2060,6 +2060,53 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Rejects_constant_y_sprite_draws_that_exceed_nes_scanline_budget()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 9).Select(index => $"        sprite_draw(hero, {index * 8}, 24, 0);"));
+        var source = """
+                     void main() {
+                         video_init();
+                         sprite_asset(hero, "hero.nes.json");
+                         while (true) {
+                             video_wait_vblank();
+
+                     """ + draws + """
+                         }
+                     }
+                     """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'nes' supports 8 hardware sprites per scanline, but 9 are required on scanline 24 for drawing logical sprites in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Rejects_logical_sprite_assets_that_exceed_nes_sprite_count()
     {
         var rows = Enumerable.Repeat(new string('1', 65 * 8), 8);

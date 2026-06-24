@@ -58,11 +58,63 @@ public static class NesRomCompiler
             Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
         }
 
+        var frameBudgets = Sdk2DOperationCollector.CollectFrameBudgets(
+            videoProgram.MainBlock,
+            videoProgram.Functions,
+            "NES",
+            draw => DrawSpriteBudget(videoProgram, draw));
+        foreach (var budget in frameBudgets)
+        {
+            Sdk2DOperationValidator.ValidateFrameBudget(NesTarget.Capabilities, budget);
+        }
+
         var audioOperations = SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
         foreach (var operation in audioOperations)
         {
             SdkAudioOperationValidator.Validate(NesTarget.AudioCapabilities, operation);
         }
+    }
+
+    private static Sdk2DFrameBudget DrawSpriteBudget(NesVideoProgram videoProgram, Sdk2DOperation.DrawLogicalSprite draw)
+    {
+        if (!videoProgram.SpriteAssets.TryGetValue(draw.SpriteId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES sprite asset '{draw.SpriteId}'. Declare it with sprite_asset(...).");
+        }
+
+        return new Sdk2DFrameBudget(
+            hardwareSprites: asset.Pieces.Count,
+            spriteSizeModes: SpriteSizeMode.Sprite8x8,
+            hardwareSpritesByScanline: HardwareSpriteScanlineCounts(
+                draw.Y,
+                asset.Pieces.Select(piece => piece.YOffset),
+                spriteHeight: 8,
+                screenHeight: NesTarget.Capabilities.ScreenPixels.Height));
+    }
+
+    private static IReadOnlyDictionary<int, int> HardwareSpriteScanlineCounts(
+        SdkByteExpression y,
+        IEnumerable<int> pieceOffsets,
+        int spriteHeight,
+        int screenHeight)
+    {
+        if (y is not SdkByteExpression.Constant constant)
+        {
+            return new Dictionary<int, int>();
+        }
+
+        var result = new Dictionary<int, int>();
+        foreach (var offset in pieceOffsets)
+        {
+            var top = constant.Value + offset;
+            var bottom = top + spriteHeight;
+            for (var scanline = Math.Max(0, top); scanline < Math.Min(screenHeight, bottom); scanline++)
+            {
+                result[scanline] = result.GetValueOrDefault(scanline) + 1;
+            }
+        }
+
+        return result;
     }
 
     private static void ValidateFunctionContracts(ProgramSyntax program)
