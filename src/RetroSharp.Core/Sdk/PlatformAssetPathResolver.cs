@@ -47,7 +47,7 @@ public static class PlatformAssetPathResolver
         {
             "gb" or "gameboy" => [".gb", ".GB", ".gameboy", ".GameBoy"],
             "nes" => [".nes", ".NES"],
-            _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unknown sprite asset platform."),
+            _ => throw new ArgumentOutOfRangeException(nameof(platform), platform, "Unknown asset platform."),
         };
     }
 

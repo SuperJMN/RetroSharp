@@ -3663,6 +3663,75 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void World_load_uses_game_boy_tileset_png_variant_when_present()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        WriteTiledTilesheetPng(directory, "tiles.png", 8, 8, 3);
+        WriteTiledTilesheetPng(directory, "tiles.gb.png", 8, 8, 0);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tsx"),
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <tileset version="1.10" tiledversion="1.12.2" name="Level" tilewidth="8" tileheight="8" tilecount="1" columns="1">
+             <image source="tiles.png" width="8" height="8"/>
+            </tileset>
+            """);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tmj"),
+            """
+            {
+              "type": "map",
+              "version": "1.10",
+              "tiledversion": "1.12.2",
+              "orientation": "orthogonal",
+              "renderorder": "right-down",
+              "width": 1,
+              "height": 1,
+              "tilewidth": 8,
+              "tileheight": 8,
+              "infinite": false,
+              "properties": [
+                { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+                { "name": "retrosharpWorldY", "type": "int", "value": 0 },
+                { "name": "retrosharpWorldHeight", "type": "int", "value": 1 }
+              ],
+              "layers": [
+                {
+                  "id": 1,
+                  "name": "world",
+                  "type": "tilelayer",
+                  "width": 1,
+                  "height": 1,
+                  "visible": true,
+                  "opacity": 1,
+                  "x": 0,
+                  "y": 0,
+                  "data": [1]
+                }
+              ],
+              "tilesets": [
+                { "firstgid": 1, "source": "level.tsx" }
+              ]
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  world.Load("level.tmj");
+                                  camera.Init(1, 0, 1);
+                                  return;
+                              }
+                              """;
+
+        var program = CompileVideoProgram(source, directory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+
+        Assert.Equal(0, worldMap.TileIdAt(0, 0));
+        Assert.Equal(0, program.TileMap[0]);
+    }
+
+    [Fact]
     public void World_load_reserves_generated_background_tiles_before_sprite_assets()
     {
         var directory = WriteSpriteAsset(

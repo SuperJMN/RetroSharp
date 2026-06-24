@@ -222,7 +222,10 @@ internal static class GameBoyTiledMapImporter
 
         public static GameBoyTileset FromLogical(LogicalTileset tileset)
         {
-            var image = tileset.ImagePath is null ? null : PngImage.Read(tileset.ImagePath);
+            var imagePath = tileset.ImagePath is null
+                ? null
+                : PlatformAssetPathResolver.ResolvePngVariant(tileset.ImagePath, "gb");
+            var image = imagePath is null ? null : PngImage.Read(imagePath);
             return new GameBoyTileset(tileset.FirstGid, tileset.Name, tileset.TileWidth, tileset.TileHeight, tileset.TileCount, tileset.Columns, image);
         }
 

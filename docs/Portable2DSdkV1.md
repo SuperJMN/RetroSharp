@@ -63,6 +63,8 @@ Game Boy currently accepts hUGETracker `.uge` v6 resources directly or through t
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
+For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editable baseline. During target lowering, that PNG path follows the target-variant convention used by sprite assets: `tiles.png` can resolve to `tiles.gb.png`/`tiles.GameBoy.png` on Game Boy or `tiles.nes.png`/`tiles.NES.png` on NES, falling back to `tiles.png` when no variant exists. The current NES lowering derives a universal background color, up to four background palette slots, and the initial attribute table from the selected tileset PNG's placed map tiles; runtime attribute streaming is still outside SDK v1.
+
 ### Logical palettes
 
 | Signature | Semantics |

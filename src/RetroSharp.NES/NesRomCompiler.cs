@@ -446,11 +446,8 @@ internal sealed class NesVideoProgram
             nextSpriteTile += generatedCount;
         }
 
-        // Map the four canonical luminance tones (0 lightest .. 3 darkest) to NES grays.
-        Palette[0] = 0x30;
-        Palette[1] = 0x10;
-        Palette[2] = 0x00;
-        Palette[3] = 0x0F;
+        ApplyBackgroundPalettes(world.BackgroundPalette);
+        ApplyBackgroundTiles(world);
 
         for (var y = 0; y < world.Height; y++)
         {
@@ -460,8 +457,181 @@ internal sealed class NesVideoProgram
             }
         }
 
+        ApplyWorldAttributes(world);
+
         WorldMap = new WorldMap2D(world.Width, world.Height, world.WorldTileIds, world.WorldFlags);
     }
+
+    private void ApplyBackgroundTiles(NesTiledWorld world)
+    {
+        if (world.BackgroundTileIds is null)
+        {
+            return;
+        }
+
+        for (var y = 0; y < world.BackgroundHeight; y++)
+        {
+            var targetY = y - world.BackgroundOffsetY;
+            if (targetY is < 0 or >= 30)
+            {
+                continue;
+            }
+
+            for (var x = 0; x < 64; x++)
+            {
+                SetTile(x, targetY, world.BackgroundTileIds[y * world.BackgroundWidth + x % world.BackgroundWidth]);
+            }
+        }
+    }
+
+    private void ApplyBackgroundPalettes(IReadOnlyList<byte> colors)
+    {
+        if (colors.Count != 16)
+        {
+            throw new InvalidOperationException("NES world.Load background palette derivation must produce four background palettes.");
+        }
+
+        for (var slot = 0; slot < 4; slot++)
+        {
+            if (!BackgroundPaletteSlotHasRawOverrides(slot))
+            {
+                ApplyBackgroundPalette(slot, colors.Skip(slot * 4).Take(4).ToArray());
+            }
+        }
+    }
+
+    private bool BackgroundPaletteSlotHasRawOverrides(int slot)
+    {
+        var baseIndex = slot * 4;
+        return Enumerable.Range(baseIndex, 4).Any(rawPaletteIndexes.Contains);
+    }
+
+    private void ApplyBackgroundPalette(int slot, IReadOnlyList<byte> colors)
+    {
+        var baseIndex = slot * 4;
+        for (var i = 0; i < colors.Count; i++)
+        {
+            Palette[baseIndex + i] = colors[i];
+        }
+    }
+
+    private void ApplyWorldAttributes(NesTiledWorld world)
+    {
+        for (var nameTable = 0; nameTable < 2; nameTable++)
+        {
+            for (var attributeY = 0; attributeY < 8; attributeY++)
+            {
+                for (var attributeX = 0; attributeX < 8; attributeX++)
+                {
+                    var attributeByte = 0;
+                    for (var quadrantY = 0; quadrantY < 2; quadrantY++)
+                    {
+                        for (var quadrantX = 0; quadrantX < 2; quadrantX++)
+                        {
+                            var baseX = nameTable * 32 + attributeX * 4 + quadrantX * 2;
+                            var baseY = attributeY * 4 + quadrantY * 2;
+                            var slot = MostCommonPaletteSlot(world, baseX, baseY);
+                            var shift = (quadrantY * 2 + quadrantX) * 2;
+                            attributeByte |= (slot & 0x03) << shift;
+                        }
+                    }
+
+                    NameTable[nameTable * 1024 + 960 + attributeY * 8 + attributeX] = (byte)attributeByte;
+                }
+            }
+        }
+    }
+
+    private static int MostCommonPaletteSlot(NesTiledWorld world, int baseX, int baseY)
+    {
+        Span<int> counts = stackalloc int[4];
+        Span<int> worldCounts = stackalloc int[4];
+        Span<int> upperWorldCounts = stackalloc int[4];
+        Span<int> lowerRowCounts = stackalloc int[4];
+        for (var y = baseY; y < baseY + 2; y++)
+        {
+            for (var x = baseX; x < baseX + 2; x++)
+            {
+                var cell = PaletteCellAtScreenTile(world, x, y);
+                var slot = cell.Slot;
+                counts[slot]++;
+                if (cell.IsWorldLayer)
+                {
+                    worldCounts[slot]++;
+                    if (y == baseY)
+                    {
+                        upperWorldCounts[slot]++;
+                    }
+                }
+                if (y == baseY + 1)
+                {
+                    lowerRowCounts[slot]++;
+                }
+            }
+        }
+
+        var bestSlot = 0;
+        for (var slot = 1; slot < counts.Length; slot++)
+        {
+            if (IsBetterAttributePaletteSlot(slot, bestSlot, counts, worldCounts, upperWorldCounts, lowerRowCounts))
+            {
+                bestSlot = slot;
+            }
+        }
+
+        return bestSlot;
+    }
+
+    private static bool IsBetterAttributePaletteSlot(
+        int candidate,
+        int incumbent,
+        ReadOnlySpan<int> counts,
+        ReadOnlySpan<int> worldCounts,
+        ReadOnlySpan<int> upperWorldCounts,
+        ReadOnlySpan<int> lowerRowCounts)
+    {
+        if (counts[candidate] != counts[incumbent])
+        {
+            return counts[candidate] > counts[incumbent];
+        }
+
+        if (worldCounts[candidate] != worldCounts[incumbent])
+        {
+            return worldCounts[candidate] > worldCounts[incumbent];
+        }
+
+        if (upperWorldCounts[candidate] != upperWorldCounts[incumbent])
+        {
+            return upperWorldCounts[candidate] > upperWorldCounts[incumbent];
+        }
+
+        return lowerRowCounts[candidate] > lowerRowCounts[incumbent];
+    }
+
+    private static PaletteCell PaletteCellAtScreenTile(NesTiledWorld world, int x, int y)
+    {
+        var worldY = y - world.StreamY;
+        if (worldY >= 0 && worldY < world.Height && x >= 0 && x < world.Width)
+        {
+            var index = worldY * world.Width + x;
+            return new PaletteCell(world.WorldPaletteSlots[index], world.WorldSourceTiles[index] != 0);
+        }
+
+        if (world.BackgroundPaletteSlots is null || x < 0 || world.BackgroundWidth <= 0)
+        {
+            return new PaletteCell(0, false);
+        }
+
+        var backgroundY = y + world.BackgroundOffsetY;
+        if (backgroundY < 0 || backgroundY >= world.BackgroundHeight)
+        {
+            return new PaletteCell(0, false);
+        }
+
+        return new PaletteCell(world.BackgroundPaletteSlots[backgroundY * world.BackgroundWidth + x % world.BackgroundWidth], false);
+    }
+
+    private readonly record struct PaletteCell(int Slot, bool IsWorldLayer);
 
     private void ApplyWorldMap(FunctionCall call)
     {

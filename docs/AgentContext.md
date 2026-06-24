@@ -132,7 +132,9 @@ Progress (2026-06-14):
   and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
   Color values are logical tones `0..3`. Game Boy lowers background slot `0` to `BGP` and sprite
   slots `0..1` to `OBP0/OBP1`; NES lowers background/sprite slots `0..3` into fixed grayscale
-  entries by default, and PNG sprite assets can derive the hardware sprite palette for the draw
+  entries by default; NES Tiled backgrounds can derive a universal background color plus up to
+  four background palette slots and initial attribute bytes from placed tiles in the selected
+  tileset PNG, and PNG sprite assets can derive the hardware sprite palette for the draw
   slot that uses them while preserving the background universal color. The runner now uses
   `palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
   `objectPalette.Set(...)`.
@@ -166,17 +168,19 @@ Pipeline shape (two phases, after #105 partial extraction):
   Tiled JSON/TSX, resolves tileset descriptors (metadata + image path, no decoded pixels),
   computes geometry and the playable world slice, and resolves collision into portable
   `WorldTileFlags`. It yields a `LogicalTiledMap` of source-tile GID references only. PNG decoding
-  (`RetroSharp.Core.Imaging.PngImage`) and luminance quantization into canonical 8x8 four-tone
-  patterns (`RetroSharp.Core.Imaging.CanonicalTileGenerator`) are also shared in Core.
+  (`RetroSharp.Core.Imaging.PngImage`) is shared in Core; Game Boy still uses the shared luminance
+  quantizer for canonical 8x8 four-tone patterns.
 - Per-target phase: `GameBoyTiledMapImporter` and `NesTiledWorldImporter` both consume the
-  `LogicalTiledMap`, decode tileset PNGs, build canonical four-tone patterns, and encode them into
-  their own 2bpp tile byte layout (Game Boy interleaved planes; NES planar planes), deduplicating
-  and composing the background under blank world cells. `world.Load(path)` therefore lowers on both
-  Game Boy and NES from the same source.
+  `LogicalTiledMap`, resolve target PNG variants for tileset images (`tiles.gb.png`/`tiles.nes.png`
+  when present), decode tileset PNGs, and encode them into their own 2bpp tile byte layout (Game Boy
+  interleaved planes from luminance tones; NES planar planes from derived palette indexes),
+  deduplicating and composing the background under blank world cells. `world.Load(path)` therefore
+  lowers on both Game Boy and NES from the same source while keeping the editable `.tsx` pointed at
+  one baseline PNG.
 - NES limitations: the Tiled source map width must fit the one-byte source-column runtime, the
   current visible/off-screen buffer is still two nametables wide, the streamed slice must fit the
-  visible 30-row height, vertical streaming is not supported yet, and the four canonical tones map
-  to a single fixed grayscale background palette (per-region attribute palettes are future work).
+  visible 30-row height, vertical streaming is not supported yet, and attribute bytes are derived for
+  the initial two-nametable buffer but are not streamed at runtime yet.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.
@@ -184,7 +188,8 @@ Pipeline shape (two phases, after #105 partial extraction):
 Important current behavior:
 
 - `world.Load(path)` imports finite orthogonal Tiled JSON maps.
-- External `.tsj` and `.tsx` tilesets with PNG images are accepted.
+- External `.tsj` and `.tsx` tilesets with PNG images are accepted; target backends can substitute
+  `.gb.png` or `.nes.png` variants for the tileset image while Tiled keeps editing against the base PNG.
 - Tiled source cells are expanded into Game Boy 8x8 cells; for example, a 16x16 source tile becomes a 2x2 Game Boy block.
 - Generated Game Boy tile patterns are quantized and deduplicated.
 - Game Boy has one scrolling background tilemap, so authoring layers are flattened.
