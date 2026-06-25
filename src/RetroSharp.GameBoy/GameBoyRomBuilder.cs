@@ -549,6 +549,15 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort MusicCurrentBankAddress = 0xC116;
     private const ushort MusicScratchBankAddress = 0xC117;
     private const ushort MusicDataCursorBankAddress = 0xC118;
+    // Deferred camera streaming: camera.SetPosition queues at most one column/row crossing per
+    // frame here; camera.Apply drains it to VRAM during the top-of-frame VBlank. This keeps each
+    // main-loop iteration to a single VBlank so audio.Update() stays locked to the frame rate.
+    private const ushort PendingStreamKindAddress = 0xC119;   // 0=none, 1=column, 2=row
+    private const ushort PendingStreamTargetAddress = 0xC11A; // background column or row index
+    private const ushort PendingStreamSourceAddress = 0xC11B; // source-map column or row index
+    private const byte PendingStreamNone = 0;
+    private const byte PendingStreamColumn = 1;
+    private const byte PendingStreamRow = 2;
     private const byte MusicActiveUgeRows = 1;
     private const byte MusicActiveApuTrace = 2;
     private const int MusicHeaderLength = 3;
@@ -2131,6 +2140,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraYLowAddress);
         builder.StoreA(CameraYHighAddress);
         builder.StoreA(CameraFineYAddress);
+        builder.StoreA(PendingStreamKindAddress);
 
         builder.LoadAImmediate(y);
         builder.StoreA(CameraTopBackgroundRowAddress);
@@ -2186,12 +2196,89 @@ internal sealed class GameBoyRuntimeCompiler
 
     internal void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)
     {
-        EnsureCameraConfigured("camera_apply");
+        var config = EnsureCameraConfigured("camera_apply");
+
+        // Drain any column/row queued by last frame's camera move into VRAM now, while we are at the
+        // top of the frame inside VBlank. This replaces the per-crossing extra WaitVBlank, so a
+        // scrolling frame no longer costs two VBlanks for a single audio.Update().
+        EmitCommitPendingStream(config);
 
         builder.LoadA(CameraXLowAddress);
         builder.StoreHighRamA(0x43);
         builder.LoadA(CameraYLowAddress);
         builder.StoreHighRamA(0x42);
+    }
+
+    private void EmitCommitPendingStream(CameraConfig config)
+    {
+        // Rows are only ever queued by camera.SetPosition with a non-zero Y (the up/down move steps
+        // are unreachable otherwise), so only emit the large row streamer when the program can
+        // actually scroll vertically. The column streamer is small and always emitted.
+        var emitRowCommit = ProgramQueuesRowStreaming();
+
+        var rowLabel = builder.CreateLabel("camera_commit_row");
+        var clearLabel = builder.CreateLabel("camera_commit_clear");
+        var doneLabel = builder.CreateLabel("camera_commit_done");
+
+        builder.LoadA(PendingStreamKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, doneLabel);      // JP Z,doneLabel: nothing queued
+        if (emitRowCommit)
+        {
+            builder.CompareImmediate(PendingStreamRow);
+            builder.JumpAbsolute(0xCA, rowLabel);   // JP Z,rowLabel
+        }
+
+        // Column crossing: stream the queued background and visible-world column.
+        EmitVisibleWorldStreamColumnFromAddresses(PendingStreamTargetAddress, PendingStreamSourceAddress, config);
+        EmitBackgroundStreamColumnFromAddresses(PendingStreamTargetAddress, PendingStreamSourceAddress);
+
+        if (emitRowCommit)
+        {
+            builder.JumpAbsolute(clearLabel);
+            builder.Label(rowLabel);
+            EmitMapStreamRowFromSourceRowAddress(PendingStreamTargetAddress, PendingStreamSourceAddress, config);
+            builder.Label(clearLabel);
+        }
+
+        builder.LoadAImmediate(PendingStreamNone);
+        builder.StoreA(PendingStreamKindAddress);
+
+        builder.Label(doneLabel);
+    }
+
+    private bool ProgramQueuesRowStreaming()
+    {
+        foreach (var operation in sdkOperations)
+        {
+            if (operation is Sdk2DOperation.SetCameraPosition position
+                && position.Y is not SdkByteExpression.Constant { Value: 0 })
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void EmitQueuePendingColumn(ushort backgroundColumnAddress, ushort sourceColumnAddress)
+    {
+        EmitQueuePendingStream(PendingStreamColumn, backgroundColumnAddress, sourceColumnAddress);
+    }
+
+    private void EmitQueuePendingRow(ushort backgroundRowAddress, ushort sourceRowAddress)
+    {
+        EmitQueuePendingStream(PendingStreamRow, backgroundRowAddress, sourceRowAddress);
+    }
+
+    private void EmitQueuePendingStream(byte kind, ushort targetAddress, ushort sourceAddress)
+    {
+        builder.LoadA(targetAddress);
+        builder.StoreA(PendingStreamTargetAddress);
+        builder.LoadA(sourceAddress);
+        builder.StoreA(PendingStreamSourceAddress);
+        builder.LoadAImmediate(kind);
+        builder.StoreA(PendingStreamKindAddress);
     }
 
     private void EmitCameraSetAxisPosition(
@@ -2244,9 +2331,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineXAddress);
-        EmitWaitForVBlankBeforeStream();
-        EmitVisibleWorldStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress, config);
-        EmitBackgroundStreamColumnFromAddresses(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress);
+        EmitQueuePendingColumn(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress);
         EmitIncrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitIncrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
         EmitIncrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
@@ -2276,9 +2361,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(7);
         builder.StoreA(CameraFineXAddress);
-        EmitWaitForVBlankBeforeStream();
-        EmitVisibleWorldStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress, config);
-        EmitBackgroundStreamColumnFromAddresses(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress);
+        EmitQueuePendingColumn(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress);
         EmitDecrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitDecrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
         EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
@@ -2301,8 +2384,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineYAddress);
-        EmitWaitForVBlankBeforeStream();
-        EmitMapStreamRowFromSourceRowAddress(CameraBottomBackgroundRowAddress, CameraBottomSourceRowAddress, config);
+        EmitQueuePendingRow(CameraBottomBackgroundRowAddress, CameraBottomSourceRowAddress);
         EmitIncrementAddressModulo(CameraTopBackgroundRowAddress, 32);
         EmitIncrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
         EmitIncrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
@@ -2324,23 +2406,13 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(7);
         builder.StoreA(CameraFineYAddress);
-        EmitWaitForVBlankBeforeStream();
         EmitDecrementAddressModulo(CameraTopBackgroundRowAddress, 32);
         EmitDecrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
         EmitDecrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
         EmitDecrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
-        EmitMapStreamRowFromSourceRowAddress(CameraTopBackgroundRowAddress, CameraTopSourceRowAddress, config);
+        EmitQueuePendingRow(CameraTopBackgroundRowAddress, CameraTopSourceRowAddress);
 
         builder.Label(endLabel);
-    }
-
-    private void EmitWaitForVBlankBeforeStream()
-    {
-        // Camera tile streaming writes the background tilemap mid-frame, after input,
-        // physics, and collision have run. A jump/landing-heavy frame can reach this
-        // path late in VBlank, so wait for a fresh VBlank edge rather than accepting
-        // the tail of the current one.
-        GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("camera_stream_wait_vblank"));
     }
 
     private void EmitMapStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, int y, int height)

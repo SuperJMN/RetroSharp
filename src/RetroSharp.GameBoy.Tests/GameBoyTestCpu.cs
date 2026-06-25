@@ -32,6 +32,16 @@ internal sealed class GameBoyTestCpu
     private ushort sp, pc;
     private int romBank = 1;
     private long instructions;
+    private long cycles;
+
+    // Opt-in instrumentation for timing investigations. Defaults preserve existing behavior:
+    // CycleAccurateLy off => LY driven by instruction count; empty Held => no buttons pressed.
+    public bool CycleAccurateLy;
+    public readonly HashSet<string> Held = [];
+    public long AudioUpdateCalls;
+    public long Cycles => cycles;
+
+    public byte Vram(ushort address) => vram[address - 0x8000];
 
     public GameBoyTestCpu(byte[] rom)
     {
@@ -41,6 +51,68 @@ internal sealed class GameBoyTestCpu
     }
 
     public IReadOnlyList<(ushort Register, byte Value)> ApuWrites => apuWrites;
+
+    /// <summary>
+    /// Runs until the cycle clock reaches <paramref name="frames"/> DMG frames (70224 cycles each),
+    /// or the instruction budget is exhausted. Requires <see cref="CycleAccurateLy"/> for meaningful
+    /// frame timing.
+    /// </summary>
+    public void RunFrames(int frames, long maxInstructions = 2_000_000_000)
+    {
+        var target = (long)frames * 70224L;
+        while (cycles < target)
+        {
+            if (instructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions} instructions but only reached {cycles} of {target} cycles.");
+            }
+
+            Step();
+        }
+    }
+
+    private byte ReadJoypad()
+    {
+        var selection = io[0] & 0x30;
+        var low = 0x0F;
+        if ((selection & 0x10) == 0) // bit4=0 selects the d-pad row
+        {
+            if (Held.Contains("right")) low &= ~0x01;
+            if (Held.Contains("left")) low &= ~0x02;
+            if (Held.Contains("up")) low &= ~0x04;
+            if (Held.Contains("down")) low &= ~0x08;
+        }
+
+        if ((selection & 0x20) == 0) // bit5=0 selects the action-button row
+        {
+            if (Held.Contains("a")) low &= ~0x01;
+            if (Held.Contains("b")) low &= ~0x02;
+            if (Held.Contains("select")) low &= ~0x04;
+            if (Held.Contains("start")) low &= ~0x08;
+        }
+
+        return (byte)(selection | 0xC0 | low); // 0=pressed; unused high bits read as 1
+    }
+
+    private static int CyclesFor(byte op) => op switch
+    {
+        0x01 or 0x11 or 0x21 or 0x31 => 12,             // LD rr,nn
+        0x36 => 12,                                      // LD (HL),n
+        0xE0 or 0xF0 => 12,                             // LDH (n),A / LDH A,(n)
+        0xEA or 0xFA => 16,                             // LD (nn),A / LD A,(nn)
+        0xC3 or 0xC2 or 0xCA or 0xD2 or 0xDA => 16,     // JP / JP cc (approx taken)
+        0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
+        0x16 or 0x26 or 0x2E or 0x06 or 0x0E or 0x1E or 0x3E => 8, // LD r,n
+        0xC6 or 0xD6 or 0xE6 or 0xF6 or 0xEE or 0xFE => 8,        // ALU A,n
+        0x0B or 0x03 or 0x13 or 0x1B or 0x23 or 0x2B => 8,        // INC/DEC rr
+        0x09 or 0x19 or 0x29 => 8,                       // ADD HL,rr
+        0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x7E => 8, // LD A,(rr)/(HL) loads/stores
+        0x46 or 0x4E or 0x56 or 0x5E => 8,               // LD r,(HL)
+        0xE2 or 0xF2 => 8,                               // LDH (C),A / LDH A,(C)
+        0xCB => 8,                                       // CB-prefixed (SWAP/SRL on A)
+        _ => 4,                                          // reg-reg LD, ALU r, INC/DEC r, NOP, DI, CPL
+    };
 
     /// <summary>
     /// Runs until <paramref name="count"/> writes to the given APU <paramref name="register"/> have
@@ -97,6 +169,9 @@ internal sealed class GameBoyTestCpu
                 return vram[addr - 0x8000];
             case < 0xC000:
                 return extRam[addr - 0xA000];
+            case 0xC0FA:
+                AudioUpdateCalls++;               // MusicActiveAddress: read once per audio.Update()
+                return wram[0xC0FA - 0xC000];
             case < 0xE000:
                 return wram[addr - 0xC000];
             case < 0xFE00:
@@ -106,10 +181,11 @@ internal sealed class GameBoyTestCpu
             case < 0xFF00:
                 return 0;
             case 0xFF44:
-                return (byte)(instructions % 154); // driven LY so WaitVBlank loops always terminate
+                return CycleAccurateLy
+                    ? (byte)((cycles / 456) % 154) // real DMG timing: 456 cycles/scanline, 154 lines
+                    : (byte)(instructions % 154);  // instruction-driven LY so WaitVBlank loops terminate
             case 0xFF00:
-                // Joypad: no buttons pressed (lower nibble reads as 1s); keep the selection bits.
-                return (byte)((io[0] & 0x30) | 0xCF);
+                return ReadJoypad();
             case < 0xFF80:
                 return io[addr - 0xFF00];
             case < 0xFFFF:
@@ -179,6 +255,7 @@ internal sealed class GameBoyTestCpu
     {
         instructions++;
         var opcode = NextByte();
+        cycles += CyclesFor(opcode);
         switch (opcode)
         {
             case 0x00: break;                                   // NOP

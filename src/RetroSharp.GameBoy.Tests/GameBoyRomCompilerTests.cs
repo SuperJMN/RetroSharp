@@ -1280,8 +1280,11 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0x3E, 0x05, 0xEA, 0xE6, 0xC0]), "camera_init should seed the right source cursor to the fine-scroll partial edge column.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xE0, 0x43, 0xFA, 0xE8, 0xC0, 0xE0, 0x42]), "camera_apply should write the current camera X and Y low bytes to SCX and SCY.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xC6, 0x01, 0xEA, 0xE0, 0xC0]), "camera_move_right should increment the 16-bit camera X low byte.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE6, 0xC0, 0x5F, 0x16, 0x00]), "camera_move_right should stream from the right source column.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x60, 0x6F, 0x26, 0x99]), "camera_move_left should stream into the left background edge.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE6, 0xC0, 0xEA, 0x1B, 0xC1]), "camera_move_right should queue the right source column for deferred streaming.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]), "camera_move_left should queue the left background edge column for deferred streaming.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]), "camera_apply should dispatch on the queued stream kind.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x5F, 0x16, 0x00]), "camera_apply should stream the queued source column into the background tilemap.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xC6, 0x60, 0x6F, 0x26, 0x99]), "camera_apply should stream the queued column into the left background edge.");
     }
 
     [Fact]
@@ -1355,9 +1358,10 @@ public class GameBoyRomCompilerTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x0B, 0xEA, 0xEB, 0xC0, 0x3E, 0x0F, 0xEA, 0xEC, 0xC0]), "camera_init should seed top and bottom background row cursors.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xED, 0xC0, 0x3E, 0x04, 0xEA, 0xEE, 0xC0]), "camera_init should seed top and bottom source row cursors.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xFE, 0x04, 0xC2]), "downward row streaming should select the current bottom source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xEA, 0x1B, 0xC1]), "downward crossing should queue the current bottom source row for deferred streaming.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0xFE, 0x04, 0xC2]), "downward row streaming should select the queued bottom source row.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "downward row streaming should fill the visible row from the current background-left column.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEC, 0xC0, 0xFE, 0x08, 0xDA]), "downward row streaming should compute the target background row address from the bottom row cursor.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xFE, 0x08, 0xDA]), "downward row streaming should compute the target background row address from the queued bottom row cursor.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xEC, 0xC0, 0xC6, 0x01, 0xEA, 0xEC, 0xC0]), "downward row streaming should advance the bottom background row cursor.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xC6, 0x01, 0xEA, 0xEE, 0xC0]), "downward row streaming should advance the bottom source row cursor.");
     }
@@ -1383,8 +1387,9 @@ public class GameBoyRomCompilerTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xD6, 0x01, 0xEA, 0xEB, 0xC0]), "upward row streaming should move the top background row cursor before streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xD6, 0x01, 0xEA, 0xED, 0xC0]), "upward row streaming should move the top source row cursor before streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xFE, 0x05, 0xC2]), "upward row streaming should select the wrapped top source row.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xFE, 0x08, 0xDA]), "upward row streaming should compute the target background row address from the top row cursor.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x1B, 0xC1]), "upward crossing should queue the wrapped top source row for deferred streaming.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0xFE, 0x05, 0xC2]), "upward row streaming should select the queued top source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xFE, 0x08, 0xDA]), "upward row streaming should compute the target background row address from the queued top row cursor.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "upward row streaming should fill the visible row from the current background-left column.");
     }
 
@@ -3492,6 +3497,8 @@ public class GameBoyRomCompilerTests
                                   world.Load("level.tmj");
                                   camera.Init(3, 2, 2);
                                   loop {
+                                      video.WaitVBlank();
+                                      camera.Apply();
                                       camera.SetPosition(1, 0);
                                   }
                               }
@@ -3500,26 +3507,26 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
         // The world band starts at GB row 2 (0x9840). The background region above the band
-        // (GB rows 0..1) must also stream when scrolling, writing GB row 0 at 0x9800.
+        // (GB rows 0..1) must also stream when scrolling, writing GB row 0 at 0x9800. A crossing
+        // queues the edge column for deferred streaming; both directions feed the same pending
+        // slot, so camera.Apply commits one column stream into the background tilemap.
         Assert.True(
-            ContainsSequence(rom, [0xFA, 0xE4, 0xC0, 0xC6, 0x00, 0x6F, 0x26, 0x98]),
-            "camera_move_right should also stream the background row above the band into GB row 0 (0x9800).");
+            ContainsSequence(rom, [0xFA, 0xE4, 0xC0, 0xEA, 0x1A, 0xC1]),
+            "a rightward crossing should queue the right background edge column for deferred streaming.");
         Assert.True(
-            ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x00, 0x6F, 0x26, 0x98]),
-            "camera_move_left should also stream the background row above the band into GB row 0 (0x9800).");
+            ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]),
+            "a leftward crossing should queue the left background edge column for deferred streaming.");
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xC6, 0x00, 0x6F, 0x26, 0x98]),
+            "camera.Apply should stream the queued background row above the band into GB row 0 (0x9800).");
 
-        // The streaming runs late in the frame (after input, physics, collision), so it must
-        // wait for a fresh VBlank edge before touching the background tilemap, otherwise
-        // a jump/landing-heavy frame can enter this path late in the current VBlank and tear
-        // the top background rows while scrolling. The edge wait
-        // (wait while LY >= 144, then wait while LY < 144) must sit immediately before the
-        // band column load (LD A,($C0E6) for the right step, LD A,($C0E7) for the left step).
+        // The deferred commit replaces the old per-crossing extra WaitVBlank: streaming now happens
+        // only from camera.Apply, at the top of the frame inside VBlank, so a scrolling frame costs a
+        // single VBlank (and a single audio.Update tick). The move steps must no longer busy-wait on LY
+        // themselves; the streaming is gated by the queued-kind dispatch in camera.Apply instead.
         Assert.True(
-            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE6, 0xC0]),
-            "camera_move_right should wait for a fresh VBlank edge before streaming the next column into the background tilemap.");
-        Assert.True(
-            ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA, 0xFA, 0xE7, 0xC0]),
-            "camera_move_left should wait for a fresh VBlank edge before streaming the next column into the background tilemap.");
+            ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]),
+            "camera.Apply should dispatch the deferred stream on the queued kind.");
     }
 
     [Fact]
@@ -3537,6 +3544,8 @@ public class GameBoyRomCompilerTests
                                   world_map(2, 9, 14);
                                   camera.Init(2, 9, 14);
                                   loop {
+                                      video.WaitVBlank();
+                                      camera.Apply();
                                       camera.SetPosition(8, 0);
                                   }
                               }
