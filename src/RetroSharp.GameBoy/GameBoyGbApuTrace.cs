@@ -10,7 +10,9 @@ public sealed record GameBoyGbsToGbApuOptions(
     int Subsong = 1,
     int Seconds = 60,
     long LoopCycle = 0,
-    string GbsPlayPath = "gbsplay");
+    string GbsPlayPath = "gbsplay",
+    bool AutoLoop = true,
+    bool EmitJson = false);
 
 public sealed record GameBoyGbsToGbApuExportResult(
     GameBoyGbsHeader Header,
@@ -32,7 +34,8 @@ public sealed record GameBoyApuTraceMetadata(
     string? Author = null,
     string? Copyright = null,
     int? Subsong = null,
-    string? Source = null);
+    string? Source = null,
+    double? ReplayHz = null);
 
 public sealed record GameBoyApuTraceEvent(long DeltaCycles, ushort Address, byte Value);
 
@@ -60,18 +63,34 @@ public static partial class GameBoyGbsToGbApuExporter
             throw new InvalidOperationException("GBS trace did not contain Game Boy APU register writes.");
         }
 
+        var loopCycle = options.LoopCycle;
         var durationCycles = checked((long)DefaultClockHz * options.Seconds);
+
+        // Auto-detect the musical loop unless the caller pinned it manually. On success the
+        // capture is trimmed to intro + exactly one loop body, which is the dominant size win.
+        if (options.AutoLoop && options.LoopCycle <= 0)
+        {
+            var loop = GameBoyApuLoopDetector.Detect(events, DefaultClockHz);
+            if (loop is not null)
+            {
+                loopCycle = loop.LoopStartCycle;
+                durationCycles = loop.LoopEndCycle;
+                events = TrimEventsToCycle(events, loop.LoopEndCycle);
+            }
+        }
+
         var trace = new GameBoyApuTrace(
             DefaultClockHz,
             DefaultFramesPerSecond,
             durationCycles,
-            options.LoopCycle,
+            loopCycle,
             new GameBoyApuTraceMetadata(
                 header.Title,
                 header.Author,
                 header.Copyright,
                 options.Subsong,
-                Path.GetFileName(options.InputPath)),
+                Path.GetFileName(options.InputPath),
+                GameBoyGbsReplayRate.FromHeader(header)),
             events);
 
         var outputDirectory = Path.GetDirectoryName(Path.GetFullPath(options.OutputPath));
@@ -80,8 +99,36 @@ public static partial class GameBoyGbsToGbApuExporter
             Directory.CreateDirectory(outputDirectory);
         }
 
-        GameBoyApuTraceFile.Write(options.OutputPath, trace);
-        return new GameBoyGbsToGbApuExportResult(header, options.Subsong, events.Count, durationCycles, options.LoopCycle);
+        var wantsJson = options.EmitJson
+            || Path.GetExtension(options.OutputPath).Equals(".json", StringComparison.OrdinalIgnoreCase);
+        if (wantsJson)
+        {
+            GameBoyApuTraceFile.Write(options.OutputPath, trace);
+        }
+        else
+        {
+            GameBoyApuTraceBinary.Write(options.OutputPath, trace);
+        }
+
+        return new GameBoyGbsToGbApuExportResult(header, options.Subsong, events.Count, durationCycles, loopCycle);
+    }
+
+    private static List<GameBoyApuTraceEvent> TrimEventsToCycle(List<GameBoyApuTraceEvent> events, long endCycle)
+    {
+        var trimmed = new List<GameBoyApuTraceEvent>(events.Count);
+        var totalCycles = 0L;
+        foreach (var traceEvent in events)
+        {
+            totalCycles = checked(totalCycles + traceEvent.DeltaCycles);
+            if (totalCycles >= endCycle)
+            {
+                break;
+            }
+
+            trimmed.Add(traceEvent);
+        }
+
+        return trimmed.Count == 0 ? events : trimmed;
     }
 
     public static GameBoyGbsToGbApuExportResult Export(GameBoyGbsToGbApuOptions options)
@@ -246,7 +293,8 @@ public static class GameBoyApuTraceFile
             OptionalString(metadata, "author"),
             OptionalString(metadata, "copyright"),
             metadata.TryGetProperty("subsong", out var subsong) && subsong.ValueKind == JsonValueKind.Number ? subsong.GetInt32() : null,
-            OptionalString(metadata, "source"));
+            OptionalString(metadata, "source"),
+            metadata.TryGetProperty("replayHz", out var replayHz) && replayHz.ValueKind == JsonValueKind.Number ? replayHz.GetDouble() : null);
     }
 
     private static void WriteMetadata(Utf8JsonWriter writer, GameBoyApuTraceMetadata metadata)
@@ -257,6 +305,7 @@ public static class GameBoyApuTraceFile
         if (!string.IsNullOrEmpty(metadata.Copyright)) writer.WriteString("copyright", metadata.Copyright);
         if (metadata.Subsong.HasValue) writer.WriteNumber("subsong", metadata.Subsong.Value);
         if (!string.IsNullOrEmpty(metadata.Source)) writer.WriteString("source", metadata.Source);
+        if (metadata.ReplayHz.HasValue) writer.WriteNumber("replayHz", Math.Round(metadata.ReplayHz.Value, 4));
         writer.WriteEndObject();
     }
 

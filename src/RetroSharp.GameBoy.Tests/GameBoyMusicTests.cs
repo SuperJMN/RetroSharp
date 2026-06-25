@@ -100,14 +100,53 @@ public sealed class GameBoyMusicTests
         Assert.Equal(GameBoyMusicAssetKind.ApuTrace, asset.Kind);
         Assert.Equal(
             [
+                0x02, 0x20, 0x00, 0x20, 0x00,
+                0x03, 0x24, 0x77, 0x14, 0x80, 0x14, 0x80,
+                0x02, 0xFF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x25, 0xFF,
+                0x05, 0x00, 0x01,
+                0x0C, 0x00, 0x00,
                 0x00, 0x00, 0x00,
-                0x03, 0x24, 0x77, 0x14, 0x80, 0x14, 0x80, 0x01,
-                0x02, 0xFF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x25, 0xFF, 0x00,
-                0x00,
             ],
             asset.Data);
         Assert.Equal(1, CountRegisterValuePairs(asset.Data, 0x24, 0x77));
         Assert.Equal(2, CountRegisterValuePairs(asset.Data, 0x14, 0x80));
+    }
+
+    [Fact]
+    public void Compiles_gbapu_trace_pooling_repeated_group_bodies_once()
+    {
+        var directory = CreateTempDirectory();
+        var path = Path.Combine(directory, "stage.gbapu.json");
+        File.WriteAllText(
+            path,
+            """
+            {
+              "format": "retrosharp.gbapu.v1",
+              "clockHz": 4194304,
+              "framesPerSecond": 60,
+              "durationCycles": 140448,
+              "loopCycle": 0,
+              "events": [
+                { "deltaCycles": 0, "address": "FF14", "value": "87" },
+                { "deltaCycles": 70224, "address": "FF14", "value": "87" }
+              ]
+            }
+            """);
+
+        var asset = GameBoyMusicAssetCompiler.CompileFromFile("stage_theme", path);
+
+        // Both frames produce the same body (a kept trigger write), so the pool stores it once
+        // and the two order entries reference the same body offset (0x0005).
+        Assert.Equal(
+            [
+                0x02, 0x08, 0x00, 0x08, 0x00,
+                0x01, 0x14, 0x87,
+                0x05, 0x00, 0x01,
+                0x05, 0x00, 0x01,
+                0x00, 0x00, 0x00,
+            ],
+            asset.Data);
+        Assert.Equal(1, CountRegisterValuePairs(asset.Data, 0x14, 0x87));
     }
 
     [Fact]
@@ -135,10 +174,12 @@ public sealed class GameBoyMusicTests
 
         Assert.Equal(
             [
-                0x00, 0x04, 0x00,
-                0x01, 0x24, 0x77, 0x00,
-                0x01, 0x25, 0xFF, 0x00,
-                0x00,
+                0x02, 0x0B, 0x00, 0x0E, 0x00,
+                0x01, 0x24, 0x77,
+                0x01, 0x25, 0xFF,
+                0x05, 0x00, 0x00,
+                0x08, 0x00, 0x00,
+                0x00, 0x00, 0x00,
             ],
             asset.Data);
     }
@@ -234,14 +275,20 @@ public sealed class GameBoyMusicTests
             ContainsSequence(
                 rom,
                 [
-                    0xEA, 0xFC, 0xC0,             // store group wait in MusicTick
-                    0x23,                         // advance past wait byte
-                    0x7D, 0xEA, 0xFF, 0xC0,       // store current pointer low
-                    0x7C, 0xEA, 0x00, 0xC1,       // store current pointer high
-                    0xFA, 0xFC, 0xC0,             // reload MusicTick after pointer store clobbers A
-                    0xFE, 0x00, 0xCA,             // continue same-frame burst when wait is zero
+                    0xEA, 0xFC, 0xC0,             // store order-entry wait in MusicTick
+                    0x23,                         // advance past wait byte to the next order entry
+                    0x7D, 0xEA, 0xFF, 0xC0,       // store current order pointer low
+                    0x7C, 0xEA, 0x00, 0xC1,       // store current order pointer high
                 ]),
-            "GBAPU playback must test the stored wait byte after saving the current pointer; otherwise every zero-wait group costs at least one frame.");
+            "GBAPU v2 playback must store the order-entry wait and advance the order pointer before decoding the pooled body.");
+        Assert.True(
+            ContainsSequence(
+                rom,
+                [
+                    0xFA, 0xFC, 0xC0,             // reload MusicTick after decoding the group body
+                    0xFE, 0x00, 0xCA,             // continue same-frame burst when the wait is zero
+                ]),
+            "GBAPU playback must re-test the stored wait byte; otherwise every zero-wait group costs at least one frame.");
     }
 
     [Fact]

@@ -1,10 +1,33 @@
 # Game Boy APU Trace Format
 
-Status: experimental analysis document for `retrosharp.gbapu.v1`.
+Status: `retrosharp.gbapu` v2 (implemented). The companion design study and rationale live in
+`GameBoyApuTraceFormatV2.md`.
 
-`*.gbapu.json` is RetroSharp's current Game Boy register-trace music format. It is a target-specific asset format for the Game Boy BGM runtime, not a portable music format and not an editable tracker module.
+`*.gbapu` (binary, magic `GBAP`) is RetroSharp's Game Boy register-trace music format. The legacy
+`*.gbapu.json` (`retrosharp.gbapu.v1`) is still accepted as input. It is a target-specific asset
+format for the Game Boy BGM runtime, not a portable music format and not an editable tracker
+module.
 
-The format exists to preserve the audible output of an existing Game Boy music driver without embedding that driver in the generated ROM. It records timed writes to the DMG APU registers and Wave RAM, then the Game Boy compiler repacks those writes into a compact frame-driven stream consumed by `audio.Update()`.
+The format exists to preserve the audible output of an existing Game Boy music driver without
+embedding that driver in the generated ROM. It records timed writes to the DMG APU registers and
+Wave RAM, then the Game Boy compiler repacks those writes into a compact, deduplicated
+frame-driven stream consumed by `audio.Update()`.
+
+## What changed in v2
+
+- **Binary source by default.** `gbs-to-gbapu` writes a compact binary `.gbapu` (≈22x smaller
+  than the equivalent JSON). `--emit-json` (or a `.json` output extension) still writes JSON, and
+  `gbapu-dump <file>` prints the `FFxx=yy` lines for inspection. Binary and JSON sources compile
+  to identical ROMs.
+- **Automatic loop detection.** The exporter autocorrelates per-frame write signatures, trims the
+  capture to intro + one loop body, and sets the loop point. `--no-auto-loop` disables it and
+  `--loop-cycle` pins it manually.
+- **Accurate frame timing.** Cycles map to frames using the true DMG frame period (70224 cycles
+  ≈ 59.7275 Hz), not a nominal 60 Hz. The GBS timer fields are read and the driver replay rate is
+  stored as `replayHz` metadata.
+- **Group-pool ROM encoding (stream marker `0x02`).** Identical per-frame group bodies are
+  deduplicated into a pool referenced by an order stream. This is ~−18% versus the previous flat
+  stream while producing bit-identical APU writes.
 
 ## Intended Use
 
@@ -28,29 +51,42 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   gbs-to-gbapu \
   --in path/to/theme.gbs \
   --subsong 1 \
-  --seconds 60 \
-  --loop-cycle 0 \
-  --out path/to/theme.gbapu.json
+  --seconds 120 \
+  --out path/to/theme.gbapu
 ```
+
+Capture for at least two full loops (`--seconds`) so auto-detection can find the loop. Useful
+options:
+
+- `--no-auto-loop`: keep the full capture; do not trim to one loop.
+- `--loop-cycle <n>`: pin the loop point manually (disables auto-detection).
+- `--emit-json`: write the JSON debug view instead of binary (also implied by a `.json` output
+  extension).
+- `--gbsplay <path>`: point at a specific `gbsplay` binary.
+
+Inspect a trace with `gbapu-dump path/to/theme.gbapu`, which prints `<absoluteCycles> ffXX=YY`.
 
 Generation flow:
 
-1. Read the GBS header for title, author, copyright, subsong count, and entry-point metadata.
+1. Read the GBS header for title, author, copyright, subsong count, timer, and entry-point metadata.
 2. Validate `--subsong`, `--seconds`, `--loop-cycle`, and `--gbsplay`.
 3. Run `gbsplay -q -o iodumper -t <seconds> -f 0 -g 0 <input.gbs> <subsong> <subsong>`.
 4. Parse lines shaped like `00000010 ff30=12`.
 5. Keep only supported APU register and Wave RAM writes.
-6. Write a `retrosharp.gbapu.v1` JSON file with timing deltas and GBS metadata.
+6. Auto-detect the loop (unless `--no-auto-loop`/`--loop-cycle`) and trim to intro + one loop.
+7. Write a binary `.gbapu` (or JSON with `--emit-json`) with timing deltas, loop point, the
+   GBS-derived `replayHz`, and GBS metadata.
 
-The helper uses a 4,194,304 Hz clock and 60 frames per second. `durationCycles` is `clockHz * seconds`. `loopCycle` is provided by the caller; the exporter does not detect musical loop points.
+The helper uses a 4,194,304 Hz clock. `loopCycle` and `durationCycles` are set by auto-detection
+or by the caller. The driver replay rate (VBlank ~59.7275 Hz, or the GBS timer rate) is recorded
+as `replayHz`.
 
-Example generated during development:
+Example generated during development (one detected loop of the reference track):
 
-- Source: `/home/jmn/Descargas/GB Music/Super Mario Land 2/DMG-L6J.gbs`
-- Subsong: `1`
-- Capture duration: `2` seconds
-- JSON size: `34155` bytes
-- Event count: `401`
+- Source: `Super Mario Land 2` subsong 1
+- Loop length: `51.43` seconds (auto-detected from a 120 s capture)
+- Binary `.gbapu` size: `43440` bytes (the equivalent JSON is `959062` bytes)
+- Compiled ROM payload: `10907` bytes (group-pool v2)
 
 ## JSON Shape
 
@@ -101,6 +137,7 @@ Metadata fields:
 | `copyright` | Source copyright, usually from the GBS header. |
 | `subsong` | 1-based subsong captured from the source GBS. |
 | `source` | Source file name. |
+| `replayHz` | Driver replay rate derived from the GBS timer fields (VBlank ~59.7275 Hz, or the timer rate). Informational. |
 
 Event fields:
 
@@ -149,20 +186,25 @@ Portable envelope:
 
 ## Compiler Packing
 
-The JSON file is not stored directly in ROM. `GameBoyMusicAssetCompiler` compiles it into a compact byte stream with this shape:
+The source file is not stored directly in ROM. `GameBoyMusicAssetCompiler` compiles it into a
+compact, deduplicated byte stream (v2 group-pool) with this shape:
 
 ```text
-00 loopOffsetLo loopOffsetHi
-group*
-00
+02 orderStartLo orderStartHi loopOrderLo loopOrderHi   ; 5-byte header
+poolBody*                                              ; unique group bodies
+orderEntry*                                            ; bodyOffsetLo bodyOffsetHi waitAfter
+00 00 00                                               ; loop sentinel (bodyOffset 0)
 ```
 
-The leading `00` marks the asset as an APU trace stream, distinguishing it from the `.uge` row-stream header where byte 0 is ticks-per-row. `loopOffset` is measured from the first byte after this three-byte header.
+The leading `02` marks the asset as a v2 APU trace stream (the `.uge` row-stream header has
+ticks-per-row in byte 0). `orderStartOffset` and `loopOrderOffset` are byte offsets from the
+data start: the order stream begins at `orderStartOffset`, and the loop resumes at
+`loopOrderOffset`.
 
-Each group is:
+Each pool body is the per-frame group, identical to the previous flat format minus its wait:
 
 ```text
-commandCount command* waitAfter
+commandCount command*
 ```
 
 Each command is one of:
@@ -172,22 +214,32 @@ registerOffset value
 FF waveByte0 ... waveByte15
 ```
 
-Register commands store only the low high-RAM offset. For example, address `FF24` becomes offset `24`. `FF` is reserved as the Wave RAM block command because valid APU offsets are in `10..26` and `30..3F`.
+Register commands store only the low high-RAM offset. For example, address `FF24` becomes offset
+`24`. `FF` is reserved as the Wave RAM block command because valid APU offsets are in `10..26`
+and `30..3F`.
+
+Each order entry plays one frame: it references a pool body by its data-relative `bodyOffset`
+(`0` is the loop sentinel, since offset 0 is the header) and carries the `waitAfter` frame delay.
+Identical bodies are stored once and shared by every order entry that needs them, so musical
+repetition collapses to a small pool plus a thin order list.
 
 Current packing rules:
 
 - Events are accumulated from `deltaCycles` into absolute cycles.
-- Absolute cycles are rounded to runtime frames through `frame = (cycles * framesPerSecond + clockHz / 2) / clockHz`.
-- Consecutive events in the same frame become one group.
-- A group split is forced when `loopCycle` is crossed, so the loop target can land on a group boundary.
+- Absolute cycles are rounded to runtime frames through the true DMG frame period:
+  `frame = round(cycles / 70224)` (scaled by `clockHz` if it is not the standard 4.194304 MHz).
+- Consecutive events in the same frame become one group body.
+- A group split is forced when `loopCycle` is crossed, so the loop target lands on a group boundary.
 - Redundant writes to the same register with the same value are removed when they are not considered side-effectful.
 - `NR52` writes are always preserved.
 - Trigger writes are preserved when bit 7 is set on `NR14`, `NR24`, `NR34`, or `NR44`.
 - Contiguous 16-byte writes to `FF30..FF3F` are packed as one Wave RAM block command.
+- Identical group bodies are deduplicated into the pool and shared by their order entries.
 - `waitAfter` is the frame delay until the next group, or until `durationCycles` after the last group.
 - Waits longer than 255 frames currently fail.
-- More than 255 command groups in one frame currently fail.
-- Loop offsets beyond 65535 bytes currently fail because the present ROM-only runtime stores a 16-bit loop offset.
+- More than 255 commands in one frame body currently fail.
+- A pool or order stream that pushes any offset beyond 65535 bytes currently fails because the
+  ROM-only runtime stores 16-bit offsets.
 
 ## Runtime Playback
 
@@ -196,42 +248,52 @@ Current packing rules:
 `music.Play(theme)` records the music data pointer and sets the active music kind:
 
 - `.uge` assets use the row-stream path.
-- `.gbapu.json` assets use the APU trace path and reset the current pointer to the first group.
+- `.gbapu` / `.gbapu.json` assets use the APU trace path and reset the order pointer to the first
+  order entry.
 
 `audio.Update()` should be called once per frame after `video.WaitVBlank()`. For APU traces it:
 
 1. Checks whether the current wait counter is zero.
 2. If waiting, decrements the counter and exits.
-3. If ready, reads the current group command count.
-4. A zero command count is the loop sentinel; the runtime resets the pointer to the compiled loop offset.
-5. Register commands use `LDH (C),A` to write dynamic APU offsets.
-6. Wave block commands write 16 bytes to `FF30..FF3F`.
-7. The group `waitAfter` value becomes the next wait counter.
-8. If `waitAfter` is zero, the runtime immediately processes the next group in the same `audio.Update()` call.
+3. If ready, reads the next order entry (`bodyOffset`, `waitAfter`) and advances the order pointer.
+4. A `bodyOffset` of zero is the loop sentinel; the runtime resets the order pointer to the
+   compiled loop order offset.
+5. It resolves the pooled group body at `dataPointer + bodyOffset` and reads its command count.
+6. Register commands use `LDH (C),A` to write dynamic APU offsets.
+7. Wave block commands write 16 bytes to `FF30..FF3F`.
+8. The order entry `waitAfter` value becomes the next wait counter.
+9. If `waitAfter` is zero, the runtime immediately processes the next order entry in the same
+   `audio.Update()` call.
 
 The runtime is therefore frame-driven. The source trace keeps cycle precision, but today that precision is used only to choose frame groups.
 
 ## Current Problems
 
-The format is useful as a quick fidelity path, but it has real design debt.
+The format is useful as a faithful preservation/playback path. Several v1 problems are resolved in
+v2 (marked **Resolved**); the remaining ones are inherent to a post-driver register trace.
 
 1. It is target-specific.
    The format stores DMG APU writes. It is not portable to NES or other future targets without a separate translation layer.
 
 2. It is not editable music.
-   A `.gbapu.json` file has register writes, not notes, instruments, patterns, song order, or musical intent. It is a preservation/playback format, not an authoring format.
+   A `.gbapu` file has register writes, not notes, instruments, patterns, song order, or musical intent. It is a preservation/playback format, not an authoring format.
 
-3. JSON is verbose.
-   The source is easy to inspect and diff, but large for generated register data. The compiler packs it aggressively, so the checked-in source size can be much larger than the actual ROM payload.
+3. **Resolved — JSON is verbose.**
+   The default source is now a compact binary `.gbapu` (≈22x smaller than JSON). JSON remains
+   available via `--emit-json`/`gbapu-dump` for inspection.
 
-4. Loop points are manual.
-   `--loop-cycle` is not inferred. A wrong loop cycle can restart at a musically bad point, and the compiler can only align it to a command group.
+4. **Resolved — Loop points are manual.**
+   The exporter auto-detects the loop by autocorrelation and trims to one loop body. `--loop-cycle`
+   and `--no-auto-loop` remain as overrides. Note the loop is similarity-based, not bit-exact:
+   drivers with free-running modulators leave a small modulator-phase discontinuity at the seam.
 
 5. Sub-frame timing is currently lost at playback.
-   The JSON keeps cycle deltas, but the runtime collapses writes into frame groups. Fast arpeggios, timer-driven effects, and dense driver tricks can be audibly different until a sub-frame scheduler exists.
+   The runtime collapses writes into VBlank frame groups. For VBlank-driven songs this is faithful;
+   for timer-driven songs whose replay rate exceeds VBlank, multiple driver ticks collapse into one
+   frame until a timer-interrupt player exists. The `replayHz` metadata is recorded for that work.
 
 6. Runtime bursts can become expensive.
-   Zero-wait groups execute in one `audio.Update()` call. That avoids accidental one-frame gaps, but a dense trace can create a long write burst in VBlank-adjacent code.
+   Zero-wait order entries execute in one `audio.Update()` call. That avoids accidental one-frame gaps, but a dense trace can create a long write burst in VBlank-adjacent code.
 
 7. The optimizer is conservative but not formally proven.
    It preserves trigger writes and `NR52`, and removes repeated non-trigger writes with the same value. That is reasonable for normal APU state writes, but this format has no explicit side-effect annotations beyond hardcoded register rules.
@@ -243,10 +305,11 @@ The format is useful as a quick fidelity path, but it has real design debt.
    The exported trace ignores writes outside supported APU and Wave RAM addresses. That is intentional for post-driver playback, but it means the resulting file cannot explain or reconstruct driver state, timers, bank switching, or source song structure.
 
 10. It is constrained by the current 32 KiB ROM-only target.
-    The compiled stream has a 16-bit loop offset and no banked data path. Longer traces can hit size limits before the target grows MBC support.
+    The compiled stream uses 16-bit offsets and no banked data path. Longer traces can hit size limits before the target grows MBC support.
 
-11. It uses a nominal 60 FPS grouping rate.
-    The exporter writes `framesPerSecond: 60`, and the compiler groups cycle timestamps against that value. That is simple and close enough for short experiments, but long captures should be checked for drift against the actual runtime frame cadence.
+11. **Resolved — It used a nominal 60 FPS grouping rate.**
+    The compiler now maps cycles to frames with the true DMG frame period (70224 cycles ≈
+    59.7275 Hz), removing the ~0.46% drift the nominal 60 Hz introduced.
 
 12. The schema has no generator metadata.
     The file records source metadata, but not the RetroSharp version, exporter version, `gbsplay` version, command line, source hash, or measured loop-quality notes. Those would help future analysis.

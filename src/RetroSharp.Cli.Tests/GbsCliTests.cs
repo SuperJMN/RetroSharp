@@ -35,6 +35,49 @@ public sealed class GbsCliTests
     }
 
     [Fact]
+    public void Gbs_to_gbapu_writes_binary_by_default_and_dump_reads_it_back()
+    {
+        using var workspace = TemporaryWorkspace();
+        var input = Path.Combine(workspace.Path, "stage.gbs");
+        var output = Path.Combine(workspace.Path, "stage.gbapu");
+        var fakeGbsPlay = Path.Combine(workspace.Path, "fake-gbsplay");
+        WriteGbsHeader(input);
+        WriteFakeGbsPlay(fakeGbsPlay);
+
+        var export = RunCli(
+            "gbs-to-gbapu", "--in", input, "--out", output,
+            "--seconds", "1", "--gbsplay", fakeGbsPlay);
+
+        Assert.Equal(0, export.ExitCode);
+        Assert.True(File.Exists(output), export.CombinedOutput);
+        var head = File.ReadAllBytes(output)[..4];
+        Assert.Equal("GBAP"u8.ToArray(), head);
+
+        var dump = RunCli("gbapu-dump", output);
+        Assert.Equal(0, dump.ExitCode);
+        Assert.Contains("ff11=80", dump.StandardOutput, StringComparison.Ordinal);
+        Assert.Contains("ff14=87", dump.StandardOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Gbs_to_gbapu_emit_json_writes_json_even_with_binary_extension()
+    {
+        using var workspace = TemporaryWorkspace();
+        var input = Path.Combine(workspace.Path, "stage.gbs");
+        var output = Path.Combine(workspace.Path, "stage.gbapu");
+        var fakeGbsPlay = Path.Combine(workspace.Path, "fake-gbsplay");
+        WriteGbsHeader(input);
+        WriteFakeGbsPlay(fakeGbsPlay);
+
+        var result = RunCli(
+            "gbs-to-gbapu", "--in", input, "--out", output,
+            "--seconds", "1", "--emit-json", "--gbsplay", fakeGbsPlay);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("\"format\": \"retrosharp.gbapu.v1\"", File.ReadAllText(output), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Gbs_to_uge_command_is_not_supported()
     {
         using var workspace = TemporaryWorkspace();

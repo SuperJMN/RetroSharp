@@ -170,6 +170,8 @@ static RetroSharp.GameBoy.GameBoyGbsToGbApuOptions ParseGbsToGbApuCommandLine(st
     var seconds = 60;
     long loopCycle = 0;
     var gbsPlayPath = "gbsplay";
+    var autoLoop = true;
+    var emitJson = false;
 
     for (var i = 0; i < args.Length; i++)
     {
@@ -196,6 +198,15 @@ static RetroSharp.GameBoy.GameBoyGbsToGbApuOptions ParseGbsToGbApuCommandLine(st
                 if (i + 1 >= args.Length) throw new ArgumentException("--loop-cycle requires a value.");
                 loopCycle = ParseNonNegativeLong(args[++i], "--loop-cycle");
                 break;
+            case "--auto-loop":
+                autoLoop = true;
+                break;
+            case "--no-auto-loop":
+                autoLoop = false;
+                break;
+            case "--emit-json":
+                emitJson = true;
+                break;
             case "--gbsplay":
                 if (i + 1 >= args.Length) throw new ArgumentException("--gbsplay requires a value.");
                 gbsPlayPath = args[++i];
@@ -221,7 +232,9 @@ static RetroSharp.GameBoy.GameBoyGbsToGbApuOptions ParseGbsToGbApuCommandLine(st
         subsong,
         seconds,
         loopCycle,
-        gbsPlayPath);
+        gbsPlayPath,
+        autoLoop,
+        emitJson);
 }
 
 static int ParsePositiveInt(string value, string option)
@@ -257,7 +270,44 @@ if (args[0] == "gbs-to-gbapu")
         var exportOptions = ParseGbsToGbApuCommandLine(args[1..]);
         var result = RetroSharp.GameBoy.GameBoyGbsToGbApuExporter.Export(exportOptions);
         Console.Error.WriteLine(
-            $"Wrote Game Boy APU trace: {exportOptions.OutputPath} ({result.EventCount} events, loop cycle {result.LoopCycle})");
+            $"Wrote Game Boy APU trace: {exportOptions.OutputPath} ({result.EventCount} events, {result.DurationCycles / 4194304.0:0.00}s, loop cycle {result.LoopCycle})");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        PrintError(ex.Message);
+        return 1;
+    }
+}
+
+if (args[0] == "gbapu-dump")
+{
+    try
+    {
+        if (args.Length < 2)
+        {
+            throw new ArgumentException("gbapu-dump requires a trace path: gbapu-dump <file.gbapu|file.gbapu.json>.");
+        }
+
+        var dumpPath = args[1];
+        var trace = RetroSharp.GameBoy.GameBoyApuTraceBinary.LooksLikeBinary(dumpPath)
+            ? RetroSharp.GameBoy.GameBoyApuTraceBinary.Read(dumpPath)
+            : RetroSharp.GameBoy.GameBoyApuTraceFile.Read(dumpPath);
+
+        Console.Error.WriteLine(
+            $"; gbapu trace: {trace.Events.Count} events, {trace.DurationCycles / 4194304.0:0.00}s, loopCycle {trace.LoopCycle}, replayHz {trace.Metadata.ReplayHz?.ToString("0.0000") ?? "?"}");
+        if (!string.IsNullOrEmpty(trace.Metadata.Title))
+        {
+            Console.Error.WriteLine($"; title: {trace.Metadata.Title}");
+        }
+
+        var absolute = 0L;
+        foreach (var traceEvent in trace.Events)
+        {
+            absolute += traceEvent.DeltaCycles;
+            Console.Out.WriteLine($"{absolute:X8} ff{traceEvent.Address & 0xFF:x2}={traceEvent.Value:x2}");
+        }
+
         return 0;
     }
     catch (Exception ex)

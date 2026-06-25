@@ -27,8 +27,10 @@ Common commands
   - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-drawing/drawing.gb samples/gameboy-drawing/drawing.rs
   - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/runner/runner.gb samples/runner/runner.rs
   - NES runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/runner.nes samples/runner/runner.rs
-- Export GBS to a Game Boy APU trace for faithful Game Boy BGM playback
-  - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- gbs-to-gbapu --in path/to/theme.gbs --subsong 1 --seconds 60 --loop-cycle 0 --out path/to/theme.gbapu.json
+- Export GBS to a Game Boy APU trace for faithful Game Boy BGM playback (binary by default; loop auto-detected)
+  - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- gbs-to-gbapu --in path/to/theme.gbs --subsong 1 --seconds 120 --out path/to/theme.gbapu
+  - Inspect a trace: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- gbapu-dump path/to/theme.gbapu
+  - Options: --no-auto-loop, --loop-cycle <n>, --emit-json, --gbsplay <path>
 - Regenerate tracked sample ROMs
   - tools/gameboy/generate_sample_roms.py --dry-run
   - tools/gameboy/generate_sample_roms.py

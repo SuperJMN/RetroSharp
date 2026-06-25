@@ -212,7 +212,7 @@ void setup_video() {
 }
 
 void setup_audio() {
-    music.Asset(runner_theme, "music/free_06_delight.uge");
+    music.Asset(runner_theme, "music/delight.gbapu");
     audio.Init();
     music.Play(runner_theme);
     return;

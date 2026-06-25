@@ -25,9 +25,11 @@ internal static class GameBoyMusicAssetCompiler
     private const byte Duty2RowMask = 0x02;
     private const byte WaveRowMask = 0x04;
     private const byte NoiseRowMask = 0x08;
-    private const byte ApuTraceMarker = 0x00;
-    private const int ApuTraceHeaderLength = 3;
+    private const byte ApuTraceMarker = 0x02;
+    private const int ApuTraceHeaderLength = 5;
     private const byte ApuTraceWaveRamBlockCommand = 0xFF;
+    private const long DmgClockHz = 4_194_304;
+    private const long DmgFrameCycles = 70_224;
 
     public static GameBoyCompiledMusicAsset CompileFromFile(string name, string path)
     {
@@ -35,9 +37,16 @@ internal static class GameBoyMusicAssetCompiler
         return asset.Format switch
         {
             "uge" => CompileSong(name, HugeSongReader.Read(asset.Path)),
-            "gbapu" => CompileApuTrace(name, GameBoyApuTraceFile.Read(asset.Path)),
+            "gbapu" => CompileApuTrace(name, ReadApuTrace(asset.Path)),
             _ => throw new InvalidOperationException($"Game Boy music asset '{Path.GetFileName(path)}' has unsupported format '{asset.Format}'."),
         };
+    }
+
+    private static GameBoyApuTrace ReadApuTrace(string path)
+    {
+        return GameBoyApuTraceBinary.LooksLikeBinary(path)
+            ? GameBoyApuTraceBinary.Read(path)
+            : GameBoyApuTraceFile.Read(path);
     }
 
     private static ResolvedMusicAsset ResolveMusicAsset(string path)
@@ -45,6 +54,11 @@ internal static class GameBoyMusicAssetCompiler
         if (Path.GetExtension(path).Equals(".uge", StringComparison.OrdinalIgnoreCase))
         {
             return new ResolvedMusicAsset("uge", path);
+        }
+
+        if (GameBoyApuTraceBinary.LooksLikeBinary(path))
+        {
+            return new ResolvedMusicAsset("gbapu", path);
         }
 
         using var document = JsonDocument.Parse(File.ReadAllText(path));
@@ -138,12 +152,6 @@ internal static class GameBoyMusicAssetCompiler
 
         var optimizedEvents = OptimizeApuTraceEvents(trace);
         var frameGroups = GroupApuTraceEvents(optimizedEvents, trace.LoopCycle);
-        var data = new List<byte>(ApuTraceHeaderLength + frameGroups.Count * 8)
-        {
-            ApuTraceMarker,
-            0,
-            0,
-        };
 
         var loopGroupIndex = trace.LoopCycle <= 0
             ? 0
@@ -153,29 +161,102 @@ internal static class GameBoyMusicAssetCompiler
             loopGroupIndex = 0;
         }
 
-        var loopOffset = 0;
+        // v2 group-pool layout: deduplicate identical per-frame group bodies into a pool and
+        // reference them from an order stream of (bodyOffset, waitAfter) entries. Musical
+        // repetition makes most frames reuse a handful of bodies, while the body bytes stay the
+        // exact v1 (command-count + commands) form, so the APU writes the runtime performs are
+        // bit-identical to a flat trace; only the ROM layout and a small indirection differ.
+        //
+        //   [0]    marker 0x02
+        //   [1..2] orderStartOffset (u16, from data start)
+        //   [3..4] loopOrderOffset  (u16, from data start)
+        //   [5..]  pool: concatenated unique group bodies (cmdCount + commands)
+        //   order: { bodyOffsetLo, bodyOffsetHi, waitAfter } per frame, bodyOffset 0 = loop end
+        var pool = new List<byte>();
+        var bodyOffsets = new Dictionary<string, int>();
+        var orderEntries = new List<(int BodyOffset, byte Wait)>(frameGroups.Count);
+
         var totalCycles = optimizedEvents[^1].AbsoluteCycles;
-        var durationFrame = FrameForCycle(Math.Max(trace.DurationCycles, totalCycles), trace.ClockHz, trace.FramesPerSecond);
+        var durationFrame = FrameForCycle(Math.Max(trace.DurationCycles, totalCycles), trace.ClockHz);
         for (var i = 0; i < frameGroups.Count; i++)
         {
-            if (i == loopGroupIndex)
+            var body = BuildApuTraceGroupBody(frameGroups[i]);
+            var key = Convert.ToHexString(body);
+            if (!bodyOffsets.TryGetValue(key, out var bodyOffset))
             {
-                loopOffset = data.Count - ApuTraceHeaderLength;
+                bodyOffset = ApuTraceHeaderLength + pool.Count;
+                if (bodyOffset > ushort.MaxValue)
+                {
+                    throw new InvalidOperationException("Game Boy APU trace pool exceeds the 32 KiB ROM-only music runtime limit.");
+                }
+
+                bodyOffsets[key] = bodyOffset;
+                pool.AddRange(body);
             }
 
             var nextFrame = i + 1 < frameGroups.Count ? frameGroups[i + 1].Frame : durationFrame;
-            AppendApuTraceFrameGroup(data, frameGroups[i], CheckedFrameDelta(frameGroups[i].Frame, nextFrame));
+            orderEntries.Add((bodyOffset, CheckedFrameDelta(frameGroups[i].Frame, nextFrame)));
         }
 
-        if (loopOffset > ushort.MaxValue)
+        var orderStartOffset = ApuTraceHeaderLength + pool.Count;
+        var loopOrderOffset = orderStartOffset + loopGroupIndex * 3;
+        if (orderStartOffset + orderEntries.Count * 3 + 3 > ushort.MaxValue)
         {
-            throw new InvalidOperationException("Game Boy APU trace loop offset exceeds the 32 KiB ROM-only music runtime limit.");
+            throw new InvalidOperationException("Game Boy APU trace order stream exceeds the 32 KiB ROM-only music runtime limit.");
         }
 
-        data[1] = (byte)(loopOffset & 0xFF);
-        data[2] = (byte)(loopOffset >> 8);
+        var data = new List<byte>(ApuTraceHeaderLength + pool.Count + orderEntries.Count * 3 + 3)
+        {
+            ApuTraceMarker,
+            (byte)(orderStartOffset & 0xFF),
+            (byte)(orderStartOffset >> 8),
+            (byte)(loopOrderOffset & 0xFF),
+            (byte)(loopOrderOffset >> 8),
+        };
+        data.AddRange(pool);
+        foreach (var (bodyOffset, wait) in orderEntries)
+        {
+            data.Add((byte)(bodyOffset & 0xFF));
+            data.Add((byte)(bodyOffset >> 8));
+            data.Add(wait);
+        }
+
+        // Loop sentinel: a body offset of 0 points at the header marker, never a real body.
+        data.Add(0);
+        data.Add(0);
         data.Add(0);
         return new GameBoyCompiledMusicAsset(name, GameBoyMusicAssetKind.ApuTrace, data.ToArray());
+    }
+
+    private static byte[] BuildApuTraceGroupBody(ApuTraceFrameGroup group)
+    {
+        var body = new List<byte>(1 + group.Events.Count * 2);
+        var commandCount = 0;
+        body.Add(0);
+
+        for (var i = 0; i < group.Events.Count;)
+        {
+            if (TryAppendWaveRamBlock(body, group.Events, ref i))
+            {
+                commandCount++;
+            }
+            else
+            {
+                var traceEvent = group.Events[i];
+                body.Add((byte)(traceEvent.Address & 0xFF));
+                body.Add(traceEvent.Value);
+                i++;
+                commandCount++;
+            }
+
+            if (commandCount > byte.MaxValue)
+            {
+                throw new InvalidOperationException("Game Boy APU trace contains more than 255 register command groups in one frame.");
+            }
+        }
+
+        body[0] = (byte)commandCount;
+        return body.ToArray();
     }
 
     private static List<ApuTraceCompiledEvent> OptimizeApuTraceEvents(GameBoyApuTrace trace)
@@ -207,7 +288,7 @@ internal static class GameBoyMusicAssetCompiler
             }
 
             lastValues[traceEvent.Address] = traceEvent.Value;
-            var frame = FrameForCycle(totalCycles, trace.ClockHz, trace.FramesPerSecond);
+            var frame = FrameForCycle(totalCycles, trace.ClockHz);
             events.Add(new ApuTraceCompiledEvent(totalCycles, frame, traceEvent.Address, traceEvent.Value));
         }
 
@@ -252,37 +333,6 @@ internal static class GameBoyMusicAssetCompiler
         return groups;
     }
 
-    private static void AppendApuTraceFrameGroup(List<byte> data, ApuTraceFrameGroup group, byte waitAfter)
-    {
-        var commandCountIndex = data.Count;
-        var commandCount = 0;
-        data.Add(0);
-
-        for (var i = 0; i < group.Events.Count;)
-        {
-            if (TryAppendWaveRamBlock(data, group.Events, ref i))
-            {
-                commandCount++;
-            }
-            else
-            {
-                var traceEvent = group.Events[i];
-                data.Add((byte)(traceEvent.Address & 0xFF));
-                data.Add(traceEvent.Value);
-                i++;
-                commandCount++;
-            }
-
-            if (commandCount > byte.MaxValue)
-            {
-                throw new InvalidOperationException("Game Boy APU trace contains more than 255 register command groups in one frame.");
-            }
-        }
-
-        data[commandCountIndex] = (byte)commandCount;
-        data.Add(waitAfter);
-    }
-
     private static bool TryAppendWaveRamBlock(List<byte> data, IReadOnlyList<ApuTraceCompiledEvent> events, ref int index)
     {
         if (index + WaveTableByteCount > events.Count)
@@ -319,9 +369,18 @@ internal static class GameBoyMusicAssetCompiler
         return (byte)frames;
     }
 
-    private static int FrameForCycle(long cycles, int clockHz, int framesPerSecond)
+    private static int FrameForCycle(long cycles, int clockHz)
     {
-        var frames = checked((cycles * framesPerSecond + clockHz / 2L) / clockHz);
+        // Map absolute APU cycles to the DMG VBlank frame the runtime player runs on.
+        // The player ticks once per VBlank (~59.7275 Hz = 70224 cycles at 4.194304 MHz),
+        // so use the true DMG frame period rather than a nominal 60 Hz, which drifts ~0.46%.
+        var framePeriod = DmgFrameCycles * clockHz / DmgClockHz;
+        if (framePeriod <= 0)
+        {
+            framePeriod = DmgFrameCycles;
+        }
+
+        var frames = checked((cycles + framePeriod / 2) / framePeriod);
         if (frames > int.MaxValue)
         {
             throw new InvalidOperationException("Game Boy APU trace duration exceeds the ROM-only music runtime limit.");

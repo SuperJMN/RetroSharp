@@ -52,6 +52,42 @@ public sealed class GameBoyGbsToGbApuExporterTests
             e => AssertEvent(e, 0, "FF3F", "EF"));
     }
 
+    [Fact]
+    public void Records_vblank_replay_rate_metadata_when_gbs_timer_is_disabled()
+    {
+        var directory = CreateTempDirectory();
+        var gbsPath = Path.Combine(directory, "stage.gbs");
+        var gbapuPath = Path.Combine(directory, "stage.gbapu.json");
+        WriteGbsHeader(gbsPath, subsongs: 1);
+
+        GameBoyGbsToGbApuExporter.Export(
+            new GameBoyGbsToGbApuOptions(gbsPath, gbapuPath, Subsong: 1, Seconds: 2, LoopCycle: 0, GbsPlayPath: "fake-gbsplay"),
+            new FakeTraceSource(["00000000 ff24=77"]));
+
+        using var document = JsonDocument.Parse(File.ReadAllText(gbapuPath));
+        var replayHz = document.RootElement.GetProperty("metadata").GetProperty("replayHz").GetDouble();
+        Assert.Equal(59.7275, replayHz, 2);
+    }
+
+    [Fact]
+    public void Records_timer_replay_rate_metadata_when_gbs_timer_is_enabled()
+    {
+        var directory = CreateTempDirectory();
+        var gbsPath = Path.Combine(directory, "stage.gbs");
+        var gbapuPath = Path.Combine(directory, "stage.gbapu.json");
+        WriteGbsHeader(gbsPath, subsongs: 1, timerModulo: 0x00, timerControl: 0x07);
+
+        GameBoyGbsToGbApuExporter.Export(
+            new GameBoyGbsToGbApuOptions(gbsPath, gbapuPath, Subsong: 1, Seconds: 2, LoopCycle: 0, GbsPlayPath: "fake-gbsplay"),
+            new FakeTraceSource(["00000000 ff24=77"]));
+
+        using var document = JsonDocument.Parse(File.ReadAllText(gbapuPath));
+        var replayHz = document.RootElement.GetProperty("metadata").GetProperty("replayHz").GetDouble();
+
+        // TAC=0x07 selects the 16384 Hz timer clock; TMA=0 gives a 256-step period.
+        Assert.Equal(64.0, replayHz, 1);
+    }
+
     private static void AssertEvent(JsonElement element, long deltaCycles, string address, string value)
     {
         Assert.Equal(deltaCycles, element.GetProperty("deltaCycles").GetInt64());
@@ -66,7 +102,7 @@ public sealed class GameBoyGbsToGbApuExporterTests
         return directory;
     }
 
-    private static void WriteGbsHeader(string path, byte subsongs)
+    private static void WriteGbsHeader(string path, byte subsongs, byte timerModulo = 0, byte timerControl = 0)
     {
         var header = new byte[0x70];
         header[0] = (byte)'G';
@@ -79,6 +115,8 @@ public sealed class GameBoyGbsToGbApuExporterTests
         WriteUInt16(header, 0x08, 0x4000);
         WriteUInt16(header, 0x0A, 0x4010);
         WriteUInt16(header, 0x0C, 0xFFFE);
+        header[0x0E] = timerModulo;
+        header[0x0F] = timerControl;
         WriteAscii(header, 0x10, 32, "Fixture Song");
         WriteAscii(header, 0x30, 32, "RetroSharp");
         WriteAscii(header, 0x50, 32, "Test");

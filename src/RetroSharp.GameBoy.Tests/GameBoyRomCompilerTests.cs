@@ -3050,7 +3050,7 @@ public class GameBoyRomCompilerTests
         var baseDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("""music.Asset(runner_theme, "music/free_06_delight.uge");""", source);
+        Assert.Contains("""music.Asset(runner_theme, "music/delight.gbapu");""", source);
         Assert.Contains("audio.Init();", source);
         Assert.Contains("music.Play(runner_theme);", source);
 
@@ -3069,8 +3069,7 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x80, 0xE0, 0x26]), "Runner BGM should enable NR52.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x12]), "Runner BGM should write CH1 envelope data during audio.Update.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x14]), "Runner BGM should trigger CH1 notes during audio.Update.");
+        Assert.True(ContainsSequence(rom, [0xE2]), "Runner gbapu playback should write dynamic APU register offsets through LDH (C),A during audio.Update.");
     }
 
     [Fact]

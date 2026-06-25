@@ -29,7 +29,7 @@ Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`
 | Signature | Semantics |
 | --- | --- |
 | `audio.Init()` | Initialize the target audio path and reset portable BGM playback state. |
-| `music.Asset(name, path)` | Declare a music resource. The portable envelope format is `retrosharp.music.v1`, with per-platform variants such as a Game Boy `.uge` file or `.gbapu.json` APU trace. |
+| `music.Asset(name, path)` | Declare a music resource. The portable envelope format is `retrosharp.music.v1`, with per-platform variants such as a Game Boy `.uge` file or `.gbapu` APU trace. |
 | `music.Play(name)` | Start the declared BGM resource. This maps to `SdkAudioOperation.PlayMusic` and is capability-checked through `TargetAudioCapabilities`. |
 | `music.Stop()` | Stop BGM playback. |
 | `audio.Update()` | Advance the target audio runtime once. Call it once per frame after the frame boundary for targets whose BGM runtime is tick-driven. |
@@ -40,13 +40,13 @@ The resource envelope intentionally allows one source-level theme to carry diffe
 {
   "format": "retrosharp.music.v1",
   "platforms": {
-    "gb": { "format": "gbapu", "path": "theme.gbapu.json" },
+    "gb": { "format": "gbapu", "path": "theme.gbapu" },
     "nes": { "format": "future", "path": "theme.nes.json" }
   }
 }
 ```
 
-Game Boy currently accepts hUGETracker `.uge` v6 resources and `retrosharp.gbapu.v1` `.gbapu.json` APU traces directly or through the envelope. The CLI has a target-specific `gbs-to-gbapu` export helper for preserving GBS APU register writes as `.gbapu.json`; `.gbs` is not a portable asset format. See `GameBoyApuTraceFormat.md` for the target-specific trace format analysis. NES recognizes the source-level audio calls for validation, but BGM playback is not implemented yet.
+Game Boy currently accepts hUGETracker `.uge` v6 resources and `.gbapu` APU traces (binary, or legacy `retrosharp.gbapu.v1` `.gbapu.json`) directly or through the envelope. The CLI has a target-specific `gbs-to-gbapu` export helper for preserving GBS APU register writes as `.gbapu`; `.gbs` is not a portable asset format. See `GameBoyApuTraceFormat.md` for the target-specific trace format analysis. NES recognizes the source-level audio calls for validation, but BGM playback is not implemented yet.
 
 ### World data and collision
 
@@ -139,7 +139,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Camera Y | Supported, but diagonal movement can exceed budget and fail. | Not supported in the current NES camera spike. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
-| BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu.json` APU traces in the current runtime. GBS files must first be exported to `.gbapu.json` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
+| BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
 | Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors on horizontal maps. |

@@ -429,7 +429,6 @@ internal sealed class GameBoyRuntimeCompiler
     private const int MusicHeaderLength = 3;
     private const int MusicWaveTableBytes = 16 * 16;
     private const int MusicRowCacheLength = 15;
-    private const int ApuTraceHeaderLength = 3;
     private const byte ApuTraceWaveRamBlockCommand = 0xFF;
     private const int VisibleScreenTileWidth = 20;
     private const int VisibleScreenTileHeight = 18;
@@ -1270,13 +1269,28 @@ internal sealed class GameBoyRuntimeCompiler
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, endLabel);       // JP NZ,endLabel
 
+        // Read the next order entry: { bodyOffset (u16 from data start), waitAfter }.
         builder.Label(processLabel);
-        EmitLoadMusicCurrentPointerToHl();
-        builder.LoadAFromHl();                      // command count, or zero sentinel
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, loopLabel);      // JP Z,loopLabel
-        builder.LoadBFromA();
+        EmitLoadMusicCurrentPointerToHl();          // HL -> order entry
+        builder.LoadAFromHl();                      // body offset low
+        builder.LoadEFromA();
         builder.Emit(0x23);                         // INC HL
+        builder.LoadAFromHl();                      // body offset high
+        builder.LoadDFromA();
+        builder.Emit(0xB3);                         // OR E: body offset zero is the loop sentinel
+        builder.JumpAbsolute(0xCA, loopLabel);      // JP Z,loopLabel
+        builder.Emit(0x23);                         // INC HL -> waitAfter
+        builder.LoadAFromHl();
+        builder.StoreA(MusicTickAddress);
+        builder.Emit(0x23);                         // INC HL -> next order entry
+        EmitStoreHlToMusicCurrentPointer();
+
+        // Resolve the pooled group body: HL = dataPointer + bodyOffset.
+        EmitLoadMusicPointerToHl();
+        builder.AddHlDe();
+        builder.LoadAFromHl();                      // command count
+        builder.LoadBFromA();
+        builder.Emit(0x23);                         // INC HL -> first command
 
         builder.Label(commandLoopLabel);
         builder.LoadAFromHl();                      // register offset or wave RAM block command
@@ -1303,13 +1317,10 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadAFromB();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, commandLoopLabel); // JP NZ,commandLoopLabel
-        builder.LoadAFromHl();                      // wait frames after this group
-        builder.StoreA(MusicTickAddress);
-        builder.Emit(0x23);                         // INC HL
-        EmitStoreHlToMusicCurrentPointer();
+
         builder.LoadA(MusicTickAddress);
         builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, processLabel);   // JP Z,processLabel
+        builder.JumpAbsolute(0xCA, processLabel);   // JP Z,processLabel: drain zero-wait order entries
         builder.JumpAbsolute(endLabel);
 
         builder.Label(loopLabel);
@@ -1400,26 +1411,35 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitResetApuTracePointerToStart()
     {
+        // Order stream pointer = dataPointer + orderStartOffset (header bytes 1..2).
         EmitLoadMusicPointerToHl();
-        builder.LoadBc(ApuTraceHeaderLength);
-        builder.AddHlBc();
+        builder.Emit(0x23);                         // INC HL -> orderStart low
+        builder.LoadAFromHl();
+        builder.LoadEFromA();
+        builder.Emit(0x23);                         // INC HL -> orderStart high
+        builder.LoadAFromHl();
+        builder.LoadDFromA();
+
+        EmitLoadMusicPointerToHl();
+        builder.AddHlDe();
         EmitStoreHlToMusicCurrentPointer();
         EmitClearMusicRowCache();
     }
 
     private void EmitResetApuTracePointerToLoop()
     {
+        // Order stream pointer = dataPointer + loopOrderOffset (header bytes 3..4).
         EmitLoadMusicPointerToHl();
-        builder.Emit(0x23);                         // INC HL: loop offset low
+        builder.Emit(0x23);                         // INC HL -> byte 1
+        builder.Emit(0x23);                         // INC HL -> byte 2
+        builder.Emit(0x23);                         // INC HL -> loopOrder low (byte 3)
         builder.LoadAFromHl();
         builder.LoadEFromA();
-        builder.Emit(0x23);                         // INC HL: loop offset high
+        builder.Emit(0x23);                         // INC HL -> loopOrder high (byte 4)
         builder.LoadAFromHl();
         builder.LoadDFromA();
 
         EmitLoadMusicPointerToHl();
-        builder.LoadBc(ApuTraceHeaderLength);
-        builder.AddHlBc();
         builder.AddHlDe();
         EmitStoreHlToMusicCurrentPointer();
     }

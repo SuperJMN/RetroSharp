@@ -13,7 +13,8 @@
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
 - [docs/RetroSharp.Language.md](docs/RetroSharp.Language.md): language surface.
 - [docs/GameBoyTarget.md](docs/GameBoyTarget.md): current Game Boy target subset and runner milestones.
-- [docs/GameBoyApuTraceFormat.md](docs/GameBoyApuTraceFormat.md): `.gbapu.json` schema, generation flow, runtime use, limitations, and future audio-format options.
+- [docs/GameBoyApuTraceFormat.md](docs/GameBoyApuTraceFormat.md): `.gbapu` binary/JSON schema, generation flow, runtime use, and limitations.
+- [docs/GameBoyApuTraceFormatV2.md](docs/GameBoyApuTraceFormatV2.md): measurement-driven design study for the faithful + compact `.gbapu` v2 format (loop detection, binary source, group-pool ROM encoding).
 - [docs/GameBoyRunnerDebugging.md](docs/GameBoyRunnerDebugging.md): normal debugging workflow with the Game Boy runner as GB test app.
 - [docs/NesTarget.md](docs/NesTarget.md): current NES target subset.
 - [samples/README.md](samples/README.md): sample classification and ROM regeneration.

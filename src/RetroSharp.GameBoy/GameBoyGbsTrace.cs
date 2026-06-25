@@ -30,6 +30,33 @@ internal interface IGameBoyGbsTraceSource
     IReadOnlyList<string> Capture(GameBoyGbsTraceOptions options);
 }
 
+internal static class GameBoyGbsReplayRate
+{
+    private const double VBlankHz = 4_194_304.0 / 70_224.0;
+
+    // Derives the GBS driver replay rate (Hz) from the header timer fields.
+    // When the timer is disabled the driver runs on VBlank (~59.7275 Hz); when it is
+    // enabled the play routine runs at the configured TAC/TMA timer rate instead.
+    public static double FromHeader(GameBoyGbsHeader header)
+    {
+        if ((header.TimerControl & 0x04) == 0)
+        {
+            return VBlankHz;
+        }
+
+        var baseHz = (header.TimerControl & 0x03) switch
+        {
+            0 => 4_096.0,
+            1 => 262_144.0,
+            2 => 65_536.0,
+            _ => 16_384.0,
+        };
+
+        var period = 256 - header.TimerModulo;
+        return period <= 0 ? baseHz : baseHz / period;
+    }
+}
+
 internal static class GameBoyGbsFile
 {
     public static GameBoyGbsHeader ReadHeader(string path)
