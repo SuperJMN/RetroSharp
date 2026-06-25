@@ -419,6 +419,12 @@ Landed after the richer runner scene pass:
 - Tileset `objectgroup` rectangles now provide the runner's solid platform and ground collision flags without a separate hand-authored collision layer.
 - The runner scene focuses on the player, camera, Tiled map streaming, tileset-authored solid collision, fall reset, and variable-height jump so the generated Tiled graphics still fit the ROM-only target.
 
+Landed after the ceiling-collision pass:
+
+- Solid blocks now block the player from below: `FrameState.ResolveCeilingHit(...)` probes a short AABB over the head with `camera.AabbTiles(...)` while the actor is rising (`velocityY >= World.SignedVelocityWrap`) and calls `player.BounceDown()` on contact, cancelling the jump and applying a small downward velocity so the actor rebounds with a physical feel instead of passing through the block.
+- The head probe is offset to the sprite's visible content, not its full cell. The player sheet is 32 px tall but the figure is bottom-aligned with ~4 px of transparent padding at the top, so the probe references the real head at `footWorldY - CeilingProbeTopOffset` with `CeilingProbeTopOffset = 28` (probe band `[footWorldY - 28, footWorldY - 24]`). This makes the impact register when the visible head reaches the block instead of a few pixels early.
+- The landing search window is now feet-relative (`LandingSearchTopOffset = 4`, `LandingSearchHeight = 12`) instead of spanning the whole sprite body, so `camera.AabbHitTop(...)` only snaps the actor onto a surface at or just below the feet. This stops a descending actor from being magnetised up onto a block whose underside it just hit, while preserving normal landing on ground and platforms approached from above. Both responses remain source-level policy in `samples/runner/runner.rs`.
+
 ## Current Framework Backlog
 
 The SDK v1 reference already exists in `docs/Portable2DSdkV1.md`. The #106 stabilization backlog items for runner-shaped collision, cross-target diagnostics, and logical palette declarations have landed. New work in this area should be filed as narrower follow-up issues rather than reusing the closed stabilization backlog.

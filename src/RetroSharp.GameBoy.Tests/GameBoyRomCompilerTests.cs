@@ -4011,13 +4011,46 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void GameBoy_runner_bounces_player_down_when_head_hits_solid_ceiling()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("CeilingProbeTopOffset = 28", source);
+        Assert.Contains("CeilingProbeHeight = 4", source);
+        Assert.Contains("BounceVelocity = 2", source);
+        Assert.Contains("inline void BounceDown()", source);
+        Assert.Contains("velocityY = Jump.BounceVelocity;", source);
+        Assert.Contains("inline void ResolveCeilingHit(PlayerState player, Pixel footWorldY)", source);
+        Assert.Contains("camera.AabbTiles(Player.ScreenX, headProbeY, sprite_width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid)", source);
+        Assert.Contains("player.BounceDown();", source);
+        Assert.Contains("frame.ResolveCeilingHit(player, footWorldY);", source);
+
+        var ceilingStart = source.IndexOf("inline void ResolveCeilingHit", StringComparison.Ordinal);
+        Assert.True(ceilingStart >= 0);
+        var ceilingEnd = source.IndexOf("inline void ResolveReset", ceilingStart, StringComparison.Ordinal);
+        Assert.True(ceilingEnd > ceilingStart);
+        var ceilingBlock = source[ceilingStart..ceilingEnd];
+        Assert.Contains("player.velocityY >= World.SignedVelocityWrap", ceilingBlock);
+
+        var landingCall = source.IndexOf("frame.ResolveSolidLanding(player, footWorldY);", StringComparison.Ordinal);
+        var ceilingCall = source.IndexOf("frame.ResolveCeilingHit(player, footWorldY);", StringComparison.Ordinal);
+        var jumpInputCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
+        Assert.True(ceilingCall > landingCall, "Ceiling resolution should run after solid landing resolution.");
+        Assert.True(jumpInputCall > ceilingCall, "Ceiling resolution should clear the jump before jump input is consumed.");
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_dynamic_world_y_for_tiled_solid_landing()
     {
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("LandingSearchTopOffset = 32", source);
-        Assert.Contains("LandingSearchHeight = 40", source);
+        Assert.Contains("LandingSearchTopOffset = 4", source);
+        Assert.Contains("LandingSearchHeight = 12", source);
         Assert.Contains("NoTileHit = 255", source);
         Assert.Contains("inline void ResolveSolidLanding(PlayerState player, Pixel footWorldY)", source);
         Assert.Contains("let footWorldY = player.y - Player.WorldOriginY;", source);

@@ -18,9 +18,11 @@ enum Player {
 }
 
 enum CollisionProbe {
-    LandingSearchTopOffset = 32,
-    LandingSearchHeight = 40,
+    LandingSearchTopOffset = 4,
+    LandingSearchHeight = 12,
     WallProbeHeight = 8,
+    CeilingProbeTopOffset = 28,
+    CeilingProbeHeight = 4,
     NoTileHit = 255
 }
 
@@ -28,7 +30,8 @@ enum Jump {
     Velocity = 253,
     BoostTicks = 12,
     GravityFrames = 2,
-    BoostTickMask = 1
+    BoostTickMask = 1,
+    BounceVelocity = 2
 }
 
 enum CollisionFlag { None = 0, Solid = 1 }
@@ -77,6 +80,13 @@ class PlayerState {
         y = targetY;
         velocityY = 0;
         grounded = 1;
+        jumping = 0;
+        gravityTick = 0;
+    }
+
+    inline void BounceDown() {
+        velocityY = Jump.BounceVelocity;
+        grounded = 0;
         jumping = 0;
         gravityTick = 0;
     }
@@ -187,6 +197,15 @@ class FrameState {
         }
     }
 
+    inline void ResolveCeilingHit(PlayerState player, Pixel footWorldY) {
+        if (player.velocityY >= World.SignedVelocityWrap) {
+            let headProbeY = footWorldY - CollisionProbe.CeilingProbeTopOffset;
+            if (camera.AabbTiles(Player.ScreenX, headProbeY, sprite_width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0) {
+                player.BounceDown();
+            }
+        }
+    }
+
     inline void ResolveReset(PlayerState player) {
         if (resetRequested != 0) {
             footTile = CollisionProbe.NoTileHit;
@@ -243,6 +262,7 @@ void main() {
         let footWorldY = player.y - Player.WorldOriginY;
 
         frame.ResolveSolidLanding(player, footWorldY);
+        frame.ResolveCeilingHit(player, footWorldY);
         frame.ResolveFall(player);
         frame.ResolveReset(player);
         player.HandleJumpInput();
