@@ -56,6 +56,184 @@ public sealed class GameBoyMusicTests
     }
 
     [Fact]
+    public void Compiles_large_music_resource_to_banked_game_boy_rom_without_source_bank_calls()
+    {
+        var directory = CreateTempDirectory();
+        var musicPath = Path.Combine(directory, "large.gbapu");
+        WriteLargeGbApuTrace(musicPath, frameCount: 12000);
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  music.Asset(stage_theme, "large.gbapu");
+                                  audio.Init();
+                                  music.Play(stage_theme);
+                                  loop {
+                                      video.WaitVBlank();
+                                      audio.Update();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+
+        Assert.Equal(65536, rom.Length);
+        Assert.Equal(0x01, rom[0x0147]);            // MBC1 without RAM
+        Assert.Equal(0x01, rom[0x0148]);            // 64 KiB ROM
+        Assert.Equal(HeaderChecksum(rom), rom[0x014D]);
+        Assert.Equal(0x02, rom[0x4000]);            // GBAPU v2 marker at the start of bank 1
+        Assert.True(ContainsSequence(rom, [0xEA, 0x00, 0x20]), "Banked playback should select ROM banks through MBC writes.");
+    }
+
+    [Fact]
+    public void Rom_only_gbapu_playback_emits_the_source_trace_register_writes_in_order()
+    {
+        // Control test: a ROM-only (non-banked) program must reproduce the source trace exactly.
+        // This validates the SM83 test interpreter against the known-correct non-banked path, so a
+        // divergence on the banked path can only mean a banking bug, not an interpreter artifact.
+        var directory = CreateTempDirectory();
+        var musicPath = Path.Combine(directory, "small.gbapu");
+        const int frameCount = 40;
+        WriteLargeGbApuTrace(musicPath, frameCount);
+
+        var rom = GameBoyRomCompiler.CompileSource(MinimalPlaybackSource("small.gbapu"), directory);
+
+        Assert.Equal(32768, rom.Length);            // ROM-only cartridge
+        Assert.Equal(0x00, rom[0x0147]);            // ROM only
+
+        var cpu = new GameBoyTestCpu(rom);
+        var played = cpu.RunUntilRegisterWrites(0xFF14, frameCount, maxInstructions: 5_000_000);
+
+        Assert.Equal(ExpectedTriggerSequence(frameCount), played);
+    }
+
+    [Fact]
+    public void Banked_gbapu_playback_emits_the_source_trace_across_rom_bank_boundaries()
+    {
+        // A single music asset large enough to span several MBC1 ROM banks must keep playing the
+        // source trace in order as sequential playback crosses 16 KiB bank boundaries. The banked
+        // runtime has to track the order-stream bank independently from the bank used to resolve
+        // pooled group bodies; conflating them reads later order entries from the wrong bank.
+        var directory = CreateTempDirectory();
+        var musicPath = Path.Combine(directory, "large.gbapu");
+        const int frameCount = 12000;
+        WriteLargeGbApuTrace(musicPath, frameCount);
+
+        var rom = GameBoyRomCompiler.CompileSource(MinimalPlaybackSource("large.gbapu"), directory);
+
+        Assert.Equal(65536, rom.Length);            // banked MBC1 cartridge
+        Assert.Equal(0x01, rom[0x0147]);            // MBC1
+
+        // 11000 frames cross both the bank 1->2 boundary (~frame 5333) and the bank 2->3 boundary
+        // (~frame 10793), exercising repeated transparent bank switches during sequential playback.
+        const int checkedFrames = 11000;
+        var cpu = new GameBoyTestCpu(rom);
+        var played = cpu.RunUntilRegisterWrites(0xFF14, checkedFrames, maxInstructions: 200_000_000);
+
+        Assert.Equal(ExpectedTriggerSequence(checkedFrames), played);
+    }
+
+    [Fact]
+    public void Multiple_music_themes_can_be_declared_and_switched_at_runtime()
+    {
+        // Two distinct themes (told apart by the APU register they drive). The program starts theme A,
+        // then switches to theme B via music.Play(...). Both must play their own data in order.
+        var directory = CreateTempDirectory();
+        WriteLargeGbApuTrace(Path.Combine(directory, "theme_a.gbapu"), frameCount: 200, register: 0xFF14);
+        WriteLargeGbApuTrace(Path.Combine(directory, "theme_b.gbapu"), frameCount: 200, register: 0xFF19);
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  music.Asset(theme_a, "theme_a.gbapu");
+                                  music.Asset(theme_b, "theme_b.gbapu");
+                                  audio.Init();
+                                  music.Play(theme_a);
+                                  u8 ticks = 0;
+                                  u8 switched = 0;
+                                  loop {
+                                      video.WaitVBlank();
+                                      audio.Update();
+                                      ticks = ticks + 1;
+                                      if (ticks == 80) {
+                                          if (switched == 0) {
+                                              music.Play(theme_b);
+                                              switched = 1;
+                                          }
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+        Assert.Equal(32768, rom.Length);            // both small themes still fit a ROM-only cartridge
+
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunUntilRegisterWrites(0xFF19, count: 50, maxInstructions: 5_000_000);
+
+        var themeA = cpu.ApuWrites.Where(w => w.Register == 0xFF14).Select(w => w.Value).ToList();
+        var themeB = cpu.ApuWrites.Where(w => w.Register == 0xFF19).Select(w => w.Value).ToList();
+
+        Assert.Equal(ExpectedTriggerSequence(50), themeA.Take(50).ToList());
+        Assert.Equal(ExpectedTriggerSequence(50), themeB.Take(50).ToList());
+    }
+
+    [Fact]
+    public void Switching_between_two_banked_themes_keeps_each_playing_across_its_own_bank_boundaries()
+    {
+        // The definitive multi-theme banked case: two large themes each occupy their own MBC1 bank range
+        // (theme A in the low banks, theme B above it). The program plays theme A across its own internal
+        // bank boundary, switches to theme B, and theme B must then play across *its* boundary from its
+        // higher base bank. Each theme drives a different APU register so the two streams stay separable.
+        var directory = CreateTempDirectory();
+        WriteLargeGbApuTrace(Path.Combine(directory, "theme_a.gbapu"), frameCount: 12000, register: 0xFF14);
+        WriteLargeGbApuTrace(Path.Combine(directory, "theme_b.gbapu"), frameCount: 12000, register: 0xFF19);
+
+        // 16-bit frame counter (two u8s) so the switch can happen after theme A has crossed its boundary.
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  music.Asset(theme_a, "theme_a.gbapu");
+                                  music.Asset(theme_b, "theme_b.gbapu");
+                                  audio.Init();
+                                  music.Play(theme_a);
+                                  u8 lo = 0;
+                                  u8 hi = 0;
+                                  u8 switched = 0;
+                                  loop {
+                                      video.WaitVBlank();
+                                      audio.Update();
+                                      lo = lo + 1;
+                                      if (lo == 0) {
+                                          hi = hi + 1;
+                                      }
+                                      if (hi == 24) {
+                                          if (switched == 0) {
+                                              music.Play(theme_b);
+                                              switched = 1;
+                                          }
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+        Assert.Equal(0x01, rom[0x0147]);            // MBC1
+        Assert.True(rom.Length >= 128 * 1024, "Two large themes need several ROM banks each.");
+
+        // Run until theme B has streamed past its own bank 1->2 boundary (~frame 5333).
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunUntilRegisterWrites(0xFF19, count: 7000, maxInstructions: 400_000_000);
+
+        var themeA = cpu.ApuWrites.Where(w => w.Register == 0xFF14).Select(w => w.Value).ToList();
+        var themeB = cpu.ApuWrites.Where(w => w.Register == 0xFF19).Select(w => w.Value).ToList();
+
+        // Theme A played in order across its boundary before the switch; theme B does the same afterwards.
+        Assert.Equal(ExpectedTriggerSequence(6000), themeA.Take(6000).ToList());
+        Assert.Equal(ExpectedTriggerSequence(7000), themeB.Take(7000).ToList());
+    }
+
+    [Fact]
     public void Compiles_gbapu_trace_to_grouped_stream_with_safe_deduplication_and_wave_blocks()
     {
         var directory = CreateTempDirectory();
@@ -434,6 +612,52 @@ public sealed class GameBoyMusicTests
         File.WriteAllText(Path.Combine(directory, name), json);
     }
 
+    private static void WriteLargeGbApuTrace(string path, int frameCount, ushort register = 0xFF14)
+    {
+        var events = new List<GameBoyApuTraceEvent>(frameCount);
+        for (var frame = 0; frame < frameCount; frame++)
+        {
+            var delta = frame == 0 ? 0 : 70_224;
+            events.Add(new GameBoyApuTraceEvent(delta, register, TriggerValue(frame)));
+        }
+
+        var trace = new GameBoyApuTrace(
+            4_194_304,
+            60,
+            DurationCycles: frameCount * 70_224L,
+            LoopCycle: 0,
+            new GameBoyApuTraceMetadata("Large Trace"),
+            events);
+        GameBoyApuTraceBinary.Write(path, trace);
+    }
+
+    private static byte TriggerValue(int frame) => (byte)(0x80 | (frame & 0x7F));
+
+    private static List<byte> ExpectedTriggerSequence(int frameCount)
+    {
+        var expected = new List<byte>(frameCount);
+        for (var frame = 0; frame < frameCount; frame++)
+        {
+            expected.Add(TriggerValue(frame));
+        }
+
+        return expected;
+    }
+
+    private static string MinimalPlaybackSource(string assetFileName) =>
+        $$"""
+          void main() {
+              video.Init();
+              music.Asset(stage_theme, "{{assetFileName}}");
+              audio.Init();
+              music.Play(stage_theme);
+              loop {
+                  video.WaitVBlank();
+                  audio.Update();
+              }
+          }
+          """;
+
     private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
     {
         for (var i = 0; i <= bytes.Count - sequence.Count; i++)
@@ -455,6 +679,17 @@ public sealed class GameBoyMusicTests
         }
 
         return false;
+    }
+
+    private static byte HeaderChecksum(IReadOnlyList<byte> rom)
+    {
+        var checksum = 0;
+        for (var i = 0x0134; i <= 0x014C; i++)
+        {
+            checksum = checksum - rom[i] - 1;
+        }
+
+        return (byte)checksum;
     }
 
     private static int CountRegisterValuePairs(IReadOnlyList<byte> bytes, byte register, byte value)

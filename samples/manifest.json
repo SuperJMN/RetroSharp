@@ -19,6 +19,12 @@
       "targets": ["gb"]
     },
     {
+      "path": "samples/gameboy-music/music-switch.rs",
+      "readme": "samples/gameboy-music/README.md",
+      "layer": "target-capability-spike",
+      "targets": ["gb"]
+    },
+    {
       "path": "samples/runner/runner.rs",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",
