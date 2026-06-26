@@ -1248,6 +1248,109 @@ Acceptance criteria:
 - Diagnostics make hidden runtime costs visible instead of silently lowering to an expensive fallback.
 - The Game Boy runner state objects are migrated to static class syntax without changing ROM behavior.
 
+### Iteration 14: Scalable Platformer Actor Framework Ergonomics
+
+Status: planned.
+
+Purpose: make complex platformer characters and enemy behaviors practical without asking game authors to hand-write one large `switch` over every enemy kind. This is a framework/SDK ergonomics goal, not a managed object model. The implementation should preserve the current 8-bit contract: fixed storage, predictable update cost, explicit caps, and no heap allocation or runtime polymorphism.
+
+The intended authoring model is declarative and platformer-oriented. A game should be able to define a small actor pool, declare enemy types with sprites, hitboxes, animation, and standard behaviors, then update/draw the active pool through stable SDK calls. The compiler/framework can lower that surface to arrays, tables, direct helper calls, and grouped update loops.
+
+Candidate source shape:
+
+```c
+actor.Pool(enemies, 8);
+
+enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+enemy.Def(Bat, sprite: bat, behavior: Flyer, speed: 2, hp: 1);
+enemy.Def(Turret, sprite: turret, behavior: Shooter, cooldown: 60);
+
+world.Load("level1.tmj");
+
+loop {
+    video.WaitVBlank();
+    input.Poll();
+
+    enemies.Update();
+    enemies.Draw();
+}
+```
+
+This is intentionally sugar over a data-oriented implementation, not a promise of `new`, inheritance, virtual methods, interfaces, RTTI, or dynamic dispatch.
+
+Design rules:
+
+- Actor pools have compile-time maximum sizes and explicit storage. The generated representation is fixed arrays or equivalent fixed-layout storage.
+- Actor definitions are data: kind id, sprite/animation ids, hitbox, flags, behavior id, constants such as speed, hp, cooldown, and contact damage.
+- Behaviors are statically selected modules such as `Walker`, `Flyer`, `Patrol`, `Shooter`, `Chaser`, `Hazard`, and simple platformer controller variants. They lower to direct helpers or grouped loops, not to function pointers or vtables.
+- Runtime actor state is explicit and byte-sized where possible: kind, active flag, x/y, vx/vy, state, timer, facing, animation tick, and health.
+- World/Tiled integration should support object-layer spawn data and optional camera-window activation so large levels do not require all enemies to be active at once.
+- Collision stays on the SDK collision query layer. The actor framework can provide reusable platformer policies, but it must not hide a full physics engine behind one opaque call.
+- Capability checks must account for hardware sprite count, scanline pressure, frame-budget-sensitive streaming, actor pool size, and target-specific unsupported behavior.
+- The same high-level actor definitions should either compile for Game Boy and NES or fail with target capability diagnostics that name the unsupported behavior.
+
+Tasks:
+
+#### AR-14.1: Define fixed actor pool and enemy definition model
+
+- Layer: portable SDK/framework.
+- Candidate files: SDK core records, frontend collectors, Game Boy/NES lowering tests, docs.
+- Steps:
+  - [ ] Define the minimum actor pool contract: fixed capacity, active slots, kind/state/timer/position fields, and per-type constant tables.
+  - [ ] Define enemy/actor declarations for sprite, animation, hitbox, behavior, and constants.
+  - [ ] Lower a simple `Update`/`Draw` surface to the same shape as hand-authored arrays plus direct helper calls.
+  - [ ] Reject unbounded pools, dynamic allocation, function-pointer-like behavior values, and uncapped spawn sources.
+- Verification:
+  - [ ] Tests compare a generated actor pool against an equivalent hand-written fixed-array implementation.
+  - [ ] Docs describe the emitted storage model so authors know the runtime cost.
+
+#### AR-14.2: Add platformer behavior modules
+
+- Layer: portable SDK/framework with target lowering.
+- Candidate files: behavior definitions, collision helpers, animation helpers, Game Boy/NES emitted-code tests.
+- Steps:
+  - [ ] Add standard static behaviors for at least ground walker, flying patrol, turret/shooter, passive hazard, and simple chaser.
+  - [ ] Keep behavior state explicit in actor fields instead of hidden objects.
+  - [ ] Reuse existing world/camera AABB collision and animation helpers.
+  - [ ] Allow behavior constants to be data-driven per enemy type.
+- Verification:
+  - [ ] A sample level can contain at least three enemy types with different behavior modules and shared update/draw calls.
+  - [ ] Tests prove behavior selection does not introduce virtual dispatch, heap allocation, or function-pointer tables.
+
+#### AR-14.3: Spawn actors from Tiled world data
+
+- Layer: portable SDK asset pipeline.
+- Candidate files: Tiled logical map importer, world asset model, sample maps, docs.
+- Steps:
+  - [ ] Read a named Tiled object layer or equivalent spawn metadata for actor kind and initial fields.
+  - [ ] Generate compact spawn tables alongside world data.
+  - [ ] Add camera-window or room-based activation into fixed actor slots.
+  - [ ] Preserve explicit failure when a room/window can exceed the declared actor pool capacity.
+- Verification:
+  - [ ] A platformer sample can place multiple enemy kinds in Tiled without hard-coding every spawn in source.
+  - [ ] Game Boy/NES generated ROMs use the same authored map data where target capabilities permit it.
+
+#### AR-14.4: Build a scalable platformer acceptance slice
+
+- Layer: samples and validation.
+- Candidate files: `samples/runner/runner.rs`, sample maps/assets, target acceptance tests, MCP/diagnostics docs.
+- Steps:
+  - [ ] Extend the runner or add a focused platformer acceptance sample with several enemy kinds, activation, map collision, player contact, and animation.
+  - [ ] Keep the source free of a hand-written global enemy-kind switch in `main`.
+  - [ ] Validate the sample on Game Boy first, then NES where the declared behavior set is supported.
+  - [ ] Document the low-level equivalent pattern for authors who need to drop down to hand-authored arrays.
+- Verification:
+  - [ ] The sample compiles and runs as a tracked ROM artifact.
+  - [ ] Validation covers source-level behavior, generated ROM execution, and visible actor rendering.
+
+Acceptance criteria:
+
+- Adding a new basic platformer enemy type requires a definition plus optional behavior constants, not editing a central game-loop switch.
+- The generated implementation remains equivalent to fixed arrays, tables, direct branches, and static helpers.
+- No accepted actor feature requires heap allocation, vtables, RTTI, inheritance, interface dispatch, delegates, closures, or unbounded collections.
+- Platformer use cases covered by the first slice include patrolling ground enemies, flying enemies, stationary shooters, hazards, map collision, player contact, animation, and activation/deactivation.
+- The framework exposes target capability errors when a behavior or pool budget cannot fit the selected target.
+
 ## First Recommended Implementation Slice
 
 Start with Iterations 1 through 3:
@@ -1285,3 +1388,5 @@ If the cross-target sample cannot compile for at least Game Boy and NES with cle
 | Palette APIs leak machine-specific slots. | Use logical palette slots in SDK and raw palette registers only in intrinsics. |
 | HUD conflicts with scrolling. | Make HUD optional and mode-based. |
 | Collision becomes hidden physics. | Keep V1 as tile/AABB queries, not a physics engine. |
+| Actor framework becomes hidden dynamic OOP. | Keep actor definitions data-driven and lower to fixed arrays, tables, direct branches, and static helpers. |
+| Actor ergonomics hide target budgets. | Require fixed pool capacities, spawn-window limits, sprite/scanline checks, and explicit capability diagnostics. |
