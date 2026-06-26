@@ -34,6 +34,17 @@ enum Jump {
     BounceVelocity = 2
 }
 
+enum HorizontalMotion {
+    None = 0,
+    Right = 1,
+    Left = 2,
+    WalkSpeed = 8,
+    RunMaxSpeed = 16,
+    SubpixelScale = 8,
+    RunAcceleration = 1,
+    Friction = 2
+}
+
 enum CollisionFlag { None = 0, Solid = 1 }
 
 class PlayerState {
@@ -145,29 +156,147 @@ class PlayerState {
 class CameraState {
     Pixel x;
     Pixel moving;
+    Pixel speed;
+    Pixel direction;
+    Pixel movementRemainder;
+
+    inline void ResetMotion() {
+        moving = 0;
+        speed = 0;
+        direction = HorizontalMotion.None;
+        movementRemainder = 0;
+    }
+
+    inline void StartDirection(Pixel desiredDirection) {
+        direction = desiredDirection;
+        speed = HorizontalMotion.WalkSpeed;
+        movementRemainder = 0;
+    }
+
+    inline void AccelerateRun() {
+        if (speed < HorizontalMotion.RunMaxSpeed) {
+            speed += HorizontalMotion.RunAcceleration;
+            if (speed > HorizontalMotion.RunMaxSpeed) {
+                speed = HorizontalMotion.RunMaxSpeed;
+            }
+        }
+    }
+
+    inline void DecelerateToWalk() {
+        if (speed > HorizontalMotion.WalkSpeed) {
+            speed -= HorizontalMotion.Friction;
+            if (speed < HorizontalMotion.WalkSpeed) {
+                speed = HorizontalMotion.WalkSpeed;
+            }
+        }
+    }
+
+    inline void HoldDirection(Pixel grounded) {
+        if (grounded != 0) {
+            if (button_down(b) != 0) {
+                AccelerateRun();
+            } else {
+                DecelerateToWalk();
+            }
+        }
+    }
+
+    inline void ApplyFriction() {
+        if (speed <= HorizontalMotion.Friction) {
+            speed = 0;
+            movementRemainder = 0;
+            direction = HorizontalMotion.None;
+        } else {
+            speed -= HorizontalMotion.Friction;
+        }
+    }
+
+    inline void UpdateIntent(Pixel desiredDirection, Pixel grounded) {
+        if (desiredDirection == HorizontalMotion.None) {
+            if (grounded != 0) {
+                ApplyFriction();
+            }
+        }
+        if (desiredDirection == HorizontalMotion.Right) {
+            if (direction == HorizontalMotion.Right) {
+                HoldDirection(grounded);
+            } else {
+                StartDirection(HorizontalMotion.Right);
+            }
+        }
+        if (desiredDirection == HorizontalMotion.Left) {
+            if (direction == HorizontalMotion.Left) {
+                HoldDirection(grounded);
+            } else {
+                StartDirection(HorizontalMotion.Left);
+            }
+        }
+    }
+
+    inline void UpdateFacing(PlayerState player) {
+        if (direction == HorizontalMotion.Right) {
+            player.displayFlipX = false;
+        }
+        if (direction == HorizontalMotion.Left) {
+            player.displayFlipX = true;
+        }
+    }
+
+    inline void MoveRightOnePixel(Pixel wallProbeY) {
+        if (camera.AabbTiles(Player.RightWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+            moving = 1;
+            x += 1;
+            camera.SetPosition(x, 0);
+        } else {
+            ResetMotion();
+        }
+    }
+
+    inline void MoveLeftOnePixel(Pixel wallProbeY) {
+        if (camera.AabbTiles(Player.LeftWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+            moving = 1;
+            x -= 1;
+            camera.SetPosition(x, 0);
+        } else {
+            ResetMotion();
+        }
+    }
+
+    inline void ApplyMotionStep(Pixel wallProbeY) {
+        if (movementRemainder >= HorizontalMotion.SubpixelScale) {
+            movementRemainder -= HorizontalMotion.SubpixelScale;
+            if (direction == HorizontalMotion.Right) {
+                MoveRightOnePixel(wallProbeY);
+            }
+            if (direction == HorizontalMotion.Left) {
+                MoveLeftOnePixel(wallProbeY);
+            }
+        }
+    }
+
+    inline void ApplyMotion(Pixel wallProbeY) {
+        moving = 0;
+        if (speed != 0) {
+            movementRemainder += speed;
+            ApplyMotionStep(wallProbeY);
+            ApplyMotionStep(wallProbeY);
+        }
+    }
 
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY) {
-        moving = 0;
         let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
+        Pixel desiredDirection = HorizontalMotion.None;
         if (button_down(right) != 0) {
-            player.displayFlipX = false;
-            if (camera.AabbTiles(Player.RightWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
-                moving = 1;
-                x += 1;
-            }
+            desiredDirection = HorizontalMotion.Right;
         }
 
         if (button_down(left) != 0) {
-            player.displayFlipX = true;
-            if (camera.AabbTiles(Player.LeftWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
-                moving = 1;
-                x -= 1;
-            }
+            desiredDirection = HorizontalMotion.Left;
         }
 
-        if (moving != 0) {
-            camera.SetPosition(x, 0);
-        }
+        UpdateIntent(desiredDirection, player.grounded);
+        UpdateFacing(player);
+        ApplyMotion(wallProbeY);
     }
 }
 
@@ -206,10 +335,11 @@ class FrameState {
         }
     }
 
-    inline void ResolveReset(PlayerState player) {
+    inline void ResolveReset(PlayerState player, CameraState view) {
         if (resetRequested != 0) {
             footTile = CollisionProbe.NoTileHit;
             player.Reset();
+            view.ResetMotion();
         }
     }
 }
@@ -251,6 +381,7 @@ void main() {
     CameraState view;
     FrameState frame;
     player.Reset();
+    view.ResetMotion();
 
     loop {
         PresentFrame(player);
@@ -264,7 +395,7 @@ void main() {
         frame.ResolveSolidLanding(player, footWorldY);
         frame.ResolveCeilingHit(player, footWorldY);
         frame.ResolveFall(player);
-        frame.ResolveReset(player);
+        frame.ResolveReset(player, view);
         player.HandleJumpInput();
         let movementFootWorldY = player.y - Player.WorldOriginY;
         view.HandleHorizontalInput(player, movementFootWorldY);

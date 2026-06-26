@@ -2686,21 +2686,24 @@ public class GameBoyRomCompilerTests
         Assert.Contains("CameraState view;", source);
         Assert.DoesNotContain("Pixel cameraX = 0;", source);
 
-        Assert.Contains("x += 1;", movementBlock);
-        Assert.Contains("moving = 1;", movementBlock);
-        Assert.Contains("x -= 1;", movementBlock);
-        Assert.Contains("camera.SetPosition(x, 0);", movementBlock);
+        Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", movementBlock);
+        Assert.Contains("ApplyMotion(wallProbeY);", movementBlock);
+        var cameraBlock = source[source.IndexOf("class CameraState", StringComparison.Ordinal)..movementEnd];
+        Assert.Contains("x += 1;", cameraBlock);
+        Assert.Contains("moving = 1;", cameraBlock);
+        Assert.Contains("x -= 1;", cameraBlock);
+        Assert.Contains("camera.SetPosition(x, 0);", cameraBlock);
         Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
-        Assert.Contains("if (moving != 0)", movementBlock);
+        Assert.Contains("if (view.moving != 0)", source);
         Assert.Contains("animTick++;", source);
         Assert.Contains("animation.Frame(run, animTick)", source);
         Assert.DoesNotContain("i16 frame = 0;", source);
         Assert.DoesNotContain("frame = frame + 1;", source);
         Assert.DoesNotContain("if (frame == 3)", source);
         Assert.DoesNotContain("displayFrame = frame + 1;", source);
-        Assert.Equal(1, CountOccurrences(source, "camera.SetPosition(x, 0);"));
+        Assert.Equal(2, CountOccurrences(source, "camera.SetPosition(x, 0);"));
         Assert.Equal(1, CountOccurrences(source, "animTick++;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -2924,13 +2927,13 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", source);
         Assert.Contains("inline void ResolveSolidLanding(PlayerState player", source);
         Assert.Contains("inline void ResolveFall(PlayerState player)", source);
-        Assert.Contains("inline void ResolveReset(PlayerState player)", source);
+        Assert.Contains("inline void ResolveReset(PlayerState player, CameraState view)", source);
         Assert.Contains("inline void UpdateRunAnimation(CameraState view)", source);
         Assert.Contains("PresentFrame(player);", source);
         Assert.Contains("frame.Begin();", source);
         Assert.Contains("frame.ResolveSolidLanding(player, footWorldY);", source);
         Assert.Contains("frame.ResolveFall(player);", source);
-        Assert.Contains("frame.ResolveReset(player);", source);
+        Assert.Contains("frame.ResolveReset(player, view);", source);
         Assert.Contains("player.HandleJumpInput();", source);
         Assert.Contains("let movementFootWorldY = player.y - Player.WorldOriginY;", source);
         Assert.Contains("view.HandleHorizontalInput(player, movementFootWorldY);", source);
@@ -4090,6 +4093,101 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void GameBoy_runner_uses_horizontal_speed_model_with_instant_turn()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("enum HorizontalMotion", source);
+        Assert.Contains("WalkSpeed = 8", source);
+        Assert.Contains("RunMaxSpeed = 16", source);
+        Assert.Contains("SubpixelScale = 8", source);
+        Assert.Contains("RunAcceleration = 1", source);
+        Assert.Contains("Friction = 2", source);
+
+        var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
+        var frameStart = source.IndexOf("class FrameState", StringComparison.Ordinal);
+        Assert.True(cameraStart >= 0);
+        Assert.True(frameStart > cameraStart);
+        var cameraBlock = source[cameraStart..frameStart];
+
+        Assert.Contains("Pixel speed;", cameraBlock);
+        Assert.Contains("Pixel direction;", cameraBlock);
+        Assert.Contains("Pixel movementRemainder;", cameraBlock);
+        Assert.Contains("inline void UpdateIntent(Pixel desiredDirection, Pixel grounded)", cameraBlock);
+        Assert.Contains("if (direction == HorizontalMotion.Right)", cameraBlock);
+        Assert.Contains("if (direction == HorizontalMotion.Left)", cameraBlock);
+        Assert.Contains("StartDirection(HorizontalMotion.Right);", cameraBlock);
+        Assert.Contains("StartDirection(HorizontalMotion.Left);", cameraBlock);
+        Assert.Contains("speed = HorizontalMotion.WalkSpeed;", cameraBlock);
+        Assert.Contains("movementRemainder += speed;", cameraBlock);
+        Assert.Contains("inline void ApplyMotionStep(Pixel wallProbeY)", cameraBlock);
+        Assert.Contains("movementRemainder -= HorizontalMotion.SubpixelScale;", cameraBlock);
+        Assert.Contains("MoveRightOnePixel(wallProbeY);", cameraBlock);
+        Assert.Contains("MoveLeftOnePixel(wallProbeY);", cameraBlock);
+
+        // The corrected model turns instantly: no skid/turn-friction that would let the actor walk backward.
+        Assert.DoesNotContain("ApplyHorizontalIntent", cameraBlock);
+        Assert.DoesNotContain("ApplyTurnFriction", cameraBlock);
+        Assert.DoesNotContain("ApplyRightIntent", cameraBlock);
+        Assert.DoesNotContain("ApplyLeftIntent", cameraBlock);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void GameBoy_runner_builds_run_speed_from_b_only_while_grounded()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        Assert.Contains("RunMaxSpeed = 16", source);
+        Assert.Contains("RunAcceleration = 1", source);
+
+        var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
+        var frameStart = source.IndexOf("class FrameState", StringComparison.Ordinal);
+        Assert.True(cameraStart >= 0);
+        Assert.True(frameStart > cameraStart);
+        var cameraBlock = source[cameraStart..frameStart];
+
+        Assert.Contains("inline void HoldDirection(Pixel grounded)", cameraBlock);
+        Assert.Contains("inline void AccelerateRun()", cameraBlock);
+        Assert.Contains("inline void DecelerateToWalk()", cameraBlock);
+        Assert.Contains("inline void ApplyFriction()", cameraBlock);
+        Assert.Contains("if (button_down(b) != 0)", cameraBlock);
+        Assert.Contains("AccelerateRun();", cameraBlock);
+        Assert.Contains("DecelerateToWalk();", cameraBlock);
+        Assert.Contains("speed += HorizontalMotion.RunAcceleration;", cameraBlock);
+        Assert.Contains("speed -= HorizontalMotion.Friction;", cameraBlock);
+        Assert.Contains("direction = HorizontalMotion.None;", cameraBlock);
+
+        // Run speed only builds while Mario has traction: acceleration and ground friction are gated by
+        // grounded, so holding B in the air preserves momentum instead of building extra speed.
+        Assert.Contains("HoldDirection(grounded);", cameraBlock);
+        Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
+        Assert.Contains("if (grounded != 0) {\n            if (button_down(b) != 0) {", cameraBlock);
+        Assert.DoesNotContain("ApplyGroundAcceleration", cameraBlock);
+
+        var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(Pixel wallProbeY)", StringComparison.Ordinal);
+        Assert.True(motionStart >= 0);
+        var horizontalStart = cameraBlock.IndexOf("inline void HandleHorizontalInput", motionStart, StringComparison.Ordinal);
+        Assert.True(horizontalStart > motionStart);
+        var motionBlock = cameraBlock[motionStart..horizontalStart];
+        Assert.Equal(2, CountOccurrences(motionBlock, "ApplyMotionStep(wallProbeY);"));
+        Assert.DoesNotContain("while (movementRemainder >= HorizontalMotion.SubpixelScale)", motionBlock);
+
+        // Regression guard: the camera is repositioned per single-pixel step (not once per frame), so a
+        // multi-pixel run frame still keeps the 1px-per-call camera follower in sync across the byte wrap.
+        Assert.Contains("x += 1;\n            camera.SetPosition(x, 0);", cameraBlock);
+        Assert.Contains("x -= 1;\n            camera.SetPosition(x, 0);", cameraBlock);
+        Assert.DoesNotContain("camera.SetPosition", motionBlock);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void GameBoy_runner_uses_lower_gravity_with_compensated_jump_height()
     {
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
@@ -4232,7 +4330,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("map_stream_column(streamColumn, rightSourceColumn, 11, 4);", source);
         Assert.DoesNotContain("map_stream_column(leftStreamColumn, leftSourceColumn, 11, 4);", source);
 
-        var resetStart = source.IndexOf("inline void ResolveReset(PlayerState player)", StringComparison.Ordinal);
+        var resetStart = source.IndexOf("inline void ResolveReset(PlayerState player, CameraState view)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
         var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
         Assert.True(resetEnd > resetStart);
@@ -4276,7 +4374,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        var resetStart = source.IndexOf("frame.ResolveReset(player);", StringComparison.Ordinal);
+        var resetStart = source.IndexOf("frame.ResolveReset(player, view);", StringComparison.Ordinal);
         var jumpStart = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
         var movementStart = source.IndexOf("view.HandleHorizontalInput(player, movementFootWorldY);", StringComparison.Ordinal);
 
@@ -4314,7 +4412,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("hazardHit", source);
         Assert.DoesNotContain("if (footTile != 3)", source);
 
-        var resetStart = source.IndexOf("inline void ResolveReset(PlayerState player)", StringComparison.Ordinal);
+        var resetStart = source.IndexOf("inline void ResolveReset(PlayerState player, CameraState view)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
         var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
         Assert.True(resetEnd > resetStart);
@@ -4324,7 +4422,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("animTick = 0;", resetBlock);
         Assert.DoesNotContain("view.moving = 0;", resetBlock);
 
-        var resetCall = source.IndexOf("frame.ResolveReset(player);", StringComparison.Ordinal);
+        var resetCall = source.IndexOf("frame.ResolveReset(player, view);", StringComparison.Ordinal);
         var jumpCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
         Assert.True(jumpCall > resetCall);
 
