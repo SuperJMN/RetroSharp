@@ -39,10 +39,14 @@ enum HorizontalMotion {
     Right = 1,
     Left = 2,
     WalkSpeed = 8,
-    RunMaxSpeed = 16,
+    RunMaxSpeed = 12,
     SubpixelScale = 8,
     RunAcceleration = 1,
     Friction = 2
+}
+
+enum RunAnimation {
+    CycleTicks = 144
 }
 
 enum CollisionFlag { None = 0, Solid = 1 }
@@ -144,7 +148,10 @@ class PlayerState {
 
     inline void UpdateRunAnimation(CameraState view) {
         if (view.moving != 0) {
-            animTick++;
+            animTick += view.speed;
+            if (animTick >= RunAnimation.CycleTicks) {
+                animTick -= RunAnimation.CycleTicks;
+            }
         } else {
             animTick = 0;
         }
@@ -356,12 +363,12 @@ void setup_video() {
     palette.Background(0, 0, 1, 2, 3);
     palette.Sprite(0, 0, 0, 1, 3);
     sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
-    animation.Clip(run, 1, 6, 6, 6);
+    animation.Clip(run, 1, 48, 48, 48);
     return;
 }
 
 void setup_audio() {
-    music.Asset(runner_theme, "music/delight.gbapu");
+    music.Asset(runner_theme, "music/sml2_track1.gbapu");
     audio.Init();
     music.Play(runner_theme);
     return;

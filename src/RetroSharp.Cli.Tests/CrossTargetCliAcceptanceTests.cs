@@ -47,7 +47,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
                 Assert.Equal(0, result.ExitCode);
                 Assert.True(File.Exists(output), result.CombinedOutput);
-                Assert.Equal(ExpectedRomSize(target), new FileInfo(output).Length);
+                Assert.Equal(ExpectedRomSize(sample.Path, target), new FileInfo(output).Length);
             }
         }
     }
@@ -150,8 +150,14 @@ public sealed class CrossTargetCliAcceptanceTests
 
     private static int ExpectedRomSize(string target)
     {
+        return ExpectedRomSize(string.Empty, target);
+    }
+
+    private static int ExpectedRomSize(string samplePath, string target)
+    {
         return target switch
         {
+            "gb" when samplePath == "samples/runner/runner.rs" => 65536,
             "gb" => 32768,
             "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),

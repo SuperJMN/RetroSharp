@@ -43,6 +43,8 @@ internal sealed class GameBoyTestCpu
 
     public byte Vram(ushort address) => vram[address - 0x8000];
 
+    public byte Oam(ushort address) => oam[address - 0xFE00];
+
     public GameBoyTestCpu(byte[] rom)
     {
         this.rom = rom;
@@ -102,6 +104,10 @@ internal sealed class GameBoyTestCpu
         0xE0 or 0xF0 => 12,                             // LDH (n),A / LDH A,(n)
         0xEA or 0xFA => 16,                             // LD (nn),A / LD A,(nn)
         0xC3 or 0xC2 or 0xCA or 0xD2 or 0xDA => 16,     // JP / JP cc (approx taken)
+        0xCD => 24,                                      // CALL nn
+        0xC9 => 16,                                      // RET
+        0xF5 => 16,                                      // PUSH AF
+        0xF1 => 12,                                      // POP AF
         0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
         0x16 or 0x26 or 0x2E or 0x06 or 0x0E or 0x1E or 0x3E => 8, // LD r,n
         0xC6 or 0xD6 or 0xE6 or 0xF6 or 0xEE or 0xFE => 8,        // ALU A,n
@@ -351,6 +357,10 @@ internal sealed class GameBoyTestCpu
             case 0xCA: { var t = NextWord(); if ((f & FlagZ) != 0) pc = t; break; } // JP Z,nn
             case 0xD2: { var t = NextWord(); if ((f & FlagC) == 0) pc = t; break; } // JP NC,nn
             case 0xDA: { var t = NextWord(); if ((f & FlagC) != 0) pc = t; break; } // JP C,nn
+            case 0xCD: { var t = NextWord(); PushWord(pc); pc = t; break; } // CALL nn
+            case 0xC9: pc = PopWord(); break;                 // RET
+            case 0xF5: PushWord((ushort)((a << 8) | f)); break; // PUSH AF
+            case 0xF1: { var v = PopWord(); a = (byte)(v >> 8); f = (byte)(v & 0xF0); break; } // POP AF
             case 0x18: { var off = (sbyte)NextByte(); pc = (ushort)(pc + off); break; } // JR e
             case 0x20: { var off = (sbyte)NextByte(); if ((f & FlagZ) == 0) pc = (ushort)(pc + off); break; } // JR NZ,e
             case 0x28: { var off = (sbyte)NextByte(); if ((f & FlagZ) != 0) pc = (ushort)(pc + off); break; } // JR Z,e
@@ -382,6 +392,19 @@ internal sealed class GameBoyTestCpu
             default:
                 throw new NotSupportedException($"Unsupported SM83 CB opcode 0x{opcode:X2}.");
         }
+    }
+
+    private void PushWord(ushort value)
+    {
+        WriteByte(--sp, (byte)(value >> 8));
+        WriteByte(--sp, (byte)value);
+    }
+
+    private ushort PopWord()
+    {
+        var low = ReadByte(sp++);
+        var high = ReadByte(sp++);
+        return (ushort)((high << 8) | low);
     }
 
     private byte Add(byte x, byte y)

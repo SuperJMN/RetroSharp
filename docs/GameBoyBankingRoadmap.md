@@ -1,18 +1,22 @@
 # Game Boy Banking Roadmap (code + data overlays)
 
-Status: **foundation started, feature incomplete.** This document records what is
-known, what is done, and a detailed, file-level plan to finish transparent MBC1
-banking so large programs (e.g. `samples/runner/runner.rs`) build and run on real
-DMG hardware.
+Status: **transparent MBC1 foundation with multi-bank code/data/audio overlays landed.**
+This document records what is known, what is done, and the remaining limits for
+transparent MBC1 banking. The current implementation lets large programs such as
+`samples/runner/runner.rs` build as an MBC1 ROM without source banking calls.
+Multi-bank subroutine bodies, read-only data, and banked music are handled by the
+generated runtime; linear main-flow fall-through across switchable program banks
+is handled by compiler-inserted continuations.
 
-The executable specification for the finished feature lives in
-`src/RetroSharp.GameBoy.Tests/GameBoyBankingRoadmapTests.cs` (skipped tests, each
-tagged with the phase it belongs to). Un-skip them as each phase lands.
+The executable specification for the landed foundation lives in
+`src/RetroSharp.GameBoy.Tests/GameBoyBankingRoadmapTests.cs`. Those tests are
+currently un-skipped and passing; add new failing/skipped specs before expanding
+the known limits below.
 
 ## 1. Problem statement
 
-`samples/runner/runner.rs` no longer fits a 32 KiB ROM-only cartridge and cannot be
-banked by the existing music-only banking, so it fails to build. Measured payload
+`samples/runner/runner.rs` no longer fits a 32 KiB ROM-only cartridge and could not
+be banked by the original music-only banking. Measured payload at roadmap creation
 (GB target, delight music):
 
 | Component | Bytes | Source of truth |
@@ -53,74 +57,76 @@ Key constants (`GameBoyRomBuilder.cs`): `BankSize=16384`, `FixedBankProgramStart
    (`MusicDataCursorBankAddress` etc.). Non-banked output is byte-identical. Extend this layout
    model to code and data.
 
-## 3. Done so far — Increment 1 (SDK-op pipeline foundation)
+## 3. Landed foundation
 
-- **NEW** `src/RetroSharp.Core/Sdk/Sdk2DProgram.cs`: `Sdk2DStreamItem` (`Op` | `CallSubroutine`)
-  and `Sdk2DProgram` (main stream + per-subroutine streams).
-- **REFACTOR** `src/RetroSharp.Sdk.Frontend/Sdk2DOperationCollector.cs`:
-  `CollectProgram(main, functions, target, subroutineNames)` collects a subroutined function's
-  body **once** (receiver params bound to their instance, value params left as local reads so
-  they can flow through slots) and turns its call sites into `CallSubroutine` markers. The
-  legacy `Collect(...)` is an empty-subroutine run flattened to ops → **byte-identical**.
-- **TESTS** `src/RetroSharp.GameBoy.Tests/Sdk2DProgramStreamTests.cs`: empty set ≡ legacy;
-  subroutined body collected once + call markers; no inlined copies.
-- **Validation:** full solution green except the pre-existing runner-overflow failures
-  (14 GB + 1 CLI), unchanged from baseline. Zero regressions.
+- **SDK operation streams:** `Sdk2DProgram` and `SdkAudioProgram` represent main streams plus
+  per-subroutine streams. The legacy collectors still flatten the no-subroutine path so existing
+  ROM-only output stays stable.
+- **GB subroutine emission:** `GameBoyVideoProgram` selects conservative runtime-work helpers
+  called more than once. The Game Boy backend emits one `user_fn_*` body with `CALL`/`RET`,
+  passes supported value parameters through fixed WRAM slots, and keeps return-value functions
+  and receiver-parameter methods inline for now.
+- **Stream-aware GB lowering:** the Game Boy SDK 2D/audio consumers enter the matching
+  subroutine stream while emitting a subroutine body and consume call markers at call sites.
+- **Runner-scale MBC1 layout:** when ROM-only output overflows, the builder first removes music
+  from the fixed payload, then reserves as many switchable program tail banks as the supported
+  MBC1 layout needs. Bank 0 holds `$0150-$3FFF`; switchable program banks hold contiguous
+  code/data tails at `$4000-$7FFF`; banked read-only data and music start after those program
+  banks. Fixed-bank helpers restore the current program bank after banked data or music access so
+  code in the tail window can continue executing.
+- **Bank-0 subroutine entry points:** when a banked layout has subroutines, calls go through
+  fixed-bank trampolines that save the caller's current program bank, select the callee body's
+  bank, `CALL` the shared body, restore the caller's bank, and `RET`. User source still calls
+  ordinary RetroSharp functions.
+- **Multi-bank subroutine overlays:** labels in switchable program banks resolve to
+  `0x4000+offset_within_bank`, and trampoline bank immediates are patched from the callee label's
+  actual bank.
+- **Multi-bank main-flow continuations:** when executable bytes approach the end of a switchable
+  program bank, `GbBuilder` reserves a small tail stub that loads the next program bank and jumps
+  to a bank-0 continuation helper. The helper updates `ProgramCurrentBankAddress`, selects the
+  next MBC1 bank, and jumps to `$4000`, so linear fall-through continues without source-level bank
+  calls.
+- **Banked read-only data:** when the linear banked program would need more than the supported
+  one switchable program tail bank, the builder can move read-only data into dedicated data-bank
+  placements. Startup-copied blobs (`tile_data`, `tilemap`, and `window_tilemap`) are copied from
+  their data bank into VRAM, and runtime map/background/flag row reads go through fixed-bank
+  helpers that select the data bank, read the byte, restore the program bank, and return.
+- **Banked audio entry points:** when a program tail bank and banked music are both present,
+  `music.Play(...)` and `audio.Update()` call fixed-bank helpers. Those helpers can switch to the
+  selected music bank, read or initialize music state, restore the program bank, and return, so
+  RetroSharp source never needs manual bank switching even when the call site lives in
+  `$4000-$7FFF`.
+- **Validation:** `GameBoyBankingRoadmapTests` are un-skipped, the runner builds as a 64 KiB MBC1
+  ROM, the test CPU supports `CALL`/`RET`, and Game Boy execution tests cross the bank boundary
+  without faulting.
 
-## 4. Roadmap (phased, each phase keeps the suite green)
+## 4. Known limits and follow-ups
 
-### Phase 0 — finish the SDK-op stream rework (started)
-- 0a. `SdkAudioOperationCollector`: same `CollectProgram`/per-subroutine-stream treatment.
-- 0b. `FrameBudgetCollector`: make subroutine-aware (don't double-count a shared body).
-- 0c. Thread a `Sdk2DProgram` (+ audio equivalent) through `GameBoyVideoProgram` /
-      `NesRom*` so targets can consume per-subroutine streams. Keep an empty-subroutine
-      path byte-identical.
-- Decide the **subroutine policy** (which functions become subroutines). Suggested:
-  non-`inline` functions become subroutines; `inline` stays inlined; `main` is the body.
-  Validate blast radius on existing byte-exact tests; if large, gate to non-`inline` AND
-  called ≥1 time, and update affected sample/test expectations deliberately.
+### Phase 0 accounting invariant
+- `FrameBudgetCollector` intentionally remains source-call-expanded instead of consuming the
+  shared emitted subroutine body. This keeps budget checks tied to actual runtime work per call
+  site; tests cover a streaming helper called twice in one frame still counting twice.
 
-### Phase 1 — calling convention (subroutine emission), bank 0 only
-- GB consumer becomes **stream-aware**: keep a stack of `(stream, cursor)`; consume the
-  active subroutine stream while emitting its body; consume the main stream otherwise.
-- For each subroutined function emit ONE body: `Label(user_fn_<name>)`, body, `RET (0xC9)`.
-  Bodies are emitted after the `forever` jump (unreachable by fall-through).
-- Calling convention:
-  - **Receiver params** → bound at compile time to the single instance (already handled by
-    `CollectProgram`'s receiver substitution); the body uses the instance's fixed addresses.
-    If a function is called on >1 distinct receiver, monomorphise per receiver, or fall back
-    to inline.
-  - **Value params** → one fixed WRAM slot per (function,param), pre-declared via
-    `DeclareVariable("<fn>__p_<name>")`. At each call site: `EmitExpressionToA(arg)` then
-    `StoreA(slot)`; then `CALL user_fn_<name>` (`JumpAbsolute(0xCD, label)`).
-  - **Return values** (value functions) → leave result in `A`; defer to a later sub-phase
-    (keep value-returning user functions inlined initially).
-  - **No recursion** (already enforced); nested subroutine calls are fine (distinct slots).
-- This shrinks code but the runner is still > 16 KB → still ROM-only-overflowing. Validate
-  with execution tests (subroutine called twice produces correct observable state).
+### Code overlay limits
+- Multi-bank subroutine bodies now work through bank-aware fixed trampolines.
+- Linear main-flow fall-through across switchable program banks now works through compiler-inserted
+  continuations and a fixed-bank helper.
+- Banked code must not switch away from the window it is executing from. New banked-data access
+  forms inside a banked body should call a bank-0 helper that saves/switches/reads/restores.
+- Non-linear control-flow edges still need care: a direct `JP`/`CALL` to code in a different
+  switchable bank is rejected explicitly unless it goes through a fixed-bank trampoline/helper.
 
-### Phase 2 — MBC1 code overlays + trampolines
-- Extend `GameBoyRomLayout`: place selected subroutine bodies (and `tile_data`/`tilemap`/map
-  data, Phase 3) into banks; keep bank 0 = startup + main loop + trampolines + bank-0 helpers.
-- Address resolution: the `GbBuilder` currently resolves all labels to `0x150+offset` (bank 0).
-  Add per-bank label spaces so banked bodies resolve to `0x4000+offset_within_bank` and the
-  builder records each label's bank. Calls to a banked body go through a **trampoline**:
-  save current ROM bank, switch to the body's bank, `CALL` it, restore bank, `RET`.
-- Banked code must not switch the window itself: any banked-data access inside a banked body
-  calls a **bank-0 helper** that saves/switches/reads/restores (mirror the music read helpers).
+### Helper hardening
+- Startup-copied tile/tilemap data and runtime map/background/flag row data now have explicit
+  data-bank metadata when the layout needs it.
+- If new read-only data categories are added, route any runtime reads through the same fixed-bank
+  helper pattern instead of switching banks inline from code that may live in `$4000-$7FFF`.
+- `music.Play(...)` and `audio.Update()` now use fixed-bank helpers in the tail-program/banked-music
+  layout. If future audio operations need to select ROM banks, route them through the same pattern.
 
-### Phase 3 — bank read-only data (tile/map) + music (already banked)
-- Startup copies (`tile_data`→`0x8000`, `tilemap`→`0x9800`): switch to the data bank, copy,
-  restore. One-time, simplest.
-- Gameplay map reads (`map_stream_column`, `camera.AabbTiles`/`AabbHitTop`,
-  `EmitCameraTileFlagsAt`, `map_tile_at`): route each read through a bank-0 helper that
-  switches to the map-data bank, reads, restores. Reuse the music transient-cursor-bank idea.
-
-### Phase 4 — wire the runner + validation
-- Make the runner build as MBC1; regenerate `samples/runner/runner.gb` (and confirm NES path).
-- Un-skip `GameBoyBankingRoadmapTests`; add SM83 execution tests (`GameBoyTestCpu`) for
-  bank-boundary crossings and banked-data reads, like `GameBoyMusicTests`.
-- Keep ROM-only output byte-identical for programs that fit (regression guard).
+### Validation invariants
+- Keep ROM-only output byte-identical for programs that fit.
+- Add tests for any future non-linear cross-bank control-flow design before implementing it.
 
 ## 5. Risks / invariants
 - **Byte-identical ROM-only output** for programs that don't need banking (many tests assert

@@ -18,14 +18,60 @@ public static class SdkAudioOperationCollector
         return collector.Operations;
     }
 
-    private sealed class Collector(IReadOnlyDictionary<string, FunctionSyntax> functions, string targetName)
+    public static SdkAudioProgram CollectProgram(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        IReadOnlySet<string> subroutineNames)
     {
-        private readonly List<SdkAudioOperation> operations = [];
-        private readonly HashSet<string> userFunctionCallStack = [];
+        var collector = new Collector(functions, targetName, subroutineNames);
+        collector.CollectBlock(mainBlock);
+        return collector.Program;
+    }
 
-        public IReadOnlyList<SdkAudioOperation> Operations => operations;
+    private sealed class Collector(
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        IReadOnlySet<string>? subroutineNames = null)
+    {
+        private readonly IReadOnlySet<string> subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
+        private readonly List<SdkAudioStreamItem> mainItems = [];
+        private readonly Dictionary<string, IReadOnlyList<SdkAudioStreamItem>> subroutineStreams = [];
+        private readonly HashSet<string> userFunctionCallStack = [];
+        private List<SdkAudioStreamItem> currentItems = [];
+
+        public IReadOnlyList<SdkAudioOperation> Operations => FlattenOps(mainItems);
+
+        public SdkAudioProgram Program => new(mainItems, subroutineStreams);
 
         public void CollectBlock(BlockSyntax block)
+        {
+            currentItems = mainItems;
+            CollectBlockCore(block);
+        }
+
+        private void AddOp(SdkAudioOperation operation)
+        {
+            currentItems.Add(new SdkAudioStreamItem.Op(operation));
+        }
+
+        private static IReadOnlyList<SdkAudioOperation> FlattenOps(IReadOnlyList<SdkAudioStreamItem> items)
+        {
+            var ops = new List<SdkAudioOperation>(items.Count);
+            foreach (var item in items)
+            {
+                if (item is not SdkAudioStreamItem.Op op)
+                {
+                    throw new InvalidOperationException("Cannot flatten an SDK audio stream that contains subroutine calls.");
+                }
+
+                ops.Add(op.Operation);
+            }
+
+            return ops;
+        }
+
+        private void CollectBlockCore(BlockSyntax block)
         {
             foreach (var statement in block.Statements)
             {
@@ -106,19 +152,19 @@ public static class SdkAudioOperationCollector
             {
                 case "audio_init":
                     SdkCallReader.RequireArity(call, 0);
-                    operations.Add(new SdkAudioOperation.InitializeAudio());
+                    AddOp(new SdkAudioOperation.InitializeAudio());
                     break;
                 case "audio_update":
                     SdkCallReader.RequireArity(call, 0);
-                    operations.Add(new SdkAudioOperation.UpdateAudio());
+                    AddOp(new SdkAudioOperation.UpdateAudio());
                     break;
                 case "music_play":
                     SdkCallReader.RequireArity(call, 1);
-                    operations.Add(new SdkAudioOperation.PlayMusic(SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "music_play argument 1")));
+                    AddOp(new SdkAudioOperation.PlayMusic(SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "music_play argument 1")));
                     break;
                 case "music_stop":
                     SdkCallReader.RequireArity(call, 0);
-                    operations.Add(new SdkAudioOperation.StopMusic());
+                    AddOp(new SdkAudioOperation.StopMusic());
                     break;
                 case "music_asset":
                     SdkCallReader.RequireArity(call, 2);
@@ -206,6 +252,12 @@ public static class SdkAudioOperationCollector
                 return;
             }
 
+            if (subroutineNames.Contains(call.Name))
+            {
+                CollectSubroutineCall(call, function);
+                return;
+            }
+
             if (!userFunctionCallStack.Add(function.Name))
             {
                 throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
@@ -213,12 +265,41 @@ public static class SdkAudioOperationCollector
 
             try
             {
-                CollectBlock(ParameterSubstitution.Substitute(function, call, targetName));
+                CollectBlockCore(ParameterSubstitution.Substitute(function, call, targetName));
             }
             finally
             {
                 userFunctionCallStack.Remove(function.Name);
             }
+        }
+
+        private void CollectSubroutineCall(FunctionCall call, FunctionSyntax function)
+        {
+            currentItems.Add(new SdkAudioStreamItem.CallSubroutine(call.Name));
+            if (subroutineStreams.ContainsKey(call.Name))
+            {
+                return;
+            }
+
+            if (!userFunctionCallStack.Add(function.Name))
+            {
+                throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
+            }
+
+            var bodyItems = new List<SdkAudioStreamItem>();
+            var previousItems = currentItems;
+            currentItems = bodyItems;
+            try
+            {
+                CollectBlockCore(ParameterSubstitution.Substitute(function, call, targetName));
+            }
+            finally
+            {
+                currentItems = previousItems;
+                userFunctionCallStack.Remove(function.Name);
+            }
+
+            subroutineStreams[call.Name] = bodyItems;
         }
 
         private bool CollectUserValueFunction(FunctionCall call)

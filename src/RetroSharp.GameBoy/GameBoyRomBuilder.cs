@@ -13,11 +13,20 @@ internal static class GameBoyRomBuilder
     private const int RomOnlySize = 32 * 1024;
     private const int BankSize = 16 * 1024;
     private const int FixedBankProgramStart = 0x0150;
+    private const int BankedWindowStart = 0x4000;
+    private const int BankedWindowEnd = 0x8000;
     private const int RomOnlyPayloadLimit = RomOnlySize - FixedBankProgramStart;
     private const int FixedBankPayloadLimit = BankSize - FixedBankProgramStart;
     internal const ushort RomBankSelectAddress = 0x2000;
+    internal const ushort ProgramCurrentBankAddress = 0xC11C;
     private const byte CartridgeTypeRomOnly = 0x00;
     private const byte CartridgeTypeMbc1 = 0x01;
+    private const string TileDataLabel = "tile_data";
+    private const string TileMapLabel = "tilemap";
+    private const string WindowTileMapLabel = "window_tilemap";
+    private const string ProgramStartLabel = "program_start";
+    private const string ProgramMainEndLabel = "program_main_end";
+    internal const string ProgramBankContinuationLabel = "program_bank_continue";
 
     private static readonly byte[] NintendoLogo =
     [
@@ -31,8 +40,9 @@ internal static class GameBoyRomBuilder
 
     public static byte[] Build(GameBoyVideoProgram program)
     {
+        var readOnlyData = BuildReadOnlyData(program);
         var romOnlyLayout = GameBoyRomLayout.RomOnly;
-        var builder = BuildProgram(program, romOnlyLayout);
+        var builder = BuildProgram(program, romOnlyLayout, readOnlyData);
         var programBytes = builder.Build();
         if (programBytes.Length <= RomOnlyPayloadLimit)
         {
@@ -43,18 +53,50 @@ internal static class GameBoyRomBuilder
             return rom;
         }
 
-        var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program);
-        builder = BuildProgram(program, bankedLayout);
+        var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData);
+        builder = BuildProgram(program, bankedLayout, readOnlyData);
         programBytes = builder.Build();
-        if (programBytes.Length > FixedBankPayloadLimit)
+        var programTailBanks = CalculateProgramTailBanks(programBytes.Length);
+        if (programTailBanks > 1)
+        {
+            bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, bankReadOnlyData: true);
+            builder = BuildProgram(program, bankedLayout, readOnlyData);
+            programBytes = builder.Build();
+            programTailBanks = CalculateProgramTailBanks(programBytes.Length);
+        }
+
+        EnsureSupportedProgramTailBanks(programTailBanks, bankedLayout.UsesBankedReadOnlyData);
+        if (programTailBanks != bankedLayout.ProgramTailBankCount)
+        {
+            bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(
+                program,
+                readOnlyData,
+                programTailBanks,
+                bankedLayout.UsesBankedReadOnlyData);
+            builder = BuildProgram(program, bankedLayout, readOnlyData);
+            programBytes = builder.Build();
+            programTailBanks = CalculateProgramTailBanks(programBytes.Length);
+            EnsureSupportedProgramTailBanks(programTailBanks, bankedLayout.UsesBankedReadOnlyData);
+        }
+
+        if (programBytes.Length > FixedBankPayloadLimit + (programTailBanks * BankSize))
         {
             throw new InvalidOperationException(
-                $"Generated Game Boy fixed-bank program is {programBytes.Length} bytes, but only {FixedBankPayloadLimit} bytes fit before banked data. Move more large data into banked ROM support.");
+                $"Generated Game Boy banked program is {programBytes.Length} bytes, but the current contiguous MBC1 program layout fits {FixedBankPayloadLimit + (programTailBanks * BankSize)} bytes.");
         }
+
+        ValidateBankedProgramShape(builder, programTailBanks);
 
         var bankedRom = new byte[bankedLayout.RomSize];
         WriteHeaderSkeleton(bankedRom, CartridgeTypeMbc1, bankedLayout.RomSizeCode);
-        programBytes.CopyTo(bankedRom, FixedBankProgramStart);
+        CopyProgramToBankedRom(programBytes, bankedRom, programTailBanks);
+
+        foreach (var placement in bankedLayout.ReadOnlyDataPlacements.Values)
+        {
+            var bankOffset = placement.Bank * BankSize;
+            var windowOffset = placement.Address - BankedWindowStart;
+            placement.Data.CopyTo(bankedRom.AsSpan(bankOffset + windowOffset, placement.Data.Length));
+        }
 
         foreach (var placement in bankedLayout.MusicPlacements.Values)
         {
@@ -73,10 +115,76 @@ internal static class GameBoyRomBuilder
         return bankedRom;
     }
 
-    private static GbBuilder BuildProgram(GameBoyVideoProgram program, GameBoyRomLayout layout)
+    private static int CalculateProgramTailBanks(int programLength)
+    {
+        if (programLength <= FixedBankPayloadLimit)
+        {
+            return 0;
+        }
+
+        return (programLength - FixedBankPayloadLimit + BankSize - 1) / BankSize;
+    }
+
+    private static void EnsureSupportedProgramTailBanks(int programTailBanks, bool bankedReadOnlyData)
+    {
+        if (programTailBanks <= GameBoyRomLayout.MaxProgramTailBankCount)
+        {
+            return;
+        }
+
+        var kind = bankedReadOnlyData ? "code" : "code/data";
+        throw new InvalidOperationException(
+            $"Generated Game Boy program needs {programTailBanks} switchable {kind} banks, but the current MBC1 foundation supports up to {GameBoyRomLayout.MaxProgramTailBankCount} switchable program banks.");
+    }
+
+    private static void CopyProgramToBankedRom(byte[] programBytes, byte[] bankedRom, int programTailBanks)
+    {
+        var fixedLength = Math.Min(programBytes.Length, FixedBankPayloadLimit);
+        programBytes.AsSpan(0, fixedLength).CopyTo(bankedRom.AsSpan(FixedBankProgramStart, fixedLength));
+
+        var sourceOffset = fixedLength;
+        for (var bank = 1; bank <= programTailBanks && sourceOffset < programBytes.Length; bank++)
+        {
+            var chunkLength = Math.Min(BankSize, programBytes.Length - sourceOffset);
+            programBytes.AsSpan(sourceOffset, chunkLength).CopyTo(bankedRom.AsSpan(bank * BankSize, chunkLength));
+            sourceOffset += chunkLength;
+        }
+    }
+
+    private static void ValidateBankedProgramShape(GbBuilder builder, int programTailBanks)
+    {
+        if (programTailBanks == 0)
+        {
+            return;
+        }
+
+        if (builder.TryLabelOffset(ProgramStartLabel, out var programStartOffset) && programStartOffset > FixedBankPayloadLimit)
+        {
+            throw new InvalidOperationException(
+                $"Generated Game Boy fixed-bank helpers are {programStartOffset} bytes, but only {FixedBankPayloadLimit} bytes fit in bank 0 before the switchable window.");
+        }
+
+        builder.LabelOffset(ProgramMainEndLabel);
+    }
+
+    private static GbBuilder BuildProgram(
+        GameBoyVideoProgram program,
+        GameBoyRomLayout layout,
+        IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData)
     {
         var builder = new GbBuilder();
-        var tileData = BuildTileData(program);
+        foreach (var placement in layout.ReadOnlyDataPlacements.Values)
+        {
+            builder.ExternalLabel(placement.Label, placement.Address);
+        }
+
+        if (layout.ProgramTailBankCount > 0)
+        {
+            builder.EnableBankedAddressing(FixedBankPayloadLimit, BankSize);
+        }
+
+        var readOnlyDataByLabel = readOnlyData.ToDictionary(data => data.Label);
+        var tileData = readOnlyDataByLabel[TileDataLabel].Data;
 
         builder.Emit(0xF3);                         // DI
         builder.Emit(0x31, 0xFE, 0xFF);             // LD SP,$FFFE
@@ -104,22 +212,12 @@ internal static class GameBoyRomBuilder
             builder.StoreHighRamA(0x4B);            // WX=7 maps to screen X=0
         }
 
-        builder.LoadHl(0x8000);
-        builder.LoadDe("tile_data");
-        builder.LoadBc((ushort)tileData.Length);
-        EmitCopyLoop(builder, "copy_tiles");
-
-        builder.LoadHl(0x9800);
-        builder.LoadDe("tilemap");
-        builder.LoadBc(1024);
-        EmitCopyLoop(builder, "copy_tilemap");
+        EmitStartupCopy(builder, layout, 0x8000, TileDataLabel, tileData.Length, "copy_tiles");
+        EmitStartupCopy(builder, layout, 0x9800, TileMapLabel, 1024, "copy_tilemap");
 
         if (program.UsesWindowHud)
         {
-            builder.LoadHl(0x9C00);
-            builder.LoadDe("window_tilemap");
-            builder.LoadBc(1024);
-            EmitCopyLoop(builder, "copy_window_tilemap");
+            EmitStartupCopy(builder, layout, 0x9C00, WindowTileMapLabel, 1024, "copy_window_tilemap");
         }
 
         EmitClearOam(builder, "clear_oam");
@@ -127,19 +225,43 @@ internal static class GameBoyRomBuilder
         builder.Emit(0x3E, (byte)(program.UsesWindowHud ? 0xF7 : 0x97));
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
 
-        new GameBoyRuntimeCompiler(builder, program, layout).Emit(program.MainBlock);
+        var runtime = new GameBoyRuntimeCompiler(builder, program, layout);
+        runtime.EmitProgramBankInitialization();
+        var usesBankContinuationHelper = layout.ProgramTailBankCount > 0;
+        if (usesBankContinuationHelper || runtime.UsesReadOnlyDataHelpers || runtime.UsesAudioHelpers || runtime.UsesSubroutineTrampolines)
+        {
+            builder.JumpAbsolute(ProgramStartLabel);
+            if (usesBankContinuationHelper)
+            {
+                EmitProgramBankContinuationHelper(builder);
+            }
+
+            runtime.EmitReadOnlyDataHelpers();
+            runtime.EmitAudioHelpers();
+            runtime.EmitSubroutineTrampolines();
+            builder.Label(ProgramStartLabel);
+        }
+
+        runtime.EmitMain(program.MainBlock);
 
         builder.Label("forever");
         builder.JumpRelative(0x18, "forever");     // JR forever
+        builder.Label(ProgramMainEndLabel);
+        runtime.EmitSubroutines();
+        runtime.EnsureAllStreamsConsumed();
+        builder.DisableBankContinuationStubs();
 
-        builder.Label("tile_data");
-        builder.Emit(tileData);
-        builder.Label("tilemap");
-        builder.Emit(program.TileMap);
-        if (program.UsesWindowHud)
+        if (!layout.UsesBankedReadOnlyData)
         {
-            builder.Label("window_tilemap");
-            builder.Emit(program.WindowTileMap);
+            builder.Label(TileDataLabel);
+            builder.Emit(tileData);
+            builder.Label(TileMapLabel);
+            builder.Emit(program.TileMap);
+            if (program.UsesWindowHud)
+            {
+                builder.Label(WindowTileMapLabel);
+                builder.Emit(program.WindowTileMap);
+            }
         }
 
         EmitMapData(builder, program);
@@ -149,6 +271,106 @@ internal static class GameBoyRomBuilder
         }
 
         return builder;
+    }
+
+    private static void EmitProgramBankContinuationHelper(GbBuilder builder)
+    {
+        builder.Label(ProgramBankContinuationLabel);
+        builder.StoreA(ProgramCurrentBankAddress);
+        builder.StoreA(RomBankSelectAddress);
+        builder.Emit(0xC3, (byte)(BankedWindowStart & 0xFF), (byte)(BankedWindowStart >> 8)); // JP $4000
+    }
+
+    private static IReadOnlyList<GameBoyReadOnlyDataBlob> BuildReadOnlyData(GameBoyVideoProgram program)
+    {
+        var data = new List<GameBoyReadOnlyDataBlob>
+        {
+            new(TileDataLabel, BuildTileData(program)),
+            new(TileMapLabel, program.TileMap),
+        };
+
+        if (program.UsesWindowHud)
+        {
+            data.Add(new GameBoyReadOnlyDataBlob(WindowTileMapLabel, program.WindowTileMap));
+        }
+
+        AddMapReadOnlyData(data, program);
+        return data;
+    }
+
+    private static void AddMapReadOnlyData(List<GameBoyReadOnlyDataBlob> data, GameBoyVideoProgram program)
+    {
+        if (program.MapColumnHeight == 0)
+        {
+            return;
+        }
+
+        var columnCount = program.MapColumns.Keys.Max() + 1;
+        for (var row = 0; row < program.MapColumnHeight; row++)
+        {
+            data.Add(new GameBoyReadOnlyDataBlob(MapRowLabel(row), BuildMapRow(program.MapColumns, columnCount, row)));
+        }
+
+        for (var row = 0; row < program.BackgroundStreamHeight; row++)
+        {
+            data.Add(new GameBoyReadOnlyDataBlob(BackgroundRowLabel(row), BuildMapRow(program.BackgroundColumns, columnCount, row)));
+        }
+
+        if (program.MapFlagColumnHeight == 0)
+        {
+            return;
+        }
+
+        var flagColumnCount = program.MapFlagColumns.Keys.Max() + 1;
+        for (var row = 0; row < program.MapFlagColumnHeight; row++)
+        {
+            data.Add(new GameBoyReadOnlyDataBlob(MapFlagRowLabel(row), BuildMapRow(program.MapFlagColumns, flagColumnCount, row)));
+        }
+    }
+
+    private static byte[] BuildMapRow(SortedDictionary<int, byte[]> columns, int columnCount, int row)
+    {
+        var result = new byte[columnCount];
+        for (var column = 0; column < columnCount; column++)
+        {
+            result[column] = columns.TryGetValue(column, out var tiles) ? tiles[row] : (byte)0;
+        }
+
+        return result;
+    }
+
+    private static void EmitStartupCopy(
+        GbBuilder builder,
+        GameBoyRomLayout layout,
+        ushort destination,
+        string sourceLabel,
+        int length,
+        string copyLabel)
+    {
+        if (length is < 0 or > ushort.MaxValue)
+        {
+            throw new InvalidOperationException($"Game Boy startup data '{sourceLabel}' is too large to copy in one block.");
+        }
+
+        if (layout.TryReadOnlyDataPlacement(sourceLabel, out var placement))
+        {
+            EmitSelectRomBank(builder, placement.Bank);
+            builder.LoadDe(placement.Address);
+        }
+        else
+        {
+            builder.LoadDe(sourceLabel);
+        }
+
+        builder.LoadHl(destination);
+        builder.LoadBc((ushort)length);
+        EmitCopyLoop(builder, copyLabel);
+    }
+
+    private static void EmitSelectRomBank(GbBuilder builder, byte bank)
+    {
+        builder.LoadAImmediate(bank);
+        builder.StoreA(RomBankSelectAddress);
     }
 
     private static void EmitMapData(GbBuilder builder, GameBoyVideoProgram program)
@@ -427,33 +649,53 @@ internal static class GameBoyRomBuilder
 internal sealed class GameBoyRomLayout
 {
     private const int BankSize = 16 * 1024;
+    private const int BankedWindowStart = 0x4000;
+    private const int BankedWindowEnd = 0x8000;
     private const int MaxSimpleMbc1BankCount = 32;
+    public const int MaxProgramTailBankCount = MaxSimpleMbc1BankCount - 1;
 
     private GameBoyRomLayout(
         bool usesBankedMusic,
+        int programTailBankCount,
         int romSize,
         byte romSizeCode,
+        IReadOnlyDictionary<string, GameBoyReadOnlyDataPlacement> readOnlyDataPlacements,
         IReadOnlyDictionary<string, GameBoyBankedMusicPlacement> musicPlacements)
     {
         UsesBankedMusic = usesBankedMusic;
+        ProgramTailBankCount = programTailBankCount;
         RomSize = romSize;
         RomSizeCode = romSizeCode;
+        ReadOnlyDataPlacements = readOnlyDataPlacements;
         MusicPlacements = musicPlacements;
     }
 
     public static GameBoyRomLayout RomOnly { get; } = new(
         usesBankedMusic: false,
+        programTailBankCount: 0,
         romSize: 32 * 1024,
         romSizeCode: 0x00,
+        readOnlyDataPlacements: new Dictionary<string, GameBoyReadOnlyDataPlacement>(),
         musicPlacements: new Dictionary<string, GameBoyBankedMusicPlacement>());
 
     public bool UsesBankedMusic { get; }
+
+    public int ProgramTailBankCount { get; }
 
     public int RomSize { get; }
 
     public byte RomSizeCode { get; }
 
+    public bool UsesBankedReadOnlyData => ReadOnlyDataPlacements.Count != 0;
+
+    public IReadOnlyDictionary<string, GameBoyReadOnlyDataPlacement> ReadOnlyDataPlacements { get; }
+
     public IReadOnlyDictionary<string, GameBoyBankedMusicPlacement> MusicPlacements { get; }
+
+    public bool TryReadOnlyDataPlacement(string label, out GameBoyReadOnlyDataPlacement placement)
+    {
+        return ReadOnlyDataPlacements.TryGetValue(label, out placement!);
+    }
 
     public GameBoyBankedMusicPlacement MusicPlacement(string name)
     {
@@ -462,10 +704,46 @@ internal sealed class GameBoyRomLayout
             : throw new InvalidOperationException($"Unknown banked Game Boy music asset '{name}'.");
     }
 
-    public static GameBoyRomLayout CreateBankedMusicLayout(GameBoyVideoProgram program)
+    public static GameBoyRomLayout CreateBankedMusicLayout(
+        GameBoyVideoProgram program,
+        IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData,
+        int programTailBankCount = 0,
+        bool bankReadOnlyData = false)
     {
+        var readOnlyPlacements = new Dictionary<string, GameBoyReadOnlyDataPlacement>();
         var placements = new Dictionary<string, GameBoyBankedMusicPlacement>();
-        var nextBank = 1;
+        var nextBank = 1 + programTailBankCount;
+        var nextAddress = BankedWindowStart;
+        if (bankReadOnlyData)
+        {
+            foreach (var data in readOnlyData)
+            {
+                if (data.Data.Length > BankSize)
+                {
+                    throw new InvalidOperationException(
+                        $"Game Boy read-only data block '{data.Label}' is {data.Data.Length} bytes, which exceeds one 16 KiB MBC1 bank.");
+                }
+
+                if (nextAddress + data.Data.Length > BankedWindowEnd)
+                {
+                    nextBank++;
+                    nextAddress = BankedWindowStart;
+                }
+
+                readOnlyPlacements[data.Label] = new GameBoyReadOnlyDataPlacement(
+                    data.Label,
+                    (byte)nextBank,
+                    (ushort)nextAddress,
+                    data.Data);
+                nextAddress += data.Data.Length;
+            }
+
+            if (readOnlyPlacements.Count != 0)
+            {
+                nextBank++;
+            }
+        }
+
         foreach (var asset in program.MusicAssetsInLoadOrder)
         {
             placements[asset.Name] = new GameBoyBankedMusicPlacement(asset.Name, (byte)nextBank, 0x4000, asset.Data);
@@ -481,8 +759,10 @@ internal sealed class GameBoyRomLayout
 
         return new GameBoyRomLayout(
             usesBankedMusic: placements.Count != 0,
+            programTailBankCount: programTailBankCount,
             romSize: bankCount * BankSize,
             romSizeCode: ToRomSizeCode(bankCount),
+            readOnlyDataPlacements: readOnlyPlacements,
             musicPlacements: placements);
     }
 
@@ -507,6 +787,10 @@ internal sealed class GameBoyRomLayout
         _ => throw new InvalidOperationException($"Unsupported Game Boy ROM bank count '{bankCount}'."),
     };
 }
+
+internal sealed record GameBoyReadOnlyDataBlob(string Label, byte[] Data);
+
+internal sealed record GameBoyReadOnlyDataPlacement(string Label, byte Bank, ushort Address, byte[] Data);
 
 internal sealed record GameBoyBankedMusicPlacement(string Name, byte Bank, ushort Address, byte[] Data);
 
@@ -584,8 +868,8 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly GameBoyRomLayout romLayout;
-    private readonly IReadOnlyList<Sdk2DOperation> sdkOperations;
-    private readonly IReadOnlyList<SdkAudioOperation> sdkAudioOperations;
+    private readonly Sdk2DStreamReader sdkOperations;
+    private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
@@ -593,8 +877,6 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly Stack<LoopTarget> loopTargets = [];
     private int nextHardwareSprite;
     private ushort nextVariableAddress = FirstVariableAddress;
-    private int nextSdkOperation;
-    private int nextSdkAudioOperation;
     private int? cameraMapWidth;
     private int? cameraStreamY;
     private int? cameraStreamHeight;
@@ -604,14 +886,172 @@ internal sealed class GameBoyRuntimeCompiler
         this.builder = builder;
         this.program = program;
         this.romLayout = romLayout ?? GameBoyRomLayout.RomOnly;
-        sdkOperations = program.SdkOperations;
-        sdkAudioOperations = program.SdkAudioOperations;
+        sdkOperations = Sdk2DStreamReader.ForProgram(program);
+        sdkAudioOperations = SdkAudioStreamReader.ForProgram(program);
     }
 
     public void Emit(BlockSyntax block)
     {
+        EmitMain(block);
+        EmitSubroutines();
+        EnsureAllStreamsConsumed();
+    }
+
+    public void EmitMain(BlockSyntax block)
+    {
         EmitInputStateInitialization();
         EmitBlock(block);
+    }
+
+    public bool UsesSubroutineTrampolines => romLayout.ProgramTailBankCount > 0 && program.SubroutineNames.Count != 0;
+
+    public bool UsesReadOnlyDataHelpers => romLayout.ReadOnlyDataPlacements.Keys.Any(IsRuntimeReadOnlyDataLabel);
+
+    public bool UsesAudioUpdateHelper =>
+        romLayout.ProgramTailBankCount > 0
+        && romLayout.UsesBankedMusic
+        && program.SdkAudioOperations.Any(operation => operation is SdkAudioOperation.UpdateAudio);
+
+    public bool UsesMusicPlayHelpers =>
+        romLayout.ProgramTailBankCount > 0
+        && romLayout.UsesBankedMusic
+        && program.SdkAudioOperations.Any(operation => operation is SdkAudioOperation.PlayMusic);
+
+    public bool UsesAudioHelpers => UsesAudioUpdateHelper || UsesMusicPlayHelpers;
+
+    public void EmitProgramBankInitialization()
+    {
+        if (romLayout.ProgramTailBankCount == 0)
+        {
+            return;
+        }
+
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+        EmitSelectRomBankFromA();
+    }
+
+    public void EmitReadOnlyDataHelpers()
+    {
+        if (!UsesReadOnlyDataHelpers)
+        {
+            return;
+        }
+
+        foreach (var placement in romLayout.ReadOnlyDataPlacements.Values)
+        {
+            if (!IsRuntimeReadOnlyDataLabel(placement.Label))
+            {
+                continue;
+            }
+
+            builder.Label(ReadOnlyDataByteReaderLabel(placement.Label));
+            builder.LoadEFromA();
+            builder.LoadDImmediate(0);
+            builder.LoadAImmediate(placement.Bank);
+            EmitSelectRomBankFromA();
+            builder.LoadHl(placement.Address);
+            builder.AddHlDe();
+            builder.LoadAFromHl();
+            if (romLayout.ProgramTailBankCount > 0)
+            {
+                builder.LoadBFromA();
+                builder.LoadA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+                EmitSelectRomBankFromA();
+                builder.LoadAFromB();
+            }
+
+            builder.Emit(0xC9); // RET
+        }
+    }
+
+    public void EmitAudioHelpers()
+    {
+        EmitMusicPlayHelpers();
+        EmitAudioUpdateHelper();
+    }
+
+    private void EmitMusicPlayHelpers()
+    {
+        if (!UsesMusicPlayHelpers)
+        {
+            return;
+        }
+
+        foreach (var themeId in program.SdkAudioOperations.OfType<SdkAudioOperation.PlayMusic>().Select(play => play.ThemeId).Distinct())
+        {
+            builder.Label(MusicPlayHelperLabel(themeId));
+            EmitPlayMusic(new SdkAudioOperation.PlayMusic(themeId));
+            EmitRestoreProgramTailBank();
+            builder.Emit(0xC9); // RET
+        }
+    }
+
+    private void EmitAudioUpdateHelper()
+    {
+        if (!UsesAudioUpdateHelper)
+        {
+            return;
+        }
+
+        builder.Label(AudioUpdateHelperLabel);
+        EmitUpdateAudio();
+        EmitRestoreProgramTailBank();
+        builder.Emit(0xC9); // RET
+    }
+
+    public void EmitSubroutineTrampolines()
+    {
+        if (!UsesSubroutineTrampolines)
+        {
+            return;
+        }
+
+        foreach (var name in program.SubroutineNames)
+        {
+            builder.Label(SubroutineTrampolineLabel(name));
+            builder.LoadA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+            builder.Emit(0xF5); // PUSH AF
+            builder.LoadAImmediateBankOf(SubroutineLabel(name));
+            builder.StoreA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+            EmitSelectRomBankFromA();
+            builder.JumpAbsolute(0xCD, SubroutineLabel(name)); // CALL nn
+            builder.Emit(0xF1); // POP AF
+            builder.StoreA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+            EmitSelectRomBankFromA();
+            builder.Emit(0xC9); // RET
+        }
+    }
+
+    public void EmitSubroutines()
+    {
+        foreach (var name in program.SubroutineNames)
+        {
+            if (!program.Functions.TryGetValue(name, out var function))
+            {
+                continue;
+            }
+
+            builder.Label(SubroutineLabel(name));
+            sdkOperations.EnterSubroutine(name);
+            sdkAudioOperations.EnterSubroutine(name);
+            var aliases = PushSubroutineParameterAliases(function);
+            try
+            {
+                EmitBlock(SubroutineBody(function));
+                sdkOperations.LeaveSubroutine(name);
+                sdkAudioOperations.LeaveSubroutine(name);
+                builder.Emit(0xC9); // RET
+            }
+            finally
+            {
+                PopSubroutineParameterAliases(aliases);
+            }
+        }
+    }
+
+    public void EnsureAllStreamsConsumed()
+    {
         EnsureAllSdkOperationsConsumed();
         EnsureAllSdkAudioOperationsConsumed();
     }
@@ -1169,12 +1609,7 @@ internal sealed class GameBoyRuntimeCompiler
     private T ConsumeSdkOperation<T>(string callName)
         where T : Sdk2DOperation
     {
-        if (nextSdkOperation >= sdkOperations.Count)
-        {
-            throw new InvalidOperationException($"Game Boy SDK call '{callName}' has no collected SDK operation.");
-        }
-
-        var operation = sdkOperations[nextSdkOperation++];
+        var operation = sdkOperations.ConsumeOperation(callName);
         if (operation is T typed)
         {
             return typed;
@@ -1187,18 +1622,27 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitNextSdkAudioOperation<T>(string callName)
         where T : SdkAudioOperation
     {
-        EmitSdkAudioOperation(ConsumeSdkAudioOperation<T>(callName));
+        var operation = ConsumeSdkAudioOperation<T>(callName);
+        if (operation is SdkAudioOperation.PlayMusic play && UsesMusicPlayHelpers)
+        {
+            builder.JumpAbsolute(0xCD, MusicPlayHelperLabel(play.ThemeId)); // CALL nn
+            return;
+        }
+
+        if (operation is SdkAudioOperation.UpdateAudio && UsesAudioUpdateHelper)
+        {
+            builder.JumpAbsolute(0xCD, AudioUpdateHelperLabel); // CALL nn
+            return;
+        }
+
+        EmitSdkAudioOperation(operation);
+        EmitRestoreProgramTailBank();
     }
 
     private T ConsumeSdkAudioOperation<T>(string callName)
         where T : SdkAudioOperation
     {
-        if (nextSdkAudioOperation >= sdkAudioOperations.Count)
-        {
-            throw new InvalidOperationException($"Game Boy SDK audio call '{callName}' has no collected SDK audio operation.");
-        }
-
-        var operation = sdkAudioOperations[nextSdkAudioOperation++];
+        var operation = sdkAudioOperations.ConsumeOperation(callName);
         if (operation is T typed)
         {
             return typed;
@@ -1210,26 +1654,23 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EnsureAllSdkOperationsConsumed()
     {
-        if (nextSdkOperation == sdkOperations.Count)
-        {
-            return;
-        }
-
-        var operation = sdkOperations[nextSdkOperation];
-        throw new InvalidOperationException(
-            $"Game Boy runtime consumed {nextSdkOperation} of {sdkOperations.Count} SDK operations; next operation is {operation.GetType().Name}.");
+        sdkOperations.EnsureAllConsumed("Game Boy runtime");
     }
 
     private void EnsureAllSdkAudioOperationsConsumed()
     {
-        if (nextSdkAudioOperation == sdkAudioOperations.Count)
+        sdkAudioOperations.EnsureAllConsumed("Game Boy runtime");
+    }
+
+    private void EmitRestoreProgramTailBank()
+    {
+        if (romLayout.ProgramTailBankCount == 0)
         {
             return;
         }
 
-        var operation = sdkAudioOperations[nextSdkAudioOperation];
-        throw new InvalidOperationException(
-            $"Game Boy runtime consumed {nextSdkAudioOperation} of {sdkAudioOperations.Count} SDK audio operations; next operation is {operation.GetType().Name}.");
+        builder.LoadA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+        EmitSelectRomBankFromA();
     }
 
     internal void EmitWaitFrame()
@@ -1819,6 +2260,12 @@ internal sealed class GameBoyRuntimeCompiler
             return false;
         }
 
+        if (program.SubroutineNames.Contains(function.Name))
+        {
+            EmitUserSubroutineCall(call, function);
+            return true;
+        }
+
         if (!userFunctionCallStack.Add(function.Name))
         {
             throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
@@ -1834,6 +2281,188 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         return true;
+    }
+
+    private void EmitUserSubroutineCall(FunctionCall call, FunctionSyntax function)
+    {
+        var arguments = BindCallArguments(function, call);
+        foreach (var parameter in function.Parameters)
+        {
+            if (parameter.IsReceiver)
+            {
+                throw new InvalidOperationException($"Game Boy subroutine '{function.Name}' cannot use receiver parameter '{parameter.Name}' yet.");
+            }
+
+            var slot = EnsureSubroutineParameterSlot(function, parameter);
+            EmitExpressionToA(arguments[parameter.Name]);
+            builder.StoreA(slot);
+        }
+
+        sdkOperations.ConsumeSubroutineCall(function.Name);
+        sdkAudioOperations.ConsumeSubroutineCall(function.Name);
+        builder.JumpAbsolute(0xCD, SubroutineEntryLabel(function.Name)); // CALL nn
+    }
+
+    private string SubroutineEntryLabel(string functionName)
+    {
+        return UsesSubroutineTrampolines
+            ? SubroutineTrampolineLabel(functionName)
+            : SubroutineLabel(functionName);
+    }
+
+    private static string SubroutineLabel(string functionName) => $"user_fn_{functionName}";
+
+    private static string SubroutineTrampolineLabel(string functionName) => $"user_fn_{functionName}_trampoline";
+
+    private static bool IsRuntimeReadOnlyDataLabel(string label)
+    {
+        return label.StartsWith("map_row_", StringComparison.Ordinal)
+               || label.StartsWith("background_stream_row_", StringComparison.Ordinal)
+               || label.StartsWith("map_flags_row_", StringComparison.Ordinal);
+    }
+
+    private static string ReadOnlyDataByteReaderLabel(string label) => $"read_data_{label}";
+
+    private static string MusicPlayHelperLabel(string themeId) => $"music_play_fixed_{themeId}";
+
+    private const string AudioUpdateHelperLabel = "audio_update_fixed_helper";
+
+    private BlockSyntax SubroutineBody(FunctionSyntax function)
+    {
+        var slotArguments = function.Parameters
+            .Select(parameter => (ExpressionSyntax)new IdentifierSyntax(SubroutineParameterSlotName(function, parameter)))
+            .ToArray();
+        return ParameterSubstitution.Substitute(function, new FunctionCall(function.Name, slotArguments), "Game Boy");
+    }
+
+    private ushort EnsureSubroutineParameterSlot(FunctionSyntax function, ParameterSyntax parameter)
+    {
+        if (!IsByteBackedLocalType(parameter.Type))
+        {
+            throw new InvalidOperationException($"Game Boy subroutine '{function.Name}' parameter '{parameter.Name}' has unsupported type '{parameter.Type}'.");
+        }
+
+        var name = SubroutineParameterSlotName(function, parameter);
+        return variables.TryGetValue(name, out var address)
+            ? address
+            : DeclareVariable(name);
+    }
+
+    private IReadOnlyList<(string Name, bool HadPrevious, ushort PreviousAddress)> PushSubroutineParameterAliases(FunctionSyntax function)
+    {
+        var aliases = new List<(string Name, bool HadPrevious, ushort PreviousAddress)>();
+        foreach (var parameter in function.Parameters)
+        {
+            if (parameter.IsReceiver)
+            {
+                continue;
+            }
+
+            var hadPrevious = variables.TryGetValue(parameter.Name, out var previousAddress);
+            aliases.Add((parameter.Name, hadPrevious, previousAddress));
+            variables[parameter.Name] = EnsureSubroutineParameterSlot(function, parameter);
+        }
+
+        return aliases;
+    }
+
+    private void PopSubroutineParameterAliases(IReadOnlyList<(string Name, bool HadPrevious, ushort PreviousAddress)> aliases)
+    {
+        for (var index = aliases.Count - 1; index >= 0; index--)
+        {
+            var alias = aliases[index];
+            if (alias.HadPrevious)
+            {
+                variables[alias.Name] = alias.PreviousAddress;
+            }
+            else
+            {
+                variables.Remove(alias.Name);
+            }
+        }
+    }
+
+    private static string SubroutineParameterSlotName(FunctionSyntax function, ParameterSyntax parameter)
+    {
+        return $"{function.Name}__p_{parameter.Name}";
+    }
+
+    private static IReadOnlyDictionary<string, ExpressionSyntax> BindCallArguments(FunctionSyntax function, FunctionCall call)
+    {
+        var parameters = function.Parameters.ToList();
+        var parameterNames = parameters.Select(parameter => parameter.Name).ToHashSet(StringComparer.Ordinal);
+        var arguments = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+        var positionalIndex = 0;
+        var namedArgumentSeen = false;
+
+        foreach (var argument in call.Parameters)
+        {
+            if (argument is NamedArgumentSyntax namedArgument)
+            {
+                namedArgumentSeen = true;
+                if (!parameterNames.Contains(namedArgument.Name))
+                {
+                    throw new InvalidOperationException($"Game Boy target call '{call.Name}' has no parameter named '{namedArgument.Name}'.");
+                }
+
+                if (!arguments.TryAdd(namedArgument.Name, namedArgument.Expression))
+                {
+                    throw new InvalidOperationException($"Game Boy target call '{call.Name}' supplies parameter '{namedArgument.Name}' more than once.");
+                }
+
+                continue;
+            }
+
+            if (namedArgumentSeen)
+            {
+                throw new InvalidOperationException($"Game Boy target call '{call.Name}' cannot use positional arguments after named arguments.");
+            }
+
+            if (positionalIndex >= parameters.Count)
+            {
+                throw new InvalidOperationException($"Game Boy target expected at most {parameters.Count} argument(s) for '{call.Name}', but got {call.Parameters.Count()}.");
+            }
+
+            arguments.Add(parameters[positionalIndex].Name, argument);
+            positionalIndex++;
+        }
+
+        var substitutions = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+        foreach (var parameter in parameters)
+        {
+            if (arguments.TryGetValue(parameter.Name, out var argument))
+            {
+                substitutions.Add(parameter.Name, argument);
+                continue;
+            }
+
+            if (!parameter.DefaultValue.HasValue)
+            {
+                throw new InvalidOperationException($"Game Boy target expected argument for '{call.Name}' because parameter '{parameter.Name}' has no default value.");
+            }
+
+            var defaultValue = ConstantFolder.FoldConstants(SubstituteDefaultValue(parameter.DefaultValue.Value, substitutions));
+            substitutions.Add(parameter.Name, defaultValue);
+        }
+
+        return substitutions;
+    }
+
+    private static ExpressionSyntax SubstituteDefaultValue(
+        ExpressionSyntax expression,
+        IReadOnlyDictionary<string, ExpressionSyntax> substitutions)
+    {
+        return expression switch
+        {
+            IdentifierSyntax identifier when substitutions.TryGetValue(identifier.Identifier, out var value) => value,
+            BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
+                SubstituteDefaultValue(binary.Left, substitutions),
+                SubstituteDefaultValue(binary.Right, substitutions),
+                binary.Operator),
+            CastSyntax cast => new CastSyntax(cast.Type, SubstituteDefaultValue(cast.Expression, substitutions)),
+            NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, SubstituteDefaultValue(namedArgument.Expression, substitutions)),
+            _ => expression,
+        };
     }
 
     private bool TryEmitUserValueFunction(FunctionCall call)
@@ -2077,11 +2706,7 @@ internal sealed class GameBoyRuntimeCompiler
         for (var row = 0; row < height; row++)
         {
             EmitSdkByteExpressionToA(operation.SourceColumn);
-            builder.LoadEFromA();
-            builder.LoadDImmediate(0);
-            builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
-            builder.AddHlDe();
-            builder.LoadAFromHl();
+            EmitReadOnlyMapByteAtSourceColumnInA(GameBoyRomBuilder.MapRowLabel(row));
             builder.LoadBFromA();
 
             var rowAddress = 0x9800 + (y + row) * 32;
@@ -2249,7 +2874,7 @@ internal sealed class GameBoyRuntimeCompiler
 
     private bool ProgramQueuesRowStreaming()
     {
-        foreach (var operation in sdkOperations)
+        foreach (var operation in program.SdkOperations)
         {
             if (operation is Sdk2DOperation.SetCameraPosition position
                 && position.Y is not SdkByteExpression.Constant { Value: 0 })
@@ -2425,11 +3050,7 @@ internal sealed class GameBoyRuntimeCompiler
         for (var row = 0; row < height; row++)
         {
             builder.LoadA(sourceColumnAddress);
-            builder.LoadEFromA();
-            builder.LoadDImmediate(0);
-            builder.LoadHl(rowLabel(row));
-            builder.AddHlDe();
-            builder.LoadAFromHl();
+            EmitReadOnlyMapByteAtSourceColumnInA(rowLabel(row));
             builder.LoadBFromA();
 
             var rowAddress = 0x9800 + (y + row) * 32;
@@ -3152,11 +3773,7 @@ internal sealed class GameBoyRuntimeCompiler
         var row = CheckedRange(GameBoyVideoProgram.ConstValue(args[1], "map_tile_at argument 2"), 0, program.MapColumnHeight - 1, "map_tile_at argument 2");
 
         EmitExpressionToA(args[0]);
-        builder.LoadEFromA();
-        builder.LoadDImmediate(0);
-        builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
-        builder.AddHlDe();
-        builder.LoadAFromHl();
+        EmitReadOnlyMapByteAtSourceColumnInA(GameBoyRomBuilder.MapRowLabel(row));
     }
 
     private void EmitMapFlagsAt(FunctionCall call)
@@ -3829,18 +4446,25 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitMapTileAtSourceColumnInA(int row)
     {
-        builder.LoadEFromA();
-        builder.LoadDImmediate(0);
-        builder.LoadHl(GameBoyRomBuilder.MapRowLabel(row));
-        builder.AddHlDe();
-        builder.LoadAFromHl();
+        EmitReadOnlyMapByteAtSourceColumnInA(GameBoyRomBuilder.MapRowLabel(row));
     }
 
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
+        EmitReadOnlyMapByteAtSourceColumnInA(GameBoyRomBuilder.MapFlagRowLabel(row));
+    }
+
+    private void EmitReadOnlyMapByteAtSourceColumnInA(string rowLabel)
+    {
+        if (romLayout.TryReadOnlyDataPlacement(rowLabel, out _))
+        {
+            builder.JumpAbsolute(0xCD, ReadOnlyDataByteReaderLabel(rowLabel)); // CALL nn
+            return;
+        }
+
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
-        builder.LoadHl(GameBoyRomBuilder.MapFlagRowLabel(row));
+        builder.LoadHl(rowLabel);
         builder.AddHlDe();
         builder.LoadAFromHl();
     }
@@ -4242,26 +4866,338 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly record struct CameraSpanInfo(int FirstScreenColumn, int LastScreenColumn, int Row);
 
     private readonly record struct LoopTarget(string BreakLabel, string ContinueLabel);
+
+    private sealed class Sdk2DStreamReader(
+        IReadOnlyList<Sdk2DStreamItem> main,
+        IReadOnlyDictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutines)
+    {
+        private readonly Stack<StreamFrame> stack = [];
+        private StreamFrame current = new("main", main);
+
+        public static Sdk2DStreamReader ForProgram(GameBoyVideoProgram program)
+        {
+            if (program.SubroutineNames.Count == 0)
+            {
+                return new Sdk2DStreamReader(
+                    program.SdkOperations.Select(operation => (Sdk2DStreamItem)new Sdk2DStreamItem.Op(operation)).ToArray(),
+                    new Dictionary<string, IReadOnlyList<Sdk2DStreamItem>>());
+            }
+
+            return new Sdk2DStreamReader(program.SdkProgram.Main, program.SdkProgram.Subroutines);
+        }
+
+        public Sdk2DOperation ConsumeOperation(string callName)
+        {
+            if (current.Cursor >= current.Items.Count)
+            {
+                throw new InvalidOperationException($"Game Boy SDK call '{callName}' has no collected SDK operation in stream '{current.Name}'.");
+            }
+
+            var item = current.Items[current.Cursor++];
+            return item is Sdk2DStreamItem.Op op
+                ? op.Operation
+                : throw new InvalidOperationException($"Game Boy SDK call '{callName}' expected a collected SDK operation in stream '{current.Name}', got {item.GetType().Name}.");
+        }
+
+        public void ConsumeSubroutineCall(string name)
+        {
+            if (current.Cursor >= current.Items.Count)
+            {
+                return;
+            }
+
+            if (current.Items[current.Cursor] is not Sdk2DStreamItem.CallSubroutine marker)
+            {
+                return;
+            }
+
+            if (!string.Equals(marker.Name, name, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Game Boy SDK stream expected subroutine call '{marker.Name}', got '{name}'.");
+            }
+
+            current.Cursor++;
+        }
+
+        public void EnterSubroutine(string name)
+        {
+            stack.Push(current);
+            current = new StreamFrame(
+                name,
+                subroutines.TryGetValue(name, out var stream)
+                    ? stream
+                    : []);
+        }
+
+        public void LeaveSubroutine(string name)
+        {
+            EnsureCurrentConsumed($"Game Boy SDK subroutine '{name}'");
+            current = stack.Pop();
+        }
+
+        public void EnsureAllConsumed(string context)
+        {
+            if (stack.Count != 0)
+            {
+                throw new InvalidOperationException($"{context} finished while SDK stream '{current.Name}' was still active.");
+            }
+
+            EnsureCurrentConsumed(context);
+        }
+
+        private void EnsureCurrentConsumed(string context)
+        {
+            if (current.Cursor == current.Items.Count)
+            {
+                return;
+            }
+
+            var item = current.Items[current.Cursor];
+            var description = item is Sdk2DStreamItem.Op op
+                ? op.Operation.GetType().Name
+                : item.GetType().Name;
+            throw new InvalidOperationException(
+                $"{context} consumed {current.Cursor} of {current.Items.Count} SDK stream item(s) in '{current.Name}'; next item is {description}.");
+        }
+
+        private sealed class StreamFrame(string name, IReadOnlyList<Sdk2DStreamItem> items)
+        {
+            public string Name { get; } = name;
+
+            public IReadOnlyList<Sdk2DStreamItem> Items { get; } = items;
+
+            public int Cursor { get; set; }
+        }
+    }
+
+    private sealed class SdkAudioStreamReader(
+        IReadOnlyList<SdkAudioStreamItem> main,
+        IReadOnlyDictionary<string, IReadOnlyList<SdkAudioStreamItem>> subroutines)
+    {
+        private readonly Stack<StreamFrame> stack = [];
+        private StreamFrame current = new("main", main);
+
+        public static SdkAudioStreamReader ForProgram(GameBoyVideoProgram program)
+        {
+            if (program.SubroutineNames.Count == 0)
+            {
+                return new SdkAudioStreamReader(
+                    program.SdkAudioOperations.Select(operation => (SdkAudioStreamItem)new SdkAudioStreamItem.Op(operation)).ToArray(),
+                    new Dictionary<string, IReadOnlyList<SdkAudioStreamItem>>());
+            }
+
+            return new SdkAudioStreamReader(program.SdkAudioProgram.Main, program.SdkAudioProgram.Subroutines);
+        }
+
+        public SdkAudioOperation ConsumeOperation(string callName)
+        {
+            if (current.Cursor >= current.Items.Count)
+            {
+                throw new InvalidOperationException($"Game Boy SDK audio call '{callName}' has no collected SDK audio operation in stream '{current.Name}'.");
+            }
+
+            var item = current.Items[current.Cursor++];
+            return item is SdkAudioStreamItem.Op op
+                ? op.Operation
+                : throw new InvalidOperationException($"Game Boy SDK audio call '{callName}' expected a collected SDK audio operation in stream '{current.Name}', got {item.GetType().Name}.");
+        }
+
+        public void ConsumeSubroutineCall(string name)
+        {
+            if (current.Cursor >= current.Items.Count)
+            {
+                return;
+            }
+
+            if (current.Items[current.Cursor] is not SdkAudioStreamItem.CallSubroutine marker)
+            {
+                return;
+            }
+
+            if (!string.Equals(marker.Name, name, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Game Boy SDK audio stream expected subroutine call '{marker.Name}', got '{name}'.");
+            }
+
+            current.Cursor++;
+        }
+
+        public void EnterSubroutine(string name)
+        {
+            stack.Push(current);
+            current = new StreamFrame(
+                name,
+                subroutines.TryGetValue(name, out var stream)
+                    ? stream
+                    : []);
+        }
+
+        public void LeaveSubroutine(string name)
+        {
+            EnsureCurrentConsumed($"Game Boy SDK audio subroutine '{name}'");
+            current = stack.Pop();
+        }
+
+        public void EnsureAllConsumed(string context)
+        {
+            if (stack.Count != 0)
+            {
+                throw new InvalidOperationException($"{context} finished while SDK audio stream '{current.Name}' was still active.");
+            }
+
+            EnsureCurrentConsumed(context);
+        }
+
+        private void EnsureCurrentConsumed(string context)
+        {
+            if (current.Cursor == current.Items.Count)
+            {
+                return;
+            }
+
+            var item = current.Items[current.Cursor];
+            var description = item is SdkAudioStreamItem.Op op
+                ? op.Operation.GetType().Name
+                : item.GetType().Name;
+            throw new InvalidOperationException(
+                $"{context} consumed {current.Cursor} of {current.Items.Count} SDK audio stream item(s) in '{current.Name}'; next item is {description}.");
+        }
+
+        private sealed class StreamFrame(string name, IReadOnlyList<SdkAudioStreamItem> items)
+        {
+            public string Name { get; } = name;
+
+            public IReadOnlyList<SdkAudioStreamItem> Items { get; } = items;
+
+            public int Cursor { get; set; }
+        }
+    }
 }
 
 internal sealed class GbBuilder
 {
     private const int BaseAddress = 0x0150;
+    private const int BankContinuationStubLength = 5;
     private readonly List<byte> bytes = [];
     private readonly Dictionary<string, int> labels = [];
-    private readonly List<(int Offset, string Label)> absoluteFixups = [];
+    private readonly Dictionary<string, ushort> externalLabels = [];
+    private readonly List<AbsoluteFixup> absoluteFixups = [];
+    private readonly List<(int Offset, string Label)> bankFixups = [];
     private readonly List<(int Offset, string Label)> relativeFixups = [];
     private int nextLabelId;
+    private int? fixedPayloadLimit;
+    private int? bankSize;
+    private bool emitBankContinuationStubs;
 
     public string CreateLabel(string prefix) => $"{prefix}_{nextLabelId++}";
 
     public void Label(string name) => labels[name] = bytes.Count;
 
-    public void Emit(params byte[] values) => bytes.AddRange(values);
+    public void ExternalLabel(string name, ushort address) => externalLabels[name] = address;
+
+    public void EnableBankedAddressing(int fixedPayloadLimit, int bankSize)
+    {
+        this.fixedPayloadLimit = fixedPayloadLimit;
+        this.bankSize = bankSize;
+        emitBankContinuationStubs = true;
+    }
+
+    public void DisableBankContinuationStubs()
+    {
+        emitBankContinuationStubs = false;
+    }
+
+    public int LabelOffset(string label)
+    {
+        if (!labels.TryGetValue(label, out var offset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy ROM label '{label}'.");
+        }
+
+        return offset;
+    }
+
+    public bool TryLabelOffset(string label, out int offset)
+    {
+        return labels.TryGetValue(label, out offset);
+    }
+
+    public void Emit(params byte[] values)
+    {
+        if (values.Length == 0)
+        {
+            return;
+        }
+
+        InsertBankContinuationStubsBefore(values.Length);
+        bytes.AddRange(values);
+    }
+
+    private void InsertBankContinuationStubsBefore(int byteCount)
+    {
+        if (!emitBankContinuationStubs || fixedPayloadLimit is null || bankSize is null)
+        {
+            return;
+        }
+
+        if (byteCount > bankSize.Value - BankContinuationStubLength)
+        {
+            return;
+        }
+
+        while (ShouldInsertBankContinuationStub(byteCount))
+        {
+            EmitBankContinuationStub();
+        }
+    }
+
+    private bool ShouldInsertBankContinuationStub(int byteCount)
+    {
+        if (fixedPayloadLimit is null || bankSize is null || bytes.Count < fixedPayloadLimit.Value)
+        {
+            return false;
+        }
+
+        var bankOffset = (bytes.Count - fixedPayloadLimit.Value) % bankSize.Value;
+        var payloadLimit = bankSize.Value - BankContinuationStubLength;
+        return bankOffset >= payloadLimit || bankOffset + byteCount > payloadLimit;
+    }
+
+    private void EmitBankContinuationStub()
+    {
+        if (fixedPayloadLimit is null || bankSize is null)
+        {
+            return;
+        }
+
+        var tailOffset = bytes.Count - fixedPayloadLimit.Value;
+        var bankOffset = tailOffset % bankSize.Value;
+        var payloadLimit = bankSize.Value - BankContinuationStubLength;
+        while (bankOffset < payloadLimit)
+        {
+            bytes.Add(0x00); // NOP padding up to the fixed-size continuation stub.
+            bankOffset++;
+        }
+
+        var currentBank = 1 + (tailOffset / bankSize.Value);
+        var nextBank = checked((byte)(currentBank + 1));
+        bytes.Add(0x3E); // LD A,n
+        bytes.Add(nextBank);
+        bytes.Add(0xC3); // JP program_bank_continue
+        bytes.Add(0x00);
+        bytes.Add(0x00);
+        absoluteFixups.Add(new AbsoluteFixup(bytes.Count - 2, GameBoyRomBuilder.ProgramBankContinuationLabel, IsControlFlow: true));
+    }
 
     public void LoadAImmediate(int value)
     {
         Emit(0x3E, (byte)value);
+    }
+
+    public void LoadAImmediateBankOf(string label)
+    {
+        Emit(0x3E, 0x00);
+        bankFixups.Add((bytes.Count - 1, label));
     }
 
     public void XorA()
@@ -4457,7 +5393,7 @@ internal sealed class GbBuilder
     public void LoadHl(string label)
     {
         Emit(0x21, 0x00, 0x00);
-        absoluteFixups.Add((bytes.Count - 2, label));
+        absoluteFixups.Add(new AbsoluteFixup(bytes.Count - 2, label, IsControlFlow: false));
     }
 
     public void LoadDImmediate(int value)
@@ -4488,7 +5424,7 @@ internal sealed class GbBuilder
     public void LoadDe(string label)
     {
         Emit(0x11, 0x00, 0x00);
-        absoluteFixups.Add((bytes.Count - 2, label));
+        absoluteFixups.Add(new AbsoluteFixup(bytes.Count - 2, label, IsControlFlow: false));
     }
 
     public void LoadDe(ushort value)
@@ -4515,13 +5451,23 @@ internal sealed class GbBuilder
     public void JumpAbsolute(byte opcode, string label)
     {
         Emit(opcode, 0x00, 0x00);
-        absoluteFixups.Add((bytes.Count - 2, label));
+        absoluteFixups.Add(new AbsoluteFixup(bytes.Count - 2, label, IsControlFlow: true));
     }
 
     public byte[] Build()
     {
+        foreach (var fixup in bankFixups)
+        {
+            bytes[fixup.Offset] = (byte)BankOf(fixup.Label);
+        }
+
         foreach (var fixup in absoluteFixups)
         {
+            if (fixup.IsControlFlow)
+            {
+                ValidateDirectControlFlow(fixup.Offset - 1, fixup.Label);
+            }
+
             var address = AddressOf(fixup.Label);
             bytes[fixup.Offset] = (byte)(address & 0xFF);
             bytes[fixup.Offset + 1] = (byte)(address >> 8);
@@ -4529,8 +5475,9 @@ internal sealed class GbBuilder
 
         foreach (var fixup in relativeFixups)
         {
+            ValidateDirectControlFlow(fixup.Offset - 1, fixup.Label);
             var target = AddressOf(fixup.Label);
-            var branchFrom = BaseAddress + fixup.Offset + 1;
+            var branchFrom = AddressOfOffset(fixup.Offset + 1);
             var delta = target - branchFrom;
             if (delta is < -128 or > 127)
             {
@@ -4543,13 +5490,69 @@ internal sealed class GbBuilder
         return bytes.ToArray();
     }
 
+    private void ValidateDirectControlFlow(int sourceOffset, string targetLabel)
+    {
+        if (!labels.TryGetValue(targetLabel, out var targetOffset))
+        {
+            return;
+        }
+
+        var sourceBank = BankOfOffset(sourceOffset);
+        var targetBank = BankOfOffset(targetOffset);
+        if (sourceBank == targetBank || sourceBank == 0 || targetBank == 0)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Direct Game Boy control flow from switchable program bank {sourceBank} to bank {targetBank} for label '{targetLabel}' is not supported; route it through a fixed-bank trampoline or helper.");
+    }
+
+    private int AddressOfOffset(int offset)
+    {
+        if (fixedPayloadLimit is null || bankSize is null || offset < fixedPayloadLimit.Value)
+        {
+            return BaseAddress + offset;
+        }
+
+        var bankedOffset = offset - fixedPayloadLimit.Value;
+        return 0x4000 + (bankedOffset % bankSize.Value);
+    }
+
     private int AddressOf(string label)
+    {
+        if (externalLabels.TryGetValue(label, out var externalAddress))
+        {
+            return externalAddress;
+        }
+
+        if (!labels.TryGetValue(label, out var offset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy ROM label '{label}'.");
+        }
+
+        return AddressOfOffset(offset);
+    }
+
+    private int BankOf(string label)
     {
         if (!labels.TryGetValue(label, out var offset))
         {
             throw new InvalidOperationException($"Unknown Game Boy ROM label '{label}'.");
         }
 
-        return BaseAddress + offset;
+        return BankOfOffset(offset);
     }
+
+    private int BankOfOffset(int offset)
+    {
+        if (fixedPayloadLimit is null || bankSize is null || offset < fixedPayloadLimit.Value)
+        {
+            return 0;
+        }
+
+        return 1 + ((offset - fixedPayloadLimit.Value) / bankSize.Value);
+    }
+
+    private readonly record struct AbsoluteFixup(int Offset, string Label, bool IsControlFlow);
 }

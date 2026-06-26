@@ -457,6 +457,34 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Compilation_counts_user_helper_streaming_per_call_site_for_frame_budget()
+    {
+        const string source = """
+                              void stream_once(i16 targetColumn, i16 sourceColumn) {
+                                  map_stream_column(targetColumn, sourceColumn, 0, 11);
+                              }
+
+                              void main() {
+                                  video_init();
+                                  map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                                  i16 targetColumn = 20;
+                                  i16 sourceColumn = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      stream_once(targetColumn, sourceColumn);
+                                      stream_once(targetColumn, sourceColumn);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Compilation_validates_branch_alternatives_as_exclusive_frame_paths()
     {
         const string source = """

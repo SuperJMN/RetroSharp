@@ -79,4 +79,45 @@ public sealed class Sdk2DProgramStreamTests
             streamed.Main.OfType<Sdk2DStreamItem.Op>(),
             item => item.Operation is Sdk2DOperation.WaitFrame or Sdk2DOperation.PollInput);
     }
+
+    [Fact]
+    public void Audio_subroutined_function_body_is_collected_once_and_referenced_by_call_markers()
+    {
+        const string source = """
+            void tick_audio() {
+                audio.Update();
+            }
+
+            void main() {
+                video.Init();
+                audio.Init();
+                loop {
+                    tick_audio();
+                    tick_audio();
+                }
+            }
+            """;
+        var parse = new SomeParser().Parse(source);
+        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
+        var program = GameBoyVideoProgram.FromProgram(parse.Value, null);
+
+        var streamed = SdkAudioOperationCollector.CollectProgram(
+            program.MainBlock,
+            program.Functions,
+            "Game Boy",
+            new HashSet<string> { "tick_audio" });
+
+        var markers = streamed.Main.OfType<SdkAudioStreamItem.CallSubroutine>().ToList();
+        Assert.Equal(2, markers.Count);
+        Assert.All(markers, marker => Assert.Equal("tick_audio", marker.Name));
+
+        Assert.True(streamed.Subroutines.ContainsKey("tick_audio"));
+        var tickOps = streamed.Subroutines["tick_audio"]
+            .Select(item => Assert.IsType<SdkAudioStreamItem.Op>(item).Operation)
+            .ToList();
+        Assert.Collection(tickOps, op => Assert.IsType<SdkAudioOperation.UpdateAudio>(op));
+
+        Assert.Single(streamed.Main.OfType<SdkAudioStreamItem.Op>());
+        Assert.IsType<SdkAudioOperation.InitializeAudio>(streamed.Main.OfType<SdkAudioStreamItem.Op>().Single().Operation);
+    }
 }

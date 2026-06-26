@@ -2697,17 +2697,17 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.Contains("if (view.moving != 0)", source);
-        Assert.Contains("animTick++;", source);
+        Assert.Contains("animTick += view.speed;", source);
         Assert.Contains("animation.Frame(run, animTick)", source);
         Assert.DoesNotContain("i16 frame = 0;", source);
         Assert.DoesNotContain("frame = frame + 1;", source);
         Assert.DoesNotContain("if (frame == 3)", source);
         Assert.DoesNotContain("displayFrame = frame + 1;", source);
         Assert.Equal(2, CountOccurrences(source, "camera.SetPosition(x, 0);"));
-        Assert.Equal(1, CountOccurrences(source, "animTick++;"));
+        Assert.Equal(1, CountOccurrences(source, "animTick += view.speed;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -2950,7 +2950,7 @@ public class GameBoyRomCompilerTests
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("""sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);""", source);
-        Assert.Contains("animation.Clip(run, 1, 6, 6, 6);", source);
+        Assert.Contains("animation.Clip(run, 1, 48, 48, 48);", source);
         Assert.DoesNotContain("animation.Clip(enemy_walk", source);
         Assert.DoesNotContain("sprites_clear();", source);
         Assert.Contains("displayFrame = grounded switch", source);
@@ -2966,7 +2966,7 @@ public class GameBoyRomCompilerTests
         Assert.Equal(1, CountOccurrences(source, "sprite.Draw("));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -3007,7 +3007,7 @@ public class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
 
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
         Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "Runner should map sprite tones to OBP0 as 0, 0, 1, 3.");
     }
 
@@ -3058,7 +3058,7 @@ public class GameBoyRomCompilerTests
         var baseDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("""music.Asset(runner_theme, "music/delight.gbapu");""", source);
+        Assert.Contains("""music.Asset(runner_theme, "music/sml2_track1.gbapu");""", source);
         Assert.Contains("audio.Init();", source);
         Assert.Contains("music.Play(runner_theme);", source);
 
@@ -3075,7 +3075,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains(operations, operation => operation is SdkAudioOperation.UpdateAudio);
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
         Assert.True(ContainsSequence(rom, [0x3E, 0x80, 0xE0, 0x26]), "Runner BGM should enable NR52.");
         Assert.True(ContainsSequence(rom, [0xE2]), "Runner gbapu playback should write dynamic APU register offsets through LDH (C),A during audio.Update.");
     }
@@ -4043,7 +4043,7 @@ public class GameBoyRomCompilerTests
         Assert.True(jumpInputCall > ceilingCall, "Ceiling resolution should clear the jump before jump input is consumed.");
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4089,7 +4089,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("view.HandleHorizontalInput(player);", source);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4100,7 +4100,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("enum HorizontalMotion", source);
         Assert.Contains("WalkSpeed = 8", source);
-        Assert.Contains("RunMaxSpeed = 16", source);
+        Assert.Contains("RunMaxSpeed = 12", source);
         Assert.Contains("SubpixelScale = 8", source);
         Assert.Contains("RunAcceleration = 1", source);
         Assert.Contains("Friction = 2", source);
@@ -4133,7 +4133,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("ApplyLeftIntent", cameraBlock);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4142,7 +4142,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("RunMaxSpeed = 16", source);
+        Assert.Contains("RunMaxSpeed = 12", source);
         Assert.Contains("RunAcceleration = 1", source);
 
         var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
@@ -4184,7 +4184,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("camera.SetPosition", motionBlock);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4222,7 +4222,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("velocityY -= 1;", jumpBlock);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4269,7 +4269,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("jumping = 0;", source);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4365,7 +4365,7 @@ public class GameBoyRomCompilerTests
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 0));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4383,7 +4383,7 @@ public class GameBoyRomCompilerTests
         Assert.True(movementStart > resetStart, "Reset should not discard horizontal movement input for the same frame.");
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4427,7 +4427,7 @@ public class GameBoyRomCompilerTests
         Assert.True(jumpCall > resetCall);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
-        Assert.Equal(32768, rom.Length);
+        AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
@@ -4475,6 +4475,13 @@ public class GameBoyRomCompilerTests
         }
 
         return (byte)checksum;
+    }
+
+    private static void AssertRunnerMbc1Rom(byte[] rom)
+    {
+        Assert.Equal(65536, rom.Length);
+        Assert.Equal(0x01, rom[0x0147]);
+        Assert.Equal(0x01, rom[0x0148]);
     }
 
     private static string WriteSpriteAsset(string fileName, string json)
