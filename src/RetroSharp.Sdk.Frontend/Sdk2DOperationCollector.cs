@@ -19,6 +19,20 @@ public static class Sdk2DOperationCollector
         return collector.Operations;
     }
 
+    // Collects a program split into a main stream plus per-subroutine streams for
+    // the named functions. When subroutineNames is empty the main stream is a flat
+    // sequence of Op items equivalent to Collect(...), so targets stay byte-identical.
+    public static Sdk2DProgram CollectProgram(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        IReadOnlySet<string> subroutineNames)
+    {
+        var collector = new Collector(functions, targetName, subroutineNames);
+        collector.CollectBlock(mainBlock);
+        return collector.Program;
+    }
+
     public static IReadOnlyList<Sdk2DFrameBudget> CollectFrameBudgets(
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
@@ -273,12 +287,53 @@ public static class Sdk2DOperationCollector
         return axes;
     }
 
-    private sealed class Collector(IReadOnlyDictionary<string, FunctionSyntax> functions, string targetName)
+    private sealed class Collector
     {
-        private readonly List<Sdk2DOperation> operations = [];
+        private readonly IReadOnlyDictionary<string, FunctionSyntax> functions;
+        private readonly string targetName;
+        private readonly IReadOnlySet<string> subroutineNames;
+        private readonly List<Sdk2DStreamItem> mainItems = [];
+        private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
+        private List<Sdk2DStreamItem> currentItems;
 
-        public IReadOnlyList<Sdk2DOperation> Operations => operations;
+        public Collector(
+            IReadOnlyDictionary<string, FunctionSyntax> functions,
+            string targetName,
+            IReadOnlySet<string>? subroutineNames = null)
+        {
+            this.functions = functions;
+            this.targetName = targetName;
+            this.subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
+            currentItems = mainItems;
+        }
+
+        // Flat operation list for the legacy inline-expanded path. Only valid when
+        // no function is subroutined (every item is an Op).
+        public IReadOnlyList<Sdk2DOperation> Operations => FlattenOps(mainItems);
+
+        public Sdk2DProgram Program => new(mainItems, subroutineStreams);
+
+        private void AddOp(Sdk2DOperation operation)
+        {
+            currentItems.Add(new Sdk2DStreamItem.Op(operation));
+        }
+
+        private static IReadOnlyList<Sdk2DOperation> FlattenOps(IReadOnlyList<Sdk2DStreamItem> items)
+        {
+            var ops = new List<Sdk2DOperation>(items.Count);
+            foreach (var item in items)
+            {
+                if (item is not Sdk2DStreamItem.Op op)
+                {
+                    throw new InvalidOperationException("Cannot flatten an SDK stream that contains subroutine calls.");
+                }
+
+                ops.Add(op.Operation);
+            }
+
+            return ops;
+        }
 
         public void CollectBlock(BlockSyntax block)
         {
@@ -361,11 +416,11 @@ public static class Sdk2DOperationCollector
             {
                 case "video_wait_vblank":
                     SdkCallReader.RequireArity(call, 0);
-                    operations.Add(new Sdk2DOperation.WaitFrame());
+                    AddOp(new Sdk2DOperation.WaitFrame());
                     break;
                 case "input_poll":
                     SdkCallReader.RequireArity(call, 0);
-                    operations.Add(new Sdk2DOperation.PollInput());
+                    AddOp(new Sdk2DOperation.PollInput());
                     break;
                 case "camera_set_position":
                     CollectCameraSetPosition(call);
@@ -394,7 +449,7 @@ public static class Sdk2DOperationCollector
 
         private void CollectCameraSetPosition(FunctionCall call)
         {
-            operations.Add(ReadSetCameraPosition(call));
+            AddOp(ReadSetCameraPosition(call));
         }
 
         private void CollectCameraApply(FunctionCall call)
@@ -403,17 +458,17 @@ public static class Sdk2DOperationCollector
             var axes = targetName == "NES"
                 ? ScrollAxes.Horizontal
                 : ScrollAxes.Horizontal | ScrollAxes.Vertical;
-            operations.Add(new Sdk2DOperation.ApplyCamera(axes));
+            AddOp(new Sdk2DOperation.ApplyCamera(axes));
         }
 
         private void CollectDrawLogicalSprite(FunctionCall call)
         {
-            operations.Add(ReadDrawLogicalSprite(call));
+            AddOp(ReadDrawLogicalSprite(call));
         }
 
         private void CollectStreamMapColumn(FunctionCall call)
         {
-            operations.Add(ReadStreamMapColumn(call));
+            AddOp(ReadStreamMapColumn(call));
         }
 
         private void CollectHudSetTile(FunctionCall call)
@@ -425,7 +480,7 @@ public static class Sdk2DOperationCollector
             var y = ConstRange(args[2], 0, 31, "hud_set_tile argument 3");
             var tile = ConstRange(args[3], 0, 255, "hud_set_tile argument 4");
 
-            operations.Add(new Sdk2DOperation.SetHudTile(mode, x, y, tile));
+            AddOp(new Sdk2DOperation.SetHudTile(mode, x, y, tile));
         }
 
         private void CollectExpression(ExpressionSyntax expression)
@@ -507,17 +562,17 @@ public static class Sdk2DOperationCollector
             var args = call.Parameters.ToList();
             var worldX = ReadByteExpression(args[0], "world_tile_flags_at argument 1");
             var worldY = ReadByteExpression(args[1], "world_tile_flags_at argument 2");
-            operations.Add(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
+            AddOp(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
         }
 
         private void CollectCameraAabbTiles(FunctionCall call)
         {
-            operations.Add(ReadCameraAabbTiles(call));
+            AddOp(ReadCameraAabbTiles(call));
         }
 
         private void CollectCameraAabbHitTop(FunctionCall call)
         {
-            operations.Add(ReadCameraAabbHitTop(call));
+            AddOp(ReadCameraAabbHitTop(call));
         }
 
         private void CollectCallArguments(FunctionCall call)
@@ -540,6 +595,12 @@ public static class Sdk2DOperationCollector
                 return;
             }
 
+            if (subroutineNames.Contains(call.Name))
+            {
+                CollectSubroutineCall(call, function);
+                return;
+            }
+
             if (!userFunctionCallStack.Add(function.Name))
             {
                 throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
@@ -553,6 +614,75 @@ public static class Sdk2DOperationCollector
             {
                 userFunctionCallStack.Remove(function.Name);
             }
+        }
+
+        // Emits a marker for a function emitted as a shared subroutine and collects
+        // its body once into a dedicated stream. Receiver parameters are bound to
+        // their single instance via substitution; value parameters stay as local
+        // reads (the consumer passes them through fixed slots).
+        private void CollectSubroutineCall(FunctionCall call, FunctionSyntax function)
+        {
+            currentItems.Add(new Sdk2DStreamItem.CallSubroutine(call.Name));
+            if (subroutineStreams.ContainsKey(call.Name))
+            {
+                return;
+            }
+
+            if (!userFunctionCallStack.Add(function.Name))
+            {
+                throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");
+            }
+
+            var bodyItems = new List<Sdk2DStreamItem>();
+            var previousItems = currentItems;
+            currentItems = bodyItems;
+            try
+            {
+                CollectBlock(SubstituteReceiverParameters(function, call));
+            }
+            finally
+            {
+                currentItems = previousItems;
+                userFunctionCallStack.Remove(function.Name);
+            }
+
+            subroutineStreams[call.Name] = bodyItems;
+        }
+
+        // Substitutes only receiver parameters (which are bound to a single shared
+        // instance) and leaves value parameters in place so the subroutine body
+        // reads them from their slots.
+        private BlockSyntax SubstituteReceiverParameters(FunctionSyntax function, FunctionCall call)
+        {
+            var receiverArguments = new List<ExpressionSyntax>();
+            var receiverParameters = new List<ParameterSyntax>();
+            var callArguments = call.Parameters.ToList();
+            for (var index = 0; index < function.Parameters.Count; index++)
+            {
+                if (function.Parameters[index].IsReceiver && index < callArguments.Count)
+                {
+                    receiverParameters.Add(function.Parameters[index]);
+                    receiverArguments.Add(callArguments[index]);
+                }
+            }
+
+            if (receiverParameters.Count == 0)
+            {
+                return function.Block;
+            }
+
+            var receiverFunction = new FunctionSyntax(
+                function.Type,
+                function.Name,
+                receiverParameters,
+                function.Block,
+                function.IsExpressionBodied,
+                function.IsInline,
+                function.IsPure,
+                function.IsExtern,
+                function.Attributes);
+            var receiverCall = new FunctionCall(function.Name, receiverArguments);
+            return ParameterSubstitution.Substitute(receiverFunction, receiverCall, targetName);
         }
 
         private bool CollectUserValueFunction(FunctionCall call)

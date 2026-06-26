@@ -194,7 +194,13 @@ internal sealed class GameBoyVideoProgram
 
     public required IReadOnlyList<Sdk2DOperation> SdkOperations { get; init; }
 
+    public required Sdk2DProgram SdkProgram { get; init; }
+
     public required IReadOnlyList<SdkAudioOperation> SdkAudioOperations { get; init; }
+
+    public required SdkAudioProgram SdkAudioProgram { get; init; }
+
+    public required IReadOnlySet<string> SubroutineNames { get; init; }
 
     public static GameBoyVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
@@ -206,6 +212,9 @@ internal sealed class GameBoyVideoProgram
         var functions = BuildFunctionIndex(program.Functions);
         var enums = BuildEnumIndex(program.Enums);
         var structs = BuildStructIndex(program.Structs);
+        var subroutineNames = SelectSubroutineNames(main.Block, functions);
+        var sdkProgram = Sdk2DOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
+        var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
         var result = new GameBoyVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
@@ -213,12 +222,319 @@ internal sealed class GameBoyVideoProgram
             Enums = enums,
             Structs = structs,
             MainBlock = main.Block,
-            SdkOperations = Sdk2DOperationCollector.Collect(main.Block, functions, "Game Boy"),
-            SdkAudioOperations = SdkAudioOperationCollector.Collect(main.Block, functions, "Game Boy"),
+            SdkOperations = FlattenSdkProgram(sdkProgram),
+            SdkProgram = sdkProgram,
+            SdkAudioOperations = FlattenSdkAudioProgram(sdkAudioProgram),
+            SdkAudioProgram = sdkAudioProgram,
+            SubroutineNames = subroutineNames,
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
         return result;
+    }
+
+    private static IReadOnlySet<string> SelectSubroutineNames(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var callCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+        CountCalls(mainBlock, callCounts);
+        foreach (var function in functions.Values)
+        {
+            if (function.Name == "main" || function.IsExtern)
+            {
+                continue;
+            }
+
+            CountCalls(function.Block, callCounts);
+        }
+
+        return callCounts
+            .Where(pair => pair.Value > 1 && IsSubroutineCandidate(functions, pair.Key))
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static bool IsSubroutineCandidate(IReadOnlyDictionary<string, FunctionSyntax> functions, string name)
+    {
+        return functions.TryGetValue(name, out var function)
+               && function is { Type: "void", IsInline: false, IsExtern: false }
+               && function.Parameters.All(parameter => !parameter.IsReceiver)
+               && HasRuntimeWork(function.Block, functions);
+    }
+
+    private static bool HasRuntimeWork(BlockSyntax block, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        return block.Statements.Any(statement => HasRuntimeWork(statement, functions));
+    }
+
+    private static bool HasRuntimeWork(StatementSyntax statement, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        return statement switch
+        {
+            DeclarationSyntax => true,
+            ExpressionStatementSyntax { Expression: AssignmentSyntax } => true,
+            ExpressionStatementSyntax { Expression: FunctionCall call } => HasRuntimeCall(call, functions),
+            WhileSyntax loop => HasRuntimeWork(loop.Body, functions),
+            DoWhileSyntax loop => HasRuntimeWork(loop.Body, functions),
+            LoopSyntax loop => HasRuntimeWork(loop.Body, functions),
+            RangeForSyntax loop => HasRuntimeWork(loop.Body, functions),
+            ForSyntax loop => HasRuntimeWork(loop.Body, functions),
+            IfElseSyntax branch => HasRuntimeWork(branch.ThenBlock, functions)
+                                   || (branch.ElseBlock.HasValue && HasRuntimeWork(branch.ElseBlock.Value, functions)),
+            SwitchSyntax switchSyntax => switchSyntax.Cases.Any(switchCase => HasRuntimeWork(switchCase.Block, functions))
+                                         || (switchSyntax.DefaultBlock.HasValue && HasRuntimeWork(switchSyntax.DefaultBlock.Value, functions)),
+            ReturnSyntax { Expression.HasValue: true } => true,
+            _ => false,
+        };
+    }
+
+    private static bool HasRuntimeCall(FunctionCall call, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        switch (call.Name)
+        {
+            case "video_init":
+            case "video_present":
+            case "palette_set":
+            case "object_palette_set":
+            case "palette_background":
+            case "palette_sprite":
+            case "tilemap_set":
+            case "tilemap_fill":
+            case "map_column":
+            case "world_column":
+            case "world_flags":
+            case "world_map":
+            case "world_load":
+            case "sprite_asset":
+            case "music_asset":
+            case "animation_clip":
+            case "hud_set_tile":
+                return false;
+            default:
+                return !functions.TryGetValue(call.Name, out var function)
+                       || HasRuntimeWork(function.Block, functions);
+        }
+    }
+
+    private static void CountCalls(BlockSyntax block, IDictionary<string, int> callCounts)
+    {
+        foreach (var statement in block.Statements)
+        {
+            CountCalls(statement, callCounts);
+        }
+    }
+
+    private static void CountCalls(StatementSyntax statement, IDictionary<string, int> callCounts)
+    {
+        switch (statement)
+        {
+            case DeclarationSyntax declaration:
+                if (declaration.ArrayLength.HasValue)
+                {
+                    CountCalls(declaration.ArrayLength.Value, callCounts);
+                }
+
+                if (declaration.Initialization.HasValue)
+                {
+                    CountCalls(declaration.Initialization.Value, callCounts);
+                }
+
+                break;
+            case ExpressionStatementSyntax expressionStatement:
+                CountCalls(expressionStatement.Expression, callCounts);
+                break;
+            case IfElseSyntax branch:
+                CountCalls(branch.Condition, callCounts);
+                CountCalls(branch.ThenBlock, callCounts);
+                if (branch.ElseBlock.HasValue)
+                {
+                    CountCalls(branch.ElseBlock.Value, callCounts);
+                }
+
+                break;
+            case WhileSyntax loop:
+                CountCalls(loop.Condition, callCounts);
+                CountCalls(loop.Body, callCounts);
+                break;
+            case DoWhileSyntax loop:
+                CountCalls(loop.Body, callCounts);
+                CountCalls(loop.Condition, callCounts);
+                break;
+            case LoopSyntax loop:
+                CountCalls(loop.Body, callCounts);
+                break;
+            case RangeForSyntax loop:
+                CountCalls(loop.Start, callCounts);
+                CountCalls(loop.End, callCounts);
+                CountCalls(loop.Body, callCounts);
+                break;
+            case ForSyntax loop:
+                if (loop.Initializer.HasValue)
+                {
+                    CountCalls(loop.Initializer.Value, callCounts);
+                }
+
+                if (loop.Condition.HasValue)
+                {
+                    CountCalls(loop.Condition.Value, callCounts);
+                }
+
+                CountCalls(loop.Body, callCounts);
+                if (loop.Increment.HasValue)
+                {
+                    CountCalls(loop.Increment.Value, callCounts);
+                }
+
+                break;
+            case SwitchSyntax switchSyntax:
+                CountCalls(switchSyntax.Subject, callCounts);
+                foreach (var switchCase in switchSyntax.Cases)
+                {
+                    foreach (var pattern in switchCase.Patterns)
+                    {
+                        CountCalls(pattern.Start, callCounts);
+                        if (pattern.End.HasValue)
+                        {
+                            CountCalls(pattern.End.Value, callCounts);
+                        }
+                    }
+
+                    CountCalls(switchCase.Block, callCounts);
+                }
+
+                if (switchSyntax.DefaultBlock.HasValue)
+                {
+                    CountCalls(switchSyntax.DefaultBlock.Value, callCounts);
+                }
+
+                break;
+            case ReturnSyntax returnSyntax:
+                if (returnSyntax.Expression.HasValue)
+                {
+                    CountCalls(returnSyntax.Expression.Value, callCounts);
+                }
+
+                break;
+        }
+    }
+
+    private static void CountCalls(ExpressionSyntax expression, IDictionary<string, int> callCounts)
+    {
+        switch (expression)
+        {
+            case FunctionCall call:
+                callCounts[call.Name] = callCounts.TryGetValue(call.Name, out var count) ? count + 1 : 1;
+                foreach (var parameter in call.Parameters)
+                {
+                    CountCalls(parameter, callCounts);
+                }
+
+                break;
+            case NamedArgumentSyntax namedArgument:
+                CountCalls(namedArgument.Expression, callCounts);
+                break;
+            case AssignmentSyntax assignment:
+                CountCalls(assignment.Right, callCounts);
+                break;
+            case ArrayInitializerSyntax arrayInitializer:
+                foreach (var element in arrayInitializer.Elements)
+                {
+                    CountCalls(element, callCounts);
+                }
+
+                break;
+            case StructInitializerSyntax structInitializer:
+                foreach (var field in structInitializer.Fields)
+                {
+                    CountCalls(field.Expression, callCounts);
+                }
+
+                break;
+            case BinaryExpressionSyntax binary:
+                CountCalls(binary.Left, callCounts);
+                CountCalls(binary.Right, callCounts);
+                break;
+            case ConditionalExpressionSyntax conditional:
+                CountCalls(conditional.Condition, callCounts);
+                CountCalls(conditional.WhenTrue, callCounts);
+                CountCalls(conditional.WhenFalse, callCounts);
+                break;
+            case SwitchExpressionSyntax switchExpression:
+                CountCalls(switchExpression.Subject, callCounts);
+                foreach (var arm in switchExpression.Arms)
+                {
+                    foreach (var pattern in arm.Patterns)
+                    {
+                        CountCalls(pattern.Start, callCounts);
+                        if (pattern.End.HasValue)
+                        {
+                            CountCalls(pattern.End.Value, callCounts);
+                        }
+                    }
+
+                    CountCalls(arm.Value, callCounts);
+                }
+
+                if (switchExpression.DefaultValue.HasValue)
+                {
+                    CountCalls(switchExpression.DefaultValue.Value, callCounts);
+                }
+
+                break;
+            case PipelineExpressionSyntax pipeline:
+                CountCalls(PipelineExpressionLowerer.Lower(pipeline), callCounts);
+                break;
+            case UnaryExpressionSyntax unary:
+                CountCalls(unary.Operand, callCounts);
+                break;
+            case CastSyntax cast:
+                CountCalls(cast.Expression, callCounts);
+                break;
+            case MemberAccessSyntax memberAccess:
+                CountCalls(memberAccess.Target, callCounts);
+                break;
+            case IndexExpressionSyntax indexExpression:
+                CountCalls(indexExpression.Index, callCounts);
+                break;
+            case PostfixMutationSyntax postfix:
+                CountCalls(postfix.Target, callCounts);
+                break;
+        }
+    }
+
+    private static void CountCalls(LValue lValue, IDictionary<string, int> callCounts)
+    {
+        switch (lValue)
+        {
+            case IndexLValue index:
+                CountCalls(index.Index, callCounts);
+                break;
+            case PointerDerefLValue pointer:
+                CountCalls(pointer.Expression, callCounts);
+                break;
+            case MemberAccessLValue memberAccess:
+                CountCalls(memberAccess.MemberAccess, callCounts);
+                break;
+        }
+    }
+
+    private static IReadOnlyList<Sdk2DOperation> FlattenSdkProgram(Sdk2DProgram program)
+    {
+        return program.Main
+            .Concat(program.Subroutines.Values.SelectMany(stream => stream))
+            .OfType<Sdk2DStreamItem.Op>()
+            .Select(item => item.Operation)
+            .ToArray();
+    }
+
+    private static IReadOnlyList<SdkAudioOperation> FlattenSdkAudioProgram(SdkAudioProgram program)
+    {
+        return program.Main
+            .Concat(program.Subroutines.Values.SelectMany(stream => stream))
+            .OfType<SdkAudioStreamItem.Op>()
+            .Select(item => item.Operation)
+            .ToArray();
     }
 
     private static Dictionary<string, EnumSyntax> BuildEnumIndex(IEnumerable<EnumSyntax> enums)
