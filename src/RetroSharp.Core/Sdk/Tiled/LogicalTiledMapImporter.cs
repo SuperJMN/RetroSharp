@@ -375,7 +375,7 @@ public static class LogicalTiledMapImporter
                 throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} requires an actor kind via a 'kind' property, type/class, or name.");
             }
 
-            var x = CheckedByte(IntNumberProperty(obj, "x", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} x");
+            var x = CheckedUInt16(IntNumberProperty(obj, "x", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} x");
             var y = CheckedByte(IntNumberProperty(obj, "y", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} y");
             result.Add(new LogicalActorSpawn(kind, x, y, ReadActorSpawnFields(obj, displayName, layerName, objectId)));
         }
@@ -481,6 +481,16 @@ public static class LogicalTiledMapImporter
         if (value is < 0 or > 255)
         {
             throw new InvalidOperationException($"{context} must be between 0 and 255.");
+        }
+
+        return value;
+    }
+
+    private static int CheckedUInt16(int value, string context)
+    {
+        if (value is < 0 or > 65535)
+        {
+            throw new InvalidOperationException($"{context} must be between 0 and 65535.");
         }
 
         return value;

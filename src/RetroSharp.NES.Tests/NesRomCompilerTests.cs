@@ -1557,6 +1557,7 @@ public class NesRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -1740,6 +1741,7 @@ public class NesRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -1766,6 +1768,9 @@ public class NesRomCompilerTests
                                             if (enemies[__enemies_update_i].active != 0) {
                                                 if (enemies[__enemies_update_i].kind == Goomba) {
                                                     enemies[__enemies_update_i].x += GoombaSpeed;
+                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
+                                                        enemies[__enemies_update_i].xHi += 1;
+                                                    }
                                                 }
                                             }
                                         }
@@ -1822,6 +1827,7 @@ public class NesRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -1848,7 +1854,12 @@ public class NesRomCompilerTests
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
                                             if (enemies[__enemies_draw_i].active != 0) {
                                                 if (enemies[__enemies_draw_i].kind == Goomba) {
-                                                    sprite.Draw(goomba, enemies[__enemies_draw_i].x, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                    u8 __enemies_draw_camera_x_lo_Goomba = __rs_actor_camera_x_lo();
+                                                    u8 __enemies_draw_camera_x_hi_Goomba = __rs_actor_camera_x_hi();
+                                                    u8 __enemies_draw_screen_x_Goomba = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo_Goomba;
+                                                    if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi_Goomba) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo_Goomba)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi_Goomba + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo_Goomba))) {
+                                                        sprite.Draw(goomba, __enemies_draw_screen_x_Goomba, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                    }
                                                 }
                                             }
                                         }
@@ -1874,6 +1885,62 @@ public class NesRomCompilerTests
                                    """;
 
         Assert.Equal(NesRomCompiler.CompileSource(manualSource, baseDirectory), NesRomCompiler.CompileSource(actorSource, baseDirectory));
+    }
+
+    [Fact]
+    public void Actor_draw_uses_world_x_minus_camera_x_and_culls_offscreen_on_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 0, 0);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].x = 20;
+                                  enemies[0].xHi = 0;
+                                  enemies[0].y = 48;
+                                  camera_set_position(4, 0);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0xE0]), "actor draw should read the camera X low byte.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xE1, 0x4A, 0x4A, 0x4A, 0x4A, 0x4A]), "actor draw should derive the camera X high byte from the absolute camera tile.");
+        Assert.True(ContainsSequence(prg, [0xC5, 0xE9, 0xD0]), "actor draw should compare actor and camera world pages and branch around sprite drawing when outside the camera window.");
     }
 
     [Fact]

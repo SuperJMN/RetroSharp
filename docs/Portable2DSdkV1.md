@@ -107,7 +107,7 @@ identity, virtual dispatch, delegates, closures, or function pointers.
 | Signature | Semantics |
 | --- | --- |
 | `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and must fit the selected target's actor-pool cap, currently the target hardware sprite count. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
-| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map and emit source-equivalent slot initialization for every spawn in that layer. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; `x` and `y` must fit a byte. |
+| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map and emit source-equivalent slot initialization for every spawn in that layer. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` must fit `0..65535` and is split into low `x` plus high `xHi`, while `y` must fit a byte. |
 | `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, filter spawns whose `x` falls in the literal half-open window `[left, left + width)`, and emit slot initialization for that activation window. |
 | `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
 | `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. |
@@ -117,17 +117,21 @@ identity, virtual dispatch, delegates, closures, or function pointers.
 
 `actor.Pool(...)` and `enemy.Def(...)` are accepted as statements inside the
 compiled source and disappear before target lowering. The generated actor state
-fields are `kind`, `active`, `x`, `y`, `vx`, `vy`, `state`, `timer`, `facing`,
-`animTick`, and `health`. Game Boy currently supports `pool.Update()` and
+fields are `kind`, `active`, `x`, `xHi`, `y`, `vx`, `vy`, `state`, `timer`,
+`facing`, `animTick`, and `health`. `x` is the low byte of world X, paired with
+`xHi`; this keeps pooled fields byte-sized without requiring mixed-width struct
+array layout. Game Boy currently supports `pool.Update()` and
 `pool.Draw()` for the basic byte-field behavior set by expanding them to grouped
 loops over active slots, with direct kind checks and `sprite.Draw` calls.
 `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and a direction-driven
 `Chaser` are implemented without actor-specific SDK operations. NES accepts the
 same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
-that basic behavior set. `pool.Draw()` emits ordinary `sprite.Draw(...)` calls,
-using `animation.Frame(...)` when a definition declares an animation clip, so
-aggregate hardware sprite usage is validated by the same frame-budget pass as
-hand-written sprite draws. `pool.TouchTiles(...)` and `pool.LandOnTiles(...)`
+that basic behavior set. `pool.Draw()` reads the current camera X state, computes
+`screenX = actorWorldX - cameraX`, culls slots outside the visible camera window,
+and emits ordinary `sprite.Draw(...)` calls for visible actors, using
+`animation.Frame(...)` when a definition declares an animation clip. Aggregate
+hardware sprite usage is validated by the same frame-budget pass as hand-written
+sprite draws. `pool.TouchTiles(...)` and `pool.LandOnTiles(...)`
 emit ordinary camera AABB SDK calls; they do not introduce actor-specific target
 intrinsics. Tiled spawn helpers read the same target-neutral map importer as
 `world.Load(...)` and lower to fixed slot stores before target lowering.

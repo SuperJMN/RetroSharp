@@ -93,7 +93,7 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
                 },
                 {
                   "id": 2,
-                  "x": 72,
+                  "x": 280,
                   "y": 32,
                   "properties": [
                     { "name": "kind", "type": "string", "value": "Bat" }
@@ -121,7 +121,7 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
             spawn =>
             {
                 Assert.Equal("Bat", spawn.Kind);
-                Assert.Equal(72, spawn.X);
+                Assert.Equal(280, spawn.X);
                 Assert.Equal(32, spawn.Y);
                 Assert.Empty(spawn.Fields);
             });

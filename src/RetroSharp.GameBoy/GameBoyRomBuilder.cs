@@ -841,6 +841,7 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort PendingStreamKindAddress = 0xC119;   // 0=none, 1=column, 2=row
     private const ushort PendingStreamTargetAddress = 0xC11A; // background column or row index
     private const ushort PendingStreamSourceAddress = 0xC11B; // source-map column or row index
+    private const ushort ExpressionScratchAddress = 0xC11C;
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
@@ -3621,11 +3622,11 @@ internal sealed class GameBoyRuntimeCompiler
                     builder.Label(trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
                     return;
                 case "<":
@@ -3675,11 +3676,11 @@ internal sealed class GameBoyRuntimeCompiler
                     EmitConditionTrueJump(binary.Right, trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, trueLabel); // JP Z,trueLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
                     return;
             }
@@ -3696,7 +3697,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.JumpAbsolute(0xC2, trueLabel);       // JP NZ,trueLabel
     }
 
-    private void EmitCompareToConstant(ExpressionSyntax left, ExpressionSyntax right)
+    private void EmitCompare(ExpressionSyntax left, ExpressionSyntax right)
     {
         if (TryConst(right, out var rightConstant))
         {
@@ -3712,7 +3713,12 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("Game Boy conditions currently require one side of == or != to be constant.");
+        EmitExpressionToA(left);
+        builder.StoreA(ExpressionScratchAddress);
+        EmitExpressionToA(right);
+        builder.LoadBFromA();
+        builder.LoadA(ExpressionScratchAddress);
+        builder.CompareB();
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -3733,7 +3739,8 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("Game Boy relational conditions currently require one side to be constant.");
+        EmitCompare(binary.Left, binary.Right);
+        EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
     }
 
     private void EmitRelationalFalseJump(string op, string falseLabel)
@@ -3920,6 +3927,14 @@ internal sealed class GameBoyRuntimeCompiler
                 break;
             case "animation_frame":
                 EmitAnimationFrame(call);
+                break;
+            case "__rs_actor_camera_x_lo":
+                GameBoyVideoProgram.RequireArity(call, 0);
+                builder.LoadA(CameraXLowAddress);
+                break;
+            case "__rs_actor_camera_x_hi":
+                GameBoyVideoProgram.RequireArity(call, 0);
+                builder.LoadA(CameraXHighAddress);
                 break;
             case "camera_tile_column_at":
                 EmitCameraTileColumnAt(call);
@@ -4791,7 +4806,13 @@ internal sealed class GameBoyRuntimeCompiler
                     return;
                 }
 
-                break;
+                EmitExpressionToA(binary.Left);
+                builder.StoreA(ExpressionScratchAddress);
+                EmitExpressionToA(binary.Right);
+                builder.LoadBFromA();
+                builder.LoadA(ExpressionScratchAddress);
+                builder.SubtractB();
+                return;
             case "&":
             case "|":
             case "^":

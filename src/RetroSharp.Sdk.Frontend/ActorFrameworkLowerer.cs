@@ -11,6 +11,8 @@ namespace RetroSharp.Sdk;
 public static class ActorFrameworkLowerer
 {
     private const string ActorStructName = "Actor";
+    private const string ActorCameraXLowFunction = "__rs_actor_camera_x_lo";
+    private const string ActorCameraXHighFunction = "__rs_actor_camera_x_hi";
 
     private static readonly IReadOnlyDictionary<string, int> BehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -439,9 +441,7 @@ public static class ActorFrameworkLowerer
         IReadOnlyList<StatementSyntax> statements = def.Behavior switch
         {
             "Walker" =>
-            [
-                FieldAssignment(pool.Name, indexName, "x", "+=", new IdentifierSyntax($"{def.Name}Speed")),
-            ],
+                AddWorldX(pool, indexName, new IdentifierSyntax($"{def.Name}Speed")),
             "Flyer" =>
             [
                 FieldAssignment(pool.Name, indexName, "y", "+=", new IdentifierSyntax($"{def.Name}Speed")),
@@ -493,10 +493,35 @@ public static class ActorFrameworkLowerer
 
     private static IfElseSyntax FacingMove(ActorPool pool, string indexName, EnemyDef def)
     {
+        var speed = new IdentifierSyntax($"{def.Name}Speed");
         return new IfElseSyntax(
             new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "facing"), new ConstantSyntax("0"), Operator.Equal),
-            new BlockSyntax([FieldAssignment(pool.Name, indexName, "x", "+=", new IdentifierSyntax($"{def.Name}Speed"))]),
-            Maybe.From(new BlockSyntax([FieldAssignment(pool.Name, indexName, "x", "-=", new IdentifierSyntax($"{def.Name}Speed"))])));
+            new BlockSyntax(AddWorldX(pool, indexName, speed).ToList()),
+            Maybe.From(new BlockSyntax(SubtractWorldX(pool, indexName, speed).ToList())));
+    }
+
+    private static IReadOnlyList<StatementSyntax> AddWorldX(ActorPool pool, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            FieldAssignment(pool.Name, indexName, "x", "+=", amount),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(pool.Name, indexName, "xHi", "+=", new ConstantSyntax("1"))]),
+                Maybe<BlockSyntax>.None),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> SubtractWorldX(ActorPool pool, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(pool.Name, indexName, "xHi", "-=", new ConstantSyntax("1"))]),
+                Maybe<BlockSyntax>.None),
+            FieldAssignment(pool.Name, indexName, "x", "-=", amount),
+        ];
     }
 
     private static IfElseSyntax TimerCooldown(
@@ -545,15 +570,38 @@ public static class ActorFrameworkLowerer
 
         var indexName = $"__{pool.Name}_draw_i";
         var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, ActorDrawBlock(pool, indexName, def)))
+            .Select(def => new KindBranch(def.Name, ActorDrawBlock(pool, indexName, def, state.ScreenWidth)))
             .ToList();
 
         return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
     }
 
-    private static BlockSyntax ActorDrawBlock(ActorPool pool, string indexName, EnemyDef def)
+    private static BlockSyntax ActorDrawBlock(ActorPool pool, string indexName, EnemyDef def, int screenWidth)
     {
         var statements = new List<StatementSyntax>();
+        var cameraXLow = $"__{pool.Name}_draw_camera_x_lo_{def.Name}";
+        var cameraXHigh = $"__{pool.Name}_draw_camera_x_hi_{def.Name}";
+        var screenX = $"__{pool.Name}_draw_screen_x_{def.Name}";
+
+        statements.Add(new DeclarationSyntax(
+            "u8",
+            cameraXLow,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXLowFunction, []))));
+        statements.Add(new DeclarationSyntax(
+            "u8",
+            cameraXHigh,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXHighFunction, []))));
+        statements.Add(new DeclarationSyntax(
+            "u8",
+            screenX,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                PoolField(pool.Name, indexName, "x"),
+                new IdentifierSyntax(cameraXLow),
+                Operator.Get("-")))));
+
         ExpressionSyntax frame = new ConstantSyntax("0");
         if (def.Animation is not null)
         {
@@ -572,17 +620,39 @@ public static class ActorFrameworkLowerer
             frame = new IdentifierSyntax(frameVariable);
         }
 
-        statements.Add(new ExpressionStatementSyntax(new SdkDotCallSyntax(
-            "sprite",
-            "Draw",
-            [
-                new IdentifierSyntax(def.Sprite!),
-                PoolField(pool.Name, indexName, "x"),
-                PoolField(pool.Name, indexName, "y"),
-                frame,
-                new IdentifierSyntax("false"),
-                new ConstantSyntax("0"),
-            ])));
+        var sameCameraPage = And(
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
+        var nextCameraPage = And(
+            new BinaryExpressionSyntax(
+                PoolField(pool.Name, indexName, "xHi"),
+                new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), new ConstantSyntax("1"), Operator.Get("+")),
+                Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan));
+        ExpressionSyntax visible = Or(sameCameraPage, nextCameraPage);
+        if (screenWidth < 256)
+        {
+            visible = And(
+                visible,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenX), new ConstantSyntax(screenWidth.ToString(CultureInfo.InvariantCulture)), Operator.LessThan));
+        }
+
+        statements.Add(new IfElseSyntax(
+            visible,
+            new BlockSyntax([
+                new ExpressionStatementSyntax(new SdkDotCallSyntax(
+                    "sprite",
+                    "Draw",
+                    [
+                        new IdentifierSyntax(def.Sprite!),
+                        new IdentifierSyntax(screenX),
+                        PoolField(pool.Name, indexName, "y"),
+                        frame,
+                        new IdentifierSyntax("false"),
+                        new ConstantSyntax("0"),
+                    ])),
+            ]),
+            Maybe<BlockSyntax>.None));
 
         return new BlockSyntax(statements);
     }
@@ -778,6 +848,11 @@ public static class ActorFrameworkLowerer
         return new BinaryExpressionSyntax(left, right, Operator.Get("&&"));
     }
 
+    private static BinaryExpressionSyntax Or(ExpressionSyntax left, ExpressionSyntax right)
+    {
+        return new BinaryExpressionSyntax(left, right, Operator.Get("||"));
+    }
+
     private static void RequireNoArguments(SdkDotCallSyntax call)
     {
         if (call.Parameters.Any())
@@ -845,14 +920,16 @@ public static class ActorFrameworkLowerer
         for (var index = 0; index < layer.Spawns.Count; index++)
         {
             var spawn = layer.Spawns[index];
+            var (xLow, xHigh) = SplitWorldX(spawn.X, $"actor.{layer.MethodName} spawn {index} X");
             if (!spawn.Fields.ContainsKey("active"))
             {
                 statements.Add(FieldAssignment(layer.PoolName, index, "active", "=", new ConstantSyntax("1")));
             }
 
             statements.Add(FieldAssignment(layer.PoolName, index, "kind", "=", new IdentifierSyntax(spawn.Kind)));
-            statements.Add(FieldAssignment(layer.PoolName, index, "x", "=", new ConstantSyntax(spawn.X.ToString(CultureInfo.InvariantCulture))));
-            statements.Add(FieldAssignment(layer.PoolName, index, "y", "=", new ConstantSyntax(spawn.Y.ToString(CultureInfo.InvariantCulture))));
+            statements.Add(FieldAssignment(layer.PoolName, index, "x", "=", new ConstantSyntax(xLow.ToString(CultureInfo.InvariantCulture))));
+            statements.Add(FieldAssignment(layer.PoolName, index, "xHi", "=", new ConstantSyntax(xHigh.ToString(CultureInfo.InvariantCulture))));
+            statements.Add(FieldAssignment(layer.PoolName, index, "y", "=", new ConstantSyntax(CheckedByte(spawn.Y, $"actor.{layer.MethodName} spawn {index} Y").ToString(CultureInfo.InvariantCulture))));
 
             foreach (var field in spawn.Fields)
             {
@@ -861,6 +938,16 @@ public static class ActorFrameworkLowerer
         }
 
         return statements;
+    }
+
+    private static (int Low, int High) SplitWorldX(int value, string context)
+    {
+        if (value is < 0 or > 65535)
+        {
+            throw new InvalidOperationException($"{context} must be between 0 and 65535.");
+        }
+
+        return (value & 0xFF, value >> 8);
     }
 
     private static ExpressionSyntax RewriteExpression(ExpressionSyntax expression, ActorFrameworkState state)
@@ -1020,6 +1107,7 @@ public static class ActorFrameworkLowerer
                 new StructFieldSyntax("u8", "kind"),
                 new StructFieldSyntax("u8", "active"),
                 new StructFieldSyntax("u8", "x"),
+                new StructFieldSyntax("u8", "xHi"),
                 new StructFieldSyntax("u8", "y"),
                 new StructFieldSyntax("i8", "vx"),
                 new StructFieldSyntax("i8", "vy"),
@@ -1048,6 +1136,7 @@ public static class ActorFrameworkLowerer
         public string BaseDirectory { get; } = baseDirectory ?? Directory.GetCurrentDirectory();
         public bool SupportsUpdate { get; } = supportsUpdate;
         public bool SupportsDraw { get; } = supportsDraw;
+        public int ScreenWidth { get; } = capabilities.ScreenPixels.Width;
         public IReadOnlyList<ActorPool> Pools => poolsInOrder;
         public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
         public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0;

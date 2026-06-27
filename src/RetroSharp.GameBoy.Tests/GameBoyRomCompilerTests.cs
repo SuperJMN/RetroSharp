@@ -2279,6 +2279,7 @@ public class GameBoyRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -2438,6 +2439,7 @@ public class GameBoyRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -2466,6 +2468,9 @@ public class GameBoyRomCompilerTests
                                             if (enemies[__enemies_update_i].active != 0) {
                                                 if (enemies[__enemies_update_i].kind == Goomba) {
                                                     enemies[__enemies_update_i].x += GoombaSpeed;
+                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
+                                                        enemies[__enemies_update_i].xHi += 1;
+                                                    }
                                                 }
                                             }
                                         }
@@ -2473,7 +2478,12 @@ public class GameBoyRomCompilerTests
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
                                             if (enemies[__enemies_draw_i].active != 0) {
                                                 if (enemies[__enemies_draw_i].kind == Goomba) {
-                                                    sprite.Draw(goomba, enemies[__enemies_draw_i].x, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                    u8 __enemies_draw_camera_x_lo_Goomba = __rs_actor_camera_x_lo();
+                                                    u8 __enemies_draw_camera_x_hi_Goomba = __rs_actor_camera_x_hi();
+                                                    u8 __enemies_draw_screen_x_Goomba = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo_Goomba;
+                                                    if ((((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi_Goomba) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo_Goomba)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi_Goomba + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo_Goomba))) && (__enemies_draw_screen_x_Goomba < 160)) {
+                                                        sprite.Draw(goomba, __enemies_draw_screen_x_Goomba, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                    }
                                                 }
                                             }
                                         }
@@ -2500,6 +2510,41 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Actor_draw_uses_world_x_minus_camera_x_and_culls_offscreen_on_game_boy()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.sprite.json",
+            SpriteJson(Rows(8, 16, "11111111")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 0, 0);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].x = 20;
+                                  enemies[0].xHi = 0;
+                                  enemies[0].y = 48;
+                                  camera_set_position(4, 0);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0]), "actor draw should read the camera X low byte.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE1, 0xC0]), "actor draw should read the camera X high byte.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0xA0, 0xD2]), "actor draw should cull screen X values at or beyond the 160px Game Boy viewport.");
+    }
+
+    [Fact]
     public void Compiles_actor_update_animation_tick_like_explicit_field_increment()
     {
         const string manualSource = """
@@ -2507,6 +2552,7 @@ public class GameBoyRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -2531,6 +2577,9 @@ public class GameBoyRomCompilerTests
                                             if (enemies[__enemies_update_i].active != 0) {
                                                 if (enemies[__enemies_update_i].kind == Goomba) {
                                                     enemies[__enemies_update_i].x += GoombaSpeed;
+                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
+                                                        enemies[__enemies_update_i].xHi += 1;
+                                                    }
                                                     enemies[__enemies_update_i].animTick += 1;
                                                 }
                                             }
@@ -2568,6 +2617,7 @@ public class GameBoyRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -2586,11 +2636,13 @@ public class GameBoyRomCompilerTests
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
                                         enemies[0].x = 24;
+                                        enemies[0].xHi = 0;
                                         enemies[0].y = 40;
                                         enemies[0].facing = 1;
                                         enemies[1].active = 1;
                                         enemies[1].kind = Bat;
                                         enemies[1].x = 72;
+                                        enemies[1].xHi = 0;
                                         enemies[1].y = 32;
                                     }
                                     """;
@@ -2648,6 +2700,7 @@ public class GameBoyRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -2665,6 +2718,7 @@ public class GameBoyRomCompilerTests
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
                                         enemies[0].x = 24;
+                                        enemies[0].xHi = 0;
                                         enemies[0].y = 40;
                                     }
                                     """;
@@ -2734,6 +2788,7 @@ public class GameBoyRomCompilerTests
                                         u8 kind;
                                         u8 active;
                                         u8 x;
+                                        u8 xHi;
                                         u8 y;
                                         i8 vx;
                                         i8 vy;
@@ -2788,6 +2843,9 @@ public class GameBoyRomCompilerTests
                                             if (enemies[__enemies_update_i].active != 0) {
                                                 if (enemies[__enemies_update_i].kind == Goomba) {
                                                     enemies[__enemies_update_i].x += GoombaSpeed;
+                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
+                                                        enemies[__enemies_update_i].xHi += 1;
+                                                    }
                                                 } else {
                                                     if (enemies[__enemies_update_i].kind == Bat) {
                                                         enemies[__enemies_update_i].y += BatSpeed;
@@ -2795,7 +2853,13 @@ public class GameBoyRomCompilerTests
                                                         if (enemies[__enemies_update_i].kind == Koopa) {
                                                             if (enemies[__enemies_update_i].facing == 0) {
                                                                 enemies[__enemies_update_i].x += KoopaSpeed;
+                                                                if (enemies[__enemies_update_i].x < KoopaSpeed) {
+                                                                    enemies[__enemies_update_i].xHi += 1;
+                                                                }
                                                             } else {
+                                                                if (enemies[__enemies_update_i].x < KoopaSpeed) {
+                                                                    enemies[__enemies_update_i].xHi -= 1;
+                                                                }
                                                                 enemies[__enemies_update_i].x -= KoopaSpeed;
                                                             }
                                                             enemies[__enemies_update_i].timer += 1;
@@ -2816,7 +2880,13 @@ public class GameBoyRomCompilerTests
                                                                 if (enemies[__enemies_update_i].kind == Seeker) {
                                                                     if (enemies[__enemies_update_i].facing == 0) {
                                                                         enemies[__enemies_update_i].x += SeekerSpeed;
+                                                                        if (enemies[__enemies_update_i].x < SeekerSpeed) {
+                                                                            enemies[__enemies_update_i].xHi += 1;
+                                                                        }
                                                                     } else {
+                                                                        if (enemies[__enemies_update_i].x < SeekerSpeed) {
+                                                                            enemies[__enemies_update_i].xHi -= 1;
+                                                                        }
                                                                         enemies[__enemies_update_i].x -= SeekerSpeed;
                                                                     }
                                                                 } else {

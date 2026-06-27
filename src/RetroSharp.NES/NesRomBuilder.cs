@@ -271,6 +271,7 @@ internal sealed class NesRuntimeCompiler
     private const byte CollisionRowScratchAddress = 0xE6;
     private const byte CameraNewXAddress = 0xE7;
     private const byte RuntimeIndexScratchAddress = 0xE8;
+    private const byte ExpressionScratchAddress = 0xE9;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -1326,11 +1327,11 @@ internal sealed class NesRuntimeCompiler
                     builder.Label(trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xF0, falseLabel); // BEQ falseLabel
                     return;
                 case "<":
@@ -1380,11 +1381,11 @@ internal sealed class NesRuntimeCompiler
                     EmitConditionTrueJump(binary.Right, trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xF0, trueLabel); // BEQ trueLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
                     return;
             }
@@ -1401,7 +1402,7 @@ internal sealed class NesRuntimeCompiler
         builder.BranchRelative(0xD0, trueLabel);     // BNE trueLabel
     }
 
-    private void EmitCompareToConstant(ExpressionSyntax left, ExpressionSyntax right)
+    private void EmitCompare(ExpressionSyntax left, ExpressionSyntax right)
     {
         if (TryConst(right, out var rightConstant))
         {
@@ -1417,7 +1418,10 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("NES equality conditions currently require one side to be constant.");
+        EmitExpressionToA(right);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        EmitExpressionToA(left);
+        builder.CompareZeroPage(ExpressionScratchAddress);
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -1438,7 +1442,8 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("NES relational conditions currently require one side to be constant.");
+        EmitCompare(binary.Left, binary.Right);
+        EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
     }
 
     private void EmitRelationalFalseJump(string op, string falseLabel)
@@ -2582,7 +2587,12 @@ internal sealed class NesRuntimeCompiler
                     return;
                 }
 
-                break;
+                EmitExpressionToA(binary.Right);
+                builder.StoreAZeroPage(ExpressionScratchAddress);
+                EmitExpressionToA(binary.Left);
+                builder.SetCarry();
+                builder.SubtractZeroPage(ExpressionScratchAddress);
+                return;
             case "&":
             case "|":
             case "^":
@@ -2832,6 +2842,19 @@ internal sealed class NesRuntimeCompiler
                 break;
             case "sprite_width":
                 EmitSpriteWidth(call);
+                break;
+            case "__rs_actor_camera_x_lo":
+                NesVideoProgram.RequireArity(call, 0);
+                builder.LoadAZeroPage(CameraXAddress);
+                break;
+            case "__rs_actor_camera_x_hi":
+                NesVideoProgram.RequireArity(call, 0);
+                builder.LoadAZeroPage(CameraTileColumnAddress);
+                builder.ShiftRightA();
+                builder.ShiftRightA();
+                builder.ShiftRightA();
+                builder.ShiftRightA();
+                builder.ShiftRightA();
                 break;
             default:
                 if (TryEmitUserValueFunction(call))

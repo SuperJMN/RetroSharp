@@ -312,13 +312,15 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Candidate files: `ActorFrameworkLowerer.cs` (draw + spawn lowering), camera
   state access, GB/NES emitted-code tests, sample.
 - Steps:
-  - [ ] Store actor positions in world coordinates; if world X exceeds 255, use
+  - [x] Store actor positions in world coordinates; if world X exceeds 255, use
     AF-1.3 mixed-width fields or explicit split hi/lo byte fields (no heap).
-  - [ ] Draw actors camera-relative (`screenX = worldX - cameraX`) and cull
+    The implemented model keeps the existing `x` field as the low byte and adds
+    `xHi` as the high byte so existing byte-sized actor code stays source-compatible.
+  - [x] Draw actors camera-relative (`screenX = worldX - cameraX`) and cull
     actors outside the visible window instead of drawing at a raw screen byte.
-  - [ ] Prove the draw loop stays a grouped loop with direct branches.
+  - [x] Prove the draw loop stays a grouped loop with direct branches.
 - Verification:
-  - [ ] A scrolling sample keeps enemies anchored to world tiles as the camera
+  - [x] A scrolling sample keeps enemies anchored to world tiles as the camera
     moves; off-screen actors are not drawn.
 - Depends on: AF-2.3 (and AF-1.3 if world X > 255).
 
@@ -386,7 +388,6 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 These are the open gaps captured as Phase 5. Until they land, treat the actor
 framework as a non-scrolling acceptance slice, not a shipping platformer SDK:
 
-- Actors are screen-space, not world-space (AF-5.1).
 - Collision uses one fixed screen column for all actors (AF-5.2).
 - Activation is compile-time window filtering, not runtime paging (AF-5.3).
 - Capability checks count one actor as one hardware sprite (AF-5.4).

@@ -1,5 +1,5 @@
 enum World {
-    Width = 16,
+    Width = 40,
     StreamY = 10,
     Height = 2
 }
@@ -16,14 +16,20 @@ void main() {
     enemy.Def(Bat, sprite: actor_marker, behavior: Flyer, animation: actor_walk, speed: 1, hp: 1, hitboxWidth: 8, hitboxHeight: 8);
     enemy.Def(Koopa, sprite: actor_marker, behavior: Patrol, animation: actor_walk, speed: 1, hp: 1, cooldown: 24, hitboxWidth: 8, hitboxHeight: 8);
 
-    actor.SpawnWindow(enemies, "actors.tmj", "actors", 0, 160);
+    actor.SpawnLayer(enemies, "actors.tmj", "actors");
+
+    u8 cameraX = 0;
 
     loop {
         video.WaitVBlank();
+        input.Poll();
+        if (button_down(right) && cameraX < 160) {
+            cameraX += 1;
+        }
+
+        camera.SetPosition(cameraX, 0);
         enemies.Update();
-        enemies.TouchTiles(72, 0, 1);
-        enemies.LandOnTiles(72, 4, 12, 1);
-        enemies.Draw();
         camera.Apply();
+        enemies.Draw();
     }
 }

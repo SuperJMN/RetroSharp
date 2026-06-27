@@ -37,7 +37,8 @@ public sealed class CrossTargetCliAcceptanceTests
         var source = File.ReadAllText(sample);
 
         Assert.Contains("""world.Load("actors.tmj");""", source);
-        Assert.Contains("""actor.SpawnWindow(enemies, "actors.tmj", "actors", 0, 160);""", source);
+        Assert.Contains("""actor.SpawnLayer(enemies, "actors.tmj", "actors");""", source);
+        Assert.Contains("""camera.SetPosition(cameraX, 0);""", source);
         Assert.DoesNotContain("enemies[0].kind", source);
 
         var gameBoyRom = Path.Combine(workspace.Path, "actors.gb");
