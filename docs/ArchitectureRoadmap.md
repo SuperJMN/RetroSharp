@@ -1250,7 +1250,7 @@ Acceptance criteria:
 
 ### Iteration 14: Scalable Platformer Actor Framework Ergonomics
 
-Status: planned.
+Status: in progress. The language/storage prerequisite (byte-backed struct arrays with `arr[i].field` access) landed on branch `feature/actor-framework`. The branch-scoped task breakdown for the rest of AR-14 lives in `docs/ActorFrameworkRoadmap.md`.
 
 Purpose: make complex platformer characters and enemy behaviors practical without asking game authors to hand-write one large `switch` over every enemy kind. This is a framework/SDK ergonomics goal, not a managed object model. The implementation should preserve the current 8-bit contract: fixed storage, predictable update cost, explicit caps, and no heap allocation or runtime polymorphism.
 
