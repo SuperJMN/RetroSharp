@@ -106,7 +106,7 @@ identity, virtual dispatch, delegates, closures, or function pointers.
 
 | Signature | Semantics |
 | --- | --- |
-| `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and must fit the selected target's actor-pool cap, currently the target hardware sprite count. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
+| `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and fit the fixed struct-array storage model. For `pool.Draw()`, targets validate `capacity * max(enemy metasprite hardware sprites)` against their sprite budget after JSON/PNG assets have been resolved. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
 | `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` must fit `0..65535` and is split into low `x` plus high `xHi`, while `y` must fit a byte. |
 | `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
 | `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
@@ -140,9 +140,12 @@ same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
 that basic behavior set. `pool.Draw()` reads the current camera X state, computes
 `screenX = actorWorldX - cameraX`, culls slots outside the visible camera window,
 and emits ordinary `sprite.Draw(...)` calls for visible actors, using
-`animation.Frame(...)` when a definition declares an animation clip. Aggregate
-hardware sprite usage is validated by the same frame-budget pass as hand-written
-sprite draws. `pool.TouchTiles(...)`, `pool.LandOnTiles(...)`, and
+`animation.Frame(...)` when a definition declares an animation clip. Drawn pools
+are checked against target sprite budgets with target-resolved metasprite
+geometry, so a pool of multi-sprite enemy definitions is charged by hardware
+sprite pieces rather than by actor slots. Aggregate hardware sprite usage is
+also validated by the same frame-budget pass as hand-written sprite draws.
+`pool.TouchTiles(...)`, `pool.LandOnTiles(...)`, and
 `pool.TouchPlayer(...)` reuse the same camera projection and visibility guard as
 draw, so collision/contact is tested per visible actor instead of at one fixed
 screen column. The tile helpers emit ordinary camera AABB SDK calls; they do not
@@ -165,7 +168,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 
 Static enforcement starts with per-operation checks, then applies a frame-budget pass for aggregate SDK budgets. The shared operation list remains flattened across control flow, so aggregate checks must not count that list directly. Instead, `Sdk2DOperationCollector.CollectFrameBudgets(...)` computes possible frame windows around `video.WaitVBlank()` and `input.Poll()`, treats `if`/`else` arms as exclusive alternatives, and validates the result through `Sdk2DOperationValidator.ValidateFrameBudget(...)`. Multiple explicit stream calls that exceed `MaxBackgroundTileWritesPerFrame` in one possible frame fail before target lowering.
 
-For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Actor pool draws that use `pool[i].y` receive an actor-specific conservative scanline proof: the validator assumes all active slots can overlap the same scanline and rejects that worst case when it exceeds `MaxSpritesPerScanline`. Other runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility outside the actor pool path. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
+For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Actor pool draws receive an earlier target-aware diagnostic after sprite assets are compiled: for every drawn pool, `capacity * max(enemy.Def metasprite hardware sprites)` must fit `SpriteCount`, and `capacity * max(enemy.Def busiest-scanline hardware sprites)` must fit `MaxSpritesPerScanline`. That diagnostic names the pool and the enemy definition with the largest metasprite pressure. The frame-budget pass still validates the lowered draw operations with branch-as-alternative and frame-boundary semantics. Other runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility outside the actor pool path. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
 
 | SDK area | Required capabilities |
 | --- | --- |
@@ -219,6 +222,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
 | Actor pool dynamic capacity | `actor.Pool for 'enemies' requires a literal capacity from 1 to 255.` |
+| Actor pool metasprite budget overflow | `Target 'gb' supports 40 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 42 because capacity 21 times enemy.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.` |
 
 Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
 

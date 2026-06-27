@@ -38,7 +38,13 @@ public static class GameBoyRomCompiler
 
         var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
-        return GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
+        var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
+        ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
+            parse.Value,
+            GameBoyTarget.Capabilities,
+            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
+            baseDirectory);
+        return videoProgram;
     }
 
     private static void ValidateFunctionContracts(ProgramSyntax program)
@@ -83,6 +89,19 @@ public static class GameBoyRomCompiler
                 asset.Pieces.Select(piece => piece.YOffset),
                 spriteHeight: 16,
                 screenHeight: GameBoyTarget.Capabilities.ScreenPixels.Height));
+    }
+
+    private static ActorMetaspriteGeometry ActorMetaspriteGeometry(GameBoyVideoProgram videoProgram, string spriteId)
+    {
+        if (!videoProgram.SpriteAssets.TryGetValue(spriteId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{spriteId}'. Declare it with sprite_asset(...).");
+        }
+
+        return new ActorMetaspriteGeometry(
+            asset.Pieces.Count,
+            asset.Pieces.Select(piece => piece.YOffset).ToArray(),
+            HardwareSpriteHeight: 16);
     }
 
     private static IReadOnlyDictionary<int, int> HardwareSpriteScanlineCounts(

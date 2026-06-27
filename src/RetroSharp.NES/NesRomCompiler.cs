@@ -21,6 +21,11 @@ public static class NesRomCompiler
         var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
+        ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
+            parse.Value,
+            NesTarget.Capabilities,
+            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
+            baseDirectory);
         ValidateSdkOperations(videoProgram);
         return NesRomBuilder.Build(videoProgram);
     }
@@ -93,6 +98,19 @@ public static class NesRomCompiler
                 asset.Pieces.Select(piece => piece.YOffset),
                 spriteHeight: 8,
                 screenHeight: NesTarget.Capabilities.ScreenPixels.Height));
+    }
+
+    private static ActorMetaspriteGeometry ActorMetaspriteGeometry(NesVideoProgram videoProgram, string spriteId)
+    {
+        if (!videoProgram.SpriteAssets.TryGetValue(spriteId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES sprite asset '{spriteId}'. Declare it with sprite_asset(...).");
+        }
+
+        return new ActorMetaspriteGeometry(
+            asset.Pieces.Count,
+            asset.Pieces.Select(piece => piece.YOffset).ToArray(),
+            HardwareSpriteHeight: 8);
     }
 
     private static IReadOnlyDictionary<int, int> HardwareSpriteScanlineCounts(

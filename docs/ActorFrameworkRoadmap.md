@@ -367,11 +367,11 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Candidate files: capability checks in `ActorFrameworkLowerer.cs`, `Target2DCapabilities`,
   tests.
 - Steps:
-  - [ ] Account for each enemy def's resolved metasprite hardware-sprite count
+  - [x] Account for each enemy def's resolved metasprite hardware-sprite count
     when checking pool budget vs target sprite count and per-scanline limits.
-  - [ ] Diagnostic names the offending pool and def.
+  - [x] Diagnostic names the offending pool and def.
 - Verification:
-  - [ ] A pool of multi-sprite metasprites that exceeds the budget fails with a
+  - [x] A pool of multi-sprite metasprites that exceeds the budget fails with a
     clear diagnostic on GB and NES.
 - Depends on: AF-4.1.
 
@@ -410,12 +410,10 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     and relational compare emission without scratch reentrancy.
 - Depends on: AF-5.1.
 
-## Known limitations after the first slice
+## Phase 5 status after AF-5.4
 
-These are the open gaps captured as Phase 5. Until they land, treat the actor
-framework as an acceptance slice, not a shipping platformer SDK:
-
-- Capability checks count one actor as one hardware sprite (AF-5.4).
+AF-5.1 through AF-5.4 are closed. Remaining Phase 5 follow-ups are robustness
+items rather than the first-slice platformer blockers.
 
 ## Recommended first slice
 

@@ -199,6 +199,37 @@ public sealed class CrossTargetScrollAcceptanceTests
         Assert.NotEmpty(nesRom);
     }
 
+    [Fact]
+    public void Same_actor_pool_with_multi_sprite_png_compiles_on_game_boy_and_nes_when_it_fits_each_budget()
+    {
+        const string actorSource = """
+            void main() {
+                world.Column(0, 1, 2);
+                world.Map(1, 10, 2);
+                camera.Init(1, 10, 2);
+                sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
+                actor.Pool(enemies, 2);
+                enemy.Def(PlayerProxy, sprite: player, behavior: Walker, speed: 1, hitboxWidth: 18, hitboxHeight: 32);
+                enemies[0].active = 1;
+                enemies[0].kind = PlayerProxy;
+                enemies[0].x = 72;
+                enemies[0].xHi = 0;
+                enemies[0].y = 32;
+
+                loop {
+                    video.WaitVBlank();
+                    enemies.Draw();
+                }
+            }
+            """;
+
+        var gbRom = GameBoyRomCompiler.CompileSource(actorSource, RepoRoot());
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(actorSource, RepoRoot());
+        Assert.NotEmpty(nesRom);
+    }
+
     private static string RepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

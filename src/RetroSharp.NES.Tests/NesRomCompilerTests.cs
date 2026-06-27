@@ -1701,7 +1701,7 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_actor_pool_above_nes_sprite_capacity()
+    public void Rejects_actor_pool_above_nes_struct_array_storage_capacity()
     {
         const string source = """
                               void main() {
@@ -1712,7 +1712,7 @@ public class NesRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
-        Assert.Equal("Target 'nes' supports actor pools up to 64 slots, but actor.Pool for 'enemies' declares 65.", exception.Message);
+        Assert.Equal("NES target struct array 'enemies' uses 780 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
     }
 
     [Fact]
@@ -1756,8 +1756,34 @@ public class NesRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'nes' supports 64 hardware sprites per frame, but 69 are required for drawing logical sprites in one frame.",
+            "Target 'nes' supports 64 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 69 because capacity 23 times enemy.Def 'Goomba' sprite 'goomba' uses 3 hardware sprites.",
             exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_draw_loop_when_multi_sprite_png_pool_fits_nes_budget()
+    {
+        var baseDirectory = WriteSpritePng(
+            "goomba.png",
+            8,
+            16,
+            Rows(8, 16, Enumerable.Repeat("11111111", 16).ToArray()));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "goomba.png", 8, 16);
+                                  actor.Pool(enemies, 8);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.NotEmpty(rom);
     }
 
     [Fact]
@@ -1801,7 +1827,7 @@ public class NesRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'nes' supports 8 hardware sprites per scanline, but 9 are required on scanline 0 for drawing logical sprites in one frame.",
+            "Target 'nes' supports 8 hardware sprites per scanline, but actor.Pool for 'enemies' can draw up to 9 on one scanline because capacity 9 times enemy.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
             exception.Message);
     }
 

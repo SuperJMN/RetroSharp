@@ -8,6 +8,11 @@ using RetroSharp.Parser;
 
 namespace RetroSharp.Sdk;
 
+public sealed record ActorMetaspriteGeometry(
+    int HardwareSpriteCount,
+    IReadOnlyList<int> PieceYOffsets,
+    int HardwareSpriteHeight);
+
 public static class ActorFrameworkLowerer
 {
     private const string ActorStructName = "Actor";
@@ -94,6 +99,182 @@ public static class ActorFrameworkLowerer
             program.Enums,
             structs,
             functions);
+    }
+
+    public static void ValidatePoolSpriteBudgets(
+        ProgramSyntax program,
+        Target2DCapabilities capabilities,
+        Func<string, ActorMetaspriteGeometry> metaspriteGeometry,
+        string? baseDirectory = null)
+    {
+        var state = new ActorFrameworkState(capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        foreach (var function in program.Functions)
+        {
+            CollectPoolBudgetDirectives(function.Block, state);
+        }
+
+        if (state.Pools.Count == 0 || state.EnemyDefs.Count == 0)
+        {
+            return;
+        }
+
+        var drawnPools = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var function in program.Functions)
+        {
+            CollectDrawnPools(function.Block, drawnPools);
+        }
+
+        if (drawnPools.Count == 0)
+        {
+            return;
+        }
+
+        var enemyBudgets = state.EnemyDefs
+            .Where(def => def.Sprite is not null)
+            .Select(def =>
+            {
+                var geometry = metaspriteGeometry(def.Sprite!);
+                return new EnemySpriteBudget(
+                    def,
+                    geometry,
+                    BusiestRelativeScanlineSpriteCount(geometry));
+            })
+            .ToList();
+
+        if (enemyBudgets.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var pool in state.Pools.Where(pool => drawnPools.Contains(pool.Name)))
+        {
+            ValidatePoolSpriteBudget(capabilities, pool, enemyBudgets);
+        }
+    }
+
+    private static void CollectPoolBudgetDirectives(BlockSyntax block, ActorFrameworkState state)
+    {
+        WalkStatements(block, statement =>
+        {
+            switch (statement)
+            {
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } poolCall }:
+                    state.AddPool(ReadPool(poolCall));
+                    break;
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "enemy", Method: "Def" } defCall }:
+                    state.AddEnemyDef(ReadEnemyDef(defCall));
+                    break;
+            }
+        });
+    }
+
+    private static void CollectDrawnPools(BlockSyntax block, ISet<string> drawnPools)
+    {
+        WalkStatements(block, statement =>
+        {
+            if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Method: "Draw" } drawCall })
+            {
+                drawnPools.Add(drawCall.Module);
+            }
+        });
+    }
+
+    private static void WalkStatements(BlockSyntax block, Action<StatementSyntax> visit)
+    {
+        foreach (var statement in block.Statements)
+        {
+            visit(statement);
+            switch (statement)
+            {
+                case IfElseSyntax ifElse:
+                    WalkStatements(ifElse.ThenBlock, visit);
+                    if (ifElse.ElseBlock.HasValue)
+                    {
+                        WalkStatements(ifElse.ElseBlock.Value, visit);
+                    }
+
+                    break;
+                case WhileSyntax whileSyntax:
+                    WalkStatements(whileSyntax.Body, visit);
+                    break;
+                case DoWhileSyntax doWhileSyntax:
+                    WalkStatements(doWhileSyntax.Body, visit);
+                    break;
+                case LoopSyntax loopSyntax:
+                    WalkStatements(loopSyntax.Body, visit);
+                    break;
+                case RangeForSyntax rangeForSyntax:
+                    WalkStatements(rangeForSyntax.Body, visit);
+                    break;
+                case ForSyntax forSyntax:
+                    WalkStatements(forSyntax.Body, visit);
+                    break;
+                case SwitchSyntax switchSyntax:
+                    foreach (var switchCase in switchSyntax.Cases)
+                    {
+                        WalkStatements(switchCase.Block, visit);
+                    }
+
+                    if (switchSyntax.DefaultBlock.HasValue)
+                    {
+                        WalkStatements(switchSyntax.DefaultBlock.Value, visit);
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private static void ValidatePoolSpriteBudget(
+        Target2DCapabilities capabilities,
+        ActorPool pool,
+        IReadOnlyList<EnemySpriteBudget> enemyBudgets)
+    {
+        var largestMetasprite = enemyBudgets
+            .OrderByDescending(budget => budget.Geometry.HardwareSpriteCount)
+            .ThenBy(budget => budget.Def.Name, StringComparer.Ordinal)
+            .First();
+        var frameSprites = pool.Capacity * largestMetasprite.Geometry.HardwareSpriteCount;
+        if (frameSprites > capabilities.SpriteCount)
+        {
+            throw new InvalidOperationException(
+                $"Target '{capabilities.Name}' supports {capabilities.SpriteCount} hardware sprites per frame, but actor.Pool for '{pool.Name}' can draw up to {frameSprites} because capacity {pool.Capacity} times enemy.Def '{largestMetasprite.Def.Name}' sprite '{largestMetasprite.Def.Sprite}' uses {HardwareSpriteCountText(largestMetasprite.Geometry.HardwareSpriteCount)}.");
+        }
+
+        var busiestScanline = enemyBudgets
+            .OrderByDescending(budget => budget.BusiestRelativeScanlineSprites)
+            .ThenBy(budget => budget.Def.Name, StringComparer.Ordinal)
+            .First();
+        var scanlineSprites = pool.Capacity * busiestScanline.BusiestRelativeScanlineSprites;
+        if (scanlineSprites > capabilities.MaxSpritesPerScanline)
+        {
+            throw new InvalidOperationException(
+                $"Target '{capabilities.Name}' supports {capabilities.MaxSpritesPerScanline} hardware sprites per scanline, but actor.Pool for '{pool.Name}' can draw up to {scanlineSprites} on one scanline because capacity {pool.Capacity} times enemy.Def '{busiestScanline.Def.Name}' sprite '{busiestScanline.Def.Sprite}' uses {HardwareSpriteCountText(busiestScanline.BusiestRelativeScanlineSprites)} on its busiest scanline.");
+        }
+    }
+
+    private static string HardwareSpriteCountText(int count)
+    {
+        return $"{count} hardware sprite{(count == 1 ? string.Empty : "s")}";
+    }
+
+    private static int BusiestRelativeScanlineSpriteCount(ActorMetaspriteGeometry geometry)
+    {
+        if (geometry.PieceYOffsets.Count == 0 || geometry.HardwareSpriteHeight <= 0)
+        {
+            return geometry.HardwareSpriteCount;
+        }
+
+        var counts = new Dictionary<int, int>();
+        foreach (var offset in geometry.PieceYOffsets)
+        {
+            for (var scanline = offset; scanline < offset + geometry.HardwareSpriteHeight; scanline++)
+            {
+                counts[scanline] = counts.GetValueOrDefault(scanline) + 1;
+            }
+        }
+
+        return counts.Values.DefaultIfEmpty(0).Max();
     }
 
     private static void CollectDirectives(BlockSyntax block, ActorFrameworkState state)
@@ -1472,11 +1653,6 @@ public static class ActorFrameworkLowerer
 
         public void AddPool(ActorPool pool)
         {
-            if (pool.Capacity > capabilities.SpriteCount)
-            {
-                throw new InvalidOperationException($"Target '{capabilities.Name}' supports actor pools up to {capabilities.SpriteCount} slots, but actor.Pool for '{pool.Name}' declares {pool.Capacity}.");
-            }
-
             if (!pools.TryAdd(pool.Name, pool))
             {
                 throw new InvalidOperationException($"actor.Pool for '{pool.Name}' is already declared.");
@@ -1634,6 +1810,8 @@ public static class ActorFrameworkLowerer
     private sealed record ActorScreenProjection(IReadOnlyList<StatementSyntax> Declarations, IdentifierSyntax ScreenX, ExpressionSyntax Visible);
 
     private sealed record KindBranch(string Kind, BlockSyntax Block);
+
+    private sealed record EnemySpriteBudget(EnemyDef Def, ActorMetaspriteGeometry Geometry, int BusiestRelativeScanlineSprites);
 
     private sealed record EnemyDef(
         string Name,

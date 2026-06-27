@@ -2423,7 +2423,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_actor_pool_above_game_boy_sprite_capacity()
+    public void Rejects_actor_pool_above_game_boy_struct_array_storage_capacity()
     {
         const string source = """
                               void main() {
@@ -2433,7 +2433,7 @@ public class GameBoyRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
-        Assert.Equal("Target 'gb' supports actor pools up to 40 slots, but actor.Pool for 'enemies' declares 41.", exception.Message);
+        Assert.Equal("Game Boy target struct array 'enemies' uses 492 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
     }
 
     [Fact]
@@ -2473,8 +2473,33 @@ public class GameBoyRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'gb' supports 40 hardware sprites per frame, but 42 are required for drawing logical sprites in one frame.",
+            "Target 'gb' supports 40 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 42 because capacity 21 times enemy.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.",
             exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_draw_loop_when_multi_sprite_png_pool_fits_game_boy_budget()
+    {
+        var baseDirectory = WriteSpritePng(
+            "goomba.png",
+            8,
+            32,
+            Rows(8, 32, Enumerable.Repeat("11111111", 32).ToArray()));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "goomba.png", 8, 32);
+                                  actor.Pool(enemies, 10);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.NotEmpty(rom);
     }
 
     [Fact]
@@ -2498,7 +2523,7 @@ public class GameBoyRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'gb' supports 10 hardware sprites per scanline, but 11 are required on scanline 0 for drawing logical sprites in one frame.",
+            "Target 'gb' supports 10 hardware sprites per scanline, but actor.Pool for 'enemies' can draw up to 11 on one scanline because capacity 11 times enemy.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
             exception.Message);
     }
 
