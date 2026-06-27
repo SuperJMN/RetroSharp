@@ -2516,6 +2516,36 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Actor_draw_hides_offscreen_slots_without_skipping_the_sprite_call()
+    {
+        const string source = """
+                              void main() {
+                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var parse = new SomeParser().Parse(source);
+        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
+
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("u8 __enemies_draw_x_Goomba=0;", lowered);
+        Assert.Contains("u8 __enemies_draw_y_Goomba=144;", lowered);
+        Assert.Contains("__enemies_draw_x_Goomba=__enemies_draw_screen_x;", lowered);
+        Assert.Contains("__enemies_draw_y_Goomba=enemies[__enemies_draw_i].y;", lowered);
+        Assert.Contains("sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);", lowered);
+        Assert.Equal(1, CountOccurrences(lowered, "sprite.Draw(goomba"));
+    }
+
+    [Fact]
     public void Rejects_actor_pool_without_literal_capacity()
     {
         const string source = """
@@ -2686,13 +2716,17 @@ public class GameBoyRomCompilerTests
                                         u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
-                                            if (enemies[__enemies_draw_i].active != 0) {
-                                                u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
-                                                if (enemies[__enemies_draw_i].kind == Goomba) {
+                                            u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
+                                            if (enemies[__enemies_draw_i].kind == Goomba) {
+                                                u8 __enemies_draw_x_Goomba = 0;
+                                                u8 __enemies_draw_y_Goomba = 144;
+                                                if (enemies[__enemies_draw_i].active != 0) {
                                                     if ((((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) && (__enemies_draw_screen_x < 160)) {
-                                                        sprite.Draw(goomba, __enemies_draw_screen_x, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                        __enemies_draw_x_Goomba = __enemies_draw_screen_x;
+                                                        __enemies_draw_y_Goomba = enemies[__enemies_draw_i].y;
                                                     }
                                                 }
+                                                sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
                                             }
                                         }
                                     }
@@ -5987,6 +6021,7 @@ public class GameBoyRomCompilerTests
             throw new InvalidOperationException(parse.Error);
         }
 
-        return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var lowered = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
     }
 }

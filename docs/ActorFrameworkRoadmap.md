@@ -337,12 +337,14 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     AF-1.3 mixed-width fields or explicit split hi/lo byte fields (no heap).
     The implemented model keeps the existing `x` field as the low byte and adds
     `xHi` as the high byte so existing byte-sized actor code stays source-compatible.
-  - [x] Draw actors camera-relative (`screenX = worldX - cameraX`) and cull
-    actors outside the visible window instead of drawing at a raw screen byte.
+  - [x] Draw actors camera-relative (`screenX = worldX - cameraX`) instead of
+    drawing at a raw screen byte. The one-slot runner path also moves
+    inactive/off-window sprite slots offscreen so stale hardware sprite entries
+    are not left behind.
   - [x] Prove the draw loop stays a grouped loop with direct branches.
 - Verification:
   - [x] A scrolling sample keeps enemies anchored to world tiles as the camera
-    moves; off-screen actors are not drawn.
+    moves; the one-slot runner enemy hides its hardware sprite slots offscreen.
 - Depends on: AF-2.3 (and AF-1.3 if world X > 255).
 
 #### AF-5.2: Per-actor collision X (priority 1)

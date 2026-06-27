@@ -354,8 +354,6 @@ class FrameState {
 inline void PresentFrame(PlayerState player) {
     video.WaitVBlank();
     sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);
-    camera.Apply();
-    audio.Update();
 }
 
 void setup_video() {
@@ -364,6 +362,8 @@ void setup_video() {
     palette.Sprite(0, 0, 0, 1, 3);
     sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
     animation.Clip(run, 1, 48, 48, 48);
+    sprite.Asset(goomba, "assets/goomba.png", 16, 16);
+    animation.Clip(goomba_walk, 0, 16, 16);
     return;
 }
 
@@ -387,12 +387,25 @@ void main() {
     PlayerState player;
     CameraState view;
     FrameState frame;
+    u8 goombaTick = 0;
     player.Reset();
     view.ResetMotion();
 
+    actor.Pool(goombas, 1);
+    enemy.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
+
     loop {
         PresentFrame(player);
+        goombas.Draw();
+        camera.Apply();
+        audio.Update();
         input.Poll();
+
+        actor.SpawnLayer(goombas, "maps/runner.tmj", "actors");
+        goombaTick ^= 1;
+        if (goombaTick == 0) {
+            goombas.Update();
+        }
 
         frame.Begin();
         player.ApplyGravity();

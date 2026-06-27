@@ -1952,13 +1952,17 @@ public class NesRomCompilerTests
                                         u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
-                                            if (enemies[__enemies_draw_i].active != 0) {
-                                                u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
-                                                if (enemies[__enemies_draw_i].kind == Goomba) {
+                                            u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
+                                            if (enemies[__enemies_draw_i].kind == Goomba) {
+                                                u8 __enemies_draw_x_Goomba = 0;
+                                                u8 __enemies_draw_y_Goomba = 240;
+                                                if (enemies[__enemies_draw_i].active != 0) {
                                                     if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) {
-                                                        sprite.Draw(goomba, __enemies_draw_screen_x, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                        __enemies_draw_x_Goomba = __enemies_draw_screen_x;
+                                                        __enemies_draw_y_Goomba = enemies[__enemies_draw_i].y;
                                                     }
                                                 }
+                                                sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
                                             }
                                         }
 

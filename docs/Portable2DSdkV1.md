@@ -122,7 +122,7 @@ fields are `kind`, `active`, `x`, `xHi`, `y`, `vx`, `vy`, `state`, `timer`,
 `xHi`; this keeps pooled fields byte-sized without requiring mixed-width struct
 array layout. Game Boy currently supports `pool.Update()` and
 `pool.Draw()` for the basic byte-field behavior set by expanding them to grouped
-loops over active slots, with direct kind checks and `sprite.Draw` calls.
+loops over slots with direct kind checks and stable `sprite.Draw` calls.
 
 Spawn activation is one-shot per authored Tiled object. The frontend generates a
 fixed `used[]` byte array per spawn layer; a spawn is marked used only after it
@@ -138,10 +138,13 @@ simultaneous authored spawns can exceed the declared pool capacity.
 `Chaser` are implemented without actor-specific SDK operations. NES accepts the
 same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
 that basic behavior set. `pool.Draw()` reads the current camera X state once for
-its generated loop, computes `screenX = actorWorldX - cameraX` per active slot,
-culls slots outside the visible camera window, and emits ordinary
-`sprite.Draw(...)` calls for visible actors, using
-`animation.Frame(...)` when a definition declares an animation clip. Drawn pools
+its generated loop and computes `screenX = actorWorldX - cameraX`. One-slot
+pools initialize draw coordinates to an offscreen Y, overwrite them only when
+the slot is active and inside the visible camera window, and emit ordinary
+`sprite.Draw(...)` calls through stable call sites so hardware sprite slots are
+hidden rather than left stale. Larger pools keep the current camera-relative
+visible-actor draw/cull shape until a per-slot OAM allocation policy lands.
+Draw uses `animation.Frame(...)` when a definition declares an animation clip. Drawn pools
 are checked against target sprite budgets with target-resolved metasprite
 geometry, so a pool of multi-sprite enemy definitions is charged by hardware
 sprite pieces rather than by actor slots. Aggregate hardware sprite usage is

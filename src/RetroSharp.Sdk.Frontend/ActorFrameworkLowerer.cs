@@ -790,19 +790,99 @@ public static class ActorFrameworkLowerer
         var indexName = $"__{pool.Name}_draw_i";
         var projection = BuildActorScreenProjection(pool, indexName, "draw", state.ScreenWidth);
         var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, ActorDrawBlock(pool, indexName, def, projection)))
+            .Select(def => new KindBranch(
+                def.Name,
+                pool.Capacity == 1
+                    ? ActorDrawBlock(pool, indexName, def, projection, state.ScreenHeight)
+                    : VisibleActorDrawBlock(pool, indexName, def, projection)))
             .ToList();
         var activeStatements = projection.Declarations
             .Append(KindDispatch(pool.Name, indexName, branches))
             .ToList();
-        var loop = PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
+        var loop = pool.Capacity == 1
+            ? PoolLoop(pool, indexName, activeStatements)
+            : PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
 
         return ActorCameraXDeclarations(pool, "draw")
             .Append(loop)
             .ToList();
     }
 
-    private static BlockSyntax ActorDrawBlock(ActorPool pool, string indexName, EnemyDef def, ActorScreenProjection projection)
+    private static BlockSyntax ActorDrawBlock(
+        ActorPool pool,
+        string indexName,
+        EnemyDef def,
+        ActorScreenProjection projection,
+        int hiddenY)
+    {
+        var statements = new List<StatementSyntax>();
+        var drawX = $"__{pool.Name}_draw_x_{def.Name}";
+        var drawY = $"__{pool.Name}_draw_y_{def.Name}";
+
+        ExpressionSyntax frame = new ConstantSyntax("0");
+        if (def.Animation is not null)
+        {
+            var frameVariable = $"__{pool.Name}_draw_frame_{def.Name}";
+            statements.Add(new DeclarationSyntax(
+                "u8",
+                frameVariable,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
+                    "animation",
+                    "Frame",
+                    [
+                        new IdentifierSyntax(def.Animation),
+                        PoolField(pool.Name, indexName, "animTick"),
+                    ]))));
+            frame = new IdentifierSyntax(frameVariable);
+        }
+
+        statements.Add(new DeclarationSyntax(
+            "u8",
+            drawX,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new ConstantSyntax("0"))));
+        statements.Add(new DeclarationSyntax(
+            "u8",
+            drawY,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new ConstantSyntax(hiddenY.ToString(CultureInfo.InvariantCulture)))));
+
+        statements.Add(new IfElseSyntax(
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "active"), new ConstantSyntax("0"), Operator.NotEqual),
+            new BlockSyntax([
+                new IfElseSyntax(
+                    projection.Visible,
+                    new BlockSyntax([
+                        new ExpressionStatementSyntax(new AssignmentSyntax(
+                            new IdentifierLValue(drawX),
+                            "=",
+                            projection.ScreenX)),
+                        new ExpressionStatementSyntax(new AssignmentSyntax(
+                            new IdentifierLValue(drawY),
+                            "=",
+                            PoolField(pool.Name, indexName, "y"))),
+                    ]),
+                    Maybe<BlockSyntax>.None),
+            ]),
+            Maybe<BlockSyntax>.None));
+
+        statements.Add(new ExpressionStatementSyntax(new SdkDotCallSyntax(
+            "sprite",
+            "Draw",
+            [
+                new IdentifierSyntax(def.Sprite!),
+                new IdentifierSyntax(drawX),
+                new IdentifierSyntax(drawY),
+                frame,
+                new IdentifierSyntax("false"),
+                new ConstantSyntax("0"),
+            ])));
+
+        return new BlockSyntax(statements);
+    }
+
+    private static BlockSyntax VisibleActorDrawBlock(ActorPool pool, string indexName, EnemyDef def, ActorScreenProjection projection)
     {
         var statements = new List<StatementSyntax>();
 
@@ -1399,11 +1479,16 @@ public static class ActorFrameworkLowerer
 
     private static ForSyntax PoolLoop(ActorPool pool, string indexName, StatementSyntax bodyStatement)
     {
+        return PoolLoop(pool, indexName, [bodyStatement]);
+    }
+
+    private static ForSyntax PoolLoop(ActorPool pool, string indexName, IReadOnlyList<StatementSyntax> bodyStatements)
+    {
         return new ForSyntax(
             Maybe.From<StatementSyntax>(new DeclarationSyntax("u8", indexName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new ConstantSyntax("0")))),
             Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(new IdentifierSyntax(indexName), new CountOfSyntax(pool.Name), Operator.LessThan)),
             Maybe.From<ExpressionSyntax>(new AssignmentSyntax(new IdentifierLValue(indexName), "+=", new ConstantSyntax("1"))),
-            new BlockSyntax([bodyStatement]));
+            new BlockSyntax(bodyStatements.ToList()));
     }
 
     private static IfElseSyntax ActiveGuard(string poolName, string indexName, StatementSyntax bodyStatement)
@@ -1805,6 +1890,7 @@ public static class ActorFrameworkLowerer
         public bool SupportsUpdate { get; } = supportsUpdate;
         public bool SupportsDraw { get; } = supportsDraw;
         public int ScreenWidth { get; } = capabilities.ScreenPixels.Width;
+        public int ScreenHeight { get; } = capabilities.ScreenPixels.Height;
         public IReadOnlyList<ActorPool> Pools => poolsInOrder;
         public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
         public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
