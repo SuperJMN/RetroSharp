@@ -11,6 +11,7 @@
 - [README.md](README.md): project overview and examples.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
+- [docs/ActorFrameworkRoadmap.md](docs/ActorFrameworkRoadmap.md): actor framework roadmap and AF-5 follow-ups for scalable platformer actors.
 - [docs/RetroSharp.Language.md](docs/RetroSharp.Language.md): language surface.
 - [docs/GameBoyTarget.md](docs/GameBoyTarget.md): current Game Boy target subset and runner milestones.
 - [docs/GameBoyApuTraceFormat.md](docs/GameBoyApuTraceFormat.md): `.gbapu` binary/JSON schema, generation flow, runtime use, and limitations.
@@ -28,6 +29,7 @@
 - [src/RetroSharp.Parser/](src/RetroSharp.Parser/): parser.
 - [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
 - [src/RetroSharp.Z80/](src/RetroSharp.Z80/): Z80 backend.
+- [samples/actor-framework/actors.rs](samples/actor-framework/actors.rs): Game Boy/NES target-acceptance actor framework sample with fixed pools, enemy definitions, Tiled spawns, runtime activation, and camera-relative helpers.
 - [samples/runner/runner.rs](samples/runner/runner.rs): shared Game Boy/NES target-acceptance runner. NES accepts its audio calls as no-ops until NES BGM lowering exists.
 - [samples/runner/maps/runner.tmj](samples/runner/maps/runner.tmj): editable Tiled runner map.
 - [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked sample ROM regeneration script.
@@ -47,5 +49,6 @@ PYTHONPATH=/tmp/retrosharp-pyboy-site python3 tools/gameboy/runner_diagnostics.p
 ## Key Concepts
 - Keep language, portable 2D SDK, and target intrinsics separate.
 - Portable SDK calls must be checked against target capabilities before lowering.
+- The actor framework is source-to-source sugar over fixed `Actor` arrays, generated tables/helpers, direct branches, and existing SDK calls; it does not add actor-specific `Sdk2DOperation` cases.
 - Game Boy runner behavior is important acceptance evidence, but target-acceptance samples are not automatically portable SDK evidence.
 - High-level syntax must remain zero-cost: no heap, GC, RTTI, boxing, closures, delegates, or virtual dispatch.

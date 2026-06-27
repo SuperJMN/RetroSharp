@@ -2,7 +2,7 @@
 
 Status: experimental, intentionally narrow.
 
-The NES target currently compiles a constrained cartridge subset directly to an iNES mapper 0 ROM. It supports tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and the camera-relative collision queries needed by the shared runner. NES accepts runner audio calls as no-ops until BGM lowering exists. NES still does not support vertical camera movement, real BGM playback, HUD, generic world-space collision queries, or per-region background attribute streaming.
+The NES target currently compiles a constrained cartridge subset directly to an iNES mapper 0 ROM. It supports tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, the camera-relative collision queries needed by the shared runner, and the source-to-source actor framework acceptance slice. NES accepts runner audio calls as no-ops until BGM lowering exists. NES still does not support vertical camera movement, real BGM playback, HUD, generic world-space collision queries, or per-region background attribute streaming.
 
 See `ArchitectureRoadmap.md` for the persistent architecture roadmap that separates the RetroSharp language, portable 2D SDK, and target intrinsics, and `Portable2DSdkV1.md` for the current SDK v1 reference.
 
@@ -123,6 +123,8 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.
 
 `samples/runner/runner.rs` is the shared Game Boy/NES acceptance sample for the runner path. It uses the same Tiled map, camera-relative collision helpers, runtime animation clip, jump/reset logic, audio calls, and generic `assets/mario-player.png` source asset reference for both targets; the asset resolves to `assets/mario-player.nes.png` for NES.
+
+`samples/actor-framework/actors.rs` is the focused Game Boy/NES acceptance sample for the actor framework. It uses `actor.Pool`, `enemy.Def`, Tiled object-layer spawn data, runtime camera-window activation, `enemies.Update()`, `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and `enemies.Draw()` over the same source. The framework lowers before NES target emission to fixed `Actor` arrays, generated spawn helpers plus `used[]`, direct kind branches, camera-relative collision, and ordinary `sprite.Draw(...)` calls.
 
 The cross-target sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scroll.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `map_stream_column(...)`, and `objectPalette.Set(...)`. It does not exercise NES vertical camera movement, generic world-space collision queries, audio, or HUD APIs. Runner-specific NES coverage lives in the runner acceptance tests instead.
 

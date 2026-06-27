@@ -18,6 +18,11 @@ The repository now also contains early cartridge targets that compile a constrai
 - `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and camera-relative runner collision. NES BGM, vertical camera movement, HUD, and generic world-space collision are still not implemented.
 - `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, horizontal `camera.*` helpers, `sprite.Set(...)`, runtime map column streaming, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, and `.gbapu`/`.gbapu.json` APU trace playback. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `music.Asset(...)`, `music.Play(...)`, and `audio.Update()`.
 
+The actor framework acceptance slice lives in `samples/actor-framework`. It shows
+fixed actor pools, declarative `enemy.Def(...)` metadata, Tiled object-layer
+spawns, runtime camera-window activation, and Game Boy/NES lowering without heap
+allocation or runtime dispatch. The roadmap is `docs/ActorFrameworkRoadmap.md`.
+
 ## What can it do?
 
 Right now, RetroSharp can compile simple programs with:
@@ -128,4 +133,4 @@ The sample sources have been migrated to the current language surface: symbolic 
 
 AI CLI agents should start with `AGENTS.md`. `llms.txt` provides a compact index, and `docs/AgentContext.md` preserves recent project memory, known traps, reliable commands, and publication expectations.
 
-See `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.
+See `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, `docs/ActorFrameworkRoadmap.md` for the actor framework slice, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.

@@ -58,7 +58,7 @@ Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Se
 
 ## Sample Classification
 
-Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, and `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample because it exercises richer runner behavior than the stable portable SDK sample. NES accepts its audio calls as no-ops until real BGM lowering exists.
+Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` is a `target-capability-spike`, `samples/actor-framework/actors.rs` is the focused Game Boy/NES `target-acceptance` sample for the actor framework, and `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample because it exercises richer runner behavior than the stable portable SDK sample. NES accepts runner audio calls as no-ops until real BGM lowering exists.
 
 ## Supported Runtime Subset
 

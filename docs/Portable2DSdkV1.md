@@ -154,6 +154,162 @@ target-neutral map importer as
 `world.Load(...)` and lower to generated ROM-table helpers plus runtime fixed-slot
 activation before target lowering.
 
+#### Low-level equivalent pattern
+
+The actor framework is deliberately equivalent to hand-authored fixed storage.
+For a small pool, the source-level sugar:
+
+```c
+actor.Pool(enemies, 2);
+enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1,
+    hitboxWidth: 8, hitboxHeight: 8);
+actor.SpawnLayer(enemies, "level.tmj", "actors");
+enemies.Update();
+enemies.TouchTiles(0, 1);
+enemies.LandOnTiles(4, 12, 1);
+enemies.TouchPlayer(72, 40, 16, 16);
+enemies.Draw();
+```
+
+lowers to the same shape as this hand-authored pattern, as covered by the
+Game Boy and NES differential tests:
+
+```c
+struct Actor {
+    u8 kind;
+    u8 active;
+    u8 x;
+    u8 xHi;
+    u8 y;
+    i8 vx;
+    i8 vy;
+    u8 state;
+    u8 timer;
+    u8 facing;
+    u8 animTick;
+    u8 health;
+}
+
+const Walker = 1;
+const Goomba = 1;
+const GoombaSpeed = 1;
+const GoombaContactDamage = 0;
+const GoombaHitboxWidth = 8;
+const GoombaHitboxHeight = 8;
+
+inline u8 __enemies_spawn_0_kind(u8 index) => Goomba;
+inline u8 __enemies_spawn_0_x(u8 index) => index == 0 ? 24 : 72;
+inline u8 __enemies_spawn_0_xHi(u8 index) => 0;
+inline u8 __enemies_spawn_0_y(u8 index) => 40;
+inline u8 __enemies_spawn_0_active(u8 index) => 1;
+inline u8 __enemies_spawn_0_vx(u8 index) => 0;
+inline u8 __enemies_spawn_0_vy(u8 index) => 0;
+inline u8 __enemies_spawn_0_state(u8 index) => 0;
+inline u8 __enemies_spawn_0_timer(u8 index) => 0;
+inline u8 __enemies_spawn_0_facing(u8 index) => 0;
+inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
+inline u8 __enemies_spawn_0_health(u8 index) => 0;
+
+void main() {
+    Actor enemies[2];
+    u8 __enemies_spawn_0_used[2];
+
+    for (u8 recycle = 0; recycle < countof(enemies); recycle += 1) {
+        if (enemies[recycle].active != 0) {
+            u8 cameraX = __rs_actor_camera_x_lo();
+            u8 cameraXHi = __rs_actor_camera_x_hi();
+            u8 screenX = enemies[recycle].x - cameraX;
+            if (!((((enemies[recycle].xHi == cameraXHi) &&
+                    (enemies[recycle].x >= cameraX)) ||
+                   ((enemies[recycle].xHi == cameraXHi + 1) &&
+                    (enemies[recycle].x < cameraX))) &&
+                  (screenX < 160))) {
+                enemies[recycle].active = 0;
+            }
+        }
+    }
+
+    for (u8 spawn = 0; spawn < 2; spawn += 1) {
+        if (__enemies_spawn_0_used[spawn] == 0) {
+            u8 spawnX = __enemies_spawn_0_x(spawn);
+            u8 spawnXHi = __enemies_spawn_0_xHi(spawn);
+            u8 cameraX = __rs_actor_camera_x_lo();
+            u8 cameraXHi = __rs_actor_camera_x_hi();
+            u8 screenX = spawnX - cameraX;
+            if ((((spawnXHi == cameraXHi) && (spawnX >= cameraX)) ||
+                 ((spawnXHi == cameraXHi + 1) && (spawnX < cameraX))) &&
+                (screenX < 160)) {
+                u8 assigned = 0;
+                for (u8 slot = 0; slot < countof(enemies); slot += 1) {
+                    if (assigned == 0) {
+                        if (enemies[slot].active == 0) {
+                            enemies[slot].kind = __enemies_spawn_0_kind(spawn);
+                            enemies[slot].x = spawnX;
+                            enemies[slot].xHi = spawnXHi;
+                            enemies[slot].y = __enemies_spawn_0_y(spawn);
+                            enemies[slot].vx = __enemies_spawn_0_vx(spawn);
+                            enemies[slot].vy = __enemies_spawn_0_vy(spawn);
+                            enemies[slot].state = __enemies_spawn_0_state(spawn);
+                            enemies[slot].timer = __enemies_spawn_0_timer(spawn);
+                            enemies[slot].facing = __enemies_spawn_0_facing(spawn);
+                            enemies[slot].animTick = __enemies_spawn_0_animTick(spawn);
+                            enemies[slot].health = __enemies_spawn_0_health(spawn);
+                            enemies[slot].active = __enemies_spawn_0_active(spawn);
+                            __enemies_spawn_0_used[spawn] = 1;
+                            assigned = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for (u8 i = 0; i < countof(enemies); i += 1) {
+        if (enemies[i].active != 0) {
+            if (enemies[i].kind == Goomba) {
+                enemies[i].x += GoombaSpeed;
+                if (enemies[i].x < GoombaSpeed) {
+                    enemies[i].xHi += 1;
+                }
+
+                u8 cameraX = __rs_actor_camera_x_lo();
+                u8 cameraXHi = __rs_actor_camera_x_hi();
+                u8 screenX = enemies[i].x - cameraX;
+                if ((((enemies[i].xHi == cameraXHi) && (enemies[i].x >= cameraX)) ||
+                     ((enemies[i].xHi == cameraXHi + 1) && (enemies[i].x < cameraX))) &&
+                    (screenX < 160)) {
+                    if (camera.AabbTiles(screenX, enemies[i].y,
+                            GoombaHitboxWidth, GoombaHitboxHeight, 1) != 0) {
+                        enemies[i].state = 1;
+                    }
+
+                    u8 hitTop = camera.AabbHitTop(screenX, enemies[i].y - 4,
+                        GoombaHitboxWidth, 12, 1);
+                    if (hitTop != 255) {
+                        enemies[i].y = hitTop;
+                        enemies[i].vy = 0;
+                        enemies[i].state = 1;
+                    }
+
+                    if (screenX < 88 && screenX + GoombaHitboxWidth > 72 &&
+                        enemies[i].y < 56 &&
+                        enemies[i].y + GoombaHitboxHeight > 40) {
+                        enemies[i].state = 1;
+                    }
+
+                    sprite.Draw(goomba, screenX, enemies[i].y, 0, false, 0);
+                }
+            }
+        }
+    }
+}
+```
+
+The generated code repeats the camera projection in each helper today. Hoisting
+that projection is tracked separately as AF-5.7; the current contract is the
+equivalent behavior and fixed cost shape, not that the source-to-source lowering
+has already removed every repeated expression.
+
 ### Optional HUD
 
 | Signature | Semantics |
@@ -198,7 +354,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
-| Actor pool/definition slice | `actor.Pool`, `enemy.Def`, and called `enemy.*` metadata helpers lower to fixed struct arrays, constants, and inline helper branches. `pool.Update()`/`pool.Draw()` support the basic Game Boy behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | Pool/definition metadata helpers and `pool.Update()`/`pool.Draw()` support the same basic behavior set. |
+| Actor framework slice | `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called `enemy.*` metadata helpers, and `pool.Update()`/`pool.Draw()`/`pool.TouchTiles()`/`pool.LandOnTiles()`/`pool.TouchPlayer()` lower before Game Boy target emission to fixed struct arrays, constants, inline helper branches, generated spawn-table helpers, `used[]`, runtime activation, camera-relative draw/collision/player contact, and the basic behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | The same source-to-source actor framework slice lowers before NES target emission with NES sprite/scanline budgets and horizontal camera-relative collision support. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
 | Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for literal or byte-backed screen X values. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for literal or byte-backed screen X values on horizontal maps. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |

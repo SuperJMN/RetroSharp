@@ -1,14 +1,16 @@
 # Actor Framework Roadmap (scalable platformer actors / enemies)
 
-Status: **in progress on branch `feature/actor-framework`.** Phases 1–4 landed
-as a working, byte-reproducible non-scrolling acceptance slice. Phase 5 tracks
-the review findings (world-space actors, per-actor collision, runtime activation,
-metasprite-aware budgets) that must land before the framework is platformer-ready.
+Status: **feature-complete for the first scrolling platformer slice on branch
+`feature/actor-framework`; AF-5.7..AF-5.10 remain non-blocking follow-ups.**
+Phases 1-4 and AF-5.1..AF-5.6 landed as a working, byte-reproducible
+Game Boy/NES actor-framework acceptance slice. Phase 5 moved the framework from
+the early non-scrolling closure to world-space actors, per-actor collision,
+runtime activation, and metasprite-aware budgets.
 
 This document is the branch-scoped execution plan for roadmap **Iteration 14:
 Scalable Platformer Actor Framework Ergonomics** (`docs/ArchitectureRoadmap.md`).
 It breaks AR-14.1..AR-14.4 into concrete, verifiable tasks, records what is
-already landed on this branch, and tracks the post-review limitations in Phase 5.
+already landed on this branch, and tracks the remaining follow-ups in Phase 5.
 
 The goal: let a game declare a small, fixed actor pool and several enemy types
 (sprite, hitbox, animation, behavior, constants), then update and draw the
@@ -293,13 +295,25 @@ Candidate file names are guidance; inspect the real code paths first.
 #### AF-4.3: Documentation and closure (AR-14.4)
 - Layer: docs.
 - Candidate files: `docs/GameBoyTarget.md`, `docs/NesTarget.md`,
-  `docs/Portable2DSdkV1.md`, `samples/README.md`, `samples/manifest.json`,
+  `docs/Portable2DSdkV1.md`, `samples/README.md`,
+  `samples/actor-framework/README.md`, `samples/manifest.json`,
+  `README.md`, `WARP.md`, `llms.txt`, `docs/AgentContext.md`, and
   `docs/ArchitectureRoadmap.md`.
 - Steps:
-  - [x] Document the actor API, the emitted storage/cost model, and the
-    hand-authored low-level equivalent.
+  - [x] Document the actor API and the emitted storage/cost model after AF-5.1..AF-5.6:
+    `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`,
+    called `enemy.*` metadata helpers, `enemies.Update()`, `enemies.Draw()`,
+    `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and
+    `enemies.TouchPlayer(...)`.
+  - [x] Document the hand-authored low-level equivalent: `Actor pool[N]`,
+    byte-sized fields including `xHi`, active-slot loops, direct `kind`
+    dispatch, camera-relative projection/cull, `camera.AabbTiles`,
+    `camera.AabbHitTop`, `sprite.Draw`, and `used[]` plus free-slot runtime
+    activation.
   - [x] Classify the new sample in `samples/manifest.json`.
-  - [x] Flip Iteration 14 status in `ArchitectureRoadmap.md` when complete.
+  - [x] Flip Iteration 14 status in `ArchitectureRoadmap.md` to
+    feature-complete for the first scrolling platformer slice while preserving
+    AF-5.7..AF-5.10 as open non-blocking follow-ups.
 - Verification:
   - [x] `git diff --check`; manifest-reading tests pass.
 - Depends on: AF-4.2.
@@ -413,28 +427,95 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     and relational compare emission without scratch reentrancy.
 - Depends on: AF-5.1.
 
-## Phase 5 status after AF-5.5
+#### AF-5.7: Hoist repeated camera-X projection (non-blocking)
+- Problem: draw, tile collision, landing, player contact, spawn recycling, and
+  activation each recompute the same camera-X projection/cull shape at their call
+  site. This is correct and byte-reproducible, but unnecessarily repeats work
+  when a frame uses several actor helpers.
+- Layer: framework source-to-source lowering.
+- Candidate files: `ActorFrameworkLowerer.cs`, GB/NES emitted-code tests.
+- Steps:
+  - [ ] Introduce a lowering-local projection helper or per-loop cached values
+    without adding a new `Sdk2DOperation`.
+  - [ ] Preserve the current world-X split model (`x` plus `xHi`) and visible-window
+    semantics.
+- Verification:
+  - [ ] Differential tests prove the optimized lowering preserves behavior while
+    reducing repeated projection code.
 
-AF-5.1 through AF-5.5 are closed. Remaining Phase 5 follow-ups are robustness
-items rather than the first-slice platformer blockers.
+#### AF-5.8: Harden `TouchPlayer` right-edge overflow (non-blocking)
+- Problem: `pool.TouchPlayer(...)` currently compares
+  `screenX + enemyHitboxWidth > playerX` with byte-backed arithmetic. If
+  `screenX + width` wraps, a wide or near-right-edge actor can produce an
+  incorrect X overlap result.
+- Layer: framework source-to-source lowering / byte expression guards.
+- Candidate files: `ActorFrameworkLowerer.cs`, GB/NES helper tests.
+- Steps:
+  - [ ] Detect or avoid byte overflow in the actor-right-edge comparison.
+  - [ ] Keep player arguments and enemy hitbox dimensions literal bytes unless a
+    broader API change is explicitly accepted.
+- Verification:
+  - [ ] Tests cover a near-viewport-edge actor whose right edge wraps in the
+    current byte expression shape.
 
-## Recommended first slice
+#### AF-5.9: Decide one-shot versus reactivation spawn policy (non-blocking)
+- Problem: authored Tiled spawns are currently one-shot. `used[]` is set only
+  after a spawn successfully claims a slot; recycled slots do not clear that
+  spawn's used bit, so scrolling back does not respawn the same authored object.
+  That is intentional for the first slice, but games may need explicit
+  reactivation or respawn policy.
+- Layer: framework API / sample policy.
+- Candidate files: `ActorFrameworkLowerer.cs`, `samples/actor-framework/README.md`,
+  target docs.
+- Steps:
+  - [ ] Decide whether v1 keeps one-shot activation as the stable default or adds
+    an explicit reactivation mode.
+  - [ ] Document the selected policy and make any alternate mode explicit in the
+    source API.
+- Verification:
+  - [ ] Tests prove one-shot behavior remains stable or the new explicit mode
+    reactivates predictably.
 
-Land a minimal, Game-Boy-only vertical slice before breadth:
+#### AF-5.10: Reduce O(spawns)/frame activation scan cost (non-blocking)
+- Problem: every `actor.SpawnLayer(...)` / `actor.SpawnWindow(...)` call scans
+  all authored spawns in that layer each frame, guarded by `used[]` and the
+  camera window. This is predictable and small for the first sample, but wide
+  levels need an indexed or cursor-based activation strategy.
+- Layer: framework asset/lowering.
+- Candidate files: spawn-table generation, Tiled spawn importer, GB/NES emitted-code
+  tests.
+- Steps:
+  - [ ] Group or sort spawn data so activation can skip clearly distant objects.
+  - [ ] Preserve deterministic fixed-slot activation and explicit capacity
+    diagnostics.
+- Verification:
+  - [ ] Tests cover equivalent activation with fewer per-frame spawn checks on a
+    wider map.
 
-1. AF-1.1 (struct-array initializers), AF-1.2 (iteration/update model), and
-   the AF-1.3 byte-sized-field decision. Done on this branch.
-2. AF-2.1 (pool + enemy definition) with AF-2.2/AF-2.3 Game Boy update/draw for
-   the basic byte-field behavior set on Game Boy and NES. Done on this branch
-   for source-authored active slots.
-3. AF-4.2 minimal acceptance (multiple enemy kinds spawned from source data, map
-   collision, player contact) on Game Boy.
+## Known limitations and follow-ups
 
-Next, connect the behavior set to collision/animation and an acceptance sample,
-then expand to Tiled spawn (AF-3.*), NES parity, and capability breadth
-(AF-4.1). Defer mixed-width pooled fields unless a slice needs true 16-bit actor
-state, and defer AF-3.* until the #105 Tiled/world coupling is acceptable for
-spawn data.
+AF-5.1 through AF-5.6 are closed, and the branch is feature-complete for the first
+scrolling platformer slice. The remaining limitations are not blockers for that
+slice, but they should stay visible:
+
+- AF-5.7: camera-X projection is recomputed by each generated helper today.
+- AF-5.8: `TouchPlayer` still needs a non-wrapping actor-right-edge comparison.
+- AF-5.9: spawn activation is intentionally one-shot; reactivation is not yet a
+  source-level policy.
+- AF-5.10: runtime activation currently scans authored spawns each frame.
+- Design note: actor pool scanline diagnostics are conservative. They charge pool
+  capacity times the busiest resolved metasprite scanline because runtime actor Y
+  positions cannot be placed on exact scanlines statically.
+
+## First slice result
+
+The initial recommendation was to land the storage prerequisite, then the pool
+and enemy definition surface, then an acceptance sample. That has happened on
+this branch and was extended by AF-5.1..AF-5.6 for scrolling-platformer behavior:
+world-space X split into `x`/`xHi`, camera-relative draw/collision/contact,
+runtime spawn activation, metasprite-aware capability checks, generated-name
+guards, and reentrant byte expression lowering. Future work should start from
+the follow-ups above rather than from the original minimal-slice plan.
 
 ## Validation commands
 
@@ -444,3 +525,7 @@ git diff --check
 tools/gameboy/generate_sample_roms.py --dry-run
 tools/gameboy/generate_sample_roms.py
 ```
+
+For docs-only closeout work, use `git diff --check` and the full test command
+above; leave tracked ROMs byte-identical. Regenerate sample ROMs only when sample
+source/assets change.
