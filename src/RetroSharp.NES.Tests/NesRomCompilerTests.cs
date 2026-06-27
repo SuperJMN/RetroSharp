@@ -1378,6 +1378,78 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_nested_variable_subtraction_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 10;
+                                  u8 b = 7;
+                                  u8 c = 2;
+                                  u8 result = a - (b - c);
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x48, 0xA5, 0x01, 0x38, 0xE5, 0x02, 0x85, 0xE9, 0x68, 0x38, 0xE5, 0xE9, 0x85, 0x03]), "Nested subtraction should preserve the outer left operand on the CPU stack while evaluating the right operand.");
+    }
+
+    [Fact]
+    public void Compiles_nested_variable_relational_compare_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 9;
+                                  u8 b = 4;
+                                  u8 c = 8;
+                                  u8 d = 2;
+                                  u8 result = 0;
+                                  if ((a - b) < (c - d)) {
+                                      result = 1;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE5, 0x01, 0x48, 0xA5, 0x02, 0x38, 0xE5, 0x03, 0x85, 0xE9, 0x68, 0xC5, 0xE9]), "Nested relational compares should preserve the left expression on the CPU stack while evaluating the right expression.");
+    }
+
+    [Fact]
+    public void Compiles_nested_variable_equality_compare_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 9;
+                                  u8 b = 4;
+                                  u8 c = 8;
+                                  u8 d = 3;
+                                  u8 result = 0;
+                                  if ((a - b) == (c - d)) {
+                                      result = 1;
+                                  }
+                                  if ((a - b) != (c - d)) {
+                                      result = 2;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE5, 0x01, 0x48, 0xA5, 0x02, 0x38, 0xE5, 0x03, 0x85, 0xE9, 0x68, 0xC5, 0xE9, 0xD0]), "Nested == should preserve the left expression on the CPU stack before comparing.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE5, 0x01, 0x48, 0xA5, 0x02, 0x38, 0xE5, 0x03, 0x85, 0xE9, 0x68, 0xC5, 0xE9, 0xF0]), "Nested != should preserve the left expression on the CPU stack before comparing.");
+    }
+
+    [Fact]
     public void Compiles_for_loop_to_direct_branching_without_helper_calls()
     {
         const string source = """

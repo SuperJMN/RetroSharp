@@ -2113,6 +2113,75 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_nested_variable_subtraction_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 10;
+                                  u8 b = 7;
+                                  u8 c = 2;
+                                  u8 result = a - (b - c);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0xF5, 0xFA, 0x02, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0x90, 0xEA, 0x03, 0xC0]), "Nested subtraction should preserve each left operand on the CPU stack while evaluating the right operand.");
+        Assert.False(ContainsSequence(rom, [0xEA, 0x1C, 0xC1]), "Nested subtraction must not store operands in the shared expression scratch address.");
+    }
+
+    [Fact]
+    public void Compiles_nested_variable_relational_compare_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 9;
+                                  u8 b = 4;
+                                  u8 c = 8;
+                                  u8 d = 2;
+                                  u8 result = 0;
+                                  if ((a - b) < (c - d)) {
+                                      result = 1;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0x47, 0xF1, 0x90, 0xF5, 0xFA, 0x02, 0xC0, 0xF5, 0xFA, 0x03, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0xB8]), "Nested relational compares should preserve the left expression on the CPU stack while evaluating the right expression.");
+        Assert.False(ContainsSequence(rom, [0xEA, 0x1C, 0xC1]), "Nested relational compare must not store operands in the shared expression scratch address.");
+    }
+
+    [Fact]
+    public void Compiles_nested_variable_equality_compare_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 9;
+                                  u8 b = 4;
+                                  u8 c = 8;
+                                  u8 d = 3;
+                                  u8 result = 0;
+                                  if ((a - b) == (c - d)) {
+                                      result = 1;
+                                  }
+                                  if ((a - b) != (c - d)) {
+                                      result = 2;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0x47, 0xF1, 0x90, 0xF5, 0xFA, 0x02, 0xC0, 0xF5, 0xFA, 0x03, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0xB8, 0xC2]), "Nested == should preserve the left expression on the CPU stack before comparing.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xF5, 0xFA, 0x01, 0xC0, 0x47, 0xF1, 0x90, 0xF5, 0xFA, 0x02, 0xC0, 0xF5, 0xFA, 0x03, 0xC0, 0x47, 0xF1, 0x90, 0x47, 0xF1, 0xB8, 0xCA]), "Nested != should preserve the left expression on the CPU stack before comparing.");
+        Assert.False(ContainsSequence(rom, [0xEA, 0x1C, 0xC1]), "Nested equality compares must not store operands in the shared expression scratch address.");
+    }
+
+    [Fact]
     public void Compiles_for_loop_to_direct_branching_without_helper_calls()
     {
         const string source = """

@@ -841,7 +841,6 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort PendingStreamKindAddress = 0xC119;   // 0=none, 1=column, 2=row
     private const ushort PendingStreamTargetAddress = 0xC11A; // background column or row index
     private const ushort PendingStreamSourceAddress = 0xC11B; // source-map column or row index
-    private const ushort ExpressionScratchAddress = 0xC11C;
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
@@ -3713,12 +3712,17 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        EmitVariableOperandsToAAndB(left, right);
+        builder.CompareB();
+    }
+
+    private void EmitVariableOperandsToAAndB(ExpressionSyntax left, ExpressionSyntax right)
+    {
         EmitExpressionToA(left);
-        builder.StoreA(ExpressionScratchAddress);
+        builder.PushAf();
         EmitExpressionToA(right);
         builder.LoadBFromA();
-        builder.LoadA(ExpressionScratchAddress);
-        builder.CompareB();
+        builder.PopAf();
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -4806,11 +4810,7 @@ internal sealed class GameBoyRuntimeCompiler
                     return;
                 }
 
-                EmitExpressionToA(binary.Left);
-                builder.StoreA(ExpressionScratchAddress);
-                EmitExpressionToA(binary.Right);
-                builder.LoadBFromA();
-                builder.LoadA(ExpressionScratchAddress);
+                EmitVariableOperandsToAAndB(binary.Left, binary.Right);
                 builder.SubtractB();
                 return;
             case "&":
@@ -5574,6 +5574,16 @@ internal sealed class GbBuilder
     public void LoadAFromB()
     {
         Emit(0x78);
+    }
+
+    public void PushAf()
+    {
+        Emit(0xF5);
+    }
+
+    public void PopAf()
+    {
+        Emit(0xF1);
     }
 
     public void LoadAFromC()

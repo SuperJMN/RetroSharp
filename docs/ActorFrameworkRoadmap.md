@@ -383,6 +383,26 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     `for` loop emitting no trampoline.
 - Depends on: AF-2.1.
 
+#### AF-5.6: Reentrant variable-vs-variable expression lowering (priority 1)
+- Problem: the AF-5.1 actor draw work generalized variable-vs-variable
+  subtraction and comparison in the Game Boy/NES backends using one shared
+  expression scratch byte. Nested expressions such as `a - (b - c)` or
+  `(a - b) < (c - d)` can recursively reuse that scratch byte while an outer
+  operand is still live.
+- Layer: target lowering.
+- Candidate files: `GameBoyRomBuilder.cs`, `NesRomBuilder.cs`, target byte tests,
+  language/target docs.
+- Steps:
+  - [x] Preserve the left operand across right-side sub-expression lowering with
+    the target CPU stack instead of a shared scratch byte.
+  - [x] Cover `==`/`!=`, relational comparisons, and `-` on Game Boy and NES.
+  - [x] Document variable-vs-variable subtraction and comparison as general
+    byte-backed language support, not actor-only lowering.
+- Verification:
+  - [x] Game Boy and NES tests cover nested subtraction, equality/inequality,
+    and relational compare emission without scratch reentrancy.
+- Depends on: AF-5.1.
+
 ## Known limitations after the first slice
 
 These are the open gaps captured as Phase 5. Until they land, treat the actor

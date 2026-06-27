@@ -1418,10 +1418,17 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        EmitVariableOperandsToAAndScratch(left, right);
+        builder.CompareZeroPage(ExpressionScratchAddress);
+    }
+
+    private void EmitVariableOperandsToAAndScratch(ExpressionSyntax left, ExpressionSyntax right)
+    {
+        EmitExpressionToA(left);
+        builder.PushA();
         EmitExpressionToA(right);
         builder.StoreAZeroPage(ExpressionScratchAddress);
-        EmitExpressionToA(left);
-        builder.CompareZeroPage(ExpressionScratchAddress);
+        builder.PullA();
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -2587,9 +2594,7 @@ internal sealed class NesRuntimeCompiler
                     return;
                 }
 
-                EmitExpressionToA(binary.Right);
-                builder.StoreAZeroPage(ExpressionScratchAddress);
-                EmitExpressionToA(binary.Left);
+                EmitVariableOperandsToAAndScratch(binary.Left, binary.Right);
                 builder.SetCarry();
                 builder.SubtractZeroPage(ExpressionScratchAddress);
                 return;
@@ -3126,6 +3131,10 @@ internal sealed class PrgBuilder
     public void SubtractImmediate(int value) => Emit(0xE9, CheckedByte(value));
 
     public void SubtractZeroPage(byte address) => Emit(0xE5, address);
+
+    public void PushA() => Emit(0x48);
+
+    public void PullA() => Emit(0x68);
 
     public void IncrementX() => Emit(0xE8);
 
