@@ -667,6 +667,26 @@ public class ParserTests
     }
 
     [Fact]
+    public void Fixed_size_struct_array_initializer()
+    {
+        var source = """
+                     struct Actor
+                     {
+                        u8 x;
+                        u8 y;
+                        bool active;
+                     }
+
+                     void main()
+                     {
+                        u8 seed = 3;
+                        Actor actors[2] = [{ x: 1, active: 1 }, { y: seed + 1 }];
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
     public void Fixed_size_array_initializer_can_infer_length()
     {
         var source = """
@@ -880,6 +900,28 @@ public class ParserTests
                         u8 values[4];
                         u8 i = 1;
                         values[i] += 1;
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
+    public void Fixed_size_struct_array_field_access()
+    {
+        var source = """
+                     struct Actor
+                     {
+                        u8 x;
+                        u8 y;
+                        bool active;
+                     }
+
+                     void main()
+                     {
+                        Actor actors[3];
+                        u8 i = 1;
+                        actors[0].x = 4;
+                        actors[i].y += 1;
                      }
                      """;
         AssertParse(source);

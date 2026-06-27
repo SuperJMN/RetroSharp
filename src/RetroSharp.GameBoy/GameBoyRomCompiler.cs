@@ -36,8 +36,15 @@ public static class GameBoyRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
+        ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
+            parse.Value,
+            GameBoyTarget.Capabilities,
+            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
+            baseDirectory);
+        return videoProgram;
     }
 
     private static void ValidateFunctionContracts(ProgramSyntax program)
@@ -84,19 +91,38 @@ public static class GameBoyRomCompiler
                 screenHeight: GameBoyTarget.Capabilities.ScreenPixels.Height));
     }
 
+    private static ActorMetaspriteGeometry ActorMetaspriteGeometry(GameBoyVideoProgram videoProgram, string spriteId)
+    {
+        if (!videoProgram.SpriteAssets.TryGetValue(spriteId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy sprite asset '{spriteId}'. Declare it with sprite_asset(...).");
+        }
+
+        return new ActorMetaspriteGeometry(
+            asset.Pieces.Count,
+            asset.Pieces.Select(piece => piece.YOffset).ToArray(),
+            HardwareSpriteHeight: 16);
+    }
+
     private static IReadOnlyDictionary<int, int> HardwareSpriteScanlineCounts(
         SdkByteExpression y,
         IEnumerable<int> pieceOffsets,
         int spriteHeight,
         int screenHeight)
     {
+        var offsets = pieceOffsets.ToList();
+        if (y is SdkByteExpression.Variable { Location: SdkStorageLocation.RuntimeIndexedField })
+        {
+            return WorstCaseDynamicScanlineCounts(offsets);
+        }
+
         if (y is not SdkByteExpression.Constant constant)
         {
             return new Dictionary<int, int>();
         }
 
         var result = new Dictionary<int, int>();
-        foreach (var offset in pieceOffsets)
+        foreach (var offset in offsets)
         {
             var top = constant.Value + offset;
             var bottom = top + spriteHeight;
@@ -104,6 +130,17 @@ public static class GameBoyRomCompiler
             {
                 result[scanline] = result.GetValueOrDefault(scanline) + 1;
             }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<int, int> WorstCaseDynamicScanlineCounts(IEnumerable<int> pieceOffsets)
+    {
+        var result = new Dictionary<int, int>();
+        foreach (var offset in pieceOffsets)
+        {
+            result[offset] = result.GetValueOrDefault(offset) + 1;
         }
 
         return result;
@@ -683,9 +720,16 @@ internal sealed class GameBoyVideoProgram
             current = member.Target;
         }
 
+        if (current is IndexExpressionSyntax indexExpression)
+        {
+            var index = CheckedRange(ConstValue(indexExpression.Index, $"{indexExpression.BaseIdentifier} array index"), 0, 255, $"{indexExpression.BaseIdentifier} array index");
+            parts.Push($"{indexExpression.BaseIdentifier}[{index}]");
+            return string.Join(".", parts);
+        }
+
         if (current is not IdentifierSyntax identifier)
         {
-            throw new InvalidOperationException("Game Boy member access currently requires an identifier base.");
+            throw new InvalidOperationException("Game Boy member access currently requires an identifier or constant indexed base.");
         }
 
         parts.Push(identifier.Identifier);

@@ -46,7 +46,7 @@ Language work belongs here:
 
 - Fixed-width primitives: `u8`, `i8`, `u16`, `i16`, `bool`.
 - Pointers and addressable storage: `ptr<T>`, static data, ROM data, RAM data.
-- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local byte arrays with initializer lists, initializer-inferred lengths, and constant or runtime byte indices, explicit casts to byte-backed local types, arithmetic and bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, explicit infinite `loop`, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; the shared ABI/layout work remains broader.
+- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local arrays of byte-backed values or byte-sized structs, byte-array initializer lists and initializer-inferred lengths, per-element struct-array initializer lists, constant or runtime byte indices, struct-array field access such as `actors[i].x`, explicit casts to byte-backed local types, arithmetic and bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, explicit infinite `loop`, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; mixed-width struct-array layout and the shared ABI/layout work remain broader.
 - Functions, parameters, returns, calling convention, and attributes.
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
 - Target attributes such as `[target("gb")]` or `[intrinsic]`.
@@ -111,7 +111,7 @@ Intrinsic work belongs here:
 | `camera_span_tile_at(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_tile(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge. |
-| `camera_aabb_tiles(...)` | Portable SDK capability-gated query | Camera-relative AABB bridge for fixed-screen actors on long maps; requires target support for `CameraRelativeAabb`. |
+| `camera_aabb_tiles(...)` | Portable SDK capability-gated query | Camera-relative AABB bridge for fixed-screen actors and projected world-space actors on long maps; requires target support for `CameraRelativeAabb`. |
 | `camera_aabb_hit_top(...)` | Portable SDK capability-gated query | Camera-relative AABB tile-hit bridge that returns the top world-pixel Y of the first matching tile, or `255` when none hit; requires target support for `CameraRelativeAabbHitTop`. |
 | `map_column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `world_column(...)` now. |
 | `map_tile_at(...)` | Portable SDK candidate | Reads generated world tile-id rows. |
@@ -188,7 +188,7 @@ Portable 2D calls should be represented as semantic operations before target low
 
 The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only. The same collector also exposes `CollectFrameBudgets(...)`, a control-flow-aware budget pass that treats branches as alternatives and frame waits/input polls as frame boundaries. Targets supply resolved metasprite geometry for `sprite.Draw(...)`, allowing total hardware sprite checks and per-scanline checks when Y is constant; runtime Y positions remain outside static scanline proof.
 
-Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries a constant screen X, runtime world Y, constant or `sprite_width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
+Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries runtime or constant screen X, runtime world Y, constant or `sprite_width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
 The first SDK-as-library prototype is also in place. The parser preserves attributes on extern prototypes, and Game Boy/NES recognize `[target("gb"|"nes")] [intrinsic("wait_frame")] extern void ...();` as a target intrinsic. A source helper that calls that extern emits the same wait-frame bytes as the current `Sdk2DOperation.WaitFrame` lowering. This proves the zero-cost direction for migrating compiler-recognized SDK calls into source libraries, while leaving module packaging, portable target selection, and the rest of the intrinsic catalog as future work.
 
@@ -868,7 +868,7 @@ Status: landed 2026-06-08.
 - Candidate files: collision helper lowering, tests.
 - Steps:
   - Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
-  - Add `camera_aabb_tiles(screenX, worldY, width, height, flags)` for camera-relative fixed-screen actor checks on long maps.
+  - Add `camera_aabb_tiles(screenX, worldY, width, height, flags)` for camera-relative actor checks on long maps.
   - Check every tile overlapped by the AABB.
   - Return a simple boolean: `1` when any overlapped tile matches the requested flag mask, otherwise `0`.
   - Keep collision resolution outside this helper.
@@ -1031,12 +1031,12 @@ This iteration treats the implemented source forms as v1 when they satisfy two r
 - They compile through parser, semantic analysis, and the current cartridge targets.
 - They lower to constants, direct branches, direct local storage, direct bit operations, or source-level inline expansion without hidden heap allocation, dispatch tables, closures, iterators, exceptions, or runtime objects.
 
-V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local byte arrays, initializer lists, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `loop`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
+V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local arrays of byte-backed values or byte-sized structs, initializer lists for byte-backed value arrays, byte-sized struct arrays, and plain local structs, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `loop`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
 
 Tasks:
 
 - [x] Keep the v1 language surface bounded to features implemented by the front-end and current Game Boy/NES cartridge targets.
-- [x] Document remaining gaps as pointer/member access through arrays, address-of fields, wider ABI/layout, backend calling conventions, and canonical-type diagnostics.
+- [x] Document remaining gaps as pointer/member access, address-of fields, wider ABI/layout, backend calling conventions, and canonical-type diagnostics.
 - [x] Migrate runnable samples to use the v1 style where it improves clarity without changing target behavior.
 - [x] Keep diagnostic samples simple enough to isolate target regressions while still using the stable `loop` and mutation syntax.
 - [x] Move dot-call SDK namespaces, receiver methods, immutable `let`, switch expressions, pipeline syntax, and explicit `pure`/`inline` contracts out of v1 and into post-v1 candidates. Trait-like constraints remain outside v1 and outside Iteration 12.
@@ -1250,7 +1250,7 @@ Acceptance criteria:
 
 ### Iteration 14: Scalable Platformer Actor Framework Ergonomics
 
-Status: planned.
+Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (byte-sized struct arrays with `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.6 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative with offscreen culling/recycling; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite. Non-blocking follow-ups remain documented in `docs/ActorFrameworkRoadmap.md`: AF-5.7 hoists repeated camera-X projection, AF-5.8 hardens `TouchPlayer` against `screenX + width` byte overflow, AF-5.9 decides one-shot versus reactivation spawn policy, and AF-5.10 reduces the current O(spawns)/frame activation scan cost.
 
 Purpose: make complex platformer characters and enemy behaviors practical without asking game authors to hand-write one large `switch` over every enemy kind. This is a framework/SDK ergonomics goal, not a managed object model. The implementation should preserve the current 8-bit contract: fixed storage, predictable update cost, explicit caps, and no heap allocation or runtime polymorphism.
 
@@ -1281,12 +1281,13 @@ This is intentionally sugar over a data-oriented implementation, not a promise o
 Design rules:
 
 - Actor pools have compile-time maximum sizes and explicit storage. The generated representation is fixed arrays or equivalent fixed-layout storage.
+- The language prerequisite for hand-authored pools is fixed-size arrays of byte-sized structs with `pool[i].field` access. AR-14 should build on that storage model or an equivalent source/library-level structure-of-arrays lowering, not on genre-specific compiler operations. True `i16`/`u16` pooled fields require a future mixed-width layout pass.
 - Actor definitions are data: kind id, sprite/animation ids, hitbox, flags, behavior id, constants such as speed, hp, cooldown, and contact damage.
 - Behaviors are statically selected modules such as `Walker`, `Flyer`, `Patrol`, `Shooter`, `Chaser`, `Hazard`, and simple platformer controller variants. They lower to direct helpers or grouped loops, not to function pointers or vtables.
 - Runtime actor state is explicit and byte-sized where possible: kind, active flag, x/y, vx/vy, state, timer, facing, animation tick, and health.
 - World/Tiled integration should support object-layer spawn data and optional camera-window activation so large levels do not require all enemies to be active at once.
 - Collision stays on the SDK collision query layer. The actor framework can provide reusable platformer policies, but it must not hide a full physics engine behind one opaque call.
-- Capability checks must account for hardware sprite count, scanline pressure, frame-budget-sensitive streaming, actor pool size, and target-specific unsupported behavior.
+- Capability checks must account for hardware sprite count, scanline pressure, frame-budget-sensitive streaming, actor pool size, and target-specific unsupported behavior. The current actor draw path uses target-resolved metasprite geometry for pool-level frame and scanline diagnostics, then still runs through the shared frame-budget pass for the lowered `sprite.Draw(...)` operations.
 - The same high-level actor definitions should either compile for Game Boy and NES or fail with target capability diagnostics that name the unsupported behavior.
 
 Tasks:
@@ -1296,52 +1297,52 @@ Tasks:
 - Layer: portable SDK/framework.
 - Candidate files: SDK core records, frontend collectors, Game Boy/NES lowering tests, docs.
 - Steps:
-  - [ ] Define the minimum actor pool contract: fixed capacity, active slots, kind/state/timer/position fields, and per-type constant tables.
-  - [ ] Define enemy/actor declarations for sprite, animation, hitbox, behavior, and constants.
-  - [ ] Lower a simple `Update`/`Draw` surface to the same shape as hand-authored arrays plus direct helper calls.
-  - [ ] Reject unbounded pools, dynamic allocation, function-pointer-like behavior values, and uncapped spawn sources.
+  - [x] Define the minimum actor pool contract: fixed capacity, active slots, kind/state/timer/position fields, and per-type constant tables.
+  - [x] Define enemy/actor declarations for sprite, animation, hitbox, behavior, and constants.
+  - [x] Lower a simple `Update`/`Draw` surface to the same shape as hand-authored arrays plus direct helper calls.
+  - [x] Reject unbounded pools, dynamic allocation, function-pointer-like behavior values, and uncapped spawn sources.
 - Verification:
-  - [ ] Tests compare a generated actor pool against an equivalent hand-written fixed-array implementation.
-  - [ ] Docs describe the emitted storage model so authors know the runtime cost.
+  - [x] Tests compare a generated actor pool against an equivalent hand-written fixed-array implementation.
+  - [x] Docs describe the emitted storage model so authors know the runtime cost.
 
 #### AR-14.2: Add platformer behavior modules
 
 - Layer: portable SDK/framework with target lowering.
 - Candidate files: behavior definitions, collision helpers, animation helpers, Game Boy/NES emitted-code tests.
 - Steps:
-  - [ ] Add standard static behaviors for at least ground walker, flying patrol, turret/shooter, passive hazard, and simple chaser.
-  - [ ] Keep behavior state explicit in actor fields instead of hidden objects.
-  - [ ] Reuse existing world/camera AABB collision and animation helpers.
-  - [ ] Allow behavior constants to be data-driven per enemy type.
+  - [x] Add standard static behaviors for at least ground walker, flying patrol, turret/shooter, passive hazard, and simple chaser.
+  - [x] Keep behavior state explicit in actor fields instead of hidden objects.
+  - [x] Reuse existing world/camera AABB collision and animation helpers.
+  - [x] Allow behavior constants to be data-driven per enemy type.
 - Verification:
-  - [ ] A sample level can contain at least three enemy types with different behavior modules and shared update/draw calls.
-  - [ ] Tests prove behavior selection does not introduce virtual dispatch, heap allocation, or function-pointer tables.
+  - [x] A sample level can contain at least three enemy types with different behavior modules and shared update/draw calls.
+  - [x] Tests prove behavior selection does not introduce virtual dispatch, heap allocation, or function-pointer tables.
 
 #### AR-14.3: Spawn actors from Tiled world data
 
 - Layer: portable SDK asset pipeline.
 - Candidate files: Tiled logical map importer, world asset model, sample maps, docs.
 - Steps:
-  - [ ] Read a named Tiled object layer or equivalent spawn metadata for actor kind and initial fields.
-  - [ ] Generate compact spawn tables alongside world data.
-  - [ ] Add camera-window or room-based activation into fixed actor slots.
-  - [ ] Preserve explicit failure when a room/window can exceed the declared actor pool capacity.
+  - [x] Read a named Tiled object layer or equivalent spawn metadata for actor kind and initial fields.
+  - [x] Generate compact spawn data alongside world data.
+  - [x] Add camera-window or room-based activation into fixed actor slots.
+  - [x] Preserve explicit failure when a room/window can exceed the declared actor pool capacity.
 - Verification:
-  - [ ] A platformer sample can place multiple enemy kinds in Tiled without hard-coding every spawn in source.
-  - [ ] Game Boy/NES generated ROMs use the same authored map data where target capabilities permit it.
+  - [x] A platformer sample can place multiple enemy kinds in Tiled without hard-coding every spawn in source.
+  - [x] Game Boy/NES generated ROMs use the same authored map data where target capabilities permit it.
 
 #### AR-14.4: Build a scalable platformer acceptance slice
 
 - Layer: samples and validation.
 - Candidate files: `samples/runner/runner.rs`, sample maps/assets, target acceptance tests, MCP/diagnostics docs.
 - Steps:
-  - [ ] Extend the runner or add a focused platformer acceptance sample with several enemy kinds, activation, map collision, player contact, and animation.
-  - [ ] Keep the source free of a hand-written global enemy-kind switch in `main`.
-  - [ ] Validate the sample on Game Boy first, then NES where the declared behavior set is supported.
-  - [ ] Document the low-level equivalent pattern for authors who need to drop down to hand-authored arrays.
+  - [x] Extend the runner or add a focused platformer acceptance sample with several enemy kinds, activation, map collision, player contact, and animation.
+  - [x] Keep the source free of a hand-written global enemy-kind switch in `main`.
+  - [x] Validate the sample on Game Boy first, then NES where the declared behavior set is supported.
+  - [x] Document the low-level equivalent pattern for authors who need to drop down to hand-authored arrays.
 - Verification:
-  - [ ] The sample compiles and runs as a tracked ROM artifact.
-  - [ ] Validation covers source-level behavior, generated ROM execution, and visible actor rendering.
+  - [x] The sample compiles as a tracked ROM artifact.
+  - [x] Validation covers source-level behavior, emitted SDK operations, generated ROM builds, and visible actor-rendering paths.
 
 Acceptance criteria:
 

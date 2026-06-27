@@ -796,6 +796,8 @@ internal sealed record GameBoyBankedMusicPlacement(string Name, byte Bank, ushor
 
 internal sealed class GameBoyRuntimeCompiler
 {
+    private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
+
     private const ushort FirstVariableAddress = 0xC000;
     private const ushort RuntimeReservedStateAddress = 0xC0E0;
     private const ushort CameraXLowAddress = 0xC0E0;
@@ -871,6 +873,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly Sdk2DStreamReader sdkOperations;
     private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
+    private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
@@ -1141,6 +1144,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitArrayDeclaration(DeclarationSyntax declaration)
     {
+        if (program.Structs.TryGetValue(declaration.Type, out var structSyntax))
+        {
+            EmitStructArrayDeclaration(declaration, structSyntax);
+            return;
+        }
+
         if (!IsByteBackedLocalType(declaration.Type))
         {
             throw new InvalidOperationException($"Game Boy target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
@@ -1166,6 +1175,93 @@ internal sealed class GameBoyRuntimeCompiler
         if (declaration.Initialization.HasValue)
         {
             EmitArrayInitializer(declaration, declaration.Initialization.Value, length, elementAddresses);
+        }
+    }
+
+    private void EmitStructArrayDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
+    {
+        if (!declaredVariables.Add(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        TrackImmutable(declaration);
+
+        var length = CheckedRange(GameBoyVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
+        var fieldOffsets = StructFieldOffsets(structSyntax, "Game Boy");
+        var stride = fieldOffsets.Count;
+        if (length * stride > 255)
+        {
+            throw new InvalidOperationException($"Game Boy target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
+        }
+
+        structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
+
+        var fieldNames = structSyntax.Fields.Select(field => field.Name).ToList();
+        for (var index = 0; index < length; index++)
+        {
+            foreach (var field in structSyntax.Fields)
+            {
+                var address = DeclareVariable(IndexedMemberName(declaration.Name, index, field.Name));
+                builder.LoadAImmediate(0);
+                builder.StoreA(address);
+            }
+        }
+
+        if (declaration.Initialization.HasValue)
+        {
+            EmitStructArrayInitializer(declaration, declaration.Initialization.Value, length, fieldNames);
+        }
+    }
+
+    private void EmitStructArrayInitializer(
+        DeclarationSyntax declaration,
+        ExpressionSyntax initialization,
+        int length,
+        IReadOnlyList<string> fieldNames)
+    {
+        if (initialization is not ArrayInitializerSyntax arrayInitializer)
+        {
+            throw new InvalidOperationException($"Game Boy target requires an array initializer for local struct array '{declaration.Name}'.");
+        }
+
+        if (arrayInitializer.Elements.Count > length)
+        {
+            throw new InvalidOperationException($"Game Boy target struct array initializer for '{declaration.Name}' has {arrayInitializer.Elements.Count} element(s), but the array length is {length}.");
+        }
+
+        var knownFields = fieldNames.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < arrayInitializer.Elements.Count; index++)
+        {
+            if (arrayInitializer.Elements[index] is not StructInitializerSyntax structInitializer)
+            {
+                throw new InvalidOperationException($"Game Boy target requires struct initializers for elements of struct array '{declaration.Name}'.");
+            }
+
+            var initializedFields = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+            foreach (var field in structInitializer.Fields)
+            {
+                if (!initializedFields.TryAdd(field.Name, field.Expression))
+                {
+                    throw new InvalidOperationException($"Game Boy target struct array initializer for '{declaration.Name}' element {index} supplies field '{field.Name}' more than once.");
+                }
+
+                if (!knownFields.Contains(field.Name))
+                {
+                    throw new InvalidOperationException($"Game Boy target struct array initializer for '{declaration.Name}' has no field named '{field.Name}'.");
+                }
+            }
+
+            foreach (var fieldName in fieldNames)
+            {
+                if (!initializedFields.TryGetValue(fieldName, out var expression))
+                {
+                    continue;
+                }
+
+                EmitExpressionToA(expression);
+                builder.StoreA(VariableAddress(IndexedMemberName(declaration.Name, index, fieldName)));
+            }
         }
     }
 
@@ -1346,6 +1442,12 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        if (assignment.Left is MemberAccessLValue memberLValue && TryRuntimeIndexedMemberAccess(memberLValue.MemberAccess, out var indexedBase, out var fieldName))
+        {
+            EmitRuntimeIndexedMemberAssignment(indexedBase, fieldName, assignment);
+            return;
+        }
+
         var address = LValueAddress(assignment.Left);
         EmitAssignmentRightToA(assignment);
         builder.StoreA(address);
@@ -1375,6 +1477,7 @@ internal sealed class GameBoyRuntimeCompiler
         return memberAccess.Target switch
         {
             IdentifierSyntax identifier => identifier.Identifier,
+            IndexExpressionSyntax indexExpression => indexExpression.BaseIdentifier,
             MemberAccessSyntax nested => MemberAccessRoot(nested),
             _ => null,
         };
@@ -1451,6 +1554,62 @@ internal sealed class GameBoyRuntimeCompiler
         EmitExpressionToA(right);
         EmitBitwiseAFromC(op);
         builder.StoreHlA();
+    }
+
+    private void EmitRuntimeIndexedMemberAssignment(IndexExpressionSyntax indexExpression, string fieldName, AssignmentSyntax assignment)
+    {
+        EmitRuntimeIndexedMemberAddressToHl(indexExpression, fieldName);
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed struct field assignment");
+                EmitExpressionToA(assignment.Right);
+                builder.StoreHlA();
+                return;
+            case "+=":
+                builder.LoadAFromHl();
+                if (TryConst(assignment.Right, out var addRight))
+                {
+                    builder.AddAImmediate(addRight);
+                    builder.StoreHlA();
+                    return;
+                }
+
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed struct field compound assignment");
+                builder.LoadCFromA();
+                EmitExpressionToA(assignment.Right);
+                builder.AddAFromC();
+                builder.StoreHlA();
+                return;
+            case "-=":
+                builder.LoadAFromHl();
+                if (TryConst(assignment.Right, out var subtractRight))
+                {
+                    builder.SubtractAImmediate(subtractRight);
+                    builder.StoreHlA();
+                    return;
+                }
+
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed struct field compound assignment");
+                builder.LoadCFromA();
+                EmitExpressionToA(assignment.Right);
+                builder.LoadBFromA();
+                builder.LoadAFromC();
+                builder.SubtractB();
+                builder.StoreHlA();
+                return;
+            case "&=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "&", "runtime indexed struct field &= assignment");
+                return;
+            case "|=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "|", "runtime indexed struct field |= assignment");
+                return;
+            case "^=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "^", "runtime indexed struct field ^= assignment");
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy assignment operator '{assignment.OperatorSymbol}'.");
+        }
     }
 
     private void EmitAssignmentRightToA(AssignmentSyntax assignment)
@@ -2812,10 +2971,24 @@ internal sealed class GameBoyRuntimeCompiler
                 builder.LoadAImmediate(constant.Value);
                 break;
             case SdkByteExpression.Variable variable:
-                builder.LoadA(VariableAddress(StorageKey(variable.Location)));
+                EmitSdkStorageLocationToA(variable.Location);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkStorageLocationToA(SdkStorageLocation location)
+    {
+        switch (location)
+        {
+            case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
+                EmitRuntimeIndexedMemberAddressToHl(runtimeIndexed.BaseName, runtimeIndexed.Index, runtimeIndexed.FieldName);
+                builder.LoadAFromHl();
+                break;
+            default:
+                builder.LoadA(VariableAddress(StorageKey(location)));
+                break;
         }
     }
 
@@ -3448,11 +3621,11 @@ internal sealed class GameBoyRuntimeCompiler
                     builder.Label(trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
                     return;
                 case "<":
@@ -3502,11 +3675,11 @@ internal sealed class GameBoyRuntimeCompiler
                     EmitConditionTrueJump(binary.Right, trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, trueLabel); // JP Z,trueLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
                     return;
             }
@@ -3523,7 +3696,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.JumpAbsolute(0xC2, trueLabel);       // JP NZ,trueLabel
     }
 
-    private void EmitCompareToConstant(ExpressionSyntax left, ExpressionSyntax right)
+    private void EmitCompare(ExpressionSyntax left, ExpressionSyntax right)
     {
         if (TryConst(right, out var rightConstant))
         {
@@ -3539,7 +3712,17 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("Game Boy conditions currently require one side of == or != to be constant.");
+        EmitVariableOperandsToAAndB(left, right);
+        builder.CompareB();
+    }
+
+    private void EmitVariableOperandsToAAndB(ExpressionSyntax left, ExpressionSyntax right)
+    {
+        EmitExpressionToA(left);
+        builder.PushAf();
+        EmitExpressionToA(right);
+        builder.LoadBFromA();
+        builder.PopAf();
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -3560,7 +3743,8 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("Game Boy relational conditions currently require one side to be constant.");
+        EmitCompare(binary.Left, binary.Right);
+        EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
     }
 
     private void EmitRelationalFalseJump(string op, string falseLabel)
@@ -3623,7 +3807,16 @@ internal sealed class GameBoyRuntimeCompiler
                 builder.LoadA(VariableAddress(identifier.Identifier));
                 break;
             case MemberAccessSyntax memberAccess:
-                builder.LoadA(VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess)));
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out var indexedBase, out var fieldName))
+                {
+                    EmitRuntimeIndexedMemberAddressToHl(indexedBase, fieldName);
+                    builder.LoadAFromHl();
+                }
+                else
+                {
+                    builder.LoadA(VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess)));
+                }
+
                 break;
             case IndexExpressionSyntax indexExpression:
                 if (TryConst(indexExpression.Index, out _))
@@ -3738,6 +3931,14 @@ internal sealed class GameBoyRuntimeCompiler
                 break;
             case "animation_frame":
                 EmitAnimationFrame(call);
+                break;
+            case "__rs_actor_camera_x_lo":
+                GameBoyVideoProgram.RequireArity(call, 0);
+                builder.LoadA(CameraXLowAddress);
+                break;
+            case "__rs_actor_camera_x_hi":
+                GameBoyVideoProgram.RequireArity(call, 0);
+                builder.LoadA(CameraXHighAddress);
                 break;
             case "camera_tile_column_at":
                 EmitCameraTileColumnAt(call);
@@ -4049,10 +4250,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > 160)
-        {
-            throw new InvalidOperationException("camera_aabb_tiles screen span must fit within the visible Game Boy width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, 160, "camera_aabb_tiles");
 
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
@@ -4060,7 +4258,7 @@ internal sealed class GameBoyRuntimeCompiler
         {
             foreach (var xOffset in AabbSampleOffsets(width))
             {
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
@@ -4092,10 +4290,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > 160)
-        {
-            throw new InvalidOperationException("camera_aabb_hit_top screen span must fit within the visible Game Boy width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, 160, "camera_aabb_hit_top");
 
         var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
@@ -4104,7 +4299,7 @@ internal sealed class GameBoyRuntimeCompiler
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
                 var hitTopOffset = operation.WorldYOffset + yOffset;
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, hitTopOffset, config, callName);
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.JumpAbsolute(0xCA, nextProbeLabel); // JP Z,nextProbeLabel
@@ -4206,6 +4401,56 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkByteExpression worldY, int worldYOffset, CameraConfig config, string callName)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraTileFlagsAt(constantScreenX + screenPixelXOffset, worldY, worldYOffset, config, callName);
+            return;
+        }
+
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
+        var endLabel = builder.CreateLabel("camera_tile_flags_end");
+        if (TrySdkConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(row);
+            return;
+        }
+
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.LoadBFromA();
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadCFromA();
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
+            builder.LoadAFromC();
+            builder.CompareImmediate(row);
+            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
+            builder.LoadAFromB();
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
     private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
     {
         var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
@@ -4230,6 +4475,49 @@ internal sealed class GameBoyRuntimeCompiler
         builder.SubtractAImmediate(mapWidth);
         builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraPixelToSourceColumn(SdkByteExpression screenPixelX, int screenPixelXOffset, int mapWidth)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraPixelToSourceColumn(constantScreenX + screenPixelXOffset, mapWidth);
+            return;
+        }
+
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+
+        EmitSdkByteExpressionToA(screenPixelX);
+        if (screenPixelXOffset != 0)
+        {
+            builder.AddAImmediate(screenPixelXOffset);
+        }
+
+        builder.LoadBFromA();
+        builder.LoadA(CameraFineXAddress);
+        builder.AddAFromB();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.LoadBFromA();
+        builder.LoadA(CameraScreenLeftColumnAddress);
+        builder.AddAFromB();
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+        builder.SubtractAImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
+        builder.Label(endLabel);
+    }
+
+    private static void ValidateConstantCameraAabbSpan(SdkByteExpression screenX, int width, int screenWidth, string callName)
+    {
+        if (screenX is SdkByteExpression.Constant constant && constant.Value + width > screenWidth)
+        {
+            throw new InvalidOperationException($"{callName} screen span must fit within the visible Game Boy width.");
+        }
     }
 
     private static IReadOnlyList<int> AabbSampleOffsets(int size)
@@ -4609,7 +4897,9 @@ internal sealed class GameBoyRuntimeCompiler
                     return;
                 }
 
-                break;
+                EmitVariableOperandsToAAndB(binary.Left, binary.Right);
+                builder.SubtractB();
+                return;
             case "&":
             case "|":
             case "^":
@@ -4737,6 +5027,70 @@ internal sealed class GameBoyRuntimeCompiler
         builder.AddHlDe();
     }
 
+    private void EmitRuntimeIndexedMemberAddressToHl(IndexExpressionSyntax indexExpression, string fieldName)
+    {
+        var layout = StructArrayLayoutFor(indexExpression.BaseIdentifier);
+        _ = layout.FieldOffsets[fieldName];
+        var baseAddress = VariableAddress(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+        EmitExpressionToA(indexExpression.Index);
+        EmitMultiplyA(layout.Stride);
+        builder.LoadHl(baseAddress);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+    }
+
+    private void EmitRuntimeIndexedMemberAddressToHl(string baseIdentifier, SdkByteExpression index, string fieldName)
+    {
+        var layout = StructArrayLayoutFor(baseIdentifier);
+        _ = layout.FieldOffsets[fieldName];
+        var baseAddress = VariableAddress(IndexedMemberName(baseIdentifier, 0, fieldName));
+        EmitSdkByteExpressionToA(index);
+        EmitMultiplyA(layout.Stride);
+        builder.LoadHl(baseAddress);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+    }
+
+    private void EmitMultiplyA(int multiplier)
+    {
+        if (multiplier <= 1)
+        {
+            return;
+        }
+
+        builder.LoadBFromA();
+        for (var count = 1; count < multiplier; count++)
+        {
+            builder.AddAFromB();
+        }
+    }
+
+    private bool TryRuntimeIndexedMemberAccess(MemberAccessSyntax memberAccess, out IndexExpressionSyntax indexExpression, out string fieldName)
+    {
+        if (memberAccess.Target is IndexExpressionSyntax candidate
+            && !TryConst(candidate.Index, out _)
+            && structArrays.ContainsKey(candidate.BaseIdentifier)
+            && StructArrayLayoutFor(candidate.BaseIdentifier).FieldOffsets.ContainsKey(memberAccess.Member))
+        {
+            indexExpression = candidate;
+            fieldName = memberAccess.Member;
+            return true;
+        }
+
+        indexExpression = null!;
+        fieldName = string.Empty;
+        return false;
+    }
+
+    private StructArrayLayout StructArrayLayoutFor(string baseIdentifier)
+    {
+        return structArrays.TryGetValue(baseIdentifier, out var layout)
+            ? layout
+            : throw new InvalidOperationException($"Game Boy target has no struct array layout for '{baseIdentifier}'.");
+    }
+
     private void RequireExpressionPreservesHl(ExpressionSyntax expression, string context)
     {
         if (!PreservesHl(expression))
@@ -4755,7 +5109,7 @@ internal sealed class GameBoyRuntimeCompiler
         return expression switch
         {
             IdentifierSyntax => true,
-            MemberAccessSyntax => true,
+            MemberAccessSyntax memberAccess => !TryRuntimeIndexedMemberAccess(memberAccess, out _, out _),
             IndexExpressionSyntax indexExpression => TryConst(indexExpression.Index, out _),
             CastSyntax cast => PreservesHl(cast.Expression),
             ConditionalExpressionSyntax conditional => PreservesHl(conditional.Condition) && PreservesHl(conditional.WhenTrue) && PreservesHl(conditional.WhenFalse),
@@ -4785,6 +5139,34 @@ internal sealed class GameBoyRuntimeCompiler
         return $"{baseIdentifier}[{index}]";
     }
 
+    private static string IndexedMemberName(string baseIdentifier, int index, string fieldName)
+    {
+        return $"{IndexedElementName(baseIdentifier, index)}.{fieldName}";
+    }
+
+    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax, string targetName)
+    {
+        var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var offset = 0;
+        foreach (var field in structSyntax.Fields)
+        {
+            if (!IsByteSizedStructArrayFieldType(field.Type))
+            {
+                throw new InvalidOperationException($"{targetName} target struct array field type '{field.Type}' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.");
+            }
+
+            offsets.Add(field.Name, offset);
+            offset++;
+        }
+
+        return offsets;
+    }
+
+    private bool IsByteSizedStructArrayFieldType(string type)
+    {
+        return type is "i8" or "u8" or "bool" || program.Enums.ContainsKey(type);
+    }
+
     private static string StorageKey(SdkStorageLocation location)
     {
         return location switch
@@ -4792,6 +5174,7 @@ internal sealed class GameBoyRuntimeCompiler
             SdkStorageLocation.Local local => local.Name,
             SdkStorageLocation.Field field => $"{StorageKey(field.Target)}.{field.FieldName}",
             SdkStorageLocation.IndexedElement indexed => IndexedElementName(indexed.BaseName, indexed.Index),
+            SdkStorageLocation.RuntimeIndexedField => throw new InvalidOperationException("Runtime indexed SDK fields must be emitted directly."),
             _ => throw new InvalidOperationException($"Unsupported SDK storage location '{location.GetType().Name}'."),
         };
     }
@@ -5278,6 +5661,16 @@ internal sealed class GbBuilder
     public void LoadAFromB()
     {
         Emit(0x78);
+    }
+
+    public void PushAf()
+    {
+        Emit(0xF5);
+    }
+
+    public void PopAf()
+    {
+        Emit(0xF1);
     }
 
     public void LoadAFromC()

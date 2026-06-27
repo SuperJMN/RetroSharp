@@ -685,6 +685,7 @@ public static class ConstantFolder
         {
             IndexLValue index => new IndexLValue(index.BaseIdentifier, FoldExpression(index.Index, constants, typeSizes, fieldOffsets, arrays)),
             PointerDerefLValue pointer => new PointerDerefLValue(FoldExpression(pointer.Expression, constants, typeSizes, fieldOffsets, arrays)),
+            MemberAccessLValue memberAccess => new MemberAccessLValue((MemberAccessSyntax)FoldExpression(memberAccess.MemberAccess, constants, typeSizes, fieldOffsets, arrays)),
             _ => lValue,
         };
     }

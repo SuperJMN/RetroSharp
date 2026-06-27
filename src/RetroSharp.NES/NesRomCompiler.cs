@@ -18,8 +18,14 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
+        ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
+            parse.Value,
+            NesTarget.Capabilities,
+            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
+            baseDirectory);
         ValidateSdkOperations(videoProgram);
         return NesRomBuilder.Build(videoProgram);
     }
@@ -32,8 +38,9 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
     }
 
@@ -45,8 +52,9 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
     }
 
@@ -92,19 +100,38 @@ public static class NesRomCompiler
                 screenHeight: NesTarget.Capabilities.ScreenPixels.Height));
     }
 
+    private static ActorMetaspriteGeometry ActorMetaspriteGeometry(NesVideoProgram videoProgram, string spriteId)
+    {
+        if (!videoProgram.SpriteAssets.TryGetValue(spriteId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES sprite asset '{spriteId}'. Declare it with sprite_asset(...).");
+        }
+
+        return new ActorMetaspriteGeometry(
+            asset.Pieces.Count,
+            asset.Pieces.Select(piece => piece.YOffset).ToArray(),
+            HardwareSpriteHeight: 8);
+    }
+
     private static IReadOnlyDictionary<int, int> HardwareSpriteScanlineCounts(
         SdkByteExpression y,
         IEnumerable<int> pieceOffsets,
         int spriteHeight,
         int screenHeight)
     {
+        var offsets = pieceOffsets.ToList();
+        if (y is SdkByteExpression.Variable { Location: SdkStorageLocation.RuntimeIndexedField })
+        {
+            return WorstCaseDynamicScanlineCounts(offsets);
+        }
+
         if (y is not SdkByteExpression.Constant constant)
         {
             return new Dictionary<int, int>();
         }
 
         var result = new Dictionary<int, int>();
-        foreach (var offset in pieceOffsets)
+        foreach (var offset in offsets)
         {
             var top = constant.Value + offset;
             var bottom = top + spriteHeight;
@@ -112,6 +139,17 @@ public static class NesRomCompiler
             {
                 result[scanline] = result.GetValueOrDefault(scanline) + 1;
             }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<int, int> WorstCaseDynamicScanlineCounts(IEnumerable<int> pieceOffsets)
+    {
+        var result = new Dictionary<int, int>();
+        foreach (var offset in pieceOffsets)
+        {
+            result[offset] = result.GetValueOrDefault(offset) + 1;
         }
 
         return result;
@@ -924,9 +962,16 @@ internal sealed class NesVideoProgram
             current = member.Target;
         }
 
+        if (current is IndexExpressionSyntax indexExpression)
+        {
+            var index = CheckedRange(ConstValue(indexExpression.Index, $"{indexExpression.BaseIdentifier} array index"), 0, 255, $"{indexExpression.BaseIdentifier} array index");
+            parts.Push($"{indexExpression.BaseIdentifier}[{index}]");
+            return string.Join(".", parts);
+        }
+
         if (current is not IdentifierSyntax identifier)
         {
-            throw new InvalidOperationException("NES member access currently requires an identifier base.");
+            throw new InvalidOperationException("NES member access currently requires an identifier or constant indexed base.");
         }
 
         parts.Push(identifier.Identifier);

@@ -7,6 +7,8 @@ public abstract record SdkStorageLocation
     public sealed record Field(SdkStorageLocation Target, string FieldName) : SdkStorageLocation;
 
     public sealed record IndexedElement(string BaseName, int Index) : SdkStorageLocation;
+
+    public sealed record RuntimeIndexedField(string BaseName, SdkByteExpression Index, string FieldName) : SdkStorageLocation;
 }
 
 public abstract record SdkByteExpression

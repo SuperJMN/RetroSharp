@@ -616,6 +616,11 @@ public class SemanticAnalyzer
             return ResolveMember(scope, memberAccess);
         }
 
+        if (expression is IndexExpressionSyntax indexExpression)
+        {
+            return ResolveIndexedSymbol(scope, indexExpression.BaseIdentifier, indexExpression.Index);
+        }
+
         return ("<expression>", SymbolType.Unknown, ["Member access target must be a symbol or another member access"]);
     }
 
@@ -824,7 +829,7 @@ public class SemanticAnalyzer
                 errors.Add("Array initializer requires a fixed-size array declaration");
             }
 
-            errors.AddRange(arrayInitializer.Elements.SelectMany(element => AnalyzeExpression(element, scope, types, functions).Node.AllErrors));
+            errors.AddRange(arrayInitializer.Elements.SelectMany(element => AnalyzeArrayInitializerElement(declaration, element, scope, types, functions)));
             return errors;
         }
 
@@ -839,6 +844,22 @@ public class SemanticAnalyzer
         return declaration.ArrayLength.HasValue
             ? expressionErrors.Concat(constantInitializerErrors).Concat(knownTypeInitializerErrors).Concat([$"Fixed-size array '{declaration.Name}' requires an array initializer"])
             : expressionErrors.Concat(constantInitializerErrors).Concat(knownTypeInitializerErrors);
+    }
+
+    private IEnumerable<string> AnalyzeArrayInitializerElement(
+        DeclarationSyntax declaration,
+        ExpressionSyntax element,
+        Scope scope,
+        IReadOnlyDictionary<string, SymbolType> types,
+        IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        if (element is StructInitializerSyntax structInitializer)
+        {
+            var elementType = ResolveType(declaration.Type, types);
+            return AnalyzeStructInitializerFields($"{declaration.Name} array initializer", elementType, structInitializer, scope, types, functions);
+        }
+
+        return AnalyzeExpression(element, scope, types, functions).Node.AllErrors;
     }
 
     private static IEnumerable<string> ConstantInitializerErrors(string typeName, ExpressionSyntax expression)
@@ -967,9 +988,23 @@ public class SemanticAnalyzer
         }
 
         var type = ResolveType(declaration.Type, types);
-        if (type is not StructType structType)
+        errors.AddRange(AnalyzeStructInitializerFields($"Struct initializer for '{declaration.Name}'", type, initializer, scope, types, functions));
+
+        return errors;
+    }
+
+    private IEnumerable<string> AnalyzeStructInitializerFields(
+        string context,
+        SymbolType type,
+        StructInitializerSyntax initializer,
+        Scope scope,
+        IReadOnlyDictionary<string, SymbolType> types,
+        IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var errors = new List<string>();
+        if (type is not StructType)
         {
-            errors.Add($"Struct initializer for '{declaration.Name}' requires a struct type");
+            errors.Add($"{context} requires a struct type");
         }
 
         var initializedFields = new HashSet<string>(StringComparer.Ordinal);
@@ -977,7 +1012,7 @@ public class SemanticAnalyzer
         {
             if (!initializedFields.Add(fieldInitializer.Name))
             {
-                errors.Add($"Struct initializer for '{declaration.Name}' supplies field '{fieldInitializer.Name}' more than once");
+                errors.Add($"{context} supplies field '{fieldInitializer.Name}' more than once");
             }
 
             if (type is StructType concreteStruct && !concreteStruct.Field(fieldInitializer.Name).HasValue)

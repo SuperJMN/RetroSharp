@@ -27,6 +27,8 @@ Common commands
   - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-drawing/drawing.gb samples/gameboy-drawing/drawing.rs
   - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/runner/runner.gb samples/runner/runner.rs
   - NES runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/runner.nes samples/runner/runner.rs
+  - Game Boy actor framework: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/actor-framework/actors.gb samples/actor-framework/actors.rs
+  - NES actor framework: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/actor-framework/actors.nes samples/actor-framework/actors.rs
 - Export GBS to a Game Boy APU trace for faithful Game Boy BGM playback (binary by default; loop auto-detected)
   - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- gbs-to-gbapu --in path/to/theme.gbs --subsong 1 --seconds 120 --out path/to/theme.gbapu
   - Inspect a trace: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- gbapu-dump path/to/theme.gbapu
@@ -77,6 +79,7 @@ Game Boy planning
 - `docs/GameBoyTarget.md` is the source of truth for the currently supported subset and short-term checklist. Keep it updated when adding runtime intrinsics or raising the supported language surface.
 - `docs/AgentContext.md` records recent Game Boy runner lessons, Tiled map pipeline behavior, validation expectations, and publication proof conventions for agents.
 - `docs/GameBoyRunnerDebugging.md` documents the normal runner-first debugging workflow, including diagnostic samples, emulator cross-checks, and layer selection.
+- `docs/ActorFrameworkRoadmap.md` tracks the Game Boy/NES actor framework acceptance slice. The sample is `samples/actor-framework/actors.rs` and demonstrates fixed actor pools, declarative enemy definitions, Tiled object-layer spawns, runtime activation, and source-to-source lowering over existing SDK calls.
 
 - External projects included in the solution
   - libs/Z80DotNet/*: Z80 processor simulator and tests (e.g., Zexall). Used as a real-world Z80 reference/executor for validation.

@@ -30,6 +30,33 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void Cli_builds_actor_framework_sample_for_game_boy_and_nes_under_temp_directory()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sample = RepositoryFile("samples/actor-framework/actors.rs");
+        var source = File.ReadAllText(sample);
+
+        Assert.Contains("""world.Load("actors.tmj");""", source);
+        Assert.Contains("""actor.SpawnLayer(enemies, "actors.tmj", "actors");""", source);
+        Assert.Contains("""camera.SetPosition(cameraX, 0);""", source);
+        Assert.DoesNotContain("enemies[0].kind", source);
+
+        var gameBoyRom = Path.Combine(workspace.Path, "actors.gb");
+        var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);
+
+        Assert.Equal(0, gameBoy.ExitCode);
+        Assert.True(File.Exists(gameBoyRom), gameBoy.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(gameBoyRom).Length);
+
+        var nesRom = Path.Combine(workspace.Path, "actors.nes");
+        var nes = RunCli("--target", "nes", "--out", nesRom, sample);
+
+        Assert.Equal(0, nes.ExitCode);
+        Assert.True(File.Exists(nesRom), nes.CombinedOutput);
+        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesRom).Length);
+    }
+
+    [Fact]
     public void Cli_builds_every_manifest_sample_for_declared_targets()
     {
         using var workspace = TemporaryWorkspace();

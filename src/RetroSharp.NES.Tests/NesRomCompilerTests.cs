@@ -1242,6 +1242,47 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_struct_array_initializer_like_explicit_field_assignments()
+    {
+        const string explicitSource = """
+                                      struct Actor {
+                                          u8 x;
+                                          u8 y;
+                                          bool active;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          u8 seed = 3;
+                                          Actor actors[3];
+                                          actors[0].x = 1;
+                                          actors[0].active = 1;
+                                          actors[1].y = seed + 1;
+                                          u8 copy = actors[2].active;
+                                          return;
+                                      }
+                                      """;
+
+        const string initializerSource = """
+                                         struct Actor {
+                                             u8 x;
+                                             u8 y;
+                                             bool active;
+                                         }
+
+                                         void main() {
+                                             video_init();
+                                             u8 seed = 3;
+                                             Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];
+                                             u8 copy = actors[2].active;
+                                             return;
+                                         }
+                                         """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(explicitSource), NesRomCompiler.CompileSource(initializerSource));
+    }
+
+    [Fact]
     public void Compiles_array_initializer_with_inferred_length_like_explicit_length()
     {
         const string explicitLengthSource = """
@@ -1337,6 +1378,78 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_nested_variable_subtraction_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 10;
+                                  u8 b = 7;
+                                  u8 c = 2;
+                                  u8 result = a - (b - c);
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x48, 0xA5, 0x01, 0x38, 0xE5, 0x02, 0x85, 0xE9, 0x68, 0x38, 0xE5, 0xE9, 0x85, 0x03]), "Nested subtraction should preserve the outer left operand on the CPU stack while evaluating the right operand.");
+    }
+
+    [Fact]
+    public void Compiles_nested_variable_relational_compare_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 9;
+                                  u8 b = 4;
+                                  u8 c = 8;
+                                  u8 d = 2;
+                                  u8 result = 0;
+                                  if ((a - b) < (c - d)) {
+                                      result = 1;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE5, 0x01, 0x48, 0xA5, 0x02, 0x38, 0xE5, 0x03, 0x85, 0xE9, 0x68, 0xC5, 0xE9]), "Nested relational compares should preserve the left expression on the CPU stack while evaluating the right expression.");
+    }
+
+    [Fact]
+    public void Compiles_nested_variable_equality_compare_without_reusing_expression_scratch()
+    {
+        const string source = """
+                              void main() {
+                                  u8 a = 9;
+                                  u8 b = 4;
+                                  u8 c = 8;
+                                  u8 d = 3;
+                                  u8 result = 0;
+                                  if ((a - b) == (c - d)) {
+                                      result = 1;
+                                  }
+                                  if ((a - b) != (c - d)) {
+                                      result = 2;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE5, 0x01, 0x48, 0xA5, 0x02, 0x38, 0xE5, 0x03, 0x85, 0xE9, 0x68, 0xC5, 0xE9, 0xD0]), "Nested == should preserve the left expression on the CPU stack before comparing.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x38, 0xE5, 0x01, 0x48, 0xA5, 0x02, 0x38, 0xE5, 0x03, 0x85, 0xE9, 0x68, 0xC5, 0xE9, 0xF0]), "Nested != should preserve the left expression on the CPU stack before comparing.");
+    }
+
+    [Fact]
     public void Compiles_for_loop_to_direct_branching_without_helper_calls()
     {
         const string source = """
@@ -1426,6 +1539,691 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_struct_array_field_access_with_runtime_index_stride()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u8 y;
+                                  bool active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  Actor actors[3];
+                                  u8 i = 2;
+                                  actors[1].active = 7;
+                                  u8 copy = actors[1].active;
+                                  actors[i].y += 1;
+                                  u8 runtimeCopy = actors[i].x;
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA9, 0x07, 0x85, 0x05]), "actors[1].active should store at base + sizeof(Actor) + offsetof(active).");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x05, 0x85, 0x0A]), "constant indexed field reads should use the flattened field address directly.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x01, 0x18, 0x69, 0x01, 0x95, 0x01]), "actors[i].y should compute X from i * sizeof(Actor) and use the y-field base address.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x85, 0x0B]), "runtime indexed field reads should compute X from i * sizeof(Actor) and use the field base address.");
+    }
+
+    [Fact]
+    public void Compiles_hand_written_actor_pool_update_loop_as_fixed_storage_and_branches()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u8 y;
+                                  u8 active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  Actor actors[3] = [{ active: 1, x: 4 }, { x: 9 }, { active: 1, x: 12 }];
+                                  for (u8 i = 0; i < countof(actors); i += 1) {
+                                      if (actors[i].active != 0) {
+                                          actors[i].x += 1;
+                                      }
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0xC9, 0x03]), "pool loop should compare the byte index with countof(actors), not use an iterator object.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x02, 0xC9, 0x00]), "active checks should read actors[i].active through the fixed field base plus i * stride.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x18, 0x69, 0x01, 0x95, 0x00]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
+    }
+
+    [Fact]
+    public void Rejects_struct_array_fields_that_are_not_byte_sized()
+    {
+        const string source = """
+                              struct Actor {
+                                  u16 worldX;
+                                  u8 y;
+                              }
+
+                              void main() {
+                                  Actor actors[2];
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("NES target struct array field type 'u16' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.", exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_pool_and_enemy_definition_like_fixed_storage_and_constants()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 xHi;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+                                    const GoombaBehavior = Walker;
+                                    const GoombaSpeed = 1;
+                                    const GoombaHp = 1;
+                                    const GoombaCooldown = 60;
+                                    const GoombaContactDamage = 0;
+                                    const GoombaHitboxWidth = 0;
+                                    const GoombaHitboxHeight = 0;
+
+                                    inline u8 enemy_behavior(u8 kind) => kind == Goomba ? GoombaBehavior : 0;
+                                    inline u8 enemy_speed(u8 kind) => kind == Goomba ? GoombaSpeed : 0;
+                                    inline u8 enemy_hp(u8 kind) => kind == Goomba ? GoombaHp : 0;
+                                    inline u8 enemy_cooldown(u8 kind) => kind == Goomba ? GoombaCooldown : 0;
+
+                                    void main() {
+                                        video_init();
+                                        Actor enemies[2];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].health = enemy_hp(enemies[0].kind);
+                                        enemies[0].vx = (i8)enemy_speed(enemies[0].kind);
+                                        enemies[0].timer = enemy_cooldown(enemies[0].kind);
+                                        return;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       actor.Pool(enemies, 0b10);
+                                       enemy.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].health = enemy.Hp(enemies[0].kind);
+                                       enemies[0].vx = (i8)enemy.Speed(enemies[0].kind);
+                                       enemies[0].timer = enemy.Cooldown(enemies[0].kind);
+                                       return;
+                                   }
+                                   """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(manualSource), NesRomCompiler.CompileSource(actorSource));
+    }
+
+    [Fact]
+    public void Rejects_actor_pool_without_literal_capacity()
+    {
+        const string source = """
+                              void main() {
+                                  u8 capacity = 2;
+                                  actor.Pool(enemies, capacity);
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("actor.Pool for 'enemies' requires a literal capacity from 1 to 255.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_actor_pool_above_nes_struct_array_storage_capacity()
+    {
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 65);
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("NES target struct array 'enemies' uses 780 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_unknown_actor_behavior_with_named_diagnostic_on_nes()
+    {
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Ghost);
+                                  enemies.Update();
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("Unknown actor behavior 'Ghost'.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_actor_draw_loop_that_exceeds_nes_hardware_sprite_budget()
+    {
+        var rows = Enumerable.Repeat(new string('1', 24), 8);
+        var rowJson = string.Join(",", rows.Select(row => $"\"{row}\""));
+        var baseDirectory = WriteSpriteAsset(
+            "wide-goomba.nes.json",
+            "{\"platforms\":{\"nes\":{\"frames\":[[" + rowJson + "]]}}}");
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "wide-goomba.nes.json");
+                                  actor.Pool(enemies, 23);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'nes' supports 64 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 69 because capacity 23 times enemy.Def 'Goomba' sprite 'goomba' uses 3 hardware sprites.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_draw_loop_when_multi_sprite_png_pool_fits_nes_budget()
+    {
+        var baseDirectory = WriteSpritePng(
+            "goomba.png",
+            8,
+            16,
+            Rows(8, 16, Enumerable.Repeat("11111111", 16).ToArray()));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "goomba.png", 8, 16);
+                                  actor.Pool(enemies, 8);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.NotEmpty(rom);
+    }
+
+    [Fact]
+    public void Rejects_actor_draw_loop_that_can_exceed_nes_scanline_budget()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  actor.Pool(enemies, 9);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'nes' supports 8 hardware sprites per scanline, but actor.Pool for 'enemies' can draw up to 9 on one scanline because capacity 9 times enemy.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_update_like_grouped_pool_loop_for_nes()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 xHi;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+                                    const GoombaSpeed = 1;
+
+                                    void main() {
+                                        video_init();
+                                        Actor enemies[1];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].y = 48;
+
+                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
+                                            if (enemies[__enemies_update_i].active != 0) {
+                                                if (enemies[__enemies_update_i].kind == Goomba) {
+                                                    enemies[__enemies_update_i].x += GoombaSpeed;
+                                                    if (enemies[__enemies_update_i].x < GoombaSpeed) {
+                                                        enemies[__enemies_update_i].xHi += 1;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        return;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 1);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].x = 24;
+                                       enemies[0].y = 48;
+                                       enemies.Update();
+                                       return;
+                                   }
+                                   """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(manualSource), NesRomCompiler.CompileSource(actorSource));
+    }
+
+    [Fact]
+    public void Compiles_actor_draw_like_grouped_pool_loop_for_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 xHi;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+
+                                    void main() {
+                                        video_init();
+                                        sprite.Asset(goomba, "goomba.nes.json");
+                                        Actor enemies[1];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].y = 48;
+                                        video.WaitVBlank();
+
+                                        u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
+                                        u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
+                                        for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
+                                            if (enemies[__enemies_draw_i].active != 0) {
+                                                u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
+                                                if (enemies[__enemies_draw_i].kind == Goomba) {
+                                                    if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) {
+                                                        sprite.Draw(goomba, __enemies_draw_screen_x, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        return;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       sprite.Asset(goomba, "goomba.nes.json");
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].x = 24;
+                                       enemies[0].y = 48;
+                                       video.WaitVBlank();
+                                       enemies.Draw();
+                                       return;
+                                   }
+                                   """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(manualSource, baseDirectory), NesRomCompiler.CompileSource(actorSource, baseDirectory));
+    }
+
+    [Fact]
+    public void Actor_draw_uses_world_x_minus_camera_x_and_culls_offscreen_on_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 0, 0);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].x = 20;
+                                  enemies[0].xHi = 0;
+                                  enemies[0].y = 48;
+                                  camera_set_position(4, 0);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA5, 0xE0]), "actor draw should read the camera X low byte.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xE1, 0x4A, 0x4A, 0x4A, 0x4A, 0x4A]), "actor draw should derive the camera X high byte from the absolute camera tile.");
+        Assert.True(ContainsSequence(prg, [0xC5, 0xE9, 0xD0]), "actor draw should compare actor and camera world pages and branch around sprite drawing when outside the camera window.");
+    }
+
+    [Fact]
+    public void Actor_tile_collision_uses_per_actor_camera_relative_x_on_nes()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 xHi;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+
+                                    void main() {
+                                        world_column(0, 0, 0);
+                                        world_flags(0, 0, 1);
+                                        world_column(1, 0, 0);
+                                        world_flags(1, 0, 2);
+                                        world_map(2, 10, 2);
+                                        camera_init(2, 10, 2);
+                                        Actor enemies[2];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].xHi = 0;
+                                        enemies[0].y = 0;
+                                        enemies[1].active = 1;
+                                        enemies[1].kind = Goomba;
+                                        enemies[1].x = 104;
+                                        enemies[1].xHi = 0;
+                                        enemies[1].y = 0;
+                                        camera_set_position(0, 0);
+
+                                        u8 __enemies_touch_camera_x_lo = __rs_actor_camera_x_lo();
+                                        u8 __enemies_touch_camera_x_hi = __rs_actor_camera_x_hi();
+                                        for (u8 __enemies_touch_i = 0; __enemies_touch_i < countof(enemies); __enemies_touch_i += 1) {
+                                            if (enemies[__enemies_touch_i].active != 0) {
+                                                u8 __enemies_touch_screen_x = enemies[__enemies_touch_i].x - __enemies_touch_camera_x_lo;
+                                                if (enemies[__enemies_touch_i].kind == Goomba) {
+                                                    if (((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo))) {
+                                                        if (camera.AabbTiles(__enemies_touch_screen_x, enemies[__enemies_touch_i].y, 8, 8, 1) != 0) {
+                                                            enemies[__enemies_touch_i].state = 1;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        return;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       world_column(0, 0, 0);
+                                       world_flags(0, 0, 1);
+                                       world_column(1, 0, 0);
+                                       world_flags(1, 0, 2);
+                                       world_map(2, 10, 2);
+                                       camera_init(2, 10, 2);
+                                       actor.Pool(enemies, 2);
+                                       enemy.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].x = 24;
+                                       enemies[0].xHi = 0;
+                                       enemies[0].y = 0;
+                                       enemies[1].active = 1;
+                                       enemies[1].kind = Goomba;
+                                       enemies[1].x = 104;
+                                       enemies[1].xHi = 0;
+                                       enemies[1].y = 0;
+                                       camera_set_position(0, 0);
+                                       enemies.TouchTiles(0, 1);
+                                       return;
+                                   }
+                                   """;
+
+        var manualRom = NesRomCompiler.CompileSource(manualSource);
+        var actorRom = NesRomCompiler.CompileSource(actorSource);
+
+        Assert.True(
+            manualRom.SequenceEqual(actorRom),
+            "NES actor TouchTiles should match the manual loop that passes __enemies_touch_screen_x computed from enemies[__enemies_touch_i].x, so actor slots at X=24 and X=104 do not share one fixed collision column.");
+        Assert.Equal(manualRom, actorRom);
+    }
+
+    [Fact]
+    public void Compiles_actor_spawn_layer_as_runtime_camera_window_activation_on_nes()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40 },
+              { "id": 2, "type": "Bat", "x": 280, "y": 32, "properties": [ { "name": "facing", "type": "int", "value": 1 } ] }
+            ]
+            """);
+
+        var manualSource = $$"""
+                             struct Actor {
+                                 u8 kind;
+                                 u8 active;
+                                 u8 x;
+                                 u8 xHi;
+                                 u8 y;
+                                 i8 vx;
+                                 i8 vy;
+                                 u8 state;
+                                 u8 timer;
+                                 u8 facing;
+                                 u8 animTick;
+                                 u8 health;
+                             }
+
+                             const Goomba = 1;
+                             const Bat = 2;
+
+                             inline u8 __enemies_spawn_0_kind(u8 index) => index == 0 ? Goomba : Bat;
+                             inline u8 __enemies_spawn_0_x(u8 index) => 24;
+                             inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
+                             inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline u8 __enemies_spawn_0_active(u8 index) => 1;
+                             inline u8 __enemies_spawn_0_vx(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_vy(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_state(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_timer(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_facing(u8 index) => index == 0 ? 0 : 1;
+                             inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_health(u8 index) => 0;
+
+                             void main() {
+                                 world_column(0, 0, 0);
+                                 world_map(40, 10, 2);
+                                 camera_init(40, 10, 2);
+                                 Actor enemies[1];
+                                 u8 __enemies_spawn_0_used[2];
+
+                                 camera_set_position(0, 0);
+                             {{RuntimeSpawnActivationBlockForNes("__enemies_spawn_0_call0")}}
+
+                                 camera_set_position(128, 0);
+                             {{RuntimeSpawnActivationBlockForNes("__enemies_spawn_0_call1")}}
+                                 return;
+                             }
+                             """;
+
+        const string actorSource = """
+                                   void main() {
+                                       world_column(0, 0, 0);
+                                       world_map(40, 10, 2);
+                                       camera_init(40, 10, 2);
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, behavior: Walker);
+                                       enemy.Def(Bat, behavior: Flyer);
+                                       camera_set_position(0, 0);
+                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       camera_set_position(128, 0);
+                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       return;
+                                   }
+                                   """;
+
+        var expected = NesRomCompiler.CompileSource(manualSource);
+        var actual = NesRomCompiler.CompileSource(actorSource, baseDirectory);
+        var firstDifference = Enumerable.Range(16, expected.Length - 16).FirstOrDefault(index => expected[index] != actual[index], -1);
+
+        Assert.True(
+            expected.SequenceEqual(actual),
+            firstDifference < 0
+                ? "NES runtime actor activation ROMs differ only in iNES header bytes."
+                : $"NES runtime actor activation ROMs differ at 0x{firstDifference:X4}: expected {BytesAround(expected, firstDifference)}, actual {BytesAround(actual, firstDifference)}.");
+    }
+
+    [Fact]
     public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
     {
         const string source = """
@@ -1492,6 +2290,58 @@ public class NesRomCompilerTests
 
         Assert.True(ContainsAbsoluteJumpTo(prg, 0x8000 + increment, continueCompare, breakCompare), "continue should jump to the for increment.");
         Assert.True(ContainsAbsoluteJumpAfter(prg, breakCompare, prg.Length, 0x8000 + increment + 7), "break should jump beyond the increment and final loop jump.");
+    }
+
+    [Fact]
+    public void Compiles_short_for_loop_condition_as_direct_relative_branch_without_trampoline()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  for (u8 i = 0; i < 3; i += 1) {
+                                      x += 1;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        var conditionCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x03, 0xB0]);
+        var bodyIncrement = IndexOfSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]);
+
+        Assert.True(conditionCompare >= 0, "for condition should compare i with the literal upper bound.");
+        Assert.True(bodyIncrement > conditionCompare, "for body should follow the condition.");
+        Assert.NotEqual(0x4C, prg[conditionCompare + 6]);
+        Assert.True(ReadRelativeTarget(prg, conditionCompare + 4) > 0x8000 + bodyIncrement, "direct false branch should skip the body and increment without landing on a trampoline.");
+    }
+
+    [Fact]
+    public void Compiles_long_for_loop_condition_with_branch_trampoline()
+    {
+        var body = string.Join(Environment.NewLine, Enumerable.Repeat("x += 1;", 40));
+        var source = $$"""
+                       void main() {
+                           u8 x = 0;
+                           for (u8 i = 0; i < 1; i += 1) {
+                       {{body}}
+                           }
+                           return;
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        var conditionCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x01, 0xB0]);
+        var trampolineAddress = ReadRelativeTarget(prg, conditionCompare + 4);
+        var trampolineOffset = trampolineAddress - 0x8000;
+
+        Assert.True(conditionCompare >= 0, "for condition should compare i with the literal upper bound.");
+        Assert.Equal(0x4C, prg[conditionCompare + 6]);
+        Assert.Equal(0x4C, prg[trampolineOffset]);
+        Assert.True(ReadLittleEndian16(prg, trampolineOffset + 1) > trampolineAddress, "long false path should jump forward to the for end label.");
     }
 
     [Fact]
@@ -2237,6 +3087,33 @@ public class NesRomCompilerTests
         return directory;
     }
 
+    private static string WriteActorSpawnMap(string objectsJson)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.NES.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tmj"),
+            $$"""
+              {
+                "type": "map",
+                "orientation": "orthogonal",
+                "infinite": false,
+                "width": 1,
+                "height": 1,
+                "tilewidth": 8,
+                "tileheight": 8,
+                "properties": [
+                  { "name": "retrosharpStreamY", "type": "int", "value": 0 }
+                ],
+                "layers": [
+                  { "type": "tilelayer", "name": "world", "width": 1, "height": 1, "data": [0] },
+                  { "type": "objectgroup", "name": "actors", "objects": {{objectsJson}} }
+                ]
+              }
+              """);
+        return directory;
+    }
+
     private static string WriteSpritePng(string fileName, int frameWidth, int frameHeight, params string[][] frames)
     {
         var palette = new[]
@@ -2402,6 +3279,71 @@ public class NesRomCompilerTests
     private static int ReadLittleEndian16(IReadOnlyList<byte> bytes, int offset)
     {
         return bytes[offset] | bytes[offset + 1] << 8;
+    }
+
+    private static string BytesAround(IReadOnlyList<byte> bytes, int offset)
+    {
+        var start = Math.Max(0, offset - 8);
+        var length = Math.Min(bytes.Count - start, 17);
+        return $"0x{offset:X4} [" + string.Join(" ", bytes.Skip(start).Take(length).Select(value => value.ToString("X2"))) + "]";
+    }
+
+    private static string RuntimeSpawnActivationBlockForNes(string prefix)
+    {
+        return $$"""
+                     u8 {{prefix}}_recycle_camera_x_lo = __rs_actor_camera_x_lo();
+                     u8 {{prefix}}_recycle_camera_x_hi = __rs_actor_camera_x_hi();
+                     for (u8 {{prefix}}_recycle_i = 0; {{prefix}}_recycle_i < countof(enemies); {{prefix}}_recycle_i += 1) {
+                         if (enemies[{{prefix}}_recycle_i].active != 0) {
+                             u8 {{prefix}}_recycle_screen_x = enemies[{{prefix}}_recycle_i].x - {{prefix}}_recycle_camera_x_lo;
+                             if (!((enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi) && (enemies[{{prefix}}_recycle_i].x >= {{prefix}}_recycle_camera_x_lo) || (enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi + 1) && (enemies[{{prefix}}_recycle_i].x < {{prefix}}_recycle_camera_x_lo))) {
+                                 enemies[{{prefix}}_recycle_i].active = 0;
+                             }
+                         }
+                     }
+                     u8 {{prefix}}_camera_x_lo = __rs_actor_camera_x_lo();
+                     u8 {{prefix}}_camera_x_hi = __rs_actor_camera_x_hi();
+                     for (u8 {{prefix}}_i = 0; {{prefix}}_i < 2; {{prefix}}_i += 1) {
+                         if (__enemies_spawn_0_used[{{prefix}}_i] == 0) {
+                             u8 {{prefix}}_kind_value = __enemies_spawn_0_kind({{prefix}}_i);
+                             u8 {{prefix}}_x_value = __enemies_spawn_0_x({{prefix}}_i);
+                             u8 {{prefix}}_xHi_value = __enemies_spawn_0_xHi({{prefix}}_i);
+                             u8 {{prefix}}_y_value = __enemies_spawn_0_y({{prefix}}_i);
+                             u8 {{prefix}}_active_value = __enemies_spawn_0_active({{prefix}}_i);
+                             u8 {{prefix}}_vx_value = __enemies_spawn_0_vx({{prefix}}_i);
+                             u8 {{prefix}}_vy_value = __enemies_spawn_0_vy({{prefix}}_i);
+                             u8 {{prefix}}_state_value = __enemies_spawn_0_state({{prefix}}_i);
+                             u8 {{prefix}}_timer_value = __enemies_spawn_0_timer({{prefix}}_i);
+                             u8 {{prefix}}_facing_value = __enemies_spawn_0_facing({{prefix}}_i);
+                             u8 {{prefix}}_animTick_value = __enemies_spawn_0_animTick({{prefix}}_i);
+                             u8 {{prefix}}_health_value = __enemies_spawn_0_health({{prefix}}_i);
+                             u8 {{prefix}}_screen_x = {{prefix}}_x_value - {{prefix}}_camera_x_lo;
+                             if ((({{prefix}}_xHi_value == {{prefix}}_camera_x_hi) && ({{prefix}}_x_value >= {{prefix}}_camera_x_lo)) || (({{prefix}}_xHi_value == {{prefix}}_camera_x_hi + 1) && ({{prefix}}_x_value < {{prefix}}_camera_x_lo))) {
+                                 u8 {{prefix}}_assigned = 0;
+                                 for (u8 {{prefix}}_slot = 0; {{prefix}}_slot < countof(enemies); {{prefix}}_slot += 1) {
+                                     if ({{prefix}}_assigned == 0) {
+                                         if (enemies[{{prefix}}_slot].active == 0) {
+                                             enemies[{{prefix}}_slot].kind = {{prefix}}_kind_value;
+                                             enemies[{{prefix}}_slot].x = {{prefix}}_x_value;
+                                             enemies[{{prefix}}_slot].xHi = {{prefix}}_xHi_value;
+                                             enemies[{{prefix}}_slot].y = {{prefix}}_y_value;
+                                             enemies[{{prefix}}_slot].vx = {{prefix}}_vx_value;
+                                             enemies[{{prefix}}_slot].vy = {{prefix}}_vy_value;
+                                             enemies[{{prefix}}_slot].state = {{prefix}}_state_value;
+                                             enemies[{{prefix}}_slot].timer = {{prefix}}_timer_value;
+                                             enemies[{{prefix}}_slot].facing = {{prefix}}_facing_value;
+                                             enemies[{{prefix}}_slot].animTick = {{prefix}}_animTick_value;
+                                             enemies[{{prefix}}_slot].health = {{prefix}}_health_value;
+                                             enemies[{{prefix}}_slot].active = {{prefix}}_active_value;
+                                             __enemies_spawn_0_used[{{prefix}}_i] = 1;
+                                             {{prefix}}_assigned = 1;
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 """;
     }
 
     private static bool ContainsAbsoluteJumpTo(IReadOnlyList<byte> bytes, int target, int startInclusive, int endExclusive)

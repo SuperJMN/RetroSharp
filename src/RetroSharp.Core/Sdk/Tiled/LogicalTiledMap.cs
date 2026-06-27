@@ -13,7 +13,8 @@ public sealed class LogicalTiledMap
         uint[]? backgroundGids,
         uint[] worldGids,
         WorldTileFlags[] worldFlags,
-        LogicalTiledMapGeometry geometry)
+        LogicalTiledMapGeometry geometry,
+        IReadOnlyDictionary<string, IReadOnlyList<LogicalActorSpawn>>? actorSpawnLayers = null)
     {
         ArgumentNullException.ThrowIfNull(tilesets);
         ArgumentNullException.ThrowIfNull(worldGids);
@@ -42,6 +43,7 @@ public sealed class LogicalTiledMap
         WorldGids = worldGids;
         WorldFlags = worldFlags;
         Geometry = geometry;
+        ActorSpawnLayers = actorSpawnLayers ?? new Dictionary<string, IReadOnlyList<LogicalActorSpawn>>(StringComparer.Ordinal);
     }
 
     public IReadOnlyList<LogicalTileset> Tilesets { get; }
@@ -57,7 +59,15 @@ public sealed class LogicalTiledMap
     public WorldTileFlags[] WorldFlags { get; }
 
     public LogicalTiledMapGeometry Geometry { get; }
+
+    public IReadOnlyDictionary<string, IReadOnlyList<LogicalActorSpawn>> ActorSpawnLayers { get; }
 }
+
+public sealed record LogicalActorSpawn(
+    string Kind,
+    int X,
+    int Y,
+    IReadOnlyDictionary<string, int> Fields);
 
 // Geometry of an imported Tiled map. Source dimensions are in Tiled source tiles;
 // expanded dimensions are in 8x8 cells, the portable tile unit shared by tile machines.

@@ -1,16 +1,24 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-24.
+Last updated: 2026-06-27.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
 ## Recent Baseline
 
-- Code baseline immediately before this documentation pass: `d3eff996ecffeb6d0d159f579127c8d4016022e8`.
-- Recent change: `fix: align game boy tiled map backgrounds`.
-- That change added `tools/gameboy/generate_sample_roms.py`, documented it in `samples/README.md`, regenerated the tracked Game Boy ROMs, and updated tests around Tiled background/world composition.
-- The recent validation proof was `git diff --check`, `tools/gameboy/generate_sample_roms.py --dry-run`, `tools/gameboy/generate_sample_roms.py`, and `dotnet test RetroSharp.sln -m:1`.
+- Code baseline immediately before the AF-4.3 documentation closeout:
+  `f0398452fd0e3b93d4d77e6aeac5749dbf1322ed`.
+- Recent change: `feat(actors): generated-name guards and codegen robustness`.
+- The actor framework first scrolling platformer slice is landed on
+  `feature/actor-framework`: `samples/actor-framework/actors.rs` builds for Game
+  Boy and NES from the manifest and exercises fixed actor pools, declarative
+  enemy definitions, Tiled object-layer spawns, runtime camera-window activation,
+  camera-relative draw/collision/player contact, animation, and metasprite-aware
+  pool budget checks.
+- The current closeout validation expectation is `git diff --check` and
+  `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
+  byte-identical for docs-only work.
 
 ## Project Shape
 
@@ -47,6 +55,13 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - SDK dot calls such as `video.Init()`, `input.Poll()`, and `camera.SetPosition(x, y)` are static grouping syntax, not object instances.
 - Dot-call precedence is single-sourced in `RetroSharp.Parser.SdkDotCallResolver`: a receiver in scope shadows a same-named SDK module (lexical scoping), otherwise a known SDK module resolves as an SDK call. Constant folding and semantic analysis both consume it; the folder detects receivers by method signature because it has no variable scope.
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
+- The actor framework is source-to-source sugar in `RetroSharp.Sdk.Frontend`.
+  `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called
+  `enemy.*` helpers, and pool helper calls lower before target emission to fixed
+  `Actor` arrays, constants, generated spawn helpers, `used[]`, direct `kind`
+  branches, and existing SDK calls such as `sprite.Draw`, `camera.AabbTiles`,
+  `camera.AabbHitTop`, and `animation.Frame`. Do not add actor-specific
+  `Sdk2DOperation` cases for this slice.
 
 ## Portability Lowering Roadmap (epic #106)
 
@@ -116,11 +131,12 @@ Progress (2026-06-14):
 - Active SDK v1 stabilization backlog after #106: none known after the collision, cross-target
   diagnostic, and logical palette slices landed.
 - Camera-relative AABB decision implemented after #106 and extended to NES runner parity:
-  `camera.AabbTiles(...)` is a capability-gated SDK query for fixed-screen actors. Game Boy and
-  NES both declare and lower it through `Sdk2DOperation.CameraAabbTiles`.
+  `camera.AabbTiles(...)` is a capability-gated SDK query for camera-relative AABBs; its
+  `screenX` operand may be literal or byte-backed. Game Boy and NES both declare and lower it
+  through `Sdk2DOperation.CameraAabbTiles`.
 - Landing tile-hit decision implemented after #106: `camera.AabbHitTop(...)` is a
   capability-gated SDK query that returns the top world-pixel Y of the first matching tile in a
-  caller-defined fixed-screen actor AABB, or `255` when none hit. Game Boy and NES lower it
+  caller-defined camera-relative AABB, or `255` when none hit. Game Boy and NES lower it
   through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
   tile-offset landing probe ladder while keeping the downward-velocity gate and
   `player.Land(...)` policy in source.
@@ -139,6 +155,18 @@ Progress (2026-06-14):
   slot that uses them while preserving the background universal color. The runner now uses
   `palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
   `objectPalette.Set(...)`.
+- Actor framework runtime activation decision on branch `feature/actor-framework`: `actor.SpawnLayer`
+  and `actor.SpawnWindow` no longer materialize Tiled spawns as active slots at compile time.
+  They generate ROM-table spawn helpers plus a fixed per-layer `used[]` byte array and should be
+  called after `camera.SetPosition(...)` each frame. Slots recycle when actors leave the activation
+  window or source code clears `active`; authored spawns are one-shot and do not respawn after a
+  successful activation. Capacity diagnostics use the maximum simultaneous spawns in the declared
+  camera-relative window, not total layer count.
+- Actor framework closure state on branch `feature/actor-framework`: AF-5.1..AF-5.6 are landed,
+  making Iteration 14 feature-complete for the first scrolling platformer slice. Open follow-ups
+  are non-blocking robustness/scale items: AF-5.7 hoist repeated camera-X projection, AF-5.8 avoid
+  `TouchPlayer` actor-right-edge byte overflow, AF-5.9 decide one-shot versus reactivation spawn
+  policy, and AF-5.10 reduce O(spawns)/frame activation scans.
 
 Suggested next steps for the next agent, in order:
 1. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,

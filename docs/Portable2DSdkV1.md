@@ -58,8 +58,8 @@ Game Boy currently accepts hUGETracker `.uge` v6 resources and `.gbapu` APU trac
 | `world.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `world_tile_flags_at(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
-| `camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a fixed-screen actor AABB overlaps requested world flags at the current camera position. This is capability-gated and intended for long scrolling maps where the actor stays at a screen X. |
-| `camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a fixed-screen actor AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
+| `camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` and `worldY` may be literals or byte-backed runtime expressions, so fixed-screen actors and projected world-space actors can share the same SDK operation. |
+| `camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a camera-relative AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
@@ -98,6 +98,221 @@ For PNG assets, a generic path can be specialized per target without changing so
 
 The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
+### Actor framework slice
+
+The current actor framework frontend is source sugar over fixed storage. It does
+not add `Sdk2DOperation` cases and does not introduce heap allocation, object
+identity, virtual dispatch, delegates, closures, or function pointers.
+
+| Signature | Semantics |
+| --- | --- |
+| `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and fit the fixed struct-array storage model. For `pool.Draw()`, targets validate `capacity * max(enemy metasprite hardware sprites)` against their sprite budget after JSON/PNG assets have been resolved. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
+| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` must fit `0..65535` and is split into low `x` plus high `xHi`, while `y` must fit a byte. |
+| `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
+| `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
+| `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. The frontend emits only helpers that source actually calls, so unused metadata helpers do not remain in the lowered program or add bytes. |
+| `pool.TouchTiles(yOffset, flags)` | Read the current camera X once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX` from world `x`/`xHi`, branch by kind, cull slots outside the visible camera window, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
+| `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Read the current camera X once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`, branch by kind, cull slots outside the visible camera window, and call `camera.AabbHitTop(...)` with the kind's literal hitbox width. On hit, assign actor `y` to the returned top Y, clear `vy`, and set `state` to `1`. |
+| `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Read the current camera X once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`, branch by kind, cull slots outside the visible camera window, and test each kind's literal hitbox against a literal player AABB in screen coordinates. On hit, set actor `state` to `contactDamage` or `1`. |
+
+`actor.Pool(...)` and `enemy.Def(...)` are accepted as statements inside the
+compiled source and disappear before target lowering. The generated actor state
+fields are `kind`, `active`, `x`, `xHi`, `y`, `vx`, `vy`, `state`, `timer`,
+`facing`, `animTick`, and `health`. `x` is the low byte of world X, paired with
+`xHi`; this keeps pooled fields byte-sized without requiring mixed-width struct
+array layout. Game Boy currently supports `pool.Update()` and
+`pool.Draw()` for the basic byte-field behavior set by expanding them to grouped
+loops over active slots, with direct kind checks and `sprite.Draw` calls.
+
+Spawn activation is one-shot per authored Tiled object. The frontend generates a
+fixed `used[]` byte array per spawn layer; a spawn is marked used only after it
+successfully claims a free slot. Active slots are recycled when they leave the
+same camera-relative activation window, and any source code can still free a slot
+by setting `active = 0` for death/despawn. A recycled slot does not clear the
+spawn's `used` bit, so scrolling back does not respawn the same authored object.
+If no free slot exists when an eligible spawn is scanned, the spawn is skipped
+deterministically for that activation pass and retried while it remains in the
+window. At compile time, the frontend rejects any spawn layer/window whose maximum
+simultaneous authored spawns can exceed the declared pool capacity.
+`Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and a direction-driven
+`Chaser` are implemented without actor-specific SDK operations. NES accepts the
+same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
+that basic behavior set. `pool.Draw()` reads the current camera X state once for
+its generated loop, computes `screenX = actorWorldX - cameraX` per active slot,
+culls slots outside the visible camera window, and emits ordinary
+`sprite.Draw(...)` calls for visible actors, using
+`animation.Frame(...)` when a definition declares an animation clip. Drawn pools
+are checked against target sprite budgets with target-resolved metasprite
+geometry, so a pool of multi-sprite enemy definitions is charged by hardware
+sprite pieces rather than by actor slots. Aggregate hardware sprite usage is
+also validated by the same frame-budget pass as hand-written sprite draws.
+`pool.TouchTiles(...)`, `pool.LandOnTiles(...)`, and
+`pool.TouchPlayer(...)` use the same per-phase camera-X cache and per-actor
+projection/visibility guard as draw, so collision/contact is tested per visible
+actor instead of at one fixed screen column. Separate helper calls remain
+separate phases and do not share a hoisted camera read across statements. The
+tile helpers emit ordinary camera AABB SDK calls; they do not introduce
+actor-specific target intrinsics. Tiled spawn helpers read the same
+target-neutral map importer as
+`world.Load(...)` and lower to generated ROM-table helpers plus runtime fixed-slot
+activation before target lowering.
+
+#### Low-level equivalent pattern
+
+The actor framework is deliberately equivalent to hand-authored fixed storage.
+For a small pool, the source-level sugar:
+
+```c
+actor.Pool(enemies, 2);
+enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1,
+    hitboxWidth: 8, hitboxHeight: 8);
+actor.SpawnLayer(enemies, "level.tmj", "actors");
+enemies.Update();
+enemies.TouchTiles(0, 1);
+enemies.LandOnTiles(4, 12, 1);
+enemies.TouchPlayer(72, 40, 16, 16);
+enemies.Draw();
+```
+
+lowers to the same shape as this hand-authored pattern, as covered by the
+Game Boy and NES differential tests:
+
+```c
+struct Actor {
+    u8 kind;
+    u8 active;
+    u8 x;
+    u8 xHi;
+    u8 y;
+    i8 vx;
+    i8 vy;
+    u8 state;
+    u8 timer;
+    u8 facing;
+    u8 animTick;
+    u8 health;
+}
+
+const Walker = 1;
+const Goomba = 1;
+const GoombaSpeed = 1;
+const GoombaContactDamage = 0;
+const GoombaHitboxWidth = 8;
+const GoombaHitboxHeight = 8;
+
+inline u8 __enemies_spawn_0_kind(u8 index) => Goomba;
+inline u8 __enemies_spawn_0_x(u8 index) => index == 0 ? 24 : 72;
+inline u8 __enemies_spawn_0_xHi(u8 index) => 0;
+inline u8 __enemies_spawn_0_y(u8 index) => 40;
+inline u8 __enemies_spawn_0_active(u8 index) => 1;
+inline u8 __enemies_spawn_0_vx(u8 index) => 0;
+inline u8 __enemies_spawn_0_vy(u8 index) => 0;
+inline u8 __enemies_spawn_0_state(u8 index) => 0;
+inline u8 __enemies_spawn_0_timer(u8 index) => 0;
+inline u8 __enemies_spawn_0_facing(u8 index) => 0;
+inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
+inline u8 __enemies_spawn_0_health(u8 index) => 0;
+
+void main() {
+    Actor enemies[2];
+    u8 __enemies_spawn_0_used[2];
+
+    u8 recycleCameraX = __rs_actor_camera_x_lo();
+    u8 recycleCameraXHi = __rs_actor_camera_x_hi();
+    for (u8 recycle = 0; recycle < countof(enemies); recycle += 1) {
+        if (enemies[recycle].active != 0) {
+            u8 screenX = enemies[recycle].x - recycleCameraX;
+            if (!((((enemies[recycle].xHi == recycleCameraXHi) &&
+                    (enemies[recycle].x >= recycleCameraX)) ||
+                   ((enemies[recycle].xHi == recycleCameraXHi + 1) &&
+                    (enemies[recycle].x < recycleCameraX))) &&
+                  (screenX < 160))) {
+                enemies[recycle].active = 0;
+            }
+        }
+    }
+
+    u8 spawnCameraX = __rs_actor_camera_x_lo();
+    u8 spawnCameraXHi = __rs_actor_camera_x_hi();
+    for (u8 spawn = 0; spawn < 2; spawn += 1) {
+        if (__enemies_spawn_0_used[spawn] == 0) {
+            u8 spawnX = __enemies_spawn_0_x(spawn);
+            u8 spawnXHi = __enemies_spawn_0_xHi(spawn);
+            u8 screenX = spawnX - spawnCameraX;
+            if ((((spawnXHi == spawnCameraXHi) && (spawnX >= spawnCameraX)) ||
+                 ((spawnXHi == spawnCameraXHi + 1) && (spawnX < spawnCameraX))) &&
+                (screenX < 160)) {
+                u8 assigned = 0;
+                for (u8 slot = 0; slot < countof(enemies); slot += 1) {
+                    if (assigned == 0) {
+                        if (enemies[slot].active == 0) {
+                            enemies[slot].kind = __enemies_spawn_0_kind(spawn);
+                            enemies[slot].x = spawnX;
+                            enemies[slot].xHi = spawnXHi;
+                            enemies[slot].y = __enemies_spawn_0_y(spawn);
+                            enemies[slot].vx = __enemies_spawn_0_vx(spawn);
+                            enemies[slot].vy = __enemies_spawn_0_vy(spawn);
+                            enemies[slot].state = __enemies_spawn_0_state(spawn);
+                            enemies[slot].timer = __enemies_spawn_0_timer(spawn);
+                            enemies[slot].facing = __enemies_spawn_0_facing(spawn);
+                            enemies[slot].animTick = __enemies_spawn_0_animTick(spawn);
+                            enemies[slot].health = __enemies_spawn_0_health(spawn);
+                            enemies[slot].active = __enemies_spawn_0_active(spawn);
+                            __enemies_spawn_0_used[spawn] = 1;
+                            assigned = 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    u8 cameraX = __rs_actor_camera_x_lo();
+    u8 cameraXHi = __rs_actor_camera_x_hi();
+    for (u8 i = 0; i < countof(enemies); i += 1) {
+        if (enemies[i].active != 0) {
+            if (enemies[i].kind == Goomba) {
+                enemies[i].x += GoombaSpeed;
+                if (enemies[i].x < GoombaSpeed) {
+                    enemies[i].xHi += 1;
+                }
+
+                u8 screenX = enemies[i].x - cameraX;
+                if ((((enemies[i].xHi == cameraXHi) && (enemies[i].x >= cameraX)) ||
+                     ((enemies[i].xHi == cameraXHi + 1) && (enemies[i].x < cameraX))) &&
+                    (screenX < 160)) {
+                    if (camera.AabbTiles(screenX, enemies[i].y,
+                            GoombaHitboxWidth, GoombaHitboxHeight, 1) != 0) {
+                        enemies[i].state = 1;
+                    }
+
+                    u8 hitTop = camera.AabbHitTop(screenX, enemies[i].y - 4,
+                        GoombaHitboxWidth, 12, 1);
+                    if (hitTop != 255) {
+                        enemies[i].y = hitTop;
+                        enemies[i].vy = 0;
+                        enemies[i].state = 1;
+                    }
+
+                    if (screenX < 88 && screenX + GoombaHitboxWidth > 72 &&
+                        enemies[i].y < 56 &&
+                        enemies[i].y + GoombaHitboxHeight > 40) {
+                        enemies[i].state = 1;
+                    }
+
+                    sprite.Draw(goomba, screenX, enemies[i].y, 0, false, 0);
+                }
+            }
+        }
+    }
+}
+```
+
+The generated code keeps the helper calls as separate phases. Each
+projection-bearing phase reads `cameraX`/`cameraXHi` once before its slot or
+spawn loop, then computes `screenX` per active actor or candidate spawn from the
+cached camera bytes.
+
 ### Optional HUD
 
 | Signature | Semantics |
@@ -112,7 +327,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 
 Static enforcement starts with per-operation checks, then applies a frame-budget pass for aggregate SDK budgets. The shared operation list remains flattened across control flow, so aggregate checks must not count that list directly. Instead, `Sdk2DOperationCollector.CollectFrameBudgets(...)` computes possible frame windows around `video.WaitVBlank()` and `input.Poll()`, treats `if`/`else` arms as exclusive alternatives, and validates the result through `Sdk2DOperationValidator.ValidateFrameBudget(...)`. Multiple explicit stream calls that exceed `MaxBackgroundTileWritesPerFrame` in one possible frame fail before target lowering.
 
-For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Draws with runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
+For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Actor pool draws receive an earlier target-aware diagnostic after sprite assets are compiled: for every drawn pool, `capacity * max(enemy.Def metasprite hardware sprites)` must fit `SpriteCount`, and `capacity * max(enemy.Def busiest-scanline hardware sprites)` must fit `MaxSpritesPerScanline`. That diagnostic names the pool and the enemy definition with the largest metasprite pressure. The frame-budget pass still validates the lowered draw operations with branch-as-alternative and frame-boundary semantics. Other runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility outside the actor pool path. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
 
 | SDK area | Required capabilities |
 | --- | --- |
@@ -125,6 +340,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Logical palettes | Palette declarations must provide exactly four colors and the requested background or sprite slot must fit the target descriptor. |
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
+| Actor framework | Pool capacity must be a literal fixed size, pooled fields are byte-sized, and enemy metadata must be literal/identifier data that can lower to constants and inline helper branches. |
 | Collision | `world.Map(...)` or `world.Load(...)` data and matching flag rows must exist before runtime collision reads. |
 | Camera-relative collision | Target must declare `CameraRelativeAabb` or `CameraRelativeAabbHitTop` collision-query support for the requested query, and the screen span must fit the visible target width. |
 | HUD | Requested `HudMode` must be declared by the target, except `none`, which is always accepted as disabled HUD. |
@@ -141,8 +357,9 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
+| Actor framework slice | `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called `enemy.*` metadata helpers, and `pool.Update()`/`pool.Draw()`/`pool.TouchTiles()`/`pool.LandOnTiles()`/`pool.TouchPlayer()` lower before Game Boy target emission to fixed struct arrays, constants, inline helper branches, generated spawn-table helpers, `used[]`, runtime activation, camera-relative draw/collision/player contact, and the basic behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | The same source-to-source actor framework slice lowers before NES target emission with NES sprite/scanline budgets and horizontal camera-relative collision support. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
-| Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors on horizontal maps. |
+| Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for literal or byte-backed screen X values. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for literal or byte-backed screen X values on horizontal maps. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
 
 Use `samples/manifest.json` to identify which samples are portable. Currently `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample and builds for both Game Boy and NES.
@@ -163,6 +380,9 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
+| Actor generated name collision | `actor framework cannot generate enemy.Def 'Goomba' speed constant named 'GoombaSpeed' because user constant 'GoombaSpeed' is already declared.` |
+| Actor pool dynamic capacity | `actor.Pool for 'enemies' requires a literal capacity from 1 to 255.` |
+| Actor pool metasprite budget overflow | `Target 'gb' supports 40 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 42 because capacity 21 times enemy.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.` |
 
 Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
 
@@ -170,8 +390,8 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing.
 
-- `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for fixed-screen actors. Game Boy and NES both support the runner-shaped horizontal form.
-- `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when a fixed-screen actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
+- `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped horizontal form and actor-framework calls with per-actor projected X.
+- `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
 - `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample; NES lowers its audio calls as no-ops until real BGM support exists.
 

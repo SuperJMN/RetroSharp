@@ -1,3 +1,4 @@
+using System.Globalization;
 using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
@@ -32,6 +33,21 @@ internal static class NesRomBuilder
 
     private static byte[] BuildPrgRom(NesVideoProgram program)
     {
+        var longForLoopIds = new HashSet<int>();
+        while (true)
+        {
+            try
+            {
+                return BuildPrgRom(program, longForLoopIds);
+            }
+            catch (BranchOutOfRangeException ex) when (TryForEndLabelId(ex.Label, out var id) && longForLoopIds.Add(id))
+            {
+            }
+        }
+    }
+
+    private static byte[] BuildPrgRom(NesVideoProgram program, IReadOnlySet<int> longForLoopIds)
+    {
         var builder = new PrgBuilder();
 
         builder.Emit(0x78);                         // SEI
@@ -50,7 +66,7 @@ internal static class NesRomBuilder
         EmitPaletteUpload(builder);
         EmitNameTableUpload(builder, program.NameTable.Length);
 
-        var runtimeCompiler = new NesRuntimeCompiler(builder, program);
+        var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds);
         runtimeCompiler.EmitInitialization();
 
         builder.Emit(0xA9, 0x00);                   // LDA #$00
@@ -84,6 +100,19 @@ internal static class NesRomBuilder
         SetVector(prg, PrgRomSize - 4, PrgBuilder.BaseAddress);
         SetVector(prg, PrgRomSize - 2, PrgBuilder.BaseAddress);
         return prg;
+    }
+
+    private static bool TryForEndLabelId(string label, out int id)
+    {
+        const string prefix = "for_end_";
+        if (label.StartsWith(prefix, StringComparison.Ordinal) &&
+            int.TryParse(label[prefix.Length..], CultureInfo.InvariantCulture, out id))
+        {
+            return true;
+        }
+
+        id = 0;
+        return false;
     }
 
     private static void EmitWaitVBlank(PrgBuilder builder, string label)
@@ -258,6 +287,8 @@ internal static class NesRomBuilder
 
 internal sealed class NesRuntimeCompiler
 {
+    private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
+
     private const byte FirstVariableAddress = 0x00;
     private const byte RuntimeReservedStateAddress = 0xE0;
     private const byte CameraXAddress = 0xE0;
@@ -268,6 +299,8 @@ internal sealed class NesRuntimeCompiler
     private const byte CollisionColumnScratchAddress = 0xE5;
     private const byte CollisionRowScratchAddress = 0xE6;
     private const byte CameraNewXAddress = 0xE7;
+    private const byte RuntimeIndexScratchAddress = 0xE8;
+    private const byte ExpressionScratchAddress = 0xE9;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -311,18 +344,22 @@ internal sealed class NesRuntimeCompiler
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly Dictionary<string, byte> variables = [];
+    private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
     private readonly Stack<LoopTarget> loopTargets = [];
+    private readonly IReadOnlySet<int> longForLoopIds;
     private byte nextVariableAddress = FirstVariableAddress;
+    private int nextForLoopId;
     private int nextHardwareSprite;
     private NesCameraConfig? cameraConfig;
 
-    public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program)
+    public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program, IReadOnlySet<int>? longForLoopIds = null)
     {
         this.builder = builder;
         this.program = program;
+        this.longForLoopIds = longForLoopIds ?? new HashSet<int>();
     }
 
     public void EmitInitialization()
@@ -449,6 +486,12 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitArrayDeclaration(DeclarationSyntax declaration)
     {
+        if (program.Structs.TryGetValue(declaration.Type, out var structSyntax))
+        {
+            EmitStructArrayDeclaration(declaration, structSyntax);
+            return;
+        }
+
         if (!IsByteBackedLocalType(declaration.Type))
         {
             throw new InvalidOperationException($"NES target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
@@ -474,6 +517,93 @@ internal sealed class NesRuntimeCompiler
         if (declaration.Initialization.HasValue)
         {
             EmitArrayInitializer(declaration, declaration.Initialization.Value, length, elementAddresses);
+        }
+    }
+
+    private void EmitStructArrayDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
+    {
+        if (!declaredVariables.Add(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        TrackImmutable(declaration);
+
+        var length = CheckedRange(NesVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
+        var fieldOffsets = StructFieldOffsets(structSyntax, "NES");
+        var stride = fieldOffsets.Count;
+        if (length * stride > 255)
+        {
+            throw new InvalidOperationException($"NES target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
+        }
+
+        structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
+
+        var fieldNames = structSyntax.Fields.Select(field => field.Name).ToList();
+        for (var index = 0; index < length; index++)
+        {
+            foreach (var field in structSyntax.Fields)
+            {
+                var address = DeclareVariable(IndexedMemberName(declaration.Name, index, field.Name));
+                builder.LoadAImmediate(0);
+                builder.StoreAZeroPage(address);
+            }
+        }
+
+        if (declaration.Initialization.HasValue)
+        {
+            EmitStructArrayInitializer(declaration, declaration.Initialization.Value, length, fieldNames);
+        }
+    }
+
+    private void EmitStructArrayInitializer(
+        DeclarationSyntax declaration,
+        ExpressionSyntax initialization,
+        int length,
+        IReadOnlyList<string> fieldNames)
+    {
+        if (initialization is not ArrayInitializerSyntax arrayInitializer)
+        {
+            throw new InvalidOperationException($"NES target requires an array initializer for local struct array '{declaration.Name}'.");
+        }
+
+        if (arrayInitializer.Elements.Count > length)
+        {
+            throw new InvalidOperationException($"NES target struct array initializer for '{declaration.Name}' has {arrayInitializer.Elements.Count} element(s), but the array length is {length}.");
+        }
+
+        var knownFields = fieldNames.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < arrayInitializer.Elements.Count; index++)
+        {
+            if (arrayInitializer.Elements[index] is not StructInitializerSyntax structInitializer)
+            {
+                throw new InvalidOperationException($"NES target requires struct initializers for elements of struct array '{declaration.Name}'.");
+            }
+
+            var initializedFields = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+            foreach (var field in structInitializer.Fields)
+            {
+                if (!initializedFields.TryAdd(field.Name, field.Expression))
+                {
+                    throw new InvalidOperationException($"NES target struct array initializer for '{declaration.Name}' element {index} supplies field '{field.Name}' more than once.");
+                }
+
+                if (!knownFields.Contains(field.Name))
+                {
+                    throw new InvalidOperationException($"NES target struct array initializer for '{declaration.Name}' has no field named '{field.Name}'.");
+                }
+            }
+
+            foreach (var fieldName in fieldNames)
+            {
+                if (!initializedFields.TryGetValue(fieldName, out var expression))
+                {
+                    continue;
+                }
+
+                EmitExpressionToA(expression);
+                builder.StoreAZeroPage(VariableAddress(IndexedMemberName(declaration.Name, index, fieldName)));
+            }
         }
     }
 
@@ -654,6 +784,12 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        if (assignment.Left is MemberAccessLValue memberLValue && TryRuntimeIndexedMemberAccess(memberLValue.MemberAccess, out var indexedBase, out var fieldName))
+        {
+            EmitRuntimeIndexedMemberAssignment(indexedBase, fieldName, assignment);
+            return;
+        }
+
         var address = LValueAddress(assignment.Left);
         EmitAssignmentRightToA(assignment);
         builder.StoreAZeroPage(address);
@@ -683,6 +819,7 @@ internal sealed class NesRuntimeCompiler
         return memberAccess.Target switch
         {
             IdentifierSyntax identifier => identifier.Identifier,
+            IndexExpressionSyntax indexExpression => indexExpression.BaseIdentifier,
             MemberAccessSyntax nested => MemberAccessRoot(nested),
             _ => null,
         };
@@ -770,6 +907,70 @@ internal sealed class NesRuntimeCompiler
         }
 
         throw new InvalidOperationException($"NES target only supports constants or direct byte-backed values on the right side of {context}.");
+    }
+
+    private void EmitRuntimeIndexedMemberAssignment(IndexExpressionSyntax indexExpression, string fieldName, AssignmentSyntax assignment)
+    {
+        var baseAddress = RuntimeIndexedMemberBaseAddress(indexExpression, fieldName);
+        EmitRuntimeMemberIndexToX(indexExpression);
+
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                RequireExpressionPreservesX(assignment.Right, "runtime indexed struct field assignment");
+                EmitExpressionToA(assignment.Right);
+                builder.StoreAZeroPageX(baseAddress);
+                return;
+            case "+=":
+                if (TryConst(assignment.Right, out var addRight))
+                {
+                    builder.LoadAZeroPageX(baseAddress);
+                    builder.ClearCarry();
+                    builder.AddImmediate(addRight);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                if (TryDirectAddress(assignment.Right, out var addAddress))
+                {
+                    builder.LoadAZeroPage(addAddress);
+                    builder.ClearCarry();
+                    builder.AddZeroPageX(baseAddress);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                throw new InvalidOperationException("NES target only supports constants or direct byte-backed values on the right side of runtime indexed struct field += assignments.");
+            case "-=":
+                builder.LoadAZeroPageX(baseAddress);
+                builder.SetCarry();
+                if (TryConst(assignment.Right, out var subtractRight))
+                {
+                    builder.SubtractImmediate(subtractRight);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                if (TryDirectAddress(assignment.Right, out var subtractAddress))
+                {
+                    builder.SubtractZeroPage(subtractAddress);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                throw new InvalidOperationException("NES target only supports constants or direct byte-backed values on the right side of runtime indexed struct field -= assignments.");
+            case "&=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "&", "runtime indexed struct field &= assignment");
+                return;
+            case "|=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "|", "runtime indexed struct field |= assignment");
+                return;
+            case "^=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "^", "runtime indexed struct field ^= assignment");
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES assignment operator '{assignment.OperatorSymbol}'.");
+        }
     }
 
     private void EmitAssignmentRightToA(AssignmentSyntax assignment)
@@ -1035,14 +1236,22 @@ internal sealed class NesRuntimeCompiler
             EmitStatement(forSyntax.Initializer.Value);
         }
 
-        var loopLabel = builder.CreateLabel("for");
-        var continueLabel = builder.CreateLabel("for_continue");
-        var endLabel = builder.CreateLabel("for_end");
+        var forLoopId = nextForLoopId++;
+        var loopLabel = $"for_{forLoopId}";
+        var continueLabel = $"for_continue_{forLoopId}";
+        var endLabel = $"for_end_{forLoopId}";
 
         builder.Label(loopLabel);
         if (forSyntax.Condition.HasValue)
         {
-            EmitConditionFalseJump(forSyntax.Condition.Value, endLabel);
+            if (longForLoopIds.Contains(forLoopId))
+            {
+                EmitConditionFalseJumpToFarLabel(forSyntax.Condition.Value, endLabel, $"for_condition_false_{forLoopId}");
+            }
+            else
+            {
+                EmitConditionFalseJump(forSyntax.Condition.Value, endLabel);
+            }
         }
 
         loopTargets.Push(new LoopTarget(endLabel, continueLabel));
@@ -1068,6 +1277,17 @@ internal sealed class NesRuntimeCompiler
 
         builder.JumpAbsolute(loopLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitConditionFalseJumpToFarLabel(ExpressionSyntax condition, string targetLabel, string prefix)
+    {
+        var trampolineLabel = builder.CreateLabel(prefix);
+        var continueLabel = builder.CreateLabel($"{prefix}_continue");
+        EmitConditionFalseJump(condition, trampolineLabel);
+        builder.JumpAbsolute(continueLabel);
+        builder.Label(trampolineLabel);
+        builder.JumpAbsolute(targetLabel);
+        builder.Label(continueLabel);
     }
 
     private bool EmitIf(IfElseSyntax ifElseSyntax)
@@ -1147,11 +1367,11 @@ internal sealed class NesRuntimeCompiler
                     builder.Label(trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xF0, falseLabel); // BEQ falseLabel
                     return;
                 case "<":
@@ -1201,11 +1421,11 @@ internal sealed class NesRuntimeCompiler
                     EmitConditionTrueJump(binary.Right, trueLabel);
                     return;
                 case "==":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xF0, trueLabel); // BEQ trueLabel
                     return;
                 case "!=":
-                    EmitCompareToConstant(binary.Left, binary.Right);
+                    EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
                     return;
             }
@@ -1222,7 +1442,7 @@ internal sealed class NesRuntimeCompiler
         builder.BranchRelative(0xD0, trueLabel);     // BNE trueLabel
     }
 
-    private void EmitCompareToConstant(ExpressionSyntax left, ExpressionSyntax right)
+    private void EmitCompare(ExpressionSyntax left, ExpressionSyntax right)
     {
         if (TryConst(right, out var rightConstant))
         {
@@ -1238,7 +1458,17 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("NES equality conditions currently require one side to be constant.");
+        EmitVariableOperandsToAAndScratch(left, right);
+        builder.CompareZeroPage(ExpressionScratchAddress);
+    }
+
+    private void EmitVariableOperandsToAAndScratch(ExpressionSyntax left, ExpressionSyntax right)
+    {
+        EmitExpressionToA(left);
+        builder.PushA();
+        EmitExpressionToA(right);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.PullA();
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -1259,7 +1489,8 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        throw new InvalidOperationException("NES relational conditions currently require one side to be constant.");
+        EmitCompare(binary.Left, binary.Right);
+        EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
     }
 
     private void EmitRelationalFalseJump(string op, string falseLabel)
@@ -1502,10 +1733,24 @@ internal sealed class NesRuntimeCompiler
                 builder.LoadAImmediate(constant.Value);
                 break;
             case SdkByteExpression.Variable variable:
-                builder.LoadAZeroPage(VariableAddress(StorageKey(variable.Location)));
+                EmitSdkStorageLocationToA(variable.Location);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkStorageLocationToA(SdkStorageLocation location)
+    {
+        switch (location)
+        {
+            case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
+                EmitRuntimeMemberIndexToX(runtimeIndexed.BaseName, runtimeIndexed.Index);
+                builder.LoadAZeroPageX(RuntimeIndexedMemberBaseAddress(runtimeIndexed.BaseName, runtimeIndexed.FieldName));
+                break;
+            default:
+                builder.LoadAZeroPage(VariableAddress(StorageKey(location)));
+                break;
         }
     }
 
@@ -1771,10 +2016,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > NesTarget.Capabilities.ScreenPixels.Width)
-        {
-            throw new InvalidOperationException("camera_aabb_tiles screen span must fit within the visible NES width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_tiles");
 
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
@@ -1783,7 +2025,7 @@ internal sealed class NesRuntimeCompiler
             foreach (var xOffset in AabbSampleOffsets(width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_tiles_next");
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
@@ -1817,10 +2059,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > NesTarget.Capabilities.ScreenPixels.Width)
-        {
-            throw new InvalidOperationException("camera_aabb_hit_top screen span must fit within the visible NES width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_hit_top");
 
         var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
@@ -1829,7 +2068,7 @@ internal sealed class NesRuntimeCompiler
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
                 var hitTopOffset = operation.WorldYOffset + yOffset;
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, hitTopOffset, config, callName);
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
@@ -1890,6 +2129,59 @@ internal sealed class NesRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkByteExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraTileFlagsAt(constantScreenX + screenPixelXOffset, worldY, worldYOffset, config, callName);
+            return;
+        }
+
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
+        var endLabel = builder.CreateLabel("camera_tile_flags_end");
+        if (TrySdkConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(row);
+            return;
+        }
+
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        var inBoundsLabel = builder.CreateLabel("camera_tile_flags_in_bounds");
+        builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
+        builder.JumpAbsolute(outOfBoundsLabel);
+        builder.Label(inBoundsLabel);
+        builder.StoreAZeroPage(CollisionRowScratchAddress);
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
+            builder.LoadAZeroPage(CollisionRowScratchAddress);
+            builder.CompareImmediate(row);
+            builder.BranchRelative(0xD0, nextRowLabel); // BNE nextRowLabel
+            builder.LoadAZeroPage(CollisionColumnScratchAddress);
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
         builder.TransferAToX();
@@ -1922,6 +2214,52 @@ internal sealed class NesRuntimeCompiler
         builder.SubtractImmediate(mapWidth);
         builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraPixelToSourceColumn(SdkByteExpression screenPixelX, int screenPixelXOffset, int mapWidth)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraPixelToSourceColumn(constantScreenX + screenPixelXOffset, mapWidth);
+            return;
+        }
+
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+
+        EmitSdkByteExpressionToA(screenPixelX);
+        if (screenPixelXOffset != 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(screenPixelXOffset);
+        }
+
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+        builder.LoadAZeroPage(CameraXAddress);
+        builder.AndImmediate(0x07);
+        builder.ClearCarry();
+        builder.AddZeroPage(CollisionColumnScratchAddress);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ClearCarry();
+        builder.AddZeroPage(CameraTileColumnAddress);
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.BranchRelative(0x90, endLabel); // BCC endLabel
+        builder.SetCarry();
+        builder.SubtractImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
+        builder.Label(endLabel);
+    }
+
+    private static void ValidateConstantCameraAabbSpan(SdkByteExpression screenX, int width, int screenWidth, string callName)
+    {
+        if (screenX is SdkByteExpression.Constant constant && constant.Value + width > screenWidth)
+        {
+            throw new InvalidOperationException($"{callName} screen span must fit within the visible NES width.");
+        }
     }
 
     private void EmitWorldPixelToTileCoordinate(SdkByteExpression expression, int offset)
@@ -2260,7 +2598,16 @@ internal sealed class NesRuntimeCompiler
                 builder.LoadAZeroPage(VariableAddress(identifier.Identifier));
                 break;
             case MemberAccessSyntax memberAccess:
-                builder.LoadAZeroPage(VariableAddress(NesVideoProgram.MemberAccessName(memberAccess)));
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out var indexedBase, out var fieldName))
+                {
+                    EmitRuntimeMemberIndexToX(indexedBase);
+                    builder.LoadAZeroPageX(RuntimeIndexedMemberBaseAddress(indexedBase, fieldName));
+                }
+                else
+                {
+                    builder.LoadAZeroPage(VariableAddress(NesVideoProgram.MemberAccessName(memberAccess)));
+                }
+
                 break;
             case IndexExpressionSyntax indexExpression:
                 if (TryConst(indexExpression.Index, out _))
@@ -2380,7 +2727,10 @@ internal sealed class NesRuntimeCompiler
                     return;
                 }
 
-                break;
+                EmitVariableOperandsToAAndScratch(binary.Left, binary.Right);
+                builder.SetCarry();
+                builder.SubtractZeroPage(ExpressionScratchAddress);
+                return;
             case "&":
             case "|":
             case "^":
@@ -2481,6 +2831,12 @@ internal sealed class NesRuntimeCompiler
                 address = VariableAddress(identifier.Identifier);
                 return true;
             case MemberAccessSyntax memberAccess:
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out _, out _))
+                {
+                    address = 0;
+                    return false;
+                }
+
                 address = VariableAddress(NesVideoProgram.MemberAccessName(memberAccess));
                 return true;
             case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
@@ -2498,9 +2854,76 @@ internal sealed class NesRuntimeCompiler
         builder.TransferAToX();
     }
 
+    private void EmitRuntimeMemberIndexToX(IndexExpressionSyntax indexExpression)
+    {
+        var layout = StructArrayLayoutFor(indexExpression.BaseIdentifier);
+        EmitExpressionToA(indexExpression.Index);
+        EmitMultiplyA(layout.Stride);
+        builder.TransferAToX();
+    }
+
+    private void EmitRuntimeMemberIndexToX(string baseIdentifier, SdkByteExpression index)
+    {
+        var layout = StructArrayLayoutFor(baseIdentifier);
+        EmitSdkByteExpressionToA(index);
+        EmitMultiplyA(layout.Stride);
+        builder.TransferAToX();
+    }
+
+    private void EmitMultiplyA(int multiplier)
+    {
+        if (multiplier <= 1)
+        {
+            return;
+        }
+
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        for (var count = 1; count < multiplier; count++)
+        {
+            builder.ClearCarry();
+            builder.AddZeroPage(RuntimeIndexScratchAddress);
+        }
+    }
+
     private byte ArrayBaseAddress(string baseIdentifier)
     {
         return VariableAddress(IndexedElementName(baseIdentifier, 0));
+    }
+
+    private byte RuntimeIndexedMemberBaseAddress(IndexExpressionSyntax indexExpression, string fieldName)
+    {
+        _ = StructArrayLayoutFor(indexExpression.BaseIdentifier).FieldOffsets[fieldName];
+        return VariableAddress(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+    }
+
+    private byte RuntimeIndexedMemberBaseAddress(string baseIdentifier, string fieldName)
+    {
+        _ = StructArrayLayoutFor(baseIdentifier).FieldOffsets[fieldName];
+        return VariableAddress(IndexedMemberName(baseIdentifier, 0, fieldName));
+    }
+
+    private bool TryRuntimeIndexedMemberAccess(MemberAccessSyntax memberAccess, out IndexExpressionSyntax indexExpression, out string fieldName)
+    {
+        if (memberAccess.Target is IndexExpressionSyntax candidate
+            && !TryConst(candidate.Index, out _)
+            && structArrays.ContainsKey(candidate.BaseIdentifier)
+            && StructArrayLayoutFor(candidate.BaseIdentifier).FieldOffsets.ContainsKey(memberAccess.Member))
+        {
+            indexExpression = candidate;
+            fieldName = memberAccess.Member;
+            return true;
+        }
+
+        indexExpression = null!;
+        fieldName = string.Empty;
+        return false;
+    }
+
+    private StructArrayLayout StructArrayLayoutFor(string baseIdentifier)
+    {
+        return structArrays.TryGetValue(baseIdentifier, out var layout)
+            ? layout
+            : throw new InvalidOperationException($"NES target has no struct array layout for '{baseIdentifier}'.");
     }
 
     private void RequireExpressionPreservesX(ExpressionSyntax expression, string context)
@@ -2521,7 +2944,7 @@ internal sealed class NesRuntimeCompiler
         return expression switch
         {
             IdentifierSyntax => true,
-            MemberAccessSyntax => true,
+            MemberAccessSyntax memberAccess => !TryRuntimeIndexedMemberAccess(memberAccess, out _, out _),
             IndexExpressionSyntax indexExpression => TryConst(indexExpression.Index, out _),
             CastSyntax cast => PreservesX(cast.Expression),
             ConditionalExpressionSyntax conditional => PreservesX(conditional.Condition) && PreservesX(conditional.WhenTrue) && PreservesX(conditional.WhenFalse),
@@ -2557,6 +2980,19 @@ internal sealed class NesRuntimeCompiler
                 break;
             case "sprite_width":
                 EmitSpriteWidth(call);
+                break;
+            case "__rs_actor_camera_x_lo":
+                NesVideoProgram.RequireArity(call, 0);
+                builder.LoadAZeroPage(CameraXAddress);
+                break;
+            case "__rs_actor_camera_x_hi":
+                NesVideoProgram.RequireArity(call, 0);
+                builder.LoadAZeroPage(CameraTileColumnAddress);
+                builder.ShiftRightA();
+                builder.ShiftRightA();
+                builder.ShiftRightA();
+                builder.ShiftRightA();
+                builder.ShiftRightA();
                 break;
             default:
                 if (TryEmitUserValueFunction(call))
@@ -2693,6 +3129,34 @@ internal sealed class NesRuntimeCompiler
         return $"{baseIdentifier}[{index}]";
     }
 
+    private static string IndexedMemberName(string baseIdentifier, int index, string fieldName)
+    {
+        return $"{IndexedElementName(baseIdentifier, index)}.{fieldName}";
+    }
+
+    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax, string targetName)
+    {
+        var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var offset = 0;
+        foreach (var field in structSyntax.Fields)
+        {
+            if (!IsByteSizedStructArrayFieldType(field.Type))
+            {
+                throw new InvalidOperationException($"{targetName} target struct array field type '{field.Type}' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.");
+            }
+
+            offsets.Add(field.Name, offset);
+            offset++;
+        }
+
+        return offsets;
+    }
+
+    private bool IsByteSizedStructArrayFieldType(string type)
+    {
+        return type is "i8" or "u8" or "bool" || program.Enums.ContainsKey(type);
+    }
+
     private static string StorageKey(SdkStorageLocation location)
     {
         return location switch
@@ -2700,6 +3164,7 @@ internal sealed class NesRuntimeCompiler
             SdkStorageLocation.Local local => local.Name,
             SdkStorageLocation.Field field => $"{StorageKey(field.Target)}.{field.FieldName}",
             SdkStorageLocation.IndexedElement indexed => IndexedElementName(indexed.BaseName, indexed.Index),
+            SdkStorageLocation.RuntimeIndexedField => throw new InvalidOperationException("Runtime indexed SDK fields must be emitted directly."),
             _ => throw new InvalidOperationException($"Unsupported SDK storage location '{location.GetType().Name}'."),
         };
     }
@@ -2800,6 +3265,10 @@ internal sealed class PrgBuilder
 
     public void SubtractZeroPage(byte address) => Emit(0xE5, address);
 
+    public void PushA() => Emit(0x48);
+
+    public void PullA() => Emit(0x68);
+
     public void IncrementX() => Emit(0xE8);
 
     public void TransferAToX() => Emit(0xAA);
@@ -2840,7 +3309,7 @@ internal sealed class PrgBuilder
             var delta = target - branchFrom;
             if (delta is < -128 or > 127)
             {
-                throw new InvalidOperationException($"Branch to '{fixup.Label}' is out of range.");
+                throw new BranchOutOfRangeException(fixup.Label, delta);
             }
 
             bytes[fixup.Offset] = unchecked((byte)(sbyte)delta);
@@ -2872,4 +3341,12 @@ internal sealed class PrgBuilder
 
         return BaseAddress + offset + addend;
     }
+}
+
+internal sealed class BranchOutOfRangeException(string label, int delta)
+    : InvalidOperationException($"Branch to '{label}' is out of range.")
+{
+    public string Label { get; } = label;
+
+    public int Delta { get; } = delta;
 }

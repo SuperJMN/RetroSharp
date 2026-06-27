@@ -96,7 +96,7 @@ public static class Sdk2DOperationCollector
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
-        var screenX = ConstRange(args[0], 0, 255, "camera_aabb_tiles argument 1");
+        var screenX = ReadByteExpression(args[0], "camera_aabb_tiles argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_tiles argument 2");
         var width = ReadAabbExtent(args[2], "camera_aabb_tiles argument 3");
         var height = ConstRange(args[3], 0, 255, "camera_aabb_tiles argument 4");
@@ -120,7 +120,7 @@ public static class Sdk2DOperationCollector
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
-        var screenX = ConstRange(args[0], 0, 255, "camera_aabb_hit_top argument 1");
+        var screenX = ReadByteExpression(args[0], "camera_aabb_hit_top argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_hit_top argument 2");
         var width = ReadAabbExtent(args[2], "camera_aabb_hit_top argument 3");
         var height = ConstRange(args[3], 0, 255, "camera_aabb_hit_top argument 4");
@@ -168,11 +168,28 @@ public static class Sdk2DOperationCollector
         return expression switch
         {
             IdentifierSyntax identifier => new SdkStorageLocation.Local(identifier.Identifier),
+            MemberAccessSyntax { Target: IndexExpressionSyntax indexExpression } memberAccess =>
+                RuntimeIndexedFieldLocation(indexExpression, memberAccess.Member, context),
             MemberAccessSyntax memberAccess => new SdkStorageLocation.Field(
                 ReadStorageLocation(memberAccess.Target, context),
                 memberAccess.Member),
             _ => throw new InvalidOperationException($"{context} member access currently requires an identifier base."),
         };
+    }
+
+    private static SdkStorageLocation RuntimeIndexedFieldLocation(IndexExpressionSyntax indexExpression, string fieldName, string context)
+    {
+        if (TryConstValue(indexExpression.Index, out var index))
+        {
+            return new SdkStorageLocation.Field(
+                new SdkStorageLocation.IndexedElement(indexExpression.BaseIdentifier, CheckedByte(index, context)),
+                fieldName);
+        }
+
+        return new SdkStorageLocation.RuntimeIndexedField(
+            indexExpression.BaseIdentifier,
+            ReadByteExpression(indexExpression.Index, context),
+            fieldName);
     }
 
     private static SdkStorageLocation IndexedElementLocation(string baseIdentifier, ExpressionSyntax index, string context)
@@ -776,6 +793,25 @@ public static class Sdk2DOperationCollector
                         state = CollectExpression(state, loop.Condition.Value);
                     }
 
+                    if (TryCountedLoopIterations(loop, out var iterations) && iterations <= MaxLoopIterationsToAnalyze)
+                    {
+                        for (var iteration = 0; iteration < iterations; iteration++)
+                        {
+                            state = CollectBlock(state, loop.Body);
+                            if (loop.Increment.HasValue)
+                            {
+                                state = CollectExpression(state, loop.Increment.Value);
+                            }
+
+                            if (loop.Condition.HasValue)
+                            {
+                                state = CollectExpression(state, loop.Condition.Value);
+                            }
+                        }
+
+                        return state;
+                    }
+
                     state = CollectLoop(state, loop.Body);
                     if (loop.Increment.HasValue)
                     {
@@ -819,6 +855,35 @@ public static class Sdk2DOperationCollector
             }
 
             return new FrameBudgetState(possibleOpenBudgets, frameBudgets, sawBoundary);
+        }
+
+        private static bool TryCountedLoopIterations(ForSyntax loop, out int iterations)
+        {
+            iterations = 0;
+            if (loop.Initializer is not { HasValue: true, Value: DeclarationSyntax { Type: "u8" } declaration } ||
+                declaration.Initialization is not { HasValue: true } initialization ||
+                !TryConstValue(initialization.Value, out var start) ||
+                loop.Condition is not { HasValue: true, Value: BinaryExpressionSyntax { Operator.Symbol: "<" } condition } ||
+                condition.Left is not IdentifierSyntax conditionIdentifier ||
+                conditionIdentifier.Identifier != declaration.Name ||
+                !TryConstValue(condition.Right, out var end) ||
+                loop.Increment is not { HasValue: true, Value: AssignmentSyntax { OperatorSymbol: "+=" } increment } ||
+                increment.Left is not IdentifierLValue incrementIdentifier ||
+                incrementIdentifier.Identifier != declaration.Name ||
+                !TryConstValue(increment.Right, out var step) ||
+                step <= 0)
+            {
+                return false;
+            }
+
+            if (start >= end)
+            {
+                iterations = 0;
+                return true;
+            }
+
+            iterations = (end - start + step - 1) / step;
+            return true;
         }
 
         private FrameBudgetState CollectBranch(FrameBudgetState state, IfElseSyntax branch)
