@@ -394,7 +394,7 @@ public sealed class GameBoySdkOperationBoundaryTests
             operation =>
             {
                 var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
-                Assert.Equal(Local("__enemies_touch_screen_x_Goomba"), query.ScreenX);
+                Assert.Equal(Local("__enemies_touch_screen_x"), query.ScreenX);
                 Assert.Equal(RuntimeIndexedField("enemies", "__enemies_touch_i", "y"), query.WorldY);
                 Assert.Equal(0, query.WorldYOffset);
                 Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
@@ -403,7 +403,7 @@ public sealed class GameBoySdkOperationBoundaryTests
             operation =>
             {
                 var query = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operation);
-                Assert.Equal(Local("__enemies_land_screen_x_Goomba"), query.ScreenX);
+                Assert.Equal(Local("__enemies_land_screen_x"), query.ScreenX);
                 Assert.Equal(RuntimeIndexedField("enemies", "__enemies_land_i", "y"), query.WorldY);
                 Assert.Equal(-4, query.WorldYOffset);
                 Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);

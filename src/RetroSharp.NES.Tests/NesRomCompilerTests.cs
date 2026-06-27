@@ -1949,14 +1949,14 @@ public class NesRomCompilerTests
                                         enemies[0].y = 48;
                                         video.WaitVBlank();
 
+                                        u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
+                                        u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
                                             if (enemies[__enemies_draw_i].active != 0) {
+                                                u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
                                                 if (enemies[__enemies_draw_i].kind == Goomba) {
-                                                    u8 __enemies_draw_camera_x_lo_Goomba = __rs_actor_camera_x_lo();
-                                                    u8 __enemies_draw_camera_x_hi_Goomba = __rs_actor_camera_x_hi();
-                                                    u8 __enemies_draw_screen_x_Goomba = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo_Goomba;
-                                                    if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi_Goomba) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo_Goomba)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi_Goomba + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo_Goomba))) {
-                                                        sprite.Draw(goomba, __enemies_draw_screen_x_Goomba, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                    if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) {
+                                                        sprite.Draw(goomba, __enemies_draw_screen_x, enemies[__enemies_draw_i].y, 0, false, 0);
                                                     }
                                                 }
                                             }
@@ -2083,14 +2083,14 @@ public class NesRomCompilerTests
                                         enemies[1].y = 0;
                                         camera_set_position(0, 0);
 
+                                        u8 __enemies_touch_camera_x_lo = __rs_actor_camera_x_lo();
+                                        u8 __enemies_touch_camera_x_hi = __rs_actor_camera_x_hi();
                                         for (u8 __enemies_touch_i = 0; __enemies_touch_i < countof(enemies); __enemies_touch_i += 1) {
                                             if (enemies[__enemies_touch_i].active != 0) {
+                                                u8 __enemies_touch_screen_x = enemies[__enemies_touch_i].x - __enemies_touch_camera_x_lo;
                                                 if (enemies[__enemies_touch_i].kind == Goomba) {
-                                                    u8 __enemies_touch_camera_x_lo_Goomba = __rs_actor_camera_x_lo();
-                                                    u8 __enemies_touch_camera_x_hi_Goomba = __rs_actor_camera_x_hi();
-                                                    u8 __enemies_touch_screen_x_Goomba = enemies[__enemies_touch_i].x - __enemies_touch_camera_x_lo_Goomba;
-                                                    if (((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi_Goomba) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo_Goomba)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi_Goomba + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo_Goomba))) {
-                                                        if (camera.AabbTiles(__enemies_touch_screen_x_Goomba, enemies[__enemies_touch_i].y, 8, 8, 1) != 0) {
+                                                    if (((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo))) {
+                                                        if (camera.AabbTiles(__enemies_touch_screen_x, enemies[__enemies_touch_i].y, 8, 8, 1) != 0) {
                                                             enemies[__enemies_touch_i].state = 1;
                                                         }
                                                     }
@@ -2133,7 +2133,7 @@ public class NesRomCompilerTests
 
         Assert.True(
             manualRom.SequenceEqual(actorRom),
-            "NES actor TouchTiles should match the manual loop that passes __enemies_touch_screen_x_Goomba computed from enemies[__enemies_touch_i].x, so actor slots at X=24 and X=104 do not share one fixed collision column.");
+            "NES actor TouchTiles should match the manual loop that passes __enemies_touch_screen_x computed from enemies[__enemies_touch_i].x, so actor slots at X=24 and X=104 do not share one fixed collision column.");
         Assert.Equal(manualRom, actorRom);
     }
 
@@ -3291,16 +3291,18 @@ public class NesRomCompilerTests
     private static string RuntimeSpawnActivationBlockForNes(string prefix)
     {
         return $$"""
+                     u8 {{prefix}}_recycle_camera_x_lo = __rs_actor_camera_x_lo();
+                     u8 {{prefix}}_recycle_camera_x_hi = __rs_actor_camera_x_hi();
                      for (u8 {{prefix}}_recycle_i = 0; {{prefix}}_recycle_i < countof(enemies); {{prefix}}_recycle_i += 1) {
                          if (enemies[{{prefix}}_recycle_i].active != 0) {
-                             u8 {{prefix}}_recycle_camera_x_lo = __rs_actor_camera_x_lo();
-                             u8 {{prefix}}_recycle_camera_x_hi = __rs_actor_camera_x_hi();
                              u8 {{prefix}}_recycle_screen_x = enemies[{{prefix}}_recycle_i].x - {{prefix}}_recycle_camera_x_lo;
                              if (!((enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi) && (enemies[{{prefix}}_recycle_i].x >= {{prefix}}_recycle_camera_x_lo) || (enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi + 1) && (enemies[{{prefix}}_recycle_i].x < {{prefix}}_recycle_camera_x_lo))) {
                                  enemies[{{prefix}}_recycle_i].active = 0;
                              }
                          }
                      }
+                     u8 {{prefix}}_camera_x_lo = __rs_actor_camera_x_lo();
+                     u8 {{prefix}}_camera_x_hi = __rs_actor_camera_x_hi();
                      for (u8 {{prefix}}_i = 0; {{prefix}}_i < 2; {{prefix}}_i += 1) {
                          if (__enemies_spawn_0_used[{{prefix}}_i] == 0) {
                              u8 {{prefix}}_kind_value = __enemies_spawn_0_kind({{prefix}}_i);
@@ -3315,8 +3317,6 @@ public class NesRomCompilerTests
                              u8 {{prefix}}_facing_value = __enemies_spawn_0_facing({{prefix}}_i);
                              u8 {{prefix}}_animTick_value = __enemies_spawn_0_animTick({{prefix}}_i);
                              u8 {{prefix}}_health_value = __enemies_spawn_0_health({{prefix}}_i);
-                             u8 {{prefix}}_camera_x_lo = __rs_actor_camera_x_lo();
-                             u8 {{prefix}}_camera_x_hi = __rs_actor_camera_x_hi();
                              u8 {{prefix}}_screen_x = {{prefix}}_x_value - {{prefix}}_camera_x_lo;
                              if ((({{prefix}}_xHi_value == {{prefix}}_camera_x_hi) && ({{prefix}}_x_value >= {{prefix}}_camera_x_lo)) || (({{prefix}}_xHi_value == {{prefix}}_camera_x_hi + 1) && ({{prefix}}_x_value < {{prefix}}_camera_x_lo))) {
                                  u8 {{prefix}}_assigned = 0;

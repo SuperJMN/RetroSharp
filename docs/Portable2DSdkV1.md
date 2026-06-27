@@ -111,9 +111,9 @@ identity, virtual dispatch, delegates, closures, or function pointers.
 | `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
 | `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
 | `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. The frontend emits only helpers that source actually calls, so unused metadata helpers do not remain in the lowered program or add bytes. |
-| `pool.TouchTiles(yOffset, flags)` | Loop active slots, branch by kind, compute each actor's camera-relative `screenX` from world `x`/`xHi`, cull slots outside the visible camera window, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
-| `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Loop active slots, branch by kind, compute each actor's camera-relative `screenX`, cull slots outside the visible camera window, and call `camera.AabbHitTop(...)` with the kind's literal hitbox width. On hit, assign actor `y` to the returned top Y, clear `vy`, and set `state` to `1`. |
-| `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Loop active slots, compute each actor's camera-relative `screenX`, cull slots outside the visible camera window, and test each kind's literal hitbox against a literal player AABB in screen coordinates. On hit, set actor `state` to `contactDamage` or `1`. |
+| `pool.TouchTiles(yOffset, flags)` | Read the current camera X once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX` from world `x`/`xHi`, branch by kind, cull slots outside the visible camera window, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
+| `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Read the current camera X once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`, branch by kind, cull slots outside the visible camera window, and call `camera.AabbHitTop(...)` with the kind's literal hitbox width. On hit, assign actor `y` to the returned top Y, clear `vy`, and set `state` to `1`. |
+| `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Read the current camera X once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`, branch by kind, cull slots outside the visible camera window, and test each kind's literal hitbox against a literal player AABB in screen coordinates. On hit, set actor `state` to `contactDamage` or `1`. |
 
 `actor.Pool(...)` and `enemy.Def(...)` are accepted as statements inside the
 compiled source and disappear before target lowering. The generated actor state
@@ -137,19 +137,22 @@ simultaneous authored spawns can exceed the declared pool capacity.
 `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and a direction-driven
 `Chaser` are implemented without actor-specific SDK operations. NES accepts the
 same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
-that basic behavior set. `pool.Draw()` reads the current camera X state, computes
-`screenX = actorWorldX - cameraX`, culls slots outside the visible camera window,
-and emits ordinary `sprite.Draw(...)` calls for visible actors, using
+that basic behavior set. `pool.Draw()` reads the current camera X state once for
+its generated loop, computes `screenX = actorWorldX - cameraX` per active slot,
+culls slots outside the visible camera window, and emits ordinary
+`sprite.Draw(...)` calls for visible actors, using
 `animation.Frame(...)` when a definition declares an animation clip. Drawn pools
 are checked against target sprite budgets with target-resolved metasprite
 geometry, so a pool of multi-sprite enemy definitions is charged by hardware
 sprite pieces rather than by actor slots. Aggregate hardware sprite usage is
 also validated by the same frame-budget pass as hand-written sprite draws.
 `pool.TouchTiles(...)`, `pool.LandOnTiles(...)`, and
-`pool.TouchPlayer(...)` reuse the same camera projection and visibility guard as
-draw, so collision/contact is tested per visible actor instead of at one fixed
-screen column. The tile helpers emit ordinary camera AABB SDK calls; they do not
-introduce actor-specific target intrinsics. Tiled spawn helpers read the same
+`pool.TouchPlayer(...)` use the same per-phase camera-X cache and per-actor
+projection/visibility guard as draw, so collision/contact is tested per visible
+actor instead of at one fixed screen column. Separate helper calls remain
+separate phases and do not share a hoisted camera read across statements. The
+tile helpers emit ordinary camera AABB SDK calls; they do not introduce
+actor-specific target intrinsics. Tiled spawn helpers read the same
 target-neutral map importer as
 `world.Load(...)` and lower to generated ROM-table helpers plus runtime fixed-slot
 activation before target lowering.
@@ -214,30 +217,30 @@ void main() {
     Actor enemies[2];
     u8 __enemies_spawn_0_used[2];
 
+    u8 recycleCameraX = __rs_actor_camera_x_lo();
+    u8 recycleCameraXHi = __rs_actor_camera_x_hi();
     for (u8 recycle = 0; recycle < countof(enemies); recycle += 1) {
         if (enemies[recycle].active != 0) {
-            u8 cameraX = __rs_actor_camera_x_lo();
-            u8 cameraXHi = __rs_actor_camera_x_hi();
-            u8 screenX = enemies[recycle].x - cameraX;
-            if (!((((enemies[recycle].xHi == cameraXHi) &&
-                    (enemies[recycle].x >= cameraX)) ||
-                   ((enemies[recycle].xHi == cameraXHi + 1) &&
-                    (enemies[recycle].x < cameraX))) &&
+            u8 screenX = enemies[recycle].x - recycleCameraX;
+            if (!((((enemies[recycle].xHi == recycleCameraXHi) &&
+                    (enemies[recycle].x >= recycleCameraX)) ||
+                   ((enemies[recycle].xHi == recycleCameraXHi + 1) &&
+                    (enemies[recycle].x < recycleCameraX))) &&
                   (screenX < 160))) {
                 enemies[recycle].active = 0;
             }
         }
     }
 
+    u8 spawnCameraX = __rs_actor_camera_x_lo();
+    u8 spawnCameraXHi = __rs_actor_camera_x_hi();
     for (u8 spawn = 0; spawn < 2; spawn += 1) {
         if (__enemies_spawn_0_used[spawn] == 0) {
             u8 spawnX = __enemies_spawn_0_x(spawn);
             u8 spawnXHi = __enemies_spawn_0_xHi(spawn);
-            u8 cameraX = __rs_actor_camera_x_lo();
-            u8 cameraXHi = __rs_actor_camera_x_hi();
-            u8 screenX = spawnX - cameraX;
-            if ((((spawnXHi == cameraXHi) && (spawnX >= cameraX)) ||
-                 ((spawnXHi == cameraXHi + 1) && (spawnX < cameraX))) &&
+            u8 screenX = spawnX - spawnCameraX;
+            if ((((spawnXHi == spawnCameraXHi) && (spawnX >= spawnCameraX)) ||
+                 ((spawnXHi == spawnCameraXHi + 1) && (spawnX < spawnCameraX))) &&
                 (screenX < 160)) {
                 u8 assigned = 0;
                 for (u8 slot = 0; slot < countof(enemies); slot += 1) {
@@ -264,6 +267,8 @@ void main() {
         }
     }
 
+    u8 cameraX = __rs_actor_camera_x_lo();
+    u8 cameraXHi = __rs_actor_camera_x_hi();
     for (u8 i = 0; i < countof(enemies); i += 1) {
         if (enemies[i].active != 0) {
             if (enemies[i].kind == Goomba) {
@@ -272,8 +277,6 @@ void main() {
                     enemies[i].xHi += 1;
                 }
 
-                u8 cameraX = __rs_actor_camera_x_lo();
-                u8 cameraXHi = __rs_actor_camera_x_hi();
                 u8 screenX = enemies[i].x - cameraX;
                 if ((((enemies[i].xHi == cameraXHi) && (enemies[i].x >= cameraX)) ||
                      ((enemies[i].xHi == cameraXHi + 1) && (enemies[i].x < cameraX))) &&
@@ -305,10 +308,10 @@ void main() {
 }
 ```
 
-The generated code repeats the camera projection in each helper today. Hoisting
-that projection is tracked separately as AF-5.7; the current contract is the
-equivalent behavior and fixed cost shape, not that the source-to-source lowering
-has already removed every repeated expression.
+The generated code keeps the helper calls as separate phases. Each
+projection-bearing phase reads `cameraX`/`cameraXHi` once before its slot or
+spawn loop, then computes `screenX` per active actor or candidate spawn from the
+cached camera bytes.
 
 ### Optional HUD
 

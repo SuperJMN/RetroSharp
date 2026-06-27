@@ -1,8 +1,8 @@
 # Actor Framework Roadmap (scalable platformer actors / enemies)
 
 Status: **feature-complete for the first scrolling platformer slice on branch
-`feature/actor-framework`; AF-5.7..AF-5.10 remain non-blocking follow-ups.**
-Phases 1-4 and AF-5.1..AF-5.6 landed as a working, byte-reproducible
+`feature/actor-framework`; AF-5.8..AF-5.10 remain non-blocking follow-ups.**
+Phases 1-4 and AF-5.1..AF-5.7 landed as a working, byte-reproducible
 Game Boy/NES actor-framework acceptance slice. Phase 5 moved the framework from
 the early non-scrolling closure to world-space actors, per-actor collision,
 runtime activation, and metasprite-aware budgets.
@@ -300,7 +300,7 @@ Candidate file names are guidance; inspect the real code paths first.
   `README.md`, `WARP.md`, `llms.txt`, `docs/AgentContext.md`, and
   `docs/ArchitectureRoadmap.md`.
 - Steps:
-  - [x] Document the actor API and the emitted storage/cost model after AF-5.1..AF-5.6:
+  - [x] Document the actor API and the emitted storage/cost model after AF-5.1..AF-5.7:
     `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`,
     called `enemy.*` metadata helpers, `enemies.Update()`, `enemies.Draw()`,
     `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and
@@ -313,7 +313,7 @@ Candidate file names are guidance; inspect the real code paths first.
   - [x] Classify the new sample in `samples/manifest.json`.
   - [x] Flip Iteration 14 status in `ArchitectureRoadmap.md` to
     feature-complete for the first scrolling platformer slice while preserving
-    AF-5.7..AF-5.10 as open non-blocking follow-ups.
+    AF-5.8..AF-5.10 as open non-blocking follow-ups.
 - Verification:
   - [x] `git diff --check`; manifest-reading tests pass.
 - Depends on: AF-4.2.
@@ -435,12 +435,12 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Layer: framework source-to-source lowering.
 - Candidate files: `ActorFrameworkLowerer.cs`, GB/NES emitted-code tests.
 - Steps:
-  - [ ] Introduce a lowering-local projection helper or per-loop cached values
+  - [x] Introduce a lowering-local projection helper or per-loop cached values
     without adding a new `Sdk2DOperation`.
-  - [ ] Preserve the current world-X split model (`x` plus `xHi`) and visible-window
+  - [x] Preserve the current world-X split model (`x` plus `xHi`) and visible-window
     semantics.
 - Verification:
-  - [ ] Differential tests prove the optimized lowering preserves behavior while
+  - [x] Differential tests prove the optimized lowering preserves behavior while
     reducing repeated projection code.
 
 #### AF-5.8: Harden `TouchPlayer` right-edge overflow (non-blocking)
@@ -494,11 +494,10 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 
 ## Known limitations and follow-ups
 
-AF-5.1 through AF-5.6 are closed, and the branch is feature-complete for the first
+AF-5.1 through AF-5.7 are closed, and the branch is feature-complete for the first
 scrolling platformer slice. The remaining limitations are not blockers for that
 slice, but they should stay visible:
 
-- AF-5.7: camera-X projection is recomputed by each generated helper today.
 - AF-5.8: `TouchPlayer` still needs a non-wrapping actor-right-edge comparison.
 - AF-5.9: spawn activation is intentionally one-shot; reactivation is not yet a
   source-level policy.
@@ -511,11 +510,12 @@ slice, but they should stay visible:
 
 The initial recommendation was to land the storage prerequisite, then the pool
 and enemy definition surface, then an acceptance sample. That has happened on
-this branch and was extended by AF-5.1..AF-5.6 for scrolling-platformer behavior:
+this branch and was extended by AF-5.1..AF-5.7 for scrolling-platformer behavior:
 world-space X split into `x`/`xHi`, camera-relative draw/collision/contact,
 runtime spawn activation, metasprite-aware capability checks, generated-name
-guards, and reentrant byte expression lowering. Future work should start from
-the follow-ups above rather than from the original minimal-slice plan.
+guards, reentrant byte expression lowering, and per-phase camera-X projection
+hoisting. Future work should start from the follow-ups above rather than from
+the original minimal-slice plan.
 
 ## Validation commands
 

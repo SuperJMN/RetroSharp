@@ -35,5 +35,5 @@ still has no global enemy-kind switch in `main`.
 See `../../docs/Portable2DSdkV1.md` for the actor API and the hand-authored
 low-level equivalent pattern. See `../../docs/ActorFrameworkRoadmap.md` for the
 AF-5 follow-ups that remain after the first scrolling platformer slice, including
-projection hoisting, `TouchPlayer` overflow hardening, spawn reactivation policy,
-and activation-scan cost.
+`TouchPlayer` overflow hardening, spawn reactivation policy, and activation-scan
+cost.
