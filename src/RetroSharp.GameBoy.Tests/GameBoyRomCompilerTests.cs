@@ -3043,10 +3043,14 @@ public class GameBoyRomCompilerTests
         var vblankStart = source.IndexOf("video.WaitVBlank();", StringComparison.Ordinal);
         var inputPoll = source.IndexOf("input.Poll();", StringComparison.Ordinal);
         var gravity = source.IndexOf("player.ApplyGravity();", StringComparison.Ordinal);
+        var audioUpdate = source.IndexOf("audio.Update();", StringComparison.Ordinal);
+        var cameraApply = source.IndexOf("camera.Apply();", StringComparison.Ordinal);
         var draw = source.IndexOf("sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
+        Assert.True(cameraApply > draw, "Runner should write OAM before camera streaming consumes VBlank time.");
+        Assert.True(audioUpdate > cameraApply, "Runner should tick music after timing-sensitive OAM and camera presentation work.");
         Assert.True(inputPoll > draw, "Runner should finish sprite presentation before input and gameplay updates consume VBlank time.");
         Assert.True(gravity > inputPoll, "Runner should update gameplay after the VBlank presentation block.");
     }
@@ -3065,9 +3069,11 @@ public class GameBoyRomCompilerTests
         var vblankStart = source.IndexOf("video.WaitVBlank();", StringComparison.Ordinal);
         var audioUpdate = source.IndexOf("audio.Update();", StringComparison.Ordinal);
         var cameraApply = source.IndexOf("camera.Apply();", StringComparison.Ordinal);
+        var draw = source.IndexOf("sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
         Assert.True(vblankStart >= 0);
         Assert.True(audioUpdate > vblankStart, "Runner should tick the music runtime once after VBlank starts.");
-        Assert.True(cameraApply > audioUpdate, "Runner should tick music before camera/sprite presentation work consumes VBlank time.");
+        Assert.True(draw < cameraApply, "Runner should write OAM before other VBlank work can run long on real hardware.");
+        Assert.True(audioUpdate > cameraApply, "Runner should tick music once per frame after timing-sensitive presentation work.");
 
         var operations = GameBoyRomCompiler.CollectSdkAudioOperations(source, baseDirectory);
         Assert.Contains(operations, operation => operation is SdkAudioOperation.InitializeAudio);

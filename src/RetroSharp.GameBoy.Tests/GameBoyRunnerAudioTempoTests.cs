@@ -1,6 +1,7 @@
 namespace RetroSharp.GameBoy.Tests;
 
 using System.IO;
+using System.Linq;
 using RetroSharp.GameBoy;
 using Xunit;
 
@@ -78,6 +79,31 @@ public sealed class GameBoyRunnerAudioTempoTests
         }
 
         Assert.True(scrolled, "Scrolling did not stream any new columns into the background tilemap during camera.Apply.");
+    }
+
+    [Fact]
+    public void Runner_writes_oam_only_during_vblank_while_scrolling()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        cpu.RunFrames(1200);
+
+        var lcdEnabledWrites = cpu.OamWrites.Where(write => write.LcdEnabled).ToArray();
+        var unsafeWrites = lcdEnabledWrites
+            .Where(write => write.Ly is < 144 or > 153)
+            .Take(8)
+            .ToArray();
+
+        Assert.NotEmpty(lcdEnabledWrites);
+        Assert.True(
+            unsafeWrites.Length == 0,
+            "Runner wrote OAM after VBlank ended: "
+            + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
     }
 
     private static byte[] CompileCameraProgram(string columns, bool move)

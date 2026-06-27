@@ -27,6 +27,7 @@ internal sealed class GameBoyTestCpu
     private readonly byte[] hram = new byte[0x7F];
 
     private readonly List<(ushort Register, byte Value)> apuWrites = [];
+    private readonly List<OamWrite> oamWrites = [];
 
     private byte a, b, c, d, e, h, l, f;
     private ushort sp, pc;
@@ -44,6 +45,8 @@ internal sealed class GameBoyTestCpu
     public byte Vram(ushort address) => vram[address - 0x8000];
 
     public byte Oam(ushort address) => oam[address - 0xFE00];
+
+    public IReadOnlyList<OamWrite> OamWrites => oamWrites;
 
     public GameBoyTestCpu(byte[] rom)
     {
@@ -229,6 +232,12 @@ internal sealed class GameBoyTestCpu
                 return;
             case < 0xFEA0:
                 oam[addr - 0xFE00] = value;
+                oamWrites.Add(new OamWrite(
+                    addr,
+                    value,
+                    cycles,
+                    (byte)((cycles / 456) % 154),
+                    (io[0x40] & 0x80) != 0));
                 return;
             case < 0xFF00:
                 return;
@@ -476,3 +485,5 @@ internal sealed class GameBoyTestCpu
         SetHl((ushort)result);
     }
 }
+
+internal readonly record struct OamWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled);

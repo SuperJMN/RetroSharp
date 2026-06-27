@@ -353,9 +353,9 @@ class FrameState {
 
 inline void PresentFrame(PlayerState player) {
     video.WaitVBlank();
-    audio.Update();
-    camera.Apply();
     sprite.Draw(mario_player, Player.ScreenX, player.y, player.displayFrame, player.displayFlipX, 0);
+    camera.Apply();
+    audio.Update();
 }
 
 void setup_video() {
