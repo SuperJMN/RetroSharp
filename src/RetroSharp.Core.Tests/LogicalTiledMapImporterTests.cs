@@ -60,6 +60,74 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
     }
 
     [Fact]
+    public void Load_reads_actor_spawns_from_object_layers_without_target_lowering()
+    {
+        var path = Path.Combine(directory, "actors.tmj");
+        File.WriteAllText(path, """
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 2,
+          "height": 2,
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "world", "width": 2, "height": 2, "data": [0, 0, 0, 0] },
+            {
+              "type": "objectgroup",
+              "name": "actors",
+              "objects": [
+                {
+                  "id": 1,
+                  "type": "Goomba",
+                  "x": 24,
+                  "y": 40,
+                  "properties": [
+                    { "name": "facing", "type": "int", "value": 1 },
+                    { "name": "health", "type": "int", "value": 2 }
+                  ]
+                },
+                {
+                  "id": 2,
+                  "x": 72,
+                  "y": 32,
+                  "properties": [
+                    { "name": "kind", "type": "string", "value": "Bat" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+        """);
+
+        var map = LogicalTiledMapImporter.Load(path);
+
+        var spawns = Assert.Contains("actors", map.ActorSpawnLayers);
+        Assert.Collection(
+            spawns,
+            spawn =>
+            {
+                Assert.Equal("Goomba", spawn.Kind);
+                Assert.Equal(24, spawn.X);
+                Assert.Equal(40, spawn.Y);
+                Assert.Equal(1, spawn.Fields["facing"]);
+                Assert.Equal(2, spawn.Fields["health"]);
+            },
+            spawn =>
+            {
+                Assert.Equal("Bat", spawn.Kind);
+                Assert.Equal(72, spawn.X);
+                Assert.Equal(32, spawn.Y);
+                Assert.Empty(spawn.Fields);
+            });
+    }
+
+    [Fact]
     public void Load_rejects_maps_without_a_world_layer()
     {
         var path = Path.Combine(directory, "no-world.tmj");

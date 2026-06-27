@@ -163,6 +163,41 @@ public sealed class CrossTargetScrollAcceptanceTests
         Assert.NotEmpty(nesRom);
     }
 
+    [Fact]
+    public void Actor_framework_animation_and_tile_helpers_lower_on_game_boy_and_nes()
+    {
+        const string actorSource = """
+            void main() {
+                world.Column(0, 1, 2);
+                world.Flags(0, 0, 1);
+                world.Map(1, 10, 2);
+                camera.Init(1, 10, 2);
+                sprite.Asset(marker, "samples/cross-target-camera/marker.json");
+                animation.Clip(walk, 0, 4);
+                actor.Pool(enemies, 1);
+                enemy.Def(Goomba, sprite: marker, behavior: Walker, speed: 1, animation: walk, hitboxWidth: 8, hitboxHeight: 8);
+                enemies[0].active = 1;
+                enemies[0].kind = Goomba;
+                enemies[0].x = 72;
+                enemies[0].y = 16;
+
+                loop {
+                    video.WaitVBlank();
+                    enemies.Update();
+                    enemies.TouchTiles(72, 0, 1);
+                    enemies.LandOnTiles(72, 4, 12, 1);
+                    enemies.Draw();
+                }
+            }
+            """;
+
+        var gbRom = GameBoyRomCompiler.CompileSource(actorSource, RepoRoot());
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(actorSource, RepoRoot());
+        Assert.NotEmpty(nesRom);
+    }
+
     private static string RepoRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

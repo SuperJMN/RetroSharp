@@ -36,8 +36,9 @@ public static class GameBoyRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        return GameBoyVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        return GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
     }
 
     private static void ValidateFunctionContracts(ProgramSyntax program)
@@ -90,13 +91,19 @@ public static class GameBoyRomCompiler
         int spriteHeight,
         int screenHeight)
     {
+        var offsets = pieceOffsets.ToList();
+        if (y is SdkByteExpression.Variable { Location: SdkStorageLocation.RuntimeIndexedField })
+        {
+            return WorstCaseDynamicScanlineCounts(offsets);
+        }
+
         if (y is not SdkByteExpression.Constant constant)
         {
             return new Dictionary<int, int>();
         }
 
         var result = new Dictionary<int, int>();
-        foreach (var offset in pieceOffsets)
+        foreach (var offset in offsets)
         {
             var top = constant.Value + offset;
             var bottom = top + spriteHeight;
@@ -104,6 +111,17 @@ public static class GameBoyRomCompiler
             {
                 result[scanline] = result.GetValueOrDefault(scanline) + 1;
             }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<int, int> WorstCaseDynamicScanlineCounts(IEnumerable<int> pieceOffsets)
+    {
+        var result = new Dictionary<int, int>();
+        foreach (var offset in pieceOffsets)
+        {
+            result[offset] = result.GetValueOrDefault(offset) + 1;
         }
 
         return result;

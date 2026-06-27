@@ -7,6 +7,12 @@
       "targets": ["gb", "nes"]
     },
     {
+      "path": "samples/actor-framework/actors.rs",
+      "readme": "samples/actor-framework/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "path": "samples/gameboy-drawing/drawing.rs",
       "readme": "samples/gameboy-drawing/README.md",
       "layer": "target-intrinsic",

@@ -283,6 +283,13 @@ public static class Sdk2DOperationValidator
                 throw new InvalidOperationException($"{context} indexed storage base name must not be empty.");
             case SdkStorageLocation.IndexedElement indexed:
                 throw new InvalidOperationException($"{context} indexed storage index must be between 0 and 255, got {indexed.Index}.");
+            case SdkStorageLocation.RuntimeIndexedField { BaseName.Length: 0 }:
+                throw new InvalidOperationException($"{context} runtime indexed field base name must not be empty.");
+            case SdkStorageLocation.RuntimeIndexedField { FieldName.Length: 0 }:
+                throw new InvalidOperationException($"{context} runtime indexed field name must not be empty.");
+            case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
+                ValidateByteExpression(runtimeIndexed.Index, context);
+                return;
             default:
                 throw new InvalidOperationException($"{context} uses unsupported SDK storage location '{location.GetType().Name}'.");
         }

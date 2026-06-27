@@ -74,6 +74,7 @@ public static class LogicalTiledMapImporter
 
         var backgroundLayer = FindTileLayer(root, "background");
         var backgroundData = backgroundLayer.HasValue ? ReadTileLayerData(backgroundLayer.Value, width, mapHeight, displayName) : null;
+        var actorSpawnLayers = ReadActorSpawnLayers(root, displayName);
 
         var worldFlags = new WorldTileFlags[expandedWidth * expandedHeight];
         for (var y = 0; y < height; y++)
@@ -113,7 +114,7 @@ public static class LogicalTiledMapImporter
             backgroundHeight: expandedMapHeight,
             backgroundOffsetY: backgroundOffsetY);
 
-        return new LogicalTiledMap(tilesets, backgroundData, worldData, worldFlags, geometry);
+        return new LogicalTiledMap(tilesets, backgroundData, worldData, worldFlags, geometry, actorSpawnLayers);
     }
 
     public static uint CleanTiledGid(uint gid, string context)
@@ -330,6 +331,90 @@ public static class LogicalTiledMapImporter
         return result;
     }
 
+    private static IReadOnlyDictionary<string, IReadOnlyList<LogicalActorSpawn>> ReadActorSpawnLayers(JsonElement root, string displayName)
+    {
+        if (!root.TryGetProperty("layers", out var layers) || layers.ValueKind != JsonValueKind.Array)
+        {
+            return new Dictionary<string, IReadOnlyList<LogicalActorSpawn>>(StringComparer.Ordinal);
+        }
+
+        var result = new Dictionary<string, IReadOnlyList<LogicalActorSpawn>>(StringComparer.Ordinal);
+        foreach (var layer in EnumerateLayers(layers))
+        {
+            if (StringPropertyOrDefault(layer, "type", "") != "objectgroup")
+            {
+                continue;
+            }
+
+            var layerName = StringPropertyOrDefault(layer, "name", "<unnamed>");
+            var spawns = ReadActorSpawns(layer, layerName, displayName);
+            result[layerName] = spawns;
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<LogicalActorSpawn> ReadActorSpawns(JsonElement layer, string layerName, string displayName)
+    {
+        if (!layer.TryGetProperty("objects", out var objects) || objects.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var result = new List<LogicalActorSpawn>();
+        foreach (var obj in objects.EnumerateArray())
+        {
+            var objectId = IntPropertyOrDefault(obj, "id", result.Count + 1);
+            var kind = FirstNonEmpty(
+                CustomStringProperty(obj, "kind"),
+                StringPropertyOrDefault(obj, "type", ""),
+                StringPropertyOrDefault(obj, "class", ""),
+                StringPropertyOrDefault(obj, "name", ""));
+            if (string.IsNullOrWhiteSpace(kind))
+            {
+                throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} requires an actor kind via a 'kind' property, type/class, or name.");
+            }
+
+            var x = CheckedByte(IntNumberProperty(obj, "x", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} x");
+            var y = CheckedByte(IntNumberProperty(obj, "y", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} y");
+            result.Add(new LogicalActorSpawn(kind, x, y, ReadActorSpawnFields(obj, displayName, layerName, objectId)));
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<string, int> ReadActorSpawnFields(JsonElement obj, string displayName, string layerName, int objectId)
+    {
+        if (!obj.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array)
+        {
+            return new Dictionary<string, int>(StringComparer.Ordinal);
+        }
+
+        var fields = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var property in properties.EnumerateArray())
+        {
+            var name = StringPropertyOrDefault(property, "name", "");
+            if (name == "kind")
+            {
+                continue;
+            }
+
+            if (name is not ("active" or "state" or "timer" or "facing" or "animTick" or "health" or "vx" or "vy"))
+            {
+                continue;
+            }
+
+            if (!property.TryGetProperty("value", out var value))
+            {
+                continue;
+            }
+
+            fields[name] = CheckedByte(PropertyIntValue(value, $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}'"), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}'");
+        }
+
+        return fields;
+    }
+
     private static int PositiveIntProperty(JsonElement element, string name, string displayName)
     {
         var value = IntProperty(element, name, displayName);
@@ -346,6 +431,56 @@ public static class LogicalTiledMapImporter
         if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number || !property.TryGetInt32(out var value))
         {
             throw new InvalidOperationException($"Tiled map '{displayName}' property '{name}' must be an integer.");
+        }
+
+        return value;
+    }
+
+    private static int IntPropertyOrDefault(JsonElement element, string name, int fallback)
+    {
+        return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var value)
+            ? value
+            : fallback;
+    }
+
+    private static int IntNumberProperty(JsonElement element, string name, string displayName, string layerName, int objectId)
+    {
+        if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
+        {
+            throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}' must be an integer.");
+        }
+
+        if (property.TryGetInt32(out var value))
+        {
+            return value;
+        }
+
+        var number = property.GetDouble();
+        if (Math.Truncate(number) == number && number >= int.MinValue && number <= int.MaxValue)
+        {
+            return (int)number;
+        }
+
+        throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}' must be an integer.");
+    }
+
+    private static int PropertyIntValue(JsonElement value, string context)
+    {
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetInt32(out var number) => number,
+            JsonValueKind.String when int.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) => number,
+            JsonValueKind.True => 1,
+            JsonValueKind.False => 0,
+            _ => throw new InvalidOperationException($"{context} must be a byte value."),
+        };
+    }
+
+    private static int CheckedByte(int value, string context)
+    {
+        if (value is < 0 or > 255)
+        {
+            throw new InvalidOperationException($"{context} must be between 0 and 255.");
         }
 
         return value;
@@ -381,6 +516,39 @@ public static class LogicalTiledMapImporter
         return element.TryGetProperty(name, out var property) && property.ValueKind is JsonValueKind.True or JsonValueKind.False
             ? property.GetBoolean()
             : fallback;
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return "";
+    }
+
+    private static string? CustomStringProperty(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty("properties", out var properties) || properties.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var property in properties.EnumerateArray())
+        {
+            if (StringPropertyOrDefault(property, "name", "") == name &&
+                property.TryGetProperty("value", out var value) &&
+                value.ValueKind == JsonValueKind.String)
+            {
+                return value.GetString();
+            }
+        }
+
+        return null;
     }
 
     private static string StringPropertyOrDefault(JsonElement element, string name, string fallback)

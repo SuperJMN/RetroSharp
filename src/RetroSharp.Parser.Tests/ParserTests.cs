@@ -667,6 +667,26 @@ public class ParserTests
     }
 
     [Fact]
+    public void Fixed_size_struct_array_initializer()
+    {
+        var source = """
+                     struct Actor
+                     {
+                        u8 x;
+                        u8 y;
+                        bool active;
+                     }
+
+                     void main()
+                     {
+                        u8 seed = 3;
+                        Actor actors[2] = [{ x: 1, active: 1 }, { y: seed + 1 }];
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
     public void Fixed_size_array_initializer_can_infer_length()
     {
         var source = """

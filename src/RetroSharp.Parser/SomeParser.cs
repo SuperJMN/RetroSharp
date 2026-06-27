@@ -482,7 +482,7 @@ public class SomeParser
     {
         if (initializer.arrayInitializer() is { } arrayInitializer)
         {
-            return new ArrayInitializerSyntax(arrayInitializer.expression().Select(ParseExpression));
+            return new ArrayInitializerSyntax(arrayInitializer.variableInitializer().Select(ParseVariableInitializer));
         }
 
         if (initializer.structInitializer() is { } structInitializer)

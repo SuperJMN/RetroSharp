@@ -367,6 +367,73 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Collects_actor_pool_tile_helpers_as_camera_aabb_operations()
+    {
+        const string source = """
+                              void main() {
+                                  world.Column(0, 0, 4);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 11, 2);
+                                  camera.Init(1, 11, 2);
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 8);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].y = 24;
+                                  enemies.TouchTiles(72, 0, 1);
+                                  enemies.LandOnTiles(72, 4, 12, 1);
+                              }
+                              """;
+
+        var operations = GameBoyRomCompiler.CollectSdkOperations(source);
+
+        Assert.Collection(
+            operations,
+            operation =>
+            {
+                var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
+                Assert.Equal(72, query.ScreenX);
+                Assert.Equal(RuntimeIndexedField("enemies", "__enemies_touch_i", "y"), query.WorldY);
+                Assert.Equal(0, query.WorldYOffset);
+                Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
+                Assert.Equal(8, query.Height);
+            },
+            operation =>
+            {
+                var query = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operation);
+                Assert.Equal(72, query.ScreenX);
+                Assert.Equal(RuntimeIndexedField("enemies", "__enemies_land_i", "y"), query.WorldY);
+                Assert.Equal(-4, query.WorldYOffset);
+                Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
+                Assert.Equal(12, query.Height);
+            });
+    }
+
+    [Fact]
+    public void Collects_actor_draw_with_animation_frame_as_sprite_draw_frame()
+    {
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  sprite.Asset(player_run, "player.sprite.json");
+                                  animation.Clip(walk, 0, 4, 4);
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, sprite: player_run, behavior: Walker, animation: walk);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].animTick = 5;
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
+        var draw = Assert.IsType<Sdk2DOperation.DrawLogicalSprite>(operation);
+
+        Assert.Equal("player_run", draw.SpriteId);
+        Assert.Equal(Local("__enemies_draw_frame_Goomba"), draw.Frame);
+    }
+
+    [Fact]
     public void Collects_sprite_draw_with_runtime_operands()
     {
         const string source = """
@@ -666,6 +733,11 @@ public sealed class GameBoySdkOperationBoundaryTests
     private static SdkByteExpression.Variable Indexed(string baseName, int index)
     {
         return new SdkByteExpression.Variable(new SdkStorageLocation.IndexedElement(baseName, index));
+    }
+
+    private static SdkByteExpression.Variable RuntimeIndexedField(string baseName, string indexName, string fieldName)
+    {
+        return new SdkByteExpression.Variable(new SdkStorageLocation.RuntimeIndexedField(baseName, Local(indexName), fieldName));
     }
 
     private static SdkStorageLocation.Local LocalLocation(string name)

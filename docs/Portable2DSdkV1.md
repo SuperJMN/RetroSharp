@@ -98,6 +98,40 @@ For PNG assets, a generic path can be specialized per target without changing so
 
 The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
+### Actor framework slice
+
+The current actor framework frontend is source sugar over fixed storage. It does
+not add `Sdk2DOperation` cases and does not introduce heap allocation, object
+identity, virtual dispatch, delegates, closures, or function pointers.
+
+| Signature | Semantics |
+| --- | --- |
+| `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and must fit the selected target's actor-pool cap, currently the target hardware sprite count. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
+| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map and emit source-equivalent slot initialization for every spawn in that layer. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; `x` and `y` must fit a byte. |
+| `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, filter spawns whose `x` falls in the literal half-open window `[left, left + width)`, and emit slot initialization for that activation window. |
+| `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
+| `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. |
+| `pool.TouchTiles(screenX, yOffset, flags)` | Loop active slots, branch by kind, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
+| `pool.LandOnTiles(screenX, searchTopOffset, searchHeight, flags)` | Loop active slots, branch by kind, and call `camera.AabbHitTop(...)` with the kind's literal hitbox width. On hit, assign actor `y` to the returned top Y, clear `vy`, and set `state` to `1`. |
+| `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Loop active slots and test each kind's literal hitbox against a literal player AABB. On hit, set actor `state` to `contactDamage` or `1`. |
+
+`actor.Pool(...)` and `enemy.Def(...)` are accepted as statements inside the
+compiled source and disappear before target lowering. The generated actor state
+fields are `kind`, `active`, `x`, `y`, `vx`, `vy`, `state`, `timer`, `facing`,
+`animTick`, and `health`. Game Boy currently supports `pool.Update()` and
+`pool.Draw()` for the basic byte-field behavior set by expanding them to grouped
+loops over active slots, with direct kind checks and `sprite.Draw` calls.
+`Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and a direction-driven
+`Chaser` are implemented without actor-specific SDK operations. NES accepts the
+same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
+that basic behavior set. `pool.Draw()` emits ordinary `sprite.Draw(...)` calls,
+using `animation.Frame(...)` when a definition declares an animation clip, so
+aggregate hardware sprite usage is validated by the same frame-budget pass as
+hand-written sprite draws. `pool.TouchTiles(...)` and `pool.LandOnTiles(...)`
+emit ordinary camera AABB SDK calls; they do not introduce actor-specific target
+intrinsics. Tiled spawn helpers read the same target-neutral map importer as
+`world.Load(...)` and lower to fixed slot stores before target lowering.
+
 ### Optional HUD
 
 | Signature | Semantics |
@@ -112,7 +146,7 @@ The compiler must validate portable SDK calls against `Target2DCapabilities` and
 
 Static enforcement starts with per-operation checks, then applies a frame-budget pass for aggregate SDK budgets. The shared operation list remains flattened across control flow, so aggregate checks must not count that list directly. Instead, `Sdk2DOperationCollector.CollectFrameBudgets(...)` computes possible frame windows around `video.WaitVBlank()` and `input.Poll()`, treats `if`/`else` arms as exclusive alternatives, and validates the result through `Sdk2DOperationValidator.ValidateFrameBudget(...)`. Multiple explicit stream calls that exceed `MaxBackgroundTileWritesPerFrame` in one possible frame fail before target lowering.
 
-For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Draws with runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
+For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Actor pool draws that use `pool[i].y` receive an actor-specific conservative scanline proof: the validator assumes all active slots can overlap the same scanline and rejects that worst case when it exceeds `MaxSpritesPerScanline`. Other runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility outside the actor pool path. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
 
 | SDK area | Required capabilities |
 | --- | --- |
@@ -125,6 +159,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Logical palettes | Palette declarations must provide exactly four colors and the requested background or sprite slot must fit the target descriptor. |
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
+| Actor framework | Pool capacity must be a literal fixed size, pooled fields are byte-sized, and enemy metadata must be literal/identifier data that can lower to constants and inline helper branches. |
 | Collision | `world.Map(...)` or `world.Load(...)` data and matching flag rows must exist before runtime collision reads. |
 | Camera-relative collision | Target must declare `CameraRelativeAabb` or `CameraRelativeAabbHitTop` collision-query support for the requested query, and the screen span must fit the visible target width. |
 | HUD | Requested `HudMode` must be declared by the target, except `none`, which is always accepted as disabled HUD. |
@@ -141,6 +176,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
+| Actor pool/definition slice | `actor.Pool`, `enemy.Def`, and `enemy.*` metadata helpers lower to fixed struct arrays, constants, and inline helper branches. `pool.Update()`/`pool.Draw()` support the basic Game Boy behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | Pool/definition metadata helpers and `pool.Update()`/`pool.Draw()` support the same basic behavior set. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
 | Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors on horizontal maps. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
@@ -163,6 +199,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
 | Game Boy sprite palette overflow | `Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.` |
 | NES sprite palette overflow | `Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.` |
+| Actor pool dynamic capacity | `actor.Pool for 'enemies' requires a literal capacity from 1 to 255.` |
 
 Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
 

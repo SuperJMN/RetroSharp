@@ -1987,6 +1987,45 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_struct_array_initializer_like_explicit_field_assignments()
+    {
+        const string explicitSource = """
+                                      struct Actor {
+                                          u8 x;
+                                          u8 y;
+                                          bool active;
+                                      }
+
+                                      void main() {
+                                          video_init();
+                                          u8 seed = 3;
+                                          Actor actors[3];
+                                          actors[0].x = 1;
+                                          actors[0].active = 1;
+                                          actors[1].y = seed + 1;
+                                          u8 copy = actors[2].active;
+                                      }
+                                      """;
+
+        const string initializerSource = """
+                                         struct Actor {
+                                             u8 x;
+                                             u8 y;
+                                             bool active;
+                                         }
+
+                                         void main() {
+                                             video_init();
+                                             u8 seed = 3;
+                                             Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];
+                                             u8 copy = actors[2].active;
+                                         }
+                                         """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitSource), GameBoyRomCompiler.CompileSource(initializerSource));
+    }
+
+    [Fact]
     public void Compiles_array_initializer_with_inferred_length_like_explicit_length()
     {
         const string explicitLengthSource = """
@@ -2182,6 +2221,648 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0x05, 0xC0, 0xEA, 0x0A, 0xC0]), "constant indexed field reads should use the flattened field address directly.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x01, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should compute HL from the y-field base plus i * sizeof(Actor).");
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xEA, 0x0B, 0xC0]), "runtime indexed field reads should compute HL from the field base plus i * sizeof(Actor).");
+    }
+
+    [Fact]
+    public void Compiles_hand_written_actor_pool_update_loop_as_fixed_storage_and_branches()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u8 y;
+                                  u8 active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  Actor actors[3] = [{ active: 1, x: 4 }, { x: 9 }, { active: 1, x: 12 }];
+                                  for (u8 i = 0; i < countof(actors); i += 1) {
+                                      if (actors[i].active != 0) {
+                                          actors[i].x += 1;
+                                      }
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0xFE, 0x03]), "pool loop should compare the byte index with countof(actors), not use an iterator object.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xFE, 0x00]), "active checks should read actors[i].active through the fixed field base plus i * stride.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
+    }
+
+    [Fact]
+    public void Rejects_struct_array_fields_that_are_not_byte_sized()
+    {
+        const string source = """
+                              struct Actor {
+                                  u16 worldX;
+                                  u8 y;
+                              }
+
+                              void main() {
+                                  Actor actors[2];
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Game Boy target struct array field type 'u16' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.", exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_pool_and_enemy_definition_like_fixed_storage_and_constants()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+                                    const GoombaBehavior = Walker;
+                                    const GoombaSpeed = 1;
+                                    const GoombaHp = 1;
+                                    const GoombaCooldown = 60;
+                                    const GoombaContactDamage = 0;
+                                    const GoombaHitboxWidth = 0;
+                                    const GoombaHitboxHeight = 0;
+
+                                    inline u8 enemy_behavior(u8 kind) => kind == Goomba ? GoombaBehavior : 0;
+                                    inline u8 enemy_speed(u8 kind) => kind == Goomba ? GoombaSpeed : 0;
+                                    inline u8 enemy_hp(u8 kind) => kind == Goomba ? GoombaHp : 0;
+                                    inline u8 enemy_cooldown(u8 kind) => kind == Goomba ? GoombaCooldown : 0;
+
+                                    void main() {
+                                        video_init();
+                                        Actor enemies[2];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].health = enemy_hp(enemies[0].kind);
+                                        enemies[0].vx = (i8)enemy_speed(enemies[0].kind);
+                                        enemies[0].timer = enemy_cooldown(enemies[0].kind);
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       actor.Pool(enemies, 0b10);
+                                       enemy.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].health = enemy.Hp(enemies[0].kind);
+                                       enemies[0].vx = (i8)enemy.Speed(enemies[0].kind);
+                                       enemies[0].timer = enemy.Cooldown(enemies[0].kind);
+                                   }
+                                   """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource));
+    }
+
+    [Fact]
+    public void Rejects_actor_pool_without_literal_capacity()
+    {
+        const string source = """
+                              void main() {
+                                  u8 capacity = 2;
+                                  actor.Pool(enemies, capacity);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("actor.Pool for 'enemies' requires a literal capacity from 1 to 255.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_actor_pool_above_game_boy_sprite_capacity()
+    {
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 41);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Target 'gb' supports actor pools up to 40 slots, but actor.Pool for 'enemies' declares 41.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_unknown_actor_behavior_with_named_diagnostic_on_game_boy()
+    {
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Ghost);
+                                  enemies.Update();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Unknown actor behavior 'Ghost'.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_actor_draw_loop_that_exceeds_game_boy_hardware_sprite_budget()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "wide-goomba.sprite.json",
+            SpriteJson(Rows(16, 16, "1111111111111111")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "wide-goomba.sprite.json");
+                                  actor.Pool(enemies, 21);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'gb' supports 40 hardware sprites per frame, but 42 are required for drawing logical sprites in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_actor_draw_loop_that_can_exceed_game_boy_scanline_budget()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.sprite.json",
+            SpriteJson(Rows(8, 16, "11111111")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  actor.Pool(enemies, 11);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  video.WaitVBlank();
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'gb' supports 10 hardware sprites per scanline, but 11 are required on scanline 0 for drawing logical sprites in one frame.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_update_and_draw_like_grouped_pool_loops()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "goomba.sprite.json",
+            SpriteJson(Rows(8, 16, "11111111")));
+
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+                                    const GoombaSpeed = 1;
+
+                                    void main() {
+                                        video_init();
+                                        sprite.Asset(goomba, "goomba.sprite.json");
+                                        Actor enemies[1];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].y = 48;
+                                        video.WaitVBlank();
+
+                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
+                                            if (enemies[__enemies_update_i].active != 0) {
+                                                if (enemies[__enemies_update_i].kind == Goomba) {
+                                                    enemies[__enemies_update_i].x += GoombaSpeed;
+                                                }
+                                            }
+                                        }
+
+                                        for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
+                                            if (enemies[__enemies_draw_i].active != 0) {
+                                                if (enemies[__enemies_draw_i].kind == Goomba) {
+                                                    sprite.Draw(goomba, enemies[__enemies_draw_i].x, enemies[__enemies_draw_i].y, 0, false, 0);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       sprite.Asset(goomba, "goomba.sprite.json");
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].x = 24;
+                                       enemies[0].y = 48;
+                                       video.WaitVBlank();
+                                       enemies.Update();
+                                       enemies.Draw();
+                                   }
+                                   """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource, baseDirectory), GameBoyRomCompiler.CompileSource(actorSource, baseDirectory));
+    }
+
+    [Fact]
+    public void Compiles_actor_update_animation_tick_like_explicit_field_increment()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+                                    const GoombaSpeed = 1;
+
+                                    void main() {
+                                        video_init();
+                                        Actor enemies[1];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+
+                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
+                                            if (enemies[__enemies_update_i].active != 0) {
+                                                if (enemies[__enemies_update_i].kind == Goomba) {
+                                                    enemies[__enemies_update_i].x += GoombaSpeed;
+                                                    enemies[__enemies_update_i].animTick += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, behavior: Walker, speed: 1, animation: walk);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies.Update();
+                                   }
+                                   """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource));
+    }
+
+    [Fact]
+    public void Compiles_actor_spawn_layer_like_source_authored_pool_slots()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40, "properties": [ { "name": "facing", "type": "int", "value": 1 } ] },
+              { "id": 2, "type": "Bat", "x": 72, "y": 32 }
+            ]
+            """);
+
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Goomba = 1;
+                                    const Bat = 2;
+
+                                    void main() {
+                                        Actor enemies[2];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].y = 40;
+                                        enemies[0].facing = 1;
+                                        enemies[1].active = 1;
+                                        enemies[1].kind = Bat;
+                                        enemies[1].x = 72;
+                                        enemies[1].y = 32;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       actor.Pool(enemies, 2);
+                                       enemy.Def(Goomba, behavior: Walker);
+                                       enemy.Def(Bat, behavior: Flyer);
+                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                   }
+                                   """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource, baseDirectory));
+    }
+
+    [Fact]
+    public void Rejects_actor_spawn_layer_that_exceeds_pool_capacity()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40 },
+              { "id": 2, "type": "Bat", "x": 72, "y": 32 }
+            ]
+            """);
+
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Walker);
+                                  enemy.Def(Bat, behavior: Flyer);
+                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal("actor.SpawnLayer for pool 'enemies' reads 2 spawn(s) from layer 'actors', exceeding the declared capacity 1.", exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_actor_spawn_window_by_filtering_tiled_spawns()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40 },
+              { "id": 2, "type": "Bat", "x": 72, "y": 32 }
+            ]
+            """);
+
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Goomba = 1;
+
+                                    void main() {
+                                        Actor enemies[1];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].y = 40;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, behavior: Walker);
+                                       enemy.Def(Bat, behavior: Flyer);
+                                       actor.SpawnWindow(enemies, "level.tmj", "actors", 0, 48);
+                                   }
+                                   """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource, baseDirectory));
+    }
+
+    [Fact]
+    public void Compiles_actor_touch_player_helper_for_player_contact()
+    {
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Walker, contactDamage: 2, hitboxWidth: 8, hitboxHeight: 8);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].x = 72;
+                                  enemies[0].y = 40;
+                                  enemies.TouchPlayer(72, 40, 16, 16);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void Rejects_actor_spawn_window_that_exceeds_pool_capacity()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40 },
+              { "id": 2, "type": "Bat", "x": 72, "y": 32 }
+            ]
+            """);
+
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Walker);
+                                  enemy.Def(Bat, behavior: Flyer);
+                                  actor.SpawnWindow(enemies, "level.tmj", "actors", 0, 128);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal("actor.SpawnWindow for pool 'enemies' reads 2 spawn(s) from layer 'actors', exceeding the declared capacity 1.", exception.Message);
+    }
+
+    [Fact]
+    public void Compiles_multiple_actor_behaviors_like_direct_kind_branches()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Flyer = 2;
+                                    const Patrol = 3;
+                                    const Shooter = 4;
+                                    const Chaser = 5;
+                                    const Hazard = 6;
+
+                                    const Goomba = 1;
+                                    const GoombaSpeed = 1;
+                                    const Bat = 2;
+                                    const BatSpeed = 2;
+                                    const Koopa = 3;
+                                    const KoopaSpeed = 1;
+                                    const KoopaCooldown = 3;
+                                    const Turret = 4;
+                                    const TurretCooldown = 5;
+                                    const Seeker = 5;
+                                    const SeekerSpeed = 1;
+                                    const Spike = 6;
+                                    const SpikeContactDamage = 2;
+
+                                    void main() {
+                                        video_init();
+                                        Actor enemies[6];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[1].active = 1;
+                                        enemies[1].kind = Bat;
+                                        enemies[2].active = 1;
+                                        enemies[2].kind = Koopa;
+                                        enemies[2].timer = 2;
+                                        enemies[3].active = 1;
+                                        enemies[3].kind = Turret;
+                                        enemies[3].timer = 4;
+                                        enemies[4].active = 1;
+                                        enemies[4].kind = Seeker;
+                                        enemies[4].facing = 1;
+                                        enemies[5].active = 1;
+                                        enemies[5].kind = Spike;
+
+                                        for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
+                                            if (enemies[__enemies_update_i].active != 0) {
+                                                if (enemies[__enemies_update_i].kind == Goomba) {
+                                                    enemies[__enemies_update_i].x += GoombaSpeed;
+                                                } else {
+                                                    if (enemies[__enemies_update_i].kind == Bat) {
+                                                        enemies[__enemies_update_i].y += BatSpeed;
+                                                    } else {
+                                                        if (enemies[__enemies_update_i].kind == Koopa) {
+                                                            if (enemies[__enemies_update_i].facing == 0) {
+                                                                enemies[__enemies_update_i].x += KoopaSpeed;
+                                                            } else {
+                                                                enemies[__enemies_update_i].x -= KoopaSpeed;
+                                                            }
+                                                            enemies[__enemies_update_i].timer += 1;
+                                                            if (enemies[__enemies_update_i].timer == KoopaCooldown) {
+                                                                enemies[__enemies_update_i].timer = 0;
+                                                                enemies[__enemies_update_i].facing ^= 1;
+                                                            }
+                                                        } else {
+                                                            if (enemies[__enemies_update_i].kind == Turret) {
+                                                                enemies[__enemies_update_i].timer += 1;
+                                                                if (enemies[__enemies_update_i].timer == TurretCooldown) {
+                                                                    enemies[__enemies_update_i].timer = 0;
+                                                                    enemies[__enemies_update_i].state = 1;
+                                                                } else {
+                                                                    enemies[__enemies_update_i].state = 0;
+                                                                }
+                                                            } else {
+                                                                if (enemies[__enemies_update_i].kind == Seeker) {
+                                                                    if (enemies[__enemies_update_i].facing == 0) {
+                                                                        enemies[__enemies_update_i].x += SeekerSpeed;
+                                                                    } else {
+                                                                        enemies[__enemies_update_i].x -= SeekerSpeed;
+                                                                    }
+                                                                } else {
+                                                                    if (enemies[__enemies_update_i].kind == Spike) {
+                                                                        enemies[__enemies_update_i].state = SpikeContactDamage;
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       video_init();
+                                       actor.Pool(enemies, 6);
+                                       enemy.Def(Goomba, behavior: Walker, speed: 1);
+                                       enemy.Def(Bat, behavior: Flyer, speed: 2);
+                                       enemy.Def(Koopa, behavior: Patrol, speed: 1, cooldown: 3);
+                                       enemy.Def(Turret, behavior: Shooter, cooldown: 5);
+                                       enemy.Def(Seeker, behavior: Chaser, speed: 1);
+                                       enemy.Def(Spike, behavior: Hazard, contactDamage: 2);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[1].active = 1;
+                                       enemies[1].kind = Bat;
+                                       enemies[2].active = 1;
+                                       enemies[2].kind = Koopa;
+                                       enemies[2].timer = 2;
+                                       enemies[3].active = 1;
+                                       enemies[3].kind = Turret;
+                                       enemies[3].timer = 4;
+                                       enemies[4].active = 1;
+                                       enemies[4].kind = Seeker;
+                                       enemies[4].facing = 1;
+                                       enemies[5].active = 1;
+                                       enemies[5].kind = Spike;
+                                       enemies.Update();
+                                   }
+                                   """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource));
     }
 
     [Fact]
@@ -4525,6 +5206,33 @@ public class GameBoyRomCompilerTests
         var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, fileName), json);
+        return directory;
+    }
+
+    private static string WriteActorSpawnMap(string objectsJson)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tmj"),
+            $$"""
+              {
+                "type": "map",
+                "orientation": "orthogonal",
+                "infinite": false,
+                "width": 1,
+                "height": 1,
+                "tilewidth": 8,
+                "tileheight": 8,
+                "properties": [
+                  { "name": "retrosharpStreamY", "type": "int", "value": 0 }
+                ],
+                "layers": [
+                  { "type": "tilelayer", "name": "world", "width": 1, "height": 1, "data": [0] },
+                  { "type": "objectgroup", "name": "actors", "objects": {{objectsJson}} }
+                ]
+              }
+              """);
         return directory;
     }
 

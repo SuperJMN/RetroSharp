@@ -25,7 +25,7 @@ variableDeclaration: variableDeclarator ';';
 variableDeclarator: type IDENTIFIER arraySize? ('=' variableInitializer)?;
 arraySize: '[' expression? ']';
 variableInitializer: arrayInitializer | structInitializer | expression;
-arrayInitializer: '[' (expression (',' expression)* ','?)? ']';
+arrayInitializer: '[' (variableInitializer (',' variableInitializer)* ','?)? ']';
 structInitializer: '{' (fieldInitializer (',' fieldInitializer)* ','?)? '}';
 fieldInitializer: IDENTIFIER (':' expression)?;
 

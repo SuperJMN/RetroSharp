@@ -18,8 +18,9 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         ValidateSdkOperations(videoProgram);
         return NesRomBuilder.Build(videoProgram);
     }
@@ -32,8 +33,9 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
     }
 
@@ -45,8 +47,9 @@ public static class NesRomCompiler
             throw new InvalidOperationException(parse.Error);
         }
 
-        ValidateFunctionContracts(parse.Value);
-        var videoProgram = NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        ValidateFunctionContracts(loweredProgram);
+        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
     }
 
@@ -98,13 +101,19 @@ public static class NesRomCompiler
         int spriteHeight,
         int screenHeight)
     {
+        var offsets = pieceOffsets.ToList();
+        if (y is SdkByteExpression.Variable { Location: SdkStorageLocation.RuntimeIndexedField })
+        {
+            return WorstCaseDynamicScanlineCounts(offsets);
+        }
+
         if (y is not SdkByteExpression.Constant constant)
         {
             return new Dictionary<int, int>();
         }
 
         var result = new Dictionary<int, int>();
-        foreach (var offset in pieceOffsets)
+        foreach (var offset in offsets)
         {
             var top = constant.Value + offset;
             var bottom = top + spriteHeight;
@@ -112,6 +121,17 @@ public static class NesRomCompiler
             {
                 result[scanline] = result.GetValueOrDefault(scanline) + 1;
             }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyDictionary<int, int> WorstCaseDynamicScanlineCounts(IEnumerable<int> pieceOffsets)
+    {
+        var result = new Dictionary<int, int>();
+        foreach (var offset in pieceOffsets)
+        {
+            result[offset] = result.GetValueOrDefault(offset) + 1;
         }
 
         return result;

@@ -1197,6 +1197,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
 
+        var fieldNames = structSyntax.Fields.Select(field => field.Name).ToList();
         for (var index = 0; index < length; index++)
         {
             foreach (var field in structSyntax.Fields)
@@ -1209,7 +1210,58 @@ internal sealed class GameBoyRuntimeCompiler
 
         if (declaration.Initialization.HasValue)
         {
-            throw new InvalidOperationException($"Game Boy target does not support initializers for struct array '{declaration.Name}' yet.");
+            EmitStructArrayInitializer(declaration, declaration.Initialization.Value, length, fieldNames);
+        }
+    }
+
+    private void EmitStructArrayInitializer(
+        DeclarationSyntax declaration,
+        ExpressionSyntax initialization,
+        int length,
+        IReadOnlyList<string> fieldNames)
+    {
+        if (initialization is not ArrayInitializerSyntax arrayInitializer)
+        {
+            throw new InvalidOperationException($"Game Boy target requires an array initializer for local struct array '{declaration.Name}'.");
+        }
+
+        if (arrayInitializer.Elements.Count > length)
+        {
+            throw new InvalidOperationException($"Game Boy target struct array initializer for '{declaration.Name}' has {arrayInitializer.Elements.Count} element(s), but the array length is {length}.");
+        }
+
+        var knownFields = fieldNames.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < arrayInitializer.Elements.Count; index++)
+        {
+            if (arrayInitializer.Elements[index] is not StructInitializerSyntax structInitializer)
+            {
+                throw new InvalidOperationException($"Game Boy target requires struct initializers for elements of struct array '{declaration.Name}'.");
+            }
+
+            var initializedFields = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+            foreach (var field in structInitializer.Fields)
+            {
+                if (!initializedFields.TryAdd(field.Name, field.Expression))
+                {
+                    throw new InvalidOperationException($"Game Boy target struct array initializer for '{declaration.Name}' element {index} supplies field '{field.Name}' more than once.");
+                }
+
+                if (!knownFields.Contains(field.Name))
+                {
+                    throw new InvalidOperationException($"Game Boy target struct array initializer for '{declaration.Name}' has no field named '{field.Name}'.");
+                }
+            }
+
+            foreach (var fieldName in fieldNames)
+            {
+                if (!initializedFields.TryGetValue(fieldName, out var expression))
+                {
+                    continue;
+                }
+
+                EmitExpressionToA(expression);
+                builder.StoreA(VariableAddress(IndexedMemberName(declaration.Name, index, fieldName)));
+            }
         }
     }
 
@@ -2919,10 +2971,24 @@ internal sealed class GameBoyRuntimeCompiler
                 builder.LoadAImmediate(constant.Value);
                 break;
             case SdkByteExpression.Variable variable:
-                builder.LoadA(VariableAddress(StorageKey(variable.Location)));
+                EmitSdkStorageLocationToA(variable.Location);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkStorageLocationToA(SdkStorageLocation location)
+    {
+        switch (location)
+        {
+            case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
+                EmitRuntimeIndexedMemberAddressToHl(runtimeIndexed.BaseName, runtimeIndexed.Index, runtimeIndexed.FieldName);
+                builder.LoadAFromHl();
+                break;
+            default:
+                builder.LoadA(VariableAddress(StorageKey(location)));
+                break;
         }
     }
 
@@ -4866,6 +4932,19 @@ internal sealed class GameBoyRuntimeCompiler
         builder.AddHlDe();
     }
 
+    private void EmitRuntimeIndexedMemberAddressToHl(string baseIdentifier, SdkByteExpression index, string fieldName)
+    {
+        var layout = StructArrayLayoutFor(baseIdentifier);
+        _ = layout.FieldOffsets[fieldName];
+        var baseAddress = VariableAddress(IndexedMemberName(baseIdentifier, 0, fieldName));
+        EmitSdkByteExpressionToA(index);
+        EmitMultiplyA(layout.Stride);
+        builder.LoadHl(baseAddress);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+    }
+
     private void EmitMultiplyA(int multiplier)
     {
         if (multiplier <= 1)
@@ -4963,9 +5042,9 @@ internal sealed class GameBoyRuntimeCompiler
         var offset = 0;
         foreach (var field in structSyntax.Fields)
         {
-            if (!IsByteBackedLocalType(field.Type))
+            if (!IsByteSizedStructArrayFieldType(field.Type))
             {
-                throw new InvalidOperationException($"{targetName} target does not support struct array field type '{field.Type}' yet.");
+                throw new InvalidOperationException($"{targetName} target struct array field type '{field.Type}' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.");
             }
 
             offsets.Add(field.Name, offset);
@@ -4975,6 +5054,11 @@ internal sealed class GameBoyRuntimeCompiler
         return offsets;
     }
 
+    private bool IsByteSizedStructArrayFieldType(string type)
+    {
+        return type is "i8" or "u8" or "bool" || program.Enums.ContainsKey(type);
+    }
+
     private static string StorageKey(SdkStorageLocation location)
     {
         return location switch
@@ -4982,6 +5066,7 @@ internal sealed class GameBoyRuntimeCompiler
             SdkStorageLocation.Local local => local.Name,
             SdkStorageLocation.Field field => $"{StorageKey(field.Target)}.{field.FieldName}",
             SdkStorageLocation.IndexedElement indexed => IndexedElementName(indexed.BaseName, indexed.Index),
+            SdkStorageLocation.RuntimeIndexedField => throw new InvalidOperationException("Runtime indexed SDK fields must be emitted directly."),
             _ => throw new InvalidOperationException($"Unsupported SDK storage location '{location.GetType().Name}'."),
         };
     }

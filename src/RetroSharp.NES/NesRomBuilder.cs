@@ -506,6 +506,7 @@ internal sealed class NesRuntimeCompiler
 
         structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
 
+        var fieldNames = structSyntax.Fields.Select(field => field.Name).ToList();
         for (var index = 0; index < length; index++)
         {
             foreach (var field in structSyntax.Fields)
@@ -518,7 +519,58 @@ internal sealed class NesRuntimeCompiler
 
         if (declaration.Initialization.HasValue)
         {
-            throw new InvalidOperationException($"NES target does not support initializers for struct array '{declaration.Name}' yet.");
+            EmitStructArrayInitializer(declaration, declaration.Initialization.Value, length, fieldNames);
+        }
+    }
+
+    private void EmitStructArrayInitializer(
+        DeclarationSyntax declaration,
+        ExpressionSyntax initialization,
+        int length,
+        IReadOnlyList<string> fieldNames)
+    {
+        if (initialization is not ArrayInitializerSyntax arrayInitializer)
+        {
+            throw new InvalidOperationException($"NES target requires an array initializer for local struct array '{declaration.Name}'.");
+        }
+
+        if (arrayInitializer.Elements.Count > length)
+        {
+            throw new InvalidOperationException($"NES target struct array initializer for '{declaration.Name}' has {arrayInitializer.Elements.Count} element(s), but the array length is {length}.");
+        }
+
+        var knownFields = fieldNames.ToHashSet(StringComparer.Ordinal);
+        for (var index = 0; index < arrayInitializer.Elements.Count; index++)
+        {
+            if (arrayInitializer.Elements[index] is not StructInitializerSyntax structInitializer)
+            {
+                throw new InvalidOperationException($"NES target requires struct initializers for elements of struct array '{declaration.Name}'.");
+            }
+
+            var initializedFields = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+            foreach (var field in structInitializer.Fields)
+            {
+                if (!initializedFields.TryAdd(field.Name, field.Expression))
+                {
+                    throw new InvalidOperationException($"NES target struct array initializer for '{declaration.Name}' element {index} supplies field '{field.Name}' more than once.");
+                }
+
+                if (!knownFields.Contains(field.Name))
+                {
+                    throw new InvalidOperationException($"NES target struct array initializer for '{declaration.Name}' has no field named '{field.Name}'.");
+                }
+            }
+
+            foreach (var fieldName in fieldNames)
+            {
+                if (!initializedFields.TryGetValue(fieldName, out var expression))
+                {
+                    continue;
+                }
+
+                EmitExpressionToA(expression);
+                builder.StoreAZeroPage(VariableAddress(IndexedMemberName(declaration.Name, index, fieldName)));
+            }
         }
     }
 
@@ -1158,7 +1210,7 @@ internal sealed class NesRuntimeCompiler
         builder.Label(loopLabel);
         if (forSyntax.Condition.HasValue)
         {
-            EmitConditionFalseJump(forSyntax.Condition.Value, endLabel);
+            EmitConditionFalseJumpToFarLabel(forSyntax.Condition.Value, endLabel, "for_condition_false");
         }
 
         loopTargets.Push(new LoopTarget(endLabel, continueLabel));
@@ -1184,6 +1236,17 @@ internal sealed class NesRuntimeCompiler
 
         builder.JumpAbsolute(loopLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitConditionFalseJumpToFarLabel(ExpressionSyntax condition, string targetLabel, string prefix)
+    {
+        var trampolineLabel = builder.CreateLabel(prefix);
+        var continueLabel = builder.CreateLabel($"{prefix}_continue");
+        EmitConditionFalseJump(condition, trampolineLabel);
+        builder.JumpAbsolute(continueLabel);
+        builder.Label(trampolineLabel);
+        builder.JumpAbsolute(targetLabel);
+        builder.Label(continueLabel);
     }
 
     private bool EmitIf(IfElseSyntax ifElseSyntax)
@@ -1618,10 +1681,24 @@ internal sealed class NesRuntimeCompiler
                 builder.LoadAImmediate(constant.Value);
                 break;
             case SdkByteExpression.Variable variable:
-                builder.LoadAZeroPage(VariableAddress(StorageKey(variable.Location)));
+                EmitSdkStorageLocationToA(variable.Location);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkStorageLocationToA(SdkStorageLocation location)
+    {
+        switch (location)
+        {
+            case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
+                EmitRuntimeMemberIndexToX(runtimeIndexed.BaseName, runtimeIndexed.Index);
+                builder.LoadAZeroPageX(RuntimeIndexedMemberBaseAddress(runtimeIndexed.BaseName, runtimeIndexed.FieldName));
+                break;
+            default:
+                builder.LoadAZeroPage(VariableAddress(StorageKey(location)));
+                break;
         }
     }
 
@@ -2637,6 +2714,14 @@ internal sealed class NesRuntimeCompiler
         builder.TransferAToX();
     }
 
+    private void EmitRuntimeMemberIndexToX(string baseIdentifier, SdkByteExpression index)
+    {
+        var layout = StructArrayLayoutFor(baseIdentifier);
+        EmitSdkByteExpressionToA(index);
+        EmitMultiplyA(layout.Stride);
+        builder.TransferAToX();
+    }
+
     private void EmitMultiplyA(int multiplier)
     {
         if (multiplier <= 1)
@@ -2661,6 +2746,12 @@ internal sealed class NesRuntimeCompiler
     {
         _ = StructArrayLayoutFor(indexExpression.BaseIdentifier).FieldOffsets[fieldName];
         return VariableAddress(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+    }
+
+    private byte RuntimeIndexedMemberBaseAddress(string baseIdentifier, string fieldName)
+    {
+        _ = StructArrayLayoutFor(baseIdentifier).FieldOffsets[fieldName];
+        return VariableAddress(IndexedMemberName(baseIdentifier, 0, fieldName));
     }
 
     private bool TryRuntimeIndexedMemberAccess(MemberAccessSyntax memberAccess, out IndexExpressionSyntax indexExpression, out string fieldName)
@@ -2888,9 +2979,9 @@ internal sealed class NesRuntimeCompiler
         var offset = 0;
         foreach (var field in structSyntax.Fields)
         {
-            if (!IsByteBackedLocalType(field.Type))
+            if (!IsByteSizedStructArrayFieldType(field.Type))
             {
-                throw new InvalidOperationException($"{targetName} target does not support struct array field type '{field.Type}' yet.");
+                throw new InvalidOperationException($"{targetName} target struct array field type '{field.Type}' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.");
             }
 
             offsets.Add(field.Name, offset);
@@ -2900,6 +2991,11 @@ internal sealed class NesRuntimeCompiler
         return offsets;
     }
 
+    private bool IsByteSizedStructArrayFieldType(string type)
+    {
+        return type is "i8" or "u8" or "bool" || program.Enums.ContainsKey(type);
+    }
+
     private static string StorageKey(SdkStorageLocation location)
     {
         return location switch
@@ -2907,6 +3003,7 @@ internal sealed class NesRuntimeCompiler
             SdkStorageLocation.Local local => local.Name,
             SdkStorageLocation.Field field => $"{StorageKey(field.Target)}.{field.FieldName}",
             SdkStorageLocation.IndexedElement indexed => IndexedElementName(indexed.BaseName, indexed.Index),
+            SdkStorageLocation.RuntimeIndexedField => throw new InvalidOperationException("Runtime indexed SDK fields must be emitted directly."),
             _ => throw new InvalidOperationException($"Unsupported SDK storage location '{location.GetType().Name}'."),
         };
     }
