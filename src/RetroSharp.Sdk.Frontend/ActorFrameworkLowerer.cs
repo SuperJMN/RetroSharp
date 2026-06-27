@@ -35,6 +35,18 @@ public static class ActorFrameworkLowerer
         ["HitboxHeight"] = "enemy_hitbox_height",
     };
 
+    private static readonly IReadOnlyList<string> SpawnInitialFieldNames =
+    [
+        "active",
+        "vx",
+        "vy",
+        "state",
+        "timer",
+        "facing",
+        "animTick",
+        "health",
+    ];
+
     public static ProgramSyntax Lower(ProgramSyntax program, Target2DCapabilities capabilities, bool supportsUpdate, bool supportsDraw, string? baseDirectory = null)
     {
         var state = new ActorFrameworkState(capabilities, supportsUpdate, supportsDraw, baseDirectory);
@@ -73,6 +85,7 @@ public static class ActorFrameworkLowerer
                 function.IsExtern,
                 function.Attributes))
             .Concat(GeneratedLookupFunctions(state.EnemyDefs))
+            .Concat(GeneratedSpawnLookupFunctions(state.SpawnLayers))
             .ToList();
 
         return new ProgramSyntax(
@@ -181,12 +194,9 @@ public static class ActorFrameworkLowerer
         {
             windowLeft = RequiredLiteralByte(parameters[3], "actor.SpawnWindow argument 4");
             windowWidth = RequiredLiteralByte(parameters[4], "actor.SpawnWindow argument 5");
-            spawns = spawns
-                .Where(spawn => spawn.X >= windowLeft.Value && spawn.X < windowLeft.Value + windowWidth.Value)
-                .ToList();
         }
 
-        return new ActorSpawnLayer(call.Method, poolName.Identifier, mapPath, layerName, windowLeft, windowWidth, spawns);
+        return new ActorSpawnLayer(call.Method, poolName.Identifier, mapPath, layerName, windowLeft, windowWidth, spawns, RuntimeName: string.Empty);
     }
 
     private static EnemyDef ReadEnemyDef(SdkDotCallSyntax call)
@@ -343,7 +353,13 @@ public static class ActorFrameworkLowerer
     {
         if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "SpawnLayer" or "SpawnWindow" } spawnCall })
         {
-            return SpawnAssignments(state.SpawnLayer(spawnCall));
+            var spawnLayer = state.SpawnLayer(spawnCall);
+            return RuntimeSpawnActivationStatements(spawnLayer, state.NextActivationPrefix(spawnLayer), state.ScreenWidth);
+        }
+
+        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } poolCall })
+        {
+            return PoolDeclarations(state.Pool(poolCall), state);
         }
 
         var rewritten = RewriteStatement(statement, state);
@@ -354,8 +370,7 @@ public static class ActorFrameworkLowerer
     {
         return statement switch
         {
-            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } poolCall } =>
-                PoolDeclaration(state.Pool(poolCall)),
+            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } } => null,
             ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "enemy", Method: "Def" } } => null,
             ExpressionStatementSyntax { Expression: SdkDotCallSyntax poolCall } when state.TryPool(poolCall.Module, out var pool) && poolCall.Method == "Update" =>
                 PoolUpdateLoop(pool, poolCall, state),
@@ -405,6 +420,21 @@ public static class ActorFrameworkLowerer
             ReturnSyntax returnSyntax => new ReturnSyntax(MapMaybe(returnSyntax.Expression, expression => RewriteExpression(expression, state))),
             _ => statement,
         };
+    }
+
+    private static IReadOnlyList<StatementSyntax> PoolDeclarations(ActorPool pool, ActorFrameworkState state)
+    {
+        var declarations = new List<StatementSyntax> { PoolDeclaration(pool) };
+        foreach (var spawnLayer in state.SpawnLayersFor(pool.Name).Where(layer => layer.Spawns.Count != 0))
+        {
+            declarations.Add(new DeclarationSyntax(
+                "u8",
+                $"{spawnLayer.RuntimeName}_used",
+                Maybe.From<ExpressionSyntax>(new ConstantSyntax(spawnLayer.Spawns.Count.ToString(CultureInfo.InvariantCulture))),
+                Maybe<ExpressionSyntax>.None));
+        }
+
+        return declarations;
     }
 
     private static DeclarationSyntax PoolDeclaration(ActorPool pool)
@@ -826,6 +856,236 @@ public static class ActorFrameworkLowerer
         return new ActorScreenProjection(declarations, screenXIdentifier, visible);
     }
 
+    private static IReadOnlyList<StatementSyntax> RuntimeSpawnActivationStatements(ActorSpawnLayer layer, string prefix, int screenWidth)
+    {
+        var windowLeft = layer.WindowLeft ?? 0;
+        var windowWidth = layer.WindowWidth ?? screenWidth;
+        var statements = new List<StatementSyntax>
+        {
+            SpawnRecycleLoop(layer, prefix, windowLeft, windowWidth),
+        };
+
+        if (layer.Spawns.Count != 0)
+        {
+            statements.Add(SpawnActivationLoop(layer, prefix, windowLeft, windowWidth));
+        }
+
+        return statements;
+    }
+
+    private static ForSyntax SpawnRecycleLoop(ActorSpawnLayer layer, string prefix, int windowLeft, int windowWidth)
+    {
+        var indexName = $"{prefix}_recycle_i";
+        var projection = BuildSpawnScreenProjection(
+            PoolField(layer.PoolName, indexName, "x"),
+            PoolField(layer.PoolName, indexName, "xHi"),
+            $"{prefix}_recycle",
+            windowLeft,
+            windowWidth);
+
+        return PoolLoop(
+            new ActorPool(layer.PoolName, 0),
+            indexName,
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(layer.PoolName, indexName, "active"), new ConstantSyntax("0"), Operator.NotEqual),
+                new BlockSyntax(projection.Declarations.Concat([
+                    new IfElseSyntax(
+                        new UnaryExpressionSyntax("!", projection.Visible),
+                        new BlockSyntax([FieldAssignment(layer.PoolName, indexName, "active", "=", new ConstantSyntax("0"))]),
+                        Maybe<BlockSyntax>.None),
+                ]).ToList()),
+                Maybe<BlockSyntax>.None));
+    }
+
+    private static ForSyntax SpawnActivationLoop(ActorSpawnLayer layer, string prefix, int windowLeft, int windowWidth)
+    {
+        var indexName = $"{prefix}_i";
+        var used = new IndexExpressionSyntax($"{layer.RuntimeName}_used", new IdentifierSyntax(indexName));
+        var declarations = SpawnValueDeclarations(layer, prefix, indexName).ToList();
+        var projection = BuildSpawnScreenProjection(
+            new IdentifierSyntax($"{prefix}_x_value"),
+            new IdentifierSyntax($"{prefix}_xHi_value"),
+            prefix,
+            windowLeft,
+            windowWidth);
+        declarations.AddRange(projection.Declarations);
+
+        var assignedName = $"{prefix}_assigned";
+        var slotName = $"{prefix}_slot";
+        var assignSlot = new IfElseSyntax(
+            new BinaryExpressionSyntax(new IdentifierSyntax(assignedName), new ConstantSyntax("0"), Operator.Equal),
+            new BlockSyntax([
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(layer.PoolName, slotName, "active"), new ConstantSyntax("0"), Operator.Equal),
+                    new BlockSyntax(SpawnSlotAssignments(layer, prefix, indexName, slotName, assignedName).ToList()),
+                    Maybe<BlockSyntax>.None),
+            ]),
+            Maybe<BlockSyntax>.None);
+
+        declarations.Add(new IfElseSyntax(
+            projection.Visible,
+            new BlockSyntax([
+                new DeclarationSyntax("u8", assignedName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new ConstantSyntax("0"))),
+                PoolLoop(new ActorPool(layer.PoolName, 0), slotName, assignSlot),
+            ]),
+            Maybe<BlockSyntax>.None));
+
+        return new ForSyntax(
+            Maybe.From<StatementSyntax>(new DeclarationSyntax("u8", indexName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new ConstantSyntax("0")))),
+            Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                new IdentifierSyntax(indexName),
+                new ConstantSyntax(layer.Spawns.Count.ToString(CultureInfo.InvariantCulture)),
+                Operator.LessThan)),
+            Maybe.From<ExpressionSyntax>(new AssignmentSyntax(new IdentifierLValue(indexName), "+=", new ConstantSyntax("1"))),
+            new BlockSyntax([
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(used, new ConstantSyntax("0"), Operator.Equal),
+                    new BlockSyntax(declarations),
+                    Maybe<BlockSyntax>.None),
+            ]));
+    }
+
+    private static IEnumerable<StatementSyntax> SpawnValueDeclarations(ActorSpawnLayer layer, string prefix, string indexName)
+    {
+        yield return SpawnValueDeclaration(layer, prefix, indexName, "kind");
+        yield return SpawnValueDeclaration(layer, prefix, indexName, "x");
+        yield return SpawnValueDeclaration(layer, prefix, indexName, "xHi");
+        yield return SpawnValueDeclaration(layer, prefix, indexName, "y");
+        foreach (var fieldName in SpawnInitialFieldNames)
+        {
+            yield return SpawnValueDeclaration(layer, prefix, indexName, fieldName);
+        }
+    }
+
+    private static DeclarationSyntax SpawnValueDeclaration(ActorSpawnLayer layer, string prefix, string indexName, string fieldName)
+    {
+        return new DeclarationSyntax(
+            "u8",
+            $"{prefix}_{fieldName}_value",
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new FunctionCall($"{layer.RuntimeName}_{fieldName}", [new IdentifierSyntax(indexName)])));
+    }
+
+    private static IEnumerable<StatementSyntax> SpawnSlotAssignments(
+        ActorSpawnLayer layer,
+        string prefix,
+        string indexName,
+        string slotName,
+        string assignedName)
+    {
+        yield return FieldAssignment(layer.PoolName, slotName, "kind", "=", new IdentifierSyntax($"{prefix}_kind_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "x", "=", new IdentifierSyntax($"{prefix}_x_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "xHi", "=", new IdentifierSyntax($"{prefix}_xHi_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "y", "=", new IdentifierSyntax($"{prefix}_y_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "vx", "=", new IdentifierSyntax($"{prefix}_vx_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "vy", "=", new IdentifierSyntax($"{prefix}_vy_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "state", "=", new IdentifierSyntax($"{prefix}_state_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "timer", "=", new IdentifierSyntax($"{prefix}_timer_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "facing", "=", new IdentifierSyntax($"{prefix}_facing_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "animTick", "=", new IdentifierSyntax($"{prefix}_animTick_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "health", "=", new IdentifierSyntax($"{prefix}_health_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "active", "=", new IdentifierSyntax($"{prefix}_active_value"));
+        yield return new ExpressionStatementSyntax(new AssignmentSyntax(
+            new IndexLValue($"{layer.RuntimeName}_used", new IdentifierSyntax(indexName)),
+            "=",
+            new ConstantSyntax("1")));
+        yield return new ExpressionStatementSyntax(new AssignmentSyntax(
+            new IdentifierLValue(assignedName),
+            "=",
+            new ConstantSyntax("1")));
+    }
+
+    private static ActorScreenProjection BuildSpawnScreenProjection(
+        ExpressionSyntax worldXLow,
+        ExpressionSyntax worldXHigh,
+        string prefix,
+        int windowLeft,
+        int windowWidth)
+    {
+        var cameraXLow = $"{prefix}_camera_x_lo";
+        var cameraXHigh = $"{prefix}_camera_x_hi";
+        var declarations = new List<StatementSyntax>
+        {
+            new DeclarationSyntax(
+                "u8",
+                cameraXLow,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXLowFunction, []))),
+            new DeclarationSyntax(
+                "u8",
+                cameraXHigh,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXHighFunction, []))),
+        };
+
+        if (windowLeft != 0)
+        {
+            var baseCameraXLow = $"{prefix}_camera_base_x_lo";
+            var baseCameraXHigh = $"{prefix}_camera_base_x_hi";
+            declarations =
+            [
+                new DeclarationSyntax(
+                    "u8",
+                    baseCameraXLow,
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXLowFunction, []))),
+                new DeclarationSyntax(
+                    "u8",
+                    baseCameraXHigh,
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXHighFunction, []))),
+                new DeclarationSyntax(
+                    "u8",
+                    cameraXLow,
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                        new IdentifierSyntax(baseCameraXLow),
+                        new ConstantSyntax(windowLeft.ToString(CultureInfo.InvariantCulture)),
+                        Operator.Get("+")))),
+                new DeclarationSyntax(
+                    "u8",
+                    cameraXHigh,
+                    Maybe<ExpressionSyntax>.None,
+                    Maybe.From<ExpressionSyntax>(new IdentifierSyntax(baseCameraXHigh))),
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(new IdentifierSyntax(cameraXLow), new IdentifierSyntax(baseCameraXLow), Operator.LessThan),
+                    new BlockSyntax([
+                        new ExpressionStatementSyntax(new AssignmentSyntax(new IdentifierLValue(cameraXHigh), "+=", new ConstantSyntax("1"))),
+                    ]),
+                    Maybe<BlockSyntax>.None),
+            ];
+        }
+
+        var screenX = $"{prefix}_screen_x";
+        declarations.Add(new DeclarationSyntax(
+            "u8",
+            screenX,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                worldXLow,
+                new IdentifierSyntax(cameraXLow),
+                Operator.Get("-")))));
+
+        var sameCameraPage = And(
+            new BinaryExpressionSyntax(worldXHigh, new IdentifierSyntax(cameraXHigh), Operator.Equal),
+            new BinaryExpressionSyntax(worldXLow, new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
+        var nextCameraPage = And(
+            new BinaryExpressionSyntax(
+                worldXHigh,
+                new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), new ConstantSyntax("1"), Operator.Get("+")),
+                Operator.Equal),
+            new BinaryExpressionSyntax(worldXLow, new IdentifierSyntax(cameraXLow), Operator.LessThan));
+        ExpressionSyntax visible = Or(sameCameraPage, nextCameraPage);
+        if (windowWidth < 256)
+        {
+            visible = And(
+                visible,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenX), new ConstantSyntax(windowWidth.ToString(CultureInfo.InvariantCulture)), Operator.LessThan));
+        }
+
+        return new ActorScreenProjection(declarations, new IdentifierSyntax(screenX), visible);
+    }
+
     private static IReadOnlyList<ExpressionSyntax> RequireArguments(SdkDotCallSyntax call, int count)
     {
         var parameters = call.Parameters.ToList();
@@ -944,32 +1204,6 @@ public static class ActorFrameworkLowerer
     private static MemberAccessSyntax PoolField(string poolName, int index, string fieldName)
     {
         return new MemberAccessSyntax(new IndexExpressionSyntax(poolName, new ConstantSyntax(index.ToString(CultureInfo.InvariantCulture))), fieldName);
-    }
-
-    private static IReadOnlyList<StatementSyntax> SpawnAssignments(ActorSpawnLayer layer)
-    {
-        var statements = new List<StatementSyntax>();
-        for (var index = 0; index < layer.Spawns.Count; index++)
-        {
-            var spawn = layer.Spawns[index];
-            var (xLow, xHigh) = SplitWorldX(spawn.X, $"actor.{layer.MethodName} spawn {index} X");
-            if (!spawn.Fields.ContainsKey("active"))
-            {
-                statements.Add(FieldAssignment(layer.PoolName, index, "active", "=", new ConstantSyntax("1")));
-            }
-
-            statements.Add(FieldAssignment(layer.PoolName, index, "kind", "=", new IdentifierSyntax(spawn.Kind)));
-            statements.Add(FieldAssignment(layer.PoolName, index, "x", "=", new ConstantSyntax(xLow.ToString(CultureInfo.InvariantCulture))));
-            statements.Add(FieldAssignment(layer.PoolName, index, "xHi", "=", new ConstantSyntax(xHigh.ToString(CultureInfo.InvariantCulture))));
-            statements.Add(FieldAssignment(layer.PoolName, index, "y", "=", new ConstantSyntax(CheckedByte(spawn.Y, $"actor.{layer.MethodName} spawn {index} Y").ToString(CultureInfo.InvariantCulture))));
-
-            foreach (var field in spawn.Fields)
-            {
-                statements.Add(FieldAssignment(layer.PoolName, index, field.Key, "=", new ConstantSyntax(field.Value.ToString(CultureInfo.InvariantCulture))));
-            }
-        }
-
-        return statements;
     }
 
     private static (int Low, int High) SplitWorldX(int value, string context)
@@ -1111,6 +1345,66 @@ public static class ActorFrameworkLowerer
         yield return LookupFunction("enemy_hitbox_height", enemyDefs, "HitboxHeight");
     }
 
+    private static IEnumerable<FunctionSyntax> GeneratedSpawnLookupFunctions(IReadOnlyList<ActorSpawnLayer> spawnLayers)
+    {
+        foreach (var layer in spawnLayers.Where(layer => layer.Spawns.Count != 0))
+        {
+            yield return SpawnLookupFunction(layer, "kind", spawn => new IdentifierSyntax(spawn.Kind));
+            yield return SpawnLookupFunction(layer, "x", spawn => new ConstantSyntax(SplitWorldX(spawn.X, "actor spawn X").Low.ToString(CultureInfo.InvariantCulture)));
+            yield return SpawnLookupFunction(layer, "xHi", spawn => new ConstantSyntax(SplitWorldX(spawn.X, "actor spawn X").High.ToString(CultureInfo.InvariantCulture)));
+            yield return SpawnLookupFunction(layer, "y", spawn => new ConstantSyntax(CheckedByte(spawn.Y, "actor spawn Y").ToString(CultureInfo.InvariantCulture)));
+            foreach (var fieldName in SpawnInitialFieldNames)
+            {
+                yield return SpawnLookupFunction(layer, fieldName, spawn => new ConstantSyntax(SpawnInitialFieldValue(spawn, fieldName).ToString(CultureInfo.InvariantCulture)));
+            }
+        }
+    }
+
+    private static FunctionSyntax SpawnLookupFunction(ActorSpawnLayer layer, string fieldName, Func<LogicalActorSpawn, ExpressionSyntax> selector)
+    {
+        var values = layer.Spawns.Select(selector).ToList();
+        ExpressionSyntax value = values[^1];
+        var firstKey = ExpressionKey(values[0]);
+        if (firstKey is null || values.Any(expression => ExpressionKey(expression) != firstKey))
+        {
+            for (var index = values.Count - 2; index >= 0; index--)
+            {
+                value = new ConditionalExpressionSyntax(
+                    new BinaryExpressionSyntax(new IdentifierSyntax("index"), new ConstantSyntax(index.ToString(CultureInfo.InvariantCulture)), Operator.Equal),
+                    values[index],
+                    value);
+            }
+        }
+
+        return new FunctionSyntax(
+            "u8",
+            $"{layer.RuntimeName}_{fieldName}",
+            [new ParameterSyntax("u8", "index")],
+            new BlockSyntax([new ReturnSyntax(Maybe.From(value))]),
+            isExpressionBodied: true,
+            isInline: true);
+    }
+
+    private static string? ExpressionKey(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            ConstantSyntax constant => $"const:{constant.Value}",
+            IdentifierSyntax identifier => $"identifier:{identifier.Identifier}",
+            _ => null,
+        };
+    }
+
+    private static int SpawnInitialFieldValue(LogicalActorSpawn spawn, string fieldName)
+    {
+        if (fieldName == "active" && !spawn.Fields.ContainsKey(fieldName))
+        {
+            return 1;
+        }
+
+        return spawn.Fields.TryGetValue(fieldName, out var value) ? CheckedByte(value, $"actor spawn field '{fieldName}'") : 0;
+    }
+
     private static FunctionSyntax LookupFunction(string functionName, IReadOnlyList<EnemyDef> enemyDefs, string suffix)
     {
         ExpressionSyntax value = new ConstantSyntax("0");
@@ -1163,6 +1457,8 @@ public static class ActorFrameworkLowerer
         private readonly Dictionary<string, EnemyDef> enemyDefs = new(StringComparer.Ordinal);
         private readonly List<EnemyDef> enemyDefsInOrder = [];
         private readonly Dictionary<ActorSpawnLayerKey, ActorSpawnLayer> spawnLayers = [];
+        private readonly List<ActorSpawnLayer> spawnLayersInOrder = [];
+        private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
 
         public string TargetName { get; } = capabilities.Name;
         public string BaseDirectory { get; } = baseDirectory ?? Directory.GetCurrentDirectory();
@@ -1171,6 +1467,7 @@ public static class ActorFrameworkLowerer
         public int ScreenWidth { get; } = capabilities.ScreenPixels.Width;
         public IReadOnlyList<ActorPool> Pools => poolsInOrder;
         public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
+        public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
         public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0;
 
         public void AddPool(ActorPool pool)
@@ -1212,10 +1509,15 @@ public static class ActorFrameworkLowerer
         public void AddSpawnLayer(ActorSpawnLayer spawnLayer)
         {
             var key = ActorSpawnLayerKey.From(spawnLayer.MethodName, spawnLayer.PoolName, spawnLayer.MapPath, spawnLayer.LayerName, spawnLayer.WindowLeft, spawnLayer.WindowWidth);
-            if (!spawnLayers.TryAdd(key, spawnLayer))
+            if (spawnLayers.ContainsKey(key))
             {
-                throw new InvalidOperationException($"actor.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' and layer '{spawnLayer.LayerName}' is already declared.");
+                return;
             }
+
+            var runtimeName = $"__{spawnLayer.PoolName}_spawn_{spawnLayers.Count}";
+            var runtimeLayer = spawnLayer with { RuntimeName = runtimeName };
+            spawnLayers.Add(key, runtimeLayer);
+            spawnLayersInOrder.Add(runtimeLayer);
         }
 
         public ActorSpawnLayer SpawnLayer(SdkDotCallSyntax call)
@@ -1244,6 +1546,18 @@ public static class ActorFrameworkLowerer
             return spawnLayers[key];
         }
 
+        public IEnumerable<ActorSpawnLayer> SpawnLayersFor(string poolName)
+        {
+            return spawnLayersInOrder.Where(layer => layer.PoolName == poolName);
+        }
+
+        public string NextActivationPrefix(ActorSpawnLayer spawnLayer)
+        {
+            activationCallCounts.TryGetValue(spawnLayer.RuntimeName, out var count);
+            activationCallCounts[spawnLayer.RuntimeName] = count + 1;
+            return $"{spawnLayer.RuntimeName}_call{count}";
+        }
+
         public void ValidateSpawnLayers()
         {
             foreach (var spawnLayer in spawnLayers.Values)
@@ -1253,9 +1567,16 @@ public static class ActorFrameworkLowerer
                     throw new InvalidOperationException($"actor.SpawnLayer references undeclared pool '{spawnLayer.PoolName}'.");
                 }
 
-                if (spawnLayer.Spawns.Count > pool.Capacity)
+                if (spawnLayer.Spawns.Count > 255)
                 {
-                    throw new InvalidOperationException($"actor.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' reads {spawnLayer.Spawns.Count} spawn(s) from layer '{spawnLayer.LayerName}', exceeding the declared capacity {pool.Capacity}.");
+                    throw new InvalidOperationException($"actor.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' reads {spawnLayer.Spawns.Count} spawn(s) from layer '{spawnLayer.LayerName}', exceeding the fixed runtime spawn table limit 255.");
+                }
+
+                var windowWidth = spawnLayer.WindowWidth ?? ScreenWidth;
+                var simultaneousSpawns = MaxSimultaneousSpawns(spawnLayer.Spawns, windowWidth);
+                if (simultaneousSpawns > pool.Capacity)
+                {
+                    throw new InvalidOperationException($"actor.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' can activate {simultaneousSpawns} spawn(s) in one camera window from layer '{spawnLayer.LayerName}', exceeding the declared capacity {pool.Capacity}.");
                 }
 
                 foreach (var spawn in spawnLayer.Spawns)
@@ -1266,6 +1587,29 @@ public static class ActorFrameworkLowerer
                     }
                 }
             }
+        }
+
+        private static int MaxSimultaneousSpawns(IReadOnlyList<LogicalActorSpawn> spawns, int windowWidth)
+        {
+            if (windowWidth <= 0 || spawns.Count == 0)
+            {
+                return 0;
+            }
+
+            var xValues = spawns.Select(spawn => spawn.X).Order().ToArray();
+            var max = 0;
+            var right = 0;
+            for (var left = 0; left < xValues.Length; left++)
+            {
+                while (right < xValues.Length && xValues[right] - xValues[left] < windowWidth)
+                {
+                    right++;
+                }
+
+                max = Math.Max(max, right - left);
+            }
+
+            return max;
         }
     }
 
@@ -1278,7 +1622,8 @@ public static class ActorFrameworkLowerer
         string LayerName,
         int? WindowLeft,
         int? WindowWidth,
-        IReadOnlyList<LogicalActorSpawn> Spawns);
+        IReadOnlyList<LogicalActorSpawn> Spawns,
+        string RuntimeName);
 
     private sealed record ActorSpawnLayerKey(string MethodName, string PoolName, string MapPath, string LayerName, int? WindowLeft, int? WindowWidth)
     {

@@ -107,8 +107,8 @@ identity, virtual dispatch, delegates, closures, or function pointers.
 | Signature | Semantics |
 | --- | --- |
 | `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and must fit the selected target's actor-pool cap, currently the target hardware sprite count. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
-| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map and emit source-equivalent slot initialization for every spawn in that layer. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` must fit `0..65535` and is split into low `x` plus high `xHi`, while `y` must fit a byte. |
-| `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, filter spawns whose `x` falls in the literal half-open window `[left, left + width)`, and emit slot initialization for that activation window. |
+| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` must fit `0..65535` and is split into low `x` plus high `xHi`, while `y` must fit a byte. |
+| `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
 | `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
 | `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. |
 | `pool.TouchTiles(yOffset, flags)` | Loop active slots, branch by kind, compute each actor's camera-relative `screenX` from world `x`/`xHi`, cull slots outside the visible camera window, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
@@ -123,6 +123,17 @@ fields are `kind`, `active`, `x`, `xHi`, `y`, `vx`, `vy`, `state`, `timer`,
 array layout. Game Boy currently supports `pool.Update()` and
 `pool.Draw()` for the basic byte-field behavior set by expanding them to grouped
 loops over active slots, with direct kind checks and `sprite.Draw` calls.
+
+Spawn activation is one-shot per authored Tiled object. The frontend generates a
+fixed `used[]` byte array per spawn layer; a spawn is marked used only after it
+successfully claims a free slot. Active slots are recycled when they leave the
+same camera-relative activation window, and any source code can still free a slot
+by setting `active = 0` for death/despawn. A recycled slot does not clear the
+spawn's `used` bit, so scrolling back does not respawn the same authored object.
+If no free slot exists when an eligible spawn is scanned, the spawn is skipped
+deterministically for that activation pass and retried while it remains in the
+window. At compile time, the frontend rejects any spawn layer/window whose maximum
+simultaneous authored spawns can exceed the declared pool capacity.
 `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and a direction-driven
 `Chaser` are implemented without actor-specific SDK operations. NES accepts the
 same pool/definition metadata slice plus `pool.Update()` and `pool.Draw()` for
@@ -137,7 +148,8 @@ draw, so collision/contact is tested per visible actor instead of at one fixed
 screen column. The tile helpers emit ordinary camera AABB SDK calls; they do not
 introduce actor-specific target intrinsics. Tiled spawn helpers read the same
 target-neutral map importer as
-`world.Load(...)` and lower to fixed slot stores before target lowering.
+`world.Load(...)` and lower to generated ROM-table helpers plus runtime fixed-slot
+activation before target lowering.
 
 ### Optional HUD
 

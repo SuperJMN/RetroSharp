@@ -11,12 +11,10 @@ void main() {
     sprite.Asset(actor_marker, "actor.json");
     animation.Clip(actor_walk, 0, 16);
 
-    actor.Pool(enemies, 3);
+    actor.Pool(enemies, 2);
     enemy.Def(Goomba, sprite: actor_marker, behavior: Walker, animation: actor_walk, speed: 1, hp: 1, hitboxWidth: 8, hitboxHeight: 8);
     enemy.Def(Bat, sprite: actor_marker, behavior: Flyer, animation: actor_walk, speed: 1, hp: 1, hitboxWidth: 8, hitboxHeight: 8);
     enemy.Def(Koopa, sprite: actor_marker, behavior: Patrol, animation: actor_walk, speed: 1, hp: 1, cooldown: 24, hitboxWidth: 8, hitboxHeight: 8);
-
-    actor.SpawnLayer(enemies, "actors.tmj", "actors");
 
     u8 cameraX = 0;
 
@@ -28,6 +26,7 @@ void main() {
         }
 
         camera.SetPosition(cameraX, 0);
+        actor.SpawnLayer(enemies, "actors.tmj", "actors");
         enemies.Update();
         enemies.TouchTiles(0, 1);
         enemies.LandOnTiles(4, 12, 1);

@@ -140,6 +140,13 @@ Progress (2026-06-14):
   slot that uses them while preserving the background universal color. The runner now uses
   `palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
   `objectPalette.Set(...)`.
+- Actor framework runtime activation decision on branch `feature/actor-framework`: `actor.SpawnLayer`
+  and `actor.SpawnWindow` no longer materialize Tiled spawns as active slots at compile time.
+  They generate ROM-table spawn helpers plus a fixed per-layer `used[]` byte array and should be
+  called after `camera.SetPosition(...)` each frame. Slots recycle when actors leave the activation
+  window or source code clears `active`; authored spawns are one-shot and do not respawn after a
+  successful activation. Capacity diagnostics use the maximum simultaneous spawns in the declared
+  camera-relative window, not total layer count.
 
 Suggested next steps for the next agent, in order:
 1. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,

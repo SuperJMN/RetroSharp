@@ -2764,7 +2764,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Compiles_actor_spawn_layer_like_source_authored_pool_slots()
+    public void Compiles_actor_spawn_layer_into_runtime_activation_table()
     {
         var baseDirectory = WriteActorSpawnMap(
             """
@@ -2774,51 +2774,107 @@ public class GameBoyRomCompilerTests
             ]
             """);
 
-        const string manualSource = """
-                                    struct Actor {
-                                        u8 kind;
-                                        u8 active;
-                                        u8 x;
-                                        u8 xHi;
-                                        u8 y;
-                                        i8 vx;
-                                        i8 vy;
-                                        u8 state;
-                                        u8 timer;
-                                        u8 facing;
-                                        u8 animTick;
-                                        u8 health;
-                                    }
-
-                                    const Goomba = 1;
-                                    const Bat = 2;
-
-                                    void main() {
-                                        Actor enemies[2];
-                                        enemies[0].active = 1;
-                                        enemies[0].kind = Goomba;
-                                        enemies[0].x = 24;
-                                        enemies[0].xHi = 0;
-                                        enemies[0].y = 40;
-                                        enemies[0].facing = 1;
-                                        enemies[1].active = 1;
-                                        enemies[1].kind = Bat;
-                                        enemies[1].x = 72;
-                                        enemies[1].xHi = 0;
-                                        enemies[1].y = 32;
-                                    }
-                                    """;
-
         const string actorSource = """
                                    void main() {
+                                       world_column(0, 0, 0);
+                                       world_map(40, 10, 2);
+                                       camera_init(40, 10, 2);
                                        actor.Pool(enemies, 2);
                                        enemy.Def(Goomba, behavior: Walker);
                                        enemy.Def(Bat, behavior: Flyer);
+                                       camera_set_position(0, 0);
                                        actor.SpawnLayer(enemies, "level.tmj", "actors");
                                    }
                                    """;
 
-        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource, baseDirectory));
+        var rom = GameBoyRomCompiler.CompileSource(actorSource, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0]), "runtime spawn activation should read camera X low instead of materializing all slots at compile time.");
+    }
+
+    [Fact]
+    public void Compiles_actor_spawn_layer_as_runtime_camera_window_activation_on_game_boy()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40 },
+              { "id": 2, "type": "Bat", "x": 280, "y": 32, "properties": [ { "name": "facing", "type": "int", "value": 1 } ] }
+            ]
+            """);
+
+        var manualSource = $$"""
+                             struct Actor {
+                                 u8 kind;
+                                 u8 active;
+                                 u8 x;
+                                 u8 xHi;
+                                 u8 y;
+                                 i8 vx;
+                                 i8 vy;
+                                 u8 state;
+                                 u8 timer;
+                                 u8 facing;
+                                 u8 animTick;
+                                 u8 health;
+                             }
+
+                             const Goomba = 1;
+                             const Bat = 2;
+
+                             inline u8 __enemies_spawn_0_kind(u8 index) => index == 0 ? Goomba : Bat;
+                             inline u8 __enemies_spawn_0_x(u8 index) => 24;
+                             inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
+                             inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline u8 __enemies_spawn_0_active(u8 index) => 1;
+                             inline u8 __enemies_spawn_0_vx(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_vy(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_state(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_timer(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_facing(u8 index) => index == 0 ? 0 : 1;
+                             inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_health(u8 index) => 0;
+
+                             void main() {
+                                 world_column(0, 0, 0);
+                                 world_map(40, 10, 2);
+                                 camera_init(40, 10, 2);
+                                 Actor enemies[1];
+                                 u8 __enemies_spawn_0_used[2];
+
+                                 camera_set_position(0, 0);
+                             {{RuntimeSpawnActivationBlock("__enemies_spawn_0_call0", 160)}}
+
+                                 camera_set_position(128, 0);
+                             {{RuntimeSpawnActivationBlock("__enemies_spawn_0_call1", 160)}}
+                             }
+                             """;
+
+        const string actorSource = """
+                                   void main() {
+                                       world_column(0, 0, 0);
+                                       world_map(40, 10, 2);
+                                       camera_init(40, 10, 2);
+                                       actor.Pool(enemies, 1);
+                                       enemy.Def(Goomba, behavior: Walker);
+                                       enemy.Def(Bat, behavior: Flyer);
+                                       camera_set_position(0, 0);
+                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       camera_set_position(128, 0);
+                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                   }
+                                   """;
+
+        var expected = GameBoyRomCompiler.CompileSource(manualSource);
+        var actual = GameBoyRomCompiler.CompileSource(actorSource, baseDirectory);
+        var firstDifference = Enumerable.Range(0x150, expected.Length - 0x150).FirstOrDefault(index => expected[index] != actual[index], -1);
+
+        Assert.True(
+            expected.SequenceEqual(actual),
+            firstDifference < 0
+                ? "Runtime actor activation ROMs differ only in header checksum bytes."
+                : $"Runtime actor activation ROMs differ at 0x{firstDifference:X4}: expected {BytesAround(expected, firstDifference)}, actual {BytesAround(actual, firstDifference)}.");
     }
 
     [Fact]
@@ -2843,11 +2899,11 @@ public class GameBoyRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
-        Assert.Equal("actor.SpawnLayer for pool 'enemies' reads 2 spawn(s) from layer 'actors', exceeding the declared capacity 1.", exception.Message);
+        Assert.Equal("actor.SpawnLayer for pool 'enemies' can activate 2 spawn(s) in one camera window from layer 'actors', exceeding the declared capacity 1.", exception.Message);
     }
 
     [Fact]
-    public void Compiles_actor_spawn_window_by_filtering_tiled_spawns()
+    public void Compiles_actor_spawn_window_as_runtime_camera_relative_window()
     {
         var baseDirectory = WriteActorSpawnMap(
             """
@@ -2857,44 +2913,23 @@ public class GameBoyRomCompilerTests
             ]
             """);
 
-        const string manualSource = """
-                                    struct Actor {
-                                        u8 kind;
-                                        u8 active;
-                                        u8 x;
-                                        u8 xHi;
-                                        u8 y;
-                                        i8 vx;
-                                        i8 vy;
-                                        u8 state;
-                                        u8 timer;
-                                        u8 facing;
-                                        u8 animTick;
-                                        u8 health;
-                                    }
-
-                                    const Goomba = 1;
-
-                                    void main() {
-                                        Actor enemies[1];
-                                        enemies[0].active = 1;
-                                        enemies[0].kind = Goomba;
-                                        enemies[0].x = 24;
-                                        enemies[0].xHi = 0;
-                                        enemies[0].y = 40;
-                                    }
-                                    """;
-
         const string actorSource = """
                                    void main() {
+                                       world_column(0, 0, 0);
+                                       world_map(40, 10, 2);
+                                       camera_init(40, 10, 2);
                                        actor.Pool(enemies, 1);
                                        enemy.Def(Goomba, behavior: Walker);
                                        enemy.Def(Bat, behavior: Flyer);
+                                       camera_set_position(0, 0);
                                        actor.SpawnWindow(enemies, "level.tmj", "actors", 0, 48);
                                    }
                                    """;
 
-        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(actorSource, baseDirectory));
+        var rom = GameBoyRomCompiler.CompileSource(actorSource, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFE, 0x30]), "SpawnWindow width 48 should lower to a runtime screen-X window check.");
     }
 
     [Fact]
@@ -2939,7 +2974,7 @@ public class GameBoyRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
-        Assert.Equal("actor.SpawnWindow for pool 'enemies' reads 2 spawn(s) from layer 'actors', exceeding the declared capacity 1.", exception.Message);
+        Assert.Equal("actor.SpawnWindow for pool 'enemies' can activate 2 spawn(s) in one camera window from layer 'actors', exceeding the declared capacity 1.", exception.Message);
     }
 
     [Fact]
@@ -5709,6 +5744,71 @@ public class GameBoyRomCompilerTests
     private static int ReadLittleEndian16(byte[] bytes, int offset)
     {
         return bytes[offset] | bytes[offset + 1] << 8;
+    }
+
+    private static string BytesAround(byte[] bytes, int offset)
+    {
+        var start = Math.Max(0, offset - 8);
+        var length = Math.Min(bytes.Length - start, 17);
+        return $"0x{offset:X4} [" + string.Join(" ", bytes.Skip(start).Take(length).Select(value => value.ToString("X2"))) + "]";
+    }
+
+    private static string RuntimeSpawnActivationBlock(string prefix, int windowWidth)
+    {
+        return $$"""
+                     for (u8 {{prefix}}_recycle_i = 0; {{prefix}}_recycle_i < countof(enemies); {{prefix}}_recycle_i += 1) {
+                         if (enemies[{{prefix}}_recycle_i].active != 0) {
+                             u8 {{prefix}}_recycle_camera_x_lo = __rs_actor_camera_x_lo();
+                             u8 {{prefix}}_recycle_camera_x_hi = __rs_actor_camera_x_hi();
+                             u8 {{prefix}}_recycle_screen_x = enemies[{{prefix}}_recycle_i].x - {{prefix}}_recycle_camera_x_lo;
+                             if (!((((enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi) && (enemies[{{prefix}}_recycle_i].x >= {{prefix}}_recycle_camera_x_lo)) || ((enemies[{{prefix}}_recycle_i].xHi == {{prefix}}_recycle_camera_x_hi + 1) && (enemies[{{prefix}}_recycle_i].x < {{prefix}}_recycle_camera_x_lo))) && ({{prefix}}_recycle_screen_x < {{windowWidth}}))) {
+                                 enemies[{{prefix}}_recycle_i].active = 0;
+                             }
+                         }
+                     }
+                     for (u8 {{prefix}}_i = 0; {{prefix}}_i < 2; {{prefix}}_i += 1) {
+                         if (__enemies_spawn_0_used[{{prefix}}_i] == 0) {
+                             u8 {{prefix}}_kind_value = __enemies_spawn_0_kind({{prefix}}_i);
+                             u8 {{prefix}}_x_value = __enemies_spawn_0_x({{prefix}}_i);
+                             u8 {{prefix}}_xHi_value = __enemies_spawn_0_xHi({{prefix}}_i);
+                             u8 {{prefix}}_y_value = __enemies_spawn_0_y({{prefix}}_i);
+                             u8 {{prefix}}_active_value = __enemies_spawn_0_active({{prefix}}_i);
+                             u8 {{prefix}}_vx_value = __enemies_spawn_0_vx({{prefix}}_i);
+                             u8 {{prefix}}_vy_value = __enemies_spawn_0_vy({{prefix}}_i);
+                             u8 {{prefix}}_state_value = __enemies_spawn_0_state({{prefix}}_i);
+                             u8 {{prefix}}_timer_value = __enemies_spawn_0_timer({{prefix}}_i);
+                             u8 {{prefix}}_facing_value = __enemies_spawn_0_facing({{prefix}}_i);
+                             u8 {{prefix}}_animTick_value = __enemies_spawn_0_animTick({{prefix}}_i);
+                             u8 {{prefix}}_health_value = __enemies_spawn_0_health({{prefix}}_i);
+                             u8 {{prefix}}_camera_x_lo = __rs_actor_camera_x_lo();
+                             u8 {{prefix}}_camera_x_hi = __rs_actor_camera_x_hi();
+                             u8 {{prefix}}_screen_x = {{prefix}}_x_value - {{prefix}}_camera_x_lo;
+                             if (((({{prefix}}_xHi_value == {{prefix}}_camera_x_hi) && ({{prefix}}_x_value >= {{prefix}}_camera_x_lo)) || (({{prefix}}_xHi_value == {{prefix}}_camera_x_hi + 1) && ({{prefix}}_x_value < {{prefix}}_camera_x_lo))) && ({{prefix}}_screen_x < {{windowWidth}})) {
+                                 u8 {{prefix}}_assigned = 0;
+                                 for (u8 {{prefix}}_slot = 0; {{prefix}}_slot < countof(enemies); {{prefix}}_slot += 1) {
+                                     if ({{prefix}}_assigned == 0) {
+                                         if (enemies[{{prefix}}_slot].active == 0) {
+                                             enemies[{{prefix}}_slot].kind = {{prefix}}_kind_value;
+                                             enemies[{{prefix}}_slot].x = {{prefix}}_x_value;
+                                             enemies[{{prefix}}_slot].xHi = {{prefix}}_xHi_value;
+                                             enemies[{{prefix}}_slot].y = {{prefix}}_y_value;
+                                             enemies[{{prefix}}_slot].vx = {{prefix}}_vx_value;
+                                             enemies[{{prefix}}_slot].vy = {{prefix}}_vy_value;
+                                             enemies[{{prefix}}_slot].state = {{prefix}}_state_value;
+                                             enemies[{{prefix}}_slot].timer = {{prefix}}_timer_value;
+                                             enemies[{{prefix}}_slot].facing = {{prefix}}_facing_value;
+                                             enemies[{{prefix}}_slot].animTick = {{prefix}}_animTick_value;
+                                             enemies[{{prefix}}_slot].health = {{prefix}}_health_value;
+                                             enemies[{{prefix}}_slot].active = {{prefix}}_active_value;
+                                             __enemies_spawn_0_used[{{prefix}}_i] = 1;
+                                             {{prefix}}_assigned = 1;
+                                         }
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 """;
     }
 
     private static string RepositoryFile(string relativePath)

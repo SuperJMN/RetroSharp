@@ -225,8 +225,9 @@ Candidate file names are guidance; inspect the real code paths first.
 - Steps:
   - [x] Read a named Tiled object layer (or equivalent spawn metadata) for actor
     kind and initial fields; keep parsing target-neutral (mind the #105 coupling).
-  - [x] Generate compact spawn data alongside world data and lower the first
-    startup/window activation slices to fixed slot stores.
+  - [x] Generate compact spawn data alongside world data. The first slice lowered
+    startup/window activation to fixed slot stores; AF-5.3 replaced that with
+    generated spawn tables and runtime camera-window activation.
 - Verification:
   - [x] A platformer sample places multiple enemy kinds in Tiled without
     hard-coding every spawn in source.
@@ -237,8 +238,11 @@ Candidate file names are guidance; inspect the real code paths first.
 - Candidate files: activation logic, capacity checks, tests.
 - Steps:
   - [x] Activate spawns into fixed actor slots by a literal camera window.
+    Superseded by AF-5.3: `actor.SpawnLayer`/`actor.SpawnWindow` now generate
+    runtime camera-window activation rather than compile-time slot fills.
   - [x] Fail explicitly when a spawn layer/window can exceed declared pool
-    capacity.
+    capacity, now using the maximum simultaneously activatable authored spawns
+    in the camera-relative window rather than total layer count.
 - Verification:
   - [x] Test proves overflow of the declared pool is a compile-time/spawn-time
     error, not silent truncation.
@@ -337,18 +341,21 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Depends on: AF-5.1.
 
 #### AF-5.3: Runtime camera-window / room activation (priority 2)
-- Problem: `actor.SpawnWindow` filters spawns at compile time; every spawn is
-  active from frame 0 and there is no runtime activation as the camera scrolls,
-  so large levels cannot keep distant enemies inactive. (Extends AF-3.2 from the
-  current literal/compile-time window to true runtime activation.)
+- Problem: before this slice, `actor.SpawnWindow` filtered spawns at compile
+  time; every spawn was active from frame 0 and there was no runtime activation
+  as the camera scrolled, so large levels could not keep distant enemies
+  inactive. (Extends AF-3.2 from literal/compile-time windows to true runtime
+  activation.)
 - Layer: framework + asset pipeline.
 - Candidate files: spawn-table generation, activation logic, GB/NES tests, sample.
 - Steps:
-  - [ ] Keep authored spawn tables (kind + world x/y + fields) as ROM data.
-  - [ ] Activate/recycle fixed slots at runtime by camera window/room; preserve
+  - [x] Keep authored spawn tables (kind + world x/y + fields) as ROM data.
+    Implemented as generated inline ROM-table helpers plus a fixed `used[]`
+    byte array per spawn layer.
+  - [x] Activate/recycle fixed slots at runtime by camera window/room; preserve
     the explicit pool-capacity overflow diagnostic.
 - Verification:
-  - [ ] A wide level activates enemies as the camera reaches them and frees slots
+  - [x] A wide level activates enemies as the camera reaches them and frees slots
     when they leave; the declared pool capacity is never exceeded.
 - Depends on: AF-3.1, AF-5.1.
 
@@ -408,7 +415,6 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 These are the open gaps captured as Phase 5. Until they land, treat the actor
 framework as an acceptance slice, not a shipping platformer SDK:
 
-- Activation is compile-time window filtering, not runtime paging (AF-5.3).
 - Capability checks count one actor as one hardware sprite (AF-5.4).
 
 ## Recommended first slice
