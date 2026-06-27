@@ -1,11 +1,14 @@
 # Actor Framework Roadmap (scalable platformer actors / enemies)
 
-Status: **in progress on branch `feature/actor-framework`.**
+Status: **in progress on branch `feature/actor-framework`.** Phases 1–4 landed
+as a working, byte-reproducible non-scrolling acceptance slice. Phase 5 tracks
+the review findings (world-space actors, per-actor collision, runtime activation,
+metasprite-aware budgets) that must land before the framework is platformer-ready.
 
 This document is the branch-scoped execution plan for roadmap **Iteration 14:
 Scalable Platformer Actor Framework Ergonomics** (`docs/ArchitectureRoadmap.md`).
-It breaks AR-14.1..AR-14.4 into concrete, verifiable tasks and records what is
-already landed on this branch.
+It breaks AR-14.1..AR-14.4 into concrete, verifiable tasks, records what is
+already landed on this branch, and tracks the post-review limitations in Phase 5.
 
 The goal: let a game declare a small, fixed actor pool and several enemy types
 (sprite, hitbox, animation, behavior, constants), then update and draw the
@@ -293,6 +296,100 @@ Candidate file names are guidance; inspect the real code paths first.
 - Verification:
   - [x] `git diff --check`; manifest-reading tests pass.
 - Depends on: AF-4.2.
+
+### Phase 5 — Review findings: remove v1 limitations
+
+The first slice (Phases 1–4) landed and is byte-reproducible, but a review found
+limitations that make the framework unsuitable for a real scrolling platformer.
+This phase removes them, in priority order. The same guardrails apply: no heap,
+vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
+
+#### AF-5.1: World-space actor positioning and camera-relative draw (priority 1)
+- Problem: actor `x`/`y` are screen-space bytes drawn with a raw `sprite.Draw(x, y)`.
+  When the camera scrolls, enemies stay glued to the screen instead of to world
+  tiles. The acceptance sample hides this with a tiny non-scrolling world.
+- Layer: framework (+ language if world X needs more than one byte).
+- Candidate files: `ActorFrameworkLowerer.cs` (draw + spawn lowering), camera
+  state access, GB/NES emitted-code tests, sample.
+- Steps:
+  - [ ] Store actor positions in world coordinates; if world X exceeds 255, use
+    AF-1.3 mixed-width fields or explicit split hi/lo byte fields (no heap).
+  - [ ] Draw actors camera-relative (`screenX = worldX - cameraX`) and cull
+    actors outside the visible window instead of drawing at a raw screen byte.
+  - [ ] Prove the draw loop stays a grouped loop with direct branches.
+- Verification:
+  - [ ] A scrolling sample keeps enemies anchored to world tiles as the camera
+    moves; off-screen actors are not drawn.
+- Depends on: AF-2.3 (and AF-1.3 if world X > 255).
+
+#### AF-5.2: Per-actor collision X (priority 1)
+- Problem: `TouchTiles`/`LandOnTiles` apply a fixed literal `screenX` to every
+  actor, ignoring each actor's own `x`, so collision is tested at one column.
+- Layer: framework.
+- Candidate files: `ActorFrameworkLowerer.cs` (collision lowering), tests, sample.
+- Steps:
+  - [ ] Use each actor's (camera-relative) `x` for the collision AABB instead of
+    a fixed column, keeping camera-relative AABB capability gating.
+- Verification:
+  - [ ] Two actors at different X positions collide against different tiles.
+- Depends on: AF-5.1.
+
+#### AF-5.3: Runtime camera-window / room activation (priority 2)
+- Problem: `actor.SpawnWindow` filters spawns at compile time; every spawn is
+  active from frame 0 and there is no runtime activation as the camera scrolls,
+  so large levels cannot keep distant enemies inactive. (Extends AF-3.2 from the
+  current literal/compile-time window to true runtime activation.)
+- Layer: framework + asset pipeline.
+- Candidate files: spawn-table generation, activation logic, GB/NES tests, sample.
+- Steps:
+  - [ ] Keep authored spawn tables (kind + world x/y + fields) as ROM data.
+  - [ ] Activate/recycle fixed slots at runtime by camera window/room; preserve
+    the explicit pool-capacity overflow diagnostic.
+- Verification:
+  - [ ] A wide level activates enemies as the camera reaches them and frees slots
+    when they leave; the declared pool capacity is never exceeded.
+- Depends on: AF-3.1, AF-5.1.
+
+#### AF-5.4: Metasprite-aware capability checks (priority 3)
+- Problem: the pool-capacity check assumes one actor equals one hardware sprite,
+  ignoring metasprite size, so dense pools of multi-sprite enemies can be
+  accepted past the target budget. (Tightens AF-4.1.)
+- Layer: portable SDK / targeting.
+- Candidate files: capability checks in `ActorFrameworkLowerer.cs`, `Target2DCapabilities`,
+  tests.
+- Steps:
+  - [ ] Account for each enemy def's resolved metasprite hardware-sprite count
+    when checking pool budget vs target sprite count and per-scanline limits.
+  - [ ] Diagnostic names the offending pool and def.
+- Verification:
+  - [ ] A pool of multi-sprite metasprites that exceeds the budget fails with a
+    clear diagnostic on GB and NES.
+- Depends on: AF-4.1.
+
+#### AF-5.5: Minor robustness follow-ups (priority 4)
+- Layer: framework / target lowering.
+- Steps:
+  - [ ] Guard generated constant names (enemy name, `{Name}Speed`, etc.) against
+    collisions with user constants/enums, mirroring the existing `Actor`
+    struct-name guard.
+  - [ ] Prune or document the currently unused generated lookup helpers
+    (`enemy_speed`, `enemy_hp`, ...).
+  - [ ] Relax the NES `for`-loop trampoline to emit only when a direct branch
+    would be out of range, removing the per-loop size overhead on small loops.
+- Verification:
+  - [ ] Tests cover a colliding generated-name diagnostic and an in-range NES
+    `for` loop emitting no trampoline.
+- Depends on: AF-2.1.
+
+## Known limitations after the first slice
+
+These are the open gaps captured as Phase 5. Until they land, treat the actor
+framework as a non-scrolling acceptance slice, not a shipping platformer SDK:
+
+- Actors are screen-space, not world-space (AF-5.1).
+- Collision uses one fixed screen column for all actors (AF-5.2).
+- Activation is compile-time window filtering, not runtime paging (AF-5.3).
+- Capability checks count one actor as one hardware sprite (AF-5.4).
 
 ## Recommended first slice
 
