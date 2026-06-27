@@ -78,7 +78,7 @@ public static class ActorFrameworkLowerer
             structs.Add(ActorStruct());
         }
 
-        var functions = program.Functions
+        var rewrittenFunctions = program.Functions
             .Select(function => new FunctionSyntax(
                 function.Type,
                 function.Name,
@@ -89,7 +89,12 @@ public static class ActorFrameworkLowerer
                 function.IsPure,
                 function.IsExtern,
                 function.Attributes))
-            .Concat(GeneratedLookupFunctions(state.EnemyDefs))
+            .ToList();
+
+        ValidateGeneratedNameCollisions(program, state);
+
+        var functions = rewrittenFunctions
+            .Concat(GeneratedLookupFunctions(state.EnemyDefs, state.UsedEnemyLookupMethods))
             .Concat(GeneratedSpawnLookupFunctions(state.SpawnLayers))
             .ToList();
 
@@ -1453,6 +1458,7 @@ public static class ActorFrameworkLowerer
             throw new InvalidOperationException($"enemy.{call.Method} requires at least one enemy.Def declaration.");
         }
 
+        state.RecordEnemyLookupMethod(call.Method);
         return new FunctionCall(functionName, call.Parameters.Select(parameter => RewriteExpression(parameter, state)));
     }
 
@@ -1510,20 +1516,117 @@ public static class ActorFrameworkLowerer
         return new ConstDeclarationSyntax(Maybe<string>.None, name, value);
     }
 
-    private static IEnumerable<FunctionSyntax> GeneratedLookupFunctions(IReadOnlyList<EnemyDef> enemyDefs)
+    private static void ValidateGeneratedNameCollisions(ProgramSyntax program, ActorFrameworkState state)
+    {
+        var userSymbols = UserSymbols(program);
+        var generatedNames = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var generatedName in GeneratedNames(state))
+        {
+            if (userSymbols.TryGetValue(generatedName.Name, out var userSymbol))
+            {
+                throw new InvalidOperationException($"actor framework cannot generate {generatedName.Origin} named '{generatedName.Name}' because {userSymbol} is already declared.");
+            }
+
+            if (!generatedNames.TryAdd(generatedName.Name, generatedName.Origin))
+            {
+                throw new InvalidOperationException($"actor framework cannot generate {generatedName.Origin} named '{generatedName.Name}' because {generatedNames[generatedName.Name]} also generates '{generatedName.Name}'.");
+            }
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string> UserSymbols(ProgramSyntax program)
+    {
+        var symbols = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var typeAlias in program.TypeAliases)
+        {
+            symbols.TryAdd(typeAlias.Name, $"user type alias '{typeAlias.Name}'");
+        }
+
+        foreach (var constant in program.Constants)
+        {
+            symbols.TryAdd(constant.Name, $"user constant '{constant.Name}'");
+        }
+
+        foreach (var enumSyntax in program.Enums)
+        {
+            symbols.TryAdd(enumSyntax.Name, $"user enum '{enumSyntax.Name}'");
+        }
+
+        foreach (var structSyntax in program.Structs)
+        {
+            symbols.TryAdd(structSyntax.Name, $"user struct '{structSyntax.Name}'");
+        }
+
+        foreach (var function in program.Functions)
+        {
+            symbols.TryAdd(function.Name, $"user function '{function.Name}'");
+        }
+
+        return symbols;
+    }
+
+    private static IEnumerable<GeneratedName> GeneratedNames(ActorFrameworkState state)
+    {
+        if (state.Pools.Count != 0)
+        {
+            yield return new GeneratedName(ActorStructName, "framework struct 'Actor'");
+        }
+
+        foreach (var behavior in state.EnemyDefs.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
+        {
+            yield return new GeneratedName(behavior, $"actor behavior '{behavior}' constant");
+        }
+
+        foreach (var def in state.EnemyDefs)
+        {
+            yield return new GeneratedName(def.Name, $"enemy.Def '{def.Name}' kind constant");
+            yield return new GeneratedName($"{def.Name}Behavior", $"enemy.Def '{def.Name}' behavior constant");
+            yield return new GeneratedName($"{def.Name}Speed", $"enemy.Def '{def.Name}' speed constant");
+            yield return new GeneratedName($"{def.Name}Hp", $"enemy.Def '{def.Name}' hp constant");
+            yield return new GeneratedName($"{def.Name}Cooldown", $"enemy.Def '{def.Name}' cooldown constant");
+            yield return new GeneratedName($"{def.Name}ContactDamage", $"enemy.Def '{def.Name}' contact damage constant");
+            yield return new GeneratedName($"{def.Name}HitboxWidth", $"enemy.Def '{def.Name}' hitbox width constant");
+            yield return new GeneratedName($"{def.Name}HitboxHeight", $"enemy.Def '{def.Name}' hitbox height constant");
+        }
+
+        foreach (var lookup in EnemyLookupFunctions.Where(pair => state.UsedEnemyLookupMethods.Contains(pair.Key)))
+        {
+            yield return new GeneratedName(lookup.Value, $"enemy.{lookup.Key} lookup helper function");
+        }
+
+        foreach (var layer in state.SpawnLayers.Where(layer => layer.Spawns.Count != 0))
+        {
+            yield return new GeneratedName($"{layer.RuntimeName}_used", $"actor.{layer.MethodName} layer '{layer.LayerName}' used array");
+            foreach (var fieldName in SpawnLookupFieldNames())
+            {
+                yield return new GeneratedName($"{layer.RuntimeName}_{fieldName}", $"actor.{layer.MethodName} layer '{layer.LayerName}' {fieldName} lookup function");
+            }
+        }
+    }
+
+    private static IEnumerable<string> SpawnLookupFieldNames()
+    {
+        yield return "kind";
+        yield return "x";
+        yield return "xHi";
+        yield return "y";
+        foreach (var fieldName in SpawnInitialFieldNames)
+        {
+            yield return fieldName;
+        }
+    }
+
+    private static IEnumerable<FunctionSyntax> GeneratedLookupFunctions(IReadOnlyList<EnemyDef> enemyDefs, IReadOnlySet<string> usedMethods)
     {
         if (enemyDefs.Count == 0)
         {
             yield break;
         }
 
-        yield return LookupFunction("enemy_behavior", enemyDefs, "Behavior");
-        yield return LookupFunction("enemy_speed", enemyDefs, "Speed");
-        yield return LookupFunction("enemy_hp", enemyDefs, "Hp");
-        yield return LookupFunction("enemy_cooldown", enemyDefs, "Cooldown");
-        yield return LookupFunction("enemy_contact_damage", enemyDefs, "ContactDamage");
-        yield return LookupFunction("enemy_hitbox_width", enemyDefs, "HitboxWidth");
-        yield return LookupFunction("enemy_hitbox_height", enemyDefs, "HitboxHeight");
+        foreach (var lookup in EnemyLookupFunctions.Where(pair => usedMethods.Contains(pair.Key)))
+        {
+            yield return LookupFunction(lookup.Value, enemyDefs, lookup.Key);
+        }
     }
 
     private static IEnumerable<FunctionSyntax> GeneratedSpawnLookupFunctions(IReadOnlyList<ActorSpawnLayer> spawnLayers)
@@ -1640,6 +1743,7 @@ public static class ActorFrameworkLowerer
         private readonly Dictionary<ActorSpawnLayerKey, ActorSpawnLayer> spawnLayers = [];
         private readonly List<ActorSpawnLayer> spawnLayersInOrder = [];
         private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
+        private readonly HashSet<string> usedEnemyLookupMethods = new(StringComparer.Ordinal);
 
         public string TargetName { get; } = capabilities.Name;
         public string BaseDirectory { get; } = baseDirectory ?? Directory.GetCurrentDirectory();
@@ -1649,6 +1753,7 @@ public static class ActorFrameworkLowerer
         public IReadOnlyList<ActorPool> Pools => poolsInOrder;
         public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
         public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
+        public IReadOnlySet<string> UsedEnemyLookupMethods => usedEnemyLookupMethods;
         public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0;
 
         public void AddPool(ActorPool pool)
@@ -1680,6 +1785,11 @@ public static class ActorFrameworkLowerer
             }
 
             enemyDefsInOrder.Add(def);
+        }
+
+        public void RecordEnemyLookupMethod(string method)
+        {
+            usedEnemyLookupMethods.Add(method);
         }
 
         public void AddSpawnLayer(ActorSpawnLayer spawnLayer)
@@ -1790,6 +1900,8 @@ public static class ActorFrameworkLowerer
     }
 
     private sealed record ActorPool(string Name, int Capacity);
+
+    private sealed record GeneratedName(string Name, string Origin);
 
     private sealed record ActorSpawnLayer(
         string MethodName,

@@ -1,3 +1,4 @@
+using System.Globalization;
 using RetroSharp.Core;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
@@ -32,6 +33,21 @@ internal static class NesRomBuilder
 
     private static byte[] BuildPrgRom(NesVideoProgram program)
     {
+        var longForLoopIds = new HashSet<int>();
+        while (true)
+        {
+            try
+            {
+                return BuildPrgRom(program, longForLoopIds);
+            }
+            catch (BranchOutOfRangeException ex) when (TryForEndLabelId(ex.Label, out var id) && longForLoopIds.Add(id))
+            {
+            }
+        }
+    }
+
+    private static byte[] BuildPrgRom(NesVideoProgram program, IReadOnlySet<int> longForLoopIds)
+    {
         var builder = new PrgBuilder();
 
         builder.Emit(0x78);                         // SEI
@@ -50,7 +66,7 @@ internal static class NesRomBuilder
         EmitPaletteUpload(builder);
         EmitNameTableUpload(builder, program.NameTable.Length);
 
-        var runtimeCompiler = new NesRuntimeCompiler(builder, program);
+        var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds);
         runtimeCompiler.EmitInitialization();
 
         builder.Emit(0xA9, 0x00);                   // LDA #$00
@@ -84,6 +100,19 @@ internal static class NesRomBuilder
         SetVector(prg, PrgRomSize - 4, PrgBuilder.BaseAddress);
         SetVector(prg, PrgRomSize - 2, PrgBuilder.BaseAddress);
         return prg;
+    }
+
+    private static bool TryForEndLabelId(string label, out int id)
+    {
+        const string prefix = "for_end_";
+        if (label.StartsWith(prefix, StringComparison.Ordinal) &&
+            int.TryParse(label[prefix.Length..], CultureInfo.InvariantCulture, out id))
+        {
+            return true;
+        }
+
+        id = 0;
+        return false;
     }
 
     private static void EmitWaitVBlank(PrgBuilder builder, string label)
@@ -320,14 +349,17 @@ internal sealed class NesRuntimeCompiler
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
     private readonly Stack<LoopTarget> loopTargets = [];
+    private readonly IReadOnlySet<int> longForLoopIds;
     private byte nextVariableAddress = FirstVariableAddress;
+    private int nextForLoopId;
     private int nextHardwareSprite;
     private NesCameraConfig? cameraConfig;
 
-    public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program)
+    public NesRuntimeCompiler(PrgBuilder builder, NesVideoProgram program, IReadOnlySet<int>? longForLoopIds = null)
     {
         this.builder = builder;
         this.program = program;
+        this.longForLoopIds = longForLoopIds ?? new HashSet<int>();
     }
 
     public void EmitInitialization()
@@ -1204,14 +1236,22 @@ internal sealed class NesRuntimeCompiler
             EmitStatement(forSyntax.Initializer.Value);
         }
 
-        var loopLabel = builder.CreateLabel("for");
-        var continueLabel = builder.CreateLabel("for_continue");
-        var endLabel = builder.CreateLabel("for_end");
+        var forLoopId = nextForLoopId++;
+        var loopLabel = $"for_{forLoopId}";
+        var continueLabel = $"for_continue_{forLoopId}";
+        var endLabel = $"for_end_{forLoopId}";
 
         builder.Label(loopLabel);
         if (forSyntax.Condition.HasValue)
         {
-            EmitConditionFalseJumpToFarLabel(forSyntax.Condition.Value, endLabel, "for_condition_false");
+            if (longForLoopIds.Contains(forLoopId))
+            {
+                EmitConditionFalseJumpToFarLabel(forSyntax.Condition.Value, endLabel, $"for_condition_false_{forLoopId}");
+            }
+            else
+            {
+                EmitConditionFalseJump(forSyntax.Condition.Value, endLabel);
+            }
         }
 
         loopTargets.Push(new LoopTarget(endLabel, continueLabel));
@@ -3269,7 +3309,7 @@ internal sealed class PrgBuilder
             var delta = target - branchFrom;
             if (delta is < -128 or > 127)
             {
-                throw new InvalidOperationException($"Branch to '{fixup.Label}' is out of range.");
+                throw new BranchOutOfRangeException(fixup.Label, delta);
             }
 
             bytes[fixup.Offset] = unchecked((byte)(sbyte)delta);
@@ -3301,4 +3341,12 @@ internal sealed class PrgBuilder
 
         return BaseAddress + offset + addend;
     }
+}
+
+internal sealed class BranchOutOfRangeException(string label, int delta)
+    : InvalidOperationException($"Branch to '{label}' is out of range.")
+{
+    public string Label { get; } = label;
+
+    public int Delta { get; } = delta;
 }

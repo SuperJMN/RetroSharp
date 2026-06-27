@@ -6,6 +6,7 @@ using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 public class GameBoyRomCompilerTests
@@ -2405,6 +2406,72 @@ public class GameBoyRomCompilerTests
             manualRom.SequenceEqual(actorRom),
             "Game Boy actor TouchTiles should match the manual loop that passes __enemies_touch_screen_x_Goomba computed from enemies[__enemies_touch_i].x, so actor slots at X=24 and X=104 do not share one fixed collision column.");
         Assert.Equal(manualRom, actorRom);
+    }
+
+    [Fact]
+    public void Rejects_actor_generated_name_collision_with_user_symbol()
+    {
+        const string source = """
+                              const GoombaSpeed = 7;
+
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Walker, speed: 1);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("actor framework cannot generate enemy.Def 'Goomba' speed constant named 'GoombaSpeed' because user constant 'GoombaSpeed' is already declared.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_actor_generated_name_collision_between_directives()
+    {
+        const string source = """
+                              void main() {
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, behavior: Walker, speed: 1);
+                                  enemy.Def(GoombaSpeed, behavior: Flyer);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("actor framework cannot generate enemy.Def 'GoombaSpeed' kind constant named 'GoombaSpeed' because enemy.Def 'Goomba' speed constant also generates 'GoombaSpeed'.", exception.Message);
+    }
+
+    [Fact]
+    public void Prunes_unused_enemy_lookup_helpers_until_author_calls_metadata_api()
+    {
+        const string unusedSource = """
+                                    void main() {
+                                        actor.Pool(enemies, 1);
+                                        enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
+                                        enemies[0].kind = Goomba;
+                                    }
+                                    """;
+
+        const string usedSource = """
+                                  void main() {
+                                      actor.Pool(enemies, 1);
+                                      enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
+                                      enemies[0].kind = Goomba;
+                                      enemies[0].vx = (i8)enemy.Speed(enemies[0].kind);
+                                  }
+                                  """;
+
+        var unusedParse = new SomeParser().Parse(unusedSource);
+        Assert.True(unusedParse.IsSuccess, unusedParse.IsFailure ? unusedParse.Error : string.Empty);
+        var unusedLowered = ActorFrameworkLowerer.Lower(unusedParse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+
+        var usedParse = new SomeParser().Parse(usedSource);
+        Assert.True(usedParse.IsSuccess, usedParse.IsFailure ? usedParse.Error : string.Empty);
+        var usedLowered = ActorFrameworkLowerer.Lower(usedParse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+
+        Assert.DoesNotContain(unusedLowered.Functions, function => function.Name.StartsWith("enemy_", StringComparison.Ordinal));
+        Assert.Contains(usedLowered.Functions, function => function.Name == "enemy_speed");
+        Assert.DoesNotContain(usedLowered.Functions, function => function.Name == "enemy_hp");
     }
 
     [Fact]

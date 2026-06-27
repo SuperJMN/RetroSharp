@@ -75,8 +75,10 @@ silently lowering to an expensive fallback.
 - **AF-2.1 — fixed actor pool and enemy definition model**. The shared SDK
   frontend now expands `actor.Pool(enemies, 8)` to a fixed `Actor enemies[8]`
   struct array and consumes `enemy.Def(...)` as byte-sized per-kind metadata.
-  It generates kind/behavior constants and inline lookup helpers such as
-  `enemy.Speed(kind)`/`enemy.Hp(kind)` without adding `Sdk2DOperation` cases.
+  It generates kind/behavior constants and emits inline lookup helpers such as
+  `enemy.Speed(kind)`/`enemy.Hp(kind)` only when source calls that metadata API,
+  without adding `Sdk2DOperation` cases. Unused lookup helpers are not kept in
+  the lowered program, so they have zero byte cost.
   `sprite` and behavior metadata must be identifiers, numeric metadata must be
   literal bytes, and pool capacity must be a literal `1..255`.
 - **AF-2.2/AF-2.3 basic behavior update/draw**. On Game Boy and NES,
@@ -90,8 +92,9 @@ silently lowering to an expensive fallback.
   `Hazard` (publish `contactDamage` through `state`). The SDK byte-expression
   model now carries runtime indexed fields such as `enemies[i].x` so existing
   SDK operations can read actor pool storage without adding actor-specific
-  operations. NES supports the same `Update()` and `Draw()` lowering after the
-  `for` loop condition path gained a local long-branch trampoline.
+  operations. NES supports the same `Update()` and `Draw()` lowering; `for`
+  loop condition branches stay short when the loop body is in 6502 branch range
+  and use a local long-branch trampoline only when needed.
 
 ## Task breakdown
 
@@ -378,15 +381,15 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 #### AF-5.5: Minor robustness follow-ups (priority 4)
 - Layer: framework / target lowering.
 - Steps:
-  - [ ] Guard generated constant names (enemy name, `{Name}Speed`, etc.) against
+  - [x] Guard generated constant names (enemy name, `{Name}Speed`, etc.) against
     collisions with user constants/enums, mirroring the existing `Actor`
     struct-name guard.
-  - [ ] Prune or document the currently unused generated lookup helpers
+  - [x] Prune or document the currently unused generated lookup helpers
     (`enemy_speed`, `enemy_hp`, ...).
-  - [ ] Relax the NES `for`-loop trampoline to emit only when a direct branch
+  - [x] Relax the NES `for`-loop trampoline to emit only when a direct branch
     would be out of range, removing the per-loop size overhead on small loops.
 - Verification:
-  - [ ] Tests cover a colliding generated-name diagnostic and an in-range NES
+  - [x] Tests cover a colliding generated-name diagnostic and an in-range NES
     `for` loop emitting no trampoline.
 - Depends on: AF-2.1.
 
@@ -410,9 +413,9 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     and relational compare emission without scratch reentrancy.
 - Depends on: AF-5.1.
 
-## Phase 5 status after AF-5.4
+## Phase 5 status after AF-5.5
 
-AF-5.1 through AF-5.4 are closed. Remaining Phase 5 follow-ups are robustness
+AF-5.1 through AF-5.5 are closed. Remaining Phase 5 follow-ups are robustness
 items rather than the first-slice platformer blockers.
 
 ## Recommended first slice

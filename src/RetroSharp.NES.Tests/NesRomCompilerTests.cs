@@ -2293,6 +2293,58 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_short_for_loop_condition_as_direct_relative_branch_without_trampoline()
+    {
+        const string source = """
+                              void main() {
+                                  u8 x = 0;
+                                  for (u8 i = 0; i < 3; i += 1) {
+                                      x += 1;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        var conditionCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x03, 0xB0]);
+        var bodyIncrement = IndexOfSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]);
+
+        Assert.True(conditionCompare >= 0, "for condition should compare i with the literal upper bound.");
+        Assert.True(bodyIncrement > conditionCompare, "for body should follow the condition.");
+        Assert.NotEqual(0x4C, prg[conditionCompare + 6]);
+        Assert.True(ReadRelativeTarget(prg, conditionCompare + 4) > 0x8000 + bodyIncrement, "direct false branch should skip the body and increment without landing on a trampoline.");
+    }
+
+    [Fact]
+    public void Compiles_long_for_loop_condition_with_branch_trampoline()
+    {
+        var body = string.Join(Environment.NewLine, Enumerable.Repeat("x += 1;", 40));
+        var source = $$"""
+                       void main() {
+                           u8 x = 0;
+                           for (u8 i = 0; i < 1; i += 1) {
+                       {{body}}
+                           }
+                           return;
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        var conditionCompare = IndexOfSequence(prg, [0xA5, 0x01, 0xC9, 0x01, 0xB0]);
+        var trampolineAddress = ReadRelativeTarget(prg, conditionCompare + 4);
+        var trampolineOffset = trampolineAddress - 0x8000;
+
+        Assert.True(conditionCompare >= 0, "for condition should compare i with the literal upper bound.");
+        Assert.Equal(0x4C, prg[conditionCompare + 6]);
+        Assert.Equal(0x4C, prg[trampolineOffset]);
+        Assert.True(ReadLittleEndian16(prg, trampolineOffset + 1) > trampolineAddress, "long false path should jump forward to the for end label.");
+    }
+
+    [Fact]
     public void Compiles_do_while_continue_to_condition_check()
     {
         const string source = """
