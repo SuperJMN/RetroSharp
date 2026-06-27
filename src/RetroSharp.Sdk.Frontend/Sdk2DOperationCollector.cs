@@ -96,7 +96,7 @@ public static class Sdk2DOperationCollector
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
-        var screenX = ConstRange(args[0], 0, 255, "camera_aabb_tiles argument 1");
+        var screenX = ReadByteExpression(args[0], "camera_aabb_tiles argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_tiles argument 2");
         var width = ReadAabbExtent(args[2], "camera_aabb_tiles argument 3");
         var height = ConstRange(args[3], 0, 255, "camera_aabb_tiles argument 4");
@@ -120,7 +120,7 @@ public static class Sdk2DOperationCollector
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
-        var screenX = ConstRange(args[0], 0, 255, "camera_aabb_hit_top argument 1");
+        var screenX = ReadByteExpression(args[0], "camera_aabb_hit_top argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_hit_top argument 2");
         var width = ReadAabbExtent(args[2], "camera_aabb_hit_top argument 3");
         var height = ConstRange(args[3], 0, 255, "camera_aabb_hit_top argument 4");

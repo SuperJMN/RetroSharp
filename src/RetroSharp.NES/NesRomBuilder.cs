@@ -1976,10 +1976,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > NesTarget.Capabilities.ScreenPixels.Width)
-        {
-            throw new InvalidOperationException("camera_aabb_tiles screen span must fit within the visible NES width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_tiles");
 
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
@@ -1988,7 +1985,7 @@ internal sealed class NesRuntimeCompiler
             foreach (var xOffset in AabbSampleOffsets(width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_tiles_next");
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
@@ -2022,10 +2019,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > NesTarget.Capabilities.ScreenPixels.Width)
-        {
-            throw new InvalidOperationException("camera_aabb_hit_top screen span must fit within the visible NES width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_hit_top");
 
         var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
@@ -2034,7 +2028,7 @@ internal sealed class NesRuntimeCompiler
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
                 var hitTopOffset = operation.WorldYOffset + yOffset;
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, hitTopOffset, config, callName);
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
@@ -2095,6 +2089,59 @@ internal sealed class NesRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkByteExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraTileFlagsAt(constantScreenX + screenPixelXOffset, worldY, worldYOffset, config, callName);
+            return;
+        }
+
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
+        var endLabel = builder.CreateLabel("camera_tile_flags_end");
+        if (TrySdkConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(row);
+            return;
+        }
+
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        var inBoundsLabel = builder.CreateLabel("camera_tile_flags_in_bounds");
+        builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
+        builder.JumpAbsolute(outOfBoundsLabel);
+        builder.Label(inBoundsLabel);
+        builder.StoreAZeroPage(CollisionRowScratchAddress);
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
+            builder.LoadAZeroPage(CollisionRowScratchAddress);
+            builder.CompareImmediate(row);
+            builder.BranchRelative(0xD0, nextRowLabel); // BNE nextRowLabel
+            builder.LoadAZeroPage(CollisionColumnScratchAddress);
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
         builder.TransferAToX();
@@ -2127,6 +2174,52 @@ internal sealed class NesRuntimeCompiler
         builder.SubtractImmediate(mapWidth);
         builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraPixelToSourceColumn(SdkByteExpression screenPixelX, int screenPixelXOffset, int mapWidth)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraPixelToSourceColumn(constantScreenX + screenPixelXOffset, mapWidth);
+            return;
+        }
+
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+
+        EmitSdkByteExpressionToA(screenPixelX);
+        if (screenPixelXOffset != 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(screenPixelXOffset);
+        }
+
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+        builder.LoadAZeroPage(CameraXAddress);
+        builder.AndImmediate(0x07);
+        builder.ClearCarry();
+        builder.AddZeroPage(CollisionColumnScratchAddress);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.ClearCarry();
+        builder.AddZeroPage(CameraTileColumnAddress);
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.BranchRelative(0x90, endLabel); // BCC endLabel
+        builder.SetCarry();
+        builder.SubtractImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
+        builder.Label(endLabel);
+    }
+
+    private static void ValidateConstantCameraAabbSpan(SdkByteExpression screenX, int width, int screenWidth, string callName)
+    {
+        if (screenX is SdkByteExpression.Constant constant && constant.Value + width > screenWidth)
+        {
+            throw new InvalidOperationException($"{callName} screen span must fit within the visible NES width.");
+        }
     }
 
     private void EmitWorldPixelToTileCoordinate(SdkByteExpression expression, int offset)

@@ -2016,6 +2016,102 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Actor_tile_collision_uses_per_actor_camera_relative_x_on_nes()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 xHi;
+                                        u8 y;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Walker = 1;
+                                    const Goomba = 1;
+
+                                    void main() {
+                                        world_column(0, 0, 0);
+                                        world_flags(0, 0, 1);
+                                        world_column(1, 0, 0);
+                                        world_flags(1, 0, 2);
+                                        world_map(2, 10, 2);
+                                        camera_init(2, 10, 2);
+                                        Actor enemies[2];
+                                        enemies[0].active = 1;
+                                        enemies[0].kind = Goomba;
+                                        enemies[0].x = 24;
+                                        enemies[0].xHi = 0;
+                                        enemies[0].y = 0;
+                                        enemies[1].active = 1;
+                                        enemies[1].kind = Goomba;
+                                        enemies[1].x = 104;
+                                        enemies[1].xHi = 0;
+                                        enemies[1].y = 0;
+                                        camera_set_position(0, 0);
+
+                                        for (u8 __enemies_touch_i = 0; __enemies_touch_i < countof(enemies); __enemies_touch_i += 1) {
+                                            if (enemies[__enemies_touch_i].active != 0) {
+                                                if (enemies[__enemies_touch_i].kind == Goomba) {
+                                                    u8 __enemies_touch_camera_x_lo_Goomba = __rs_actor_camera_x_lo();
+                                                    u8 __enemies_touch_camera_x_hi_Goomba = __rs_actor_camera_x_hi();
+                                                    u8 __enemies_touch_screen_x_Goomba = enemies[__enemies_touch_i].x - __enemies_touch_camera_x_lo_Goomba;
+                                                    if (((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi_Goomba) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo_Goomba)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi_Goomba + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo_Goomba))) {
+                                                        if (camera.AabbTiles(__enemies_touch_screen_x_Goomba, enemies[__enemies_touch_i].y, 8, 8, 1) != 0) {
+                                                            enemies[__enemies_touch_i].state = 1;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        return;
+                                    }
+                                    """;
+
+        const string actorSource = """
+                                   void main() {
+                                       world_column(0, 0, 0);
+                                       world_flags(0, 0, 1);
+                                       world_column(1, 0, 0);
+                                       world_flags(1, 0, 2);
+                                       world_map(2, 10, 2);
+                                       camera_init(2, 10, 2);
+                                       actor.Pool(enemies, 2);
+                                       enemy.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                       enemies[0].active = 1;
+                                       enemies[0].kind = Goomba;
+                                       enemies[0].x = 24;
+                                       enemies[0].xHi = 0;
+                                       enemies[0].y = 0;
+                                       enemies[1].active = 1;
+                                       enemies[1].kind = Goomba;
+                                       enemies[1].x = 104;
+                                       enemies[1].xHi = 0;
+                                       enemies[1].y = 0;
+                                       camera_set_position(0, 0);
+                                       enemies.TouchTiles(0, 1);
+                                       return;
+                                   }
+                                   """;
+
+        var manualRom = NesRomCompiler.CompileSource(manualSource);
+        var actorRom = NesRomCompiler.CompileSource(actorSource);
+
+        Assert.True(
+            manualRom.SequenceEqual(actorRom),
+            "NES actor TouchTiles should match the manual loop that passes __enemies_touch_screen_x_Goomba computed from enemies[__enemies_touch_i].x, so actor slots at X=24 and X=104 do not share one fixed collision column.");
+        Assert.Equal(manualRom, actorRom);
+    }
+
+    [Fact]
     public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
     {
         const string source = """

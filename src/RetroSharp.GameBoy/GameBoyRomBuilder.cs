@@ -4250,10 +4250,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > 160)
-        {
-            throw new InvalidOperationException("camera_aabb_tiles screen span must fit within the visible Game Boy width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, 160, "camera_aabb_tiles");
 
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
@@ -4261,7 +4258,7 @@ internal sealed class GameBoyRuntimeCompiler
         {
             foreach (var xOffset in AabbSampleOffsets(width))
             {
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
@@ -4293,10 +4290,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        if (operation.ScreenX + width > 160)
-        {
-            throw new InvalidOperationException("camera_aabb_hit_top screen span must fit within the visible Game Boy width.");
-        }
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, 160, "camera_aabb_hit_top");
 
         var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
@@ -4305,7 +4299,7 @@ internal sealed class GameBoyRuntimeCompiler
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
                 var hitTopOffset = operation.WorldYOffset + yOffset;
-                EmitCameraTileFlagsAt(operation.ScreenX + xOffset, operation.WorldY, hitTopOffset, config, callName);
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.JumpAbsolute(0xCA, nextProbeLabel); // JP Z,nextProbeLabel
@@ -4407,6 +4401,56 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkByteExpression worldY, int worldYOffset, CameraConfig config, string callName)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraTileFlagsAt(constantScreenX + screenPixelXOffset, worldY, worldYOffset, config, callName);
+            return;
+        }
+
+        var worldMap = WorldMapForFlagQuery(callName);
+        var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
+        var endLabel = builder.CreateLabel("camera_tile_flags_end");
+        if (TrySdkConst(worldY, out var constantWorldY))
+        {
+            var row = (constantWorldY + worldYOffset) / 8;
+            if (row < 0 || row >= worldMap.Height)
+            {
+                builder.LoadAImmediate(0);
+                return;
+            }
+
+            EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+            EmitMapFlagsAtSourceColumnInA(row);
+            return;
+        }
+
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.LoadBFromA();
+
+        EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
+        builder.CompareImmediate(worldMap.Height);
+        builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
+        builder.LoadCFromA();
+
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
+            builder.LoadAFromC();
+            builder.CompareImmediate(row);
+            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
+            builder.LoadAFromB();
+            EmitMapFlagsAtSourceColumnInA(row);
+            builder.JumpAbsolute(endLabel);
+            builder.Label(nextRowLabel);
+        }
+
+        builder.Label(outOfBoundsLabel);
+        builder.LoadAImmediate(0);
+        builder.Label(endLabel);
+    }
+
     private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
     {
         var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
@@ -4431,6 +4475,49 @@ internal sealed class GameBoyRuntimeCompiler
         builder.SubtractAImmediate(mapWidth);
         builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraPixelToSourceColumn(SdkByteExpression screenPixelX, int screenPixelXOffset, int mapWidth)
+    {
+        if (TrySdkConst(screenPixelX, out var constantScreenX))
+        {
+            EmitCameraPixelToSourceColumn(constantScreenX + screenPixelXOffset, mapWidth);
+            return;
+        }
+
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+
+        EmitSdkByteExpressionToA(screenPixelX);
+        if (screenPixelXOffset != 0)
+        {
+            builder.AddAImmediate(screenPixelXOffset);
+        }
+
+        builder.LoadBFromA();
+        builder.LoadA(CameraFineXAddress);
+        builder.AddAFromB();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.LoadBFromA();
+        builder.LoadA(CameraScreenLeftColumnAddress);
+        builder.AddAFromB();
+
+        builder.Label(wrapLabel);
+        builder.CompareImmediate(mapWidth);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+        builder.SubtractAImmediate(mapWidth);
+        builder.JumpAbsolute(wrapLabel);
+        builder.Label(endLabel);
+    }
+
+    private static void ValidateConstantCameraAabbSpan(SdkByteExpression screenX, int width, int screenWidth, string callName)
+    {
+        if (screenX is SdkByteExpression.Constant constant && constant.Value + width > screenWidth)
+        {
+            throw new InvalidOperationException($"{callName} screen span must fit within the visible Game Boy width.");
+        }
     }
 
     private static IReadOnlyList<int> AabbSampleOffsets(int size)

@@ -58,8 +58,8 @@ Game Boy currently accepts hUGETracker `.uge` v6 resources and `.gbapu` APU trac
 | `world.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `world_tile_flags_at(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
-| `camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a fixed-screen actor AABB overlaps requested world flags at the current camera position. This is capability-gated and intended for long scrolling maps where the actor stays at a screen X. |
-| `camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a fixed-screen actor AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
+| `camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` and `worldY` may be literals or byte-backed runtime expressions, so fixed-screen actors and projected world-space actors can share the same SDK operation. |
+| `camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a camera-relative AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
@@ -111,9 +111,9 @@ identity, virtual dispatch, delegates, closures, or function pointers.
 | `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, filter spawns whose `x` falls in the literal half-open window `[left, left + width)`, and emit slot initialization for that activation window. |
 | `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
 | `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. |
-| `pool.TouchTiles(screenX, yOffset, flags)` | Loop active slots, branch by kind, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
-| `pool.LandOnTiles(screenX, searchTopOffset, searchHeight, flags)` | Loop active slots, branch by kind, and call `camera.AabbHitTop(...)` with the kind's literal hitbox width. On hit, assign actor `y` to the returned top Y, clear `vy`, and set `state` to `1`. |
-| `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Loop active slots and test each kind's literal hitbox against a literal player AABB. On hit, set actor `state` to `contactDamage` or `1`. |
+| `pool.TouchTiles(yOffset, flags)` | Loop active slots, branch by kind, compute each actor's camera-relative `screenX` from world `x`/`xHi`, cull slots outside the visible camera window, and call `camera.AabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
+| `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Loop active slots, branch by kind, compute each actor's camera-relative `screenX`, cull slots outside the visible camera window, and call `camera.AabbHitTop(...)` with the kind's literal hitbox width. On hit, assign actor `y` to the returned top Y, clear `vy`, and set `state` to `1`. |
+| `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Loop active slots, compute each actor's camera-relative `screenX`, cull slots outside the visible camera window, and test each kind's literal hitbox against a literal player AABB in screen coordinates. On hit, set actor `state` to `contactDamage` or `1`. |
 
 `actor.Pool(...)` and `enemy.Def(...)` are accepted as statements inside the
 compiled source and disappear before target lowering. The generated actor state
@@ -131,9 +131,12 @@ that basic behavior set. `pool.Draw()` reads the current camera X state, compute
 and emits ordinary `sprite.Draw(...)` calls for visible actors, using
 `animation.Frame(...)` when a definition declares an animation clip. Aggregate
 hardware sprite usage is validated by the same frame-budget pass as hand-written
-sprite draws. `pool.TouchTiles(...)` and `pool.LandOnTiles(...)`
-emit ordinary camera AABB SDK calls; they do not introduce actor-specific target
-intrinsics. Tiled spawn helpers read the same target-neutral map importer as
+sprite draws. `pool.TouchTiles(...)`, `pool.LandOnTiles(...)`, and
+`pool.TouchPlayer(...)` reuse the same camera projection and visibility guard as
+draw, so collision/contact is tested per visible actor instead of at one fixed
+screen column. The tile helpers emit ordinary camera AABB SDK calls; they do not
+introduce actor-specific target intrinsics. Tiled spawn helpers read the same
+target-neutral map importer as
 `world.Load(...)` and lower to fixed slot stores before target lowering.
 
 ### Optional HUD
@@ -182,7 +185,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
 | Actor pool/definition slice | `actor.Pool`, `enemy.Def`, and `enemy.*` metadata helpers lower to fixed struct arrays, constants, and inline helper branches. `pool.Update()`/`pool.Draw()` support the basic Game Boy behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | Pool/definition metadata helpers and `pool.Update()`/`pool.Draw()` support the same basic behavior set. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
-| Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for fixed-screen actors on horizontal maps. |
+| Camera-relative collision | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for literal or byte-backed screen X values. | Supported through `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` for literal or byte-backed screen X values on horizontal maps. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
 
 Use `samples/manifest.json` to identify which samples are portable. Currently `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample and builds for both Game Boy and NES.
@@ -211,8 +214,8 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing.
 
-- `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for fixed-screen actors. Game Boy and NES both support the runner-shaped horizontal form.
-- `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when a fixed-screen actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
+- `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped horizontal form and actor-framework calls with per-actor projected X.
+- `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
 - `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample; NES lowers its audio calls as no-ops until real BGM support exists.
 

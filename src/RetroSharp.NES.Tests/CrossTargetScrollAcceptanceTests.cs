@@ -179,13 +179,14 @@ public sealed class CrossTargetScrollAcceptanceTests
                 enemies[0].active = 1;
                 enemies[0].kind = Goomba;
                 enemies[0].x = 72;
+                enemies[0].xHi = 0;
                 enemies[0].y = 16;
 
                 loop {
                     video.WaitVBlank();
                     enemies.Update();
-                    enemies.TouchTiles(72, 0, 1);
-                    enemies.LandOnTiles(72, 4, 12, 1);
+                    enemies.TouchTiles(0, 1);
+                    enemies.LandOnTiles(4, 12, 1);
                     enemies.Draw();
                 }
             }

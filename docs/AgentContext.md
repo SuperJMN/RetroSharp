@@ -116,11 +116,12 @@ Progress (2026-06-14):
 - Active SDK v1 stabilization backlog after #106: none known after the collision, cross-target
   diagnostic, and logical palette slices landed.
 - Camera-relative AABB decision implemented after #106 and extended to NES runner parity:
-  `camera.AabbTiles(...)` is a capability-gated SDK query for fixed-screen actors. Game Boy and
-  NES both declare and lower it through `Sdk2DOperation.CameraAabbTiles`.
+  `camera.AabbTiles(...)` is a capability-gated SDK query for camera-relative AABBs; its
+  `screenX` operand may be literal or byte-backed. Game Boy and NES both declare and lower it
+  through `Sdk2DOperation.CameraAabbTiles`.
 - Landing tile-hit decision implemented after #106: `camera.AabbHitTop(...)` is a
   capability-gated SDK query that returns the top world-pixel Y of the first matching tile in a
-  caller-defined fixed-screen actor AABB, or `255` when none hit. Game Boy and NES lower it
+  caller-defined camera-relative AABB, or `255` when none hit. Game Boy and NES lower it
   through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
   tile-offset landing probe ladder while keeping the downward-velocity gate and
   `player.Land(...)` policy in source.

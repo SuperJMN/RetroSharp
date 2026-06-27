@@ -579,28 +579,8 @@ public static class ActorFrameworkLowerer
     private static BlockSyntax ActorDrawBlock(ActorPool pool, string indexName, EnemyDef def, int screenWidth)
     {
         var statements = new List<StatementSyntax>();
-        var cameraXLow = $"__{pool.Name}_draw_camera_x_lo_{def.Name}";
-        var cameraXHigh = $"__{pool.Name}_draw_camera_x_hi_{def.Name}";
-        var screenX = $"__{pool.Name}_draw_screen_x_{def.Name}";
-
-        statements.Add(new DeclarationSyntax(
-            "u8",
-            cameraXLow,
-            Maybe<ExpressionSyntax>.None,
-            Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXLowFunction, []))));
-        statements.Add(new DeclarationSyntax(
-            "u8",
-            cameraXHigh,
-            Maybe<ExpressionSyntax>.None,
-            Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXHighFunction, []))));
-        statements.Add(new DeclarationSyntax(
-            "u8",
-            screenX,
-            Maybe<ExpressionSyntax>.None,
-            Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
-                PoolField(pool.Name, indexName, "x"),
-                new IdentifierSyntax(cameraXLow),
-                Operator.Get("-")))));
+        var projection = BuildActorScreenProjection(pool, indexName, def, "draw", screenWidth);
+        statements.AddRange(projection.Declarations);
 
         ExpressionSyntax frame = new ConstantSyntax("0");
         if (def.Animation is not null)
@@ -620,6 +600,212 @@ public static class ActorFrameworkLowerer
             frame = new IdentifierSyntax(frameVariable);
         }
 
+        statements.Add(new IfElseSyntax(
+            projection.Visible,
+            new BlockSyntax([
+                new ExpressionStatementSyntax(new SdkDotCallSyntax(
+                    "sprite",
+                    "Draw",
+                    [
+                        new IdentifierSyntax(def.Sprite!),
+                        projection.ScreenX,
+                        PoolField(pool.Name, indexName, "y"),
+                        frame,
+                        new IdentifierSyntax("false"),
+                        new ConstantSyntax("0"),
+                    ])),
+            ]),
+            Maybe<BlockSyntax>.None));
+
+        return new BlockSyntax(statements);
+    }
+
+    private static ForSyntax PoolTouchTilesLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = RequireArguments(call, 2);
+        RequireEnemyDefs(state, $"{pool.Name}.TouchTiles");
+
+        var yOffset = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchTiles argument 1");
+        var indexName = $"__{pool.Name}_touch_i";
+        var branches = state.EnemyDefs
+            .Select(def => new KindBranch(def.Name, TouchTilesBlock(pool, indexName, def, yOffset, parameters[1], state.ScreenWidth)))
+            .ToList();
+
+        return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
+    }
+
+    private static BlockSyntax TouchTilesBlock(
+        ActorPool pool,
+        string indexName,
+        EnemyDef def,
+        int yOffset,
+        ExpressionSyntax flags,
+        int screenWidth)
+    {
+        var projection = BuildActorScreenProjection(pool, indexName, def, "touch", screenWidth);
+        var collision = new IfElseSyntax(
+            new BinaryExpressionSyntax(
+                new SdkDotCallSyntax(
+                    "camera",
+                    "AabbTiles",
+                    [
+                        projection.ScreenX,
+                        OffsetPoolField(pool.Name, indexName, "y", yOffset, subtract: false),
+                        new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
+                        new ConstantSyntax(def.HitboxHeight.ToString(CultureInfo.InvariantCulture)),
+                        flags,
+                    ]),
+                new ConstantSyntax("0"),
+                Operator.NotEqual),
+            new BlockSyntax([
+                FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax((def.ContactDamage == 0 ? 1 : def.ContactDamage).ToString(CultureInfo.InvariantCulture))),
+            ]),
+            Maybe<BlockSyntax>.None);
+
+        return new BlockSyntax(projection.Declarations.Concat([
+            new IfElseSyntax(projection.Visible, new BlockSyntax([collision]), Maybe<BlockSyntax>.None),
+        ]).ToList());
+    }
+
+    private static ForSyntax PoolLandOnTilesLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = RequireArguments(call, 3);
+        RequireEnemyDefs(state, $"{pool.Name}.LandOnTiles");
+
+        var searchTopOffset = RequiredLiteralByte(parameters[0], $"{pool.Name}.LandOnTiles argument 1");
+        var searchHeight = RequiredLiteralByte(parameters[1], $"{pool.Name}.LandOnTiles argument 2");
+        var indexName = $"__{pool.Name}_land_i";
+        var branches = state.EnemyDefs
+            .Select(def => new KindBranch(def.Name, LandOnTilesBlock(pool, indexName, def, searchTopOffset, searchHeight, parameters[2], state.ScreenWidth)))
+            .ToList();
+
+        return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
+    }
+
+    private static BlockSyntax LandOnTilesBlock(
+        ActorPool pool,
+        string indexName,
+        EnemyDef def,
+        int searchTopOffset,
+        int searchHeight,
+        ExpressionSyntax flags,
+        int screenWidth)
+    {
+        var projection = BuildActorScreenProjection(pool, indexName, def, "land", screenWidth);
+        var hitTop = $"__{pool.Name}_land_hit_{def.Name}";
+        var hitTopDeclaration = new DeclarationSyntax(
+            "u8",
+            hitTop,
+            Maybe<ExpressionSyntax>.None,
+            Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
+                "camera",
+                "AabbHitTop",
+                [
+                    projection.ScreenX,
+                    OffsetPoolField(pool.Name, indexName, "y", searchTopOffset, subtract: true),
+                    new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
+                    new ConstantSyntax(searchHeight.ToString(CultureInfo.InvariantCulture)),
+                    flags,
+                ])));
+        var hitTopGuard = new IfElseSyntax(
+            new BinaryExpressionSyntax(new IdentifierSyntax(hitTop), new ConstantSyntax("255"), Operator.NotEqual),
+            new BlockSyntax([
+                FieldAssignment(pool.Name, indexName, "y", "=", new IdentifierSyntax(hitTop)),
+                FieldAssignment(pool.Name, indexName, "vy", "=", new ConstantSyntax("0")),
+                FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax("1")),
+            ]),
+            Maybe<BlockSyntax>.None);
+
+        return new BlockSyntax(projection.Declarations.Concat([
+            new IfElseSyntax(
+                projection.Visible,
+                new BlockSyntax([hitTopDeclaration, hitTopGuard]),
+                Maybe<BlockSyntax>.None),
+        ]).ToList());
+    }
+
+    private static ForSyntax PoolTouchPlayerLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = RequireArguments(call, 4);
+        RequireEnemyDefs(state, $"{pool.Name}.TouchPlayer");
+
+        var playerX = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchPlayer argument 1");
+        var playerY = RequiredLiteralByte(parameters[1], $"{pool.Name}.TouchPlayer argument 2");
+        var playerWidth = RequiredLiteralByte(parameters[2], $"{pool.Name}.TouchPlayer argument 3");
+        var playerHeight = RequiredLiteralByte(parameters[3], $"{pool.Name}.TouchPlayer argument 4");
+        var playerRight = CheckedByte(playerX + playerWidth, $"{pool.Name}.TouchPlayer player right edge");
+        var playerBottom = CheckedByte(playerY + playerHeight, $"{pool.Name}.TouchPlayer player bottom edge");
+
+        var indexName = $"__{pool.Name}_player_i";
+        var branches = state.EnemyDefs
+            .Select(def => new KindBranch(def.Name, TouchPlayerBlock(pool, indexName, def, playerX, playerY, playerRight, playerBottom, state.ScreenWidth)))
+            .ToList();
+
+        return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
+    }
+
+    private static BlockSyntax TouchPlayerBlock(
+        ActorPool pool,
+        string indexName,
+        EnemyDef def,
+        int playerX,
+        int playerY,
+        int playerRight,
+        int playerBottom,
+        int screenWidth)
+    {
+        var projection = BuildActorScreenProjection(pool, indexName, def, "player", screenWidth);
+        var overlapsX = And(
+            new BinaryExpressionSyntax(projection.ScreenX, Constant(playerRight), Operator.LessThan),
+            new BinaryExpressionSyntax(
+                new BinaryExpressionSyntax(projection.ScreenX, Constant(def.HitboxWidth), Operator.Get("+")),
+                Constant(playerX),
+                Operator.Get(">")));
+        var overlapsY = And(
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), Constant(playerBottom), Operator.LessThan),
+            new BinaryExpressionSyntax(OffsetPoolField(pool.Name, indexName, "y", def.HitboxHeight, subtract: false), Constant(playerY), Operator.Get(">")));
+
+        var touchPlayer = new IfElseSyntax(
+            And(overlapsX, overlapsY),
+            new BlockSyntax([
+                FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax((def.ContactDamage == 0 ? 1 : def.ContactDamage).ToString(CultureInfo.InvariantCulture))),
+            ]),
+            Maybe<BlockSyntax>.None);
+
+        return new BlockSyntax(projection.Declarations.Concat([
+            new IfElseSyntax(projection.Visible, new BlockSyntax([touchPlayer]), Maybe<BlockSyntax>.None),
+        ]).ToList());
+    }
+
+    private static ActorScreenProjection BuildActorScreenProjection(ActorPool pool, string indexName, EnemyDef def, string phase, int screenWidth)
+    {
+        var cameraXLow = $"__{pool.Name}_{phase}_camera_x_lo_{def.Name}";
+        var cameraXHigh = $"__{pool.Name}_{phase}_camera_x_hi_{def.Name}";
+        var screenX = $"__{pool.Name}_{phase}_screen_x_{def.Name}";
+        var screenXIdentifier = new IdentifierSyntax(screenX);
+
+        var declarations = new List<StatementSyntax>
+        {
+            new DeclarationSyntax(
+                "u8",
+                cameraXLow,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXLowFunction, []))),
+            new DeclarationSyntax(
+                "u8",
+                cameraXHigh,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXHighFunction, []))),
+            new DeclarationSyntax(
+                "u8",
+                screenX,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    PoolField(pool.Name, indexName, "x"),
+                    new IdentifierSyntax(cameraXLow),
+                    Operator.Get("-")))),
+        };
+
         var sameCameraPage = And(
             new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
             new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
@@ -637,161 +823,7 @@ public static class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(new IdentifierSyntax(screenX), new ConstantSyntax(screenWidth.ToString(CultureInfo.InvariantCulture)), Operator.LessThan));
         }
 
-        statements.Add(new IfElseSyntax(
-            visible,
-            new BlockSyntax([
-                new ExpressionStatementSyntax(new SdkDotCallSyntax(
-                    "sprite",
-                    "Draw",
-                    [
-                        new IdentifierSyntax(def.Sprite!),
-                        new IdentifierSyntax(screenX),
-                        PoolField(pool.Name, indexName, "y"),
-                        frame,
-                        new IdentifierSyntax("false"),
-                        new ConstantSyntax("0"),
-                    ])),
-            ]),
-            Maybe<BlockSyntax>.None));
-
-        return new BlockSyntax(statements);
-    }
-
-    private static ForSyntax PoolTouchTilesLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
-    {
-        var parameters = RequireArguments(call, 3);
-        RequireEnemyDefs(state, $"{pool.Name}.TouchTiles");
-
-        var yOffset = RequiredLiteralByte(parameters[1], $"{pool.Name}.TouchTiles argument 2");
-        var indexName = $"__{pool.Name}_touch_i";
-        var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, new BlockSyntax([TouchTilesStatement(pool, indexName, def, parameters[0], yOffset, parameters[2])])))
-            .ToList();
-
-        return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
-    }
-
-    private static IfElseSyntax TouchTilesStatement(
-        ActorPool pool,
-        string indexName,
-        EnemyDef def,
-        ExpressionSyntax screenX,
-        int yOffset,
-        ExpressionSyntax flags)
-    {
-        return new IfElseSyntax(
-            new BinaryExpressionSyntax(
-                new SdkDotCallSyntax(
-                    "camera",
-                    "AabbTiles",
-                    [
-                        screenX,
-                        OffsetPoolField(pool.Name, indexName, "y", yOffset, subtract: false),
-                        new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
-                        new ConstantSyntax(def.HitboxHeight.ToString(CultureInfo.InvariantCulture)),
-                        flags,
-                    ]),
-                new ConstantSyntax("0"),
-                Operator.NotEqual),
-            new BlockSyntax([
-                FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax((def.ContactDamage == 0 ? 1 : def.ContactDamage).ToString(CultureInfo.InvariantCulture))),
-            ]),
-            Maybe<BlockSyntax>.None);
-    }
-
-    private static ForSyntax PoolLandOnTilesLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
-    {
-        var parameters = RequireArguments(call, 4);
-        RequireEnemyDefs(state, $"{pool.Name}.LandOnTiles");
-
-        var searchTopOffset = RequiredLiteralByte(parameters[1], $"{pool.Name}.LandOnTiles argument 2");
-        var searchHeight = RequiredLiteralByte(parameters[2], $"{pool.Name}.LandOnTiles argument 3");
-        var indexName = $"__{pool.Name}_land_i";
-        var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, LandOnTilesBlock(pool, indexName, def, parameters[0], searchTopOffset, searchHeight, parameters[3])))
-            .ToList();
-
-        return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
-    }
-
-    private static BlockSyntax LandOnTilesBlock(
-        ActorPool pool,
-        string indexName,
-        EnemyDef def,
-        ExpressionSyntax screenX,
-        int searchTopOffset,
-        int searchHeight,
-        ExpressionSyntax flags)
-    {
-        var hitTop = $"__{pool.Name}_land_hit_{def.Name}";
-        return new BlockSyntax([
-            new DeclarationSyntax(
-                "u8",
-                hitTop,
-                Maybe<ExpressionSyntax>.None,
-                Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                    "camera",
-                    "AabbHitTop",
-                    [
-                        screenX,
-                        OffsetPoolField(pool.Name, indexName, "y", searchTopOffset, subtract: true),
-                        new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
-                        new ConstantSyntax(searchHeight.ToString(CultureInfo.InvariantCulture)),
-                        flags,
-                    ]))),
-            new IfElseSyntax(
-                new BinaryExpressionSyntax(new IdentifierSyntax(hitTop), new ConstantSyntax("255"), Operator.NotEqual),
-                new BlockSyntax([
-                    FieldAssignment(pool.Name, indexName, "y", "=", new IdentifierSyntax(hitTop)),
-                    FieldAssignment(pool.Name, indexName, "vy", "=", new ConstantSyntax("0")),
-                    FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax("1")),
-                ]),
-                Maybe<BlockSyntax>.None),
-        ]);
-    }
-
-    private static ForSyntax PoolTouchPlayerLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
-    {
-        var parameters = RequireArguments(call, 4);
-        RequireEnemyDefs(state, $"{pool.Name}.TouchPlayer");
-
-        var playerX = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchPlayer argument 1");
-        var playerY = RequiredLiteralByte(parameters[1], $"{pool.Name}.TouchPlayer argument 2");
-        var playerWidth = RequiredLiteralByte(parameters[2], $"{pool.Name}.TouchPlayer argument 3");
-        var playerHeight = RequiredLiteralByte(parameters[3], $"{pool.Name}.TouchPlayer argument 4");
-        var playerRight = CheckedByte(playerX + playerWidth, $"{pool.Name}.TouchPlayer player right edge");
-        var playerBottom = CheckedByte(playerY + playerHeight, $"{pool.Name}.TouchPlayer player bottom edge");
-
-        var indexName = $"__{pool.Name}_player_i";
-        var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, new BlockSyntax([TouchPlayerStatement(pool, indexName, def, playerX, playerY, playerRight, playerBottom)])))
-            .ToList();
-
-        return PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, KindDispatch(pool.Name, indexName, branches)));
-    }
-
-    private static IfElseSyntax TouchPlayerStatement(
-        ActorPool pool,
-        string indexName,
-        EnemyDef def,
-        int playerX,
-        int playerY,
-        int playerRight,
-        int playerBottom)
-    {
-        var overlapsX = And(
-            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), Constant(playerRight), Operator.LessThan),
-            new BinaryExpressionSyntax(OffsetPoolField(pool.Name, indexName, "x", def.HitboxWidth, subtract: false), Constant(playerX), Operator.Get(">")));
-        var overlapsY = And(
-            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), Constant(playerBottom), Operator.LessThan),
-            new BinaryExpressionSyntax(OffsetPoolField(pool.Name, indexName, "y", def.HitboxHeight, subtract: false), Constant(playerY), Operator.Get(">")));
-
-        return new IfElseSyntax(
-            And(overlapsX, overlapsY),
-            new BlockSyntax([
-                FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax((def.ContactDamage == 0 ? 1 : def.ContactDamage).ToString(CultureInfo.InvariantCulture))),
-            ]),
-            Maybe<BlockSyntax>.None);
+        return new ActorScreenProjection(declarations, screenXIdentifier, visible);
     }
 
     private static IReadOnlyList<ExpressionSyntax> RequireArguments(SdkDotCallSyntax call, int count)
@@ -1253,6 +1285,8 @@ public static class ActorFrameworkLowerer
         public static ActorSpawnLayerKey From(string methodName, string poolName, string mapPath, string layerName, int? windowLeft, int? windowWidth) =>
             new(methodName, poolName, mapPath, layerName, windowLeft, windowWidth);
     }
+
+    private sealed record ActorScreenProjection(IReadOnlyList<StatementSyntax> Declarations, IdentifierSyntax ScreenX, ExpressionSyntax Visible);
 
     private sealed record KindBranch(string Kind, BlockSyntax Block);
 

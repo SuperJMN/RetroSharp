@@ -29,6 +29,8 @@ void main() {
 
         camera.SetPosition(cameraX, 0);
         enemies.Update();
+        enemies.TouchTiles(0, 1);
+        enemies.LandOnTiles(4, 12, 1);
         camera.Apply();
         enemies.Draw();
     }

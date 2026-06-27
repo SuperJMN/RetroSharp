@@ -66,7 +66,7 @@ public sealed class Sdk2DOperationTests
         Assert.IsType<Sdk2DOperation.ReadWorldTile>(operations[7]);
         Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operations[8]);
         var cameraAabb = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operations[9]);
-        Assert.Equal(72, cameraAabb.ScreenX);
+        Assert.Equal(new SdkByteExpression.Constant(72), cameraAabb.ScreenX);
         Assert.Equal(Field("player", "footY"), cameraAabb.WorldY);
         Assert.Equal(new SdkAabbExtent.Constant(16), cameraAabb.Width);
         Assert.Equal(WorldTileFlags.Solid, cameraAabb.Flags);
@@ -148,6 +148,31 @@ public sealed class Sdk2DOperationTests
         Assert.Equal(
             "camera AABB screen span must fit within target 'gb' visible width 160.",
             exception.Message);
+    }
+
+    [Fact]
+    public void Validator_accepts_camera_aabb_with_byte_backed_screen_x()
+    {
+        var capabilities = FullCapabilities();
+
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.CameraAabbTiles(
+                WorldId: "level1",
+                ScreenX: Local("actorScreenX"),
+                WorldY: Field("actor", "footY"),
+                Width: 16,
+                Height: 8,
+                Flags: WorldTileFlags.Solid));
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.CameraAabbHitTop(
+                WorldId: "level1",
+                ScreenX: Local("actorScreenX"),
+                WorldY: Field("actor", "footY"),
+                Width: 16,
+                Height: 16,
+                Flags: WorldTileFlags.Solid));
     }
 
     [Fact]

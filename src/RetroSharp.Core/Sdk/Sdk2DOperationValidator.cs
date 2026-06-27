@@ -184,17 +184,13 @@ public static class Sdk2DOperationValidator
 
     private static void ValidateCameraAabbGeometry(
         Target2DCapabilities capabilities,
-        int screenX,
+        SdkByteExpression screenX,
         SdkAabbExtent width,
         int height,
         SdkByteExpression worldY,
         WorldTileFlags flags)
     {
-        if (screenX < 0 || screenX >= capabilities.ScreenPixels.Width)
-        {
-            throw new InvalidOperationException($"camera AABB screen X must be between 0 and {capabilities.ScreenPixels.Width - 1} for target '{capabilities.Name}'.");
-        }
-
+        ValidateByteExpression(screenX, "camera AABB screen X");
         ValidateAabbWidth(capabilities, screenX, width);
 
         if (height < 0 || height > 255)
@@ -214,16 +210,24 @@ public static class Sdk2DOperationValidator
         }
     }
 
-    private static void ValidateAabbWidth(Target2DCapabilities capabilities, int screenX, SdkAabbExtent width)
+    private static void ValidateAabbWidth(Target2DCapabilities capabilities, SdkByteExpression screenX, SdkAabbExtent width)
     {
         switch (width)
         {
             case SdkAabbExtent.Constant constant when constant.Value < 0 || constant.Value > capabilities.ScreenPixels.Width:
                 throw new InvalidOperationException($"camera AABB width must be between 0 and {capabilities.ScreenPixels.Width} for target '{capabilities.Name}'.");
             case SdkAabbExtent.Constant constant:
-                if (screenX + constant.Value > capabilities.ScreenPixels.Width)
+                if (screenX is SdkByteExpression.Constant constantScreenX)
                 {
-                    throw new InvalidOperationException($"camera AABB screen span must fit within target '{capabilities.Name}' visible width {capabilities.ScreenPixels.Width}.");
+                    if (constantScreenX.Value >= capabilities.ScreenPixels.Width)
+                    {
+                        throw new InvalidOperationException($"camera AABB screen X must be between 0 and {capabilities.ScreenPixels.Width - 1} for target '{capabilities.Name}'.");
+                    }
+
+                    if (constantScreenX.Value + constant.Value > capabilities.ScreenPixels.Width)
+                    {
+                        throw new InvalidOperationException($"camera AABB screen span must fit within target '{capabilities.Name}' visible width {capabilities.ScreenPixels.Width}.");
+                    }
                 }
 
                 return;

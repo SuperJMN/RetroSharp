@@ -330,10 +330,10 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Layer: framework.
 - Candidate files: `ActorFrameworkLowerer.cs` (collision lowering), tests, sample.
 - Steps:
-  - [ ] Use each actor's (camera-relative) `x` for the collision AABB instead of
+  - [x] Use each actor's (camera-relative) `x` for the collision AABB instead of
     a fixed column, keeping camera-relative AABB capability gating.
 - Verification:
-  - [ ] Two actors at different X positions collide against different tiles.
+  - [x] Two actors at different X positions collide against different tiles.
 - Depends on: AF-5.1.
 
 #### AF-5.3: Runtime camera-window / room activation (priority 2)
@@ -406,9 +406,8 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 ## Known limitations after the first slice
 
 These are the open gaps captured as Phase 5. Until they land, treat the actor
-framework as a non-scrolling acceptance slice, not a shipping platformer SDK:
+framework as an acceptance slice, not a shipping platformer SDK:
 
-- Collision uses one fixed screen column for all actors (AF-5.2).
 - Activation is compile-time window filtering, not runtime paging (AF-5.3).
 - Capability checks count one actor as one hardware sprite (AF-5.4).
 
