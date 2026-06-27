@@ -1426,6 +1426,38 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_struct_array_field_access_with_runtime_index_stride()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u8 y;
+                                  bool active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  Actor actors[3];
+                                  u8 i = 2;
+                                  actors[1].active = 7;
+                                  u8 copy = actors[1].active;
+                                  actors[i].y += 1;
+                                  u8 runtimeCopy = actors[i].x;
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA9, 0x07, 0x85, 0x05]), "actors[1].active should store at base + sizeof(Actor) + offsetof(active).");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x05, 0x85, 0x0A]), "constant indexed field reads should use the flattened field address directly.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x01, 0x18, 0x69, 0x01, 0x95, 0x01]), "actors[i].y should compute X from i * sizeof(Actor) and use the y-field base address.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x85, 0x0B]), "runtime indexed field reads should compute X from i * sizeof(Actor) and use the field base address.");
+    }
+
+    [Fact]
     public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
     {
         const string source = """

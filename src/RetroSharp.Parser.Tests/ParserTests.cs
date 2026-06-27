@@ -886,6 +886,28 @@ public class ParserTests
     }
 
     [Fact]
+    public void Fixed_size_struct_array_field_access()
+    {
+        var source = """
+                     struct Actor
+                     {
+                        u8 x;
+                        u8 y;
+                        bool active;
+                     }
+
+                     void main()
+                     {
+                        Actor actors[3];
+                        u8 i = 1;
+                        actors[0].x = 4;
+                        actors[i].y += 1;
+                     }
+                     """;
+        AssertParse(source);
+    }
+
+    [Fact]
     public void For_loop_with_break_and_continue()
     {
         var source = """

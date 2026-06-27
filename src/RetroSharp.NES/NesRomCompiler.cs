@@ -924,9 +924,16 @@ internal sealed class NesVideoProgram
             current = member.Target;
         }
 
+        if (current is IndexExpressionSyntax indexExpression)
+        {
+            var index = CheckedRange(ConstValue(indexExpression.Index, $"{indexExpression.BaseIdentifier} array index"), 0, 255, $"{indexExpression.BaseIdentifier} array index");
+            parts.Push($"{indexExpression.BaseIdentifier}[{index}]");
+            return string.Join(".", parts);
+        }
+
         if (current is not IdentifierSyntax identifier)
         {
-            throw new InvalidOperationException("NES member access currently requires an identifier base.");
+            throw new InvalidOperationException("NES member access currently requires an identifier or constant indexed base.");
         }
 
         parts.Push(identifier.Identifier);

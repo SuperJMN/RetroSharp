@@ -268,6 +268,13 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Fixed_size_struct_array_field_access_resolves_field_type()
+    {
+        var input = "struct Actor { u8 x; u8 y; bool active; } void main(){ Actor actors[3]; u8 i = 1; actors[0].x = 4; actors[i].y += 1; }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
     public void Fixed_size_array_initializer_resolves_element_expressions()
     {
         var input = "void main(){ u8 seed = 1; u8 values[3] = [seed, seed + 1, 3]; }";

@@ -796,6 +796,8 @@ internal sealed record GameBoyBankedMusicPlacement(string Name, byte Bank, ushor
 
 internal sealed class GameBoyRuntimeCompiler
 {
+    private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
+
     private const ushort FirstVariableAddress = 0xC000;
     private const ushort RuntimeReservedStateAddress = 0xC0E0;
     private const ushort CameraXLowAddress = 0xC0E0;
@@ -871,6 +873,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly Sdk2DStreamReader sdkOperations;
     private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
+    private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
@@ -1141,6 +1144,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitArrayDeclaration(DeclarationSyntax declaration)
     {
+        if (program.Structs.TryGetValue(declaration.Type, out var structSyntax))
+        {
+            EmitStructArrayDeclaration(declaration, structSyntax);
+            return;
+        }
+
         if (!IsByteBackedLocalType(declaration.Type))
         {
             throw new InvalidOperationException($"Game Boy target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
@@ -1166,6 +1175,41 @@ internal sealed class GameBoyRuntimeCompiler
         if (declaration.Initialization.HasValue)
         {
             EmitArrayInitializer(declaration, declaration.Initialization.Value, length, elementAddresses);
+        }
+    }
+
+    private void EmitStructArrayDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
+    {
+        if (!declaredVariables.Add(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        TrackImmutable(declaration);
+
+        var length = CheckedRange(GameBoyVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
+        var fieldOffsets = StructFieldOffsets(structSyntax, "Game Boy");
+        var stride = fieldOffsets.Count;
+        if (length * stride > 255)
+        {
+            throw new InvalidOperationException($"Game Boy target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
+        }
+
+        structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
+
+        for (var index = 0; index < length; index++)
+        {
+            foreach (var field in structSyntax.Fields)
+            {
+                var address = DeclareVariable(IndexedMemberName(declaration.Name, index, field.Name));
+                builder.LoadAImmediate(0);
+                builder.StoreA(address);
+            }
+        }
+
+        if (declaration.Initialization.HasValue)
+        {
+            throw new InvalidOperationException($"Game Boy target does not support initializers for struct array '{declaration.Name}' yet.");
         }
     }
 
@@ -1346,6 +1390,12 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        if (assignment.Left is MemberAccessLValue memberLValue && TryRuntimeIndexedMemberAccess(memberLValue.MemberAccess, out var indexedBase, out var fieldName))
+        {
+            EmitRuntimeIndexedMemberAssignment(indexedBase, fieldName, assignment);
+            return;
+        }
+
         var address = LValueAddress(assignment.Left);
         EmitAssignmentRightToA(assignment);
         builder.StoreA(address);
@@ -1375,6 +1425,7 @@ internal sealed class GameBoyRuntimeCompiler
         return memberAccess.Target switch
         {
             IdentifierSyntax identifier => identifier.Identifier,
+            IndexExpressionSyntax indexExpression => indexExpression.BaseIdentifier,
             MemberAccessSyntax nested => MemberAccessRoot(nested),
             _ => null,
         };
@@ -1451,6 +1502,62 @@ internal sealed class GameBoyRuntimeCompiler
         EmitExpressionToA(right);
         EmitBitwiseAFromC(op);
         builder.StoreHlA();
+    }
+
+    private void EmitRuntimeIndexedMemberAssignment(IndexExpressionSyntax indexExpression, string fieldName, AssignmentSyntax assignment)
+    {
+        EmitRuntimeIndexedMemberAddressToHl(indexExpression, fieldName);
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed struct field assignment");
+                EmitExpressionToA(assignment.Right);
+                builder.StoreHlA();
+                return;
+            case "+=":
+                builder.LoadAFromHl();
+                if (TryConst(assignment.Right, out var addRight))
+                {
+                    builder.AddAImmediate(addRight);
+                    builder.StoreHlA();
+                    return;
+                }
+
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed struct field compound assignment");
+                builder.LoadCFromA();
+                EmitExpressionToA(assignment.Right);
+                builder.AddAFromC();
+                builder.StoreHlA();
+                return;
+            case "-=":
+                builder.LoadAFromHl();
+                if (TryConst(assignment.Right, out var subtractRight))
+                {
+                    builder.SubtractAImmediate(subtractRight);
+                    builder.StoreHlA();
+                    return;
+                }
+
+                RequireExpressionPreservesHl(assignment.Right, "runtime indexed struct field compound assignment");
+                builder.LoadCFromA();
+                EmitExpressionToA(assignment.Right);
+                builder.LoadBFromA();
+                builder.LoadAFromC();
+                builder.SubtractB();
+                builder.StoreHlA();
+                return;
+            case "&=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "&", "runtime indexed struct field &= assignment");
+                return;
+            case "|=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "|", "runtime indexed struct field |= assignment");
+                return;
+            case "^=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(assignment.Right, "^", "runtime indexed struct field ^= assignment");
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy assignment operator '{assignment.OperatorSymbol}'.");
+        }
     }
 
     private void EmitAssignmentRightToA(AssignmentSyntax assignment)
@@ -3623,7 +3730,16 @@ internal sealed class GameBoyRuntimeCompiler
                 builder.LoadA(VariableAddress(identifier.Identifier));
                 break;
             case MemberAccessSyntax memberAccess:
-                builder.LoadA(VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess)));
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out var indexedBase, out var fieldName))
+                {
+                    EmitRuntimeIndexedMemberAddressToHl(indexedBase, fieldName);
+                    builder.LoadAFromHl();
+                }
+                else
+                {
+                    builder.LoadA(VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess)));
+                }
+
                 break;
             case IndexExpressionSyntax indexExpression:
                 if (TryConst(indexExpression.Index, out _))
@@ -4737,6 +4853,57 @@ internal sealed class GameBoyRuntimeCompiler
         builder.AddHlDe();
     }
 
+    private void EmitRuntimeIndexedMemberAddressToHl(IndexExpressionSyntax indexExpression, string fieldName)
+    {
+        var layout = StructArrayLayoutFor(indexExpression.BaseIdentifier);
+        _ = layout.FieldOffsets[fieldName];
+        var baseAddress = VariableAddress(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+        EmitExpressionToA(indexExpression.Index);
+        EmitMultiplyA(layout.Stride);
+        builder.LoadHl(baseAddress);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+    }
+
+    private void EmitMultiplyA(int multiplier)
+    {
+        if (multiplier <= 1)
+        {
+            return;
+        }
+
+        builder.LoadBFromA();
+        for (var count = 1; count < multiplier; count++)
+        {
+            builder.AddAFromB();
+        }
+    }
+
+    private bool TryRuntimeIndexedMemberAccess(MemberAccessSyntax memberAccess, out IndexExpressionSyntax indexExpression, out string fieldName)
+    {
+        if (memberAccess.Target is IndexExpressionSyntax candidate
+            && !TryConst(candidate.Index, out _)
+            && structArrays.ContainsKey(candidate.BaseIdentifier)
+            && StructArrayLayoutFor(candidate.BaseIdentifier).FieldOffsets.ContainsKey(memberAccess.Member))
+        {
+            indexExpression = candidate;
+            fieldName = memberAccess.Member;
+            return true;
+        }
+
+        indexExpression = null!;
+        fieldName = string.Empty;
+        return false;
+    }
+
+    private StructArrayLayout StructArrayLayoutFor(string baseIdentifier)
+    {
+        return structArrays.TryGetValue(baseIdentifier, out var layout)
+            ? layout
+            : throw new InvalidOperationException($"Game Boy target has no struct array layout for '{baseIdentifier}'.");
+    }
+
     private void RequireExpressionPreservesHl(ExpressionSyntax expression, string context)
     {
         if (!PreservesHl(expression))
@@ -4755,7 +4922,7 @@ internal sealed class GameBoyRuntimeCompiler
         return expression switch
         {
             IdentifierSyntax => true,
-            MemberAccessSyntax => true,
+            MemberAccessSyntax memberAccess => !TryRuntimeIndexedMemberAccess(memberAccess, out _, out _),
             IndexExpressionSyntax indexExpression => TryConst(indexExpression.Index, out _),
             CastSyntax cast => PreservesHl(cast.Expression),
             ConditionalExpressionSyntax conditional => PreservesHl(conditional.Condition) && PreservesHl(conditional.WhenTrue) && PreservesHl(conditional.WhenFalse),
@@ -4783,6 +4950,29 @@ internal sealed class GameBoyRuntimeCompiler
     private static string IndexedElementName(string baseIdentifier, int index)
     {
         return $"{baseIdentifier}[{index}]";
+    }
+
+    private static string IndexedMemberName(string baseIdentifier, int index, string fieldName)
+    {
+        return $"{IndexedElementName(baseIdentifier, index)}.{fieldName}";
+    }
+
+    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax, string targetName)
+    {
+        var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var offset = 0;
+        foreach (var field in structSyntax.Fields)
+        {
+            if (!IsByteBackedLocalType(field.Type))
+            {
+                throw new InvalidOperationException($"{targetName} target does not support struct array field type '{field.Type}' yet.");
+            }
+
+            offsets.Add(field.Name, offset);
+            offset++;
+        }
+
+        return offsets;
     }
 
     private static string StorageKey(SdkStorageLocation location)

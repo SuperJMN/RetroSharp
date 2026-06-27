@@ -616,6 +616,11 @@ public class SemanticAnalyzer
             return ResolveMember(scope, memberAccess);
         }
 
+        if (expression is IndexExpressionSyntax indexExpression)
+        {
+            return ResolveIndexedSymbol(scope, indexExpression.BaseIdentifier, indexExpression.Index);
+        }
+
         return ("<expression>", SymbolType.Unknown, ["Member access target must be a symbol or another member access"]);
     }
 

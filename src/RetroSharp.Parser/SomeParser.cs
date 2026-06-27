@@ -991,13 +991,30 @@ public class SomeParser
             ParseArguments(sdkDotCall.arguments()));
     }
 
-    private static MemberAccessSyntax ParseMemberAccess(MemberAccessContext memberAccess)
+    private MemberAccessSyntax ParseMemberAccess(MemberAccessContext memberAccess)
     {
-        var identifiers = memberAccess.IDENTIFIER().Select(identifier => identifier.GetText()).ToList();
-        ExpressionSyntax current = new IdentifierSyntax(identifiers[0]);
-        foreach (var member in identifiers.Skip(1))
+        ExpressionSyntax current;
+        var childIndex = 0;
+        if (memberAccess.GetChild(0) is IndexExpressionContext indexExpression)
         {
-            current = new MemberAccessSyntax(current, member);
+            current = ParseIndexExpression(indexExpression);
+            childIndex = 1;
+        }
+        else
+        {
+            current = new IdentifierSyntax(memberAccess.GetChild(0).GetText());
+            childIndex = 1;
+        }
+
+        while (childIndex < memberAccess.ChildCount)
+        {
+            if (memberAccess.GetChild(childIndex).GetText() != ".")
+            {
+                throw new InvalidOperationException("Unsupported member access syntax.");
+            }
+
+            current = new MemberAccessSyntax(current, memberAccess.GetChild(childIndex + 1).GetText());
+            childIndex += 2;
         }
 
         return (MemberAccessSyntax)current;

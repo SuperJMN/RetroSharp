@@ -147,7 +147,7 @@ offsetofExpression: 'offsetof' '(' type ',' IDENTIFIER ')';
 countofExpression: 'countof' '(' IDENTIFIER ')';
 
 sdkDotCall: IDENTIFIER '.' IDENTIFIER '(' arguments? ')';
-memberAccess: IDENTIFIER ('.' IDENTIFIER)+;
+memberAccess: (IDENTIFIER | indexExpression) ('.' IDENTIFIER)+;
 indexExpression: IDENTIFIER '[' expression ']';
 
 // LValue forms for assignments (parser-only for now)

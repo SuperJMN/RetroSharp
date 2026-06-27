@@ -2155,6 +2155,36 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_struct_array_field_access_with_runtime_index_stride()
+    {
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u8 y;
+                                  bool active;
+                              }
+
+                              void main() {
+                                  video_init();
+                                  Actor actors[3];
+                                  u8 i = 2;
+                                  actors[1].active = 7;
+                                  u8 copy = actors[1].active;
+                                  actors[i].y += 1;
+                                  u8 runtimeCopy = actors[i].x;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x05, 0xC0]), "actors[1].active should store at base + sizeof(Actor) + offsetof(active).");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x05, 0xC0, 0xEA, 0x0A, 0xC0]), "constant indexed field reads should use the flattened field address directly.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x01, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should compute HL from the y-field base plus i * sizeof(Actor).");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xEA, 0x0B, 0xC0]), "runtime indexed field reads should compute HL from the field base plus i * sizeof(Actor).");
+    }
+
+    [Fact]
     public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
     {
         const string source = """

@@ -258,6 +258,8 @@ internal static class NesRomBuilder
 
 internal sealed class NesRuntimeCompiler
 {
+    private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
+
     private const byte FirstVariableAddress = 0x00;
     private const byte RuntimeReservedStateAddress = 0xE0;
     private const byte CameraXAddress = 0xE0;
@@ -268,6 +270,7 @@ internal sealed class NesRuntimeCompiler
     private const byte CollisionColumnScratchAddress = 0xE5;
     private const byte CollisionRowScratchAddress = 0xE6;
     private const byte CameraNewXAddress = 0xE7;
+    private const byte RuntimeIndexScratchAddress = 0xE8;
     private const byte InputCurrentAddress = 0xF0;
     private const byte InputPreviousAddress = 0xF1;
     private const byte InputHoldTicksStartAddress = 0xF2;
@@ -311,6 +314,7 @@ internal sealed class NesRuntimeCompiler
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly Dictionary<string, byte> variables = [];
+    private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
@@ -449,6 +453,12 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitArrayDeclaration(DeclarationSyntax declaration)
     {
+        if (program.Structs.TryGetValue(declaration.Type, out var structSyntax))
+        {
+            EmitStructArrayDeclaration(declaration, structSyntax);
+            return;
+        }
+
         if (!IsByteBackedLocalType(declaration.Type))
         {
             throw new InvalidOperationException($"NES target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
@@ -474,6 +484,41 @@ internal sealed class NesRuntimeCompiler
         if (declaration.Initialization.HasValue)
         {
             EmitArrayInitializer(declaration, declaration.Initialization.Value, length, elementAddresses);
+        }
+    }
+
+    private void EmitStructArrayDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
+    {
+        if (!declaredVariables.Add(declaration.Name))
+        {
+            throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
+        }
+
+        TrackImmutable(declaration);
+
+        var length = CheckedRange(NesVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
+        var fieldOffsets = StructFieldOffsets(structSyntax, "NES");
+        var stride = fieldOffsets.Count;
+        if (length * stride > 255)
+        {
+            throw new InvalidOperationException($"NES target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
+        }
+
+        structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
+
+        for (var index = 0; index < length; index++)
+        {
+            foreach (var field in structSyntax.Fields)
+            {
+                var address = DeclareVariable(IndexedMemberName(declaration.Name, index, field.Name));
+                builder.LoadAImmediate(0);
+                builder.StoreAZeroPage(address);
+            }
+        }
+
+        if (declaration.Initialization.HasValue)
+        {
+            throw new InvalidOperationException($"NES target does not support initializers for struct array '{declaration.Name}' yet.");
         }
     }
 
@@ -654,6 +699,12 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        if (assignment.Left is MemberAccessLValue memberLValue && TryRuntimeIndexedMemberAccess(memberLValue.MemberAccess, out var indexedBase, out var fieldName))
+        {
+            EmitRuntimeIndexedMemberAssignment(indexedBase, fieldName, assignment);
+            return;
+        }
+
         var address = LValueAddress(assignment.Left);
         EmitAssignmentRightToA(assignment);
         builder.StoreAZeroPage(address);
@@ -683,6 +734,7 @@ internal sealed class NesRuntimeCompiler
         return memberAccess.Target switch
         {
             IdentifierSyntax identifier => identifier.Identifier,
+            IndexExpressionSyntax indexExpression => indexExpression.BaseIdentifier,
             MemberAccessSyntax nested => MemberAccessRoot(nested),
             _ => null,
         };
@@ -770,6 +822,70 @@ internal sealed class NesRuntimeCompiler
         }
 
         throw new InvalidOperationException($"NES target only supports constants or direct byte-backed values on the right side of {context}.");
+    }
+
+    private void EmitRuntimeIndexedMemberAssignment(IndexExpressionSyntax indexExpression, string fieldName, AssignmentSyntax assignment)
+    {
+        var baseAddress = RuntimeIndexedMemberBaseAddress(indexExpression, fieldName);
+        EmitRuntimeMemberIndexToX(indexExpression);
+
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                RequireExpressionPreservesX(assignment.Right, "runtime indexed struct field assignment");
+                EmitExpressionToA(assignment.Right);
+                builder.StoreAZeroPageX(baseAddress);
+                return;
+            case "+=":
+                if (TryConst(assignment.Right, out var addRight))
+                {
+                    builder.LoadAZeroPageX(baseAddress);
+                    builder.ClearCarry();
+                    builder.AddImmediate(addRight);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                if (TryDirectAddress(assignment.Right, out var addAddress))
+                {
+                    builder.LoadAZeroPage(addAddress);
+                    builder.ClearCarry();
+                    builder.AddZeroPageX(baseAddress);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                throw new InvalidOperationException("NES target only supports constants or direct byte-backed values on the right side of runtime indexed struct field += assignments.");
+            case "-=":
+                builder.LoadAZeroPageX(baseAddress);
+                builder.SetCarry();
+                if (TryConst(assignment.Right, out var subtractRight))
+                {
+                    builder.SubtractImmediate(subtractRight);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                if (TryDirectAddress(assignment.Right, out var subtractAddress))
+                {
+                    builder.SubtractZeroPage(subtractAddress);
+                    builder.StoreAZeroPageX(baseAddress);
+                    return;
+                }
+
+                throw new InvalidOperationException("NES target only supports constants or direct byte-backed values on the right side of runtime indexed struct field -= assignments.");
+            case "&=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "&", "runtime indexed struct field &= assignment");
+                return;
+            case "|=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "|", "runtime indexed struct field |= assignment");
+                return;
+            case "^=":
+                EmitRuntimeIndexedBitwiseCompoundAssignment(baseAddress, assignment.Right, "^", "runtime indexed struct field ^= assignment");
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES assignment operator '{assignment.OperatorSymbol}'.");
+        }
     }
 
     private void EmitAssignmentRightToA(AssignmentSyntax assignment)
@@ -2260,7 +2376,16 @@ internal sealed class NesRuntimeCompiler
                 builder.LoadAZeroPage(VariableAddress(identifier.Identifier));
                 break;
             case MemberAccessSyntax memberAccess:
-                builder.LoadAZeroPage(VariableAddress(NesVideoProgram.MemberAccessName(memberAccess)));
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out var indexedBase, out var fieldName))
+                {
+                    EmitRuntimeMemberIndexToX(indexedBase);
+                    builder.LoadAZeroPageX(RuntimeIndexedMemberBaseAddress(indexedBase, fieldName));
+                }
+                else
+                {
+                    builder.LoadAZeroPage(VariableAddress(NesVideoProgram.MemberAccessName(memberAccess)));
+                }
+
                 break;
             case IndexExpressionSyntax indexExpression:
                 if (TryConst(indexExpression.Index, out _))
@@ -2481,6 +2606,12 @@ internal sealed class NesRuntimeCompiler
                 address = VariableAddress(identifier.Identifier);
                 return true;
             case MemberAccessSyntax memberAccess:
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out _, out _))
+                {
+                    address = 0;
+                    return false;
+                }
+
                 address = VariableAddress(NesVideoProgram.MemberAccessName(memberAccess));
                 return true;
             case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
@@ -2498,9 +2629,62 @@ internal sealed class NesRuntimeCompiler
         builder.TransferAToX();
     }
 
+    private void EmitRuntimeMemberIndexToX(IndexExpressionSyntax indexExpression)
+    {
+        var layout = StructArrayLayoutFor(indexExpression.BaseIdentifier);
+        EmitExpressionToA(indexExpression.Index);
+        EmitMultiplyA(layout.Stride);
+        builder.TransferAToX();
+    }
+
+    private void EmitMultiplyA(int multiplier)
+    {
+        if (multiplier <= 1)
+        {
+            return;
+        }
+
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        for (var count = 1; count < multiplier; count++)
+        {
+            builder.ClearCarry();
+            builder.AddZeroPage(RuntimeIndexScratchAddress);
+        }
+    }
+
     private byte ArrayBaseAddress(string baseIdentifier)
     {
         return VariableAddress(IndexedElementName(baseIdentifier, 0));
+    }
+
+    private byte RuntimeIndexedMemberBaseAddress(IndexExpressionSyntax indexExpression, string fieldName)
+    {
+        _ = StructArrayLayoutFor(indexExpression.BaseIdentifier).FieldOffsets[fieldName];
+        return VariableAddress(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+    }
+
+    private bool TryRuntimeIndexedMemberAccess(MemberAccessSyntax memberAccess, out IndexExpressionSyntax indexExpression, out string fieldName)
+    {
+        if (memberAccess.Target is IndexExpressionSyntax candidate
+            && !TryConst(candidate.Index, out _)
+            && structArrays.ContainsKey(candidate.BaseIdentifier)
+            && StructArrayLayoutFor(candidate.BaseIdentifier).FieldOffsets.ContainsKey(memberAccess.Member))
+        {
+            indexExpression = candidate;
+            fieldName = memberAccess.Member;
+            return true;
+        }
+
+        indexExpression = null!;
+        fieldName = string.Empty;
+        return false;
+    }
+
+    private StructArrayLayout StructArrayLayoutFor(string baseIdentifier)
+    {
+        return structArrays.TryGetValue(baseIdentifier, out var layout)
+            ? layout
+            : throw new InvalidOperationException($"NES target has no struct array layout for '{baseIdentifier}'.");
     }
 
     private void RequireExpressionPreservesX(ExpressionSyntax expression, string context)
@@ -2521,7 +2705,7 @@ internal sealed class NesRuntimeCompiler
         return expression switch
         {
             IdentifierSyntax => true,
-            MemberAccessSyntax => true,
+            MemberAccessSyntax memberAccess => !TryRuntimeIndexedMemberAccess(memberAccess, out _, out _),
             IndexExpressionSyntax indexExpression => TryConst(indexExpression.Index, out _),
             CastSyntax cast => PreservesX(cast.Expression),
             ConditionalExpressionSyntax conditional => PreservesX(conditional.Condition) && PreservesX(conditional.WhenTrue) && PreservesX(conditional.WhenFalse),
@@ -2691,6 +2875,29 @@ internal sealed class NesRuntimeCompiler
     private static string IndexedElementName(string baseIdentifier, int index)
     {
         return $"{baseIdentifier}[{index}]";
+    }
+
+    private static string IndexedMemberName(string baseIdentifier, int index, string fieldName)
+    {
+        return $"{IndexedElementName(baseIdentifier, index)}.{fieldName}";
+    }
+
+    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax, string targetName)
+    {
+        var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var offset = 0;
+        foreach (var field in structSyntax.Fields)
+        {
+            if (!IsByteBackedLocalType(field.Type))
+            {
+                throw new InvalidOperationException($"{targetName} target does not support struct array field type '{field.Type}' yet.");
+            }
+
+            offsets.Add(field.Name, offset);
+            offset++;
+        }
+
+        return offsets;
     }
 
     private static string StorageKey(SdkStorageLocation location)
