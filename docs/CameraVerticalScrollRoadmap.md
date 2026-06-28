@@ -411,3 +411,37 @@ test harness. Effort: a small epic; this is the risky part.
 
 Strategy A is the shipped behavior. Only pursue Strategy B if profiling shows the
 one-frame edge lag is visible in real gameplay.
+
+### When to escalate to Strategy B (decision criteria)
+
+Strategy A (shipped) commits at most one edge per VBlank with column priority.
+That is correct and imperceptible at platformer/runner scroll speeds (≤1-2 px per
+frame), where boundary crossings are sparse (~every 8 frames per axis). Do **not**
+pursue Strategy B preemptively. Escalate only when one of these concrete needs
+appears:
+
+- **Fast diagonal scrolling.** If the camera can cross a column boundary almost
+  every frame (≈8 px/frame horizontal), the priority column monopolizes the single
+  per-VBlank commit slot and the **row queue starves** → visible gaps/garbage on
+  the newly exposed row edge. Strategy B (both edges in one VBlank) is then the
+  correct fix. Triggers: rapid free-look, chases, strong screen-shake, snap moves.
+- **Pixel-perfect / no 1-frame edge lag.** Strategy A updates the second-axis edge
+  one frame late; at the crossing instant a freshly revealed corner/row can show a
+  stale tile for one frame. On high-contrast scenes or for visual polish, B removes
+  it.
+- **Large camera cuts/jumps** (respawn, cut, teleport moving many tiles at once):
+  A repaints one edge per frame → a multi-frame "wipe". B (or a full VRAM rebuild
+  path) repaints faster.
+- **VBlank headroom for other features.** Strategy B requires rewriting the
+  streamers from per-tile address recomputation into precomputed-pointer tight copy
+  loops (`LDI`-style). That also speeds up the **single-axis** horizontal/vertical
+  streamers and frees VBlank budget for OAM DMA, audio, or HUD. If VBlank pressure
+  from other systems forces the issue, B pays off across all axes, not just
+  diagonal.
+
+Honest cost/risk: Strategy B must rewrite the streamers **and** raise the budget
+**and** prove the combined column + row + OAM DMA commit fits the GB VBlank
+(~4560 cycles). If it does not fit, B does not work and you fall back to A, so B
+carries a feasibility/measurement risk and needs a VBlank cycle-budget test harness
+(VS-DIAG-4) to be honest about the fit. Treat B as a "when you hit the wall"
+optimization, not a default.
