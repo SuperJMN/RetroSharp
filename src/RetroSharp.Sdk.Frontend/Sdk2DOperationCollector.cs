@@ -12,9 +12,10 @@ public static class Sdk2DOperationCollector
     public static IReadOnlyList<Sdk2DOperation> Collect(
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
-        string targetName)
+        string targetName,
+        Target2DCapabilities capabilities)
     {
-        var collector = new Collector(functions, targetName);
+        var collector = new Collector(functions, targetName, capabilities);
         collector.CollectBlock(mainBlock);
         return collector.Operations;
     }
@@ -26,9 +27,10 @@ public static class Sdk2DOperationCollector
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
+        Target2DCapabilities capabilities,
         IReadOnlySet<string> subroutineNames)
     {
-        var collector = new Collector(functions, targetName, subroutineNames);
+        var collector = new Collector(functions, targetName, capabilities, subroutineNames);
         collector.CollectBlock(mainBlock);
         return collector.Program;
     }
@@ -45,18 +47,13 @@ public static class Sdk2DOperationCollector
 
     // Shared reader so a target lowering a camera position drives emission from
     // the same operation the collector produces, instead of re-deriving it.
-    public static Sdk2DOperation.SetCameraPosition ReadSetCameraPosition(FunctionCall call, string? targetName = null)
+    public static Sdk2DOperation.SetCameraPosition ReadSetCameraPosition(FunctionCall call)
     {
         SdkCallReader.RequireArity(call, 2);
         var args = call.Parameters.ToList();
         var x = ReadByteExpression(args[0], "camera_set_position argument 1");
         var y = ReadByteExpression(args[1], "camera_set_position argument 2");
         var axes = AxesFor(x, y);
-        if (targetName == "Game Boy" && axes == (ScrollAxes.Horizontal | ScrollAxes.Vertical))
-        {
-            return new Sdk2DOperation.SetCameraPosition(x, new SdkByteExpression.Constant(0), ScrollAxes.Horizontal);
-        }
-
         return new Sdk2DOperation.SetCameraPosition(x, y, axes);
     }
 
@@ -325,6 +322,7 @@ public static class Sdk2DOperationCollector
     {
         private readonly IReadOnlyDictionary<string, FunctionSyntax> functions;
         private readonly string targetName;
+        private readonly Target2DCapabilities capabilities;
         private readonly IReadOnlySet<string> subroutineNames;
         private readonly List<Sdk2DStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
@@ -334,10 +332,12 @@ public static class Sdk2DOperationCollector
         public Collector(
             IReadOnlyDictionary<string, FunctionSyntax> functions,
             string targetName,
+            Target2DCapabilities capabilities,
             IReadOnlySet<string>? subroutineNames = null)
         {
             this.functions = functions;
             this.targetName = targetName;
+            this.capabilities = capabilities;
             this.subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
             currentItems = mainItems;
         }
@@ -486,16 +486,13 @@ public static class Sdk2DOperationCollector
 
         private void CollectCameraSetPosition(FunctionCall call)
         {
-            AddOp(ReadSetCameraPosition(call, targetName));
+            AddOp(ReadSetCameraPosition(call));
         }
 
         private void CollectCameraApply(FunctionCall call)
         {
             SdkCallReader.RequireArity(call, 0);
-            var axes = targetName == "NES"
-                ? ScrollAxes.Horizontal
-                : ScrollAxes.Horizontal | ScrollAxes.Vertical;
-            AddOp(new Sdk2DOperation.ApplyCamera(axes));
+            AddOp(new Sdk2DOperation.ApplyCamera(capabilities.ScrollAxes));
         }
 
         private void CollectDrawLogicalSprite(FunctionCall call)

@@ -27,19 +27,19 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
-    public void Nes_runner_uses_four_screen_free_scroll_camera()
+    public void Nes_runner_keeps_horizontal_camera_path()
     {
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var runnerDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
         var operations = NesRomCompiler.CollectSdkOperations(source, runnerDirectory);
-        Assert.Contains(
+        Assert.All(
             operations.OfType<Sdk2DOperation.SetCameraPosition>(),
-            operation => operation.Axes.HasFlag(ScrollAxes.Vertical));
+            operation => Assert.Equal(ScrollAxes.Horizontal, operation.Axes));
 
         var rom = NesRomCompiler.CompileSource(source, runnerDirectory);
-        Assert.Equal(0x08, rom[6] & 0x08);
+        Assert.Equal(0x00, rom[6] & 0x08);
     }
 
     [Fact]

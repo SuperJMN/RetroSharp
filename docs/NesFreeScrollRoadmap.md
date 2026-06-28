@@ -328,8 +328,8 @@ requirement.
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
   - [x] Golden-byte tests for the four-screen header, scroll-register writes,
-    explicit row streaming, runtime row streaming, attribute refresh, and runner
-    four-screen integration.
+    explicit row streaming, runtime row streaming, attribute refresh, and the
+    shared runner staying on the horizontal camera path.
   - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
     and `read_ppu_state` assert both axes move and the four nametables stay
     distinct.
@@ -354,13 +354,14 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 
 ## Acceptance criteria (free-scroll milestone)
 
-- A NES sample scrolls **diagonally** (both axes at once) with no corner artifacts,
-  proven behaviorally through the four-screen `nes_debug` MCP, not just compile
-  level.
+- `samples/nes-free-scroll/freescroll.rs` scrolls **diagonally** (both axes at
+  once) with no corner artifacts, proven behaviorally through the four-screen
+  `nes_debug` MCP, not just compile level.
 - Levels up to 512x480 work with no runtime streaming (NF-3). Larger
   source-authored worlds stream columns/rows with the staggered one-edge-per-
   VBlank policy; NF-10 remains only for mapper-backed scale, banking, and HUD IRQs.
-- Horizontal-only NES programs are byte-identical and unaffected.
+- Horizontal-only NES programs, including the shared runner, stay on the
+  horizontal camera path and are unaffected.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a
   clear diagnostic.

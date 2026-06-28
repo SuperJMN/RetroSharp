@@ -42,7 +42,11 @@ public static class NesRomCompiler
         var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
-        return Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        return Sdk2DOperationCollector.Collect(
+            videoProgram.MainBlock,
+            videoProgram.Functions,
+            "NES",
+            NesTarget.Capabilities);
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(string source, string? baseDirectory = null)
@@ -61,7 +65,11 @@ public static class NesRomCompiler
 
     private static IReadOnlyList<Sdk2DOperation> ValidateSdkOperations(NesVideoProgram videoProgram)
     {
-        var operations = Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        var operations = Sdk2DOperationCollector.Collect(
+            videoProgram.MainBlock,
+            videoProgram.Functions,
+            "NES",
+            NesTarget.Capabilities);
         foreach (var operation in operations)
         {
             Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
@@ -406,7 +414,7 @@ internal sealed class NesVideoProgram
     private void ApplyDerivedSpritePalettes()
     {
         var appliedPalettes = new Dictionary<int, byte[]>();
-        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES");
+        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES", NesTarget.Capabilities);
         foreach (var operation in operations.OfType<Sdk2DOperation.DrawLogicalSprite>())
         {
             if (!spriteAssets.TryGetValue(operation.SpriteId, out var asset)

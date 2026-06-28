@@ -3837,7 +3837,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("x += 1;", cameraBlock);
         Assert.Contains("moving = 1;", cameraBlock);
         Assert.Contains("x -= 1;", cameraBlock);
-        Assert.Contains("camera.SetPosition(x, wallProbeY);", cameraBlock);
+        Assert.Contains("camera.SetPosition(x, 0);", cameraBlock);
         Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
@@ -3848,7 +3848,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("frame = frame + 1;", source);
         Assert.DoesNotContain("if (frame == 3)", source);
         Assert.DoesNotContain("displayFrame = frame + 1;", source);
-        Assert.Equal(2, CountOccurrences(source, "camera.SetPosition(x, wallProbeY);"));
+        Assert.Equal(2, CountOccurrences(source, "camera.SetPosition(x, 0);"));
         Assert.Equal(1, CountOccurrences(source, "animTick += view.speed;"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -5330,8 +5330,8 @@ public class GameBoyRomCompilerTests
 
         // Regression guard: the camera is repositioned per single-pixel step (not once per frame), so a
         // multi-pixel run frame still keeps the 1px-per-call camera follower in sync across the byte wrap.
-        Assert.Contains("x += 1;\n            camera.SetPosition(x, wallProbeY);", cameraBlock);
-        Assert.Contains("x -= 1;\n            camera.SetPosition(x, wallProbeY);", cameraBlock);
+        Assert.Contains("x += 1;\n            camera.SetPosition(x, 0);", cameraBlock);
+        Assert.Contains("x -= 1;\n            camera.SetPosition(x, 0);", cameraBlock);
         Assert.DoesNotContain("camera.SetPosition", motionBlock);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
@@ -5471,7 +5471,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
-        Assert.Contains("camera.SetPosition(x, wallProbeY);", source);
+        Assert.Contains("camera.SetPosition(x, 0);", source);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);

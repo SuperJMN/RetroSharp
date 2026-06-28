@@ -218,6 +218,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
+- The shared runner is intentionally horizontal on both Game Boy and NES. NES diagonal/four-screen
+  free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs`; do not silently degrade
+  unsupported camera axes in the collector.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.

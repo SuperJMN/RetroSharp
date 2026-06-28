@@ -250,7 +250,12 @@ internal sealed class GameBoyVideoProgram
         var enums = BuildEnumIndex(program.Enums);
         var structs = BuildStructIndex(program.Structs);
         var subroutineNames = SelectSubroutineNames(main.Block, functions);
-        var sdkProgram = Sdk2DOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
+        var sdkProgram = Sdk2DOperationCollector.CollectProgram(
+            main.Block,
+            functions,
+            "Game Boy",
+            GameBoyTarget.Capabilities,
+            subroutineNames);
         var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
         var result = new GameBoyVideoProgram
         {

@@ -1366,7 +1366,7 @@ This gives the project a durable architecture before adding vertical scrolling, 
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample. NES accepts the runner audio calls as no-ops until real BGM lowering exists, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the horizontal platformer slice. NES accepts the runner audio calls as no-ops until real BGM lowering exists, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. NES diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
 
 The final cross-target sample should prove:
 
