@@ -1,7 +1,7 @@
 # Camera Vertical Scroll Roadmap (AR-5 execution plan)
 
-Status: **GB vertical path is proven by sample/tests; NES vertical is deliberately
-gated OFF.** This is the branch-scoped execution plan for roadmap **Iteration 5:
+Status: **GB vertical path is proven by sample/tests; NES has a separate bounded
+four-screen free-scroll path.** This is the branch-scoped execution plan for roadmap **Iteration 5:
 Camera2D Vertical Scroll** (`docs/ArchitectureRoadmap.md`, AR-5.1..AR-5.3). It is
 written so an autonomous agent (Codex) can pick up a task and know exactly what
 to change, where, and how to verify it.
@@ -17,12 +17,11 @@ current supported subset per target.
   slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix; future GB work should extend that path rather
   than write a new camera.
-- **NES is the hard part.** NES is hard-capped to horizontal. Opening vertical
-  scroll requires real PPU work (nametable mirroring/mapper choice, `$2000`/
-  `$2005` Y writes, the 240-row coarse-Y wrap quirk, and runtime attribute-row
-  streaming with a non-zero attribute budget). Treat NES as a separate, gated
-  decision (Phase D) — confirm the approach with a human before flipping the
-  capability.
+- **NES is tracked separately.** The bounded free-scroll path now uses iNES
+  four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
+  coarse-Y wrap for maps that fit 64x60 tiles. Runtime row, diagonal, and
+  attribute streaming for larger worlds remains gated in
+  `docs/NesFreeScrollRoadmap.md` until the VBlank policy is decided.
 - Every change keeps the layer golden rule: the language and classic IR never
   learn about cameras; vertical scroll lives in the SDK operation model + per
   target lowering + capability checks.
@@ -58,15 +57,16 @@ Game Boy — fully wired, coherent, and now exercised by a GB-only sample/test:
   stream code could force unsupported direct control flow across MBC1 program
   banks.
 
-NES — deliberately horizontal-only:
+NES — bounded four-screen free scroll:
 
-- Capability declares Horizontal only: `src/RetroSharp.NES/NesTarget.cs:19`
-  (`ScrollAxes: Horizontal`), `:21` (`SupportsFineScrollY: false`), attribute
-  write budget `0`.
-- `EmitSetCameraPosition` ignores Y by design and relies on the validator to
-  reject non-zero vertical: `src/RetroSharp.NES/NesRomBuilder.cs:1699-1726`.
-- `camera.Apply()` writes zero vertical scroll to `$2005`. Documented limits:
-  `docs/NesTarget.md:5`, `:20`, `:107`, `:109`.
+- Capability declares X/Y fine scroll over a 64x60 preloaded four-screen buffer:
+  `src/RetroSharp.NES/NesTarget.cs`.
+- `EmitSetCameraPosition` tracks Y for four-screen programs and rejects maps that
+  cannot fit the preloaded surface.
+- `camera.Apply()` writes both nametable bits and both `$2005` scroll bytes while
+  avoiding invalid NES Y scroll values in the 240..255 range.
+- Runtime row/attribute streaming for larger NES worlds is still pending in
+  `docs/NesFreeScrollRoadmap.md`.
 
 ## Guardrails (do not violate)
 
@@ -226,12 +226,12 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
 
 ---
 
-## Phase D — NES vertical scroll (the hard part)
+## Phase D — NES vertical scroll (historical gate; see free-scroll roadmap)
 
-NES is NROM/mapper 0 today with two **horizontally** arranged nametables
-(vertical mirroring). True vertical scrolling needs a different VRAM/mirroring
-story and several PPU details that horizontal scroll never touched. **Confirm the
-approach with a human (SuperJMN) before flipping `NesTarget.Capabilities`.**
+The first NES vertical gate was superseded by `docs/NesFreeScrollRoadmap.md`.
+That roadmap selected four-screen VRAM for the bounded free-scroll milestone and
+kept mapper-backed larger worlds as NF-10. Use this section only as historical
+context for why NES Y needed a separate substrate decision.
 
 ### VS-NES-0 (do this first): keep the gate honest
 
@@ -239,12 +239,11 @@ approach with a human (SuperJMN) before flipping `NesTarget.Capabilities`.**
 - Files: `src/RetroSharp.Core/Sdk/Sdk2DOperationValidator.cs`,
   `src/RetroSharp.NES/NesRomBuilder.cs:1699-1726`, `docs/NesTarget.md`.
 - Steps:
-  - [x] Ensure a non-zero/runtime camera Y on NES fails with a message that names
-    "vertical camera movement is not supported on NES yet" and points to this
-    roadmap. (It already rejects; make the diagnostic explicit and tested.)
-  - [x] Add/keep an `NesRunnerAcceptanceTests`/validator test asserting the
-    rejection so cross-target samples cannot silently regress.
-- Verify: `dotnet test` green; the failure message is actionable.
+  - [x] Keep a clear diagnostic while NES vertical was unsupported.
+  - [x] Replace that gate with the bounded four-screen path only after NF-0 gave
+    the acceptance emulator four distinct nametables.
+- Verify: `dotnet test` green; unsupported larger-world cases now fail with the
+  64x60 preloaded-surface diagnostic.
 
 ### The NES constraints Codex must respect (why this is painful)
 
@@ -337,7 +336,8 @@ approach with a human (SuperJMN) before flipping `NesTarget.Capabilities`.**
    slice and likely surfaces the first real bugs.
 2. VS-4 (diagonal budget) and VS-5 (GB docs).
 3. VS-NES-0 (honest gate) immediately, so cross-target samples stay correct.
-4. VS-NES-1..3 only after a human confirms the NES mirroring/mapper approach.
+4. For NES, follow `docs/NesFreeScrollRoadmap.md`; NF-4..NF-6 still require a
+   human decision on the VBlank streaming policy before larger worlds are enabled.
 
 ---
 

@@ -306,6 +306,29 @@ public sealed class Sdk2DOperationTests
     }
 
     [Fact]
+    public void Validator_rejects_stream_map_row_when_target_supports_vertical_camera_but_not_runtime_row_streaming()
+    {
+        var target = FullCapabilities() with
+        {
+            CameraMovementStreamsBackground = false,
+            RuntimeBackgroundStreamingAxes = ScrollAxes.Horizontal,
+        };
+
+        Sdk2DOperationValidator.Validate(
+            target,
+            new Sdk2DOperation.SetCameraPosition(X: 0, Y: 16, Axes: ScrollAxes.Vertical));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                target,
+                new Sdk2DOperation.StreamMapRow(TargetRow: 29, SourceRow: 40, X: 0, Width: 20)));
+
+        Assert.Equal(
+            "Target 'gb' does not support runtime vertical background streaming.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Validator_rejects_stream_map_column_when_height_exceeds_budget()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>

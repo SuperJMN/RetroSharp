@@ -31,5 +31,6 @@ public static class NesTarget
         CollisionQueries: CollisionQueryMode.CameraRelativeAabb | CollisionQueryMode.CameraRelativeAabbHitTop)
     {
         CameraMovementStreamsBackground = false,
+        RuntimeBackgroundStreamingAxes = ScrollAxes.Horizontal,
     };
 }

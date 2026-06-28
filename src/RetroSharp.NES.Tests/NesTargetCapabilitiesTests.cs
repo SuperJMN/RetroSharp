@@ -38,8 +38,10 @@ public sealed class NesTargetCapabilitiesTests
         Assert.True(capabilities.SupportsFineScrollY);
         Assert.Equal(32, capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(0, capabilities.MaxAttributeWritesPerFrame);
+        Assert.True(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Horizontal));
+        Assert.False(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Vertical));
         Assert.True(CanStreamVisibleColumn(capabilities));
-        Assert.True(CanStreamVisibleRow(capabilities));
+        Assert.False(CanStreamVisibleRow(capabilities));
         Assert.False(capabilities.SupportsHudMode(HudMode.Window));
         Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
         Assert.False(capabilities.SupportsHudMode(HudMode.Sprite));
@@ -52,12 +54,14 @@ public sealed class NesTargetCapabilitiesTests
     private static bool CanStreamVisibleColumn(Target2DCapabilities capabilities)
     {
         return capabilities.SupportsScrollAxis(ScrollAxes.Horizontal)
+               && capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Horizontal)
                && capabilities.MaxBackgroundTileWritesPerFrame >= capabilities.ScreenTiles.Height;
     }
 
     private static bool CanStreamVisibleRow(Target2DCapabilities capabilities)
     {
         return capabilities.SupportsScrollAxis(ScrollAxes.Vertical)
+               && capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Vertical)
                && capabilities.MaxBackgroundTileWritesPerFrame >= capabilities.ScreenTiles.Width;
     }
 }

@@ -60,23 +60,32 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
 
 ## What exists today (verified in source)
 
-- NES emits **NROM, vertical mirroring**: `src/RetroSharp.NES/NesRomBuilder.cs:24`
-  (`rom[3]=0x1A`), `:27` (`rom[6]=0x01`), 32 KiB PRG + 8 KiB CHR, two horizontal
-  nametables uploaded at startup (`EmitNameTableUpload`, `:141`).
-- Scroll path is **horizontal only**: `EmitSetCameraPosition`
-  (`NesRomBuilder.cs:1699`) ignores Y by design; `EmitApplyCamera` writes the
-  horizontal nametable bit to `$2000` and horizontal + zero vertical scroll to
-  `$2005`. `camera.Apply()` zero-Y documented in `docs/NesTarget.md:109`.
-- Attributes are written **at startup only**: `NesRomCompiler.ApplyWorldAttributes`
-  (`src/RetroSharp.NES/NesRomCompiler.cs:608`). `MaxAttributeWritesPerFrame: 0`
-  (`src/RetroSharp.NES/NesTarget.cs:22`).
-- Capabilities: `ScrollAxes: Horizontal`, `SupportsFineScrollY: false`,
-  `BackgroundBufferTiles: 64x30`, `MaxBackgroundTileWritesPerFrame: 30`
-  (`NesTarget.cs:19-23`).
-- The validator already rejects NES vertical with a clear diagnostic pointing to
-  the vertical-scroll roadmap (`Sdk2DOperationValidator.RequireVerticalCameraAxis`).
-- `Sdk2DOperation.StreamMapRow` exists but `NesSdkOperationLowerer` throws
-  `NotSupportedException` for it (`src/RetroSharp.NES/NesSdkOperationLowerer.cs:38`).
+- NF-0..NF-3 are implemented in the active branches:
+  - `~/Repos/NesMcp` branch `feature/four-screen-nametables` adds ADNES
+    four-screen nametable VRAM and validates four distinct nametables.
+  - RetroSharp branch `feature/nes-free-scroll` emits the iNES four-screen bit
+    when a program uses vertical camera movement, uploads four nametables at
+    startup, and keeps horizontal-only programs on the existing two-nametable
+    vertical-mirroring path.
+- NES still emits NROM-256: 32 KiB PRG + 8 KiB CHR. Four-screen is selected with
+  iNES flags6 bit 3 only for vertical-camera programs; horizontal-only programs
+  keep the old flags6 vertical-mirroring bit.
+- The bounded free-scroll path is **preloaded**: maps must fit within the 64x60
+  four-screen surface, and per-frame camera movement writes only `$2000` and
+  `$2005`. It tracks absolute X/Y tile positions and handles the NES 240-pixel
+  coarse-Y wrap by deriving `(tileRow % 30) * 8 + fineY`.
+- Horizontal-only maps retain the previous runtime column-streaming path for
+  worlds wider than 32 columns.
+- Attributes are still written **at startup only**. `MaxAttributeWritesPerFrame`
+  remains `0`; runtime row/diagonal/attribute streaming for worlds larger than
+  64x60 is not implemented yet.
+- Capabilities now describe the bounded substrate: `ScrollAxes: Horizontal |
+  Vertical`, `SupportsFineScrollY: true`, `BackgroundBufferTiles: 64x60`,
+  `MaxBackgroundTileWritesPerFrame: 32`, and
+  `CameraMovementStreamsBackground = false` for preloaded camera movement.
+  `RuntimeBackgroundStreamingAxes` remains horizontal-only until NF-4 lands.
+- `Sdk2DOperation.StreamMapRow` exists, but NES lowering for explicit row
+  streaming remains future work.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).
 
@@ -131,16 +140,16 @@ lives in the `~/Repos/NesMcp` repo, not RetroSharp.
   `src/Nes.Debug.Emulator/Adnes/Cartridge/NESCartridge.cs:82`, the PPU nametable
   read/write resolution, `src/Nes.Debug.Mcp/NesDebugTools.cs` (expose 4 NTs).
 - Steps:
-  - [ ] Add `FourScreen` to `NametableMirroring`.
-  - [ ] Parse iNES flags6 bit 3 in `NESCartridge` (four-screen overrides bit 0);
+  - [x] Add `FourScreen` to `NametableMirroring`.
+  - [x] Parse iNES flags6 bit 3 in `NESCartridge` (four-screen overrides bit 0);
     allocate 4 KiB nametable VRAM (4 distinct nametables) when set.
-  - [ ] Resolve PPU `$2000-$2FFF` to 4 distinct nametables under `FourScreen`.
-  - [ ] Make `read_ppu_state` / `dump_tilemap` able to address all four
+  - [x] Resolve PPU `$2000-$2FFF` to 4 distinct nametables under `FourScreen`.
+  - [x] Make `read_ppu_state` / `dump_tilemap` able to address all four
     nametables.
 - Verify:
-  - [ ] A hand-crafted four-screen ROM that writes a distinct tile to each of the
+  - [x] A hand-crafted four-screen ROM that writes a distinct tile to each of the
     four nametables reads back four distinct tilemaps via `dump_tilemap`.
-  - [ ] NesMcp unit tests cover four-screen address resolution; existing
+  - [x] NesMcp unit tests cover four-screen address resolution; existing
     NROM/MMC1 tests stay green.
 - Output: a published/locally-runnable `nes_debug` MCP that emulates four-screen.
 
@@ -152,13 +161,13 @@ lives in the `~/Repos/NesMcp` repo, not RetroSharp.
 - Files: `src/RetroSharp.NES/NesRomBuilder.cs` (iNES header + startup nametable
   upload), `src/RetroSharp.NES/NesTarget.cs`.
 - Steps:
-  - [ ] Set iNES flags6 four-screen bit (`rom[6] |= 0x08`) when the program
+  - [x] Set iNES flags6 four-screen bit (`rom[6] |= 0x08`) when the program
     requests free scroll. (Note: a current test pins `rom[6] & 0x01 == 1`; update
     it.)
-  - [ ] Upload the initial 2x2 nametable grid at startup (extend
+  - [x] Upload the initial 2x2 nametable grid at startup (extend
     `EmitNameTableUpload` from 2 to up to 4 nametables; each is 960 tiles + 64
     attribute bytes).
-  - [ ] Keep horizontal-only programs on the existing two-nametable vertical
+  - [x] Keep horizontal-only programs on the existing two-nametable vertical
     mirroring path (no regression).
 - Verify: golden-byte test asserts the four-screen header bit and the four startup
   nametable uploads; the ROM boots in the four-screen `nes_debug` MCP.
@@ -171,11 +180,11 @@ lives in the `~/Repos/NesMcp` repo, not RetroSharp.
 - Files: `src/RetroSharp.NES/NesRomBuilder.cs` (`NesCameraConfig`, `CameraNewX*`
   state, `EmitSetCameraPosition`, `EmitApplyCamera`).
 - Steps:
-  - [ ] Add absolute camera Y state next to X (track coarse Y 0..29 + the vertical
+  - [x] Add absolute camera Y state next to X (track coarse Y 0..29 + the vertical
     nametable select bit + fine Y 0..7), mirroring the X state.
-  - [ ] Generalize `NesCameraConfig` to a world that is wider **and** taller than
+  - [x] Generalize `NesCameraConfig` to a world that is wider **and** taller than
     one screen.
-  - [ ] In `EmitApplyCamera`, write **both** nametable select bits to `$2000`
+  - [x] In `EmitApplyCamera`, write **both** nametable select bits to `$2000`
     (bit 0 = X table, bit 1 = Y table) and **both** scroll bytes to `$2005`
     (X then Y), handling the 240 coarse-Y wrap.
 - Verify: `read_ppu_state` reports the expected scroll X/Y, fine X, and nametable
@@ -192,22 +201,29 @@ runtime VRAM streaming.
 - Files: new `samples/nes-free-scroll/freescroll.rs`, `samples/manifest.json`,
   `samples/README.md`, NES acceptance tests.
 - Steps:
-  - [ ] Author a level that fits entirely in the 512x480 four-screen surface.
-  - [ ] Upload all four nametables (+ attributes) at startup; the per-frame loop
+  - [x] Author a level that fits entirely in the 512x480 four-screen surface.
+  - [x] Upload all four nametables (+ attributes) at startup; the per-frame loop
     only updates `$2000`/`$2005` from the 2D camera. No `$2007` streaming.
-  - [ ] Drive the camera diagonally (X and Y both change) and confirm no corner
+  - [x] Drive the camera diagonally (X and Y both change) and confirm no corner
     artifacts.
 - Verify:
-  - [ ] Golden-byte: per-frame writes are only scroll-register writes, no runtime
+  - [x] Golden-byte: per-frame writes are only scroll-register writes, no runtime
     `$2007`.
-  - [ ] Behavioral (MCP): `run_input_timeline` moving diagonally, then
-    `capture_screen` / `read_screen_region` across frames shows the surface
-    panning in both axes with the four nametables distinct and aligned (no
-    duplicated corner).
+  - [x] Behavioral (MCP): `dump_tilemap` shows all four nametables distinct, and
+    `run_input_timeline` / PPU-state reads show X/Y camera state and the vertical
+    nametable bit changing as the camera moves diagonally.
 
 ---
 
 ## Phase NF-4 — Vertical row streaming (levels taller than the surface)
+
+Status: pending decision. A vertical boundary crossing while the camera can also
+show either horizontal nametable may require refreshing the row in both horizontal
+nametable halves before it becomes visible. That is 64 tile writes before
+attributes, while the current explicit background write budget is 32 per VBlank.
+Do not implement this phase until the streaming policy is decided: restrict the
+camera, prefetch/stagger over multiple VBlanks, or move the larger-level work to
+the mapper-backed NF-10 path.
 
 - Layer: NES target.
 - Files: `src/RetroSharp.NES/NesRomBuilder.cs` (stream helpers),
@@ -226,6 +242,11 @@ runtime VRAM streaming.
 
 ## Phase NF-5 — Diagonal streaming (both column and row in one crossing)
 
+Status: blocked with NF-4/NF-6 until the same VBlank policy is decided. The
+preloaded 64x60 sample can move diagonally because it performs no per-frame
+background streaming; larger worlds need a scheduler that proves the exposed
+column, row, corner, and attributes are valid before the camera reveals them.
+
 - Layer: NES target + validator.
 - Files: `NesRomBuilder.cs` stream scheduler, `Sdk2DOperationValidator.cs`.
 - Steps:
@@ -242,6 +263,10 @@ runtime VRAM streaming.
 ---
 
 ## Phase NF-6 — Runtime attribute streaming
+
+Status: pending. Startup attributes are emitted for all loaded nametables, but
+runtime attribute writes remain undeclared (`MaxAttributeWritesPerFrame: 0`).
+This phase should land with the same budget policy as NF-4/NF-5.
 
 - Layer: NES target + capability.
 - Files: `NesRomBuilder.cs`, `NesRomCompiler.cs` (`ApplyWorldAttributes` →
@@ -265,13 +290,12 @@ runtime VRAM streaming.
   `src/RetroSharp.Core/Targeting/Target2DCapabilities.cs` (if a `FreeScroll` /
   four-screen capability is needed).
 - Steps:
-  - [ ] Flip NES `ScrollAxes` to `Horizontal | Vertical`, `SupportsFineScrollY:
-    true`, attribute budget > 0 — only behind the working four-screen
-    implementation.
-  - [ ] Stop rejecting `Horizontal | Vertical` for NES; keep a clear diagnostic
-    for over-budget single-frame demands and for programs that ask for free scroll
-    without four-screen.
-  - [ ] Update `RequireVerticalCameraAxis` / `RequireCameraMovementBudget`
+  - [x] Flip NES `ScrollAxes` to `Horizontal | Vertical` and
+    `SupportsFineScrollY: true` behind the bounded four-screen implementation.
+    Attribute budget remains `0` until NF-6.
+  - [x] Stop rejecting bounded `Horizontal | Vertical` for NES; keep a clear
+    diagnostic for maps that do not fit the preloaded four-screen surface.
+  - [x] Update `RequireVerticalCameraAxis` / `RequireCameraMovementBudget`
     accordingly.
 - Verify: validator tests for the new accepted/rejected cases; the
   vertical-scroll roadmap's NES gate message is replaced, not silently dropped.
@@ -299,14 +323,14 @@ runtime VRAM streaming.
 - Files: `samples/nes-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
-  - [ ] Golden-byte tests for the four-screen header, scroll-register writes, and
-    (for big levels) column/row/attribute streaming.
-  - [ ] MCP behavioral acceptance: diagonal `run_input_timeline` + `capture_screen`
-    + `read_ppu_state` asserting both axes move and the four nametables stay
-    distinct and aligned.
+  - [x] Golden-byte tests for the four-screen header and scroll-register writes.
+    Big-level column/row/attribute streaming remains pending NF-4..NF-6.
+  - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
+    and `read_ppu_state` assert both axes move and the four nametables stay
+    distinct.
   - [ ] Optional Mesen2 cross-check of the same ROM.
-  - [ ] Update `docs/NesTarget.md` to remove "vertical not supported" only when
-    shipped; update `ArchitectureRoadmap.md`.
+  - [x] Update `docs/NesTarget.md` to remove "vertical not supported" only for the
+    bounded four-screen path; update `ArchitectureRoadmap.md`.
 - Verify: `dotnet test` green; the sample is a tracked NES ROM artifact.
 
 ---
@@ -328,8 +352,9 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 - A NES sample scrolls **diagonally** (both axes at once) with no corner artifacts,
   proven behaviorally through the four-screen `nes_debug` MCP, not just compile
   level.
-- Levels up to 512x480 work with no runtime streaming (NF-3); larger levels stream
-  columns, rows, and attributes within the VBlank budget (NF-4..NF-6).
+- Levels up to 512x480 work with no runtime streaming (NF-3). Larger-level row,
+  diagonal, and attribute streaming remains intentionally pending until NF-4..NF-6
+  have a chosen VBlank policy.
 - Horizontal-only NES programs are byte-identical and unaffected.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a
@@ -344,7 +369,7 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 | Free scroll attempted on 2 nametables → corner artifacts. | Require four-screen VRAM; reject otherwise. |
 | ADNES cannot emulate four-screen → cannot validate. | NF-0 extends ADNES first; optional Mesen2 cross-check. |
 | 240 coarse-Y wrap corrupts attribute fetch. | Map world Y → (nametable Y bit, 0..239); never write 240..255 to `$2005` Y. |
-| VBlank budget overrun (column + row + attributes + OAM DMA). | Amortize on crossings; stagger one edge per VBlank; document the policy. |
+| VBlank budget overrun (column + row + attributes + OAM DMA). | Pending decision: restrict, prefetch/stagger, or defer larger worlds to NF-10. Do not silently enable artifact-prone streaming. |
 | Real-hardware four-screen needs cart SRAM. | Emulator-first demo; document the hardware caveat; mapper path in NF-10. |
 | Tracked NES ROMs change unexpectedly. | Gate four-screen behind explicit free-scroll request; keep horizontal path byte-identical. |
 

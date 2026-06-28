@@ -22,9 +22,16 @@ public sealed record Target2DCapabilities(
 {
     public bool CameraMovementStreamsBackground { get; init; } = true;
 
+    public ScrollAxes RuntimeBackgroundStreamingAxes { get; init; } = ScrollAxes;
+
     public bool SupportsScrollAxis(ScrollAxes axis)
     {
         return axis != ScrollAxes.None && ScrollAxes.HasFlag(axis);
+    }
+
+    public bool SupportsRuntimeBackgroundStreamingAxis(ScrollAxes axis)
+    {
+        return axis != ScrollAxes.None && RuntimeBackgroundStreamingAxes.HasFlag(axis);
     }
 
     public bool SupportsSpriteSize(SpriteSizeMode mode)

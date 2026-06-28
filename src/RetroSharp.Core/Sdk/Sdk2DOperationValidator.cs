@@ -121,11 +121,11 @@ public static class Sdk2DOperationValidator
             case Sdk2DOperation.StreamMapColumn column:
                 ValidateByteExpression(column.TargetColumn, "stream map target column");
                 ValidateByteExpression(column.SourceColumn, "stream map source column");
-                TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Horizontal);
+                RequireRuntimeBackgroundStreamingAxis(capabilities, ScrollAxes.Horizontal);
                 RequireBackgroundTileWriteBudget(capabilities, column.Height, "streaming a visible map column");
                 return;
             case Sdk2DOperation.StreamMapRow row:
-                TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
+                RequireRuntimeBackgroundStreamingAxis(capabilities, ScrollAxes.Vertical);
                 RequireBackgroundTileWriteBudget(capabilities, row.Width, "streaming a visible map row");
                 return;
             case Sdk2DOperation.SetHudTile hud:
@@ -319,12 +319,6 @@ public static class Sdk2DOperationValidator
             return;
         }
 
-        if (capabilities.Name == "nes")
-        {
-            throw new InvalidOperationException(
-                "Target 'nes': vertical camera movement is not supported on NES yet; see docs/CameraVerticalScrollRoadmap.md before enabling NES vertical scroll.");
-        }
-
         TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
     }
 
@@ -362,6 +356,18 @@ public static class Sdk2DOperationValidator
         }
 
         RequireBackgroundTileWriteBudget(capabilities, requiredWrites, CameraMovementDescription(axes, columnWrites, rowWrites));
+    }
+
+    private static void RequireRuntimeBackgroundStreamingAxis(Target2DCapabilities capabilities, ScrollAxes axis)
+    {
+        if (capabilities.SupportsRuntimeBackgroundStreamingAxis(axis))
+        {
+            return;
+        }
+
+        var axisName = axis == ScrollAxes.Horizontal ? "horizontal" : "vertical";
+        throw new InvalidOperationException(
+            $"Target '{capabilities.Name}' does not support runtime {axisName} background streaming.");
     }
 
     private static string CameraMovementDescription(ScrollAxes axes, int columnWrites, int rowWrites)

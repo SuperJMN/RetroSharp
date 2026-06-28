@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-27.
+Last updated: 2026-06-28.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -20,8 +20,10 @@ This document preserves project knowledge that previously lived only in agent me
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
-  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. NES vertical
-  remains gated with the diagnostic that points to `docs/CameraVerticalScrollRoadmap.md`.
+  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. NES has a
+  preloaded four-screen free-scroll path for source-authored maps up to 64x60 tiles;
+  larger row/diagonal/attribute streaming remains gated on the VBlank policy in
+  `docs/NesFreeScrollRoadmap.md`.
 
 ## Project Shape
 
