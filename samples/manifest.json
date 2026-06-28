@@ -43,6 +43,12 @@
       "targets": ["gb"]
     },
     {
+      "path": "samples/tiled-vscroll/vscroll.rs",
+      "readme": "samples/tiled-vscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "path": "samples/tiled-diagonal/diag.rs",
       "readme": "samples/tiled-diagonal/README.md",
       "layer": "target-acceptance",

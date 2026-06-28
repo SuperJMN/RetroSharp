@@ -122,6 +122,20 @@ public sealed class CrossTargetScrollAcceptanceTests
     }
 
     [Fact]
+    public void Wide_tall_tiled_sample_lowers_vertical_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
     public void Vertical_only_camera_still_lowers_on_game_boy_and_nes()
     {
         const string verticalSource = """

@@ -700,6 +700,67 @@ public sealed class NesWorldLoadTests : IDisposable
         Assert.Equal((byte)'N', nesRom[0]);
     }
 
+    [Fact]
+    public void World_load_tall_tiled_map_feeds_nes_runtime_row_streaming()
+    {
+        WriteTwoToneTilesheetPng(Path.Combine(directory, "tiles.png"));
+        var rows = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 2 + 1));
+        File.WriteAllText(Path.Combine(directory, "level.tmj"), $$"""
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 1,
+          "height": 61,
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldHeight", "type": "int", "value": 61 }
+          ],
+          "tilesets": [
+            {
+              "firstgid": 1,
+              "name": "tiles",
+              "tilewidth": 8,
+              "tileheight": 8,
+              "tilecount": 2,
+              "columns": 2,
+              "image": "tiles.png",
+              "imagewidth": 16,
+              "imageheight": 8
+            }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "world", "width": 1, "height": 61, "data": [{{rows}}] }
+          ]
+        }
+        """);
+
+        const string source = """
+            void main() {
+                video.Init();
+                world.Load("level.tmj");
+                camera.Init(1, 0, 60);
+                u8 y = 8;
+                camera.SetPosition(0, y);
+                camera.Apply();
+            }
+            """;
+
+        var rom = NesRomCompiler.CompileSource(source, directory);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(0x08, rom[6] & 0x08);
+        Assert.True(
+            ContainsSequence(prg, [0xA4, 0xE3, 0xB1, 0xE8, 0x8D, 0x07, 0x20]),
+            "A Tiled world.Load row beyond the initial four-screen surface should stream through the runtime-selected world row pointer.");
+        Assert.True(
+            ContainsSequence(prg, [0xA9, 0x09, 0x85, 0xEF]),
+            "A Tiled world.Load streamed row should refresh the worst-case 9 touched row-attribute bytes.");
+    }
+
     private NesVideoProgram BuildProgram(string source)
     {
         var parse = new SomeParser().Parse(source);
@@ -949,6 +1010,17 @@ public sealed class NesWorldLoadTests : IDisposable
         var crcBytes = new byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc);
         output.Write(crcBytes);
+    }
+
+    private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
+    {
+        if (bytes.Count < sequence.Count)
+        {
+            return false;
+        }
+
+        return Enumerable.Range(0, bytes.Count - sequence.Count + 1)
+            .Any(offset => sequence.Select((expected, index) => bytes[offset + index] == expected).All(match => match));
     }
 
     private static uint Crc32(byte[] type, byte[] data)
