@@ -258,7 +258,7 @@ public sealed class Sdk2DOperationTests
     }
 
     [Fact]
-    public void Validator_rejects_diagonal_camera_movement_on_streaming_target_when_combined_streaming_exceeds_budget()
+    public void Validator_rejects_diagonal_camera_movement_on_streaming_target_when_combined_streaming_exceeds_budget_without_staggering()
     {
         var exception = Assert.Throws<InvalidOperationException>(() =>
             Sdk2DOperationValidator.Validate(
@@ -270,6 +270,44 @@ public sealed class Sdk2DOperationTests
 
         Assert.Equal(
             "Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Validator_accepts_diagonal_camera_movement_when_streaming_target_staggers_edges_within_budget()
+    {
+        var target = FullCapabilities() with
+        {
+            StaggersCameraMovementStreams = true,
+        };
+
+        Sdk2DOperationValidator.Validate(
+            target,
+            new Sdk2DOperation.SetCameraPosition(
+                Local("cameraX"),
+                Local("cameraY"),
+                ScrollAxes.Horizontal | ScrollAxes.Vertical));
+    }
+
+    [Fact]
+    public void Validator_rejects_staggered_diagonal_camera_movement_when_one_edge_exceeds_budget()
+    {
+        var target = FullCapabilities() with
+        {
+            MaxBackgroundTileWritesPerFrame = 19,
+            StaggersCameraMovementStreams = true,
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            Sdk2DOperationValidator.Validate(
+                target,
+                new Sdk2DOperation.SetCameraPosition(
+                    Local("cameraX"),
+                    Local("cameraY"),
+                    ScrollAxes.Horizontal | ScrollAxes.Vertical)));
+
+        Assert.Equal(
+            "Target 'gb' supports 19 background tile writes per frame, but 20 are required for moving the camera diagonally with staggered streaming (max of 18 column tiles and 20 row tiles).",
             exception.Message);
     }
 

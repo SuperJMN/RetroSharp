@@ -1,6 +1,7 @@
 enum World {
     Width = 64,
-    Height = 60
+    Height = 60,
+    ViewHeight = 18
 }
 
 void main() {
@@ -13,7 +14,7 @@ void main() {
     world.Column(47, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4);
     world.Column(63, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5);
     world.Map(World.Width, 0, World.Height);
-    camera.Init(World.Width, 0, World.Height);
+    camera.Init(World.Width, 0, World.ViewHeight);
 
     u8 cameraX = 0;
     u8 cameraY = 0;

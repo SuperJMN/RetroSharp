@@ -1,6 +1,7 @@
 namespace RetroSharp.NES.Tests;
 
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.NES;
 using Xunit;
@@ -98,6 +99,25 @@ public sealed class CrossTargetScrollAcceptanceTests
         // NES free scroll uses a preloaded four-screen background for maps up to 64x60,
         // so the same diagonal camera movement has no row/column streaming cost.
         var nesRom = NesRomCompiler.CompileSource(verticalSource);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Free_scroll_sample_lowers_diagonal_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var gbCamera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(0x08, nesRom[6] & 0x08);
     }
 
@@ -249,6 +269,17 @@ public sealed class CrossTargetScrollAcceptanceTests
 
         return directory?.FullName
                ?? throw new InvalidOperationException("Could not locate RetroSharp repository root.");
+    }
+
+    private static string RepositoryFile(string relativePath)
+    {
+        var path = Path.Combine(RepoRoot(), relativePath);
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+        }
+
+        return path;
     }
 
     private static string WideHorizontalScrollSource(int width, int streamY, int height)

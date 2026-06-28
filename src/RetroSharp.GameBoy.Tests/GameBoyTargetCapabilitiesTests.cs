@@ -30,6 +30,7 @@ public sealed class GameBoyTargetCapabilitiesTests
         Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Vertical));
         Assert.True(capabilities.SupportsFineScrollX);
         Assert.True(capabilities.SupportsFineScrollY);
+        Assert.True(capabilities.StaggersCameraMovementStreams);
         Assert.Equal(20, capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(0, capabilities.MaxAttributeWritesPerFrame);
         Assert.Equal(40, capabilities.SpriteCount);
@@ -65,5 +66,18 @@ public sealed class GameBoyTargetCapabilitiesTests
                 new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.ScreenTiles.Width + 1)));
 
         Assert.Equal("Target 'gb' supports 20 background tile writes per frame, but 21 are required for streaming a visible map row.", exception.Message);
+    }
+
+    [Fact]
+    public void Descriptor_accepts_diagonal_camera_movement_by_staggering_visible_edge_streams()
+    {
+        var capabilities = GameBoyTarget.Capabilities;
+
+        Sdk2DOperationValidator.Validate(
+            capabilities,
+            new Sdk2DOperation.SetCameraPosition(
+                X: 1,
+                Y: 1,
+                Axes: ScrollAxes.Horizontal | ScrollAxes.Vertical));
     }
 }

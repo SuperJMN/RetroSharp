@@ -22,6 +22,8 @@ public sealed record Target2DCapabilities(
 {
     public bool CameraMovementStreamsBackground { get; init; } = true;
 
+    public bool StaggersCameraMovementStreams { get; init; }
+
     public ScrollAxes RuntimeBackgroundStreamingAxes { get; init; } = ScrollAxes;
 
     public bool SupportsScrollAxis(ScrollAxes axis)

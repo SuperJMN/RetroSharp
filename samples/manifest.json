@@ -40,7 +40,7 @@
       "path": "samples/nes-free-scroll/freescroll.rs",
       "readme": "samples/nes-free-scroll/README.md",
       "layer": "target-acceptance",
-      "targets": ["nes"]
+      "targets": ["gb", "nes"]
     },
     {
       "path": "samples/runner/runner.rs",
