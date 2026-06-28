@@ -28,7 +28,7 @@ public sealed class NesTargetCapabilitiesTests
     }
 
     [Fact]
-    public void Descriptor_reports_free_scroll_and_blocks_features_not_lowered_by_the_static_nes_target()
+    public void Descriptor_reports_free_scroll_streaming_budget_for_large_worlds()
     {
         var capabilities = NesTarget.Capabilities;
 
@@ -37,11 +37,11 @@ public sealed class NesTargetCapabilitiesTests
         Assert.True(capabilities.SupportsFineScrollX);
         Assert.True(capabilities.SupportsFineScrollY);
         Assert.Equal(32, capabilities.MaxBackgroundTileWritesPerFrame);
-        Assert.Equal(0, capabilities.MaxAttributeWritesPerFrame);
+        Assert.True(capabilities.MaxAttributeWritesPerFrame > 0);
         Assert.True(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Horizontal));
-        Assert.False(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Vertical));
+        Assert.True(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Vertical));
         Assert.True(CanStreamVisibleColumn(capabilities));
-        Assert.False(CanStreamVisibleRow(capabilities));
+        Assert.True(CanStreamVisibleRow(capabilities));
         Assert.False(capabilities.SupportsHudMode(HudMode.Window));
         Assert.False(capabilities.SupportsHudMode(HudMode.SplitScroll));
         Assert.False(capabilities.SupportsHudMode(HudMode.Sprite));

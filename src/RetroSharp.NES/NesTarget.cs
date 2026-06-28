@@ -20,7 +20,7 @@ public static class NesTarget
         SupportsFineScrollX: true,
         SupportsFineScrollY: true,
         MaxBackgroundTileWritesPerFrame: 32,
-        MaxAttributeWritesPerFrame: 0,
+        MaxAttributeWritesPerFrame: 9,
         SpriteCount: 64,
         SpriteSizeModes: SpriteSizeMode.Sprite8x8 | SpriteSizeMode.Sprite8x16,
         MaxSpritesPerScanline: 8,
@@ -31,6 +31,6 @@ public static class NesTarget
         CollisionQueries: CollisionQueryMode.CameraRelativeAabb | CollisionQueryMode.CameraRelativeAabbHitTop)
     {
         CameraMovementStreamsBackground = false,
-        RuntimeBackgroundStreamingAxes = ScrollAxes.Horizontal,
+        RuntimeBackgroundStreamingAxes = ScrollAxes.Horizontal | ScrollAxes.Vertical,
     };
 }

@@ -551,9 +551,15 @@ internal sealed class NesVideoProgram
 
         for (var y = 0; y < world.Height; y++)
         {
+            var targetY = world.StreamY + y;
+            if (targetY >= 60)
+            {
+                continue;
+            }
+
             for (var x = 0; x < Math.Min(world.Width, 64); x++)
             {
-                SetTile(x, world.StreamY + y, world.WorldTileIds[y * world.Width + x]);
+                SetTile(x, targetY, world.WorldTileIds[y * world.Width + x]);
             }
         }
 
@@ -750,11 +756,6 @@ internal sealed class NesVideoProgram
         var width = ConstArg(call, 0, 1, 255);
         var streamY = ConstArg(call, 1, 0, 29);
         var height = ConstArg(call, 2, 1, sourceHeight);
-        if (streamY + height > 60)
-        {
-            throw new InvalidOperationException("NES four-screen free scroll supports preloaded maps up to 64x60 tiles.");
-        }
-
         if (WorldFlagColumnHeight is not 0 && WorldFlagColumnHeight < height)
         {
             throw new InvalidOperationException("world_map height must not exceed the declared world_flags height.");
@@ -771,7 +772,7 @@ internal sealed class NesVideoProgram
                 var tile = column is null ? (byte)0 : column[y];
                 tileIds[y * width + x] = tile;
                 tileFlags[y * width + x] = flagColumn is null ? WorldTileFlags.Empty : flagColumn[y];
-                if (x < 64)
+                if (x < 64 && streamY + y < 60)
                 {
                     SetTile(x, streamY + y, tile);
                 }

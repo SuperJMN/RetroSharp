@@ -2942,7 +2942,7 @@ internal sealed class GameBoyRuntimeCompiler
     {
         var config = EnsureCameraConfigured("camera_set_position");
 
-        if (operation.X is not SdkByteExpression.Constant { Value: 0 })
+        if (operation.Axes.HasFlag(ScrollAxes.Horizontal))
         {
             EmitCameraSetAxisPosition(
                 () => EmitSdkByteExpressionToA(operation.X),
@@ -2953,7 +2953,7 @@ internal sealed class GameBoyRuntimeCompiler
                 "camera_set_position_x_end");
         }
 
-        if (operation.Y is not SdkByteExpression.Constant { Value: 0 })
+        if (operation.Axes.HasFlag(ScrollAxes.Vertical))
         {
             EmitCameraSetAxisPosition(
                 () => EmitSdkByteExpressionToA(operation.Y),
@@ -3052,7 +3052,7 @@ internal sealed class GameBoyRuntimeCompiler
         foreach (var operation in program.SdkOperations)
         {
             if (operation is Sdk2DOperation.SetCameraPosition position
-                && position.Y is not SdkByteExpression.Constant { Value: 0 })
+                && position.Axes.HasFlag(ScrollAxes.Vertical))
             {
                 return true;
             }

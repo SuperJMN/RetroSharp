@@ -1,5 +1,7 @@
 namespace RetroSharp.NES.Tests;
 
+using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.NES;
 using Xunit;
 
@@ -22,6 +24,22 @@ public sealed class NesRunnerAcceptanceTests
         Assert.Equal((byte)'N', rom[0]);
         Assert.Equal((byte)'E', rom[1]);
         Assert.Equal((byte)'S', rom[2]);
+    }
+
+    [Fact]
+    public void Nes_runner_uses_four_screen_free_scroll_camera()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var runnerDirectory = Path.GetDirectoryName(sourcePath);
+        var source = File.ReadAllText(sourcePath);
+
+        var operations = NesRomCompiler.CollectSdkOperations(source, runnerDirectory);
+        Assert.Contains(
+            operations.OfType<Sdk2DOperation.SetCameraPosition>(),
+            operation => operation.Axes.HasFlag(ScrollAxes.Vertical));
+
+        var rom = NesRomCompiler.CompileSource(source, runnerDirectory);
+        Assert.Equal(0x08, rom[6] & 0x08);
     }
 
     [Fact]

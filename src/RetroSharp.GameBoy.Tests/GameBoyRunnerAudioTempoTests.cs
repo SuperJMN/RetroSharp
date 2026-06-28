@@ -38,6 +38,17 @@ public sealed class GameBoyRunnerAudioTempoTests
     }
 
     [Fact]
+    public void Shared_runner_keeps_tracked_game_boy_rom_byte_identical()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var compiled = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+        var tracked = File.ReadAllBytes(Path.Combine(runnerDirectory, "runner.gb"));
+
+        Assert.Equal(tracked, compiled);
+    }
+
+    [Fact]
     public void Deferred_camera_commit_streams_columns_into_vram_during_apply()
     {
         // The deferred-commit camera streaming only writes VRAM from camera.Apply (during the

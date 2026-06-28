@@ -253,7 +253,7 @@ class CameraState {
         if (camera.AabbTiles(Player.RightWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = 1;
             x += 1;
-            camera.SetPosition(x, 0);
+            camera.SetPosition(x, wallProbeY);
         } else {
             ResetMotion();
         }
@@ -263,7 +263,7 @@ class CameraState {
         if (camera.AabbTiles(Player.LeftWallProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = 1;
             x -= 1;
-            camera.SetPosition(x, 0);
+            camera.SetPosition(x, wallProbeY);
         } else {
             ResetMotion();
         }

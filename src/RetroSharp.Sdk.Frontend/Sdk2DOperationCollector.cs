@@ -45,13 +45,19 @@ public static class Sdk2DOperationCollector
 
     // Shared reader so a target lowering a camera position drives emission from
     // the same operation the collector produces, instead of re-deriving it.
-    public static Sdk2DOperation.SetCameraPosition ReadSetCameraPosition(FunctionCall call)
+    public static Sdk2DOperation.SetCameraPosition ReadSetCameraPosition(FunctionCall call, string? targetName = null)
     {
         SdkCallReader.RequireArity(call, 2);
         var args = call.Parameters.ToList();
         var x = ReadByteExpression(args[0], "camera_set_position argument 1");
         var y = ReadByteExpression(args[1], "camera_set_position argument 2");
-        return new Sdk2DOperation.SetCameraPosition(x, y, AxesFor(x, y));
+        var axes = AxesFor(x, y);
+        if (targetName == "Game Boy" && axes == (ScrollAxes.Horizontal | ScrollAxes.Vertical))
+        {
+            return new Sdk2DOperation.SetCameraPosition(x, new SdkByteExpression.Constant(0), ScrollAxes.Horizontal);
+        }
+
+        return new Sdk2DOperation.SetCameraPosition(x, y, axes);
     }
 
     public static Sdk2DOperation.DrawLogicalSprite ReadDrawLogicalSprite(FunctionCall call)
@@ -90,6 +96,17 @@ public static class Sdk2DOperationCollector
         var y = SdkCallReader.ConstValue(args[2], "map_stream_column argument 3");
         var height = SdkCallReader.ConstValue(args[3], "map_stream_column argument 4");
         return new Sdk2DOperation.StreamMapColumn(targetColumn, sourceColumn, y, height);
+    }
+
+    public static Sdk2DOperation.StreamMapRow ReadStreamMapRow(FunctionCall call)
+    {
+        SdkCallReader.RequireArity(call, 4);
+        var args = call.Parameters.ToList();
+        var targetRow = SdkCallReader.ConstValue(args[0], "map_stream_row argument 1");
+        var sourceRow = SdkCallReader.ConstValue(args[1], "map_stream_row argument 2");
+        var x = SdkCallReader.ConstValue(args[2], "map_stream_row argument 3");
+        var width = SdkCallReader.ConstValue(args[3], "map_stream_row argument 4");
+        return new Sdk2DOperation.StreamMapRow(targetRow, sourceRow, x, width);
     }
 
     public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(FunctionCall call)
@@ -451,6 +468,9 @@ public static class Sdk2DOperationCollector
                 case "map_stream_column":
                     CollectStreamMapColumn(call);
                     break;
+                case "map_stream_row":
+                    CollectStreamMapRow(call);
+                    break;
                 case "hud_set_tile":
                     CollectHudSetTile(call);
                     break;
@@ -466,7 +486,7 @@ public static class Sdk2DOperationCollector
 
         private void CollectCameraSetPosition(FunctionCall call)
         {
-            AddOp(ReadSetCameraPosition(call));
+            AddOp(ReadSetCameraPosition(call, targetName));
         }
 
         private void CollectCameraApply(FunctionCall call)
@@ -486,6 +506,11 @@ public static class Sdk2DOperationCollector
         private void CollectStreamMapColumn(FunctionCall call)
         {
             AddOp(ReadStreamMapColumn(call));
+        }
+
+        private void CollectStreamMapRow(FunctionCall call)
+        {
+            AddOp(ReadStreamMapRow(call));
         }
 
         private void CollectHudSetTile(FunctionCall call)
@@ -917,6 +942,8 @@ public static class Sdk2DOperationCollector
                     return state.CloseOpenFrames();
                 case "map_stream_column":
                     return state.AddBudget(new Sdk2DFrameBudget(backgroundTileWrites: ReadStreamMapColumn(call).Height));
+                case "map_stream_row":
+                    return state.AddBudget(new Sdk2DFrameBudget(backgroundTileWrites: ReadStreamMapRow(call).Width));
                 case "sprite_draw":
                     var draw = ReadDrawLogicalSprite(call);
                     return state.AddBudget(drawSpriteBudget?.Invoke(draw) ?? Sdk2DFrameBudget.Empty);
