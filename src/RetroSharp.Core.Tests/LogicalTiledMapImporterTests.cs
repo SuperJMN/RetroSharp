@@ -128,6 +128,43 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
     }
 
     [Fact]
+    public void Load_rounds_fractional_actor_coordinates_to_the_nearest_pixel()
+    {
+        var path = Path.Combine(directory, "fractional-actors.tmj");
+        File.WriteAllText(path, """
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 2,
+          "height": 2,
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "world", "width": 2, "height": 2, "data": [0, 0, 0, 0] },
+            {
+              "type": "objectgroup",
+              "name": "actors",
+              "objects": [
+                { "id": 1, "type": "Goomba", "x": 168.5, "y": 40.5 }
+              ]
+            }
+          ]
+        }
+        """);
+
+        var map = LogicalTiledMapImporter.Load(path);
+
+        var spawn = Assert.Single(Assert.Contains("actors", map.ActorSpawnLayers));
+        Assert.Equal("Goomba", spawn.Kind);
+        Assert.Equal(169, spawn.X);
+        Assert.Equal(41, spawn.Y);
+    }
+
+    [Fact]
     public void Load_rejects_maps_without_a_world_layer()
     {
         var path = Path.Combine(directory, "no-world.tmj");
