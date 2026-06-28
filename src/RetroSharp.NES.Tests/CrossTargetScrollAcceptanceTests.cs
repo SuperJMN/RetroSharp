@@ -112,7 +112,8 @@ public sealed class CrossTargetScrollAcceptanceTests
 
         // NES is horizontal-only: the shared validator rejects the vertical axis.
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(verticalSource));
-        Assert.Contains("does not support vertical scrolling", exception.Message);
+        Assert.Contains("vertical camera movement is not supported on NES yet", exception.Message);
+        Assert.Contains("docs/CameraVerticalScrollRoadmap.md", exception.Message);
     }
 
     [Fact]

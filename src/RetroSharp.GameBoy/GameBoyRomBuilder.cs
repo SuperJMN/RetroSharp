@@ -841,6 +841,8 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort PendingStreamKindAddress = 0xC119;   // 0=none, 1=column, 2=row
     private const ushort PendingStreamTargetAddress = 0xC11A; // background column or row index
     private const ushort PendingStreamSourceAddress = 0xC11B; // source-map column or row index
+    private const ushort PendingStreamRowDataLowAddress = 0xC11D;
+    private const ushort PendingStreamRowDataHighAddress = 0xC11E;
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
@@ -3264,6 +3266,7 @@ internal sealed class GameBoyRuntimeCompiler
             GameBoyTarget.Capabilities,
             new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: VisibleScreenTileWidth));
 
+        var streamLabel = builder.CreateLabel("map_stream_row_write");
         var endLabel = builder.CreateLabel("map_stream_row_end");
 
         for (var sourceRow = 0; sourceRow < config.SourceHeight; sourceRow++)
@@ -3273,20 +3276,39 @@ internal sealed class GameBoyRuntimeCompiler
             builder.CompareImmediate(sourceRow);
             builder.JumpAbsolute(0xC2, nextLabel); // JP NZ,nextLabel
 
-            EmitMapStreamRow(sourceRow, targetRowAddress, config.MapWidth);
-            builder.JumpAbsolute(endLabel);
+            EmitSelectMapStreamSourceRow(sourceRow);
+            builder.JumpAbsolute(streamLabel);
             builder.Label(nextLabel);
         }
 
+        builder.JumpAbsolute(endLabel);
+        builder.Label(streamLabel);
+        EmitMapStreamRowFromSelectedSourceRow(targetRowAddress, config.MapWidth);
         builder.Label(endLabel);
     }
 
-    private void EmitMapStreamRow(int sourceRow, ushort targetRowAddress, int mapWidth)
+    private void EmitSelectMapStreamSourceRow(int sourceRow)
+    {
+        builder.LoadHl(GameBoyRomBuilder.MapRowLabel(sourceRow));
+        builder.LoadAFromL();
+        builder.StoreA(PendingStreamRowDataLowAddress);
+        builder.LoadAFromH();
+        builder.StoreA(PendingStreamRowDataHighAddress);
+    }
+
+    private void EmitMapStreamRowFromSelectedSourceRow(ushort targetRowAddress, int mapWidth)
     {
         for (var screenColumn = 0; screenColumn < VisibleScreenTileWidth; screenColumn++)
         {
             EmitCameraTileColumnAt(new ConstantSyntax(screenColumn.ToString(CultureInfo.InvariantCulture)), mapWidth);
-            EmitMapTileAtSourceColumnInA(sourceRow);
+            builder.LoadEFromA();
+            builder.LoadDImmediate(0);
+            builder.LoadA(PendingStreamRowDataLowAddress);
+            builder.LoadLFromA();
+            builder.LoadA(PendingStreamRowDataHighAddress);
+            builder.LoadHFromA();
+            builder.AddHlDe();
+            builder.LoadAFromHl();
             builder.LoadBFromA();
             EmitVisibleBackgroundColumnToC(screenColumn);
             EmitBackgroundTileAddressToHl(targetRowAddress);
@@ -5683,6 +5705,16 @@ internal sealed class GbBuilder
         Emit(0x7A);
     }
 
+    public void LoadAFromH()
+    {
+        Emit(0x7C);
+    }
+
+    public void LoadAFromL()
+    {
+        Emit(0x7D);
+    }
+
     public void AddAFromB()
     {
         Emit(0x80);
@@ -5731,6 +5763,11 @@ internal sealed class GbBuilder
     public void LoadLFromA()
     {
         Emit(0x6F);
+    }
+
+    public void LoadHFromA()
+    {
+        Emit(0x67);
     }
 
     public void LoadLFromE()

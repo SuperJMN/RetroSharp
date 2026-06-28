@@ -15,6 +15,8 @@ Until RetroSharp grows a dedicated `module` or `const group` syntax, samples may
 
 The portable quarantine check in `RetroSharp.Core.Tests` reads the manifest and rejects transitional or target-intrinsic calls inside `portable-sdk` samples.
 
+`samples/gameboy-vscroll/vscroll.rs` is a Game Boy-only `target-acceptance` sample for vertical camera movement. It is not portable evidence for NES; NES still rejects non-zero camera Y until the vertical PPU plan is implemented.
+
 ## Regenerating ROMs
 
 Run this from the repository root to refresh the tracked sample ROMs:

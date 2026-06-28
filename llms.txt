@@ -12,6 +12,7 @@
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
 - [docs/ActorFrameworkRoadmap.md](docs/ActorFrameworkRoadmap.md): actor framework roadmap and AF-5 follow-ups for scalable platformer actors.
+- [docs/CameraVerticalScrollRoadmap.md](docs/CameraVerticalScrollRoadmap.md): AR-5 vertical scroll execution plan (GB proven by sample/tests, NES PPU deep-dive and gate).
 - [docs/RetroSharp.Language.md](docs/RetroSharp.Language.md): language surface.
 - [docs/GameBoyTarget.md](docs/GameBoyTarget.md): current Game Boy target subset and runner milestones.
 - [docs/GameBoyApuTraceFormat.md](docs/GameBoyApuTraceFormat.md): `.gbapu` binary/JSON schema, generation flow, runtime use, and limitations.
