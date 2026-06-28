@@ -391,12 +391,12 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 ## Current Stabilization Gaps
 
-SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a horizontal target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing. Diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs`, not by the shared runner.
+SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a horizontal target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing. Diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs`, and the Game Boy Tiled `world.Load(...)` diagonal path is demonstrated by `samples/tiled-diagonal/diag.rs`; neither proof lives in the shared runner.
 
 - `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped horizontal form and actor-framework calls with per-actor projected X.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared horizontal Game Boy/NES `target-acceptance` sample; NES lowers its audio calls as no-ops until real BGM support exists. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared horizontal Game Boy/NES `target-acceptance` sample; NES lowers its audio calls as no-ops until real BGM support exists. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES, while `samples/tiled-diagonal/diag.rs` is Game Boy-only target-acceptance coverage for diagonal Tiled `world.Load(...)`.
 
 ## Minimal Game Boy/NES Example
 

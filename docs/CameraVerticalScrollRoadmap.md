@@ -16,8 +16,9 @@ current supported subset per target.
   implemented at the codegen level and is internally consistent. The VS-1..VS-5
   slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix. The diagonal Strategy A slice is also proven
-  by `samples/nes-free-scroll/freescroll.rs` on Game Boy: the runtime queues a
-  column and row independently and drains one visible edge per VBlank.
+  by `samples/nes-free-scroll/freescroll.rs` and `samples/tiled-diagonal/diag.rs`
+  on Game Boy: the runtime queues a column and row independently and drains one
+  visible edge per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
   coarse-Y wrap for maps that fit 64x60 tiles. Runtime row, diagonal, and
@@ -52,6 +53,9 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   24-row source-authored map, scrolls down and back up, and builds as a Game Boy ROM.
   `samples/tiled-tall/tall.rs` proves the same vertical row streamer over a 16x40
   Tiled `world.Load(...)` map whose full height is kept in the imported world rows.
+  `samples/tiled-diagonal/diag.rs` moves X and Y together by one pixel per frame
+  over a 40x40 Tiled `world.Load(...)` map, proving that the imported rows and
+  columns feed the staggered diagonal streamer.
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
   row data in VRAM after the 32-row background buffer wraps.
