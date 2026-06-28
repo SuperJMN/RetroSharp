@@ -971,11 +971,6 @@ internal sealed class GameBoyVideoProgram
             return;
         }
 
-        if (map.BackgroundHeight > 32)
-        {
-            throw new InvalidOperationException("Tiled background layer exceeds the Game Boy background tilemap height.");
-        }
-
         for (var y = 0; y < map.BackgroundHeight; y++)
         {
             var targetY = y - map.BackgroundOffsetY;

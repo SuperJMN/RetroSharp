@@ -2904,10 +2904,17 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         var y = CheckedRange(GameBoyVideoProgram.ConstValue(args[1], "camera_init argument 2"), 0, 31, "camera_init argument 2");
-        var height = CheckedRange(GameBoyVideoProgram.ConstValue(args[2], "camera_init argument 3"), 1, program.MapColumnHeight, "camera_init argument 3");
-        if (y + height > 32)
+        var requestedHeight = CheckedRange(GameBoyVideoProgram.ConstValue(args[2], "camera_init argument 3"), 1, program.MapColumnHeight, "camera_init argument 3");
+        var maxBufferedHeight = 32 - y;
+        var height = requestedHeight;
+        if (requestedHeight > maxBufferedHeight)
         {
-            throw new InvalidOperationException("camera_init stream area exceeds the Game Boy background tilemap height.");
+            if (!ProgramQueuesRowStreaming())
+            {
+                throw new InvalidOperationException("camera_init stream area exceeds the Game Boy background tilemap height.");
+            }
+
+            height = maxBufferedHeight;
         }
 
         cameraMapWidth = mapWidth;

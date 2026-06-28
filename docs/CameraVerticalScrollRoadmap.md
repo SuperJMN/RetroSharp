@@ -49,7 +49,9 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   - Row streamer reads the world by source row: `:3261-3296`.
   - `CameraConfig.SourceHeight = program.MapColumnHeight`: `:5244-5247`.
 - `samples/gameboy-vscroll/vscroll.rs` moves Y by one pixel per frame over a
-  24-row source map, scrolls down and back up, and builds as a Game Boy ROM.
+  24-row source-authored map, scrolls down and back up, and builds as a Game Boy ROM.
+  `samples/tiled-tall/tall.rs` proves the same vertical row streamer over a 16x40
+  Tiled `world.Load(...)` map whose full height is kept in the imported world rows.
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
   row data in VRAM after the 32-row background buffer wraps.

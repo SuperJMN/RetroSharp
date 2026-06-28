@@ -239,6 +239,7 @@ Important current behavior:
 - Non-empty `world` cells overlay the background at the same Tiled coordinate.
 - Empty `world` cells keep the background tile underneath.
 - If `retrosharpWorldY` and `retrosharpStreamY` move the playable world slice, the background layer is shifted by the same amount so Tiled layers stay visually aligned.
+- Game Boy Tiled maps loaded through `world.Load(...)` can keep a world taller than the 32-row background buffer. Startup clips the initial preload to the circular tilemap, while the full imported height stays in ROM row tables for vertical camera streaming.
 - Background rows above the streamed world band (GB rows `0..streamY-1`) are emitted as full-width source-map rows and streamed horizontally by the camera, so background decorations above the band scroll with the world instead of freezing/repeating every 32 tiles.
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.

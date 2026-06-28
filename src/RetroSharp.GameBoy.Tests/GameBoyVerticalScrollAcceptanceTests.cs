@@ -61,6 +61,57 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     }
 
     [Fact]
+    public void Game_boy_tall_tiled_world_load_streams_fresh_rows_when_camera_moves_vertically()
+    {
+        var samplePath = RepositoryFile("samples/tiled-tall/tall.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath)
+            ?? throw new InvalidOperationException("Could not locate tall Tiled sample directory.");
+        var source = File.ReadAllText(samplePath);
+        Assert.Contains("camera.Init(World.Width, World.StreamY, World.Height);", source, StringComparison.Ordinal);
+
+        var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
+
+        Assert.True(camera.Axes.HasFlag(ScrollAxes.Vertical));
+        Assert.IsType<SdkByteExpression.Variable>(camera.Y);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, rom.Length);
+
+        var scrolling = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        var still = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(StationaryTallTiledSource(source), sampleDirectory))
+        {
+            CycleAccurateLy = true,
+        };
+
+        var observedFreshRow = false;
+        for (var frame = 1; frame <= 220; frame++)
+        {
+            scrolling.RunFrames(frame);
+            still.RunFrames(frame);
+
+            const ushort topRow = 0x9800;
+            var changedColumns = 0;
+            for (var column = 0; column < 20; column++)
+            {
+                if (scrolling.Vram((ushort)(topRow + column)) != still.Vram((ushort)(topRow + column)))
+                {
+                    changedColumns++;
+                }
+            }
+
+            if (changedColumns >= 8)
+            {
+                observedFreshRow = true;
+                break;
+            }
+        }
+
+        Assert.True(observedFreshRow, "The tall Tiled world.Load sample did not stream fresh rows into the wrapped background buffer.");
+    }
+
+    [Fact]
     public void Game_boy_free_scroll_sample_streams_fresh_columns_and_rows_with_staggered_diagonal_commit()
     {
         var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
@@ -150,6 +201,12 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             .Replace("cameraX += stepX;", "cameraX = 0;", StringComparison.Ordinal)
             .Replace("cameraY += stepY;", "cameraY = 0;", StringComparison.Ordinal)
             .Replace("camera.SetPosition(cameraX, cameraY);", "camera.SetPosition(0, 0);", StringComparison.Ordinal);
+    }
+
+    private static string StationaryTallTiledSource(string source)
+    {
+        return source
+            .Replace("if (direction == 1) {", "if (false) {", StringComparison.Ordinal);
     }
 
     private static string RepositoryFile(string relativePath)
