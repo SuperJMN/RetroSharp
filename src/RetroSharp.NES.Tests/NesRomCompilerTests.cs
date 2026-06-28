@@ -439,7 +439,7 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Nes_sdk_dot_calls_keep_existing_capability_errors()
+    public void Nes_sdk_dot_calls_accept_vertical_camera_on_four_screen_target()
     {
         const string source = """
                               void main() {
@@ -453,9 +453,9 @@ public class NesRomCompilerTests
                               }
                               """;
 
-        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
-        Assert.Contains("vertical camera movement is not supported on NES yet", exception.Message);
-        Assert.Contains("docs/CameraVerticalScrollRoadmap.md", exception.Message);
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(0x08, rom[6] & 0x08);
     }
 
     [Fact]
@@ -3021,6 +3021,39 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_four_screen_camera_path_from_world_map_to_nes_scroll()
+    {
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
+        var source = $$"""
+                       void main() {
+                           video_init();
+                           world_column(0, {{tallColumn}});
+                           world_column(63, {{tallColumn}});
+                           world_map(64, 0, 60);
+                           camera_init(64, 0, 60);
+                           u8 x = 0;
+                           u8 y = 0;
+                           while (true) {
+                               video_wait_vblank();
+                               x += 1;
+                               y += 1;
+                               camera_set_position(x, y);
+                               camera_apply();
+                           }
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.Equal(0x08, rom[6] & 0x08);
+        Assert.True(CountOccurrences(prg, [0x8D, 0x07, 0x20]) >= 17, "four-screen startup should upload palette plus 16 nametable pages.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xEB, 0xC9, 0x1E]), "camera_apply should derive the vertical nametable bit from the absolute camera tile row.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xEA, 0x29, 0x07]), "camera_apply should preserve fine Y when wrapping NES scroll Y at 240 pixels.");
+    }
+
+    [Fact]
     public void Camera_relative_collision_uses_absolute_camera_tile_after_scroll_wrap()
     {
         const string source = """
@@ -3048,24 +3081,24 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_vertical_camera_position_in_current_nes_camera_spike()
+    public void Rejects_vertical_camera_position_when_world_does_not_fit_four_screen_buffer()
     {
-        const string source = """
-                              void main() {
-                                  world_column(0, 1, 2);
-                                  world_map(1, 10, 2);
-                                  camera_init(1, 10, 2);
-                                  while (true) {
-                                      camera_set_position(0, 1);
-                                      camera_apply();
-                                  }
-                              }
-                              """;
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
+        var source = $$"""
+                       void main() {
+                           world_column(0, {{tallColumn}});
+                           world_map(1, 0, 61);
+                           camera_init(1, 0, 61);
+                           while (true) {
+                               camera_set_position(0, 1);
+                               camera_apply();
+                           }
+                       }
+                       """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
-        Assert.Contains("vertical camera movement is not supported on NES yet", exception.Message);
-        Assert.Contains("docs/CameraVerticalScrollRoadmap.md", exception.Message);
+        Assert.Contains("NES four-screen free scroll supports preloaded maps up to 64x60 tiles", exception.Message);
     }
 
     private static string RepositoryFile(string relativePath)
@@ -3257,6 +3290,30 @@ public class NesRomCompilerTests
     private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
     {
         return IndexOfSequence(bytes, sequence) >= 0;
+    }
+
+    private static int CountOccurrences(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
+    {
+        var count = 0;
+        for (var i = 0; i <= bytes.Count - sequence.Count; i++)
+        {
+            var match = true;
+            for (var j = 0; j < sequence.Count; j++)
+            {
+                if (bytes[i + j] != sequence[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static int IndexOfSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)

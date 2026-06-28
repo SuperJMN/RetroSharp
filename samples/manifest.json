@@ -37,6 +37,12 @@
       "targets": ["gb"]
     },
     {
+      "path": "samples/nes-free-scroll/freescroll.rs",
+      "readme": "samples/nes-free-scroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["nes"]
+    },
+    {
       "path": "samples/runner/runner.rs",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",

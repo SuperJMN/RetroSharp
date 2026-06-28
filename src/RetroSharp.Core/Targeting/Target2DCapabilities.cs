@@ -20,6 +20,8 @@ public sealed record Target2DCapabilities(
     HudMode HudModes,
     CollisionQueryMode CollisionQueries)
 {
+    public bool CameraMovementStreamsBackground { get; init; } = true;
+
     public bool SupportsScrollAxis(ScrollAxes axis)
     {
         return axis != ScrollAxes.None && ScrollAxes.HasFlag(axis);

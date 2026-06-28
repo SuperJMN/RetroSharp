@@ -348,7 +348,7 @@ public static class Sdk2DOperationValidator
         // (for example NES with no runtime column streaming), so a camera position set
         // costs no background tile writes. Streaming targets must still fit the per-frame
         // budget for the new column/row revealed by the move.
-        if (capabilities.MaxBackgroundTileWritesPerFrame == 0)
+        if (!capabilities.CameraMovementStreamsBackground || capabilities.MaxBackgroundTileWritesPerFrame == 0)
         {
             return;
         }
