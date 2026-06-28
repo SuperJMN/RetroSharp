@@ -29,7 +29,7 @@ public sealed class SdkV1ReferenceTests
             Assert.Contains(signature, reference, StringComparison.Ordinal);
         }
 
-        Assert.Contains("NES four-screen free scroll supports preloaded maps up to 64x60 tiles.", reference, StringComparison.Ordinal);
+        Assert.Contains("larger source-authored worlds stream one exposed column or row per VBlank", reference, StringComparison.Ordinal);
         Assert.Contains("Target 'nes' does not support Window HUD", reference, StringComparison.Ordinal);
     }
 

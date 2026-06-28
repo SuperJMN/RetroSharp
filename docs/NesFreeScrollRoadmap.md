@@ -1,7 +1,7 @@
 # NES Free Scroll Roadmap (free 2-axis camera scrolling)
 
-Status: **not implemented; design + execution plan on branch
-`feature/nes-free-scroll`.** This is the hard NES milestone: pixel-level,
+Status: **implemented through NF-9 on branch `feature/nes-free-scroll`; NF-10
+remains a separate epic.** This is the hard NES milestone: pixel-level,
 artifact-free scrolling in **both** axes simultaneously (8-direction / diagonal),
 the kind Super Mario Land 2 does on Game Boy and games like Gauntlet do on NES.
 
@@ -27,9 +27,9 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   MCP and CI can validate free scroll. This is **NF-0** and gates everything else.
 - **Ship the easy win before the hard one.** With four-screen, a level that fits
   in 512x480 scrolls freely with *zero* runtime streaming (upload 4 nametables at
-  startup, then just write scroll registers). Deliver that first (NF-3). Only
-  larger-than-4-screen levels need the painful column+row+attribute streaming
-  (NF-4..NF-6).
+  startup, then just write scroll registers). NF-3 delivered that first; NF-4..NF-6
+  then added staggered column/row/attribute streaming for larger source-authored
+  worlds without starting the mapper-backed NF-10 work.
 - Keep the golden rule: the language and classic IR never learn about cameras;
   free scroll lives in `Sdk2DOperation` + NES lowering + `Target2DCapabilities`.
 
@@ -70,22 +70,26 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
 - NES still emits NROM-256: 32 KiB PRG + 8 KiB CHR. Four-screen is selected with
   iNES flags6 bit 3 only for vertical-camera programs; horizontal-only programs
   keep the old flags6 vertical-mirroring bit.
-- The bounded free-scroll path is **preloaded**: maps must fit within the 64x60
-  four-screen surface, and per-frame camera movement writes only `$2000` and
-  `$2005`. It tracks absolute X/Y tile positions and handles the NES 240-pixel
-  coarse-Y wrap by deriving `(tileRow % 30) * 8 + fineY`.
+- The bounded free-scroll path preloads the first 64x60 four-screen surface and
+  writes `$2000`/`$2005` for X/Y camera movement. It tracks absolute source X/Y
+  tile positions and maps Y through the 60-row buffer before deriving the NES
+  240-pixel coarse-Y scroll, so `$2005` never receives 240..255.
 - Horizontal-only maps retain the previous runtime column-streaming path for
-  worlds wider than 32 columns.
-- Attributes are still written **at startup only**. `MaxAttributeWritesPerFrame`
-  remains `0`; runtime row/diagonal/attribute streaming for worlds larger than
-  64x60 is not implemented yet.
-- Capabilities now describe the bounded substrate: `ScrollAxes: Horizontal |
+  worlds wider than 32 columns. Four-screen maps wider than 64 columns stream
+  the next off-screen visible-edge column while keeping the four nametables
+  distinct.
+- Source-authored worlds taller than 60 rows stream the exposed vertical row at
+  runtime through a row-pointer table, and refresh the worst-case 9 touched
+  attribute bytes with palette slot 0. This is intentionally staggered: a column
+  and a row crossing perform one edge per VBlank instead of combining them into
+  one over-budget transfer.
+- Capabilities now describe the free-scroll substrate: `ScrollAxes: Horizontal |
   Vertical`, `SupportsFineScrollY: true`, `BackgroundBufferTiles: 64x60`,
-  `MaxBackgroundTileWritesPerFrame: 32`, and
+  `MaxBackgroundTileWritesPerFrame: 32`, `MaxAttributeWritesPerFrame: 9`,
+  `RuntimeBackgroundStreamingAxes: Horizontal | Vertical`, and
   `CameraMovementStreamsBackground = false` for preloaded camera movement.
-  `RuntimeBackgroundStreamingAxes` remains horizontal-only until NF-4 lands.
-- `Sdk2DOperation.StreamMapRow` exists, but NES lowering for explicit row
-  streaming remains future work.
+- `Sdk2DOperation.StreamMapRow` lowers on NES for explicit source-authored row
+  spans and is also used by the shared capability/budget model.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).
 
@@ -217,23 +221,21 @@ runtime VRAM streaming.
 
 ## Phase NF-4 — Vertical row streaming (levels taller than the surface)
 
-Status: pending decision. A vertical boundary crossing while the camera can also
-show either horizontal nametable may require refreshing the row in both horizontal
-nametable halves before it becomes visible. That is 64 tile writes before
-attributes, while the current explicit background write budget is 32 per VBlank.
-Do not implement this phase until the streaming policy is decided: restrict the
-camera, prefetch/stagger over multiple VBlanks, or move the larger-level work to
-the mapper-backed NF-10 path.
+Status: implemented with a staggered policy. A vertical boundary crossing streams
+the 32-tile row that is about to enter the visible window, not the full 64-tile
+four-screen row. If a frame also crosses a horizontal boundary, the existing
+column streamer and the new row streamer each wait for their own VBlank, so no
+single VBlank exceeds the declared 32-tile write budget.
 
 - Layer: NES target.
 - Files: `src/RetroSharp.NES/NesRomBuilder.cs` (stream helpers),
   `src/RetroSharp.NES/NesSdkOperationLowerer.cs` (add `StreamMapRow` case — it
   currently throws), `src/RetroSharp.Core/Sdk/Sdk2DOperationValidator.cs`.
 - Steps:
-  - [ ] On a vertical tile-boundary crossing, stream the next world row into the
+  - [x] On a vertical tile-boundary crossing, stream the next world row into the
     off-screen (stacked) nametable via `$2006`/`$2007`, handling the 240 wrap and
     selecting the correct nametable quadrant.
-  - [ ] Lower `Sdk2DOperation.StreamMapRow` on NES (mirror the existing
+  - [x] Lower `Sdk2DOperation.StreamMapRow` on NES (mirror the existing
     `EmitStreamColumn*` horizontal path).
 - Verify: golden-byte row-write tests; MCP shows fresh rows entering as the camera
   scrolls vertically past the initial surface; horizontal regression green.
@@ -242,18 +244,18 @@ the mapper-backed NF-10 path.
 
 ## Phase NF-5 — Diagonal streaming (both column and row in one crossing)
 
-Status: blocked with NF-4/NF-6 until the same VBlank policy is decided. The
-preloaded 64x60 sample can move diagonally because it performs no per-frame
-background streaming; larger worlds need a scheduler that proves the exposed
-column, row, corner, and attributes are valid before the camera reveals them.
+Status: implemented with the same staggered policy as NF-4. Preloaded 64x60
+movement still only restores scroll registers. Larger source-authored worlds
+stream at most one column or one row per VBlank; a diagonal tile crossing emits
+two VBlank-backed transfers in source order before restoring scroll.
 
 - Layer: NES target + validator.
 - Files: `NesRomBuilder.cs` stream scheduler, `Sdk2DOperationValidator.cs`.
 - Steps:
-  - [ ] When a frame crosses both a column and a row boundary, stream the new
+  - [x] When a frame crosses both a column and a row boundary, stream the new
     column **and** the new row (the exposed L-shape + corner) into the correct
     quadrants.
-  - [ ] Apply a per-frame VBlank budget. NES VBlank (~2273 CPU cycles) must also
+  - [x] Apply a per-frame VBlank budget. NES VBlank (~2273 CPU cycles) must also
     cover OAM DMA (~513 cycles); a full column (30) + row (32) + attributes may
     not fit. Stagger across frames if needed (commit one edge per VBlank), like
     the Game Boy strategy A, and document the policy.
@@ -264,16 +266,18 @@ column, row, corner, and attributes are valid before the camera reveals them.
 
 ## Phase NF-6 — Runtime attribute streaming
 
-Status: pending. Startup attributes are emitted for all loaded nametables, but
-runtime attribute writes remain undeclared (`MaxAttributeWritesPerFrame: 0`).
-This phase should land with the same budget policy as NF-4/NF-5.
+Status: implemented for runtime row streaming. Startup attributes are still
+derived from Tiled palette provenance, while runtime streamed rows refresh the
+touched attribute bytes as palette slot 0. Rich runtime palette provenance for
+newly streamed Tiled rows remains future refinement, not an NF-10 mapper
+requirement.
 
 - Layer: NES target + capability.
 - Files: `NesRomBuilder.cs`, `NesRomCompiler.cs` (`ApplyWorldAttributes` →
   runtime equivalent), `NesTarget.cs` (`MaxAttributeWritesPerFrame`).
 - Steps:
-  - [ ] Raise `MaxAttributeWritesPerFrame` above 0.
-  - [ ] Stream attribute bytes for newly exposed columns/rows. Attribute
+  - [x] Raise `MaxAttributeWritesPerFrame` above 0.
+  - [x] Stream attribute bytes for newly exposed rows. Attribute
     granularity is 16x16 px (one byte per 32x32 px / 4x4 tiles); the 30-row
     nametable means the bottom attribute row covers only 2 tile rows — handle the
     partial row.
@@ -308,9 +312,9 @@ This phase should land with the same budget policy as NF-4/NF-5.
 - Files: `src/RetroSharp.Core/Sdk/Tiled/LogicalTiledMapImporter.*`,
   `src/RetroSharp.NES/NesTiledWorldImporter.*`, sample maps.
 - Steps:
-  - [ ] Provide a world wider **and** taller than the screen, with source column
+  - [x] Provide a world wider **and** taller than the screen, with source column
     **and** row tables available to NES streaming.
-  - [ ] Respect the current one-byte source-column runtime limit (or lift it
+  - [x] Respect the current one-byte source-column runtime limit (or lift it
     deliberately); document the maximum free-scroll level size per substrate.
 - Verify: the free-scroll sample loads a Tiled map and scrolls in both axes;
   Game Boy parity unaffected.
@@ -323,14 +327,15 @@ This phase should land with the same budget policy as NF-4/NF-5.
 - Files: `samples/nes-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
-  - [x] Golden-byte tests for the four-screen header and scroll-register writes.
-    Big-level column/row/attribute streaming remains pending NF-4..NF-6.
+  - [x] Golden-byte tests for the four-screen header, scroll-register writes,
+    explicit row streaming, runtime row streaming, attribute refresh, and runner
+    four-screen integration.
   - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
     and `read_ppu_state` assert both axes move and the four nametables stay
     distinct.
   - [ ] Optional Mesen2 cross-check of the same ROM.
-  - [x] Update `docs/NesTarget.md` to remove "vertical not supported" only for the
-    bounded four-screen path; update `ArchitectureRoadmap.md`.
+  - [x] Update `docs/NesTarget.md` and `ArchitectureRoadmap.md` for four-screen
+    free scroll plus staggered runtime streaming.
 - Verify: `dotnet test` green; the sample is a tracked NES ROM artifact.
 
 ---
@@ -352,9 +357,9 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 - A NES sample scrolls **diagonally** (both axes at once) with no corner artifacts,
   proven behaviorally through the four-screen `nes_debug` MCP, not just compile
   level.
-- Levels up to 512x480 work with no runtime streaming (NF-3). Larger-level row,
-  diagonal, and attribute streaming remains intentionally pending until NF-4..NF-6
-  have a chosen VBlank policy.
+- Levels up to 512x480 work with no runtime streaming (NF-3). Larger
+  source-authored worlds stream columns/rows with the staggered one-edge-per-
+  VBlank policy; NF-10 remains only for mapper-backed scale, banking, and HUD IRQs.
 - Horizontal-only NES programs are byte-identical and unaffected.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a

@@ -103,7 +103,7 @@ Intrinsic work belongs here:
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
 | `camera_init(...)` | Portable SDK candidate | Current form configures target camera state and stream band. |
-| `camera_set_position(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES supports preloaded four-screen X/Y movement for maps up to 64x60 tiles and horizontal streaming for wider horizontal-only maps. |
+| `camera_set_position(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES supports four-screen X/Y movement with horizontal column streaming, vertical row streaming, and staggered diagonal edge updates. |
 | `camera_apply()` | Portable SDK candidate | Valid concept, but should apply SDK camera state. |
 | `camera_move_right()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
 | `camera_move_left()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
@@ -354,20 +354,20 @@ Acceptance criteria:
 
 Purpose: add vertical scroll as a first-class camera capability.
 
-Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. The row streamer shares the emitted write loop across source rows so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path for maps that fit the preloaded 64x60 surface: it emits the iNES four-screen bit, uploads four nametables at startup, tracks X/Y camera state, and writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled. Runtime row, diagonal, and attribute streaming for worlds beyond that surface remains gated on a documented VBlank policy; see `docs/NesFreeScrollRoadmap.md`.
+Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. The row streamer shares the emitted write loop across source rows so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path: it emits the iNES four-screen bit, uploads the initial four nametables at startup, tracks X/Y source camera state, writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled, streams horizontal columns for worlds wider than the buffer, and streams vertical rows plus zero-palette attribute refreshes for source-authored worlds taller than the buffer. Mapper-backed scale, banking, and IRQ HUD remain in NF-10; see `docs/NesFreeScrollRoadmap.md`.
 
 Tasks:
 
 - Extend camera state to world X and world Y.
-- Add row streaming when the camera crosses tile boundaries vertically. Done for Game Boy; pending for NES worlds larger than the preloaded four-screen surface.
-- Support column and row streaming in the same frame when moving diagonally. Game Boy validates this with budget checks; NES larger-than-four-screen streaming is pending a budget policy.
+- Add row streaming when the camera crosses tile boundaries vertically. Done for Game Boy and NES source-authored worlds.
+- Support column and row streaming in the same frame when moving diagonally. Game Boy validates this with budget checks; NES uses a staggered one-edge-per-VBlank policy for larger worlds.
 - Add budget checks for tile writes per frame.
 - Add capability checks for targets that support only X, only Y, or XY scroll.
 - Add a Game Boy vertical-scroll sample or runner section that exercises Y movement. Done in `samples/gameboy-vscroll/vscroll.rs`.
 
 Acceptance criteria:
 
-- Game Boy supports SDK-level vertical camera movement within declared limits, and NES supports bounded four-screen X/Y movement within a preloaded 64x60 surface.
+- Game Boy supports SDK-level vertical camera movement within declared limits, and NES supports four-screen X/Y movement with staggered column/row streaming beyond the initially preloaded 64x60 surface.
 - The compiler rejects unsupported scroll modes with clear errors.
 - Horizontal behavior from Iteration 4 does not regress.
 

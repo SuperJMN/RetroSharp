@@ -63,7 +63,7 @@ Game Boy currently accepts hUGETracker `.uge` v6 resources and `.gbapu` APU trac
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
-For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editable baseline. During target lowering, that PNG path follows the target-variant convention used by sprite assets: `tiles.png` can resolve to `tiles.gb.png`/`tiles.GameBoy.png` on Game Boy or `tiles.nes.png`/`tiles.NES.png` on NES, falling back to `tiles.png` when no variant exists. The current NES lowering derives a universal background color, up to four background palette slots, and the initial attribute table from the selected tileset PNG's placed map tiles; runtime attribute streaming is still outside SDK v1.
+For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editable baseline. During target lowering, that PNG path follows the target-variant convention used by sprite assets: `tiles.png` can resolve to `tiles.gb.png`/`tiles.GameBoy.png` on Game Boy or `tiles.nes.png`/`tiles.NES.png` on NES, falling back to `tiles.png` when no variant exists. The current NES lowering derives a universal background color, up to four background palette slots, and the initial attribute table from the selected tileset PNG's placed map tiles; runtime-streamed rows refresh touched attributes as palette slot 0 until richer Tiled palette provenance is carried into the streaming path.
 
 ### Logical palettes
 
@@ -82,7 +82,7 @@ The slot is logical and capability-checked against the target descriptor. The fo
 | `camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
 | `camera.Apply()` | Apply the current camera state to the target during the frame. |
 
-Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `camera.SetPosition(x, y)` with one-pixel-per-call stepping and row streaming during `camera.Apply()`. NES supports non-zero Y for source-authored maps that fit a preloaded four-screen 64x60 tile surface; larger free-scroll worlds still fail until row, diagonal, and attribute streaming have a documented VBlank policy.
+Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `camera.SetPosition(x, y)` with one-pixel-per-call stepping and row streaming during `camera.Apply()`. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
 
 ### Logical sprites and animation
 
@@ -354,9 +354,9 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | API group | Game Boy | NES |
 | --- | --- | --- |
 | Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
-| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Source-authored free-scroll maps can instead preload a four-screen 64x60 surface; Tiled `world.Load(...)` still keeps the current visible-slice limits. |
-| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for horizontal-only maps wider than 32 columns. In four-screen free-scroll mode, X movement pans within the preloaded 64x60 surface. |
-| Camera Y | Supported with one-pixel stepping and row streaming. Diagonal movement is rejected when the combined row+column write budget would exceed one frame. | Supported for maps that fit the preloaded four-screen 64x60 surface. Runtime row/attribute streaming for larger worlds is not implemented yet. |
+| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Four-screen free-scroll maps preload the initial 64x60 surface and keep source rows/columns in ROM for staggered runtime streaming beyond that buffer. |
+| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for horizontal-only maps wider than 32 columns. In four-screen free-scroll mode, X movement pans within the 64x60 buffer and streams wider worlds one edge per VBlank. |
+| Camera Y | Supported with one-pixel stepping and row streaming. Diagonal movement is rejected when the combined row+column write budget would exceed one frame. | Supported through four-screen nametables. Maps up to 64x60 move without runtime tile writes; taller source-authored worlds stream the exposed 32-tile row and 9 touched attribute bytes with the staggered one-edge-per-VBlank policy. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
@@ -376,9 +376,8 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | --- | --- |
 | Game Boy split-scroll HUD | `Target 'gb' does not support SplitScroll HUD. Use Window HUD, SpriteHud, or disable HUD for this target.` |
 | NES Window HUD | `Target 'nes' does not support Window HUD. Use disable HUD for this target.` |
-| NES four-screen free-scroll map overflow | `NES four-screen free scroll supports preloaded maps up to 64x60 tiles.` |
+| NES four-screen camera stream area overflow | `NES four-screen free scroll stream area must fit within the 60-row four-screen height.` |
 | Game Boy diagonal camera movement over budget | `Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).` |
-| NES runtime row streaming | `Target 'nes' does not support runtime vertical background streaming.` |
 | NES BGM playback on targets without no-op audio enabled | `Target 'nes' does not support BGM playback yet.` |
 | Game Boy sprite palette slot overflow | `Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.` |
 | NES world tile flag query | `Target 'nes' does not support world tile flag queries.` |

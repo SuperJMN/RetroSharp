@@ -21,9 +21,10 @@ This document preserves project knowledge that previously lived only in agent me
   byte-identical for docs-only work.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. NES has a
-  preloaded four-screen free-scroll path for source-authored maps up to 64x60 tiles;
-  larger row/diagonal/attribute streaming remains gated on the VBlank policy in
-  `docs/NesFreeScrollRoadmap.md`.
+  four-screen free-scroll path with preloaded 64x60 movement, horizontal column
+  streaming for wider worlds, and staggered vertical row plus zero-palette
+  attribute streaming for source-authored worlds taller than the buffer. NF-10
+  mapper-backed scale and IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 
 ## Project Shape
 
@@ -213,10 +214,10 @@ Pipeline shape (two phases, after #105 partial extraction):
   deduplicating and composing the background under blank world cells. `world.Load(path)` therefore
   lowers on both Game Boy and NES from the same source while keeping the editable `.tsx` pointed at
   one baseline PNG.
-- NES limitations: the Tiled source map width must fit the one-byte source-column runtime, the
-  current visible/off-screen buffer is still two nametables wide, the streamed slice must fit the
-  visible 30-row height, vertical streaming is not supported yet, and attribute bytes are derived for
-  the initial two-nametable buffer but are not streamed at runtime yet.
+- NES limitations: source map rows and columns must still fit the one-byte runtime, four-screen
+  free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
+  as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
+  IRQs are still deferred to NF-10.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.
