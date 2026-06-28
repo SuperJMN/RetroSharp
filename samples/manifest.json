@@ -31,6 +31,12 @@
       "targets": ["gb"]
     },
     {
+      "path": "samples/gameboy-vscroll/vscroll.rs",
+      "readme": "samples/gameboy-vscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
       "path": "samples/runner/runner.rs",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",

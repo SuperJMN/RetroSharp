@@ -308,8 +308,24 @@ public static class Sdk2DOperationValidator
 
         if (axes.HasFlag(ScrollAxes.Vertical))
         {
-            TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
+            RequireVerticalCameraAxis(capabilities);
         }
+    }
+
+    private static void RequireVerticalCameraAxis(Target2DCapabilities capabilities)
+    {
+        if (capabilities.SupportsScrollAxis(ScrollAxes.Vertical))
+        {
+            return;
+        }
+
+        if (capabilities.Name == "nes")
+        {
+            throw new InvalidOperationException(
+                "Target 'nes': vertical camera movement is not supported on NES yet; see docs/CameraVerticalScrollRoadmap.md before enabling NES vertical scroll.");
+        }
+
+        TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
     }
 
     private static void RequireFineScroll(Target2DCapabilities capabilities, ScrollAxes axes)

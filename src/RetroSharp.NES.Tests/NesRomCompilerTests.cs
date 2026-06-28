@@ -454,7 +454,8 @@ public class NesRomCompilerTests
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
-        Assert.Contains("Target 'nes' does not support vertical scrolling.", exception.Message);
+        Assert.Contains("vertical camera movement is not supported on NES yet", exception.Message);
+        Assert.Contains("docs/CameraVerticalScrollRoadmap.md", exception.Message);
     }
 
     [Fact]
@@ -3063,7 +3064,8 @@ public class NesRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
-        Assert.Contains("Target 'nes' does not support vertical scrolling.", exception.Message);
+        Assert.Contains("vertical camera movement is not supported on NES yet", exception.Message);
+        Assert.Contains("docs/CameraVerticalScrollRoadmap.md", exception.Message);
     }
 
     private static string RepositoryFile(string relativePath)

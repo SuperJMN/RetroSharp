@@ -102,8 +102,8 @@ Intrinsic work belongs here:
 | `sprite_width(...)` | Portable SDK | Add `sprite_height(...)`. |
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
-| `camera_init(...)` | Portable SDK candidate | Current form is Game Boy horizontal camera setup. |
-| `camera_set_position(...)` | Portable SDK camera | First position-based camera API candidate; current Game Boy slice is horizontal-only. |
+| `camera_init(...)` | Portable SDK candidate | Current form configures target camera state and stream band. |
+| `camera_set_position(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES is still horizontal-only. |
 | `camera_apply()` | Portable SDK candidate | Valid concept, but should apply SDK camera state. |
 | `camera_move_right()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
 | `camera_move_left()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
@@ -354,6 +354,8 @@ Acceptance criteria:
 
 Purpose: add vertical scroll as a first-class camera capability.
 
+Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. The row streamer shares the emitted write loop across source rows so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES is deliberately gated to horizontal-only and requires real PPU work (nametable mirroring/mapper choice, `$2000`/`$2005` Y writes, the 240-row coarse-Y wrap, and runtime attribute-row streaming) before vertical can be enabled; see `docs/CameraVerticalScrollRoadmap.md` for the VS-NES tasks.
+
 Tasks:
 
 - Extend camera state to world X and world Y.
@@ -361,7 +363,7 @@ Tasks:
 - Support column and row streaming in the same frame when moving diagonally.
 - Add budget checks for tile writes per frame.
 - Add capability checks for targets that support only X, only Y, or XY scroll.
-- Add a Game Boy vertical-scroll sample or runner section that exercises Y movement.
+- Add a Game Boy vertical-scroll sample or runner section that exercises Y movement. Done in `samples/gameboy-vscroll/vscroll.rs`.
 
 Acceptance criteria:
 

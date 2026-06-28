@@ -19,6 +19,9 @@ This document preserves project knowledge that previously lived only in agent me
 - The current closeout validation expectation is `git diff --check` and
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
+- The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
+  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. NES vertical
+  remains gated with the diagnostic that points to `docs/CameraVerticalScrollRoadmap.md`.
 
 ## Project Shape
 
@@ -41,6 +44,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | How do we debug with the runner as the GB test app? | `docs/GameBoyRunnerDebugging.md` |
 | Which samples are portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
+| How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |
 | What should a generic AI agent read first? | `AGENTS.md` and `llms.txt` |
 
 ## Decisions To Preserve
