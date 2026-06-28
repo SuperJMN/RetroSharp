@@ -1,7 +1,7 @@
 # Camera Vertical Scroll Roadmap (AR-5 execution plan)
 
-Status: **GB vertical path is proven by sample/tests; NES has a separate bounded
-four-screen free-scroll path.** This is the branch-scoped execution plan for roadmap **Iteration 5:
+Status: **GB vertical and staggered diagonal paths are proven by sample/tests; NES
+has a separate bounded four-screen free-scroll path.** This is the branch-scoped execution plan for roadmap **Iteration 5:
 Camera2D Vertical Scroll** (`docs/ArchitectureRoadmap.md`, AR-5.1..AR-5.3). It is
 written so an autonomous agent (Codex) can pick up a task and know exactly what
 to change, where, and how to verify it.
@@ -15,8 +15,9 @@ current supported subset per target.
 - **Do NOT start from scratch on Game Boy.** Vertical scroll is already
   implemented at the codegen level and is internally consistent. The VS-1..VS-5
   slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
-  and a row-streamer emission fix; future GB work should extend that path rather
-  than write a new camera.
+  and a row-streamer emission fix. The diagonal Strategy A slice is also proven
+  by `samples/nes-free-scroll/freescroll.rs` on Game Boy: the runtime queues a
+  column and row independently and drains one visible edge per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
   coarse-Y wrap for maps that fit 64x60 tiles. Runtime row, diagonal, and
@@ -28,7 +29,7 @@ current supported subset per target.
 
 ## What already exists (verified in source)
 
-Game Boy — fully wired, coherent, and now exercised by a GB-only sample/test:
+Game Boy — fully wired, coherent, and now exercised by samples/tests:
 
 - Capability declares both axes: `src/RetroSharp.GameBoy/GameBoyTarget.cs:18`
   (`ScrollAxes: Horizontal | Vertical`) and `:20` (`SupportsFineScrollY: true`).
@@ -52,6 +53,10 @@ Game Boy — fully wired, coherent, and now exercised by a GB-only sample/test:
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
   row data in VRAM after the 32-row background buffer wraps.
+- `samples/nes-free-scroll/freescroll.rs` moves X and Y by one pixel per frame
+  over a 64x60 source map and builds as both Game Boy and NES. The Game Boy
+  acceptance test runs the emitted ROM and observes both fresh wrapped columns
+  and fresh wrapped rows after diagonal movement.
 - The row streamer now shares one emitted 20-column write block across source
   rows. That fixed the latent tall-map failure where fully unrolled per-row
   stream code could force unsupported direct control flow across MBC1 program
@@ -65,8 +70,8 @@ NES — bounded four-screen free scroll:
   cannot fit the preloaded surface.
 - `camera.Apply()` writes both nametable bits and both `$2005` scroll bytes while
   avoiding invalid NES Y scroll values in the 240..255 range.
-- Runtime row/attribute streaming for larger NES worlds is still pending in
-  `docs/NesFreeScrollRoadmap.md`.
+- Runtime row/attribute streaming for larger NES worlds is implemented with the
+  same one-edge-per-VBlank policy documented in `docs/NesFreeScrollRoadmap.md`.
 
 ## Guardrails (do not violate)
 
@@ -341,27 +346,26 @@ context for why NES Y needed a separate substrate decision.
 
 ---
 
-## Phase E — Diagonal scroll (recommended proof of concept, NOT in this branch)
+## Phase E — Diagonal scroll (Strategy A implemented)
 
-Status: **not implemented; documented as a recommended proof of concept.** This
-branch ships single-axis scroll only. A `camera.SetPosition(x, y)` that moves
-**both** axes in the same frame is deliberately rejected by the validator:
-
-```
-Target 'gb' supports 20 background tile writes per frame, but 38 are required
-for moving the camera diagonally (18 column tiles + 20 row tiles).
-```
+Status: **implemented with staggered edge commits.** A `camera.SetPosition(x, y)`
+that moves both axes remains a diagonal SDK request; the collector does not
+degrade it to horizontal or vertical. Game Boy accepts it because
+`GameBoyTarget.Capabilities` declares staggered camera stream draining and each
+committed edge fits the 20-tile background write budget.
 
 Real Game Boy games (e.g. Super Mario Land 2) scroll in 8 directions, so diagonal
 is clearly feasible on hardware. The blockers are two of *our* design choices, not
 the DMG:
 
 - Conservative `MaxBackgroundTileWritesPerFrame: 20`
-  (`src/RetroSharp.GameBoy/GameBoyTarget.cs:20`). A diagonal tile-boundary crossing
-  exposes a column (18 tiles) **and** a row (20 tiles) → 38 writes.
-- A single deferred stream slot (`PendingStreamKind/Target/Source`,
-  `GameBoyRomBuilder.cs:841-843`): only one column *or* row can be queued per
-  frame; a second `EmitQueuePending*` in the same frame overwrites the first.
+  (`src/RetroSharp.GameBoy/GameBoyTarget.cs`). A diagonal tile-boundary crossing
+  exposes a column (18 tiles) **and** a row (20 tiles) → 38 writes if committed in
+  one VBlank.
+- Horizontal/vertical-only programs still use the original deferred stream slot
+  (`PendingStreamKind/Target/Source`) so their ROM shape stays compact. Diagonal
+  programs emit separate pending column and row slots so the second edge is not
+  overwritten.
 
 The real VBlank (~4560 cycles) easily affords ~38 tiles with tight copy loops, so
 this is engineering cost in our pipeline, not a hardware limit.
@@ -371,8 +375,8 @@ this is engineering cost in our pipeline, not a hardware limit.
 **Strategy A — stagger crossings across frames (recommended PoC).** Allow a column
 **and** a row to be pending at once, but drain **one per VBlank** within the
 existing 20-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
-commit that handles both kinds) and removing the diagonal rejection in the
-validator. **No streamer rewrite.** Price: the second-axis edge appears one frame
+commit that handles both kinds) and a validator rule keyed off the target's
+staggered-stream capability. **No streamer rewrite.** Price: the second-axis edge appears one frame
 late — practically invisible at 1px/frame. Effort is comparable to the GB vertical
 slice this branch shipped.
 
@@ -392,18 +396,18 @@ test harness. Effort: a small epic; this is the risky part.
   `Horizontal | Vertical` when both move.
 - Runner/actor ROMs are unaffected unless they adopt diagonal movement.
 
-### VS-DIAG tasks (when a future branch picks this up)
+### VS-DIAG tasks
 
-- [ ] VS-DIAG-1 (Strategy A): add a two-kind pending queue so a column and a row
+- [x] VS-DIAG-1 (Strategy A): add a two-kind pending queue so a column and a row
   can both be pending, drained one per VBlank; document the ≤1-frame edge latency.
-- [ ] VS-DIAG-2: in the validator, stop rejecting `Horizontal | Vertical` for GB
+- [x] VS-DIAG-2: in the validator, stop rejecting `Horizontal | Vertical` for GB
   when staggered draining keeps each frame within budget; keep a clear diagnostic
   for genuinely over-budget single-frame demands.
-- [ ] VS-DIAG-3: add a GB diagonal acceptance sample + emulator test that observes
+- [x] VS-DIAG-3: add a GB diagonal acceptance sample + emulator test that observes
   both a fresh column and a fresh row after diagonal movement.
 - [ ] VS-DIAG-4 (optional, Strategy B): tighten the streamers into precomputed-
   pointer copy loops, raise the budget, and add a VBlank cycle-budget check so a
   full column+row commit fits one frame.
 
-Recommendation: start with Strategy A; only pursue Strategy B if profiling shows
-the one-frame edge lag is visible in real gameplay.
+Strategy A is the shipped behavior. Only pursue Strategy B if profiling shows the
+one-frame edge lag is visible in real gameplay.

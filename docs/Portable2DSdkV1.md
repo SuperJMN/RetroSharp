@@ -82,7 +82,7 @@ The slot is logical and capability-checked against the target descriptor. The fo
 | `camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
 | `camera.Apply()` | Apply the current camera state to the target during the frame. |
 
-Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `camera.SetPosition(x, y)` with one-pixel-per-call stepping and row streaming during `camera.Apply()`. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
+Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `camera.SetPosition(x, y)` with one-pixel-per-call stepping and row streaming during `camera.Apply()`. Diagonal Game Boy movement is accepted through the target's staggered camera-stream capability: a column and row can be pending together, but only one visible edge is committed per VBlank inside the 20-tile budget. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
 
 ### Logical sprites and animation
 
@@ -339,7 +339,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | World map | Active world dimensions must fit the target's static setup or streaming path. |
 | Camera X | `ScrollAxes.Horizontal`, fine-scroll support as required by target lowering, and enough background tile writes for any streamed column. |
 | Camera Y | `ScrollAxes.Vertical`, fine-scroll support as required by target lowering, and enough background tile writes for any streamed row. |
-| Diagonal camera movement | Combined row plus column write budget must fit one frame or fail explicitly. |
+| Diagonal camera movement | Combined row plus column writes must fit one frame, or the target must declare staggered camera stream draining so each committed edge fits its frame budget. |
 | Explicit background streaming | `RuntimeBackgroundStreamingAxes` must include the requested `StreamMapColumn` or `StreamMapRow` axis, and the requested tile count must fit `MaxBackgroundTileWritesPerFrame`. |
 | Logical palettes | Palette declarations must provide exactly four colors and the requested background or sprite slot must fit the target descriptor. |
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
@@ -356,7 +356,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
 | World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Four-screen free-scroll maps preload the initial 64x60 surface and keep source rows/columns in ROM for staggered runtime streaming beyond that buffer. |
 | Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for horizontal-only maps wider than 32 columns. In four-screen free-scroll mode, X movement pans within the 64x60 buffer and streams wider worlds one edge per VBlank. |
-| Camera Y | Supported with one-pixel stepping and row streaming. Diagonal movement is rejected when the combined row+column write budget would exceed one frame. | Supported through four-screen nametables. Maps up to 64x60 move without runtime tile writes; taller source-authored worlds stream the exposed 32-tile row and 9 touched attribute bytes with the staggered one-edge-per-VBlank policy. |
+| Camera Y | Supported with one-pixel stepping and row streaming. Diagonal movement uses a staggered one-edge-per-VBlank policy so a column and row crossing stay inside the 20-tile background write budget. | Supported through four-screen nametables. Maps up to 64x60 move without runtime tile writes; taller source-authored worlds stream the exposed 32-tile row and 9 touched attribute bytes with the staggered one-edge-per-VBlank policy. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
 | BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
@@ -377,7 +377,6 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy split-scroll HUD | `Target 'gb' does not support SplitScroll HUD. Use Window HUD, SpriteHud, or disable HUD for this target.` |
 | NES Window HUD | `Target 'nes' does not support Window HUD. Use disable HUD for this target.` |
 | NES four-screen camera stream area overflow | `NES four-screen free scroll stream area must fit within the 60-row four-screen height.` |
-| Game Boy diagonal camera movement over budget | `Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).` |
 | NES BGM playback on targets without no-op audio enabled | `Target 'nes' does not support BGM playback yet.` |
 | Game Boy sprite palette slot overflow | `Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.` |
 | NES world tile flag query | `Target 'nes' does not support world tile flag queries.` |
@@ -392,12 +391,12 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 ## Current Stabilization Gaps
 
-SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a horizontal target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing. NES diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs`, not by the shared runner.
+SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a horizontal target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing. Diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs`, not by the shared runner.
 
 - `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped horizontal form and actor-framework calls with per-actor projected X.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared horizontal Game Boy/NES `target-acceptance` sample; NES lowers its audio calls as no-ops until real BGM support exists.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared horizontal Game Boy/NES `target-acceptance` sample; NES lowers its audio calls as no-ops until real BGM support exists. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES.
 
 ## Minimal Game Boy/NES Example
 

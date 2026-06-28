@@ -90,6 +90,9 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   `CameraMovementStreamsBackground = false` for preloaded camera movement.
 - `Sdk2DOperation.StreamMapRow` lowers on NES for explicit source-authored row
   spans and is also used by the shared capability/budget model.
+- `samples/nes-free-scroll/freescroll.rs` remains the NES four-screen behavioral
+  proof and now also builds for Game Boy, where the same diagonal source exercises
+  the GB staggered one-edge-per-VBlank streaming policy.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).
 
@@ -202,7 +205,7 @@ This is the fast, low-risk milestone: prove genuine diagonal scroll with no
 runtime VRAM streaming.
 
 - Layer: NES target + sample + validation.
-- Files: new `samples/nes-free-scroll/freescroll.rs`, `samples/manifest.json`,
+- Files: `samples/nes-free-scroll/freescroll.rs`, `samples/manifest.json`,
   `samples/README.md`, NES acceptance tests.
 - Steps:
   - [x] Author a level that fits entirely in the 512x480 four-screen surface.

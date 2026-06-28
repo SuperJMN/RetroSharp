@@ -20,7 +20,9 @@ This document preserves project knowledge that previously lived only in agent me
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
-  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. NES has a
+  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
+  diagonal camera movement is proven by `samples/nes-free-scroll/freescroll.rs`
+  with staggered one-edge-per-VBlank column/row commits. NES has a
   four-screen free-scroll path with preloaded 64x60 movement, horizontal column
   streaming for wider worlds, and staggered vertical row plus zero-palette
   attribute streaming for source-authored worlds taller than the buffer. NF-10
@@ -218,9 +220,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
-- The shared runner is intentionally horizontal on both Game Boy and NES. NES diagonal/four-screen
-  free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs`; do not silently degrade
-  unsupported camera axes in the collector.
+- The shared runner is intentionally horizontal on both Game Boy and NES. Diagonal/free scroll is
+  demonstrated by `samples/nes-free-scroll/freescroll.rs`; do not silently degrade unsupported
+  camera axes in the collector.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.
