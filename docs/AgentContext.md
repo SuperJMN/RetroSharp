@@ -45,6 +45,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | Which samples are portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
 | How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |
+| How do we implement free 2-axis scroll on NES? | `docs/NesFreeScrollRoadmap.md` |
 | What should a generic AI agent read first? | `AGENTS.md` and `llms.txt` |
 
 ## Decisions To Preserve
