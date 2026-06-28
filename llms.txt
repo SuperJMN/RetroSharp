@@ -1,5 +1,5 @@
 # RetroSharp
-> A small C#-like language and compiler for 8-bit targets, with classic Z80 output and experimental NES/Game Boy ROM targets.
+> A C#-inspired language, compiler, and zero-cost 2D framework for 8-bit targets, with classic Z80 output and experimental NES/Game Boy ROM targets.
 
 ## Agent Entry Points
 - [AGENTS.md](AGENTS.md): generic AI CLI agent rules, read order, validation, and publication workflow.
@@ -9,6 +9,7 @@
 
 ## Core Documentation
 - [README.md](README.md): project overview and examples.
+- [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
 - [docs/ActorFrameworkRoadmap.md](docs/ActorFrameworkRoadmap.md): actor framework roadmap and AF-5 follow-ups for scalable platformer actors.

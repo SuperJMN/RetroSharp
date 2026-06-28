@@ -1,12 +1,32 @@
 # RetroSharp
 
-RetroSharp is a modern C#-like language that compiles to 8-bit architectures, created for "The Joy of Learning®".
+RetroSharp is a C#-inspired language, compiler, and zero-cost 2D framework for
+8-bit game systems.
 
-I'm making this in my free time to learn about compilers and some old-school topics. It combines the familiar syntax of C# with the nostalgic charm of retro computing. It's supposed to make me happier, but more often that not, it's making me get bald faster 🤣
+I'm making this in my free time to learn about compilers and old-school game
+hardware. It was supposed to make me happier; it has also managed to reach the
+shaved-head milestone.
 
-## How does it work?
+See [`docs/ProjectOverview.md`](docs/ProjectOverview.md) for the human-facing
+overview of the language, framework, targets, and project objectives.
 
-RetroSharp's original path uses a multi-stage compilation pipeline:
+## Project shape
+
+RetroSharp has three layers that should stay separate:
+
+- **Language**: target-neutral syntax, types, storage, constants, helpers,
+  control flow, and zero-cost source ergonomics.
+- **Portable 2D SDK**: capability-checked game APIs for frames, input, worlds,
+  cameras, sprites, palettes, music, animation, and actors.
+- **Target intrinsics and lowering**: Game Boy, NES, Z80, and future
+  hardware-specific behavior.
+
+The language should not know what a sprite, camera, tilemap, joypad, or palette
+register is. Those concepts belong in the SDK or in explicit target intrinsics.
+
+## Compilation paths
+
+RetroSharp's original compiler path uses a multi-stage pipeline:
 
 1. **Parser**: Uses ANTLR4 to parse RetroSharp source code into an AST
 2. **Semantic Analysis**: Validates types, scopes, and semantics
@@ -23,7 +43,7 @@ fixed actor pools, declarative `enemy.Def(...)` metadata, Tiled object-layer
 spawns, runtime camera-window activation, and Game Boy/NES lowering without heap
 allocation or runtime dispatch. The roadmap is `docs/ActorFrameworkRoadmap.md`.
 
-## What can it do?
+## Language surface
 
 Right now, RetroSharp can compile simple programs with:
 - Basic arithmetic and logic operations
@@ -56,6 +76,30 @@ i16 main()
     return 2 * 3 * 4;
 }
 ```
+
+## Framework surface
+
+The portable 2D SDK gives game code a common vocabulary for tile-and-sprite
+machines while keeping each target's limits explicit. Current SDK-shaped code
+can use frame/input calls, Tiled `world.Load(...)`, collision flags,
+camera-relative AABB queries, logical palettes, logical sprites, animation,
+music declarations, and fixed-pool actor framework sugar.
+
+Portability is capability-based, not magic. A shared source file is portable
+only when each selected target can support the requested scrolling mode, sprite
+budget, palette slots, audio format, runtime tile writes, and asset shape. See
+[`docs/Portable2DSdkV1.md`](docs/Portable2DSdkV1.md) for the current API
+reference.
+
+## Project objectives
+
+- Keep the language small, explicit, and independent from any one machine.
+- Let the framework make small real 2D games practical without hiding hardware
+  budgets.
+- Keep raw machine access available through target intrinsics.
+- Make Game Boy and NES the first compatibility pair for portable SDK work.
+- Prefer zero-cost ergonomics over managed-runtime features: no heap, GC, RTTI,
+  boxing, virtual dispatch, closures, delegates, or hidden object identity.
 
 ## Which platforms does it compile for?
 
@@ -133,4 +177,4 @@ The sample sources have been migrated to the current language surface: symbolic 
 
 AI CLI agents should start with `AGENTS.md`. `llms.txt` provides a compact index, and `docs/AgentContext.md` preserves recent project memory, known traps, reliable commands, and publication expectations.
 
-See `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, `docs/ActorFrameworkRoadmap.md` for the actor framework slice, `docs/CameraVerticalScrollRoadmap.md` for the AR-5 vertical scroll execution plan, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.
+See `docs/ProjectOverview.md` for the reader-facing project overview, `docs/Portable2DSdkV1.md` for the portable 2D SDK v1 reference, `samples/README.md` for sample layer classification, `docs/RetroSharp.Language.md` for the language v1 surface, `docs/GameBoyTarget.md` for the current Game Boy subset, `docs/NesTarget.md` for the current NES subset, `docs/ArchitectureRoadmap.md` for the persistent language/SDK/intrinsics architecture roadmap, `docs/ActorFrameworkRoadmap.md` for the actor framework slice, `docs/CameraVerticalScrollRoadmap.md` for the AR-5 vertical scroll execution plan, and `docs/AgentExecution.md` for the autonomous issue/agent workflow.
