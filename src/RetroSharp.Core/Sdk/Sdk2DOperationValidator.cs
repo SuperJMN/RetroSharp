@@ -121,11 +121,11 @@ public static class Sdk2DOperationValidator
             case Sdk2DOperation.StreamMapColumn column:
                 ValidateByteExpression(column.TargetColumn, "stream map target column");
                 ValidateByteExpression(column.SourceColumn, "stream map source column");
-                TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Horizontal);
+                RequireRuntimeBackgroundStreamingAxis(capabilities, ScrollAxes.Horizontal);
                 RequireBackgroundTileWriteBudget(capabilities, column.Height, "streaming a visible map column");
                 return;
             case Sdk2DOperation.StreamMapRow row:
-                TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
+                RequireRuntimeBackgroundStreamingAxis(capabilities, ScrollAxes.Vertical);
                 RequireBackgroundTileWriteBudget(capabilities, row.Width, "streaming a visible map row");
                 return;
             case Sdk2DOperation.SetHudTile hud:
@@ -319,12 +319,6 @@ public static class Sdk2DOperationValidator
             return;
         }
 
-        if (capabilities.Name == "nes")
-        {
-            throw new InvalidOperationException(
-                "Target 'nes': vertical camera movement is not supported on NES yet; see docs/CameraVerticalScrollRoadmap.md before enabling NES vertical scroll.");
-        }
-
         TargetCapabilityChecks.RequireScrollAxis(capabilities, ScrollAxes.Vertical);
     }
 
@@ -348,26 +342,46 @@ public static class Sdk2DOperationValidator
         // (for example NES with no runtime column streaming), so a camera position set
         // costs no background tile writes. Streaming targets must still fit the per-frame
         // budget for the new column/row revealed by the move.
-        if (capabilities.MaxBackgroundTileWritesPerFrame == 0)
+        if (!capabilities.CameraMovementStreamsBackground || capabilities.MaxBackgroundTileWritesPerFrame == 0)
         {
             return;
         }
 
         var columnWrites = axes.HasFlag(ScrollAxes.Horizontal) ? capabilities.ScreenTiles.Height : 0;
         var rowWrites = axes.HasFlag(ScrollAxes.Vertical) ? capabilities.ScreenTiles.Width : 0;
-        var requiredWrites = columnWrites + rowWrites;
+        var requiredWrites = RequiredCameraMovementWrites(capabilities, axes, columnWrites, rowWrites);
         if (requiredWrites == 0)
         {
             return;
         }
 
-        RequireBackgroundTileWriteBudget(capabilities, requiredWrites, CameraMovementDescription(axes, columnWrites, rowWrites));
+        RequireBackgroundTileWriteBudget(
+            capabilities,
+            requiredWrites,
+            CameraMovementDescription(axes, columnWrites, rowWrites, capabilities.StaggersCameraMovementStreams));
     }
 
-    private static string CameraMovementDescription(ScrollAxes axes, int columnWrites, int rowWrites)
+    private static void RequireRuntimeBackgroundStreamingAxis(Target2DCapabilities capabilities, ScrollAxes axis)
+    {
+        if (capabilities.SupportsRuntimeBackgroundStreamingAxis(axis))
+        {
+            return;
+        }
+
+        var axisName = axis == ScrollAxes.Horizontal ? "horizontal" : "vertical";
+        throw new InvalidOperationException(
+            $"Target '{capabilities.Name}' does not support runtime {axisName} background streaming.");
+    }
+
+    private static string CameraMovementDescription(ScrollAxes axes, int columnWrites, int rowWrites, bool staggered)
     {
         if (axes.HasFlag(ScrollAxes.Horizontal) && axes.HasFlag(ScrollAxes.Vertical))
         {
+            if (staggered)
+            {
+                return $"moving the camera diagonally with staggered streaming (max of {columnWrites} column tiles and {rowWrites} row tiles)";
+            }
+
             return $"moving the camera diagonally ({columnWrites} column tiles + {rowWrites} row tiles)";
         }
 
@@ -377,6 +391,22 @@ public static class Sdk2DOperationValidator
         }
 
         return $"moving the camera vertically ({rowWrites} row tiles)";
+    }
+
+    private static int RequiredCameraMovementWrites(
+        Target2DCapabilities capabilities,
+        ScrollAxes axes,
+        int columnWrites,
+        int rowWrites)
+    {
+        if (axes.HasFlag(ScrollAxes.Horizontal)
+            && axes.HasFlag(ScrollAxes.Vertical)
+            && capabilities.StaggersCameraMovementStreams)
+        {
+            return Math.Max(columnWrites, rowWrites);
+        }
+
+        return columnWrites + rowWrites;
     }
 
     private static void RequireBackgroundTileWriteBudget(Target2DCapabilities capabilities, int requiredWrites, string operationDescription)

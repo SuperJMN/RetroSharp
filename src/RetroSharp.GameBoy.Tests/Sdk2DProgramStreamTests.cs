@@ -36,11 +36,16 @@ public sealed class Sdk2DProgramStreamTests
     public void Empty_subroutine_set_is_byte_identical_to_legacy_collect()
     {
         var program = Compile();
-        var legacy = Sdk2DOperationCollector.Collect(program.MainBlock, program.Functions, "Game Boy");
+        var legacy = Sdk2DOperationCollector.Collect(
+            program.MainBlock,
+            program.Functions,
+            "Game Boy",
+            GameBoyTarget.Capabilities);
         var streamed = Sdk2DOperationCollector.CollectProgram(
             program.MainBlock,
             program.Functions,
             "Game Boy",
+            GameBoyTarget.Capabilities,
             new HashSet<string>());
 
         Assert.Empty(streamed.Subroutines);
@@ -56,6 +61,7 @@ public sealed class Sdk2DProgramStreamTests
             program.MainBlock,
             program.Functions,
             "Game Boy",
+            GameBoyTarget.Capabilities,
             new HashSet<string> { "tick" });
 
         // The two tick() calls become CallSubroutine markers in the main stream

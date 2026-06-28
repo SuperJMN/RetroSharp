@@ -15,7 +15,7 @@ Until RetroSharp grows a dedicated `module` or `const group` syntax, samples may
 
 The portable quarantine check in `RetroSharp.Core.Tests` reads the manifest and rejects transitional or target-intrinsic calls inside `portable-sdk` samples.
 
-`samples/gameboy-vscroll/vscroll.rs` is a Game Boy-only `target-acceptance` sample for vertical camera movement. It is not portable evidence for NES; NES still rejects non-zero camera Y until the vertical PPU plan is implemented.
+`samples/gameboy-vscroll/vscroll.rs` is a Game Boy-only `target-acceptance` sample for vertical camera movement. `samples/nes-free-scroll/freescroll.rs` is a Game Boy/NES `target-acceptance` sample for diagonal camera movement: NES proves preloaded four-screen free scroll over a bounded 64x60 surface, and Game Boy proves staggered one-edge-per-VBlank streaming. The shared `samples/runner/runner.rs` stays horizontal on both Game Boy and NES; it is the richer runner acceptance path, not the free-scroll proof.
 
 ## Regenerating ROMs
 

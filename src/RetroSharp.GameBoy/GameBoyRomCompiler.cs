@@ -250,7 +250,12 @@ internal sealed class GameBoyVideoProgram
         var enums = BuildEnumIndex(program.Enums);
         var structs = BuildStructIndex(program.Structs);
         var subroutineNames = SelectSubroutineNames(main.Block, functions);
-        var sdkProgram = Sdk2DOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
+        var sdkProgram = Sdk2DOperationCollector.CollectProgram(
+            main.Block,
+            functions,
+            "Game Boy",
+            GameBoyTarget.Capabilities,
+            subroutineNames);
         var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
         var result = new GameBoyVideoProgram
         {
@@ -899,11 +904,6 @@ internal sealed class GameBoyVideoProgram
             throw new InvalidOperationException("world_map height must not exceed the declared world_flags height.");
         }
 
-        if (streamY + height > 32)
-        {
-            throw new InvalidOperationException("world_map stream area exceeds the Game Boy background tilemap height.");
-        }
-
         var tileIds = new int[width * height];
         var tileFlags = new WorldTileFlags[width * height];
         for (var x = 0; x < width; x++)
@@ -1152,7 +1152,8 @@ internal sealed class GameBoyVideoProgram
 
     private void ApplyWorldMapToTileMap(WorldMap2D worldMap, int streamY)
     {
-        for (var y = 0; y < worldMap.Height; y++)
+        var rowsToPreload = Math.Min(worldMap.Height, 32 - streamY);
+        for (var y = 0; y < rowsToPreload; y++)
         {
             for (var x = 0; x < 32; x++)
             {

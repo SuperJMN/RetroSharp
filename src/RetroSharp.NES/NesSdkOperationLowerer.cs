@@ -29,6 +29,9 @@ internal static class NesSdkOperationLowerer
             case Sdk2DOperation.StreamMapColumn column:
                 compiler.EmitStreamMapColumn(column);
                 break;
+            case Sdk2DOperation.StreamMapRow row:
+                compiler.EmitStreamMapRow(row);
+                break;
             case Sdk2DOperation.CameraAabbTiles cameraAabb:
                 compiler.EmitCameraAabbTiles(cameraAabb);
                 break;

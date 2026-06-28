@@ -60,11 +60,96 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.True(observedFreshRow, "The vertical scroll sample did not stream a fresh row into the wrapped background buffer.");
     }
 
+    [Fact]
+    public void Game_boy_free_scroll_sample_streams_fresh_columns_and_rows_with_staggered_diagonal_commit()
+    {
+        var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath)
+            ?? throw new InvalidOperationException("Could not locate free scroll sample directory.");
+        var source = File.ReadAllText(samplePath);
+
+        var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
+
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, camera.Axes);
+
+        var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, rom.Length);
+
+        var scrolling = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        var still = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(StationaryFreeScrollSource(source), sampleDirectory))
+        {
+            CycleAccurateLy = true,
+        };
+
+        var observedFreshColumn = false;
+        var observedFreshRow = false;
+        for (var frame = 1; frame <= 500; frame++)
+        {
+            scrolling.RunFrames(frame);
+            still.RunFrames(frame);
+
+            const ushort background = 0x9800;
+            for (var column = 0; column < 32; column++)
+            {
+                var changedRows = 0;
+                for (var row = 1; row < 18; row++)
+                {
+                    var address = (ushort)(background + row * 32 + column);
+                    if (scrolling.Vram(address) != still.Vram(address))
+                    {
+                        changedRows++;
+                    }
+                }
+
+                if (changedRows >= 2)
+                {
+                    observedFreshColumn = true;
+                }
+            }
+
+            for (var row = 0; row < 32; row++)
+            {
+                var changedColumns = 0;
+                for (var column = 1; column < 32; column++)
+                {
+                    var address = (ushort)(background + row * 32 + column);
+                    if (scrolling.Vram(address) != still.Vram(address))
+                    {
+                        changedColumns++;
+                    }
+                }
+
+                if (changedColumns >= 2)
+                {
+                    observedFreshRow = true;
+                }
+            }
+
+            if (observedFreshColumn && observedFreshRow)
+            {
+                break;
+            }
+        }
+
+        Assert.True(observedFreshColumn, "The diagonal free-scroll sample did not stream a fresh wrapped column.");
+        Assert.True(observedFreshRow, "The diagonal free-scroll sample did not stream a fresh wrapped row.");
+    }
+
     private static string StationarySource(string source)
     {
         return source
             .Replace("camera.SetPosition(0, cameraY);", "camera.SetPosition(0, 0);", StringComparison.Ordinal)
             .Replace("if (direction == 1) {", "if (false) {", StringComparison.Ordinal);
+    }
+
+    private static string StationaryFreeScrollSource(string source)
+    {
+        return source
+            .Replace("cameraX += stepX;", "cameraX = 0;", StringComparison.Ordinal)
+            .Replace("cameraY += stepY;", "cameraY = 0;", StringComparison.Ordinal)
+            .Replace("camera.SetPosition(cameraX, cameraY);", "camera.SetPosition(0, 0);", StringComparison.Ordinal);
     }
 
     private static string RepositoryFile(string relativePath)

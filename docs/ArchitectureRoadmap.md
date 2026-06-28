@@ -103,7 +103,7 @@ Intrinsic work belongs here:
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
 | `camera_init(...)` | Portable SDK candidate | Current form configures target camera state and stream band. |
-| `camera_set_position(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES is still horizontal-only. |
+| `camera_set_position(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES supports four-screen X/Y movement with horizontal column streaming, vertical row streaming, and staggered diagonal edge updates. |
 | `camera_apply()` | Portable SDK candidate | Valid concept, but should apply SDK camera state. |
 | `camera_move_right()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
 | `camera_move_left()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
@@ -143,6 +143,7 @@ Target2DCapabilities:
   supportsFineScrollY
   maxBackgroundTileWritesPerFrame
   maxAttributeWritesPerFrame
+  staggerCameraMovementStreams
   spriteCount
   spriteSizeModes
   maxSpritesPerScanline
@@ -182,7 +183,7 @@ Portable 2D calls should be represented as semantic operations before target low
 - `Sdk2DOperation.CameraAabbHitTop`
 - `Sdk2DOperation.SetHudTile`
 
-`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels. `SetCameraPosition` charges a background-tile-write budget only on targets that stream background tiles at runtime (`MaxBackgroundTileWritesPerFrame > 0`): for them horizontal movement can require one visible column, vertical movement one visible row, and diagonal movement must fit the combined write count. Targets that cannot write background tiles at runtime (`MaxBackgroundTileWritesPerFrame == 0`) fine-scroll the viewport within a pre-loaded background buffer and are charged no streaming cost for a camera position set. The explicit streaming operations (`StreamMapColumn`, `StreamMapRow`) are per-operation budget-checked, and `ValidateFrameBudget(...)` rejects combined explicit background-stream writes, unsupported sprite size modes, total hardware sprites, and constant-Y sprite scanline counts that exceed one frame's target budget.
+`Sdk2DOperationValidator` validates operations against `Target2DCapabilities` before target-specific lowering. The records carry SDK-level concepts only: no Game Boy addresses, NES registers, emitted opcodes, or backend labels. `SetCameraPosition` charges a background-tile-write budget only on targets that stream background tiles at runtime (`CameraMovementStreamsBackground`): for them horizontal movement can require one visible column and vertical movement one visible row. Diagonal movement must either fit the combined write count or use a target-declared staggered camera stream policy (`StaggersCameraMovementStreams`) where each committed edge fits the frame budget. Targets that fine-scroll within a pre-loaded background buffer set `CameraMovementStreamsBackground = false` and are charged no streaming cost for a camera position set. The explicit streaming operations (`StreamMapColumn`, `StreamMapRow`) require the matching `RuntimeBackgroundStreamingAxes` flag, are per-operation budget-checked, and `ValidateFrameBudget(...)` rejects combined explicit background-stream writes, unsupported sprite size modes, total hardware sprites, and constant-Y sprite scanline counts that exceed one frame's target budget.
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The boundary recognizes frame/input, camera, HUD tile, world flag reads, logical sprite draw, and map-column streaming operations; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, direction-specific camera helpers, and raw tilemap writes remain on the direct target path until later roadmap tasks move them deliberately.
 
@@ -354,20 +355,20 @@ Acceptance criteria:
 
 Purpose: add vertical scroll as a first-class camera capability.
 
-Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. The row streamer shares the emitted write loop across source rows so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES is deliberately gated to horizontal-only and requires real PPU work (nametable mirroring/mapper choice, `$2000`/`$2005` Y writes, the 240-row coarse-Y wrap, and runtime attribute-row streaming) before vertical can be enabled; see `docs/CameraVerticalScrollRoadmap.md` for the VS-NES tasks.
+Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. Game Boy diagonal movement is exercised by `samples/nes-free-scroll/freescroll.rs`; the target declares staggered camera stream draining, queues pending column and row edges independently, and commits one visible edge per VBlank inside the 20-tile write budget. The row streamer shares the emitted write loop across source rows so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path: it emits the iNES four-screen bit, uploads the initial four nametables at startup, tracks X/Y source camera state, writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled, streams horizontal columns for worlds wider than the buffer, and streams vertical rows plus zero-palette attribute refreshes for source-authored worlds taller than the buffer. Mapper-backed scale, banking, and IRQ HUD remain in NF-10; see `docs/NesFreeScrollRoadmap.md`.
 
 Tasks:
 
 - Extend camera state to world X and world Y.
-- Add row streaming when the camera crosses tile boundaries vertically.
-- Support column and row streaming in the same frame when moving diagonally.
+- Add row streaming when the camera crosses tile boundaries vertically. Done for Game Boy and NES source-authored worlds.
+- Support column and row streaming when moving diagonally. Game Boy and NES both use capability-declared staggered one-edge-per-VBlank policies for streamed edges.
 - Add budget checks for tile writes per frame.
 - Add capability checks for targets that support only X, only Y, or XY scroll.
 - Add a Game Boy vertical-scroll sample or runner section that exercises Y movement. Done in `samples/gameboy-vscroll/vscroll.rs`.
 
 Acceptance criteria:
 
-- Game Boy supports SDK-level vertical camera movement within declared limits.
+- Game Boy supports SDK-level vertical and diagonal camera movement within declared limits, and NES supports four-screen X/Y movement with staggered column/row streaming beyond the initially preloaded 64x60 surface.
 - The compiler rejects unsupported scroll modes with clear errors.
 - Horizontal behavior from Iteration 4 does not regress.
 
@@ -752,13 +753,14 @@ Status: landed 2026-06-08.
 
 #### AR-5.3: Add diagonal movement budget checks
 
-Status: landed 2026-06-08.
+Status: landed for strict combined-budget validation 2026-06-08; updated 2026-06-28 for capability-declared staggered stream draining.
 
 - Layer: portable SDK validation.
 - Candidate files: capability validation, camera operation validation tests.
 - Steps:
   - Compute required column and row writes for one frame.
   - Compare against target tile/attribute write budgets.
+  - Accept diagonal streaming when the target declares staggered camera stream draining and each committed edge fits the per-frame budget.
   - Emit a clear capability error if a requested movement mode exceeds budget.
 - Verification:
   - Tests include one accepted movement and one rejected movement.
@@ -1366,7 +1368,7 @@ This gives the project a durable architecture before adding vertical scrolling, 
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample. NES accepts the runner audio calls as no-ops until real BGM lowering exists, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the horizontal platformer slice. NES accepts the runner audio calls as no-ops until real BGM lowering exists, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
 
 The final cross-target sample should prove:
 

@@ -20,9 +20,20 @@ public sealed record Target2DCapabilities(
     HudMode HudModes,
     CollisionQueryMode CollisionQueries)
 {
+    public bool CameraMovementStreamsBackground { get; init; } = true;
+
+    public bool StaggersCameraMovementStreams { get; init; }
+
+    public ScrollAxes RuntimeBackgroundStreamingAxes { get; init; } = ScrollAxes;
+
     public bool SupportsScrollAxis(ScrollAxes axis)
     {
         return axis != ScrollAxes.None && ScrollAxes.HasFlag(axis);
+    }
+
+    public bool SupportsRuntimeBackgroundStreamingAxis(ScrollAxes axis)
+    {
+        return axis != ScrollAxes.None && RuntimeBackgroundStreamingAxes.HasFlag(axis);
     }
 
     public bool SupportsSpriteSize(SpriteSizeMode mode)

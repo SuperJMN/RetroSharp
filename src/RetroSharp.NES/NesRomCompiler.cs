@@ -26,8 +26,9 @@ public static class NesRomCompiler
             NesTarget.Capabilities,
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
             baseDirectory);
-        ValidateSdkOperations(videoProgram);
-        return NesRomBuilder.Build(videoProgram);
+        var sdkOperations = ValidateSdkOperations(videoProgram);
+        var useFourScreenNametables = UsesVerticalCamera(sdkOperations);
+        return NesRomBuilder.Build(videoProgram, useFourScreenNametables);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(string source, string? baseDirectory = null)
@@ -41,7 +42,11 @@ public static class NesRomCompiler
         var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
-        return Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        return Sdk2DOperationCollector.Collect(
+            videoProgram.MainBlock,
+            videoProgram.Functions,
+            "NES",
+            NesTarget.Capabilities);
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(string source, string? baseDirectory = null)
@@ -58,9 +63,13 @@ public static class NesRomCompiler
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
     }
 
-    private static void ValidateSdkOperations(NesVideoProgram videoProgram)
+    private static IReadOnlyList<Sdk2DOperation> ValidateSdkOperations(NesVideoProgram videoProgram)
     {
-        var operations = Sdk2DOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        var operations = Sdk2DOperationCollector.Collect(
+            videoProgram.MainBlock,
+            videoProgram.Functions,
+            "NES",
+            NesTarget.Capabilities);
         foreach (var operation in operations)
         {
             Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
@@ -81,6 +90,15 @@ public static class NesRomCompiler
         {
             SdkAudioOperationValidator.Validate(NesTarget.AudioCapabilities, operation);
         }
+
+        return operations;
+    }
+
+    private static bool UsesVerticalCamera(IEnumerable<Sdk2DOperation> operations)
+    {
+        return operations
+            .OfType<Sdk2DOperation.SetCameraPosition>()
+            .Any(operation => operation.Axes.HasFlag(ScrollAxes.Vertical));
     }
 
     private static Sdk2DFrameBudget DrawSpriteBudget(NesVideoProgram videoProgram, Sdk2DOperation.DrawLogicalSprite draw)
@@ -193,7 +211,7 @@ internal sealed class NesVideoProgram
         0x0F, 0x09, 0x19, 0x29,
     ];
 
-    public byte[] NameTable { get; } = new byte[2048];
+    public byte[] NameTable { get; } = new byte[4096];
 
     public int MapColumnHeight { get; private set; }
 
@@ -396,7 +414,7 @@ internal sealed class NesVideoProgram
     private void ApplyDerivedSpritePalettes()
     {
         var appliedPalettes = new Dictionary<int, byte[]>();
-        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES");
+        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES", NesTarget.Capabilities);
         foreach (var operation in operations.OfType<Sdk2DOperation.DrawLogicalSprite>())
         {
             if (!spriteAssets.TryGetValue(operation.SpriteId, out var asset)
@@ -541,9 +559,15 @@ internal sealed class NesVideoProgram
 
         for (var y = 0; y < world.Height; y++)
         {
+            var targetY = world.StreamY + y;
+            if (targetY >= 60)
+            {
+                continue;
+            }
+
             for (var x = 0; x < Math.Min(world.Width, 64); x++)
             {
-                SetTile(x, world.StreamY + y, world.WorldTileIds[y * world.Width + x]);
+                SetTile(x, targetY, world.WorldTileIds[y * world.Width + x]);
             }
         }
 
@@ -607,26 +631,30 @@ internal sealed class NesVideoProgram
 
     private void ApplyWorldAttributes(NesTiledWorld world)
     {
-        for (var nameTable = 0; nameTable < 2; nameTable++)
+        for (var nameTableY = 0; nameTableY < 2; nameTableY++)
         {
-            for (var attributeY = 0; attributeY < 8; attributeY++)
+            for (var nameTableX = 0; nameTableX < 2; nameTableX++)
             {
-                for (var attributeX = 0; attributeX < 8; attributeX++)
+                var nameTable = nameTableY * 2 + nameTableX;
+                for (var attributeY = 0; attributeY < 8; attributeY++)
                 {
-                    var attributeByte = 0;
-                    for (var quadrantY = 0; quadrantY < 2; quadrantY++)
+                    for (var attributeX = 0; attributeX < 8; attributeX++)
                     {
-                        for (var quadrantX = 0; quadrantX < 2; quadrantX++)
+                        var attributeByte = 0;
+                        for (var quadrantY = 0; quadrantY < 2; quadrantY++)
                         {
-                            var baseX = nameTable * 32 + attributeX * 4 + quadrantX * 2;
-                            var baseY = attributeY * 4 + quadrantY * 2;
-                            var slot = MostCommonPaletteSlot(world, baseX, baseY);
-                            var shift = (quadrantY * 2 + quadrantX) * 2;
-                            attributeByte |= (slot & 0x03) << shift;
+                            for (var quadrantX = 0; quadrantX < 2; quadrantX++)
+                            {
+                                var baseX = nameTableX * 32 + attributeX * 4 + quadrantX * 2;
+                                var baseY = nameTableY * 30 + attributeY * 4 + quadrantY * 2;
+                                var slot = MostCommonPaletteSlot(world, baseX, baseY);
+                                var shift = (quadrantY * 2 + quadrantX) * 2;
+                                attributeByte |= (slot & 0x03) << shift;
+                            }
                         }
-                    }
 
-                    NameTable[nameTable * 1024 + 960 + attributeY * 8 + attributeX] = (byte)attributeByte;
+                        NameTable[nameTable * 1024 + 960 + attributeY * 8 + attributeX] = (byte)attributeByte;
+                    }
                 }
             }
         }
@@ -736,11 +764,6 @@ internal sealed class NesVideoProgram
         var width = ConstArg(call, 0, 1, 255);
         var streamY = ConstArg(call, 1, 0, 29);
         var height = ConstArg(call, 2, 1, sourceHeight);
-        if (streamY + height > 30)
-        {
-            throw new InvalidOperationException("world_map stream area exceeds the NES visible nametable height.");
-        }
-
         if (WorldFlagColumnHeight is not 0 && WorldFlagColumnHeight < height)
         {
             throw new InvalidOperationException("world_map height must not exceed the declared world_flags height.");
@@ -757,7 +780,7 @@ internal sealed class NesVideoProgram
                 var tile = column is null ? (byte)0 : column[y];
                 tileIds[y * width + x] = tile;
                 tileFlags[y * width + x] = flagColumn is null ? WorldTileFlags.Empty : flagColumn[y];
-                if (x < 64)
+                if (x < 64 && streamY + y < 60)
                 {
                     SetTile(x, streamY + y, tile);
                 }
@@ -888,13 +911,15 @@ internal sealed class NesVideoProgram
             throw new InvalidOperationException("NES nametable tile X must be between 0 and 63.");
         }
 
-        if (y is < 0 or > 29)
+        if (y is < 0 or > 59)
         {
-            throw new InvalidOperationException("NES nametable tile Y must be between 0 and 29.");
+            throw new InvalidOperationException("NES nametable tile Y must be between 0 and 59.");
         }
 
-        var nameTableBase = x < 32 ? 0 : 1024;
-        return nameTableBase + (y * 32) + (x % 32);
+        var nameTableX = x / 32;
+        var nameTableY = y / 30;
+        var nameTableBase = (nameTableY * 2 + nameTableX) * 1024;
+        return nameTableBase + (y % 30 * 32) + (x % 32);
     }
 
     internal static void RequireArity(FunctionCall call, int expected)

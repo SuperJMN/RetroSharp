@@ -15,12 +15,12 @@ public static class NesTarget
         ScreenPixels: new Size2D(256, 240),
         ScreenTiles: new Size2D(32, 30),
         TileSize: new Size2D(8, 8),
-        BackgroundBufferTiles: new Size2D(64, 30),
-        ScrollAxes: ScrollAxes.Horizontal,
+        BackgroundBufferTiles: new Size2D(64, 60),
+        ScrollAxes: ScrollAxes.Horizontal | ScrollAxes.Vertical,
         SupportsFineScrollX: true,
-        SupportsFineScrollY: false,
-        MaxBackgroundTileWritesPerFrame: 30,
-        MaxAttributeWritesPerFrame: 0,
+        SupportsFineScrollY: true,
+        MaxBackgroundTileWritesPerFrame: 32,
+        MaxAttributeWritesPerFrame: 9,
         SpriteCount: 64,
         SpriteSizeModes: SpriteSizeMode.Sprite8x8 | SpriteSizeMode.Sprite8x16,
         MaxSpritesPerScanline: 8,
@@ -28,5 +28,9 @@ public static class NesTarget
         BackgroundPaletteSlots: 4,
         SupportedSpriteTransforms: SpriteTransform.FlipX | SpriteTransform.FlipY,
         HudModes: HudMode.None,
-        CollisionQueries: CollisionQueryMode.CameraRelativeAabb | CollisionQueryMode.CameraRelativeAabbHitTop);
+        CollisionQueries: CollisionQueryMode.CameraRelativeAabb | CollisionQueryMode.CameraRelativeAabbHitTop)
+    {
+        CameraMovementStreamsBackground = false,
+        RuntimeBackgroundStreamingAxes = ScrollAxes.Horizontal | ScrollAxes.Vertical,
+    };
 }

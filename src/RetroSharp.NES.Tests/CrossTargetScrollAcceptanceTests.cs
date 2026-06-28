@@ -1,6 +1,7 @@
 namespace RetroSharp.NES.Tests;
 
 using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.NES;
 using Xunit;
@@ -91,7 +92,37 @@ public sealed class CrossTargetScrollAcceptanceTests
     }
 
     [Fact]
-    public void Vertical_camera_is_rejected_on_nes_but_accepted_on_game_boy_via_shared_capabilities()
+    public void Vertical_camera_lowers_on_nes_when_four_screen_preloaded_buffer_can_cover_the_world()
+    {
+        var verticalSource = TallFreeScrollSource();
+
+        // NES free scroll uses a preloaded four-screen background for maps up to 64x60,
+        // so the same diagonal camera movement has no row/column streaming cost.
+        var nesRom = NesRomCompiler.CompileSource(verticalSource);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Free_scroll_sample_lowers_diagonal_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var gbCamera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Vertical_only_camera_still_lowers_on_game_boy_and_nes()
     {
         const string verticalSource = """
             void main() {
@@ -106,14 +137,11 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
             """;
 
-        // Game Boy supports vertical scrolling: the shared model accepts it.
         var gbRom = GameBoyRomCompiler.CompileSource(verticalSource);
         Assert.Equal(32768, gbRom.Length);
 
-        // NES is horizontal-only: the shared validator rejects the vertical axis.
-        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(verticalSource));
-        Assert.Contains("vertical camera movement is not supported on NES yet", exception.Message);
-        Assert.Contains("docs/CameraVerticalScrollRoadmap.md", exception.Message);
+        var nesRom = NesRomCompiler.CompileSource(verticalSource);
+        Assert.NotEmpty(nesRom);
     }
 
     [Fact]
@@ -243,6 +271,17 @@ public sealed class CrossTargetScrollAcceptanceTests
                ?? throw new InvalidOperationException("Could not locate RetroSharp repository root.");
     }
 
+    private static string RepositoryFile(string relativePath)
+    {
+        var path = Path.Combine(RepoRoot(), relativePath);
+        if (!File.Exists(path))
+        {
+            throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+        }
+
+        return path;
+    }
+
     private static string WideHorizontalScrollSource(int width, int streamY, int height)
     {
         var columns = string.Join(
@@ -268,6 +307,30 @@ public sealed class CrossTargetScrollAcceptanceTests
                     input.Poll();
                     let cameraX = button_hold_ticks(right);
                     camera.SetPosition(cameraX, 0);
+                    camera.Apply();
+                }
+            }
+            """;
+    }
+
+    private static string TallFreeScrollSource()
+    {
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
+        return $$"""
+            void main() {
+                video.Init();
+                world.Column(0, {{tallColumn}});
+                world.Column(63, {{tallColumn}});
+                world.Map(64, 0, 60);
+                camera.Init(64, 0, 60);
+
+                u8 cameraX = 0;
+                u8 cameraY = 0;
+                loop {
+                    video.WaitVBlank();
+                    cameraX += 1;
+                    cameraY += 1;
+                    camera.SetPosition(cameraX, cameraY);
                     camera.Apply();
                 }
             }

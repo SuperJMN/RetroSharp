@@ -29,7 +29,7 @@ public sealed class SdkV1ReferenceTests
             Assert.Contains(signature, reference, StringComparison.Ordinal);
         }
 
-        Assert.Contains("Target 'nes': vertical camera movement is not supported on NES yet; see docs/CameraVerticalScrollRoadmap.md before enabling NES vertical scroll.", reference, StringComparison.Ordinal);
+        Assert.Contains("larger source-authored worlds stream one exposed column or row per VBlank", reference, StringComparison.Ordinal);
         Assert.Contains("Target 'nes' does not support Window HUD", reference, StringComparison.Ordinal);
     }
 

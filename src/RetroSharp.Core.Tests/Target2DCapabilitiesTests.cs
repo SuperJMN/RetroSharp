@@ -15,6 +15,9 @@ public class Target2DCapabilitiesTests
         Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Horizontal));
         Assert.True(capabilities.SupportsScrollAxis(ScrollAxes.Vertical));
         Assert.False(capabilities.SupportsScrollAxis(ScrollAxes.None));
+        Assert.True(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Horizontal));
+        Assert.True(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Vertical));
+        Assert.False(capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.None));
         Assert.True(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite8x16));
         Assert.False(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite16x16));
         Assert.True(capabilities.SupportsSpriteTransform(SpriteTransform.FlipX));

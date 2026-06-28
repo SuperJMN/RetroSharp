@@ -843,9 +843,16 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort PendingStreamSourceAddress = 0xC11B; // source-map column or row index
     private const ushort PendingStreamRowDataLowAddress = 0xC11D;
     private const ushort PendingStreamRowDataHighAddress = 0xC11E;
+    private const ushort PendingDiagonalColumnKindAddress = 0xC11F;   // 0=none, 1=queued
+    private const ushort PendingDiagonalColumnTargetAddress = 0xC120; // background column index
+    private const ushort PendingDiagonalColumnSourceAddress = 0xC121; // source-map column index
+    private const ushort PendingDiagonalRowKindAddress = 0xC122;      // 0=none, 1=queued
+    private const ushort PendingDiagonalRowTargetAddress = 0xC123;    // background row index
+    private const ushort PendingDiagonalRowSourceAddress = 0xC124;    // source-map row index
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
+    private const byte PendingStreamQueued = 1;
     private const byte MusicActiveUgeRows = 1;
     private const byte MusicActiveApuTrace = 2;
     private const int MusicHeaderLength = 3;
@@ -2926,7 +2933,15 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraYLowAddress);
         builder.StoreA(CameraYHighAddress);
         builder.StoreA(CameraFineYAddress);
-        builder.StoreA(PendingStreamKindAddress);
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            builder.StoreA(PendingDiagonalColumnKindAddress);
+            builder.StoreA(PendingDiagonalRowKindAddress);
+        }
+        else
+        {
+            builder.StoreA(PendingStreamKindAddress);
+        }
 
         builder.LoadAImmediate(y);
         builder.StoreA(CameraTopBackgroundRowAddress);
@@ -2942,7 +2957,7 @@ internal sealed class GameBoyRuntimeCompiler
     {
         var config = EnsureCameraConfigured("camera_set_position");
 
-        if (operation.X is not SdkByteExpression.Constant { Value: 0 })
+        if (operation.Axes.HasFlag(ScrollAxes.Horizontal))
         {
             EmitCameraSetAxisPosition(
                 () => EmitSdkByteExpressionToA(operation.X),
@@ -2953,7 +2968,7 @@ internal sealed class GameBoyRuntimeCompiler
                 "camera_set_position_x_end");
         }
 
-        if (operation.Y is not SdkByteExpression.Constant { Value: 0 })
+        if (operation.Axes.HasFlag(ScrollAxes.Vertical))
         {
             EmitCameraSetAxisPosition(
                 () => EmitSdkByteExpressionToA(operation.Y),
@@ -3011,6 +3026,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitCommitPendingStream(CameraConfig config)
     {
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            EmitCommitStaggeredPendingStream(config);
+            return;
+        }
+
         // Rows are only ever queued by camera.SetPosition with a non-zero Y (the up/down move steps
         // are unreachable otherwise), so only emit the large row streamer when the program can
         // actually scroll vertically. The column streamer is small and always emitted.
@@ -3047,12 +3068,53 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(doneLabel);
     }
 
+    private void EmitCommitStaggeredPendingStream(CameraConfig config)
+    {
+        var tryRowLabel = builder.CreateLabel("camera_commit_try_row");
+        var doneLabel = builder.CreateLabel("camera_commit_done");
+
+        builder.LoadA(PendingDiagonalColumnKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, tryRowLabel); // JP Z,tryRowLabel
+
+        EmitVisibleWorldStreamColumnFromAddresses(PendingDiagonalColumnTargetAddress, PendingDiagonalColumnSourceAddress, config);
+        EmitBackgroundStreamColumnFromAddresses(PendingDiagonalColumnTargetAddress, PendingDiagonalColumnSourceAddress);
+        builder.LoadAImmediate(PendingStreamNone);
+        builder.StoreA(PendingDiagonalColumnKindAddress);
+        builder.JumpAbsolute(doneLabel);
+
+        builder.Label(tryRowLabel);
+        builder.LoadA(PendingDiagonalRowKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, doneLabel); // JP Z,doneLabel
+        EmitMapStreamRowFromSourceRowAddress(PendingDiagonalRowTargetAddress, PendingDiagonalRowSourceAddress, config);
+        builder.LoadAImmediate(PendingStreamNone);
+        builder.StoreA(PendingDiagonalRowKindAddress);
+
+        builder.Label(doneLabel);
+    }
+
     private bool ProgramQueuesRowStreaming()
     {
         foreach (var operation in program.SdkOperations)
         {
             if (operation is Sdk2DOperation.SetCameraPosition position
-                && position.Y is not SdkByteExpression.Constant { Value: 0 })
+                && position.Axes.HasFlag(ScrollAxes.Vertical))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool ProgramQueuesDiagonalStreaming()
+    {
+        foreach (var operation in program.SdkOperations)
+        {
+            if (operation is Sdk2DOperation.SetCameraPosition position
+                && position.Axes.HasFlag(ScrollAxes.Horizontal)
+                && position.Axes.HasFlag(ScrollAxes.Vertical))
             {
                 return true;
             }
@@ -3063,11 +3125,33 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitQueuePendingColumn(ushort backgroundColumnAddress, ushort sourceColumnAddress)
     {
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            EmitQueuePendingStaggeredStream(
+                PendingDiagonalColumnKindAddress,
+                PendingDiagonalColumnTargetAddress,
+                PendingDiagonalColumnSourceAddress,
+                backgroundColumnAddress,
+                sourceColumnAddress);
+            return;
+        }
+
         EmitQueuePendingStream(PendingStreamColumn, backgroundColumnAddress, sourceColumnAddress);
     }
 
     private void EmitQueuePendingRow(ushort backgroundRowAddress, ushort sourceRowAddress)
     {
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            EmitQueuePendingStaggeredStream(
+                PendingDiagonalRowKindAddress,
+                PendingDiagonalRowTargetAddress,
+                PendingDiagonalRowSourceAddress,
+                backgroundRowAddress,
+                sourceRowAddress);
+            return;
+        }
+
         EmitQueuePendingStream(PendingStreamRow, backgroundRowAddress, sourceRowAddress);
     }
 
@@ -3079,6 +3163,21 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(PendingStreamSourceAddress);
         builder.LoadAImmediate(kind);
         builder.StoreA(PendingStreamKindAddress);
+    }
+
+    private void EmitQueuePendingStaggeredStream(
+        ushort pendingKindAddress,
+        ushort pendingTargetAddress,
+        ushort pendingSourceAddress,
+        ushort targetAddress,
+        ushort sourceAddress)
+    {
+        builder.LoadA(targetAddress);
+        builder.StoreA(pendingTargetAddress);
+        builder.LoadA(sourceAddress);
+        builder.StoreA(pendingSourceAddress);
+        builder.LoadAImmediate(PendingStreamQueued);
+        builder.StoreA(pendingKindAddress);
     }
 
     private void EmitCameraSetAxisPosition(

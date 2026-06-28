@@ -20,9 +20,9 @@ dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target 
 
 The sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scroll.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `map_stream_column(...)`, and `objectPalette.Set(...)`.
 
-Current unsupported optional features:
+Current intentionally excluded optional features:
 
-- NES accepts only horizontal `camera.SetPosition(x, 0)` in this spike; vertical camera movement is a capability error.
-- NES seeds a two-nametable horizontal buffer from `world.Map(...)` and streams new columns at runtime; vertical row streaming is not supported yet.
+- This portable sample uses only horizontal `camera.SetPosition(x, 0)`. NES vertical and diagonal free-scroll capability is covered by `../nes-free-scroll/freescroll.rs`, not by this cross-target sample.
+- NES seeds a two-nametable horizontal buffer from `world.Map(...)` for this sample and streams new columns at runtime.
 - NES `sprite.Draw(...)` accepts byte-backed frame and flip operands; palette slot remains a compile-time logical slot.
-- This sample does not use collision queries, runtime animation, audio, or HUD APIs. Runner-shaped camera-relative collision and runtime animation are covered by the NES build of `samples/runner/runner.rs`; HUD, real NES audio playback, vertical camera movement, and generic world-space collision remain outside this sample.
+- This sample does not use collision queries, runtime animation, audio, or HUD APIs. Runner-shaped camera-relative collision and runtime animation are covered by the NES build of `samples/runner/runner.rs`; HUD, real NES audio playback, and generic world-space collision remain outside this sample.

@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-27.
+Last updated: 2026-06-28.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -20,8 +20,13 @@ This document preserves project knowledge that previously lived only in agent me
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
-  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. NES vertical
-  remains gated with the diagnostic that points to `docs/CameraVerticalScrollRoadmap.md`.
+  a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
+  diagonal camera movement is proven by `samples/nes-free-scroll/freescroll.rs`
+  with staggered one-edge-per-VBlank column/row commits. NES has a
+  four-screen free-scroll path with preloaded 64x60 movement, horizontal column
+  streaming for wider worlds, and staggered vertical row plus zero-palette
+  attribute streaming for source-authored worlds taller than the buffer. NF-10
+  mapper-backed scale and IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 
 ## Project Shape
 
@@ -45,6 +50,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | Which samples are portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
 | How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |
+| How do we implement free 2-axis scroll on NES? | `docs/NesFreeScrollRoadmap.md` |
 | What should a generic AI agent read first? | `AGENTS.md` and `llms.txt` |
 
 ## Decisions To Preserve
@@ -210,10 +216,13 @@ Pipeline shape (two phases, after #105 partial extraction):
   deduplicating and composing the background under blank world cells. `world.Load(path)` therefore
   lowers on both Game Boy and NES from the same source while keeping the editable `.tsx` pointed at
   one baseline PNG.
-- NES limitations: the Tiled source map width must fit the one-byte source-column runtime, the
-  current visible/off-screen buffer is still two nametables wide, the streamed slice must fit the
-  visible 30-row height, vertical streaming is not supported yet, and attribute bytes are derived for
-  the initial two-nametable buffer but are not streamed at runtime yet.
+- NES limitations: source map rows and columns must still fit the one-byte runtime, four-screen
+  free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
+  as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
+  IRQs are still deferred to NF-10.
+- The shared runner is intentionally horizontal on both Game Boy and NES. Diagonal/free scroll is
+  demonstrated by `samples/nes-free-scroll/freescroll.rs`; do not silently degrade unsupported
+  camera axes in the collector.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.
