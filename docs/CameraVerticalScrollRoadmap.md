@@ -338,3 +338,72 @@ approach with a human (SuperJMN) before flipping `NesTarget.Capabilities`.**
 2. VS-4 (diagonal budget) and VS-5 (GB docs).
 3. VS-NES-0 (honest gate) immediately, so cross-target samples stay correct.
 4. VS-NES-1..3 only after a human confirms the NES mirroring/mapper approach.
+
+---
+
+## Phase E — Diagonal scroll (recommended proof of concept, NOT in this branch)
+
+Status: **not implemented; documented as a recommended proof of concept.** This
+branch ships single-axis scroll only. A `camera.SetPosition(x, y)` that moves
+**both** axes in the same frame is deliberately rejected by the validator:
+
+```
+Target 'gb' supports 20 background tile writes per frame, but 38 are required
+for moving the camera diagonally (18 column tiles + 20 row tiles).
+```
+
+Real Game Boy games (e.g. Super Mario Land 2) scroll in 8 directions, so diagonal
+is clearly feasible on hardware. The blockers are two of *our* design choices, not
+the DMG:
+
+- Conservative `MaxBackgroundTileWritesPerFrame: 20`
+  (`src/RetroSharp.GameBoy/GameBoyTarget.cs:20`). A diagonal tile-boundary crossing
+  exposes a column (18 tiles) **and** a row (20 tiles) → 38 writes.
+- A single deferred stream slot (`PendingStreamKind/Target/Source`,
+  `GameBoyRomBuilder.cs:841-843`): only one column *or* row can be queued per
+  frame; a second `EmitQueuePending*` in the same frame overwrites the first.
+
+The real VBlank (~4560 cycles) easily affords ~38 tiles with tight copy loops, so
+this is engineering cost in our pipeline, not a hardware limit.
+
+### Two strategies (cost ordered)
+
+**Strategy A — stagger crossings across frames (recommended PoC).** Allow a column
+**and** a row to be pending at once, but drain **one per VBlank** within the
+existing 20-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
+commit that handles both kinds) and removing the diagonal rejection in the
+validator. **No streamer rewrite.** Price: the second-axis edge appears one frame
+late — practically invisible at 1px/frame. Effort is comparable to the GB vertical
+slice this branch shipped.
+
+**Strategy B — full same-frame diagonal (matches SML2 exactly).** Commit column +
+row in one VBlank. Requires raising the budget to ≥38 **and** rewriting the row/
+column streamers from per-tile address recomputation (modulo + pointer math) into
+precomputed-pointer tight copy loops so they fit the VBlank cycle budget (this also
+speeds up the single-axis path). Needs cycle measurement, likely a GB cycle-budget
+test harness. Effort: a small epic; this is the risky part.
+
+### What is already in place (no cost)
+
+- Both-axis source data exists: column source tables (horizontal) and row source
+  tables (`MapRowLabel`, vertical).
+- `camera.SetPosition` already moves ≤1px per axis and queues per axis; only the
+  destination slot is single. `AxesFor(x, y)` already produces
+  `Horizontal | Vertical` when both move.
+- Runner/actor ROMs are unaffected unless they adopt diagonal movement.
+
+### VS-DIAG tasks (when a future branch picks this up)
+
+- [ ] VS-DIAG-1 (Strategy A): add a two-kind pending queue so a column and a row
+  can both be pending, drained one per VBlank; document the ≤1-frame edge latency.
+- [ ] VS-DIAG-2: in the validator, stop rejecting `Horizontal | Vertical` for GB
+  when staggered draining keeps each frame within budget; keep a clear diagnostic
+  for genuinely over-budget single-frame demands.
+- [ ] VS-DIAG-3: add a GB diagonal acceptance sample + emulator test that observes
+  both a fresh column and a fresh row after diagonal movement.
+- [ ] VS-DIAG-4 (optional, Strategy B): tighten the streamers into precomputed-
+  pointer copy loops, raise the budget, and add a VBlank cycle-budget check so a
+  full column+row commit fits one frame.
+
+Recommendation: start with Strategy A; only pursue Strategy B if profiling shows
+the one-frame edge lag is visible in real gameplay.
