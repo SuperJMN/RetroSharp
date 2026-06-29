@@ -156,6 +156,38 @@ public sealed class CrossTargetScrollAcceptanceTests
     }
 
     [Fact]
+    public void Dead_zone_follow_sample_lowers_diagonal_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/deadzone-follow/deadzone.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        Assert.Contains("world.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
+        Assert.Contains("enum DeadZone", source, StringComparison.Ordinal);
+        Assert.Contains("enum CameraBounds", source, StringComparison.Ordinal);
+
+        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var gbCamera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var program = BuildNesProgram(source, sampleDirectory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        Assert.Equal(64, worldMap.Width);
+        Assert.Equal(60, worldMap.Height);
+        AssertHasTileInNametable(program, 0);
+        AssertHasTileInNametable(program, 1);
+        AssertHasTileInNametable(program, 2);
+        AssertHasTileInNametable(program, 3);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
     public void Tiled_free_scroll_sample_populates_four_screen_nametable_tiles_and_attributes_on_nes()
     {
         var samplePath = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");

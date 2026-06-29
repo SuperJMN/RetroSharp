@@ -44,6 +44,16 @@ internal sealed class GameBoyTestCpu
 
     public byte Vram(ushort address) => vram[address - 0x8000];
 
+    public byte IoRegister(ushort address)
+    {
+        if (address is < 0xFF00 or >= 0xFF80)
+        {
+            throw new ArgumentOutOfRangeException(nameof(address), "Game Boy IO registers live in the 0xFF00-0xFF7F range.");
+        }
+
+        return io[address - 0xFF00];
+    }
+
     public byte Oam(ushort address) => oam[address - 0xFE00];
 
     public IReadOnlyList<OamWrite> OamWrites => oamWrites;

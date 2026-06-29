@@ -275,6 +275,49 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.True(observedFreshRow, $"The diagonal Tiled world.Load sample did not stream a fresh wrapped row. Max changed columns: {maxChangedColumns}.");
     }
 
+    [Fact]
+    public void Game_boy_dead_zone_follow_sample_keeps_scroll_still_inside_band_then_follows_both_axes()
+    {
+        var samplePath = RepositoryFile("samples/deadzone-follow/deadzone.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath)
+            ?? throw new InvalidOperationException("Could not locate dead-zone follow sample directory.");
+        var source = File.ReadAllText(samplePath);
+
+        Assert.Contains("world.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
+
+        var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
+
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, camera.Axes);
+
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, sampleDirectory))
+        {
+            CycleAccurateLy = true,
+        };
+
+        cpu.RunFrames(2);
+        var earlySpriteX = cpu.Oam(0xFE01);
+        var earlySpriteY = cpu.Oam(0xFE00);
+
+        cpu.RunFrames(12);
+        Assert.Equal(0, cpu.IoRegister(0xFF43)); // SCX
+        Assert.Equal(0, cpu.IoRegister(0xFF42)); // SCY
+        Assert.True(cpu.Oam(0xFE01) > earlySpriteX, "The player point should move on screen while still inside the horizontal dead-zone.");
+        Assert.True(cpu.Oam(0xFE00) > earlySpriteY, "The player point should move on screen while still inside the vertical dead-zone.");
+
+        cpu.RunFrames(55);
+        var followedX = cpu.IoRegister(0xFF43);
+        var followedY = cpu.IoRegister(0xFF42);
+        Assert.InRange(followedX, (byte)1, (byte)64);
+        Assert.InRange(followedY, (byte)1, (byte)64);
+        Assert.Equal(followedX, followedY);
+
+        cpu.RunFrames(56);
+        Assert.Equal((byte)(followedX + 1), cpu.IoRegister(0xFF43));
+        Assert.Equal((byte)(followedY + 1), cpu.IoRegister(0xFF42));
+    }
+
     private static string StationarySource(string source)
     {
         return source
