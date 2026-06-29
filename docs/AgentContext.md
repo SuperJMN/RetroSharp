@@ -22,11 +22,12 @@ This document preserves project knowledge that previously lived only in agent me
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
   diagonal camera movement is proven by `samples/nes-free-scroll/freescroll.rs`
-  with staggered one-edge-per-VBlank column/row commits. NES has a
-  four-screen free-scroll path with preloaded 64x60 movement, horizontal column
-  streaming for wider worlds, and staggered vertical row plus zero-palette
-  attribute streaming for source-authored worlds taller than the buffer. NF-10
-  mapper-backed scale and IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
+  and `samples/tiled-free-scroll/free-scroll.rs` with staggered one-edge-per-VBlank
+  column/row commits. NES has a four-screen free-scroll path with preloaded 64x60
+  movement, Tiled diagonal coverage inside that surface, horizontal column streaming
+  for wider worlds, and staggered vertical row plus zero-palette attribute streaming
+  for source-authored worlds taller than the buffer. NF-10 mapper-backed scale and
+  IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 
 ## Project Shape
 
@@ -221,8 +222,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
 - The shared runner is intentionally horizontal on both Game Boy and NES. Diagonal/free scroll is
-  demonstrated by `samples/nes-free-scroll/freescroll.rs`; do not silently degrade unsupported
-  camera axes in the collector.
+  demonstrated by `samples/nes-free-scroll/freescroll.rs` and Tiled diagonal coverage by
+  `samples/tiled-free-scroll/free-scroll.rs`; do not silently degrade unsupported camera axes
+  in the collector.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.

@@ -16,14 +16,15 @@ current supported subset per target.
   implemented at the codegen level and is internally consistent. The VS-1..VS-5
   slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix. The diagonal Strategy A slice is also proven
-  by `samples/nes-free-scroll/freescroll.rs` and `samples/tiled-diagonal/diag.rs`
-  on Game Boy: the runtime queues a column and row independently and drains one
-  visible edge per VBlank.
+  by `samples/nes-free-scroll/freescroll.rs`, `samples/tiled-diagonal/diag.rs`,
+  and `samples/tiled-free-scroll/free-scroll.rs` on Game Boy: the runtime queues
+  a column and row independently and drains one visible edge per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
   coarse-Y wrap for maps that fit 64x60 tiles. Tall Tiled `world.Load(...)`
-  maps now enter that four-screen path when a vertical camera axis is used.
-  Runtime row, diagonal, and attribute streaming for larger worlds remains
+  maps now enter that four-screen path when a vertical camera axis is used, and
+  `samples/tiled-free-scroll/free-scroll.rs` proves diagonal Tiled maps inside
+  the 64x60 four-screen surface. Runtime row, diagonal, and attribute streaming for larger worlds remains
   governed by `docs/NesFreeScrollRoadmap.md`.
 - Every change keeps the layer golden rule: the language and classic IR never
   learn about cameras; vertical scroll lives in the SDK operation model + per
@@ -59,6 +60,9 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   `samples/tiled-diagonal/diag.rs` moves X and Y together by one pixel per frame
   over a 40x40 Tiled `world.Load(...)` map, proving that the imported rows and
   columns feed the staggered diagonal streamer.
+  `samples/tiled-free-scroll/free-scroll.rs` moves X and Y together by one pixel
+  per frame over a 50x60 Tiled `world.Load(...)` map and builds for both Game Boy
+  and NES.
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
   row data in VRAM after the 32-row background buffer wraps.
