@@ -512,8 +512,8 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   i16 sourceColumn = 0;
                                   while (true) {
                                       video_wait_vblank();
-                                      map_stream_column(targetColumn, sourceColumn, 0, 12);
-                                      map_stream_column(targetColumn, sourceColumn, 0, 10);
+                                      map_stream_column(targetColumn, sourceColumn, 0, 16);
+                                      map_stream_column(targetColumn, sourceColumn, 0, 17);
                                   }
                               }
                               """;
@@ -521,7 +521,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 32 background tile writes per frame, but 33 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 
@@ -530,7 +530,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void stream_once(i16 targetColumn, i16 sourceColumn) {
-                                  map_stream_column(targetColumn, sourceColumn, 0, 11);
+                                  map_stream_column(targetColumn, sourceColumn, 0, 17);
                               }
 
                               void main() {
@@ -549,7 +549,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 32 background tile writes per frame, but 34 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 

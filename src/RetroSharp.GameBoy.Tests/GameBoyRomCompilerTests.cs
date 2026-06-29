@@ -1285,8 +1285,9 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0xE6, 0xC0, 0xEA, 0x1B, 0xC1]), "camera_move_right should queue the right source column for deferred streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]), "camera_move_left should queue the left background edge column for deferred streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]), "camera_apply should dispatch on the queued stream kind.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x47, 0xFA, 0xED, 0xC0]), "camera_apply should stream the queued source column using the current top source row.");
-        Assert.True(ContainsSequence(rom, [0xEA, 0x26, 0xC1, 0xFA, 0x1A, 0xC1, 0x4F]), "camera_apply should stream the queued column into the circular background edge.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x28, 0xC1]), "camera_apply should seed the column stream from the current top source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x47, 0xFA, 0x28, 0xC1, 0x4F]), "camera_apply should stream the queued source column using the row scratch cursor.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x4F, 0xFA, 0x26, 0xC1]), "camera_apply should stream the queued column into the circular background edge.");
     }
 
     [Fact]
@@ -4244,7 +4245,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("enum World", source);
         Assert.Contains("Width = 48", source);
         Assert.Contains("Height = 96", source);
-        Assert.Contains("StreamHeight = 30", source);
+        Assert.Contains("StreamHeight = 96", source);
         Assert.Contains("SignedVelocityWrap = 128", source);
         Assert.Contains("PixelWidth = 384", source);
         Assert.Contains("enum Player", source);
@@ -4381,7 +4382,7 @@ public class GameBoyRomCompilerTests
         Assert.NotEqual(0, program.TileMap[28 * 32 + 4]);
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(16, 24));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(4, 28));
-        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(30, 24));
+        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(30, 8));
     }
 
     [Fact]
@@ -4891,7 +4892,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Camera_horizontal_streaming_skips_world_rows_below_the_visible_screen()
+    public void Camera_horizontal_streaming_fills_configured_world_rows_beyond_the_visible_screen()
     {
         const string source = """
                               void define_world() {
@@ -4915,11 +4916,14 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.True(
-            ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xC6, 0x09, 0xFE, 0x20]),
-            "camera horizontal streaming should still update the partial bottom world row (GB row 18).");
-        Assert.False(
-            ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xC6, 0x0A, 0xFE, 0x20]),
-            "camera horizontal streaming should not spend VBlank time on off-screen world row 19.");
+            ContainsSequence(rom, [0x3E, 0x0E, 0xEA, 0x29, 0xC1]),
+            "camera horizontal streaming should cover every configured world row, including hidden rows in the circular BG buffer.");
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0x28, 0xC1, 0xC6, 0x01, 0xEA, 0x28, 0xC1]),
+            "camera horizontal streaming should advance the source-row scratch cursor while filling the column.");
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0x26, 0xC1, 0xC6, 0x01, 0xEA, 0x26, 0xC1]),
+            "camera horizontal streaming should advance the target-row scratch cursor while filling the circular BG column.");
     }
 
     [Fact]
@@ -5655,7 +5659,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("world.Map(", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.Contains("Height = 96", source);
-        Assert.Contains("StreamHeight = 30", source);
+        Assert.Contains("StreamHeight = 96", source);
 
         Assert.Contains("camera.Init(World.Width, World.StreamY, World.StreamHeight);", source);
         Assert.True(
@@ -5718,7 +5722,7 @@ public class GameBoyRomCompilerTests
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 16));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(46, 16));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 28));
-        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(30, 28));
+        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(30, 8));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 12));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 4));
 
@@ -5745,7 +5749,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("Width = 48", source);
         Assert.Contains("Height = 96", source);
-        Assert.Contains("StreamHeight = 30", source);
+        Assert.Contains("StreamHeight = 96", source);
         Assert.Contains("PixelWidth = 384", source);
         Assert.Contains("MaxY = 196", source);
         Assert.Contains("camera.Init(World.Width, World.StreamY, World.StreamHeight);", source);

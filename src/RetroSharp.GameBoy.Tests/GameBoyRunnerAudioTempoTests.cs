@@ -60,20 +60,26 @@ public sealed class GameBoyRunnerAudioTempoTests
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        cpu.RunFrames(30);
+        cpu.RunFrames(130);
         var idleScx = cpu.IoRegister(0xFF43);
         var idleScy = cpu.IoRegister(0xFF42);
 
         cpu.Held.Add("right");
-        cpu.RunFrames(70);
+        cpu.Held.Add("b");
+        cpu.RunFrames(148);
+        cpu.Held.Add("a");
+        cpu.RunFrames(170);
+        cpu.Held.Remove("a");
+        cpu.RunFrames(185);
         var scxAfterFirstRun = cpu.IoRegister(0xFF43);
-        cpu.RunFrames(110);
+        cpu.Held.Add("a");
+        cpu.RunFrames(250);
         var scxAfterSecondRun = cpu.IoRegister(0xFF43);
 
         Assert.Equal(0, idleScx);
         Assert.True(idleScy > 0, "Runner should use the vertical dead-zone camera path even before horizontal input.");
         Assert.True(scxAfterFirstRun > idleScx, "Runner should start scrolling right after Mario leaves the horizontal dead-zone.");
-        Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following sustained right input.");
+        Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following right input through the next ramp jump.");
     }
 
     [Fact]
@@ -152,22 +158,43 @@ public sealed class GameBoyRunnerAudioTempoTests
         var frame = 0;
 
         Run(cpu, ref frame, 130);
+        AdvanceToAppliedCamera(cpu, ref frame);
         AssertVisibleTilesMatchWorldMap(cpu, worldMap, "idle");
 
         Run(cpu, ref frame, 18, "right", "b");
         Run(cpu, ref frame, 22, "right", "b", "a");
         Run(cpu, ref frame, 15, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
         AssertVisibleTilesMatchWorldMap(cpu, worldMap, "first platform diagonal scroll");
 
         Run(cpu, ref frame, 22, "right", "b", "a");
         Run(cpu, ref frame, 15, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
         AssertVisibleTilesMatchWorldMap(cpu, worldMap, "second platform diagonal scroll");
 
         Run(cpu, ref frame, 22, "right", "b", "a");
         Run(cpu, ref frame, 11, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
         AssertVisibleTilesMatchWorldMap(cpu, worldMap, "third platform diagonal scroll");
 
+        Run(cpu, ref frame, 30, "right", "b", "a");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "upper pyramid diagonal climb");
+
+        Run(cpu, ref frame, 20, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "upper pyramid vertical scroll");
+
+        Run(cpu, ref frame, 30, "right", "b", "a");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "top pyramid diagonal climb");
+
+        Run(cpu, ref frame, 20, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "top pyramid vertical scroll");
+
         Run(cpu, ref frame, 75, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
         AssertVisibleTilesMatchWorldMap(cpu, worldMap, "right edge high scroll");
 
         static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
@@ -182,29 +209,37 @@ public sealed class GameBoyRunnerAudioTempoTests
             cpu.RunFrames(frame);
         }
 
+        static void AdvanceToAppliedCamera(GameBoyTestCpu cpu, ref int frame)
+        {
+            cpu.RunUntilIoRegisterWrites(0xFF42, 1, maxInstructions: 50_000_000);
+            frame = Math.Max(frame, (int)((cpu.Cycles + 70223) / 70224));
+        }
+
         static void AssertVisibleTilesMatchWorldMap(GameBoyTestCpu cpu, WorldMap2D worldMap, string label)
         {
             var scx = cpu.IoRegister(0xFF43);
             var scy = cpu.IoRegister(0xFF42);
-            var firstColumn = scx / 8;
-            var firstRow = scy / 8;
+            var cameraX = cpu.Wram(0xC0E0) | cpu.Wram(0xC0E1) << 8;
+            var cameraY = cpu.Wram(0xC0E8) | cpu.Wram(0xC0E9) << 8;
+            var firstBufferColumn = scx / 8;
+            var firstBufferRow = scy / 8;
             var mismatches = new List<string>();
 
-            // Include the partially visible right/bottom edge tiles, not just the 20x18 full cells.
-            for (var screenRow = 0; screenRow <= 18; screenRow++)
+            for (var screenRow = 0; screenRow < 18; screenRow++)
             {
-                var sourceRow = (firstRow + screenRow) % worldMap.Height;
-                var bufferRow = (firstRow + screenRow) % 32;
-                for (var screenColumn = 0; screenColumn <= 20; screenColumn++)
+                var sourceRow = (cameraY + screenRow * 8) / 8 % worldMap.Height;
+                var bufferRow = (firstBufferRow + screenRow) % 32;
+                for (var screenColumn = 0; screenColumn < 20; screenColumn++)
                 {
-                    var sourceColumn = (firstColumn + screenColumn) % worldMap.Width;
-                    var bufferColumn = (firstColumn + screenColumn) % 32;
+                    var sourceColumn = (cameraX + screenColumn * 8) / 8 % worldMap.Width;
+                    var bufferColumn = (firstBufferColumn + screenColumn) % 32;
                     var expected = (byte)worldMap.TileIdAt(sourceColumn, sourceRow);
                     var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
                     if (actual != expected)
                     {
                         mismatches.Add(
-                            $"{label}: scx={scx} scy={scy} screen=({screenColumn},{screenRow}) "
+                            $"{label}: camera=({cameraX},{cameraY}) scx={scx} scy={scy} screen=({screenColumn},{screenRow}) "
+                            + $"state={CameraState(cpu)} "
                             + $"buffer=({bufferColumn},{bufferRow}) source=({sourceColumn},{sourceRow}) "
                             + $"expected=0x{expected:X2} actual=0x{actual:X2}");
                         if (mismatches.Count >= 12)
@@ -221,6 +256,18 @@ public sealed class GameBoyRunnerAudioTempoTests
             }
 
             Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+        }
+
+        static string CameraState(GameBoyTestCpu cpu)
+        {
+            return $"fine=({cpu.Wram(0xC0E2)},{cpu.Wram(0xC0EA)}) "
+                + $"screenLeft={cpu.Wram(0xC0E3)} bgLeft={cpu.Wram(0xC0E5)} bgRight={cpu.Wram(0xC0E4)} "
+                + $"srcLeft={cpu.Wram(0xC0E7)} srcRight={cpu.Wram(0xC0E6)} "
+                + $"topBg={cpu.Wram(0xC0EB)} bottomBg={cpu.Wram(0xC0EC)} "
+                + $"topSrc={cpu.Wram(0xC0ED)} bottomSrc={cpu.Wram(0xC0EE)} "
+                + $"pending={cpu.Wram(0xC119)}/{cpu.Wram(0xC11A)}/{cpu.Wram(0xC11B)} "
+                + $"diagCol={cpu.Wram(0xC11F)}/{cpu.Wram(0xC120)}/{cpu.Wram(0xC121)} "
+                + $"diagRow={cpu.Wram(0xC122)}/{cpu.Wram(0xC123)}/{cpu.Wram(0xC124)}";
         }
     }
 

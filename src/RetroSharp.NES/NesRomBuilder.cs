@@ -1796,19 +1796,22 @@ internal sealed class NesRuntimeCompiler
             throw new InvalidOperationException($"camera_init argument 3 must not exceed the declared world_map height ({worldMap.Height}).");
         }
 
+        var bufferedHeight = height;
         if (useFourScreenNametables)
         {
-            if (streamY < 0 || height < 1 || streamY + height > 60)
+            if (streamY < 0 || height < 1 || streamY >= 60)
             {
                 throw new InvalidOperationException("NES four-screen free scroll stream area must fit within the 60-row four-screen height.");
             }
+
+            bufferedHeight = Math.Min(height, 60 - streamY);
         }
         else if (streamY < 0 || height < 1 || streamY + height > 30)
         {
             throw new InvalidOperationException("camera_init stream area must fit within the NES visible nametable height.");
         }
 
-        cameraConfig = new NesCameraConfig(mapWidth, worldMap.Height, streamY, height, useFourScreenNametables);
+        cameraConfig = new NesCameraConfig(mapWidth, worldMap.Height, streamY, bufferedHeight, useFourScreenNametables);
         builder.LoadAImmediate(0);
         builder.StoreAZeroPage(CameraXAddress);
         builder.StoreAZeroPage(CameraTileColumnAddress);

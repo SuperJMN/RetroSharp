@@ -18,7 +18,7 @@ public static class GameBoyTarget
         ScrollAxes: ScrollAxes.Horizontal | ScrollAxes.Vertical,
         SupportsFineScrollX: true,
         SupportsFineScrollY: true,
-        MaxBackgroundTileWritesPerFrame: 21,
+        MaxBackgroundTileWritesPerFrame: 32,
         MaxAttributeWritesPerFrame: 0,
         SpriteCount: 40,
         SpriteSizeModes: SpriteSizeMode.Sprite8x8 | SpriteSizeMode.Sprite8x16,

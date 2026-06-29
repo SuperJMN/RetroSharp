@@ -4,7 +4,7 @@ enum World {
     Width = 48,
     StreamY = 0,
     Height = 96,
-    StreamHeight = 30,
+    StreamHeight = 96,
     SignedVelocityWrap = 128,
     PixelWidth = 384
 }

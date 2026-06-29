@@ -3283,20 +3283,40 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_vertical_camera_stream_area_when_it_does_not_fit_four_screen_buffer()
+    public void Accepts_vertical_camera_stream_area_taller_than_four_screen_buffer()
     {
-        var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 96).Select(row => row % 4 + 1));
         var source = $$"""
                        void main() {
                            world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 61);
+                           world_map(1, 0, 96);
+                           camera_init(1, 0, 96);
                            while (true) {
                                camera_set_position(0, 1);
                                camera_apply();
                            }
                        }
                        """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(0x08, rom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Rejects_vertical_camera_stream_start_outside_four_screen_buffer()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 1);
+                                  world_map(1, 0, 1);
+                                  camera_init(1, 60, 1);
+                                  while (true) {
+                                      camera_set_position(0, 1);
+                                      camera_apply();
+                                  }
+                              }
+                              """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 

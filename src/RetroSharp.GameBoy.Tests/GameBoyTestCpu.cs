@@ -27,6 +27,7 @@ internal sealed class GameBoyTestCpu
     private readonly byte[] hram = new byte[0x7F];
 
     private readonly List<(ushort Register, byte Value)> apuWrites = [];
+    private readonly List<(ushort Register, byte Value)> ioWrites = [];
     private readonly List<OamWrite> oamWrites = [];
 
     private byte a, b, c, d, e, h, l, f;
@@ -43,6 +44,8 @@ internal sealed class GameBoyTestCpu
     public long Cycles => cycles;
 
     public byte Vram(ushort address) => vram[address - 0x8000];
+
+    public byte Wram(ushort address) => wram[address - 0xC000];
 
     public byte IoRegister(ushort address)
     {
@@ -66,6 +69,32 @@ internal sealed class GameBoyTestCpu
     }
 
     public IReadOnlyList<(ushort Register, byte Value)> ApuWrites => apuWrites;
+
+    public IReadOnlyList<byte> RunUntilIoRegisterWrites(ushort register, int count, long maxInstructions)
+    {
+        var values = new List<byte>(count);
+        var processed = ioWrites.Count;
+        var startInstructions = instructions;
+        while (values.Count < count)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but only captured {values.Count} of {count} writes to 0x{register:X4}.");
+            }
+
+            Step();
+            for (; processed < ioWrites.Count; processed++)
+            {
+                if (ioWrites[processed].Register == register)
+                {
+                    values.Add(ioWrites[processed].Value);
+                }
+            }
+        }
+
+        return values;
+    }
 
     /// <summary>
     /// Runs until the cycle clock reaches <paramref name="frames"/> DMG frames (70224 cycles each),
@@ -257,6 +286,7 @@ internal sealed class GameBoyTestCpu
                     apuWrites.Add((addr, value));
                 }
 
+                ioWrites.Add((addr, value));
                 io[addr - 0xFF00] = value;
                 return;
             case < 0xFFFF:
