@@ -71,18 +71,26 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   iNES flags6 bit 3 only for vertical-camera programs; horizontal-only programs
   keep the old flags6 vertical-mirroring bit.
 - The bounded free-scroll path preloads the first 64x60 four-screen surface and
-  writes `$2000`/`$2005` for X/Y camera movement. It tracks absolute source X/Y
-  tile positions and maps Y through the 60-row buffer before deriving the NES
-  240-pixel coarse-Y scroll, so `$2005` never receives 240..255.
+  writes `$2000`/`$2005` for X/Y camera movement. Source maps narrower than that
+  surface wrap into the unused buffer columns during startup instead of exposing
+  tile-0 padding when the camera reaches the right-hand nametables. It tracks
+  absolute source X/Y tile positions and maps Y through the 60-row buffer before
+  deriving the NES 240-pixel coarse-Y scroll, so `$2005` never receives
+  240..255.
 - Horizontal-only maps retain the previous runtime column-streaming path for
   worlds wider than 32 columns. Four-screen maps wider than 64 columns stream
   the next off-screen visible-edge column while keeping the four nametables
   distinct.
-- Source-authored worlds taller than 60 rows stream the exposed vertical row at
-  runtime through a row-pointer table, and refresh the worst-case 9 touched
-  attribute bytes with palette slot 0. This is intentionally staggered: a column
-  and a row crossing perform one edge per VBlank instead of combining them into
-  one over-budget transfer.
+- Source-authored worlds taller than 60 rows queue the exposed vertical row at
+  tile-boundary time. `video.WaitVBlank()` drains one pending camera stream phase
+  at VBlank entry, before sprite DMA can consume the window; a later
+  `camera.Apply()` in the same frame is skipped unless the source changes camera
+  state after the wait. Rows stream through a row-pointer table as four 8-tile
+  phases plus a separate attribute phase. The attribute phase refreshes the
+  worst-case 9 touched bytes with palette slot 0. Row tile writes are emitted as
+  contiguous `$2007` segments, resetting `$2006` only at a 32-column nametable
+  boundary. Diagonal column/row crossings are intentionally staggered as one
+  edge or row phase per VBlank.
 - Capabilities now describe the free-scroll substrate: `ScrollAxes: Horizontal |
   Vertical`, `SupportsFineScrollY: true`, `BackgroundBufferTiles: 64x60`,
   `MaxBackgroundTileWritesPerFrame: 32`, `MaxAttributeWritesPerFrame: 9`,
@@ -225,11 +233,14 @@ runtime VRAM streaming.
 
 ## Phase NF-4 — Vertical row streaming (levels taller than the surface)
 
-Status: implemented with a staggered policy. A vertical boundary crossing streams
-the 32-tile row that is about to enter the visible window, not the full 64-tile
-four-screen row. If a frame also crosses a horizontal boundary, the existing
-column streamer and the new row streamer each wait for their own VBlank, so no
-single VBlank exceeds the declared 32-tile write budget.
+Status: implemented with a deferred, staggered policy. A vertical boundary
+crossing queues the 32-tile row that is about to enter the visible window, not
+the full 64-tile four-screen row. `camera.Apply()` drains one pending row phase
+during the caller's VBlank: four phases write 8 contiguous `$2007` tile bytes
+each, and a fifth phase refreshes the 9-byte worst-case attribute span. Every
+phase restores PPUCTRL/PPUSCROLL before rendering resumes. If a frame also
+crosses a horizontal boundary, the queued column and row are drained across
+separate `camera.Apply()` calls so no single VBlank combines both edges.
 
 - Layer: NES target.
 - Files: `src/RetroSharp.NES/NesRomBuilder.cs` (stream helpers),
@@ -248,10 +259,11 @@ single VBlank exceeds the declared 32-tile write budget.
 
 ## Phase NF-5 — Diagonal streaming (both column and row in one crossing)
 
-Status: implemented with the same staggered policy as NF-4. Preloaded 64x60
-movement still only restores scroll registers. Larger source-authored worlds
-stream at most one column or one row per VBlank; a diagonal tile crossing emits
-two VBlank-backed transfers in source order before restoring scroll.
+Status: implemented with the same deferred staggered policy as NF-4. Preloaded
+64x60 movement still only restores scroll registers. Larger source-authored
+worlds stream at most one column or one row phase per `camera.Apply()` VBlank; a
+diagonal tile crossing queues both edges and drains them over successive frames
+before each frame's scroll restore.
 
 - Layer: NES target + validator.
 - Files: `NesRomBuilder.cs` stream scheduler, `Sdk2DOperationValidator.cs`.
@@ -364,8 +376,9 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 - Levels up to 512x480 work with no runtime streaming (NF-3). Larger
   source-authored worlds stream columns/rows with the staggered one-edge-per-
   VBlank policy; NF-10 remains only for mapper-backed scale, banking, and HUD IRQs.
-- Horizontal-only NES programs, including the shared runner, stay on the
-  horizontal camera path and are unaffected.
+- Horizontal-only NES programs stay on the horizontal camera path. The shared
+  runner uses the same four-screen path as other vertical-camera samples because
+  its Tiled world expands to 48x96 tiles.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a
   clear diagnostic.
@@ -379,7 +392,7 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 | Free scroll attempted on 2 nametables → corner artifacts. | Require four-screen VRAM; reject otherwise. |
 | ADNES cannot emulate four-screen → cannot validate. | NF-0 extends ADNES first; optional Mesen2 cross-check. |
 | 240 coarse-Y wrap corrupts attribute fetch. | Map world Y → (nametable Y bit, 0..239); never write 240..255 to `$2005` Y. |
-| VBlank budget overrun (column + row + attributes + OAM DMA). | Pending decision: restrict, prefetch/stagger, or defer larger worlds to NF-10. Do not silently enable artifact-prone streaming. |
+| VBlank budget overrun (column + row + attributes + OAM DMA). | Camera movement queues streams and `camera.Apply()` drains at most one edge or 8-tile row phase per VBlank; row attributes are a separate phase, and runtime rows only reset `$2006` at nametable boundaries. Larger mapper-backed worlds remain NF-10. |
 | Real-hardware four-screen needs cart SRAM. | Emulator-first demo; document the hardware caveat; mapper path in NF-10. |
 | Tracked NES ROMs change unexpectedly. | Gate four-screen behind explicit free-scroll request; keep horizontal path byte-identical. |
 

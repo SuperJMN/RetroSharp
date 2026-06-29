@@ -564,6 +564,139 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Nes_automatic_camera_row_streaming_uses_the_callers_vblank()
+    {
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
+        var source = $$"""
+                       void main() {
+                           video_init();
+                           world_column(0, {{tallColumn}});
+                           world_map(1, 0, 61);
+                           camera_init(1, 0, 60);
+                           u8 y = 8;
+                           video_wait_vblank();
+                           camera_set_position(0, y);
+                           camera_apply();
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        var waitFrameCount = CountOccurrences(prg, [0x2C, 0x02, 0x20, 0x10]);
+        Assert.True(
+            waitFrameCount == 3,
+            $"Startup should wait for two VBlanks and source video_wait_vblank should wait once; automatic camera row streaming must not insert another frame wait before restoring scroll. Actual count: {waitFrameCount}.");
+    }
+
+    [Fact]
+    public void Nes_video_wait_vblank_waits_for_the_next_vblank_edge()
+    {
+        const string source = """
+                       void main() {
+                           video_init();
+                           loop {
+                               video_wait_vblank();
+                           }
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(
+            ContainsSequence(prg, [0x2C, 0x02, 0x20, 0x30, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB]),
+            "video_wait_vblank should first wait for any active VBlank flag to clear, then wait for the next VBlank edge.");
+    }
+
+    [Fact]
+    public void Nes_video_wait_vblank_applies_pending_camera_scroll_before_sprite_dma()
+    {
+        const string source = """
+                       void main() {
+                           video_init();
+                           palette_sprite(0, 0, 1, 2, 3);
+                           world_column(0, 1);
+                           world_map(1, 0, 1);
+                           camera_init(1, 0, 1);
+                           sprite_asset(marker, "samples/cross-target-camera/marker.json");
+                           camera_set_position(0, 0);
+                           loop {
+                               video_wait_vblank();
+                               sprite_draw(marker, 72, 72, 0, false, 0);
+                               camera_apply();
+                           }
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source, Path.GetDirectoryName(RepositoryFile("RetroSharp.sln")));
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+        var waitIndex = IndexOfSequence(prg, [0x2C, 0x02, 0x20, 0x30, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB]);
+        Assert.True(waitIndex >= 0, "The runtime VBlank wait should use edge polling.");
+
+        var afterWait = prg.Skip(waitIndex).ToArray();
+        var scrollIndex = IndexOfSequence(afterWait, [0x8D, 0x05, 0x20]);
+        var dmaIndex = IndexOfSequence(afterWait, [0x8D, 0x14, 0x40]);
+
+        Assert.True(scrollIndex >= 0, "The camera scroll restore should write PPUSCROLL.");
+        Assert.True(dmaIndex >= 0, "sprite_draw should DMA the OAM shadow page.");
+        Assert.True(scrollIndex < dmaIndex, "Pending camera scroll should be restored at the start of VBlank before sprite DMA consumes the window.");
+    }
+
+    [Fact]
+    public void Nes_runtime_row_streaming_writes_contiguous_ppudata_segments()
+    {
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
+        var source = $$"""
+                       void main() {
+                           video_init();
+                           world_column(0, {{tallColumn}});
+                           world_map(1, 0, 61);
+                           camera_init(1, 0, 60);
+                           u8 y = 8;
+                           video_wait_vblank();
+                           camera_set_position(0, y);
+                           camera_apply();
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(
+            ContainsSequence(prg, [0xA5, 0xE2, 0x29, 0x1F, 0xC9, 0x00]),
+            "Runtime row streaming should keep PPUDATA auto-incrementing within a nametable row and only reset PPUADDR when the target column crosses a 32-column nametable boundary.");
+    }
+
+    [Fact]
+    public void Nes_runtime_row_streaming_is_split_across_vblanks()
+    {
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
+        var source = $$"""
+                       void main() {
+                           video_init();
+                           world_column(0, {{tallColumn}});
+                           world_map(1, 0, 61);
+                           camera_init(1, 0, 60);
+                           u8 y = 8;
+                           video_wait_vblank();
+                           camera_set_position(0, y);
+                           camera_apply();
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(
+            ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xEF]),
+            "Runtime row streaming should write only an 8-tile row segment per VBlank before restoring scroll.");
+        Assert.False(
+            ContainsSequence(prg, [0xA9, 0x20, 0x85, 0xEF]),
+            "Runtime row streaming must not attempt the full 32-tile row in one VBlank.");
+    }
+
+    [Fact]
     public void Compiles_receiver_method_calls_like_static_helper_calls()
     {
         const string staticSource = """

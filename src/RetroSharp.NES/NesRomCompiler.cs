@@ -98,7 +98,7 @@ public static class NesRomCompiler
     {
         return operations
             .OfType<Sdk2DOperation.SetCameraPosition>()
-            .Any(operation => operation.Axes.HasFlag(ScrollAxes.Vertical));
+            .Any(operation => (operation.Axes & ScrollAxes.Vertical) != 0);
     }
 
     private static Sdk2DFrameBudget DrawSpriteBudget(NesVideoProgram videoProgram, Sdk2DOperation.DrawLogicalSprite draw)
@@ -199,6 +199,8 @@ internal sealed class NesVideoProgram
 
     private string BaseDirectory { get; init; } = Directory.GetCurrentDirectory();
 
+    private bool UseFourScreenNametables { get; init; }
+
     public byte[] Palette { get; } =
     [
         0x0F, 0x27, 0x16, 0x30,
@@ -250,6 +252,7 @@ internal sealed class NesVideoProgram
         var result = new NesVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
+            UseFourScreenNametables = UsesVerticalCamera(main.Block, functions),
             Functions = functions,
             Enums = enums,
             Structs = structs,
@@ -259,6 +262,18 @@ internal sealed class NesVideoProgram
         result.ApplyStaticVideoCalls(main.Block, []);
         result.ApplyDerivedSpritePalettes();
         return result;
+    }
+
+    private static bool UsesVerticalCamera(BlockSyntax mainBlock, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var operations = Sdk2DOperationCollector.Collect(
+            mainBlock,
+            functions,
+            "NES",
+            NesTarget.Capabilities);
+        return operations
+            .OfType<Sdk2DOperation.SetCameraPosition>()
+            .Any(operation => (operation.Axes & ScrollAxes.Vertical) != 0);
     }
 
     private static Dictionary<string, EnumSyntax> BuildEnumIndex(IEnumerable<EnumSyntax> enums)
@@ -557,17 +572,35 @@ internal sealed class NesVideoProgram
         ApplyBackgroundPalettes(world.BackgroundPalette);
         ApplyBackgroundTiles(world);
 
-        for (var y = 0; y < world.Height; y++)
+        if (UseFourScreenNametables)
         {
-            var targetY = world.StreamY + y;
-            if (targetY >= 60)
+            var seededRows = 60 - world.StreamY;
+            for (var y = 0; y < seededRows; y++)
             {
-                continue;
-            }
+                var targetY = world.StreamY + y;
+                var sourceY = world.Height > y ? y : y % world.Height;
 
-            for (var x = 0; x < Math.Min(world.Width, 64); x++)
+                for (var x = 0; x < 64; x++)
+                {
+                    var sourceX = x % world.Width;
+                    SetTile(x, targetY, world.WorldTileIds[sourceY * world.Width + sourceX]);
+                }
+            }
+        }
+        else
+        {
+            for (var y = 0; y < world.Height; y++)
             {
-                SetTile(x, targetY, world.WorldTileIds[y * world.Width + x]);
+                var targetY = world.StreamY + y;
+                if (targetY >= 60)
+                {
+                    continue;
+                }
+
+                for (var x = 0; x < Math.Min(world.Width, 64); x++)
+                {
+                    SetTile(x, targetY, world.WorldTileIds[y * world.Width + x]);
+                }
             }
         }
 
@@ -647,7 +680,7 @@ internal sealed class NesVideoProgram
                             {
                                 var baseX = nameTableX * 32 + attributeX * 4 + quadrantX * 2;
                                 var baseY = nameTableY * 30 + attributeY * 4 + quadrantY * 2;
-                                var slot = MostCommonPaletteSlot(world, baseX, baseY);
+                                var slot = MostCommonPaletteSlot(world, baseX, baseY, UseFourScreenNametables);
                                 var shift = (quadrantY * 2 + quadrantX) * 2;
                                 attributeByte |= (slot & 0x03) << shift;
                             }
@@ -660,7 +693,7 @@ internal sealed class NesVideoProgram
         }
     }
 
-    private static int MostCommonPaletteSlot(NesTiledWorld world, int baseX, int baseY)
+    private static int MostCommonPaletteSlot(NesTiledWorld world, int baseX, int baseY, bool useFourScreenNametables)
     {
         Span<int> counts = stackalloc int[4];
         Span<int> worldCounts = stackalloc int[4];
@@ -670,7 +703,7 @@ internal sealed class NesVideoProgram
         {
             for (var x = baseX; x < baseX + 2; x++)
             {
-                var cell = PaletteCellAtScreenTile(world, x, y);
+                var cell = PaletteCellAtScreenTile(world, x, y, useFourScreenNametables);
                 var slot = cell.Slot;
                 counts[slot]++;
                 if (cell.IsWorldLayer)
@@ -726,10 +759,21 @@ internal sealed class NesVideoProgram
         return lowerRowCounts[candidate] > lowerRowCounts[incumbent];
     }
 
-    private static PaletteCell PaletteCellAtScreenTile(NesTiledWorld world, int x, int y)
+    private static PaletteCell PaletteCellAtScreenTile(NesTiledWorld world, int x, int y, bool useFourScreenNametables)
     {
         var worldY = y - world.StreamY;
-        if (worldY >= 0 && worldY < world.Height && x >= 0 && x < world.Width)
+        if (useFourScreenNametables)
+        {
+            var seededRows = 60 - world.StreamY;
+            if (worldY >= 0 && worldY < seededRows && x >= 0 && x < 64 && world.Width > 0)
+            {
+                var sourceY = world.Height > worldY ? worldY : worldY % world.Height;
+                var sourceX = x % world.Width;
+                var index = sourceY * world.Width + sourceX;
+                return new PaletteCell(world.WorldPaletteSlots[index], world.WorldSourceTiles[index] != 0);
+            }
+        }
+        else if (worldY >= 0 && worldY < world.Height && x >= 0 && x < world.Width)
         {
             var index = worldY * world.Width + x;
             return new PaletteCell(world.WorldPaletteSlots[index], world.WorldSourceTiles[index] != 0);
@@ -771,6 +815,7 @@ internal sealed class NesVideoProgram
 
         var tileIds = new int[width * height];
         var tileFlags = new WorldTileFlags[width * height];
+        var seededRows = 60 - streamY;
         for (var x = 0; x < width; x++)
         {
             sourceColumns.TryGetValue(x, out var column);
@@ -782,6 +827,32 @@ internal sealed class NesVideoProgram
                 tileFlags[y * width + x] = flagColumn is null ? WorldTileFlags.Empty : flagColumn[y];
                 if (x < 64 && streamY + y < 60)
                 {
+                    SetTile(x, streamY + y, tile);
+                }
+            }
+        }
+
+        if (UseFourScreenNametables)
+        {
+            for (var x = width; x < 64; x++)
+            {
+                var sourceX = x % width;
+                sourceColumns.TryGetValue(sourceX, out var column);
+                for (var y = 0; y < seededRows; y++)
+                {
+                    var sourceY = height > y ? y : y % height;
+                    var tile = column is null ? (byte)0 : column[sourceY];
+                    SetTile(x, streamY + y, tile);
+                }
+            }
+
+            for (var y = height; y < seededRows; y++)
+            {
+                var sourceY = y % height;
+                for (var x = 0; x < Math.Min(width, 64); x++)
+                {
+                    sourceColumns.TryGetValue(x, out var column);
+                    var tile = column is null ? (byte)0 : column[sourceY];
                     SetTile(x, streamY + y, tile);
                 }
             }

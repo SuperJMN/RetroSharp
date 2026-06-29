@@ -12,7 +12,7 @@ internal static class NesSdkOperationLowerer
         switch (operation)
         {
             case Sdk2DOperation.WaitFrame:
-                compiler.EmitWaitFrame();
+                compiler.EmitWaitFrame(applyPendingCameraScroll: true);
                 break;
             case Sdk2DOperation.PollInput:
                 compiler.EmitPollInput();

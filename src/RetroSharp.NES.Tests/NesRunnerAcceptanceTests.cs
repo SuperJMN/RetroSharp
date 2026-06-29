@@ -57,9 +57,9 @@ public sealed class NesRunnerAcceptanceTests
 
         for (var y = 0; y < Math.Min(worldMap.Height, 60); y++)
         {
-            for (var x = 0; x < Math.Min(worldMap.Width, 64); x++)
+            for (var x = 0; x < 64; x++)
             {
-                var expected = (byte)worldMap.TileIdAt(x, y);
+                var expected = (byte)worldMap.TileIdAt(x % worldMap.Width, y);
                 var actual = NameTableTileAt(program, x, y);
                 if (actual != expected)
                 {

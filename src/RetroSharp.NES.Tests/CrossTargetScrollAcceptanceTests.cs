@@ -201,8 +201,12 @@ public sealed class CrossTargetScrollAcceptanceTests
 
         Assert.Equal(worldMap.TileIdAt(0, 0), NameTableTileAt(program, 0, 0));
         Assert.Equal(worldMap.TileIdAt(49, 0), NameTableTileAt(program, 49, 0));
+        Assert.Equal(worldMap.TileIdAt(0, 0), NameTableTileAt(program, 50, 0));
+        Assert.Equal(worldMap.TileIdAt(13, 0), NameTableTileAt(program, 63, 0));
         Assert.Equal(worldMap.TileIdAt(0, 59), NameTableTileAt(program, 0, 59));
         Assert.Equal(worldMap.TileIdAt(49, 59), NameTableTileAt(program, 49, 59));
+        Assert.Equal(worldMap.TileIdAt(0, 59), NameTableTileAt(program, 50, 59));
+        Assert.Equal(worldMap.TileIdAt(13, 59), NameTableTileAt(program, 63, 59));
 
         AssertHasTileInNametable(program, 0);
         AssertHasTileInNametable(program, 1);
