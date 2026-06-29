@@ -24,6 +24,7 @@ internal static class GameBoyRomBuilder
     private const string TileDataLabel = "tile_data";
     private const string TileMapLabel = "tilemap";
     private const string WindowTileMapLabel = "window_tilemap";
+    internal const string MapFlagDataLabel = "map_flags_data";
     private const string ProgramStartLabel = "program_start";
     private const string ProgramMainEndLabel = "program_main_end";
     internal const string ProgramBankContinuationLabel = "program_bank_continue";
@@ -322,10 +323,9 @@ internal static class GameBoyRomBuilder
         }
 
         var flagColumnCount = program.MapFlagColumns.Keys.Max() + 1;
-        for (var row = 0; row < program.MapFlagColumnHeight; row++)
-        {
-            data.Add(new GameBoyReadOnlyDataBlob(MapFlagRowLabel(row), BuildMapRow(program.MapFlagColumns, flagColumnCount, row)));
-        }
+        data.Add(new GameBoyReadOnlyDataBlob(
+            MapFlagDataLabel,
+            BuildMapRows(program.MapFlagColumns, flagColumnCount, program.MapFlagColumnHeight)));
     }
 
     private static byte[] BuildMapRow(SortedDictionary<int, byte[]> columns, int columnCount, int row)
@@ -334,6 +334,20 @@ internal static class GameBoyRomBuilder
         for (var column = 0; column < columnCount; column++)
         {
             result[column] = columns.TryGetValue(column, out var tiles) ? tiles[row] : (byte)0;
+        }
+
+        return result;
+    }
+
+    private static byte[] BuildMapRows(SortedDictionary<int, byte[]> columns, int columnCount, int rowCount)
+    {
+        var result = new byte[checked(columnCount * rowCount)];
+        for (var row = 0; row < rowCount; row++)
+        {
+            for (var column = 0; column < columnCount; column++)
+            {
+                result[row * columnCount + column] = columns.TryGetValue(column, out var tiles) ? tiles[row] : (byte)0;
+            }
         }
 
         return result;
@@ -407,22 +421,13 @@ internal static class GameBoyRomBuilder
         }
 
         var flagColumnCount = program.MapFlagColumns.Keys.Max() + 1;
-        for (var row = 0; row < program.MapFlagColumnHeight; row++)
-        {
-            builder.Label(MapFlagRowLabel(row));
-            for (var column = 0; column < flagColumnCount; column++)
-            {
-                var flags = program.MapFlagColumns.TryGetValue(column, out var flagColumn) ? flagColumn[row] : (byte)0;
-                builder.Emit(flags);
-            }
-        }
+        builder.Label(MapFlagDataLabel);
+        builder.Emit(BuildMapRows(program.MapFlagColumns, flagColumnCount, program.MapFlagColumnHeight));
     }
 
     internal static string MapRowLabel(int row) => $"map_row_{row}";
 
     internal static string BackgroundRowLabel(int row) => $"background_stream_row_{row}";
-
-    internal static string MapFlagRowLabel(int row) => $"map_flags_row_{row}";
 
     internal static string MusicLabel(string name) => $"music_{name}";
 
@@ -2486,8 +2491,7 @@ internal sealed class GameBoyRuntimeCompiler
     private static bool IsRuntimeReadOnlyDataLabel(string label)
     {
         return label.StartsWith("map_row_", StringComparison.Ordinal)
-               || label.StartsWith("background_stream_row_", StringComparison.Ordinal)
-               || label.StartsWith("map_flags_row_", StringComparison.Ordinal);
+               || label.StartsWith("background_stream_row_", StringComparison.Ordinal);
     }
 
     private static string ReadOnlyDataByteReaderLabel(string label) => $"read_data_{label}";
@@ -4186,18 +4190,8 @@ internal sealed class GameBoyRuntimeCompiler
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("world_tile_flags_next_row");
-            builder.LoadAFromC();
-            builder.CompareImmediate(row);
-            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
-            builder.LoadAFromB();
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -4238,18 +4232,8 @@ internal sealed class GameBoyRuntimeCompiler
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("world_tile_flags_next_row");
-            builder.LoadAFromC();
-            builder.CompareImmediate(row);
-            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
-            builder.LoadAFromB();
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -4568,18 +4552,8 @@ internal sealed class GameBoyRuntimeCompiler
 
         EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
         builder.LoadBFromA();
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
-            builder.LoadAFromC();
-            builder.CompareImmediate(row);
-            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
-            builder.LoadAFromB();
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -4612,18 +4586,8 @@ internal sealed class GameBoyRuntimeCompiler
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
-            builder.LoadAFromC();
-            builder.CompareImmediate(row);
-            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
-            builder.LoadAFromB();
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -4662,18 +4626,8 @@ internal sealed class GameBoyRuntimeCompiler
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
-            builder.LoadAFromC();
-            builder.CompareImmediate(row);
-            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
-            builder.LoadAFromB();
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -4696,20 +4650,9 @@ internal sealed class GameBoyRuntimeCompiler
 
         EmitCameraPixelToSourceRow(screenPixelY, screenPixelYOffset, worldMap.Height);
         builder.LoadCFromA();
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_screen_tile_flags_next_row");
-            builder.LoadAFromC();
-            builder.CompareImmediate(row);
-            builder.JumpAbsolute(0xC2, nextRowLabel); // JP NZ,nextRowLabel
-            builder.LoadA(CameraScreenTileFlagsColumnAddress);
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
-
-        builder.LoadAImmediate(0);
+        builder.LoadA(CameraScreenTileFlagsColumnAddress);
+        builder.LoadBFromA();
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
         builder.Label(endLabel);
     }
 
@@ -5045,7 +4988,122 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
-        EmitReadOnlyMapByteAtSourceColumnInA(GameBoyRomBuilder.MapFlagRowLabel(row));
+        EmitReadOnlyMapFlagsByteAtSourceColumnInA(checked(row * MapFlagColumnCount()));
+    }
+
+    private int MapFlagColumnCount()
+    {
+        return program.MapFlagColumns.Keys.Max() + 1;
+    }
+
+    private void EmitReadOnlyMapFlagsByteAtSourceColumnInA(int rowOffset)
+    {
+        if (romLayout.TryReadOnlyDataPlacement(GameBoyRomBuilder.MapFlagDataLabel, out var placement))
+        {
+            builder.LoadAImmediate(placement.Bank);
+            EmitSelectRomBankFromA();
+            EmitMapDataByteAtSourceColumnInA(placement.Address, rowOffset);
+            RestoreProgramBankAfterReadOnlyDataRead();
+            return;
+        }
+
+        EmitMapDataByteAtSourceColumnInA(GameBoyRomBuilder.MapFlagDataLabel, rowOffset);
+    }
+
+    private void EmitMapFlagsAtSourceColumnInBAndRowInC()
+    {
+        if (romLayout.TryReadOnlyDataPlacement(GameBoyRomBuilder.MapFlagDataLabel, out var placement))
+        {
+            builder.LoadAImmediate(placement.Bank);
+            EmitSelectRomBankFromA();
+            EmitMapDataByteAtSourceColumnInBAndRowInC(placement.Address, MapFlagColumnCount());
+            RestoreProgramBankAfterReadOnlyDataRead();
+            return;
+        }
+
+        EmitMapDataByteAtSourceColumnInBAndRowInC(GameBoyRomBuilder.MapFlagDataLabel, MapFlagColumnCount());
+    }
+
+    private void EmitMapDataByteAtSourceColumnInA(ushort baseAddress, int rowOffset)
+    {
+        builder.LoadHl(baseAddress);
+        EmitAddConstantToHl(rowOffset);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+    }
+
+    private void EmitMapDataByteAtSourceColumnInA(string baseLabel, int rowOffset)
+    {
+        builder.LoadHl(baseLabel);
+        EmitAddConstantToHl(rowOffset);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+    }
+
+    private void EmitMapDataByteAtSourceColumnInBAndRowInC(ushort baseAddress, int rowWidth)
+    {
+        builder.LoadHl(baseAddress);
+        EmitAddRuntimeRowOffsetToHl(rowWidth);
+        builder.LoadAFromB();
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+    }
+
+    private void EmitMapDataByteAtSourceColumnInBAndRowInC(string baseLabel, int rowWidth)
+    {
+        builder.LoadHl(baseLabel);
+        EmitAddRuntimeRowOffsetToHl(rowWidth);
+        builder.LoadAFromB();
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+    }
+
+    private void EmitAddRuntimeRowOffsetToHl(int rowWidth)
+    {
+        var doneLabel = builder.CreateLabel("map_flags_row_offset_done");
+        var loopLabel = builder.CreateLabel("map_flags_row_offset_loop");
+
+        builder.LoadAFromC();
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, doneLabel); // JP Z,doneLabel
+        builder.LoadDe((ushort)rowWidth);
+        builder.Label(loopLabel);
+        builder.AddHlDe();
+        builder.DecrementA();
+        builder.JumpAbsolute(0xC2, loopLabel); // JP NZ,loopLabel
+        builder.Label(doneLabel);
+    }
+
+    private void EmitAddConstantToHl(int offset)
+    {
+        if (offset == 0)
+        {
+            return;
+        }
+
+        builder.LoadDe((ushort)offset);
+        builder.AddHlDe();
+    }
+
+    private void RestoreProgramBankAfterReadOnlyDataRead()
+    {
+        if (romLayout.ProgramTailBankCount == 0)
+        {
+            return;
+        }
+
+        builder.LoadBFromA();
+        builder.LoadA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+        EmitSelectRomBankFromA();
+        builder.LoadAFromB();
     }
 
     private void EmitReadOnlyMapByteAtSourceColumnInA(string rowLabel)
@@ -6072,6 +6130,11 @@ internal sealed class GbBuilder
     public void AddAImmediate(int value)
     {
         Emit(0xC6, (byte)value);
+    }
+
+    public void DecrementA()
+    {
+        Emit(0x3D);
     }
 
     public void SubtractAImmediate(int value)

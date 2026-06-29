@@ -1,18 +1,20 @@
 type Pixel = i16;
 
 enum World {
-    Width = 68,
-    StreamY = 9,
-    Height = 14,
+    Width = 48,
+    StreamY = 0,
+    Height = 96,
+    StreamHeight = 30,
     SignedVelocityWrap = 128,
-    PixelWidth = 544
+    PixelWidth = 384
 }
 
 enum Player {
     StartX = 72,
-    StartY = 105,
-    WorldOriginY = 41,
-    FallResetY = 116
+    StartY = 193,
+    FootOffset = 31,
+    FallResetY = 240,
+    TopWrapY = 240
 }
 
 enum DeadZone {
@@ -23,7 +25,7 @@ enum DeadZone {
 }
 
 enum CameraBounds {
-    MaxY = 96
+    MaxY = 196
 }
 
 enum CollisionProbe {
@@ -96,7 +98,7 @@ class PlayerState {
             y += velocityY;
         }
         if (velocityY >= World.SignedVelocityWrap) {
-            if (y >= World.SignedVelocityWrap) {
+            if (y > Player.TopWrapY) {
                 y = 0;
                 velocityY = 0;
                 jumping = 0;
@@ -374,7 +376,7 @@ class FrameState {
         if (player.velocityY < World.SignedVelocityWrap && player.velocityY != 0) {
             footTile = camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, sprite_width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
             if (footTile != CollisionProbe.NoTileHit) {
-                player.Land(footTile + Player.WorldOriginY);
+                player.Land(footTile - Player.FootOffset);
             }
         }
     }
@@ -438,7 +440,7 @@ void main() {
     setup_video();
     setup_audio();
     load_world();
-    camera.Init(World.Width, World.StreamY, World.Height);
+    camera.Init(World.Width, World.StreamY, World.StreamHeight);
     PlayerState player;
     CameraState view;
     FrameState frame;
@@ -465,7 +467,7 @@ void main() {
         frame.Begin();
         player.ApplyGravity();
 
-        let footWorldY = player.y - Player.WorldOriginY;
+        let footWorldY = player.y + Player.FootOffset;
         view.CaptureScreen(player);
 
         frame.ResolveSolidLanding(player, view.screenX, footWorldY);
@@ -474,7 +476,7 @@ void main() {
         frame.ResolveReset(player, view);
         view.FollowPlayer(player);
         player.HandleJumpInput();
-        let movementFootWorldY = player.y - Player.WorldOriginY;
+        let movementFootWorldY = player.y + Player.FootOffset;
         view.HandleHorizontalInput(player, movementFootWorldY);
         view.ApplyPosition();
         view.ApplyPosition();

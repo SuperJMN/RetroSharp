@@ -90,6 +90,7 @@ internal static class NesRomBuilder
         EmitWorldMapRowPointerTables(builder, program.WorldMap);
         EmitPpuRowAddressTables(builder, program.WorldMap);
         EmitWorldMapFlagRows(builder, program.WorldMap);
+        EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
 
         var prg = new byte[PrgRomSize];
         var code = builder.Build();
@@ -272,6 +273,29 @@ internal static class NesRomBuilder
     }
 
     internal static string WorldMapFlagRowLabel(int row) => $"world_map_flags_row_{row}";
+
+    internal const string WorldMapFlagRowPointerLowLabel = "world_map_flags_row_ptr_lo";
+    internal const string WorldMapFlagRowPointerHighLabel = "world_map_flags_row_ptr_hi";
+
+    private static void EmitWorldMapFlagRowPointerTables(PrgBuilder builder, WorldMap2D? worldMap)
+    {
+        if (worldMap is null)
+        {
+            return;
+        }
+
+        builder.Label(WorldMapFlagRowPointerLowLabel);
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            builder.EmitLabelLowByte(WorldMapFlagRowLabel(row));
+        }
+
+        builder.Label(WorldMapFlagRowPointerHighLabel);
+        for (var row = 0; row < worldMap.Height; row++)
+        {
+            builder.EmitLabelHighByte(WorldMapFlagRowLabel(row));
+        }
+    }
 
     private static byte[] BuildChrRom(NesVideoProgram program)
     {
@@ -2886,18 +2910,8 @@ internal sealed class NesRuntimeCompiler
         builder.JumpAbsolute(outOfBoundsLabel);
         builder.Label(inBoundsLabel);
         builder.StoreAZeroPage(CollisionRowScratchAddress);
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
-            builder.LoadAZeroPage(CollisionRowScratchAddress);
-            builder.CompareImmediate(row);
-            builder.BranchRelative(0xD0, nextRowLabel); // BNE nextRowLabel
-            builder.LoadAZeroPage(CollisionColumnScratchAddress);
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtScratchColumnAndRow();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -2939,18 +2953,8 @@ internal sealed class NesRuntimeCompiler
         builder.JumpAbsolute(outOfBoundsLabel);
         builder.Label(inBoundsLabel);
         builder.StoreAZeroPage(CollisionRowScratchAddress);
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_tile_flags_next_row");
-            builder.LoadAZeroPage(CollisionRowScratchAddress);
-            builder.CompareImmediate(row);
-            builder.BranchRelative(0xD0, nextRowLabel); // BNE nextRowLabel
-            builder.LoadAZeroPage(CollisionColumnScratchAddress);
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
+        EmitMapFlagsAtScratchColumnAndRow();
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
@@ -2973,20 +2977,7 @@ internal sealed class NesRuntimeCompiler
 
         EmitCameraPixelToSourceRow(screenPixelY, screenPixelYOffset, worldMap.Height);
         builder.StoreAZeroPage(CollisionRowScratchAddress);
-
-        for (var row = 0; row < worldMap.Height; row++)
-        {
-            var nextRowLabel = builder.CreateLabel("camera_screen_tile_flags_next_row");
-            builder.LoadAZeroPage(CollisionRowScratchAddress);
-            builder.CompareImmediate(row);
-            builder.BranchRelative(0xD0, nextRowLabel); // BNE nextRowLabel
-            builder.LoadAZeroPage(CollisionColumnScratchAddress);
-            EmitMapFlagsAtSourceColumnInA(row);
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextRowLabel);
-        }
-
-        builder.LoadAImmediate(0);
+        EmitMapFlagsAtScratchColumnAndRow();
         builder.Label(endLabel);
     }
 
@@ -2994,6 +2985,17 @@ internal sealed class NesRuntimeCompiler
     {
         builder.TransferAToX();
         builder.LdaAbsoluteX(NesRomBuilder.WorldMapFlagRowLabel(row));
+    }
+
+    private void EmitMapFlagsAtScratchColumnAndRow()
+    {
+        builder.LoadXZeroPage(CollisionRowScratchAddress);
+        builder.LdaAbsoluteX(NesRomBuilder.WorldMapFlagRowPointerLowLabel);
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        builder.LdaAbsoluteX(NesRomBuilder.WorldMapFlagRowPointerHighLabel);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.LoadYZeroPage(CollisionColumnScratchAddress);
+        builder.LoadAIndirectY(RuntimeIndexScratchAddress);
     }
 
     private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
