@@ -4,6 +4,8 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using RetroSharp.GameBoy;
 using RetroSharp.NES;
+using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 public class NesRomCompilerTests
@@ -1735,6 +1737,7 @@ public class NesRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -1816,7 +1819,50 @@ public class NesRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
-        Assert.Equal("NES target struct array 'enemies' uses 780 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
+        Assert.Equal("NES target struct array 'enemies' uses 845 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
+    }
+
+    [Fact]
+    public void Actor_framework_projects_wide_y_spawns_for_draw_and_collision_on_nes()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 261 }
+            ]
+            """);
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 0);
+                                  world_map(40, 10, 40);
+                                  camera_init(40, 10, 40);
+                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  actor.Pool(enemies, 2);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                  camera_set_position(0, 160);
+                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  enemies.TouchTiles(0, 1);
+                                  enemies.LandOnTiles(4, 12, 1);
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        var parse = new SomeParser().Parse(source);
+        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
+
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("u8 yHi;", lowered);
+        Assert.Contains("inline u8 __enemies_spawn_0_y(u8 index)=>5;", lowered);
+        Assert.Contains("inline u8 __enemies_spawn_0_yHi(u8 index)=>1;", lowered);
+        Assert.Contains("u8 __enemies_touch_screen_y=enemies[__enemies_touch_i].y-__enemies_touch_camera_y_lo;", lowered);
+        Assert.Contains("camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains("camera.ScreenAabbHitTop(__enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
+        Assert.Contains("sprite.Draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
     }
 
     [Fact]
@@ -1945,6 +1991,7 @@ public class NesRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2031,6 +2078,7 @@ public class NesRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2055,15 +2103,26 @@ public class NesRomCompilerTests
 
                                         u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
+                                        u8 __enemies_draw_camera_y_lo = __rs_actor_camera_y_lo();
+                                        u8 __enemies_draw_camera_y_hi = __rs_actor_camera_y_hi();
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
                                             u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
+                                            u8 __enemies_draw_screen_y = enemies[__enemies_draw_i].y - __enemies_draw_camera_y_lo;
+                                            u8 __enemies_draw_visible_x = 0;
+                                            u8 __enemies_draw_visible_y = 0;
+                                            if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) {
+                                                __enemies_draw_visible_x = 1;
+                                            }
+                                            if ((((enemies[__enemies_draw_i].yHi == __enemies_draw_camera_y_hi) && (enemies[__enemies_draw_i].y >= __enemies_draw_camera_y_lo)) || ((enemies[__enemies_draw_i].yHi == __enemies_draw_camera_y_hi + 1) && (enemies[__enemies_draw_i].y < __enemies_draw_camera_y_lo))) && (__enemies_draw_screen_y < 240)) {
+                                                __enemies_draw_visible_y = 1;
+                                            }
                                             if (enemies[__enemies_draw_i].kind == Goomba) {
                                                 u8 __enemies_draw_x_Goomba = 0;
                                                 u8 __enemies_draw_y_Goomba = 240;
                                                 if (enemies[__enemies_draw_i].active != 0) {
-                                                    if (((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) {
+                                                    if ((__enemies_draw_visible_x != 0) && (__enemies_draw_visible_y != 0)) {
                                                         __enemies_draw_x_Goomba = __enemies_draw_screen_x;
-                                                        __enemies_draw_y_Goomba = enemies[__enemies_draw_i].y;
+                                                        __enemies_draw_y_Goomba = __enemies_draw_screen_y;
                                                     }
                                                 }
                                                 sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
@@ -2159,6 +2218,7 @@ public class NesRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2193,12 +2253,23 @@ public class NesRomCompilerTests
 
                                         u8 __enemies_touch_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_touch_camera_x_hi = __rs_actor_camera_x_hi();
+                                        u8 __enemies_touch_camera_y_lo = __rs_actor_camera_y_lo();
+                                        u8 __enemies_touch_camera_y_hi = __rs_actor_camera_y_hi();
                                         for (u8 __enemies_touch_i = 0; __enemies_touch_i < countof(enemies); __enemies_touch_i += 1) {
                                             if (enemies[__enemies_touch_i].active != 0) {
                                                 u8 __enemies_touch_screen_x = enemies[__enemies_touch_i].x - __enemies_touch_camera_x_lo;
+                                                u8 __enemies_touch_screen_y = enemies[__enemies_touch_i].y - __enemies_touch_camera_y_lo;
+                                                u8 __enemies_touch_visible_x = 0;
+                                                u8 __enemies_touch_visible_y = 0;
+                                                if (((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo))) {
+                                                    __enemies_touch_visible_x = 1;
+                                                }
+                                                if ((((enemies[__enemies_touch_i].yHi == __enemies_touch_camera_y_hi) && (enemies[__enemies_touch_i].y >= __enemies_touch_camera_y_lo)) || ((enemies[__enemies_touch_i].yHi == __enemies_touch_camera_y_hi + 1) && (enemies[__enemies_touch_i].y < __enemies_touch_camera_y_lo))) && (__enemies_touch_screen_y < 240)) {
+                                                    __enemies_touch_visible_y = 1;
+                                                }
                                                 if (enemies[__enemies_touch_i].kind == Goomba) {
-                                                    if (((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo))) {
-                                                        if (camera.AabbTiles(__enemies_touch_screen_x, enemies[__enemies_touch_i].y, 8, 8, 1) != 0) {
+                                                    if ((__enemies_touch_visible_x != 0) && (__enemies_touch_visible_y != 0)) {
+                                                        if (camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1) != 0) {
                                                             enemies[__enemies_touch_i].state = 1;
                                                         }
                                                     }
@@ -2263,6 +2334,7 @@ public class NesRomCompilerTests
                                  u8 x;
                                  u8 xHi;
                                  u8 y;
+                                 u8 yHi;
                                  i8 vx;
                                  i8 vy;
                                  u8 state;
@@ -2279,6 +2351,7 @@ public class NesRomCompilerTests
                              inline u8 __enemies_spawn_0_x(u8 index) => 24;
                              inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
                              inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
                              inline u8 __enemies_spawn_0_active(u8 index) => 1;
                              inline u8 __enemies_spawn_0_vx(u8 index) => 0;
                              inline u8 __enemies_spawn_0_vy(u8 index) => 0;
@@ -3210,20 +3283,40 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_vertical_camera_stream_area_when_it_does_not_fit_four_screen_buffer()
+    public void Accepts_vertical_camera_stream_area_taller_than_four_screen_buffer()
     {
-        var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
+        var tallColumn = string.Join(", ", Enumerable.Range(0, 96).Select(row => row % 4 + 1));
         var source = $$"""
                        void main() {
                            world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 61);
+                           world_map(1, 0, 96);
+                           camera_init(1, 0, 96);
                            while (true) {
                                camera_set_position(0, 1);
                                camera_apply();
                            }
                        }
                        """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(0x08, rom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Rejects_vertical_camera_stream_start_outside_four_screen_buffer()
+    {
+        const string source = """
+                              void main() {
+                                  world_column(0, 1);
+                                  world_map(1, 0, 1);
+                                  camera_init(1, 60, 1);
+                                  while (true) {
+                                      camera_set_position(0, 1);
+                                      camera_apply();
+                                  }
+                              }
+                              """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
@@ -3501,6 +3594,7 @@ public class NesRomCompilerTests
                              u8 {{prefix}}_x_value = __enemies_spawn_0_x({{prefix}}_i);
                              u8 {{prefix}}_xHi_value = __enemies_spawn_0_xHi({{prefix}}_i);
                              u8 {{prefix}}_y_value = __enemies_spawn_0_y({{prefix}}_i);
+                             u8 {{prefix}}_yHi_value = __enemies_spawn_0_yHi({{prefix}}_i);
                              u8 {{prefix}}_active_value = __enemies_spawn_0_active({{prefix}}_i);
                              u8 {{prefix}}_vx_value = __enemies_spawn_0_vx({{prefix}}_i);
                              u8 {{prefix}}_vy_value = __enemies_spawn_0_vy({{prefix}}_i);
@@ -3519,6 +3613,7 @@ public class NesRomCompilerTests
                                              enemies[{{prefix}}_slot].x = {{prefix}}_x_value;
                                              enemies[{{prefix}}_slot].xHi = {{prefix}}_xHi_value;
                                              enemies[{{prefix}}_slot].y = {{prefix}}_y_value;
+                                             enemies[{{prefix}}_slot].yHi = {{prefix}}_yHi_value;
                                              enemies[{{prefix}}_slot].vx = {{prefix}}_vx_value;
                                              enemies[{{prefix}}_slot].vy = {{prefix}}_vy_value;
                                              enemies[{{prefix}}_slot].state = {{prefix}}_state_value;

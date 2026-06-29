@@ -27,7 +27,9 @@ internal sealed class GameBoyTestCpu
     private readonly byte[] hram = new byte[0x7F];
 
     private readonly List<(ushort Register, byte Value)> apuWrites = [];
+    private readonly List<(ushort Register, byte Value)> ioWrites = [];
     private readonly List<OamWrite> oamWrites = [];
+    private readonly List<VramWrite> vramWrites = [];
 
     private byte a, b, c, d, e, h, l, f;
     private ushort sp, pc;
@@ -38,15 +40,30 @@ internal sealed class GameBoyTestCpu
     // Opt-in instrumentation for timing investigations. Defaults preserve existing behavior:
     // CycleAccurateLy off => LY driven by instruction count; empty Held => no buttons pressed.
     public bool CycleAccurateLy;
+    public bool EnforceVblankVramWrites;
     public readonly HashSet<string> Held = [];
     public long AudioUpdateCalls;
     public long Cycles => cycles;
 
     public byte Vram(ushort address) => vram[address - 0x8000];
 
+    public byte Wram(ushort address) => wram[address - 0xC000];
+
+    public byte IoRegister(ushort address)
+    {
+        if (address is < 0xFF00 or >= 0xFF80)
+        {
+            throw new ArgumentOutOfRangeException(nameof(address), "Game Boy IO registers live in the 0xFF00-0xFF7F range.");
+        }
+
+        return io[address - 0xFF00];
+    }
+
     public byte Oam(ushort address) => oam[address - 0xFE00];
 
     public IReadOnlyList<OamWrite> OamWrites => oamWrites;
+
+    public IReadOnlyList<VramWrite> VramWrites => vramWrites;
 
     public GameBoyTestCpu(byte[] rom)
     {
@@ -56,6 +73,32 @@ internal sealed class GameBoyTestCpu
     }
 
     public IReadOnlyList<(ushort Register, byte Value)> ApuWrites => apuWrites;
+
+    public IReadOnlyList<byte> RunUntilIoRegisterWrites(ushort register, int count, long maxInstructions)
+    {
+        var values = new List<byte>(count);
+        var processed = ioWrites.Count;
+        var startInstructions = instructions;
+        while (values.Count < count)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but only captured {values.Count} of {count} writes to 0x{register:X4}.");
+            }
+
+            Step();
+            for (; processed < ioWrites.Count; processed++)
+            {
+                if (ioWrites[processed].Register == register)
+                {
+                    values.Add(ioWrites[processed].Value);
+                }
+            }
+        }
+
+        return values;
+    }
 
     /// <summary>
     /// Runs until the cycle clock reaches <paramref name="frames"/> DMG frames (70224 cycles each),
@@ -219,8 +262,24 @@ internal sealed class GameBoyTestCpu
             case < 0x8000:
                 return; // RAM bank / banking mode (unused by the ROMs under test)
             case < 0xA000:
-                vram[addr - 0x8000] = value;
+            {
+                var ly = (byte)((cycles / 456) % 154);
+                var lcdEnabled = (io[0x40] & 0x80) != 0;
+                var applied = !EnforceVblankVramWrites || !lcdEnabled || ly is >= 144 and <= 153;
+                vramWrites.Add(new VramWrite(
+                    addr,
+                    value,
+                    cycles,
+                    ly,
+                    lcdEnabled,
+                    applied));
+                if (applied)
+                {
+                    vram[addr - 0x8000] = value;
+                }
+
                 return;
+            }
             case < 0xC000:
                 extRam[addr - 0xA000] = value;
                 return;
@@ -247,6 +306,7 @@ internal sealed class GameBoyTestCpu
                     apuWrites.Add((addr, value));
                 }
 
+                ioWrites.Add((addr, value));
                 io[addr - 0xFF00] = value;
                 return;
             case < 0xFFFF:
@@ -305,8 +365,10 @@ internal sealed class GameBoyTestCpu
             case 0x7E: a = ReadByte(Hl); break;                 // LD A,(HL)
             case 0x46: b = ReadByte(Hl); break;                 // LD B,(HL)
             case 0x4E: c = ReadByte(Hl); break;                 // LD C,(HL)
+            case 0x54: d = h; break;                            // LD D,H
             case 0x56: d = ReadByte(Hl); break;                 // LD D,(HL)
             case 0x5E: e = ReadByte(Hl); break;                 // LD E,(HL)
+            case 0x5D: e = l; break;                            // LD E,L
             case 0x47: b = a; break;                            // LD B,A
             case 0x4F: c = a; break;                            // LD C,A
             case 0x57: d = a; break;                            // LD D,A
@@ -339,6 +401,7 @@ internal sealed class GameBoyTestCpu
             case 0x0C: c = Inc(c); break;                       // INC C
             case 0x14: d = Inc(d); break;                       // INC D
             case 0x1C: e = Inc(e); break;                       // INC E
+            case 0x24: h = Inc(h); break;                       // INC H
             case 0x3C: a = Inc(a); break;                       // INC A
             case 0xA0: a = And(b); break;                       // AND B
             case 0xA1: a = And(c); break;                       // AND C
@@ -487,3 +550,5 @@ internal sealed class GameBoyTestCpu
 }
 
 internal readonly record struct OamWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled);
+
+internal readonly record struct VramWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled, bool Applied);

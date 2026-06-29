@@ -3,6 +3,8 @@ namespace RetroSharp.NES.Tests;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.NES;
+using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class NesRunnerAcceptanceTests
@@ -27,19 +29,55 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
-    public void Nes_runner_keeps_horizontal_camera_path()
+    public void Nes_runner_uses_dead_zone_2d_camera_path()
     {
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var runnerDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
         var operations = NesRomCompiler.CollectSdkOperations(source, runnerDirectory);
+        Assert.Equal(2, operations.OfType<Sdk2DOperation.SetCameraPosition>().Count());
         Assert.All(
             operations.OfType<Sdk2DOperation.SetCameraPosition>(),
-            operation => Assert.Equal(ScrollAxes.Horizontal, operation.Axes));
+            operation => Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, operation.Axes));
 
         var rom = NesRomCompiler.CompileSource(source, runnerDirectory);
-        Assert.Equal(0x00, rom[6] & 0x08);
+        Assert.Equal(0x08, rom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Nes_runner_initial_four_screen_nametables_match_imported_world_tiles()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var runnerDirectory = Path.GetDirectoryName(sourcePath);
+        var source = File.ReadAllText(sourcePath);
+        var program = CompileVideoProgram(source, runnerDirectory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var mismatches = new List<string>();
+
+        for (var y = 0; y < Math.Min(worldMap.Height, 60); y++)
+        {
+            for (var x = 0; x < Math.Min(worldMap.Width, 64); x++)
+            {
+                var expected = (byte)worldMap.TileIdAt(x, y);
+                var actual = NameTableTileAt(program, x, y);
+                if (actual != expected)
+                {
+                    mismatches.Add($"nametable=({x},{y}) expected=0x{expected:X2} actual=0x{actual:X2}");
+                    if (mismatches.Count >= 12)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (mismatches.Count >= 12)
+            {
+                break;
+            }
+        }
+
+        Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
     }
 
     [Fact]
@@ -107,5 +145,25 @@ public sealed class NesRunnerAcceptanceTests
 
         return directory?.FullName
                ?? throw new InvalidOperationException("Could not locate RetroSharp repository root.");
+    }
+
+    private static NesVideoProgram CompileVideoProgram(string source, string? baseDirectory)
+    {
+        var parse = new SomeParser().Parse(source);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        var lowered = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        return NesVideoProgram.FromProgram(lowered, baseDirectory);
+    }
+
+    private static byte NameTableTileAt(NesVideoProgram program, int x, int y)
+    {
+        var nameTableX = x / 32;
+        var nameTableY = y / 30;
+        var nameTableBase = (nameTableY * 2 + nameTableX) * 1024;
+        return program.NameTable[nameTableBase + y % 30 * 32 + x % 32];
     }
 }

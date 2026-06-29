@@ -393,19 +393,19 @@ public sealed class GameBoySdkOperationBoundaryTests
             operations,
             operation =>
             {
-                var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
+                var query = Assert.IsType<Sdk2DOperation.CameraScreenAabbTiles>(operation);
                 Assert.Equal(Local("__enemies_touch_screen_x"), query.ScreenX);
-                Assert.Equal(RuntimeIndexedField("enemies", "__enemies_touch_i", "y"), query.WorldY);
-                Assert.Equal(0, query.WorldYOffset);
+                Assert.Equal(Local("__enemies_touch_screen_y"), query.ScreenY);
+                Assert.Equal(0, query.ScreenYOffset);
                 Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
                 Assert.Equal(8, query.Height);
             },
             operation =>
             {
-                var query = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operation);
+                var query = Assert.IsType<Sdk2DOperation.CameraScreenAabbHitTop>(operation);
                 Assert.Equal(Local("__enemies_land_screen_x"), query.ScreenX);
-                Assert.Equal(RuntimeIndexedField("enemies", "__enemies_land_i", "y"), query.WorldY);
-                Assert.Equal(-4, query.WorldYOffset);
+                Assert.Equal(Local("__enemies_land_screen_y"), query.ScreenY);
+                Assert.Equal(-4, query.ScreenYOffset);
                 Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
                 Assert.Equal(12, query.Height);
             });
@@ -512,8 +512,8 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   i16 sourceColumn = 0;
                                   while (true) {
                                       video_wait_vblank();
-                                      map_stream_column(targetColumn, sourceColumn, 0, 12);
-                                      map_stream_column(targetColumn, sourceColumn, 0, 10);
+                                      map_stream_column(targetColumn, sourceColumn, 0, 16);
+                                      map_stream_column(targetColumn, sourceColumn, 0, 17);
                                   }
                               }
                               """;
@@ -521,7 +521,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 33 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 
@@ -530,7 +530,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void stream_once(i16 targetColumn, i16 sourceColumn) {
-                                  map_stream_column(targetColumn, sourceColumn, 0, 11);
+                                  map_stream_column(targetColumn, sourceColumn, 0, 17);
                               }
 
                               void main() {
@@ -549,7 +549,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 34 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 

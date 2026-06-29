@@ -22,7 +22,7 @@ The sample intentionally avoids raw target calls such as `sprite.Set(...)`, `scr
 
 Current intentionally excluded optional features:
 
-- This portable sample uses only horizontal `camera.SetPosition(x, 0)`. NES vertical and diagonal free-scroll capability is covered by `../nes-free-scroll/freescroll.rs`, not by this cross-target sample.
+- This portable sample uses only horizontal `camera.SetPosition(x, 0)`. NES vertical and diagonal free-scroll capability is covered by `../nes-free-scroll/freescroll.rs` and `../tiled-free-scroll/free-scroll.rs`, not by this cross-target sample.
 - NES seeds a two-nametable horizontal buffer from `world.Map(...)` for this sample and streams new columns at runtime.
 - NES `sprite.Draw(...)` accepts byte-backed frame and flip operands; palette slot remains a compile-time logical slot.
 - This sample does not use collision queries, runtime animation, audio, or HUD APIs. Runner-shaped camera-relative collision and runtime animation are covered by the NES build of `samples/runner/runner.rs`; HUD, real NES audio playback, and generic world-space collision remain outside this sample.

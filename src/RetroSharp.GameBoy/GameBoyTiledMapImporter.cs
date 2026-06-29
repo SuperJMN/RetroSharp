@@ -35,11 +35,6 @@ internal static class GameBoyTiledMapImporter
             throw new InvalidOperationException($"Tiled map '{displayName}' property 'retrosharpStreamY' must be between 0 and 31.");
         }
 
-        if (geometry.StreamY + geometry.Height > 32)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' world slice exceeds the Game Boy background tilemap height.");
-        }
-
         var tilesets = logical.Tilesets.Select(GameBoyTileset.FromLogical).ToArray();
         var resolver = new GameBoyTileResolver(tilesets, firstGeneratedTileId);
 

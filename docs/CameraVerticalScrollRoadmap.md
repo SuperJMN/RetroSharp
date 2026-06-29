@@ -16,13 +16,16 @@ current supported subset per target.
   implemented at the codegen level and is internally consistent. The VS-1..VS-5
   slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix. The diagonal Strategy A slice is also proven
-  by `samples/nes-free-scroll/freescroll.rs` on Game Boy: the runtime queues a
-  column and row independently and drains one visible edge per VBlank.
+  by `samples/nes-free-scroll/freescroll.rs`, `samples/tiled-diagonal/diag.rs`,
+  and `samples/tiled-free-scroll/free-scroll.rs` on Game Boy: the runtime queues
+  a column and row independently and drains one visible background-map edge per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
-  coarse-Y wrap for maps that fit 64x60 tiles. Runtime row, diagonal, and
-  attribute streaming for larger worlds remains gated in
-  `docs/NesFreeScrollRoadmap.md` until the VBlank policy is decided.
+  coarse-Y wrap for maps that fit 64x60 tiles. Tall Tiled `world.Load(...)`
+  maps now enter that four-screen path when a vertical camera axis is used, and
+  `samples/tiled-free-scroll/free-scroll.rs` proves diagonal Tiled maps inside
+  the 64x60 four-screen surface. Runtime row, diagonal, and attribute streaming for larger worlds remains
+  governed by `docs/NesFreeScrollRoadmap.md`.
 - Every change keeps the layer golden rule: the language and classic IR never
   learn about cameras; vertical scroll lives in the SDK operation model + per
   target lowering + capability checks.
@@ -49,7 +52,17 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   - Row streamer reads the world by source row: `:3261-3296`.
   - `CameraConfig.SourceHeight = program.MapColumnHeight`: `:5244-5247`.
 - `samples/gameboy-vscroll/vscroll.rs` moves Y by one pixel per frame over a
-  24-row source map, scrolls down and back up, and builds as a Game Boy ROM.
+  24-row source-authored map, scrolls down and back up, and builds as a Game Boy ROM.
+  `samples/tiled-tall/tall.rs` proves the same vertical row streamer over a 16x40
+  Tiled `world.Load(...)` map whose full height is kept in the imported world rows.
+  `samples/tiled-vscroll/vscroll.rs` builds for Game Boy and NES from a 40x60 Tiled
+  map; NES uses it to prove four-screen vertical scroll over all four nametables.
+  `samples/tiled-diagonal/diag.rs` moves X and Y together by one pixel per frame
+  over a 40x40 Tiled `world.Load(...)` map, proving that the imported rows and
+  columns feed the staggered diagonal streamer.
+  `samples/tiled-free-scroll/free-scroll.rs` moves X and Y together by one pixel
+  per frame over a 50x60 Tiled `world.Load(...)` map and builds for both Game Boy
+  and NES.
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
   row data in VRAM after the 32-row background buffer wraps.
@@ -57,7 +70,7 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   over a 64x60 source map and builds as both Game Boy and NES. The Game Boy
   acceptance test runs the emitted ROM and observes both fresh wrapped columns
   and fresh wrapped rows after diagonal movement.
-- The row streamer now shares one emitted 20-column write block across source
+- The row streamer now shares one emitted 21-column write block across source
   rows. That fixed the latent tall-map failure where fully unrolled per-row
   stream code could force unsupported direct control flow across MBC1 program
   banks.
@@ -151,7 +164,7 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
     (bottom edge) crossings.
   - [x] Confirm the VBlank drain (`EmitCommitPendingStream`, `:3010-3046`) commits
     at most one row per frame and does not exceed the GB background write budget
-    (20 tiles/row vs `MaxBackgroundTileWritesPerFrame`).
+    (21 visible columns vs `MaxBackgroundTileWritesPerFrame`).
 - How: add golden-byte tests like the existing column-streaming tests; if the
   emulator shows wrong rows, fix the row/source address init or the modulo
   arithmetic — do not paper over it in the sample.
@@ -352,15 +365,15 @@ Status: **implemented with staggered edge commits.** A `camera.SetPosition(x, y)
 that moves both axes remains a diagonal SDK request; the collector does not
 degrade it to horizontal or vertical. Game Boy accepts it because
 `GameBoyTarget.Capabilities` declares staggered camera stream draining and each
-committed edge fits the 20-tile background write budget.
+committed visible edge fits the 21-tile background write budget.
 
 Real Game Boy games (e.g. Super Mario Land 2) scroll in 8 directions, so diagonal
 is clearly feasible on hardware. The blockers are two of *our* design choices, not
 the DMG:
 
-- Conservative `MaxBackgroundTileWritesPerFrame: 20`
+- `MaxBackgroundTileWritesPerFrame: 21`
   (`src/RetroSharp.GameBoy/GameBoyTarget.cs`). A diagonal tile-boundary crossing
-  exposes a column (18 tiles) **and** a row (20 tiles) → 38 writes if committed in
+  exposes a visible background-map column (19 tiles) **and** a visible background-map row (21 tiles) -> 40 writes if committed in
   one VBlank.
 - Horizontal/vertical-only programs still use the original deferred stream slot
   (`PendingStreamKind/Target/Source`) so their ROM shape stays compact. Diagonal
@@ -374,7 +387,7 @@ this is engineering cost in our pipeline, not a hardware limit.
 
 **Strategy A — stagger crossings across frames (recommended PoC).** Allow a column
 **and** a row to be pending at once, but drain **one per VBlank** within the
-existing 20-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
+existing 21-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
 commit that handles both kinds) and a validator rule keyed off the target's
 staggered-stream capability. **No streamer rewrite.** Price: the second-axis edge appears one frame
 late — practically invisible at 1px/frame. Effort is comparable to the GB vertical

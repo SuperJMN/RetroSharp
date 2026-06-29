@@ -4,6 +4,7 @@ using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.NES;
+using RetroSharp.Parser;
 using Xunit;
 
 // Acceptance: one source program of horizontal scroll and logical sprite drawing produces the SAME shared
@@ -119,6 +120,104 @@ public sealed class CrossTargetScrollAcceptanceTests
 
         var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Wide_tall_tiled_sample_lowers_vertical_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Tiled_free_scroll_sample_lowers_diagonal_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var gbCamera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Dead_zone_follow_sample_lowers_diagonal_camera_on_game_boy_and_nes()
+    {
+        var samplePath = RepositoryFile("samples/deadzone-follow/deadzone.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        Assert.Contains("world.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
+        Assert.Contains("enum DeadZone", source, StringComparison.Ordinal);
+        Assert.Contains("enum CameraBounds", source, StringComparison.Ordinal);
+
+        var gbOperations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
+        var gbCamera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(gbOperations.OfType<Sdk2DOperation.SetCameraPosition>()));
+        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, gbCamera.Axes);
+
+        var gbRom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(32768, gbRom.Length);
+
+        var program = BuildNesProgram(source, sampleDirectory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        Assert.Equal(64, worldMap.Width);
+        Assert.Equal(60, worldMap.Height);
+        AssertHasTileInNametable(program, 0);
+        AssertHasTileInNametable(program, 1);
+        AssertHasTileInNametable(program, 2);
+        AssertHasTileInNametable(program, 3);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        Assert.Equal(0x08, nesRom[6] & 0x08);
+    }
+
+    [Fact]
+    public void Tiled_free_scroll_sample_populates_four_screen_nametable_tiles_and_attributes_on_nes()
+    {
+        var samplePath = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath);
+        var source = File.ReadAllText(samplePath);
+
+        var program = BuildNesProgram(source, sampleDirectory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        Assert.Equal(50, worldMap.Width);
+        Assert.Equal(60, worldMap.Height);
+
+        Assert.Equal(worldMap.TileIdAt(0, 0), NameTableTileAt(program, 0, 0));
+        Assert.Equal(worldMap.TileIdAt(49, 0), NameTableTileAt(program, 49, 0));
+        Assert.Equal(worldMap.TileIdAt(0, 59), NameTableTileAt(program, 0, 59));
+        Assert.Equal(worldMap.TileIdAt(49, 59), NameTableTileAt(program, 49, 59));
+
+        AssertHasTileInNametable(program, 0);
+        AssertHasTileInNametable(program, 1);
+        AssertHasTileInNametable(program, 2);
+        AssertHasTileInNametable(program, 3);
+
+        AssertHasAttributeInNametable(program, 0);
+        AssertHasAttributeInNametable(program, 1);
+        AssertHasAttributeInNametable(program, 2);
+        AssertHasAttributeInNametable(program, 3);
+
+        var nesRom = NesRomCompiler.CompileSource(source, sampleDirectory);
+        var prg = nesRom.Skip(16).Take(32 * 1024).ToArray();
+        Assert.True(CountOccurrences(prg, [0xA5, 0xE8, 0xC9, 0x1E]) > 0, "camera_apply should derive the vertical nametable bit from the four-screen buffer row.");
+        Assert.True(CountOccurrences(prg, [0xA5, 0xEA, 0x29, 0x07]) > 0, "camera_apply should preserve fine Y when wrapping NES scroll Y at 240 pixels.");
     }
 
     [Fact]
@@ -340,6 +439,35 @@ public sealed class CrossTargetScrollAcceptanceTests
     private static string WideColumnTiles(int column, int height)
     {
         return string.Join(", ", Enumerable.Range(0, height).Select(row => ((column + row) % 5) + 1));
+    }
+
+    private static NesVideoProgram BuildNesProgram(string source, string? baseDirectory)
+    {
+        var parse = new SomeParser().Parse(source);
+        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
+        return NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+    }
+
+    private static byte NameTableTileAt(NesVideoProgram program, int x, int y)
+    {
+        var nameTableX = x / 32;
+        var nameTableY = y / 30;
+        var nameTableBase = (nameTableY * 2 + nameTableX) * 1024;
+        return program.NameTable[nameTableBase + y % 30 * 32 + x % 32];
+    }
+
+    private static void AssertHasTileInNametable(NesVideoProgram program, int nameTable)
+    {
+        Assert.Contains(
+            program.NameTable.Skip(nameTable * 1024).Take(960),
+            value => value != 0);
+    }
+
+    private static void AssertHasAttributeInNametable(NesVideoProgram program, int nameTable)
+    {
+        Assert.Contains(
+            program.NameTable.Skip(nameTable * 1024 + 960).Take(64),
+            value => value != 0);
     }
 
     private static int CountOccurrences(byte[] haystack, byte[] needle)

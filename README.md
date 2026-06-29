@@ -35,7 +35,7 @@ RetroSharp's original compiler path uses a multi-stage pipeline:
 
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
-- `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, Tiled `world.Load(...)`, runtime animation helpers, and camera-relative runner collision. NES BGM, vertical camera movement, HUD, and generic world-space collision are still not implemented.
+- `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, four-screen 2-axis camera movement, Tiled `world.Load(...)`, runtime animation helpers, and camera-relative runner collision. NES BGM, HUD, and generic world-space collision are still not implemented.
 - `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, and `.gbapu`/`.gbapu.json` APU trace playback. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `music.Asset(...)`, `music.Play(...)`, and `audio.Update()`.
 
 The actor framework acceptance slice lives in `samples/actor-framework`. It shows

@@ -37,6 +37,36 @@
       "targets": ["gb"]
     },
     {
+      "path": "samples/tiled-tall/tall.rs",
+      "readme": "samples/tiled-tall/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/tiled-vscroll/vscroll.rs",
+      "readme": "samples/tiled-vscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
+      "path": "samples/tiled-diagonal/diag.rs",
+      "readme": "samples/tiled-diagonal/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb"]
+    },
+    {
+      "path": "samples/tiled-free-scroll/free-scroll.rs",
+      "readme": "samples/tiled-free-scroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
+      "path": "samples/deadzone-follow/deadzone.rs",
+      "readme": "samples/deadzone-follow/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "path": "samples/nes-free-scroll/freescroll.rs",
       "readme": "samples/nes-free-scroll/README.md",
       "layer": "target-acceptance",

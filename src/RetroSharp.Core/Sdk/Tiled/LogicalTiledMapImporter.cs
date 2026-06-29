@@ -375,8 +375,8 @@ public static class LogicalTiledMapImporter
                 throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} requires an actor kind via a 'kind' property, type/class, or name.");
             }
 
-            var x = CheckedUInt16(IntNumberProperty(obj, "x", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} x");
-            var y = CheckedByte(IntNumberProperty(obj, "y", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} y");
+            var x = CheckedUInt16(CoordinateProperty(obj, "x", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} x");
+            var y = CheckedUInt16(CoordinateProperty(obj, "y", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} y");
             result.Add(new LogicalActorSpawn(kind, x, y, ReadActorSpawnFields(obj, displayName, layerName, objectId)));
         }
 
@@ -443,11 +443,11 @@ public static class LogicalTiledMapImporter
             : fallback;
     }
 
-    private static int IntNumberProperty(JsonElement element, string name, string displayName, string layerName, int objectId)
+    private static int CoordinateProperty(JsonElement element, string name, string displayName, string layerName, int objectId)
     {
         if (!element.TryGetProperty(name, out var property) || property.ValueKind != JsonValueKind.Number)
         {
-            throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}' must be an integer.");
+            throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}' must be a number.");
         }
 
         if (property.TryGetInt32(out var value))
@@ -455,13 +455,16 @@ public static class LogicalTiledMapImporter
             return value;
         }
 
+        // Tiled object coordinates are pixel positions and can be fractional when an object
+        // is not snapped to the grid. Round to the nearest pixel instead of rejecting it, so
+        // hand-authored maps do not break on sub-pixel object placement.
         var number = property.GetDouble();
-        if (Math.Truncate(number) == number && number >= int.MinValue && number <= int.MaxValue)
+        if (number < int.MinValue || number > int.MaxValue)
         {
-            return (int)number;
+            throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}' is out of range.");
         }
 
-        throw new InvalidOperationException($"Tiled map '{displayName}' object layer '{layerName}' object {objectId} property '{name}' must be an integer.");
+        return (int)Math.Round(number, MidpointRounding.AwayFromZero);
     }
 
     private static int PropertyIntValue(JsonElement value, string context)

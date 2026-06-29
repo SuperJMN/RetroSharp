@@ -18,6 +18,8 @@ public static class ActorFrameworkLowerer
     private const string ActorStructName = "Actor";
     private const string ActorCameraXLowFunction = "__rs_actor_camera_x_lo";
     private const string ActorCameraXHighFunction = "__rs_actor_camera_x_hi";
+    private const string ActorCameraYLowFunction = "__rs_actor_camera_y_lo";
+    private const string ActorCameraYHighFunction = "__rs_actor_camera_y_hi";
 
     private static readonly IReadOnlyDictionary<string, int> BehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -662,9 +664,7 @@ public static class ActorFrameworkLowerer
             "Walker" =>
                 AddWorldX(pool, indexName, new IdentifierSyntax($"{def.Name}Speed")),
             "Flyer" =>
-            [
-                FieldAssignment(pool.Name, indexName, "y", "+=", new IdentifierSyntax($"{def.Name}Speed")),
-            ],
+                AddWorldY(pool, indexName, new IdentifierSyntax($"{def.Name}Speed")),
             "Patrol" =>
             [
                 FacingMove(pool, indexName, def),
@@ -743,6 +743,18 @@ public static class ActorFrameworkLowerer
         ];
     }
 
+    private static IReadOnlyList<StatementSyntax> AddWorldY(ActorPool pool, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            FieldAssignment(pool.Name, indexName, "y", "+=", amount),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(pool.Name, indexName, "yHi", "+=", new ConstantSyntax("1"))]),
+                Maybe<BlockSyntax>.None),
+        ];
+    }
+
     private static IfElseSyntax TimerCooldown(
         ActorPool pool,
         string indexName,
@@ -788,7 +800,7 @@ public static class ActorFrameworkLowerer
         }
 
         var indexName = $"__{pool.Name}_draw_i";
-        var projection = BuildActorScreenProjection(pool, indexName, "draw", state.ScreenWidth);
+        var projection = BuildActorScreenProjection(pool, indexName, "draw", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EnemyDefs
             .Select(def => new KindBranch(
                 def.Name,
@@ -803,7 +815,7 @@ public static class ActorFrameworkLowerer
             ? PoolLoop(pool, indexName, activeStatements)
             : PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
 
-        return ActorCameraXDeclarations(pool, "draw")
+        return ActorCameraDeclarations(pool, "draw")
             .Append(loop)
             .ToList();
     }
@@ -861,7 +873,7 @@ public static class ActorFrameworkLowerer
                         new ExpressionStatementSyntax(new AssignmentSyntax(
                             new IdentifierLValue(drawY),
                             "=",
-                            PoolField(pool.Name, indexName, "y"))),
+                            projection.ScreenY)),
                     ]),
                     Maybe<BlockSyntax>.None),
             ]),
@@ -913,7 +925,7 @@ public static class ActorFrameworkLowerer
                     [
                         new IdentifierSyntax(def.Sprite!),
                         projection.ScreenX,
-                        PoolField(pool.Name, indexName, "y"),
+                        projection.ScreenY,
                         frame,
                         new IdentifierSyntax("false"),
                         new ConstantSyntax("0"),
@@ -931,7 +943,7 @@ public static class ActorFrameworkLowerer
 
         var yOffset = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchTiles argument 1");
         var indexName = $"__{pool.Name}_touch_i";
-        var projection = BuildActorScreenProjection(pool, indexName, "touch", state.ScreenWidth);
+        var projection = BuildActorScreenProjection(pool, indexName, "touch", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EnemyDefs
             .Select(def => new KindBranch(def.Name, TouchTilesBlock(pool, indexName, def, yOffset, parameters[1], projection)))
             .ToList();
@@ -940,7 +952,7 @@ public static class ActorFrameworkLowerer
             .ToList();
         var loop = PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
 
-        return ActorCameraXDeclarations(pool, "touch")
+        return ActorCameraDeclarations(pool, "touch")
             .Append(loop)
             .ToList();
     }
@@ -957,10 +969,10 @@ public static class ActorFrameworkLowerer
             new BinaryExpressionSyntax(
                 new SdkDotCallSyntax(
                     "camera",
-                    "AabbTiles",
+                    "ScreenAabbTiles",
                     [
                         projection.ScreenX,
-                        OffsetPoolField(pool.Name, indexName, "y", yOffset, subtract: false),
+                        OffsetExpression(projection.ScreenY, yOffset, subtract: false),
                         new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
                         new ConstantSyntax(def.HitboxHeight.ToString(CultureInfo.InvariantCulture)),
                         flags,
@@ -985,7 +997,7 @@ public static class ActorFrameworkLowerer
         var searchTopOffset = RequiredLiteralByte(parameters[0], $"{pool.Name}.LandOnTiles argument 1");
         var searchHeight = RequiredLiteralByte(parameters[1], $"{pool.Name}.LandOnTiles argument 2");
         var indexName = $"__{pool.Name}_land_i";
-        var projection = BuildActorScreenProjection(pool, indexName, "land", state.ScreenWidth);
+        var projection = BuildActorScreenProjection(pool, indexName, "land", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EnemyDefs
             .Select(def => new KindBranch(def.Name, LandOnTilesBlock(pool, indexName, def, searchTopOffset, searchHeight, parameters[2], projection)))
             .ToList();
@@ -994,7 +1006,7 @@ public static class ActorFrameworkLowerer
             .ToList();
         var loop = PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
 
-        return ActorCameraXDeclarations(pool, "land")
+        return ActorCameraDeclarations(pool, "land")
             .Append(loop)
             .ToList();
     }
@@ -1015,10 +1027,10 @@ public static class ActorFrameworkLowerer
             Maybe<ExpressionSyntax>.None,
             Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
                 "camera",
-                "AabbHitTop",
+                "ScreenAabbHitTop",
                 [
                     projection.ScreenX,
-                    OffsetPoolField(pool.Name, indexName, "y", searchTopOffset, subtract: true),
+                    OffsetExpression(projection.ScreenY, searchTopOffset, subtract: true),
                     new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
                     new ConstantSyntax(searchHeight.ToString(CultureInfo.InvariantCulture)),
                     flags,
@@ -1027,6 +1039,12 @@ public static class ActorFrameworkLowerer
             new BinaryExpressionSyntax(new IdentifierSyntax(hitTop), new ConstantSyntax("255"), Operator.NotEqual),
             new BlockSyntax([
                 FieldAssignment(pool.Name, indexName, "y", "=", new IdentifierSyntax(hitTop)),
+                FieldAssignment(pool.Name, indexName, "y", "+=", new IdentifierSyntax($"__{pool.Name}_land_camera_y_lo")),
+                FieldAssignment(pool.Name, indexName, "yHi", "=", new IdentifierSyntax($"__{pool.Name}_land_camera_y_hi")),
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), new IdentifierSyntax(hitTop), Operator.LessThan),
+                    new BlockSyntax([FieldAssignment(pool.Name, indexName, "yHi", "+=", new ConstantSyntax("1"))]),
+                    Maybe<BlockSyntax>.None),
                 FieldAssignment(pool.Name, indexName, "vy", "=", new ConstantSyntax("0")),
                 FieldAssignment(pool.Name, indexName, "state", "=", new ConstantSyntax("1")),
             ]),
@@ -1053,7 +1071,7 @@ public static class ActorFrameworkLowerer
         var playerBottom = CheckedByte(playerY + playerHeight, $"{pool.Name}.TouchPlayer player bottom edge");
 
         var indexName = $"__{pool.Name}_player_i";
-        var projection = BuildActorScreenProjection(pool, indexName, "player", state.ScreenWidth);
+        var projection = BuildActorScreenProjection(pool, indexName, "player", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EnemyDefs
             .Select(def => new KindBranch(def.Name, TouchPlayerBlock(pool, indexName, def, playerX, playerY, playerRight, playerBottom, projection)))
             .ToList();
@@ -1062,7 +1080,7 @@ public static class ActorFrameworkLowerer
             .ToList();
         var loop = PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
 
-        return ActorCameraXDeclarations(pool, "player")
+        return ActorCameraDeclarations(pool, "player")
             .Append(loop)
             .ToList();
     }
@@ -1084,8 +1102,8 @@ public static class ActorFrameworkLowerer
                 Constant(playerX),
                 Operator.Get(">")));
         var overlapsY = And(
-            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), Constant(playerBottom), Operator.LessThan),
-            new BinaryExpressionSyntax(OffsetPoolField(pool.Name, indexName, "y", def.HitboxHeight, subtract: false), Constant(playerY), Operator.Get(">")));
+            new BinaryExpressionSyntax(projection.ScreenY, Constant(playerBottom), Operator.LessThan),
+            new BinaryExpressionSyntax(OffsetExpression(projection.ScreenY, def.HitboxHeight, subtract: false), Constant(playerY), Operator.Get(">")));
 
         var touchPlayer = new IfElseSyntax(
             And(overlapsX, overlapsY),
@@ -1099,10 +1117,12 @@ public static class ActorFrameworkLowerer
         ]);
     }
 
-    private static IReadOnlyList<StatementSyntax> ActorCameraXDeclarations(ActorPool pool, string phase)
+    private static IReadOnlyList<StatementSyntax> ActorCameraDeclarations(ActorPool pool, string phase)
     {
         var cameraXLow = $"__{pool.Name}_{phase}_camera_x_lo";
         var cameraXHigh = $"__{pool.Name}_{phase}_camera_x_hi";
+        var cameraYLow = $"__{pool.Name}_{phase}_camera_y_lo";
+        var cameraYHigh = $"__{pool.Name}_{phase}_camera_y_hi";
 
         return
         [
@@ -1116,15 +1136,31 @@ public static class ActorFrameworkLowerer
                 cameraXHigh,
                 Maybe<ExpressionSyntax>.None,
                 Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraXHighFunction, []))),
+            new DeclarationSyntax(
+                "u8",
+                cameraYLow,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraYLowFunction, []))),
+            new DeclarationSyntax(
+                "u8",
+                cameraYHigh,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new FunctionCall(ActorCameraYHighFunction, []))),
         ];
     }
 
-    private static ActorScreenProjection BuildActorScreenProjection(ActorPool pool, string indexName, string phase, int screenWidth)
+    private static ActorScreenProjection BuildActorScreenProjection(ActorPool pool, string indexName, string phase, int screenWidth, int screenHeight)
     {
         var cameraXLow = $"__{pool.Name}_{phase}_camera_x_lo";
         var cameraXHigh = $"__{pool.Name}_{phase}_camera_x_hi";
+        var cameraYLow = $"__{pool.Name}_{phase}_camera_y_lo";
+        var cameraYHigh = $"__{pool.Name}_{phase}_camera_y_hi";
         var screenX = $"__{pool.Name}_{phase}_screen_x";
+        var screenY = $"__{pool.Name}_{phase}_screen_y";
+        var visibleXName = $"__{pool.Name}_{phase}_visible_x";
+        var visibleYName = $"__{pool.Name}_{phase}_visible_y";
         var screenXIdentifier = new IdentifierSyntax(screenX);
+        var screenYIdentifier = new IdentifierSyntax(screenY);
 
         var declarations = new List<StatementSyntax>
         {
@@ -1136,26 +1172,75 @@ public static class ActorFrameworkLowerer
                     PoolField(pool.Name, indexName, "x"),
                     new IdentifierSyntax(cameraXLow),
                     Operator.Get("-")))),
+            new DeclarationSyntax(
+                "u8",
+                screenY,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    PoolField(pool.Name, indexName, "y"),
+                    new IdentifierSyntax(cameraYLow),
+                    Operator.Get("-")))),
+            new DeclarationSyntax(
+                "u8",
+                visibleXName,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new ConstantSyntax("0"))),
+            new DeclarationSyntax(
+                "u8",
+                visibleYName,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new ConstantSyntax("0"))),
         };
 
-        var sameCameraPage = And(
+        var sameCameraXPage = And(
             new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
             new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
-        var nextCameraPage = And(
+        var nextCameraXPage = And(
             new BinaryExpressionSyntax(
                 PoolField(pool.Name, indexName, "xHi"),
                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), new ConstantSyntax("1"), Operator.Get("+")),
                 Operator.Equal),
             new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan));
-        ExpressionSyntax visible = Or(sameCameraPage, nextCameraPage);
+        ExpressionSyntax visibleXExpression = Or(sameCameraXPage, nextCameraXPage);
         if (screenWidth < 256)
         {
-            visible = And(
-                visible,
+            visibleXExpression = And(
+                visibleXExpression,
                 new BinaryExpressionSyntax(new IdentifierSyntax(screenX), new ConstantSyntax(screenWidth.ToString(CultureInfo.InvariantCulture)), Operator.LessThan));
         }
+        declarations.Add(new IfElseSyntax(
+            visibleXExpression,
+            new BlockSyntax([new ExpressionStatementSyntax(new AssignmentSyntax(new IdentifierLValue(visibleXName), "=", new ConstantSyntax("1")))]),
+            Maybe<BlockSyntax>.None));
 
-        return new ActorScreenProjection(declarations, screenXIdentifier, visible);
+        var sameCameraYPage = And(
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.Get(">=")));
+        var nextCameraYPage = And(
+            new BinaryExpressionSyntax(
+                PoolField(pool.Name, indexName, "yHi"),
+                new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), new ConstantSyntax("1"), Operator.Get("+")),
+                Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan));
+        ExpressionSyntax visibleYExpression = Or(sameCameraYPage, nextCameraYPage);
+        if (screenHeight < 256)
+        {
+            visibleYExpression = And(
+                visibleYExpression,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenY), new ConstantSyntax(screenHeight.ToString(CultureInfo.InvariantCulture)), Operator.LessThan));
+        }
+        declarations.Add(new IfElseSyntax(
+            visibleYExpression,
+            new BlockSyntax([new ExpressionStatementSyntax(new AssignmentSyntax(new IdentifierLValue(visibleYName), "=", new ConstantSyntax("1")))]),
+            Maybe<BlockSyntax>.None));
+
+        return new ActorScreenProjection(
+            declarations,
+            screenXIdentifier,
+            screenYIdentifier,
+            And(
+                new BinaryExpressionSyntax(new IdentifierSyntax(visibleXName), new ConstantSyntax("0"), Operator.NotEqual),
+                new BinaryExpressionSyntax(new IdentifierSyntax(visibleYName), new ConstantSyntax("0"), Operator.NotEqual)));
     }
 
     private static IReadOnlyList<StatementSyntax> RuntimeSpawnActivationStatements(ActorSpawnLayer layer, string prefix, int screenWidth)
@@ -1259,6 +1344,7 @@ public static class ActorFrameworkLowerer
         yield return SpawnValueDeclaration(layer, prefix, indexName, "x");
         yield return SpawnValueDeclaration(layer, prefix, indexName, "xHi");
         yield return SpawnValueDeclaration(layer, prefix, indexName, "y");
+        yield return SpawnValueDeclaration(layer, prefix, indexName, "yHi");
         foreach (var fieldName in SpawnInitialFieldNames)
         {
             yield return SpawnValueDeclaration(layer, prefix, indexName, fieldName);
@@ -1285,6 +1371,7 @@ public static class ActorFrameworkLowerer
         yield return FieldAssignment(layer.PoolName, slotName, "x", "=", new IdentifierSyntax($"{prefix}_x_value"));
         yield return FieldAssignment(layer.PoolName, slotName, "xHi", "=", new IdentifierSyntax($"{prefix}_xHi_value"));
         yield return FieldAssignment(layer.PoolName, slotName, "y", "=", new IdentifierSyntax($"{prefix}_y_value"));
+        yield return FieldAssignment(layer.PoolName, slotName, "yHi", "=", new IdentifierSyntax($"{prefix}_yHi_value"));
         yield return FieldAssignment(layer.PoolName, slotName, "vx", "=", new IdentifierSyntax($"{prefix}_vx_value"));
         yield return FieldAssignment(layer.PoolName, slotName, "vy", "=", new IdentifierSyntax($"{prefix}_vy_value"));
         yield return FieldAssignment(layer.PoolName, slotName, "state", "=", new IdentifierSyntax($"{prefix}_state_value"));
@@ -1341,7 +1428,7 @@ public static class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(new IdentifierSyntax(screenX), new ConstantSyntax(windowWidth.ToString(CultureInfo.InvariantCulture)), Operator.LessThan));
         }
 
-        return new ActorScreenProjection(declarations, new IdentifierSyntax(screenX), visible);
+        return new ActorScreenProjection(declarations, new IdentifierSyntax(screenX), new IdentifierSyntax(screenX), visible);
     }
 
     private static IReadOnlyList<StatementSyntax> SpawnCameraXDeclarations(string prefix, int windowLeft)
@@ -1446,6 +1533,19 @@ public static class ActorFrameworkLowerer
             Operator.Get(subtract ? "-" : "+"));
     }
 
+    private static ExpressionSyntax OffsetExpression(ExpressionSyntax expression, int offset, bool subtract)
+    {
+        if (offset == 0)
+        {
+            return expression;
+        }
+
+        return new BinaryExpressionSyntax(
+            expression,
+            new ConstantSyntax(offset.ToString(CultureInfo.InvariantCulture)),
+            Operator.Get(subtract ? "-" : "+"));
+    }
+
     private static ConstantSyntax Constant(int value)
     {
         return new ConstantSyntax(value.ToString(CultureInfo.InvariantCulture));
@@ -1541,6 +1641,8 @@ public static class ActorFrameworkLowerer
 
         return (value & 0xFF, value >> 8);
     }
+
+    private static (int Low, int High) SplitWorldY(int value, string context) => SplitWorldX(value, context);
 
     private static ExpressionSyntax RewriteExpression(ExpressionSyntax expression, ActorFrameworkState state)
     {
@@ -1750,6 +1852,7 @@ public static class ActorFrameworkLowerer
         yield return "x";
         yield return "xHi";
         yield return "y";
+        yield return "yHi";
         foreach (var fieldName in SpawnInitialFieldNames)
         {
             yield return fieldName;
@@ -1776,7 +1879,8 @@ public static class ActorFrameworkLowerer
             yield return SpawnLookupFunction(layer, "kind", spawn => new IdentifierSyntax(spawn.Kind));
             yield return SpawnLookupFunction(layer, "x", spawn => new ConstantSyntax(SplitWorldX(spawn.X, "actor spawn X").Low.ToString(CultureInfo.InvariantCulture)));
             yield return SpawnLookupFunction(layer, "xHi", spawn => new ConstantSyntax(SplitWorldX(spawn.X, "actor spawn X").High.ToString(CultureInfo.InvariantCulture)));
-            yield return SpawnLookupFunction(layer, "y", spawn => new ConstantSyntax(CheckedByte(spawn.Y, "actor spawn Y").ToString(CultureInfo.InvariantCulture)));
+            yield return SpawnLookupFunction(layer, "y", spawn => new ConstantSyntax(SplitWorldY(spawn.Y, "actor spawn Y").Low.ToString(CultureInfo.InvariantCulture)));
+            yield return SpawnLookupFunction(layer, "yHi", spawn => new ConstantSyntax(SplitWorldY(spawn.Y, "actor spawn Y").High.ToString(CultureInfo.InvariantCulture)));
             foreach (var fieldName in SpawnInitialFieldNames)
             {
                 yield return SpawnLookupFunction(layer, fieldName, spawn => new ConstantSyntax(SpawnInitialFieldValue(spawn, fieldName).ToString(CultureInfo.InvariantCulture)));
@@ -1859,6 +1963,7 @@ public static class ActorFrameworkLowerer
                 new StructFieldSyntax("u8", "x"),
                 new StructFieldSyntax("u8", "xHi"),
                 new StructFieldSyntax("u8", "y"),
+                new StructFieldSyntax("u8", "yHi"),
                 new StructFieldSyntax("i8", "vx"),
                 new StructFieldSyntax("i8", "vy"),
                 new StructFieldSyntax("u8", "state"),
@@ -2060,7 +2165,7 @@ public static class ActorFrameworkLowerer
             new(methodName, poolName, mapPath, layerName, windowLeft, windowWidth);
     }
 
-    private sealed record ActorScreenProjection(IReadOnlyList<StatementSyntax> Declarations, IdentifierSyntax ScreenX, ExpressionSyntax Visible);
+    private sealed record ActorScreenProjection(IReadOnlyList<StatementSyntax> Declarations, IdentifierSyntax ScreenX, IdentifierSyntax ScreenY, ExpressionSyntax Visible);
 
     private sealed record KindBranch(string Kind, BlockSyntax Block);
 

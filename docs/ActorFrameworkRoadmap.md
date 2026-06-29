@@ -337,8 +337,10 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     AF-1.3 mixed-width fields or explicit split hi/lo byte fields (no heap).
     The implemented model keeps the existing `x` field as the low byte and adds
     `xHi` as the high byte so existing byte-sized actor code stays source-compatible.
-  - [x] Draw actors camera-relative (`screenX = worldX - cameraX`) instead of
-    drawing at a raw screen byte. The one-slot runner path also moves
+    The runner free-scroll G7b slice applies the same split model to actor Y
+    (`y` plus `yHi`) for spawns and runtime positions beyond 255 px.
+  - [x] Draw actors camera-relative (`screenX = worldX - cameraX`,
+    `screenY = worldY - cameraY`) instead of drawing at a raw screen byte. The one-slot runner path also moves
     inactive/off-window sprite slots offscreen so stale hardware sprite entries
     are not left behind.
   - [x] Prove the draw loop stays a grouped loop with direct branches.

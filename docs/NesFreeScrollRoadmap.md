@@ -90,9 +90,10 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   `CameraMovementStreamsBackground = false` for preloaded camera movement.
 - `Sdk2DOperation.StreamMapRow` lowers on NES for explicit source-authored row
   spans and is also used by the shared capability/budget model.
-- `samples/nes-free-scroll/freescroll.rs` remains the NES four-screen behavioral
-  proof and now also builds for Game Boy, where the same diagonal source exercises
-  the GB staggered one-edge-per-VBlank streaming policy.
+- `samples/nes-free-scroll/freescroll.rs` remains the source-authored NES four-screen
+  behavioral proof and now also builds for Game Boy, where the same diagonal source
+  exercises the GB staggered one-edge-per-VBlank streaming policy. `samples/tiled-free-scroll/free-scroll.rs`
+  is the matching Tiled `world.Load(...)` diagonal proof inside the 64x60 four-screen surface.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).
 
@@ -319,20 +320,20 @@ requirement.
     **and** row tables available to NES streaming.
   - [x] Respect the current one-byte source-column runtime limit (or lift it
     deliberately); document the maximum free-scroll level size per substrate.
-- Verify: the free-scroll sample loads a Tiled map and scrolls in both axes;
-  Game Boy parity unaffected.
+- Verify: `samples/tiled-free-scroll/free-scroll.rs` loads a Tiled map and scrolls
+  in both axes; Game Boy parity unaffected.
 
 ---
 
 ## Phase NF-9 — Acceptance: sample + tests + cross-check
 
 - Layer: samples + validation + docs.
-- Files: `samples/nes-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
+- Files: `samples/nes-free-scroll/`, `samples/tiled-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
   - [x] Golden-byte tests for the four-screen header, scroll-register writes,
     explicit row streaming, runtime row streaming, attribute refresh, and the
-    shared runner staying on the horizontal camera path.
+    shared runner using its playable 2-axis dead-zone camera path.
   - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
     and `read_ppu_state` assert both axes move and the four nametables stay
     distinct.
@@ -357,9 +358,9 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 
 ## Acceptance criteria (free-scroll milestone)
 
-- `samples/nes-free-scroll/freescroll.rs` scrolls **diagonally** (both axes at
-  once) with no corner artifacts, proven behaviorally through the four-screen
-  `nes_debug` MCP, not just compile level.
+- `samples/nes-free-scroll/freescroll.rs` and `samples/tiled-free-scroll/free-scroll.rs`
+  scroll **diagonally** (both axes at once) with no corner artifacts, proven behaviorally
+  through the four-screen `nes_debug` MCP, not just compile level.
 - Levels up to 512x480 work with no runtime streaming (NF-3). Larger
   source-authored worlds stream columns/rows with the staggered one-edge-per-
   VBlank policy; NF-10 remains only for mapper-backed scale, banking, and HUD IRQs.

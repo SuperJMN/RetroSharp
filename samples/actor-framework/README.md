@@ -7,11 +7,12 @@ same `actors.rs` source builds for Game Boy and NES and exercises a fixed actor
 pool, three declarative enemy definitions, Tiled object-layer spawn data
 kept as generated ROM tables, runtime camera-window activation into two fixed
 slots, shared `enemies.Update()`, tile helpers, and animation-backed
-`enemies.Draw()` while the camera scrolls horizontally. Actor X positions are
-world-space bytes split as low `x` plus high `xHi`; draw,
-`enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and spawn activation
-project each actor or spawn to `screenX = worldX - cameraX` and cull actors
-outside the current camera window, including the Koopa spawned beyond X=255.
+`enemies.Draw()` while the camera scrolls horizontally. Actor world positions
+use split byte storage (`x`/`xHi` and `y`/`yHi`); draw,
+`enemies.TouchTiles(...)`, and `enemies.LandOnTiles(...)` project actors to
+`screenX = worldX - cameraX` and `screenY = worldY - cameraY` before culling or
+collision. Spawn activation still uses the camera X window, including the Koopa
+spawned beyond X=255.
 
 Build the Game Boy ROM:
 

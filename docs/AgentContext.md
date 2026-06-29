@@ -22,11 +22,12 @@ This document preserves project knowledge that previously lived only in agent me
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
   diagonal camera movement is proven by `samples/nes-free-scroll/freescroll.rs`
-  with staggered one-edge-per-VBlank column/row commits. NES has a
-  four-screen free-scroll path with preloaded 64x60 movement, horizontal column
-  streaming for wider worlds, and staggered vertical row plus zero-palette
-  attribute streaming for source-authored worlds taller than the buffer. NF-10
-  mapper-backed scale and IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
+  and `samples/tiled-free-scroll/free-scroll.rs` with staggered one-edge-per-VBlank
+  column/row commits. NES has a four-screen free-scroll path with preloaded 64x60
+  movement, Tiled diagonal coverage inside that surface, horizontal column streaming
+  for wider worlds, and staggered vertical row plus zero-palette attribute streaming
+  for source-authored worlds taller than the buffer. NF-10 mapper-backed scale and
+  IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 
 ## Project Shape
 
@@ -70,8 +71,9 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
   `enemy.*` helpers, and pool helper calls lower before target emission to fixed
   `Actor` arrays, constants, generated spawn helpers, `used[]`, direct `kind`
   branches, and existing SDK calls such as `sprite.Draw`, `camera.AabbTiles`,
-  `camera.AabbHitTop`, and `animation.Frame`. Do not add actor-specific
-  `Sdk2DOperation` cases for this slice.
+  `camera.AabbHitTop`, `camera.ScreenAabbTiles`, `camera.ScreenAabbHitTop`,
+  and `animation.Frame`. Do not add actor-specific target intrinsics for this
+  slice.
 
 ## Portability Lowering Roadmap (epic #106)
 
@@ -192,7 +194,7 @@ Suggested next steps for the next agent, in order:
 - Sprite PNG paths can be generic. `sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
-- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; fixed-screen runner actors should use `camera.AabbTiles(...)` for boolean overlap and `camera.AabbHitTop(...)` for landing tile-edge facts so X stays aligned with the visible camera after long scrolls.
+- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; runner actors should project current screen X/Y from actor/player world position minus camera position, then pass byte-backed screen coordinates to `camera.AabbTiles(...)`/`camera.AabbHitTop(...)` or the fully screen-space `camera.ScreenAabbTiles(...)`/`camera.ScreenAabbHitTop(...)` forms so collision stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
@@ -220,8 +222,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
-- The shared runner is intentionally horizontal on both Game Boy and NES. Diagonal/free scroll is
-  demonstrated by `samples/nes-free-scroll/freescroll.rs`; do not silently degrade unsupported
+- The shared runner now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a
+  48x96 tile world. It keeps player collision keyed from the projected screen X and forces vertical
+  plus horizontal camera movement on both Game Boy and NES; do not silently degrade unsupported
   camera axes in the collector.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
@@ -239,6 +242,7 @@ Important current behavior:
 - Non-empty `world` cells overlay the background at the same Tiled coordinate.
 - Empty `world` cells keep the background tile underneath.
 - If `retrosharpWorldY` and `retrosharpStreamY` move the playable world slice, the background layer is shifted by the same amount so Tiled layers stay visually aligned.
+- Game Boy Tiled maps loaded through `world.Load(...)` can keep a world taller than the 32-row background buffer. Startup clips the initial preload to the circular tilemap, while the full imported height stays in ROM row tables for vertical camera streaming.
 - Background rows above the streamed world band (GB rows `0..streamY-1`) are emitted as full-width source-map rows and streamed horizontally by the camera, so background decorations above the band scroll with the world instead of freezing/repeating every 32 tiles.
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.

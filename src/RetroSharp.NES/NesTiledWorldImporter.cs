@@ -25,8 +25,8 @@ internal sealed record NesTiledWorld(
 // owns the NES specifics: decoding tileset images, generating and deduplicating
 // 2bpp planar CHR tiles, expanding source tiles into 8x8 cells, and composing the
 // background under blank world cells. The current NES runtime streams horizontal
-// worlds through a two-nametable 64-column buffer; vertical streaming remains out
-// of scope.
+// worlds through a two-nametable 64-column buffer, and vertical camera programs
+// use the shared four-screen background buffer plus row streaming when needed.
 internal static class NesTiledWorldImporter
 {
     public static NesTiledWorld Load(string path, int firstGeneratedTile)
@@ -34,11 +34,6 @@ internal static class NesTiledWorldImporter
         var logical = LogicalTiledMapImporter.Load(path);
         var geometry = logical.Geometry;
         var displayName = Path.GetFileName(path);
-
-        if (geometry.StreamY < 0 || geometry.StreamY + geometry.Height > 30)
-        {
-            throw new InvalidOperationException($"Tiled map '{displayName}' world slice must fit the visible 30-row NES nametable.");
-        }
 
         var tilesets = logical.Tilesets.Select(NesTileset.FromLogical).ToArray();
         var palettePlan = NesBackgroundPalettePlan.Derive(logical, tilesets, displayName);

@@ -2,7 +2,11 @@ namespace RetroSharp.GameBoy.Tests;
 
 using System.IO;
 using System.Linq;
+using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
+using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class GameBoyRunnerAudioTempoTests
@@ -46,6 +50,226 @@ public sealed class GameBoyRunnerAudioTempoTests
         var tracked = File.ReadAllBytes(Path.Combine(runnerDirectory, "runner.gb"));
 
         Assert.Equal(tracked, compiled);
+    }
+
+    [Fact]
+    public void Runner_dead_zone_camera_stays_still_then_follows_right_input()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        cpu.RunFrames(130);
+        var idleScx = cpu.IoRegister(0xFF43);
+        var idleScy = cpu.IoRegister(0xFF42);
+
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        cpu.RunFrames(148);
+        cpu.Held.Add("a");
+        cpu.RunFrames(170);
+        cpu.Held.Remove("a");
+        cpu.RunFrames(185);
+        var scxAfterFirstRun = cpu.IoRegister(0xFF43);
+        cpu.Held.Add("a");
+        cpu.RunFrames(250);
+        var scxAfterSecondRun = cpu.IoRegister(0xFF43);
+
+        Assert.Equal(0, idleScx);
+        Assert.True(idleScy > 0, "Runner should use the vertical dead-zone camera path even before horizontal input.");
+        Assert.True(scxAfterFirstRun > idleScx, "Runner should start scrolling right after Mario leaves the horizontal dead-zone.");
+        Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following right input through the next ramp jump.");
+    }
+
+    [Fact]
+    public void Runner_free_scroll_camera_follows_platform_climb_in_two_axes()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        var frame = 0;
+
+        Run(cpu, ref frame, 130);
+        var idle = Sample(cpu);
+
+        Run(cpu, ref frame, 18, "right", "b");
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        var firstPlatform = Sample(cpu);
+
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        var secondPlatform = Sample(cpu);
+
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 11, "right", "b");
+        var thirdPlatform = Sample(cpu);
+
+        Assert.True(idle.WorldY >= 190, $"Runner should settle on the lower floor before climbing; observed worldY={idle.WorldY}.");
+
+        Assert.True(firstPlatform.Scx > idle.Scx, $"Expected horizontal scroll on first climb; idle={idle.Scx}, first={firstPlatform.Scx}.");
+        Assert.True(firstPlatform.Scy < idle.Scy, $"Expected upward vertical scroll on first climb; idle={idle.Scy}, first={firstPlatform.Scy}.");
+        Assert.True(firstPlatform.WorldY <= 165, $"Expected Mario on the first elevated platform; observed worldY={firstPlatform.WorldY}.");
+
+        Assert.True(secondPlatform.Scx > firstPlatform.Scx, $"Expected horizontal scroll to continue on second climb; first={firstPlatform.Scx}, second={secondPlatform.Scx}.");
+        Assert.True(secondPlatform.Scy < firstPlatform.Scy, $"Expected camera to keep following upward on second climb; first={firstPlatform.Scy}, second={secondPlatform.Scy}.");
+        Assert.True(secondPlatform.WorldY <= 132, $"Expected Mario on the second elevated platform; observed worldY={secondPlatform.WorldY}.");
+
+        Assert.True(thirdPlatform.Scx > secondPlatform.Scx, $"Expected horizontal scroll to continue on third climb; second={secondPlatform.Scx}, third={thirdPlatform.Scx}.");
+        Assert.True(thirdPlatform.Scy < secondPlatform.Scy, $"Expected camera to keep following upward on third climb; second={secondPlatform.Scy}, third={thirdPlatform.Scy}.");
+        Assert.True(thirdPlatform.WorldY <= 100, $"Expected Mario on the third elevated platform; observed worldY={thirdPlatform.WorldY}.");
+
+        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
+        {
+            cpu.Held.Clear();
+            foreach (var button in held)
+            {
+                cpu.Held.Add(button);
+            }
+
+            frame += frames;
+            cpu.RunFrames(frame);
+        }
+
+        static (int Scx, int Scy, int WorldX, int WorldY) Sample(GameBoyTestCpu cpu)
+        {
+            var scx = cpu.IoRegister(0xFF43);
+            var scy = cpu.IoRegister(0xFF42);
+            var worldX = scx + cpu.Oam(0xFE01) - 8;
+            var worldY = scy + cpu.Oam(0xFE00) - 16;
+            return (scx, scy, worldX, worldY);
+        }
+    }
+
+    [Fact]
+    public void Runner_free_scroll_keeps_visible_game_boy_background_tiles_aligned_with_world_map()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var program = CompileVideoProgram(source, runnerDirectory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory))
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+        var frame = 0;
+
+        Run(cpu, ref frame, 130);
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "idle");
+
+        Run(cpu, ref frame, 18, "right", "b");
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "first platform diagonal scroll");
+
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "second platform diagonal scroll");
+
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 11, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "third platform diagonal scroll");
+
+        Run(cpu, ref frame, 30, "right", "b", "a");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "upper pyramid diagonal climb");
+
+        Run(cpu, ref frame, 20, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "upper pyramid vertical scroll");
+
+        Run(cpu, ref frame, 30, "right", "b", "a");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "top pyramid diagonal climb");
+
+        Run(cpu, ref frame, 20, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "top pyramid vertical scroll");
+
+        Run(cpu, ref frame, 75, "right", "b");
+        AdvanceToAppliedCamera(cpu, ref frame);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "right edge high scroll");
+
+        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
+        {
+            cpu.Held.Clear();
+            foreach (var button in held)
+            {
+                cpu.Held.Add(button);
+            }
+
+            frame += frames;
+            cpu.RunFrames(frame);
+        }
+
+        static void AdvanceToAppliedCamera(GameBoyTestCpu cpu, ref int frame)
+        {
+            cpu.RunUntilIoRegisterWrites(0xFF42, 1, maxInstructions: 50_000_000);
+            frame = Math.Max(frame, (int)((cpu.Cycles + 70223) / 70224));
+        }
+
+        static void AssertVisibleTilesMatchWorldMap(GameBoyTestCpu cpu, WorldMap2D worldMap, string label)
+        {
+            var scx = cpu.IoRegister(0xFF43);
+            var scy = cpu.IoRegister(0xFF42);
+            var cameraX = cpu.Wram(0xC0E0) | cpu.Wram(0xC0E1) << 8;
+            var cameraY = cpu.Wram(0xC0E8) | cpu.Wram(0xC0E9) << 8;
+            var firstBufferColumn = scx / 8;
+            var firstBufferRow = scy / 8;
+            var mismatches = new List<string>();
+
+            for (var screenRow = 0; screenRow < 18; screenRow++)
+            {
+                var sourceRow = (cameraY + screenRow * 8) / 8 % worldMap.Height;
+                var bufferRow = (firstBufferRow + screenRow) % 32;
+                for (var screenColumn = 0; screenColumn < 20; screenColumn++)
+                {
+                    var sourceColumn = (cameraX + screenColumn * 8) / 8 % worldMap.Width;
+                    var bufferColumn = (firstBufferColumn + screenColumn) % 32;
+                    var expected = (byte)worldMap.TileIdAt(sourceColumn, sourceRow);
+                    var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
+                    if (actual != expected)
+                    {
+                        mismatches.Add(
+                            $"{label}: camera=({cameraX},{cameraY}) scx={scx} scy={scy} screen=({screenColumn},{screenRow}) "
+                            + $"state={CameraState(cpu)} "
+                            + $"buffer=({bufferColumn},{bufferRow}) source=({sourceColumn},{sourceRow}) "
+                            + $"expected=0x{expected:X2} actual=0x{actual:X2}");
+                        if (mismatches.Count >= 12)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (mismatches.Count >= 12)
+                {
+                    break;
+                }
+            }
+
+            Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+        }
+
+        static string CameraState(GameBoyTestCpu cpu)
+        {
+            return $"fine=({cpu.Wram(0xC0E2)},{cpu.Wram(0xC0EA)}) "
+                + $"screenLeft={cpu.Wram(0xC0E3)} bgLeft={cpu.Wram(0xC0E5)} bgRight={cpu.Wram(0xC0E4)} "
+                + $"srcLeft={cpu.Wram(0xC0E7)} srcRight={cpu.Wram(0xC0E6)} "
+                + $"topBg={cpu.Wram(0xC0EB)} bottomBg={cpu.Wram(0xC0EC)} "
+                + $"topSrc={cpu.Wram(0xC0ED)} bottomSrc={cpu.Wram(0xC0EE)} "
+                + $"pending={cpu.Wram(0xC119)}/{cpu.Wram(0xC11A)}/{cpu.Wram(0xC11B)} "
+                + $"diagCol={cpu.Wram(0xC11F)}/{cpu.Wram(0xC120)}/{cpu.Wram(0xC121)} "
+                + $"diagRow={cpu.Wram(0xC122)}/{cpu.Wram(0xC123)}/{cpu.Wram(0xC124)}";
+        }
     }
 
     [Fact]
@@ -117,6 +341,56 @@ public sealed class GameBoyRunnerAudioTempoTests
             + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
     }
 
+    [Fact]
+    public void Runner_streams_background_tilemap_only_during_vblank_while_climbing()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        var frame = 0;
+
+        Run(cpu, ref frame, 130);
+        var startupWrites = cpu.VramWrites.Count;
+
+        Run(cpu, ref frame, 18, "right", "b");
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        Run(cpu, ref frame, 30, "right", "b");
+        Run(cpu, ref frame, 35, "right", "b", "a");
+        Run(cpu, ref frame, 30, "right", "b");
+        Run(cpu, ref frame, 35, "right", "b", "a");
+        Run(cpu, ref frame, 30, "right", "b");
+
+        var runtimeTilemapWrites = cpu.VramWrites
+            .Skip(startupWrites)
+            .Where(write => write is { Address: >= 0x9800 and < 0x9C00, LcdEnabled: true })
+            .ToArray();
+        var unsafeWrites = runtimeTilemapWrites
+            .Where(write => write.Ly is < 144 or > 153)
+            .Take(12)
+            .ToArray();
+
+        Assert.NotEmpty(runtimeTilemapWrites);
+        Assert.True(
+            unsafeWrites.Length == 0,
+            "Runner wrote streamed background tiles after VBlank ended while climbing: "
+            + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
+
+        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
+        {
+            cpu.Held.Clear();
+            foreach (var button in held)
+            {
+                cpu.Held.Add(button);
+            }
+
+            frame += frames;
+            cpu.RunFrames(frame);
+        }
+    }
+
     private static byte[] CompileCameraProgram(string columns, bool move)
     {
         var movement = move ? "camera_move_right();" : "";
@@ -133,6 +407,18 @@ public sealed class GameBoyRunnerAudioTempoTests
                        }
                        """;
         return GameBoyRomCompiler.CompileSource(source);
+    }
+
+    private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
+    {
+        var parse = new SomeParser().Parse(source);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        var lowered = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
     }
 
     private static string LocateRunnerDirectory()
