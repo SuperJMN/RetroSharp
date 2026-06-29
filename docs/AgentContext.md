@@ -193,7 +193,7 @@ Suggested next steps for the next agent, in order:
 - Sprite PNG paths can be generic. `sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
-- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; fixed-screen runner actors should use `camera.AabbTiles(...)` for boolean overlap and `camera.AabbHitTop(...)` for landing tile-edge facts so X stays aligned with the visible camera after long scrolls.
+- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; runner actors should project their current screen X from actor/player world position minus camera position, then pass that byte-backed screen X to `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` so collision stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
@@ -221,10 +221,11 @@ Pipeline shape (two phases, after #105 partial extraction):
   free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
-- The shared runner is intentionally horizontal on both Game Boy and NES. Diagonal/free scroll is
+- The shared runner now uses a 2-axis dead-zone camera over the current 34x15 Tiled map and keeps
+  player collision keyed from the projected screen X. Larger diagonal/free-scroll scale is still
   demonstrated by `samples/nes-free-scroll/freescroll.rs` and Tiled diagonal coverage by
-  `samples/tiled-free-scroll/free-scroll.rs`; do not silently degrade unsupported camera axes
-  in the collector.
+  `samples/tiled-free-scroll/free-scroll.rs`; do not silently degrade unsupported camera axes in
+  the collector.
 - Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
   and per-pixel layer flattening stays per target because the blank-cell decision depends on the
   generated pattern.

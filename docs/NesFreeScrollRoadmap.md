@@ -333,7 +333,7 @@ requirement.
 - Steps:
   - [x] Golden-byte tests for the four-screen header, scroll-register writes,
     explicit row streaming, runtime row streaming, attribute refresh, and the
-    shared runner staying on the horizontal camera path.
+    shared runner using its playable 2-axis dead-zone camera path.
   - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
     and `read_ppu_state` assert both axes move and the four nametables stay
     distinct.

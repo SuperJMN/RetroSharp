@@ -49,6 +49,30 @@ public sealed class GameBoyRunnerAudioTempoTests
     }
 
     [Fact]
+    public void Runner_dead_zone_camera_stays_still_then_follows_right_input()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        cpu.RunFrames(30);
+        var idleScx = cpu.IoRegister(0xFF43);
+        var idleScy = cpu.IoRegister(0xFF42);
+
+        cpu.Held.Add("right");
+        cpu.RunFrames(70);
+        var scxAfterFirstRun = cpu.IoRegister(0xFF43);
+        cpu.RunFrames(110);
+        var scxAfterSecondRun = cpu.IoRegister(0xFF43);
+
+        Assert.Equal(0, idleScx);
+        Assert.True(idleScy > 0, "Runner should use the vertical dead-zone camera path even before horizontal input.");
+        Assert.True(scxAfterFirstRun > idleScx, "Runner should start scrolling right after Mario leaves the horizontal dead-zone.");
+        Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following sustained right input.");
+    }
+
+    [Fact]
     public void Deferred_camera_commit_streams_columns_into_vram_during_apply()
     {
         // The deferred-commit camera streaming only writes VRAM from camera.Apply (during the

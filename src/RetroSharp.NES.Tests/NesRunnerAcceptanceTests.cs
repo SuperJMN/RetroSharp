@@ -27,19 +27,20 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
-    public void Nes_runner_keeps_horizontal_camera_path()
+    public void Nes_runner_uses_dead_zone_2d_camera_path()
     {
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var runnerDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
         var operations = NesRomCompiler.CollectSdkOperations(source, runnerDirectory);
+        Assert.Equal(2, operations.OfType<Sdk2DOperation.SetCameraPosition>().Count());
         Assert.All(
             operations.OfType<Sdk2DOperation.SetCameraPosition>(),
-            operation => Assert.Equal(ScrollAxes.Horizontal, operation.Axes));
+            operation => Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, operation.Axes));
 
         var rom = NesRomCompiler.CompileSource(source, runnerDirectory);
-        Assert.Equal(0x00, rom[6] & 0x08);
+        Assert.Equal(0x08, rom[6] & 0x08);
     }
 
     [Fact]
