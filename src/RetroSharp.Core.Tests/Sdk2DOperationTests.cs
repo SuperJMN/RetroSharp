@@ -269,7 +269,7 @@ public sealed class Sdk2DOperationTests
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
-            "Target 'gb' supports 32 background tile writes per frame, but 64 are required for moving the camera diagonally (32 column tiles + 32 row tiles).",
+            "Target 'gb' supports 32 background tile writes per frame, but 40 are required for moving the camera diagonally (19 column tiles + 21 row tiles).",
             exception.Message);
     }
 
@@ -278,7 +278,7 @@ public sealed class Sdk2DOperationTests
     {
         var target = FullCapabilities() with
         {
-            MaxBackgroundTileWritesPerFrame = 32,
+            MaxBackgroundTileWritesPerFrame = 21,
             StaggersCameraMovementStreams = true,
         };
 
@@ -295,7 +295,7 @@ public sealed class Sdk2DOperationTests
     {
         var target = FullCapabilities() with
         {
-            MaxBackgroundTileWritesPerFrame = 31,
+            MaxBackgroundTileWritesPerFrame = 20,
             StaggersCameraMovementStreams = true,
         };
 
@@ -308,7 +308,7 @@ public sealed class Sdk2DOperationTests
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
-            "Target 'gb' supports 31 background tile writes per frame, but 32 are required for moving the camera diagonally with staggered streaming (max of 32 column tiles and 32 row tiles).",
+            "Target 'gb' supports 20 background tile writes per frame, but 21 are required for moving the camera diagonally with staggered streaming (max of 19 column tiles and 21 row tiles).",
             exception.Message);
     }
 

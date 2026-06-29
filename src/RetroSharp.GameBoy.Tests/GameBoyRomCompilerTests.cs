@@ -1286,8 +1286,9 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]), "camera_move_left should queue the left background edge column for deferred streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]), "camera_apply should dispatch on the queued stream kind.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x28, 0xC1]), "camera_apply should seed the column stream from the current top source row.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x47, 0xFA, 0x28, 0xC1, 0x4F]), "camera_apply should stream the queued source column using the row scratch cursor.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x4F, 0xFA, 0x26, 0xC1]), "camera_apply should stream the queued column into the circular background edge.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x28, 0xC1, 0x5F, 0x16, 0x00, 0x21]), "camera_apply should resolve the top source row through the row-pointer table.");
+        Assert.True(ContainsSequence(rom, [0x1A, 0x77, 0x7B, 0xC6, 0x10, 0x5F]), "camera_apply should stream source-column rows through a compact DE-to-HL loop.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x4F, 0xFA, 0xEB, 0xC0]), "camera_apply should stream the queued column into the circular background edge.");
     }
 
     [Fact]
@@ -4879,7 +4880,7 @@ public class GameBoyRomCompilerTests
             ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]),
             "a leftward crossing should queue the left background edge column for deferred streaming.");
         Assert.True(
-            ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xC6, 0x00, 0x6F, 0x26, 0x98]),
+            ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x6F, 0x26, 0x98, 0x0E]),
             "camera.Apply should stream the queued background row above the band into GB row 0 (0x9800).");
 
         // The deferred commit replaces the old per-crossing extra WaitVBlank: streaming now happens
@@ -4892,7 +4893,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Camera_horizontal_streaming_fills_configured_world_rows_beyond_the_visible_screen()
+    public void Camera_horizontal_streaming_fills_configured_visible_world_rows()
     {
         const string source = """
                               void define_world() {
@@ -4916,14 +4917,14 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.True(
-            ContainsSequence(rom, [0x3E, 0x0E, 0xEA, 0x29, 0xC1]),
-            "camera horizontal streaming should cover every configured world row, including hidden rows in the circular BG buffer.");
+            ContainsSequence(rom, [0x0E, 0x0E, 0x1A, 0x77]),
+            "camera horizontal streaming should cover the configured visible world rows when fewer than the screen-plus-partial edge are configured.");
         Assert.True(
-            ContainsSequence(rom, [0xFA, 0x28, 0xC1, 0xC6, 0x01, 0xEA, 0x28, 0xC1]),
-            "camera horizontal streaming should advance the source-row scratch cursor while filling the column.");
+            ContainsSequence(rom, [0x1A, 0x77, 0x7B, 0xC6, 0x02, 0x5F]),
+            "camera horizontal streaming should advance the source pointer by the map width while filling the column.");
         Assert.True(
-            ContainsSequence(rom, [0xFA, 0x26, 0xC1, 0xC6, 0x01, 0xEA, 0x26, 0xC1]),
-            "camera horizontal streaming should advance the target-row scratch cursor while filling the circular BG column.");
+            ContainsSequence(rom, [0x7D, 0xC6, 0x20, 0x6F]),
+            "camera horizontal streaming should advance the target pointer by one GB background row.");
     }
 
     [Fact]

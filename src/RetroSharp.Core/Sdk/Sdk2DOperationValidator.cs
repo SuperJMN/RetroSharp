@@ -380,10 +380,10 @@ public static class Sdk2DOperationValidator
         }
 
         var columnWrites = axes.HasFlag(ScrollAxes.Horizontal)
-            ? (capabilities.SupportsFineScrollY ? capabilities.BackgroundBufferTiles.Height : capabilities.ScreenTiles.Height)
+            ? (capabilities.SupportsFineScrollY ? capabilities.ScreenTiles.Height + 1 : capabilities.ScreenTiles.Height)
             : 0;
         var rowWrites = axes.HasFlag(ScrollAxes.Vertical)
-            ? (capabilities.SupportsFineScrollX ? capabilities.BackgroundBufferTiles.Width : capabilities.ScreenTiles.Width)
+            ? (capabilities.SupportsFineScrollX ? capabilities.ScreenTiles.Width + 1 : capabilities.ScreenTiles.Width)
             : 0;
         var requiredWrites = RequiredCameraMovementWrites(capabilities, axes, columnWrites, rowWrites);
         if (requiredWrites == 0)

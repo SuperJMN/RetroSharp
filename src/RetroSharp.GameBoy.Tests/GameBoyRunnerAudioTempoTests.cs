@@ -154,6 +154,7 @@ public sealed class GameBoyRunnerAudioTempoTests
         var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory))
         {
             CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
         };
         var frame = 0;
 
@@ -338,6 +339,56 @@ public sealed class GameBoyRunnerAudioTempoTests
             unsafeWrites.Length == 0,
             "Runner wrote OAM after VBlank ended: "
             + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
+    }
+
+    [Fact]
+    public void Runner_streams_background_tilemap_only_during_vblank_while_climbing()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        var frame = 0;
+
+        Run(cpu, ref frame, 130);
+        var startupWrites = cpu.VramWrites.Count;
+
+        Run(cpu, ref frame, 18, "right", "b");
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        Run(cpu, ref frame, 30, "right", "b");
+        Run(cpu, ref frame, 35, "right", "b", "a");
+        Run(cpu, ref frame, 30, "right", "b");
+        Run(cpu, ref frame, 35, "right", "b", "a");
+        Run(cpu, ref frame, 30, "right", "b");
+
+        var runtimeTilemapWrites = cpu.VramWrites
+            .Skip(startupWrites)
+            .Where(write => write is { Address: >= 0x9800 and < 0x9C00, LcdEnabled: true })
+            .ToArray();
+        var unsafeWrites = runtimeTilemapWrites
+            .Where(write => write.Ly is < 144 or > 153)
+            .Take(12)
+            .ToArray();
+
+        Assert.NotEmpty(runtimeTilemapWrites);
+        Assert.True(
+            unsafeWrites.Length == 0,
+            "Runner wrote streamed background tiles after VBlank ended while climbing: "
+            + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
+
+        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
+        {
+            cpu.Held.Clear();
+            foreach (var button in held)
+            {
+                cpu.Held.Add(button);
+            }
+
+            frame += frames;
+            cpu.RunFrames(frame);
+        }
     }
 
     private static byte[] CompileCameraProgram(string columns, bool move)

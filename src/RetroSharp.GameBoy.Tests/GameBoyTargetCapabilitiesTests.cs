@@ -31,7 +31,7 @@ public sealed class GameBoyTargetCapabilitiesTests
         Assert.True(capabilities.SupportsFineScrollX);
         Assert.True(capabilities.SupportsFineScrollY);
         Assert.True(capabilities.StaggersCameraMovementStreams);
-        Assert.Equal(32, capabilities.MaxBackgroundTileWritesPerFrame);
+        Assert.Equal(21, capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(0, capabilities.MaxAttributeWritesPerFrame);
         Assert.Equal(40, capabilities.SpriteCount);
         Assert.True(capabilities.SupportsSpriteSize(SpriteSizeMode.Sprite8x8));
@@ -52,20 +52,20 @@ public sealed class GameBoyTargetCapabilitiesTests
     }
 
     [Fact]
-    public void Descriptor_accepts_one_full_background_row_stream_per_frame()
+    public void Descriptor_accepts_one_visible_background_edge_stream_per_frame()
     {
         var capabilities = GameBoyTarget.Capabilities;
 
         Sdk2DOperationValidator.Validate(
             capabilities,
-            new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.BackgroundBufferTiles.Width));
+            new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.ScreenTiles.Width + 1));
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
             Sdk2DOperationValidator.Validate(
                 capabilities,
-                new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.BackgroundBufferTiles.Width + 1)));
+                new Sdk2DOperation.StreamMapRow(TargetRow: 0, SourceRow: 0, X: 0, Width: capabilities.ScreenTiles.Width + 2)));
 
-        Assert.Equal("Target 'gb' supports 32 background tile writes per frame, but 33 are required for streaming a visible map row.", exception.Message);
+        Assert.Equal("Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming a visible map row.", exception.Message);
     }
 
     [Fact]

@@ -453,8 +453,8 @@ void main() {
 
     loop {
         PresentFrame(player, view);
-        goombas.Draw();
         camera.Apply();
+        goombas.Draw();
         audio.Update();
         input.Poll();
 
