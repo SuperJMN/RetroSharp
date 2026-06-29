@@ -521,7 +521,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 
@@ -549,7 +549,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 

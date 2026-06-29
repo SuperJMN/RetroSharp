@@ -70,7 +70,7 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   over a 64x60 source map and builds as both Game Boy and NES. The Game Boy
   acceptance test runs the emitted ROM and observes both fresh wrapped columns
   and fresh wrapped rows after diagonal movement.
-- The row streamer now shares one emitted 20-column write block across source
+- The row streamer now shares one emitted 21-column write block across source
   rows. That fixed the latent tall-map failure where fully unrolled per-row
   stream code could force unsupported direct control flow across MBC1 program
   banks.
@@ -164,7 +164,7 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
     (bottom edge) crossings.
   - [x] Confirm the VBlank drain (`EmitCommitPendingStream`, `:3010-3046`) commits
     at most one row per frame and does not exceed the GB background write budget
-    (20 tiles/row vs `MaxBackgroundTileWritesPerFrame`).
+    (21 tiles/row including the partial fine-scroll edge vs `MaxBackgroundTileWritesPerFrame`).
 - How: add golden-byte tests like the existing column-streaming tests; if the
   emulator shows wrong rows, fix the row/source address init or the modulo
   arithmetic — do not paper over it in the sample.
@@ -365,15 +365,15 @@ Status: **implemented with staggered edge commits.** A `camera.SetPosition(x, y)
 that moves both axes remains a diagonal SDK request; the collector does not
 degrade it to horizontal or vertical. Game Boy accepts it because
 `GameBoyTarget.Capabilities` declares staggered camera stream draining and each
-committed edge fits the 20-tile background write budget.
+committed edge fits the 21-tile background write budget.
 
 Real Game Boy games (e.g. Super Mario Land 2) scroll in 8 directions, so diagonal
 is clearly feasible on hardware. The blockers are two of *our* design choices, not
 the DMG:
 
-- Conservative `MaxBackgroundTileWritesPerFrame: 20`
+- Conservative `MaxBackgroundTileWritesPerFrame: 21`
   (`src/RetroSharp.GameBoy/GameBoyTarget.cs`). A diagonal tile-boundary crossing
-  exposes a column (18 tiles) **and** a row (20 tiles) → 38 writes if committed in
+  exposes a column (19 tiles with fine Y) **and** a row (21 tiles with fine X) → 40 writes if committed in
   one VBlank.
 - Horizontal/vertical-only programs still use the original deferred stream slot
   (`PendingStreamKind/Target/Source`) so their ROM shape stays compact. Diagonal
@@ -387,7 +387,7 @@ this is engineering cost in our pipeline, not a hardware limit.
 
 **Strategy A — stagger crossings across frames (recommended PoC).** Allow a column
 **and** a row to be pending at once, but drain **one per VBlank** within the
-existing 20-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
+existing 21-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
 commit that handles both kinds) and a validator rule keyed off the target's
 staggered-stream capability. **No streamer rewrite.** Price: the second-axis edge appears one frame
 late — practically invisible at 1px/frame. Effort is comparable to the GB vertical

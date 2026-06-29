@@ -379,8 +379,12 @@ public static class Sdk2DOperationValidator
             return;
         }
 
-        var columnWrites = axes.HasFlag(ScrollAxes.Horizontal) ? capabilities.ScreenTiles.Height : 0;
-        var rowWrites = axes.HasFlag(ScrollAxes.Vertical) ? capabilities.ScreenTiles.Width : 0;
+        var columnWrites = axes.HasFlag(ScrollAxes.Horizontal)
+            ? capabilities.ScreenTiles.Height + (capabilities.SupportsFineScrollY ? 1 : 0)
+            : 0;
+        var rowWrites = axes.HasFlag(ScrollAxes.Vertical)
+            ? capabilities.ScreenTiles.Width + (capabilities.SupportsFineScrollX ? 1 : 0)
+            : 0;
         var requiredWrites = RequiredCameraMovementWrites(capabilities, axes, columnWrites, rowWrites);
         if (requiredWrites == 0)
         {

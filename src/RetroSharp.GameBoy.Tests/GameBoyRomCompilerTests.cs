@@ -1285,8 +1285,8 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0xE6, 0xC0, 0xEA, 0x1B, 0xC1]), "camera_move_right should queue the right source column for deferred streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]), "camera_move_left should queue the left background edge column for deferred streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]), "camera_apply should dispatch on the queued stream kind.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x5F, 0x16, 0x00]), "camera_apply should stream the queued source column into the background tilemap.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xC6, 0x60, 0x6F, 0x26, 0x99]), "camera_apply should stream the queued column into the left background edge.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x47, 0xFA, 0xED, 0xC0]), "camera_apply should stream the queued source column using the current top source row.");
+        Assert.True(ContainsSequence(rom, [0xEA, 0x26, 0xC1, 0xFA, 0x1A, 0xC1, 0x4F]), "camera_apply should stream the queued column into the circular background edge.");
     }
 
     [Fact]
@@ -4915,11 +4915,11 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.True(
-            ContainsSequence(rom, [0xC6, 0x20, 0x6F, 0x26, 0x9A, 0x78, 0x77]),
-            "camera horizontal streaming should still update the last visible world row (GB row 17).");
+            ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xC6, 0x09, 0xFE, 0x20]),
+            "camera horizontal streaming should still update the partial bottom world row (GB row 18).");
         Assert.False(
-            ContainsSequence(rom, [0xC6, 0x40, 0x6F, 0x26, 0x9A, 0x78, 0x77]),
-            "camera horizontal streaming should not spend VBlank time on off-screen world row 18.");
+            ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xC6, 0x0A, 0xFE, 0x20]),
+            "camera horizontal streaming should not spend VBlank time on off-screen world row 19.");
     }
 
     [Fact]

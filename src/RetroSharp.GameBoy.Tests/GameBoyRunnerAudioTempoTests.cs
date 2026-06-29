@@ -2,7 +2,11 @@ namespace RetroSharp.GameBoy.Tests;
 
 using System.IO;
 using System.Linq;
+using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
+using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class GameBoyRunnerAudioTempoTests
@@ -135,6 +139,92 @@ public sealed class GameBoyRunnerAudioTempoTests
     }
 
     [Fact]
+    public void Runner_free_scroll_keeps_visible_game_boy_background_tiles_aligned_with_world_map()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
+        var program = CompileVideoProgram(source, runnerDirectory);
+        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory))
+        {
+            CycleAccurateLy = true,
+        };
+        var frame = 0;
+
+        Run(cpu, ref frame, 130);
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "idle");
+
+        Run(cpu, ref frame, 18, "right", "b");
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "first platform diagonal scroll");
+
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 15, "right", "b");
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "second platform diagonal scroll");
+
+        Run(cpu, ref frame, 22, "right", "b", "a");
+        Run(cpu, ref frame, 11, "right", "b");
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "third platform diagonal scroll");
+
+        Run(cpu, ref frame, 75, "right", "b");
+        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "right edge high scroll");
+
+        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
+        {
+            cpu.Held.Clear();
+            foreach (var button in held)
+            {
+                cpu.Held.Add(button);
+            }
+
+            frame += frames;
+            cpu.RunFrames(frame);
+        }
+
+        static void AssertVisibleTilesMatchWorldMap(GameBoyTestCpu cpu, WorldMap2D worldMap, string label)
+        {
+            var scx = cpu.IoRegister(0xFF43);
+            var scy = cpu.IoRegister(0xFF42);
+            var firstColumn = scx / 8;
+            var firstRow = scy / 8;
+            var mismatches = new List<string>();
+
+            // Include the partially visible right/bottom edge tiles, not just the 20x18 full cells.
+            for (var screenRow = 0; screenRow <= 18; screenRow++)
+            {
+                var sourceRow = (firstRow + screenRow) % worldMap.Height;
+                var bufferRow = (firstRow + screenRow) % 32;
+                for (var screenColumn = 0; screenColumn <= 20; screenColumn++)
+                {
+                    var sourceColumn = (firstColumn + screenColumn) % worldMap.Width;
+                    var bufferColumn = (firstColumn + screenColumn) % 32;
+                    var expected = (byte)worldMap.TileIdAt(sourceColumn, sourceRow);
+                    var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
+                    if (actual != expected)
+                    {
+                        mismatches.Add(
+                            $"{label}: scx={scx} scy={scy} screen=({screenColumn},{screenRow}) "
+                            + $"buffer=({bufferColumn},{bufferRow}) source=({sourceColumn},{sourceRow}) "
+                            + $"expected=0x{expected:X2} actual=0x{actual:X2}");
+                        if (mismatches.Count >= 12)
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (mismatches.Count >= 12)
+                {
+                    break;
+                }
+            }
+
+            Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+        }
+    }
+
+    [Fact]
     public void Deferred_camera_commit_streams_columns_into_vram_during_apply()
     {
         // The deferred-commit camera streaming only writes VRAM from camera.Apply (during the
@@ -219,6 +309,18 @@ public sealed class GameBoyRunnerAudioTempoTests
                        }
                        """;
         return GameBoyRomCompiler.CompileSource(source);
+    }
+
+    private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
+    {
+        var parse = new SomeParser().Parse(source);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        var lowered = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
     }
 
     private static string LocateRunnerDirectory()

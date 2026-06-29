@@ -269,7 +269,7 @@ public sealed class Sdk2DOperationTests
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 38 are required for moving the camera diagonally (18 column tiles + 20 row tiles).",
+            "Target 'gb' supports 21 background tile writes per frame, but 40 are required for moving the camera diagonally (19 column tiles + 21 row tiles).",
             exception.Message);
     }
 
@@ -278,6 +278,7 @@ public sealed class Sdk2DOperationTests
     {
         var target = FullCapabilities() with
         {
+            MaxBackgroundTileWritesPerFrame = 21,
             StaggersCameraMovementStreams = true,
         };
 
@@ -307,7 +308,7 @@ public sealed class Sdk2DOperationTests
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
-            "Target 'gb' supports 19 background tile writes per frame, but 20 are required for moving the camera diagonally with staggered streaming (max of 18 column tiles and 20 row tiles).",
+            "Target 'gb' supports 19 background tile writes per frame, but 21 are required for moving the camera diagonally with staggered streaming (max of 19 column tiles and 21 row tiles).",
             exception.Message);
     }
 
@@ -372,10 +373,10 @@ public sealed class Sdk2DOperationTests
         var exception = Assert.Throws<InvalidOperationException>(() =>
             Sdk2DOperationValidator.Validate(
                 FullCapabilities(),
-                new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 21)));
+                new Sdk2DOperation.StreamMapColumn(TargetColumn: 31, SourceColumn: 64, Y: 0, Height: 22)));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 21 are required for streaming a visible map column.",
+            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming a visible map column.",
             exception.Message);
     }
 
@@ -408,7 +409,7 @@ public sealed class Sdk2DOperationTests
             Sdk2DOperationValidator.ValidateFrame(FullCapabilities(), frameOperations));
 
         Assert.Equal(
-            "Target 'gb' supports 20 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 
@@ -441,7 +442,7 @@ public sealed class Sdk2DOperationTests
             ScrollAxes: ScrollAxes.Horizontal | ScrollAxes.Vertical,
             SupportsFineScrollX: true,
             SupportsFineScrollY: true,
-            MaxBackgroundTileWritesPerFrame: 20,
+            MaxBackgroundTileWritesPerFrame: 21,
             MaxAttributeWritesPerFrame: 0,
             SpriteCount: 40,
             SpriteSizeModes: SpriteSizeMode.Sprite8x8 | SpriteSizeMode.Sprite8x16,
