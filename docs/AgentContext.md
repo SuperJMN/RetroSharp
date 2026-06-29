@@ -71,8 +71,9 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
   `enemy.*` helpers, and pool helper calls lower before target emission to fixed
   `Actor` arrays, constants, generated spawn helpers, `used[]`, direct `kind`
   branches, and existing SDK calls such as `sprite.Draw`, `camera.AabbTiles`,
-  `camera.AabbHitTop`, and `animation.Frame`. Do not add actor-specific
-  `Sdk2DOperation` cases for this slice.
+  `camera.AabbHitTop`, `camera.ScreenAabbTiles`, `camera.ScreenAabbHitTop`,
+  and `animation.Frame`. Do not add actor-specific target intrinsics for this
+  slice.
 
 ## Portability Lowering Roadmap (epic #106)
 
@@ -193,7 +194,7 @@ Suggested next steps for the next agent, in order:
 - Sprite PNG paths can be generic. `sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
-- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; runner actors should project their current screen X from actor/player world position minus camera position, then pass that byte-backed screen X to `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` so collision stays aligned with the visible camera after long scrolls.
+- Collision over wider sprites should use logical sprite width through helpers such as `sprite_width(...)`; runner actors should project current screen X/Y from actor/player world position minus camera position, then pass byte-backed screen coordinates to `camera.AabbTiles(...)`/`camera.AabbHitTop(...)` or the fully screen-space `camera.ScreenAabbTiles(...)`/`camera.ScreenAabbHitTop(...)` forms so collision stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.

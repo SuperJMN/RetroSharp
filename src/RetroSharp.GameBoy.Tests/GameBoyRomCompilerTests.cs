@@ -2351,6 +2351,7 @@ public class GameBoyRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2404,7 +2405,7 @@ public class GameBoyRomCompilerTests
 
         Assert.True(
             manualRom.SequenceEqual(actorRom),
-            "Game Boy actor TouchTiles should match the manual loop that passes __enemies_touch_screen_x computed from enemies[__enemies_touch_i].x, so actor slots at X=24 and X=104 do not share one fixed collision column.");
+            "Game Boy actor framework should lower to the same fixed Actor storage and direct enemy lookup constants as the manual source.");
         Assert.Equal(manualRom, actorRom);
     }
 
@@ -2540,9 +2541,111 @@ public class GameBoyRomCompilerTests
         Assert.Contains("u8 __enemies_draw_x_Goomba=0;", lowered);
         Assert.Contains("u8 __enemies_draw_y_Goomba=144;", lowered);
         Assert.Contains("__enemies_draw_x_Goomba=__enemies_draw_screen_x;", lowered);
-        Assert.Contains("__enemies_draw_y_Goomba=enemies[__enemies_draw_i].y;", lowered);
+        Assert.Contains("__enemies_draw_y_Goomba=__enemies_draw_screen_y;", lowered);
         Assert.Contains("sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);", lowered);
         Assert.Equal(1, CountOccurrences(lowered, "sprite.Draw(goomba"));
+    }
+
+    [Fact]
+    public void Actor_framework_projects_wide_y_spawns_for_draw_and_collision_on_game_boy()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 261 }
+            ]
+            """);
+        const string source = """
+                              void main() {
+                                  world_column(0, 0, 0);
+                                  world_map(40, 10, 40);
+                                  camera_init(40, 10, 18);
+                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  actor.Pool(enemies, 2);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                  camera_set_position(0, 160);
+                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  enemies.TouchTiles(0, 1);
+                                  enemies.LandOnTiles(4, 12, 1);
+                                  enemies.Draw();
+                              }
+                              """;
+
+        var parse = new SomeParser().Parse(source);
+        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
+
+        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("u8 yHi;", lowered);
+        Assert.Contains("inline u8 __enemies_spawn_0_y(u8 index)=>5;", lowered);
+        Assert.Contains("inline u8 __enemies_spawn_0_yHi(u8 index)=>1;", lowered);
+        Assert.Contains("u8 __enemies_touch_screen_y=enemies[__enemies_touch_i].y-__enemies_touch_camera_y_lo;", lowered);
+        Assert.Contains("camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains("camera.ScreenAabbHitTop(__enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
+        Assert.Contains("sprite.Draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
+    }
+
+    [Fact]
+    public void Actor_framework_runtime_uses_wide_y_for_game_boy_draw_and_collision()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 261 }
+            ]
+            """);
+        File.WriteAllText(Path.Combine(baseDirectory, "goomba.sprite.json"), SpriteJson(Rows(8, 16, "11111111")));
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  world.Column(0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      1, 0, 0, 0, 0, 0, 0, 0);
+                                  world.Flags(0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      0, 0, 0, 0, 0, 0, 0, 0,
+                                      1, 0, 0, 0, 0, 0, 0, 0);
+                                  world.Map(1, 0, 40);
+                                  camera.Init(1, 0, 40);
+                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  actor.Pool(enemies, 1);
+                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                  u8 cameraY = 0;
+                                  for (u8 i = 0; i < 160; i += 1) {
+                                      cameraY += 1;
+                                      camera.SetPosition(0, cameraY);
+                                      video.WaitVBlank();
+                                      camera.Apply();
+                                  }
+                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  enemies.TouchTiles(0, 1);
+                                  if (enemies[0].state == 1) {
+                                      enemies[0].x = 32;
+                                  } else {
+                                      enemies[0].x = 16;
+                                  }
+                                  loop {
+                                      video.WaitVBlank();
+                                      enemies.Draw();
+                                      camera.Apply();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        cpu.RunFrames(180);
+
+        Assert.Equal(117, cpu.Oam(0xFE00));
+        Assert.Equal(40, cpu.Oam(0xFE01));
     }
 
     [Fact]
@@ -2571,7 +2674,7 @@ public class GameBoyRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
-        Assert.Equal("Game Boy target struct array 'enemies' uses 492 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
+        Assert.Equal("Game Boy target struct array 'enemies' uses 533 byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.", exception.Message);
     }
 
     [Fact]
@@ -2679,6 +2782,7 @@ public class GameBoyRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2715,15 +2819,26 @@ public class GameBoyRomCompilerTests
 
                                         u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
+                                        u8 __enemies_draw_camera_y_lo = __rs_actor_camera_y_lo();
+                                        u8 __enemies_draw_camera_y_hi = __rs_actor_camera_y_hi();
                                         for (u8 __enemies_draw_i = 0; __enemies_draw_i < countof(enemies); __enemies_draw_i += 1) {
                                             u8 __enemies_draw_screen_x = enemies[__enemies_draw_i].x - __enemies_draw_camera_x_lo;
+                                            u8 __enemies_draw_screen_y = enemies[__enemies_draw_i].y - __enemies_draw_camera_y_lo;
+                                            u8 __enemies_draw_visible_x = 0;
+                                            u8 __enemies_draw_visible_y = 0;
+                                            if ((((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) && (__enemies_draw_screen_x < 160)) {
+                                                __enemies_draw_visible_x = 1;
+                                            }
+                                            if ((((enemies[__enemies_draw_i].yHi == __enemies_draw_camera_y_hi) && (enemies[__enemies_draw_i].y >= __enemies_draw_camera_y_lo)) || ((enemies[__enemies_draw_i].yHi == __enemies_draw_camera_y_hi + 1) && (enemies[__enemies_draw_i].y < __enemies_draw_camera_y_lo))) && (__enemies_draw_screen_y < 144)) {
+                                                __enemies_draw_visible_y = 1;
+                                            }
                                             if (enemies[__enemies_draw_i].kind == Goomba) {
                                                 u8 __enemies_draw_x_Goomba = 0;
                                                 u8 __enemies_draw_y_Goomba = 144;
                                                 if (enemies[__enemies_draw_i].active != 0) {
-                                                    if ((((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi) && (enemies[__enemies_draw_i].x >= __enemies_draw_camera_x_lo)) || ((enemies[__enemies_draw_i].xHi == __enemies_draw_camera_x_hi + 1) && (enemies[__enemies_draw_i].x < __enemies_draw_camera_x_lo))) && (__enemies_draw_screen_x < 160)) {
+                                                    if ((__enemies_draw_visible_x != 0) && (__enemies_draw_visible_y != 0)) {
                                                         __enemies_draw_x_Goomba = __enemies_draw_screen_x;
-                                                        __enemies_draw_y_Goomba = enemies[__enemies_draw_i].y;
+                                                        __enemies_draw_y_Goomba = __enemies_draw_screen_y;
                                                     }
                                                 }
                                                 sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
@@ -2796,6 +2911,7 @@ public class GameBoyRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2830,12 +2946,23 @@ public class GameBoyRomCompilerTests
 
                                         u8 __enemies_touch_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_touch_camera_x_hi = __rs_actor_camera_x_hi();
+                                        u8 __enemies_touch_camera_y_lo = __rs_actor_camera_y_lo();
+                                        u8 __enemies_touch_camera_y_hi = __rs_actor_camera_y_hi();
                                         for (u8 __enemies_touch_i = 0; __enemies_touch_i < countof(enemies); __enemies_touch_i += 1) {
                                             if (enemies[__enemies_touch_i].active != 0) {
                                                 u8 __enemies_touch_screen_x = enemies[__enemies_touch_i].x - __enemies_touch_camera_x_lo;
+                                                u8 __enemies_touch_screen_y = enemies[__enemies_touch_i].y - __enemies_touch_camera_y_lo;
+                                                u8 __enemies_touch_visible_x = 0;
+                                                u8 __enemies_touch_visible_y = 0;
+                                                if ((((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo))) && (__enemies_touch_screen_x < 160)) {
+                                                    __enemies_touch_visible_x = 1;
+                                                }
+                                                if ((((enemies[__enemies_touch_i].yHi == __enemies_touch_camera_y_hi) && (enemies[__enemies_touch_i].y >= __enemies_touch_camera_y_lo)) || ((enemies[__enemies_touch_i].yHi == __enemies_touch_camera_y_hi + 1) && (enemies[__enemies_touch_i].y < __enemies_touch_camera_y_lo))) && (__enemies_touch_screen_y < 144)) {
+                                                    __enemies_touch_visible_y = 1;
+                                                }
                                                 if (enemies[__enemies_touch_i].kind == Goomba) {
-                                                    if ((((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi) && (enemies[__enemies_touch_i].x >= __enemies_touch_camera_x_lo)) || ((enemies[__enemies_touch_i].xHi == __enemies_touch_camera_x_hi + 1) && (enemies[__enemies_touch_i].x < __enemies_touch_camera_x_lo))) && (__enemies_touch_screen_x < 160)) {
-                                                        if (camera.AabbTiles(__enemies_touch_screen_x, enemies[__enemies_touch_i].y, 8, 8, 1) != 0) {
+                                                    if ((__enemies_touch_visible_x != 0) && (__enemies_touch_visible_y != 0)) {
+                                                        if (camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1) != 0) {
                                                             enemies[__enemies_touch_i].state = 1;
                                                         }
                                                     }
@@ -2883,6 +3010,7 @@ public class GameBoyRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -2978,6 +3106,7 @@ public class GameBoyRomCompilerTests
                                  u8 x;
                                  u8 xHi;
                                  u8 y;
+                                 u8 yHi;
                                  i8 vx;
                                  i8 vy;
                                  u8 state;
@@ -2994,6 +3123,7 @@ public class GameBoyRomCompilerTests
                              inline u8 __enemies_spawn_0_x(u8 index) => 24;
                              inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
                              inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
                              inline u8 __enemies_spawn_0_active(u8 index) => 1;
                              inline u8 __enemies_spawn_0_vx(u8 index) => 0;
                              inline u8 __enemies_spawn_0_vy(u8 index) => 0;
@@ -3154,6 +3284,7 @@ public class GameBoyRomCompilerTests
                                         u8 x;
                                         u8 xHi;
                                         u8 y;
+                                        u8 yHi;
                                         i8 vx;
                                         i8 vy;
                                         u8 state;
@@ -3213,6 +3344,9 @@ public class GameBoyRomCompilerTests
                                                 } else {
                                                     if (enemies[__enemies_update_i].kind == Bat) {
                                                         enemies[__enemies_update_i].y += BatSpeed;
+                                                        if (enemies[__enemies_update_i].y < BatSpeed) {
+                                                            enemies[__enemies_update_i].yHi += 1;
+                                                        }
                                                     } else {
                                                         if (enemies[__enemies_update_i].kind == Koopa) {
                                                             if (enemies[__enemies_update_i].facing == 0) {
@@ -6016,6 +6150,7 @@ public class GameBoyRomCompilerTests
                              u8 {{prefix}}_x_value = __enemies_spawn_0_x({{prefix}}_i);
                              u8 {{prefix}}_xHi_value = __enemies_spawn_0_xHi({{prefix}}_i);
                              u8 {{prefix}}_y_value = __enemies_spawn_0_y({{prefix}}_i);
+                             u8 {{prefix}}_yHi_value = __enemies_spawn_0_yHi({{prefix}}_i);
                              u8 {{prefix}}_active_value = __enemies_spawn_0_active({{prefix}}_i);
                              u8 {{prefix}}_vx_value = __enemies_spawn_0_vx({{prefix}}_i);
                              u8 {{prefix}}_vy_value = __enemies_spawn_0_vy({{prefix}}_i);
@@ -6034,6 +6169,7 @@ public class GameBoyRomCompilerTests
                                              enemies[{{prefix}}_slot].x = {{prefix}}_x_value;
                                              enemies[{{prefix}}_slot].xHi = {{prefix}}_xHi_value;
                                              enemies[{{prefix}}_slot].y = {{prefix}}_y_value;
+                                             enemies[{{prefix}}_slot].yHi = {{prefix}}_yHi_value;
                                              enemies[{{prefix}}_slot].vx = {{prefix}}_vx_value;
                                              enemies[{{prefix}}_slot].vy = {{prefix}}_vy_value;
                                              enemies[{{prefix}}_slot].state = {{prefix}}_state_value;

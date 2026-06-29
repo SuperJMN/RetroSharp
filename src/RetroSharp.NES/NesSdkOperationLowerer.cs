@@ -38,6 +38,12 @@ internal static class NesSdkOperationLowerer
             case Sdk2DOperation.CameraAabbHitTop cameraAabb:
                 compiler.EmitCameraAabbHitTop(cameraAabb);
                 break;
+            case Sdk2DOperation.CameraScreenAabbTiles cameraAabb:
+                compiler.EmitCameraScreenAabbTiles(cameraAabb);
+                break;
+            case Sdk2DOperation.CameraScreenAabbHitTop cameraAabb:
+                compiler.EmitCameraScreenAabbHitTop(cameraAabb);
+                break;
             default:
                 throw new NotSupportedException($"NES SDK lowering does not support {operation.GetType().Name} yet.");
         }

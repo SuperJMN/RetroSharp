@@ -376,7 +376,7 @@ public static class LogicalTiledMapImporter
             }
 
             var x = CheckedUInt16(CoordinateProperty(obj, "x", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} x");
-            var y = CheckedByte(CoordinateProperty(obj, "y", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} y");
+            var y = CheckedUInt16(CoordinateProperty(obj, "y", displayName, layerName, objectId), $"Tiled map '{displayName}' object layer '{layerName}' object {objectId} y");
             result.Add(new LogicalActorSpawn(kind, x, y, ReadActorSpawnFields(obj, displayName, layerName, objectId)));
         }
 

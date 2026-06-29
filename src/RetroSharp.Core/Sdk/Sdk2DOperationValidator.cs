@@ -105,6 +105,12 @@ public static class Sdk2DOperationValidator
             case Sdk2DOperation.CameraAabbHitTop cameraAabb:
                 ValidateCameraAabbHitTop(capabilities, cameraAabb);
                 return;
+            case Sdk2DOperation.CameraScreenAabbTiles cameraAabb:
+                ValidateCameraScreenAabbTiles(capabilities, cameraAabb);
+                return;
+            case Sdk2DOperation.CameraScreenAabbHitTop cameraAabb:
+                ValidateCameraScreenAabbHitTop(capabilities, cameraAabb);
+                return;
             case Sdk2DOperation.DrawLogicalSprite draw:
                 ValidateDrawLogicalSprite(capabilities, draw);
                 return;
@@ -179,6 +185,32 @@ public static class Sdk2DOperationValidator
             cameraAabb.Width,
             cameraAabb.Height,
             cameraAabb.WorldY,
+            cameraAabb.Flags);
+    }
+
+    private static void ValidateCameraScreenAabbTiles(Target2DCapabilities capabilities, Sdk2DOperation.CameraScreenAabbTiles cameraAabb)
+    {
+        RequireCollisionQuery(capabilities, CollisionQueryMode.CameraRelativeAabb, "camera-relative screen AABB collision");
+
+        ValidateCameraAabbGeometry(
+            capabilities,
+            cameraAabb.ScreenX,
+            cameraAabb.Width,
+            cameraAabb.Height,
+            cameraAabb.ScreenY,
+            cameraAabb.Flags);
+    }
+
+    private static void ValidateCameraScreenAabbHitTop(Target2DCapabilities capabilities, Sdk2DOperation.CameraScreenAabbHitTop cameraAabb)
+    {
+        RequireCollisionQuery(capabilities, CollisionQueryMode.CameraRelativeAabbHitTop, "camera-relative screen AABB hit-top");
+
+        ValidateCameraAabbGeometry(
+            capabilities,
+            cameraAabb.ScreenX,
+            cameraAabb.Width,
+            cameraAabb.Height,
+            cameraAabb.ScreenY,
             cameraAabb.Flags);
     }
 
