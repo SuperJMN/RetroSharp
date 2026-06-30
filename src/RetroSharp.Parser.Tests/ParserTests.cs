@@ -415,6 +415,59 @@ public class ParserTests
     }
 
     [Fact]
+    public void Static_class_calls_do_not_shadow_visible_receiver_locals()
+    {
+        const string source = """
+                              class video
+                              {
+                                 static inline void WaitVBlank()
+                                 {
+                                 }
+                              }
+
+                              struct Port
+                              {
+                                 u8 value;
+                              }
+
+                              inline void WaitVBlank(this Port video)
+                              {
+                                 video.value = 1;
+                              }
+
+                              void main()
+                              {
+                                 Port video;
+                                 video.WaitVBlank();
+                              }
+                              """;
+
+        const string expected = """
+                                struct Port
+                                {
+                                 u8 value;
+                                }
+                                struct video
+                                {
+                                }
+                                inline void video_WaitVBlank()
+                                {
+                                }
+                                inline void WaitVBlank(this Port video)
+                                {
+                                 video.value = 1;
+                                }
+                                void main()
+                                {
+                                 Port video;
+                                 video.WaitVBlank();
+                                }
+                                """;
+
+        AssertParse(source, expected);
+    }
+
+    [Fact]
     public void Static_class_rejects_runtime_object_features()
     {
         new SomeParser().Parse("class Actor { virtual void Update() { } }")

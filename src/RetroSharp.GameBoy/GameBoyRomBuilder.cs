@@ -2409,52 +2409,19 @@ internal sealed class GameBoyRuntimeCompiler
             return false;
         }
 
-        var intrinsic = TargetIntrinsicName(function, "gb", "Game Boy");
-        switch (intrinsic)
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, GameBoyTarget.Intrinsics);
+        GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+        switch (intrinsic.Operation)
         {
-            case "wait_frame":
-                GameBoyVideoProgram.RequireArity(call, 0);
-                EmitWaitFrame();
+            case TargetIntrinsicOperation.WaitFrame:
+                EmitNextSdkOperation<Sdk2DOperation.WaitFrame>(call.Name);
+                return true;
+            case TargetIntrinsicOperation.PollInput:
+                EmitNextSdkOperation<Sdk2DOperation.PollInput>(call.Name);
                 return true;
             default:
-                throw new InvalidOperationException($"Unsupported Game Boy intrinsic '{intrinsic}' on extern function '{function.Name}'.");
+                throw new NotSupportedException($"Game Boy intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
-    }
-
-    private static string TargetIntrinsicName(FunctionSyntax function, string targetId, string targetName)
-    {
-        var intrinsic = AttributeString(function, "intrinsic")
-                        ?? throw new InvalidOperationException($"Extern function '{function.Name}' must declare an intrinsic attribute.");
-        var target = AttributeString(function, "target")
-                     ?? throw new InvalidOperationException($"Extern intrinsic '{function.Name}' must declare a target attribute.");
-        if (!string.Equals(target, targetId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Extern intrinsic '{function.Name}' targets '{target}', not {targetName}.");
-        }
-
-        return intrinsic;
-    }
-
-    private static string? AttributeString(FunctionSyntax function, string name)
-    {
-        var attribute = function.Attributes.FirstOrDefault(attr => attr.Name == name);
-        if (attribute is null)
-        {
-            return null;
-        }
-
-        if (attribute.Arguments is not [ConstantSyntax constant])
-        {
-            throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
-        }
-
-        var text = constant.Value.ToString() ?? "";
-        if (text.Length >= 2 && text[0] == '"' && text[^1] == '"')
-        {
-            return text[1..^1];
-        }
-
-        throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
     }
 
     private bool TryEmitUserFunction(FunctionCall call)

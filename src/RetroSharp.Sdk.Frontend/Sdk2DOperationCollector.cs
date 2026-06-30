@@ -13,9 +13,10 @@ public static class Sdk2DOperationCollector
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
-        Target2DCapabilities capabilities)
+        Target2DCapabilities capabilities,
+        TargetIntrinsicCatalog? targetIntrinsics = null)
     {
-        var collector = new Collector(functions, targetName, capabilities);
+        var collector = new Collector(functions, targetName, capabilities, targetIntrinsics: targetIntrinsics);
         collector.CollectBlock(mainBlock);
         return collector.Operations;
     }
@@ -28,9 +29,10 @@ public static class Sdk2DOperationCollector
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
         Target2DCapabilities capabilities,
-        IReadOnlySet<string> subroutineNames)
+        IReadOnlySet<string> subroutineNames,
+        TargetIntrinsicCatalog? targetIntrinsics = null)
     {
-        var collector = new Collector(functions, targetName, capabilities, subroutineNames);
+        var collector = new Collector(functions, targetName, capabilities, subroutineNames, targetIntrinsics);
         collector.CollectBlock(mainBlock);
         return collector.Program;
     }
@@ -39,9 +41,10 @@ public static class Sdk2DOperationCollector
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
-        Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget = null)
+        Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null)
     {
-        var collector = new FrameBudgetCollector(functions, targetName, drawSpriteBudget);
+        var collector = new FrameBudgetCollector(functions, targetName, drawSpriteBudget, targetIntrinsics);
         return collector.Collect(mainBlock);
     }
 
@@ -372,6 +375,7 @@ public static class Sdk2DOperationCollector
         private readonly string targetName;
         private readonly Target2DCapabilities capabilities;
         private readonly IReadOnlySet<string> subroutineNames;
+        private readonly TargetIntrinsicCatalog? targetIntrinsics;
         private readonly List<Sdk2DStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
@@ -381,12 +385,14 @@ public static class Sdk2DOperationCollector
             IReadOnlyDictionary<string, FunctionSyntax> functions,
             string targetName,
             Target2DCapabilities capabilities,
-            IReadOnlySet<string>? subroutineNames = null)
+            IReadOnlySet<string>? subroutineNames = null,
+            TargetIntrinsicCatalog? targetIntrinsics = null)
         {
             this.functions = functions;
             this.targetName = targetName;
             this.capabilities = capabilities;
             this.subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
+            this.targetIntrinsics = targetIntrinsics;
             currentItems = mainItems;
         }
 
@@ -415,6 +421,16 @@ public static class Sdk2DOperationCollector
             }
 
             return ops;
+        }
+
+        private static Sdk2DOperation OperationFor(TargetIntrinsicDescriptor intrinsic)
+        {
+            return intrinsic.Operation switch
+            {
+                TargetIntrinsicOperation.WaitFrame => new Sdk2DOperation.WaitFrame(),
+                TargetIntrinsicOperation.PollInput => new Sdk2DOperation.PollInput(),
+                _ => throw new NotSupportedException($"SDK operation collection does not support target intrinsic {intrinsic.Operation} yet."),
+            };
         }
 
         public void CollectBlock(BlockSyntax block)
@@ -526,10 +542,30 @@ public static class Sdk2DOperationCollector
                     SdkCallReader.RequireArity(call, 1);
                     break;
                 default:
+                    if (CollectTargetIntrinsic(call))
+                    {
+                        break;
+                    }
+
                     CollectCallArguments(call);
                     CollectUserFunction(call);
                     break;
             }
+        }
+
+        private bool CollectTargetIntrinsic(FunctionCall call)
+        {
+            if (targetIntrinsics is null ||
+                !functions.TryGetValue(call.Name, out var function) ||
+                !function.IsExtern)
+            {
+                return false;
+            }
+
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
+            SdkCallReader.RequireArity(call, intrinsic.Arity);
+            AddOp(OperationFor(intrinsic));
+            return true;
         }
 
         private void CollectCameraSetPosition(FunctionCall call)
@@ -816,7 +852,8 @@ public static class Sdk2DOperationCollector
     private sealed class FrameBudgetCollector(
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
-        Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget)
+        Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget,
+        TargetIntrinsicCatalog? targetIntrinsics)
     {
         private const int MaxLoopIterationsToAnalyze = 64;
 
@@ -1009,9 +1046,34 @@ public static class Sdk2DOperationCollector
                     var draw = ReadDrawLogicalSprite(call);
                     return state.AddBudget(drawSpriteBudget?.Invoke(draw) ?? Sdk2DFrameBudget.Empty);
                 default:
+                    if (TryCollectTargetIntrinsic(state, call, out var intrinsicState))
+                    {
+                        return intrinsicState;
+                    }
+
                     state = CollectCallArguments(state, call);
                     return CollectUserFunction(state, call);
             }
+        }
+
+        private bool TryCollectTargetIntrinsic(FrameBudgetState state, FunctionCall call, out FrameBudgetState result)
+        {
+            if (targetIntrinsics is null ||
+                !functions.TryGetValue(call.Name, out var function) ||
+                !function.IsExtern)
+            {
+                result = state;
+                return false;
+            }
+
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
+            SdkCallReader.RequireArity(call, intrinsic.Arity);
+            result = intrinsic.Operation switch
+            {
+                TargetIntrinsicOperation.WaitFrame or TargetIntrinsicOperation.PollInput => state.CloseOpenFrames(),
+                _ => throw new NotSupportedException($"SDK frame-budget collection does not support target intrinsic {intrinsic.Operation} yet."),
+            };
+            return true;
         }
 
         private FrameBudgetState CollectExpression(FrameBudgetState state, ExpressionSyntax expression)

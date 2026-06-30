@@ -1746,15 +1746,18 @@ internal sealed class NesRuntimeCompiler
             return false;
         }
 
-        var intrinsic = TargetIntrinsicName(function, "nes", "NES");
-        switch (intrinsic)
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, NesTarget.Intrinsics);
+        NesVideoProgram.RequireArity(call, intrinsic.Arity);
+        switch (intrinsic.Operation)
         {
-            case "wait_frame":
-                NesVideoProgram.RequireArity(call, 0);
+            case TargetIntrinsicOperation.WaitFrame:
                 EmitWaitFrame(applyPendingCameraScroll: true);
                 return true;
+            case TargetIntrinsicOperation.PollInput:
+                EmitPollInput();
+                return true;
             default:
-                throw new InvalidOperationException($"Unsupported NES intrinsic '{intrinsic}' on extern function '{function.Name}'.");
+                throw new NotSupportedException($"NES intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
     }
 
@@ -1921,42 +1924,6 @@ internal sealed class NesRuntimeCompiler
             0x0C, 0x0D, 0x0E, 0x0F,
             0x15, 0x17,
         ];
-    }
-
-    private static string TargetIntrinsicName(FunctionSyntax function, string targetId, string targetName)
-    {
-        var intrinsic = AttributeString(function, "intrinsic")
-                        ?? throw new InvalidOperationException($"Extern function '{function.Name}' must declare an intrinsic attribute.");
-        var target = AttributeString(function, "target")
-                     ?? throw new InvalidOperationException($"Extern intrinsic '{function.Name}' must declare a target attribute.");
-        if (!string.Equals(target, targetId, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException($"Extern intrinsic '{function.Name}' targets '{target}', not {targetName}.");
-        }
-
-        return intrinsic;
-    }
-
-    private static string? AttributeString(FunctionSyntax function, string name)
-    {
-        var attribute = function.Attributes.FirstOrDefault(attr => attr.Name == name);
-        if (attribute is null)
-        {
-            return null;
-        }
-
-        if (attribute.Arguments is not [ConstantSyntax constant])
-        {
-            throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
-        }
-
-        var text = constant.Value.ToString() ?? "";
-        if (text.Length >= 2 && text[0] == '"' && text[^1] == '"')
-        {
-            return text[1..^1];
-        }
-
-        throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
     }
 
     internal void EmitPollInput()

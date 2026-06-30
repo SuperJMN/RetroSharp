@@ -191,7 +191,28 @@ The collector itself is target-neutral and lives in a dedicated SDK-frontend ass
 
 Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries runtime or constant screen X, runtime world Y, constant or `sprite_width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
-The first SDK-as-library prototype is also in place. The parser preserves attributes on extern prototypes, and Game Boy/NES recognize `[target("gb"|"nes")] [intrinsic("wait_frame")] extern void ...();` as a target intrinsic. A source helper that calls that extern emits the same wait-frame bytes as the current `Sdk2DOperation.WaitFrame` lowering. This proves the zero-cost direction for migrating compiler-recognized SDK calls into source libraries, while leaving module packaging, portable target selection, and the rest of the intrinsic catalog as future work.
+The first SDK-as-library slice is now in place. Each cartridge target exposes a
+declarative `TargetIntrinsicCatalog` instead of a one-off intrinsic switch; Game
+Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, and
+`poll_input`. `RetroSharp.Sdk.Frontend` injects a small target-selected SDK
+library before parsing target compilations. That library defines `video` and
+`input` classes whose `video.WaitVBlank()` and `input.Poll()` helpers call
+`[target(...)] [intrinsic(...)] extern` declarations, and those helpers emit the
+same bytes as the previous SDK operation path. `TargetProgramSelector` filters
+`[target("gb")]` / `[target("nes")]` function variants before constant folding
+or function indexing, so a portable helper can name one target-specific extern
+and let the active target select the matching declaration.
+
+The migration boundary remains deliberate. `camera.SetPosition()` and
+`camera.Apply()` stay operation-backed for now because their behavior is not a
+simple leaf intrinsic: collection records scroll axes, validates target
+capabilities, charges frame budgets, and feeds target-specific streaming state.
+Likewise sprite drawing and camera-relative collision remain `Sdk2DOperation`
+records because they carry asset geometry, palette slots, storage descriptors,
+and collision capability checks. The next clean library moves should be leaf
+helpers over a small target intrinsic catalog; higher-level camera/sprite/collision
+helpers need either more primitive intrinsics plus library code or should remain
+capability-checked operations.
 
 ## Layer Boundary and Golden Rule
 

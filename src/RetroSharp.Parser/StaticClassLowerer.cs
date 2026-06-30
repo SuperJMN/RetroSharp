@@ -40,14 +40,17 @@ internal static class StaticClassLowerer
             .Select(constant => new ConstDeclarationSyntax(
                 constant.TypeAnnotation,
                 constant.Name,
-                RewriteStaticExpression(constant.Value, staticMethods)))
+                RewriteStaticExpression(constant.Value, staticMethods, new HashSet<string>(StringComparer.Ordinal))))
             .ToList();
         var functions = program.Functions
             .Select(function => new FunctionSyntax(
                 function.Type,
                 function.Name,
                 function.Parameters,
-                RewriteStaticBlock(function.Block, staticMethods),
+                RewriteStaticBlock(
+                    function.Block,
+                    staticMethods,
+                    function.Parameters.Select(parameter => parameter.Name)),
                 function.IsExpressionBodied,
                 function.IsInline,
                 function.IsPure,
@@ -265,122 +268,170 @@ internal static class StaticClassLowerer
             memberAccess.Member);
     }
 
-    private static BlockSyntax RewriteStaticBlock(BlockSyntax block, IReadOnlyDictionary<string, string> staticMethods)
+    private static BlockSyntax RewriteStaticBlock(
+        BlockSyntax block,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IEnumerable<string> visibleNames)
     {
-        return new BlockSyntax(block.Statements.Select(statement => RewriteStaticStatement(statement, staticMethods)).ToList());
+        var scopedNames = new HashSet<string>(visibleNames, StringComparer.Ordinal);
+        var statements = new List<StatementSyntax>();
+        foreach (var statement in block.Statements)
+        {
+            statements.Add(RewriteStaticStatement(statement, staticMethods, scopedNames));
+            AddDeclaredName(statement, scopedNames);
+        }
+
+        return new BlockSyntax(statements);
     }
 
-    private static StatementSyntax RewriteStaticStatement(StatementSyntax statement, IReadOnlyDictionary<string, string> staticMethods)
+    private static StatementSyntax RewriteStaticStatement(
+        StatementSyntax statement,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
     {
         return statement switch
         {
             ConstDeclarationSyntax constant => new ConstDeclarationSyntax(
                 constant.TypeAnnotation,
                 constant.Name,
-                RewriteStaticExpression(constant.Value, staticMethods)),
+                RewriteStaticExpression(constant.Value, staticMethods, visibleNames)),
             DeclarationSyntax declaration => new DeclarationSyntax(
                 declaration.Type,
                 declaration.Name,
-                declaration.ArrayLength.Map(expression => RewriteStaticExpression(expression, staticMethods)),
-                declaration.Initialization.Map(expression => RewriteStaticExpression(expression, staticMethods)),
+                declaration.ArrayLength.Map(expression => RewriteStaticExpression(expression, staticMethods, visibleNames)),
+                declaration.Initialization.Map(expression => RewriteStaticExpression(expression, staticMethods, visibleNames)),
                 declaration.IsImmutable),
             ExpressionStatementSyntax expressionStatement => new ExpressionStatementSyntax(
-                RewriteStaticExpression(expressionStatement.Expression, staticMethods)),
+                RewriteStaticExpression(expressionStatement.Expression, staticMethods, visibleNames)),
             IfElseSyntax ifElse => new IfElseSyntax(
-                RewriteStaticExpression(ifElse.Condition, staticMethods),
-                RewriteStaticBlock(ifElse.ThenBlock, staticMethods),
-                ifElse.ElseBlock.Map(block => RewriteStaticBlock(block, staticMethods))),
+                RewriteStaticExpression(ifElse.Condition, staticMethods, visibleNames),
+                RewriteStaticBlock(ifElse.ThenBlock, staticMethods, visibleNames),
+                ifElse.ElseBlock.Map(block => RewriteStaticBlock(block, staticMethods, visibleNames))),
             WhileSyntax whileSyntax => new WhileSyntax(
-                RewriteStaticExpression(whileSyntax.Condition, staticMethods),
-                RewriteStaticBlock(whileSyntax.Body, staticMethods)),
+                RewriteStaticExpression(whileSyntax.Condition, staticMethods, visibleNames),
+                RewriteStaticBlock(whileSyntax.Body, staticMethods, visibleNames)),
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
-                RewriteStaticBlock(doWhileSyntax.Body, staticMethods),
-                RewriteStaticExpression(doWhileSyntax.Condition, staticMethods)),
-            LoopSyntax loopSyntax => new LoopSyntax(RewriteStaticBlock(loopSyntax.Body, staticMethods)),
-            RangeForSyntax rangeForSyntax => new RangeForSyntax(
-                rangeForSyntax.Type,
-                rangeForSyntax.Identifier,
-                RewriteStaticExpression(rangeForSyntax.Start, staticMethods),
-                RewriteStaticExpression(rangeForSyntax.End, staticMethods),
-                RewriteStaticBlock(rangeForSyntax.Body, staticMethods)),
-            ForSyntax forSyntax => new ForSyntax(
-                forSyntax.Initializer.Map(initializer => RewriteStaticStatement(initializer, staticMethods)),
-                forSyntax.Condition.Map(condition => RewriteStaticExpression(condition, staticMethods)),
-                forSyntax.Increment.Map(increment => RewriteStaticExpression(increment, staticMethods)),
-                RewriteStaticBlock(forSyntax.Body, staticMethods)),
+                RewriteStaticBlock(doWhileSyntax.Body, staticMethods, visibleNames),
+                RewriteStaticExpression(doWhileSyntax.Condition, staticMethods, visibleNames)),
+            LoopSyntax loopSyntax => new LoopSyntax(RewriteStaticBlock(loopSyntax.Body, staticMethods, visibleNames)),
+            RangeForSyntax rangeForSyntax => RewriteStaticRangeFor(rangeForSyntax, staticMethods, visibleNames),
+            ForSyntax forSyntax => RewriteStaticFor(forSyntax, staticMethods, visibleNames),
             SwitchSyntax switchSyntax => new SwitchSyntax(
-                RewriteStaticExpression(switchSyntax.Subject, staticMethods),
+                RewriteStaticExpression(switchSyntax.Subject, staticMethods, visibleNames),
                 switchSyntax.Cases.Select(switchCase => new SwitchCaseSyntax(
-                    switchCase.Patterns.Select(pattern => RewriteStaticSwitchPattern(pattern, staticMethods)).ToList(),
-                    RewriteStaticBlock(switchCase.Block, staticMethods))).ToList(),
-                switchSyntax.DefaultBlock.Map(block => RewriteStaticBlock(block, staticMethods))),
-            ReturnSyntax returnSyntax => new ReturnSyntax(returnSyntax.Expression.Map(expression => RewriteStaticExpression(expression, staticMethods))),
+                    switchCase.Patterns.Select(pattern => RewriteStaticSwitchPattern(pattern, staticMethods, visibleNames)).ToList(),
+                    RewriteStaticBlock(switchCase.Block, staticMethods, visibleNames))).ToList(),
+                switchSyntax.DefaultBlock.Map(block => RewriteStaticBlock(block, staticMethods, visibleNames))),
+            ReturnSyntax returnSyntax => new ReturnSyntax(returnSyntax.Expression.Map(expression => RewriteStaticExpression(expression, staticMethods, visibleNames))),
             BreakSyntax or ContinueSyntax => statement,
             _ => statement,
         };
     }
 
-    private static ExpressionSyntax RewriteStaticExpression(ExpressionSyntax expression, IReadOnlyDictionary<string, string> staticMethods)
+    private static RangeForSyntax RewriteStaticRangeFor(
+        RangeForSyntax rangeForSyntax,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
+    {
+        var bodyNames = new HashSet<string>(visibleNames, StringComparer.Ordinal) { rangeForSyntax.Identifier };
+        return new RangeForSyntax(
+            rangeForSyntax.Type,
+            rangeForSyntax.Identifier,
+            RewriteStaticExpression(rangeForSyntax.Start, staticMethods, visibleNames),
+            RewriteStaticExpression(rangeForSyntax.End, staticMethods, visibleNames),
+            RewriteStaticBlock(rangeForSyntax.Body, staticMethods, bodyNames));
+    }
+
+    private static ForSyntax RewriteStaticFor(
+        ForSyntax forSyntax,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
+    {
+        var forNames = new HashSet<string>(visibleNames, StringComparer.Ordinal);
+        var initializer = forSyntax.Initializer.Map(initializer =>
+        {
+            var rewritten = RewriteStaticStatement(initializer, staticMethods, forNames);
+            AddDeclaredName(initializer, forNames);
+            return rewritten;
+        });
+        return new ForSyntax(
+            initializer,
+            forSyntax.Condition.Map(condition => RewriteStaticExpression(condition, staticMethods, forNames)),
+            forSyntax.Increment.Map(increment => RewriteStaticExpression(increment, staticMethods, forNames)),
+            RewriteStaticBlock(forSyntax.Body, staticMethods, forNames));
+    }
+
+    private static ExpressionSyntax RewriteStaticExpression(
+        ExpressionSyntax expression,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
     {
         return expression switch
         {
-            SdkDotCallSyntax call when staticMethods.TryGetValue($"{call.Module}.{call.Method}", out var functionName) =>
-                new FunctionCall(functionName, call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods))),
+            SdkDotCallSyntax call when !visibleNames.Contains(call.Module)
+                                      && staticMethods.TryGetValue($"{call.Module}.{call.Method}", out var functionName) =>
+                new FunctionCall(functionName, call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods, visibleNames))),
             BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
-                RewriteStaticExpression(binary.Left, staticMethods),
-                RewriteStaticExpression(binary.Right, staticMethods),
+                RewriteStaticExpression(binary.Left, staticMethods, visibleNames),
+                RewriteStaticExpression(binary.Right, staticMethods, visibleNames),
                 binary.Operator),
-            UnaryExpressionSyntax unary => new UnaryExpressionSyntax(unary.OperatorSymbol, RewriteStaticExpression(unary.Operand, staticMethods)),
+            UnaryExpressionSyntax unary => new UnaryExpressionSyntax(unary.OperatorSymbol, RewriteStaticExpression(unary.Operand, staticMethods, visibleNames)),
             ConditionalExpressionSyntax conditional => new ConditionalExpressionSyntax(
-                RewriteStaticExpression(conditional.Condition, staticMethods),
-                RewriteStaticExpression(conditional.WhenTrue, staticMethods),
-                RewriteStaticExpression(conditional.WhenFalse, staticMethods)),
-            CastSyntax cast => new CastSyntax(cast.Type, RewriteStaticExpression(cast.Expression, staticMethods)),
-            FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods))),
+                RewriteStaticExpression(conditional.Condition, staticMethods, visibleNames),
+                RewriteStaticExpression(conditional.WhenTrue, staticMethods, visibleNames),
+                RewriteStaticExpression(conditional.WhenFalse, staticMethods, visibleNames)),
+            CastSyntax cast => new CastSyntax(cast.Type, RewriteStaticExpression(cast.Expression, staticMethods, visibleNames)),
+            FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods, visibleNames))),
             SdkDotCallSyntax call => new SdkDotCallSyntax(
                 call.Module,
                 call.Method,
-                call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods))),
-            MemberAccessSyntax memberAccess => new MemberAccessSyntax(RewriteStaticExpression(memberAccess.Target, staticMethods), memberAccess.Member),
-            IndexExpressionSyntax index => new IndexExpressionSyntax(index.BaseIdentifier, RewriteStaticExpression(index.Index, staticMethods)),
-            NamedArgumentSyntax named => new NamedArgumentSyntax(named.Name, RewriteStaticExpression(named.Expression, staticMethods)),
+                call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods, visibleNames))),
+            MemberAccessSyntax memberAccess => new MemberAccessSyntax(RewriteStaticExpression(memberAccess.Target, staticMethods, visibleNames), memberAccess.Member),
+            IndexExpressionSyntax index => new IndexExpressionSyntax(index.BaseIdentifier, RewriteStaticExpression(index.Index, staticMethods, visibleNames)),
+            NamedArgumentSyntax named => new NamedArgumentSyntax(named.Name, RewriteStaticExpression(named.Expression, staticMethods, visibleNames)),
             PipelineExpressionSyntax pipeline => new PipelineExpressionSyntax(
-                RewriteStaticExpression(pipeline.Value, staticMethods),
+                RewriteStaticExpression(pipeline.Value, staticMethods, visibleNames),
                 pipeline.Steps.Select(step => new PipelineStepSyntax(
                     step.FunctionName,
-                    step.Arguments.Select(argument => RewriteStaticExpression(argument, staticMethods)))).ToList()),
+                    step.Arguments.Select(argument => RewriteStaticExpression(argument, staticMethods, visibleNames)))).ToList()),
             SwitchExpressionSyntax switchExpression => new SwitchExpressionSyntax(
-                RewriteStaticExpression(switchExpression.Subject, staticMethods),
+                RewriteStaticExpression(switchExpression.Subject, staticMethods, visibleNames),
                 switchExpression.Arms.Select(arm => new SwitchExpressionArmSyntax(
-                    arm.Patterns.Select(pattern => RewriteStaticSwitchPattern(pattern, staticMethods)).ToList(),
-                    RewriteStaticExpression(arm.Value, staticMethods))).ToList(),
-                switchExpression.DefaultValue.Map(value => RewriteStaticExpression(value, staticMethods))),
-            ArrayInitializerSyntax array => new ArrayInitializerSyntax(array.Elements.Select(element => RewriteStaticExpression(element, staticMethods))),
+                    arm.Patterns.Select(pattern => RewriteStaticSwitchPattern(pattern, staticMethods, visibleNames)).ToList(),
+                    RewriteStaticExpression(arm.Value, staticMethods, visibleNames))).ToList(),
+                switchExpression.DefaultValue.Map(value => RewriteStaticExpression(value, staticMethods, visibleNames))),
+            ArrayInitializerSyntax array => new ArrayInitializerSyntax(array.Elements.Select(element => RewriteStaticExpression(element, staticMethods, visibleNames))),
             StructInitializerSyntax initializer => new StructInitializerSyntax(
-                initializer.Fields.Select(field => new StructFieldInitializerSyntax(field.Name, RewriteStaticExpression(field.Expression, staticMethods)))),
+                initializer.Fields.Select(field => new StructFieldInitializerSyntax(field.Name, RewriteStaticExpression(field.Expression, staticMethods, visibleNames)))),
             AssignmentSyntax assignment => new AssignmentSyntax(
-                RewriteStaticLValue(assignment.Left, staticMethods),
+                RewriteStaticLValue(assignment.Left, staticMethods, visibleNames),
                 assignment.OperatorSymbol,
-                RewriteStaticExpression(assignment.Right, staticMethods)),
-            PostfixMutationSyntax postfix => new PostfixMutationSyntax(RewriteStaticLValue(postfix.Target, staticMethods), postfix.OperatorSymbol),
+                RewriteStaticExpression(assignment.Right, staticMethods, visibleNames)),
+            PostfixMutationSyntax postfix => new PostfixMutationSyntax(RewriteStaticLValue(postfix.Target, staticMethods, visibleNames), postfix.OperatorSymbol),
             _ => expression,
         };
     }
 
-    private static LValue RewriteStaticLValue(LValue lValue, IReadOnlyDictionary<string, string> staticMethods)
+    private static LValue RewriteStaticLValue(
+        LValue lValue,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
     {
         return lValue switch
         {
-            MemberAccessLValue memberAccess => new MemberAccessLValue(RewriteStaticMemberAccess(memberAccess.MemberAccess, staticMethods)),
-            IndexLValue index => new IndexLValue(index.BaseIdentifier, RewriteStaticExpression(index.Index, staticMethods)),
-            PointerDerefLValue pointer => new PointerDerefLValue(RewriteStaticExpression(pointer.Expression, staticMethods)),
+            MemberAccessLValue memberAccess => new MemberAccessLValue(RewriteStaticMemberAccess(memberAccess.MemberAccess, staticMethods, visibleNames)),
+            IndexLValue index => new IndexLValue(index.BaseIdentifier, RewriteStaticExpression(index.Index, staticMethods, visibleNames)),
+            PointerDerefLValue pointer => new PointerDerefLValue(RewriteStaticExpression(pointer.Expression, staticMethods, visibleNames)),
             _ => lValue,
         };
     }
 
-    private static MemberAccessSyntax RewriteStaticMemberAccess(MemberAccessSyntax memberAccess, IReadOnlyDictionary<string, string> staticMethods)
+    private static MemberAccessSyntax RewriteStaticMemberAccess(
+        MemberAccessSyntax memberAccess,
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
     {
-        return new MemberAccessSyntax(RewriteStaticExpression(memberAccess.Target, staticMethods), memberAccess.Member);
+        return new MemberAccessSyntax(RewriteStaticExpression(memberAccess.Target, staticMethods, visibleNames), memberAccess.Member);
     }
 
     private static SwitchCasePatternSyntax RewriteSwitchPattern(
@@ -399,13 +450,14 @@ internal static class StaticClassLowerer
 
     private static SwitchCasePatternSyntax RewriteStaticSwitchPattern(
         SwitchCasePatternSyntax pattern,
-        IReadOnlyDictionary<string, string> staticMethods)
+        IReadOnlyDictionary<string, string> staticMethods,
+        IReadOnlySet<string> visibleNames)
     {
         return pattern.End.Match(
             end => new SwitchCasePatternSyntax(
-                RewriteStaticExpression(pattern.Start, staticMethods),
-                RewriteStaticExpression(end, staticMethods)),
-            () => new SwitchCasePatternSyntax(RewriteStaticExpression(pattern.Start, staticMethods)));
+                RewriteStaticExpression(pattern.Start, staticMethods, visibleNames),
+                RewriteStaticExpression(end, staticMethods, visibleNames)),
+            () => new SwitchCasePatternSyntax(RewriteStaticExpression(pattern.Start, staticMethods, visibleNames)));
     }
 
     private static bool IsFieldReference(string name, IReadOnlySet<string> fieldNames, IReadOnlySet<string> visibleNames)

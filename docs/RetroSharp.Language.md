@@ -138,9 +138,24 @@ inline void WaitFrame() {
 }
 ```
 
-The current Game Boy and NES cartridge targets recognize `intrinsic("wait_frame")` on an extern declaration whose `target(...)` matches the backend (`"gb"` or `"nes"`). Calling a source helper over that extern emits the same bytes as the current `Sdk2DOperation.WaitFrame` path, with no call ABI, stack setup, helper thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline helpers: if a target does not recognize the declared intrinsic, compilation fails instead of emitting an empty function.
+The current Game Boy and NES cartridge targets resolve extern intrinsics through
+a per-target catalog. Both targets currently recognize `wait_frame`
+(`wait_vblank` is accepted as an alias) and `poll_input` on declarations whose
+`target(...)` matches the backend (`"gb"` or `"nes"`). Calling a source helper
+over those externs emits the same bytes as the current `Sdk2DOperation.WaitFrame`
+and `Sdk2DOperation.PollInput` paths, with no call ABI, stack setup, helper
+thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline
+helpers: if a target does not recognize the declared intrinsic, compilation
+fails instead of emitting an empty function.
 
-This is a minimal bridge toward moving SDK functions into source libraries over per-target intrinsics. The full design still needs module/library packaging, target selection for portable helper bodies, more intrinsic names and signatures, and diagnostics for unsupported target variants.
+Target compilation now injects a small SDK source library before parsing. For
+the first slice, that library defines `video.WaitVBlank()` and `input.Poll()` as
+inline wrappers over target-selected extern intrinsics. Functions can carry
+`[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
+non-matching variants before constant folding and function indexing, so portable
+helper code can share one helper name while selecting the correct target extern.
+Higher-level camera, sprite, and collision SDK calls still lower through
+capability-checked SDK operations rather than direct intrinsics.
 
 ---
 
