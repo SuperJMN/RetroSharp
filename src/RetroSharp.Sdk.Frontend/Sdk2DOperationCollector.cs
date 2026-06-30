@@ -169,6 +169,41 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
+    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraAabbTiles)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.CameraAabbTiles}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var screenXArg, var worldYArg, var widthArg, var heightArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var worldId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.WorldId) ?? "default";
+        var flags = (WorldTileFlags)ConstRange(
+            CompileTimeConstant(resolved, TargetIntrinsicOperandRole.EnumFlags) ?? 0,
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_aabb_tiles argument 5");
+        var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_tiles argument 1");
+        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_tiles argument 2");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_tiles argument 3");
+        var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_tiles argument 4");
+
+        return new Sdk2DOperation.CameraAabbTiles(
+            WorldId: worldId,
+            ScreenX: screenX,
+            WorldY: worldY,
+            WorldYOffset: worldYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
     public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(FunctionCall call)
     {
         SdkCallReader.RequireArity(call, 5);
@@ -185,6 +220,41 @@ public static class Sdk2DOperationCollector
 
         return new Sdk2DOperation.CameraAabbHitTop(
             WorldId: "default",
+            ScreenX: screenX,
+            WorldY: worldY,
+            WorldYOffset: worldYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
+    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraAabbHitTop)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.CameraAabbHitTop}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var screenXArg, var worldYArg, var widthArg, var heightArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var worldId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.WorldId) ?? "default";
+        var flags = (WorldTileFlags)ConstRange(
+            CompileTimeConstant(resolved, TargetIntrinsicOperandRole.EnumFlags) ?? 0,
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_aabb_hit_top argument 5");
+        var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_hit_top argument 1");
+        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_hit_top argument 2");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_hit_top argument 3");
+        var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_hit_top argument 4");
+
+        return new Sdk2DOperation.CameraAabbHitTop(
+            WorldId: worldId,
             ScreenX: screenX,
             WorldY: worldY,
             WorldYOffset: worldYOffset,
@@ -312,12 +382,31 @@ public static class Sdk2DOperationCollector
     private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
     {
         var value = SdkCallReader.ConstValue(expression, context);
+        return ConstRange(value, min, max, context);
+    }
+
+    private static int ConstRange(int value, int min, int max, string context)
+    {
         if (value < min || value > max)
         {
             throw new InvalidOperationException($"{context} must be between {min} and {max}.");
         }
 
         return value;
+    }
+
+    private static string? CompileTimeIdentifier(ResolvedTargetIntrinsicCall resolved, TargetIntrinsicOperandRole role)
+    {
+        return resolved.CompileTimeOperands
+            .FirstOrDefault(operand => operand.Role == role)
+            ?.Identifier;
+    }
+
+    private static int? CompileTimeConstant(ResolvedTargetIntrinsicCall resolved, TargetIntrinsicOperandRole role)
+    {
+        return resolved.CompileTimeOperands
+            .FirstOrDefault(operand => operand.Role == role)
+            ?.Constant;
     }
 
     private static SdkAabbExtent ReadAabbExtent(ExpressionSyntax expression, string context)
@@ -771,13 +860,20 @@ public static class Sdk2DOperationCollector
             }
 
             var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
-            if (resolved.Descriptor.Operation != TargetIntrinsicOperation.ReadWorldTileFlags)
+            switch (resolved.Descriptor.Operation)
             {
-                return false;
+                case TargetIntrinsicOperation.ReadWorldTileFlags:
+                    CollectWorldTileFlagsAt(resolved);
+                    return true;
+                case TargetIntrinsicOperation.CameraAabbTiles:
+                    CollectCameraAabbTiles(resolved);
+                    return true;
+                case TargetIntrinsicOperation.CameraAabbHitTop:
+                    CollectCameraAabbHitTop(resolved);
+                    return true;
+                default:
+                    return false;
             }
-
-            CollectWorldTileFlagsAt(resolved);
-            return true;
         }
 
         private void CollectWorldTileFlagsAt(FunctionCall call)
@@ -810,9 +906,19 @@ public static class Sdk2DOperationCollector
             AddOp(ReadCameraAabbTiles(call));
         }
 
+        private void CollectCameraAabbTiles(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadCameraAabbTiles(resolved));
+        }
+
         private void CollectCameraAabbHitTop(FunctionCall call)
         {
             AddOp(ReadCameraAabbHitTop(call));
+        }
+
+        private void CollectCameraAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadCameraAabbHitTop(resolved));
         }
 
         private void CollectCameraScreenAabbTiles(FunctionCall call)

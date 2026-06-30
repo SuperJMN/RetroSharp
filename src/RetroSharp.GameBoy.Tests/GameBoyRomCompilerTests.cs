@@ -646,6 +646,74 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_gb()
+    {
+        const string direct = """
+                              void define_world() {
+                                  world_column(0, 0, 4);
+                                  world_column(1, 0, 4);
+                                  world_column(2, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_flags(1, 0, 1);
+                                  world_flags(2, 0, 1);
+                                  world_map(3, 11, 2);
+                                  camera_init(3, 11, 2);
+                              }
+
+                              void main() {
+                                  define_world();
+                                  i16 footY = 16;
+                                  i16 hit = camera_aabb_tiles(72, footY - 8, 16, 16, 1);
+                                  i16 hitTop = camera_aabb_hit_top(72, footY - 8, 16, 16, 1);
+                              }
+                              """;
+        const string library = """
+                               void define_world() {
+                                   world.Column(0, 0, 4);
+                                   world.Column(1, 0, 4);
+                                   world.Column(2, 0, 4);
+                                   world.Flags(0, 0, 1);
+                                   world.Flags(1, 0, 1);
+                                   world.Flags(2, 0, 1);
+                                   world.Map(3, 11, 2);
+                                   camera.Init(3, 11, 2);
+                               }
+
+                               void main() {
+                                   define_world();
+                                   i16 footY = 16;
+                                   i16 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                   i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("[intrinsic(\"camera_aabb_tiles\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"camera_aabb_hit_top\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
+    public void Collision_capability_checks_preserved()
+    {
+        const string source = """
+                              void main() {
+                                  world.Column(0, 0, 4);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 11, 2);
+                                  camera.Init(1, 11, 2);
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(150, footY, 16, 8, 1);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("camera AABB screen span must fit within target 'gb' visible width 160.", exception.Message);
+    }
+
+    [Fact]
     public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """

@@ -6,6 +6,8 @@ public enum TargetIntrinsicOperation
     PollInput,
     UpdateAudio,
     ReadWorldTileFlags,
+    CameraAabbTiles,
+    CameraAabbHitTop,
     SetCameraPosition,
     ApplyCamera,
     DrawLogicalSprite,
@@ -89,6 +91,30 @@ public sealed record TargetIntrinsicDescriptor
     public static TargetIntrinsicDescriptor SetCameraPosition(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.SetCameraPosition, arity);
+    }
+
+    public static TargetIntrinsicDescriptor CameraAabbTiles(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.CameraAabbTiles,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
+    public static TargetIntrinsicDescriptor CameraAabbHitTop(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.CameraAabbHitTop,
+            runtimeArity,
+            compileTimeOperands);
     }
 
     public static TargetIntrinsicDescriptor ApplyCamera(string name, int arity)

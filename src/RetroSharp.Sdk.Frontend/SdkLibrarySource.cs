@@ -7,6 +7,44 @@ public static class SdkLibrarySource
     public static string ForTarget(TargetIntrinsicCatalog catalog)
     {
         var prefix = $"__retrosharp_{catalog.TargetId}";
+        var cameraAabbExterns = "";
+        var cameraAabbMethods = "";
+        if (catalog.TryResolve("camera_aabb_tiles", out var cameraAabbTiles)
+            && cameraAabbTiles.Operation == TargetIntrinsicOperation.CameraAabbTiles)
+        {
+            cameraAabbExterns += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_aabb_tiles")]
+                 extern i16 {{prefix}}_camera_aabb_tiles(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
+
+                 """;
+            cameraAabbMethods += $$"""
+
+                     static inline i16 AabbTiles(i16 screenX, i16 worldY, i16 width, i16 height, i16 flags)
+                     {
+                         return {{prefix}}_camera_aabb_tiles("default", screenX, worldY, width, height, flags);
+                     }
+                 """;
+        }
+
+        if (catalog.TryResolve("camera_aabb_hit_top", out var cameraAabbHitTop)
+            && cameraAabbHitTop.Operation == TargetIntrinsicOperation.CameraAabbHitTop)
+        {
+            cameraAabbExterns += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_aabb_hit_top")]
+                 extern i16 {{prefix}}_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
+
+                 """;
+            cameraAabbMethods += $$"""
+
+                     static inline i16 AabbHitTop(i16 screenX, i16 worldY, i16 width, i16 height, i16 flags)
+                     {
+                         return {{prefix}}_camera_aabb_hit_top("default", screenX, worldY, width, height, flags);
+                     }
+                 """;
+        }
+
         var library = $$"""
                  const {{MarkerName(catalog.TargetId)}} = 1;
 
@@ -32,6 +70,7 @@ public static class SdkLibrarySource
                  [intrinsic("camera_apply")]
                  extern void {{prefix}}_camera_apply();
 
+                 {{cameraAabbExterns}}
                  class video
                  {
                      static inline void WaitVBlank()
@@ -67,6 +106,7 @@ public static class SdkLibrarySource
                      {
                          {{prefix}}_camera_apply();
                      }
+                 {{cameraAabbMethods}}
                  }
 
                  """;
