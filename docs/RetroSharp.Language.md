@@ -140,19 +140,20 @@ inline void WaitFrame() {
 
 The current Game Boy and NES cartridge targets resolve extern intrinsics through
 a per-target catalog. Both targets currently recognize `wait_frame`
-(`wait_vblank` is accepted as an alias), `poll_input`, and `audio_update` on
-declarations whose
+(`wait_vblank` is accepted as an alias), `poll_input`, `audio_update`,
+`camera_set_position`, and `camera_apply` on declarations whose
 `target(...)` matches the backend (`"gb"` or `"nes"`). Calling a source helper
 over those externs emits the same bytes as the current `Sdk2DOperation.WaitFrame`,
-`Sdk2DOperation.PollInput`, and `SdkAudioOperation.UpdateAudio` paths, with no call
+`Sdk2DOperation.PollInput`, `SdkAudioOperation.UpdateAudio`, and
+`Sdk2DOperation.SetCameraPosition`/`ApplyCamera` paths, with no call
 ABI, stack setup, helper
 thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline
 helpers: if a target does not recognize the declared intrinsic, compilation
 fails instead of emitting an empty function.
 
-Target compilation now injects a small SDK source library before parsing. For
-the first slice, that library defines `video.WaitVBlank()`, `input.Poll()`, and
-`audio.Update()` as
+Target compilation now injects a small SDK source library before parsing. That
+library defines `video.WaitVBlank()`, `input.Poll()`, `audio.Update()`,
+`camera.SetPosition(x, y)`, and `camera.Apply()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
 non-matching variants before constant folding and function indexing, so portable
@@ -162,8 +163,10 @@ Library helpers can be capability-gated and value-returning: Game Boy exposes
 `world_tile_flags_at` intrinsic, while NES — which lacks the world tile-flag
 collision query — does not inject the `world` class at all. Parameterized `inline`
 helpers substitute their arguments directly into the operation, so these calls stay
-byte-identical to the direct SDK form.
-Higher-level camera, sprite, and collision SDK calls still lower through
+byte-identical to the direct SDK form. Injecting `class camera` exposes only
+`SetPosition`/`Apply`; the rest of the camera module (`camera.Init`,
+`camera.AabbTiles`, `camera.AabbHitTop`) is unaffected.
+Higher-level sprite drawing and the streaming/collision SDK calls still lower through
 capability-checked SDK operations rather than direct intrinsics.
 
 ---

@@ -6,6 +6,8 @@ public enum TargetIntrinsicOperation
     PollInput,
     UpdateAudio,
     ReadWorldTileFlags,
+    SetCameraPosition,
+    ApplyCamera,
 }
 
 public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOperation Operation, int Arity)
@@ -28,6 +30,16 @@ public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOpera
     public static TargetIntrinsicDescriptor ReadWorldTileFlags(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ReadWorldTileFlags, arity);
+    }
+
+    public static TargetIntrinsicDescriptor SetCameraPosition(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.SetCameraPosition, arity);
+    }
+
+    public static TargetIntrinsicDescriptor ApplyCamera(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ApplyCamera, arity);
     }
 }
 

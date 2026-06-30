@@ -14,6 +14,8 @@ public static class GameBoyTarget
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
             TargetIntrinsicDescriptor.ReadWorldTileFlags("world_tile_flags_at", arity: 2),
+            TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
+            TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
         ]);
 
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(

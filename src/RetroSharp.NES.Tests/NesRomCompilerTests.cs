@@ -509,6 +509,37 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_camera_library_helpers_over_nes_intrinsic_like_sdk_operations()
+    {
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 1, 2);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  i16 x = 4;
+                                  camera_set_position(x, 0);
+                                  camera_apply();
+                                  return;
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   video.Init();
+                                   world.Column(0, 1, 2);
+                                   world.Map(1, 10, 2);
+                                   camera.Init(1, 10, 2);
+                                   i16 x = 4;
+                                   camera.SetPosition(x, 0);
+                                   camera.Apply();
+                                   return;
+                               }
+                               """;
+        Assert.Contains("class camera", SdkLibrarySource.ForTarget(NesTarget.Intrinsics), StringComparison.Ordinal);
+        Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
     public void Nes_sdk_library_does_not_expose_capability_gated_world_tile_flags_helper()
     {
         // world.TileFlagsAt(...) is gated on the WorldTileFlags collision query,
