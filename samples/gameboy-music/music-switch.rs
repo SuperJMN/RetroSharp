@@ -10,7 +10,7 @@ void main() {
         video.WaitVBlank();
         input.Poll();
         audio.Update();
-        if (button_just_pressed(Button.Start) != 0) {
+        if (Input.WasPressed(Button.Start)) {
             if (!onBlueOcean) {
                 music.Play(blue_ocean);
                 onBlueOcean = true;

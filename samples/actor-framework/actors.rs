@@ -21,7 +21,7 @@ void main() {
     loop {
         video.WaitVBlank();
         input.Poll();
-        if (button_down(Button.Right) && cameraX < 160) {
+        if (Input.IsDown(Button.Right) && cameraX < 160) {
             cameraX += 1;
         }
 

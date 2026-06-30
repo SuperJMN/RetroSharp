@@ -1358,6 +1358,44 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Input_facade_predicates_lower_like_button_builtins()
+    {
+        const string builtinSource = """
+                                     void main() {
+                                         video_init();
+                                         i16 w = 0;
+                                         i16 h = 0;
+                                         while (true) {
+                                             video_wait_vblank();
+                                             input_poll();
+                                             if (button_just_pressed(Button.A) != 0) { w += 1; }
+                                             if (button_down(Button.A) != 0) { w += 1; }
+                                             if (button_just_released(Button.A) != 0) { w += 1; }
+                                             h = button_hold_ticks(Button.A);
+                                         }
+                                     }
+                                     """;
+
+        const string facadeSource = """
+                                    void main() {
+                                        video_init();
+                                        i16 w = 0;
+                                        i16 h = 0;
+                                        while (true) {
+                                            video_wait_vblank();
+                                            input_poll();
+                                            if (Input.WasPressed(Button.A)) { w += 1; }
+                                            if (Input.IsDown(Button.A)) { w += 1; }
+                                            if (Input.WasReleased(Button.A)) { w += 1; }
+                                            h = Input.HoldTicks(Button.A);
+                                        }
+                                    }
+                                    """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(builtinSource), NesRomCompiler.CompileSource(facadeSource));
+    }
+
+    [Fact]
     public void Compiles_tick_input_helpers_to_nes_controller_state()
     {
         const string source = """

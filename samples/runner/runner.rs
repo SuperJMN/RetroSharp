@@ -139,15 +139,15 @@ class PlayerState {
     }
 
     inline void HandleJumpInput() {
-        if (button_just_pressed(Button.A) != 0) {
+        if (Input.WasPressed(Button.A)) {
             if (grounded) {
                 StartJump();
             }
         }
 
         if (jumping) {
-            jumpTicks = button_hold_ticks(Button.A);
-            if (button_down(Button.A) != 0) {
+            jumpTicks = Input.HoldTicks(Button.A);
+            if (Input.IsDown(Button.A)) {
                 if (jumpTicks < Jump.BoostTicks) {
                     if ((jumpTicks & Jump.BoostTickMask) != 0) {
                         velocityY -= 1;
@@ -155,7 +155,7 @@ class PlayerState {
                 }
             }
 
-            if (button_just_released(Button.A) != 0) {
+            if (Input.WasReleased(Button.A)) {
                 jumping = false;
             }
         }
@@ -246,7 +246,7 @@ class CameraState {
 
     inline void HoldDirection(bool grounded) {
         if (grounded) {
-            if (button_down(Button.B) != 0) {
+            if (Input.IsDown(Button.B)) {
                 AccelerateRun();
             } else {
                 DecelerateToWalk();
@@ -298,7 +298,7 @@ class CameraState {
     inline void MoveRightOnePixel(PlayerState player, Pixel wallProbeY) {
         CaptureScreen(player);
         rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;
-        if (camera.AabbTiles(rightProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+        if (camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = true;
             player.x += 1;
             if (screenX >= DeadZone.Right) {
@@ -312,7 +312,7 @@ class CameraState {
     inline void MoveLeftOnePixel(PlayerState player, Pixel wallProbeY) {
         CaptureScreen(player);
         leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;
-        if (camera.AabbTiles(leftProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+        if (camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = true;
             player.x -= 1;
             if (screenX <= DeadZone.Left) {
@@ -349,11 +349,11 @@ class CameraState {
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY) {
         let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
         Pixel desiredDirection = HorizontalMotion.None;
-        if (button_down(Button.Right) != 0) {
+        if (Input.IsDown(Button.Right)) {
             desiredDirection = HorizontalMotion.Right;
         }
 
-        if (button_down(Button.Left) != 0) {
+        if (Input.IsDown(Button.Left)) {
             desiredDirection = HorizontalMotion.Left;
         }
 
@@ -374,7 +374,7 @@ class FrameState {
 
     inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY) {
         if (player.velocityY < World.SignedVelocityWrap && player.velocityY != 0) {
-            footTile = camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, sprite_width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
+            footTile = camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
             if (footTile != CollisionProbe.NoTileHit) {
                 player.Land(footTile - Player.FootOffset);
             }
@@ -392,7 +392,7 @@ class FrameState {
     inline void ResolveCeilingHit(PlayerState player, Pixel screenX, Pixel footWorldY) {
         if (player.velocityY >= World.SignedVelocityWrap) {
             let headProbeY = footWorldY - CollisionProbe.CeilingProbeTopOffset;
-            if (camera.AabbTiles(screenX, headProbeY, sprite_width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0) {
+            if (camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0) {
                 player.BounceDown();
             }
         }
