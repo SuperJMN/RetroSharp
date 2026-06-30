@@ -64,7 +64,7 @@ public static class NesRomCompiler
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
-        return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES", NesTarget.Intrinsics);
     }
 
     private static IReadOnlyList<Sdk2DOperation> ValidateSdkOperations(NesVideoProgram videoProgram)
@@ -91,7 +91,7 @@ public static class NesRomCompiler
             Sdk2DOperationValidator.ValidateFrameBudget(NesTarget.Capabilities, budget);
         }
 
-        var audioOperations = SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
+        var audioOperations = SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES", NesTarget.Intrinsics);
         foreach (var operation in audioOperations)
         {
             SdkAudioOperationValidator.Validate(NesTarget.AudioCapabilities, operation);

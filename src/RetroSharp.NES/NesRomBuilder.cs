@@ -1756,6 +1756,9 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.PollInput:
                 EmitPollInput();
                 return true;
+            case TargetIntrinsicOperation.UpdateAudio:
+                EmitAudioUpdate();
+                return true;
             default:
                 throw new NotSupportedException($"NES intrinsic lowering does not support {intrinsic.Operation} yet.");
         }

@@ -18,6 +18,10 @@ public static class SdkLibrarySource
                  [intrinsic("poll_input")]
                  extern void {{prefix}}_poll_input();
 
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("audio_update")]
+                 extern void {{prefix}}_audio_update();
+
                  class video
                  {
                      static inline void WaitVBlank()
@@ -31,6 +35,14 @@ public static class SdkLibrarySource
                      static inline void Poll()
                      {
                          {{prefix}}_poll_input();
+                     }
+                 }
+
+                 class audio
+                 {
+                     static inline void Update()
+                     {
+                         {{prefix}}_audio_update();
                      }
                  }
 

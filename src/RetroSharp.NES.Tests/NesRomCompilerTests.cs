@@ -467,6 +467,48 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_audio_update_library_helper_over_nes_intrinsic_like_sdk_operation()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     audio_update();
+                                 }
+                                 """;
+
+        const string intrinsicSource = """
+                                       [target("nes")]
+                                       [intrinsic("audio_update")]
+                                       extern void nes_audio_update();
+
+                                       inline void audio_update() {
+                                           nes_audio_update();
+                                       }
+
+                                       void main() {
+                                           audio_update();
+                                       }
+                                       """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(sdkSource), NesRomCompiler.CompileSource(intrinsicSource));
+    }
+
+    [Fact]
+    public void Injected_nes_audio_update_helper_keeps_surface_byte_identical()
+    {
+        const string source = """
+                              void main() {
+                                  audio.Init();
+                                  audio.Update();
+                              }
+                              """;
+        var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
+        var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.Contains("class audio", library, StringComparison.Ordinal);
+        Assert.Equal(NesRomCompiler.CompileSource(explicitLibrarySource), NesRomCompiler.CompileSource(source));
+    }
+
+    [Fact]
     public void Injected_nes_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """

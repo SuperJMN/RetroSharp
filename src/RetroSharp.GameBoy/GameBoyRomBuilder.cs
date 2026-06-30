@@ -2419,6 +2419,9 @@ internal sealed class GameBoyRuntimeCompiler
             case TargetIntrinsicOperation.PollInput:
                 EmitNextSdkOperation<Sdk2DOperation.PollInput>(call.Name);
                 return true;
+            case TargetIntrinsicOperation.UpdateAudio:
+                EmitNextSdkAudioOperation<SdkAudioOperation.UpdateAudio>(call.Name);
+                return true;
             default:
                 throw new NotSupportedException($"Game Boy intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
