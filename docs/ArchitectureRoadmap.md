@@ -1368,7 +1368,7 @@ This gives the project a durable architecture before adding vertical scrolling, 
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It now uses a 2-axis dead-zone camera and variable projected screen-position collision over a tall 24x48 Tiled map that expands to a 48x96 tile world. NES accepts the runner audio calls as no-ops until real BGM lowering exists, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Larger diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` and the Tiled `world.Load(...)` path by `samples/tiled-free-scroll/free-scroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It now uses a 2-axis dead-zone camera and variable projected screen-position collision over a tall 24x48 Tiled map that expands to a 48x96 tile world. It also declares per-target VGM/VGZ background music through the portable audio calls, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Larger diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` and the Tiled `world.Load(...)` path by `samples/tiled-free-scroll/free-scroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
 
 The final cross-target sample should prove:
 

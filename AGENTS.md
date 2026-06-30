@@ -83,7 +83,7 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 ## Runner Notes
 
 - `samples/runner/runner.rs` is the shared Game Boy/NES runner target-acceptance sample, not proof that every API it uses is portable.
-- NES accepts the runner audio calls as no-ops until NES BGM lowering exists; do not treat that as real NES audio support.
+- NES and Game Boy both use per-target VGM/VGZ runner music variants via `music/runner.vgz`; do not treat NES audio calls as no-ops.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
 - The runner now uses `world.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.

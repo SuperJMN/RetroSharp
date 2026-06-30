@@ -19,6 +19,7 @@
 - [docs/GameBoyTarget.md](docs/GameBoyTarget.md): current Game Boy target subset and runner milestones.
 - [docs/GameBoyApuTraceFormat.md](docs/GameBoyApuTraceFormat.md): `.gbapu` binary/JSON schema, generation flow, runtime use, and limitations.
 - [docs/GameBoyApuTraceFormatV2.md](docs/GameBoyApuTraceFormatV2.md): measurement-driven design study for the faithful + compact `.gbapu` v2 format (loop detection, binary source, group-pool ROM encoding).
+- [docs/NesApuTraceFormat.md](docs/NesApuTraceFormat.md): compact NES VGM/VGZ-derived 2A03 frame-stream format and runtime replay notes.
 - [docs/GameBoyRunnerDebugging.md](docs/GameBoyRunnerDebugging.md): normal debugging workflow with the Game Boy runner as GB test app.
 - [docs/NesTarget.md](docs/NesTarget.md): current NES target subset.
 - [samples/README.md](samples/README.md): sample classification and ROM regeneration.
@@ -33,7 +34,7 @@
 - [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
 - [src/RetroSharp.Z80/](src/RetroSharp.Z80/): Z80 backend.
 - [samples/actor-framework/actors.rs](samples/actor-framework/actors.rs): Game Boy/NES target-acceptance actor framework sample with fixed pools, enemy definitions, Tiled spawns, runtime activation, and camera-relative helpers.
-- [samples/runner/runner.rs](samples/runner/runner.rs): shared Game Boy/NES target-acceptance runner. NES accepts its audio calls as no-ops until NES BGM lowering exists.
+- [samples/runner/runner.rs](samples/runner/runner.rs): shared Game Boy/NES target-acceptance runner with per-target VGM/VGZ background music.
 - [samples/runner/maps/runner.tmj](samples/runner/maps/runner.tmj): editable Tiled runner map.
 - [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked sample ROM regeneration script.
 

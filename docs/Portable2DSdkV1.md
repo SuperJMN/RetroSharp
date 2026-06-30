@@ -29,7 +29,7 @@ Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`
 | Signature | Semantics |
 | --- | --- |
 | `audio.Init()` | Initialize the target audio path and reset portable BGM playback state. |
-| `music.Asset(name, path)` | Declare a music resource. The portable envelope format is `retrosharp.music.v1`, with per-platform variants such as a Game Boy `.uge` file or `.gbapu` APU trace. |
+| `music.Asset(name, path)` | Declare a music resource. VGM/VGZ is the preferred faithful input; per-target variants such as `theme.gb.vgz` and `theme.nes.vgz` are resolved automatically when present. The portable envelope format is `retrosharp.music.v1` for explicit platform entries. |
 | `music.Play(name)` | Start the declared BGM resource. This maps to `SdkAudioOperation.PlayMusic` and is capability-checked through `TargetAudioCapabilities`. |
 | `music.Stop()` | Stop BGM playback. |
 | `audio.Update()` | Advance the target audio runtime once. Call it once per frame after the frame boundary for targets whose BGM runtime is tick-driven. |
@@ -40,13 +40,13 @@ The resource envelope intentionally allows one source-level theme to carry diffe
 {
   "format": "retrosharp.music.v1",
   "platforms": {
-    "gb": { "format": "gbapu", "path": "theme.gbapu" },
-    "nes": { "format": "future", "path": "theme.nes.json" }
+    "gb": { "format": "vgm", "path": "theme.gb.vgz" },
+    "nes": { "format": "vgm", "path": "theme.nes.vgz" }
   }
 }
 ```
 
-Game Boy currently accepts hUGETracker `.uge` v6 resources and `.gbapu` APU traces (binary, or legacy `retrosharp.gbapu.v1` `.gbapu.json`) directly or through the envelope. The CLI has a target-specific `gbs-to-gbapu` export helper for preserving GBS APU register writes as `.gbapu`; `.gbs` is not a portable asset format. See `GameBoyApuTraceFormat.md` for the target-specific trace format analysis. NES recognizes the source-level audio calls for validation, but BGM playback is not implemented yet.
+Game Boy currently accepts VGM/VGZ DMG register logs, hUGETracker `.uge` v6 resources, and transitional `.gbapu` APU traces (binary, or legacy `retrosharp.gbapu.v1` `.gbapu.json`) directly or through the envelope. The CLI has a target-specific `gbs-to-gbapu` export helper for preserving GBS APU register writes as `.gbapu`; `.gbs` is not a portable asset format. NES accepts VGM/VGZ 2A03 register logs for pulse, triangle, noise, `$4015`, and `$4017`; DPCM and expansion audio remain out of scope for v1. See `GameBoyApuTraceFormat.md` and `NesApuTraceFormat.md` for target-specific compiled trace details.
 
 ### World data and collision
 
@@ -377,7 +377,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Camera Y | Supported with one-pixel stepping and row streaming. Diagonal movement uses a staggered one-edge-per-VBlank policy so a 19-row column or 21-column row crossing stays inside the 21-tile background write budget. | Supported through four-screen nametables. Maps up to 64x60 move without runtime tile writes; taller source-authored worlds stream the exposed 32-tile row and 9 touched attribute bytes with the staggered one-edge-per-VBlank policy. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
-| BGM | Supported for hUGETracker `.uge` v6 songs and `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Real playback not implemented; audio calls are accepted and lowered as no-ops for shared acceptance sources. |
+| BGM | Supported for VGM/VGZ DMG logs, hUGETracker `.uge` v6 songs, and transitional `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Supported for VGM/VGZ 2A03 logs covering pulse, triangle, noise, `$4015`, and `$4017`; DPCM and expansion audio are deferred. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
 | Actor framework slice | `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called `enemy.*` metadata helpers, and `pool.Update()`/`pool.Draw()`/`pool.TouchTiles()`/`pool.LandOnTiles()`/`pool.TouchPlayer()` lower before Game Boy target emission to fixed struct arrays, constants, inline helper branches, generated spawn-table helpers, `used[]`, runtime activation, camera-relative 2-axis draw/collision/player contact, and the basic behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | The same source-to-source actor framework slice lowers before NES target emission with NES sprite/scanline budgets and 2-axis camera-relative actor draw/collision support. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
@@ -395,7 +395,6 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Game Boy split-scroll HUD | `Target 'gb' does not support SplitScroll HUD. Use Window HUD, SpriteHud, or disable HUD for this target.` |
 | NES Window HUD | `Target 'nes' does not support Window HUD. Use disable HUD for this target.` |
 | NES four-screen camera stream area overflow | `NES four-screen free scroll stream area must fit within the 60-row four-screen height.` |
-| NES BGM playback on targets without no-op audio enabled | `Target 'nes' does not support BGM playback yet.` |
 | Game Boy sprite palette slot overflow | `Target 'gb' supports sprite palette slots 0..1, but palette slot 2 was requested.` |
 | NES world tile flag query | `Target 'nes' does not support world tile flag queries.` |
 | Game Boy hUGETracker timer tempo | `hUGETracker timer-based tempo is not supported by the Game Boy BGM v1 runtime.` |
@@ -409,12 +408,12 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 
 ## Current Stabilization Gaps
 
-SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because NES audio calls are currently no-ops and several broader world/HUD contracts are still missing. It now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a 48x96 tile world; larger diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `world.Load(...)`.
+SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because several broader world/HUD contracts are still missing. It now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a 48x96 tile world and declares per-target VGM/VGZ background music; larger diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `world.Load(...)`.
 
 - `camera.AabbTiles(...)`, `camera.AabbHitTop(...)`, `camera.ScreenAabbTiles(...)`, and `camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample with a 2-axis dead-zone camera; NES lowers its audio calls as no-ops until real BGM support exists. `samples/tiled-tall/tall.rs` is Game Boy-only target-acceptance coverage for vertical Tiled `world.Load(...)` scrolling, while `samples/tiled-vscroll/vscroll.rs` covers the same vertical Tiled path on Game Boy and NES with a wider 40x60 map. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES over source-authored columns, `samples/tiled-diagonal/diag.rs` is Game Boy-only target-acceptance coverage for diagonal Tiled `world.Load(...)`, and `samples/tiled-free-scroll/free-scroll.rs` is Game Boy/NES target-acceptance coverage for diagonal Tiled `world.Load(...)`.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample with a 2-axis dead-zone camera and per-target VGM/VGZ music. `samples/tiled-tall/tall.rs` is Game Boy-only target-acceptance coverage for vertical Tiled `world.Load(...)` scrolling, while `samples/tiled-vscroll/vscroll.rs` covers the same vertical Tiled path on Game Boy and NES with a wider 40x60 map. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES over source-authored columns, `samples/tiled-diagonal/diag.rs` is Game Boy-only target-acceptance coverage for diagonal Tiled `world.Load(...)`, and `samples/tiled-free-scroll/free-scroll.rs` is Game Boy/NES target-acceptance coverage for diagonal Tiled `world.Load(...)`.
 
 ## Minimal Game Boy/NES Example
 

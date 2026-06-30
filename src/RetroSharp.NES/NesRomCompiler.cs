@@ -189,6 +189,8 @@ internal sealed class NesVideoProgram
 
     private readonly List<NesCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
     private readonly Dictionary<string, NesCompiledSpriteAsset> spriteAssets = [];
+    private readonly List<NesCompiledMusicAsset> musicAssetsInLoadOrder = [];
+    private readonly Dictionary<string, NesCompiledMusicAsset> musicAssets = [];
     private readonly List<(int FirstTile, byte[] Data)> generatedBackgroundTiles = [];
     private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
     private readonly SortedDictionary<int, byte[]> mapColumns = [];
@@ -226,6 +228,10 @@ internal sealed class NesVideoProgram
     public IReadOnlyList<NesCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, NesCompiledSpriteAsset> SpriteAssets => spriteAssets;
+
+    public IReadOnlyList<NesCompiledMusicAsset> MusicAssetsInLoadOrder => musicAssetsInLoadOrder;
+
+    public IReadOnlyDictionary<string, NesCompiledMusicAsset> MusicAssets => musicAssets;
 
     public IReadOnlyList<(int FirstTile, byte[] Data)> GeneratedBackgroundTiles => generatedBackgroundTiles;
 
@@ -387,7 +393,7 @@ internal sealed class NesVideoProgram
                 ApplyAnimationClip(call);
                 break;
             case "music_asset":
-                RequireArity(call, 2);
+                ApplyMusicAsset(call);
                 break;
             case "audio_init":
             case "audio_update":
@@ -919,6 +925,21 @@ internal sealed class NesVideoProgram
         nextSpriteTile += asset.TileCount;
         spriteAssets.Add(name, asset);
         spriteAssetsInLoadOrder.Add(asset);
+    }
+
+    private void ApplyMusicAsset(FunctionCall call)
+    {
+        RequireArity(call, 2);
+        var name = IdentifierArg(call.Parameters.ElementAt(0), "music_asset argument 1");
+        if (musicAssets.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"Music asset '{name}' is already declared.");
+        }
+
+        var path = PlatformAssetPathResolver.ResolveVariant(ResolveAssetPath(StringArg(call, 1)), "nes");
+        var asset = NesMusicAssetCompiler.CompileFromFile(name, path);
+        musicAssets.Add(name, asset);
+        musicAssetsInLoadOrder.Add(asset);
     }
 
     private void ApplyAnimationClip(FunctionCall call)

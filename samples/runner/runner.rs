@@ -425,7 +425,7 @@ void setup_video() {
 }
 
 void setup_audio() {
-    music.Asset(runner_theme, "music/sml2_track1.gbapu");
+    music.Asset(runner_theme, "music/runner.vgz");
     audio.Init();
     music.Play(runner_theme);
     return;

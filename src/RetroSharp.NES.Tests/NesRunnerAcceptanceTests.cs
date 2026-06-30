@@ -16,7 +16,7 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
-    public void Nes_runner_sample_compiles_with_audio_as_noop()
+    public void Nes_runner_sample_compiles_with_vgm_audio()
     {
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);

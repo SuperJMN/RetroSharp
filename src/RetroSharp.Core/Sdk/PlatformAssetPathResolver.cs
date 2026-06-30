@@ -10,6 +10,17 @@ public static class PlatformAssetPathResolver
             return path;
         }
 
+        return ResolveVariant(path, platform);
+    }
+
+    public static string ResolveVariant(string path, string platform)
+    {
+        var extension = Path.GetExtension(path);
+        if (string.IsNullOrEmpty(extension))
+        {
+            return path;
+        }
+
         var directory = Path.GetDirectoryName(path);
         var fileName = Path.GetFileNameWithoutExtension(path);
         var logicalName = StripKnownPlatformSuffix(fileName);

@@ -774,7 +774,7 @@ internal sealed class GameBoyVideoProgram
             throw new InvalidOperationException($"Music asset '{name}' is already declared.");
         }
 
-        var path = ResolveAssetPath(StringArg(call, 1));
+        var path = PlatformAssetPathResolver.ResolveVariant(ResolveAssetPath(StringArg(call, 1)), "gb");
         var asset = GameBoyMusicAssetCompiler.CompileFromFile(name, path);
         musicAssets.Add(name, asset);
         musicAssetsInLoadOrder.Add(asset);

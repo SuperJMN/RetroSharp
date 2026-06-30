@@ -4416,7 +4416,7 @@ public class GameBoyRomCompilerTests
         var baseDirectory = Path.GetDirectoryName(sourcePath);
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("""music.Asset(runner_theme, "music/sml2_track1.gbapu");""", source);
+        Assert.Contains("""music.Asset(runner_theme, "music/runner.vgz");""", source);
         Assert.Contains("audio.Init();", source);
         Assert.Contains("music.Play(runner_theme);", source);
 

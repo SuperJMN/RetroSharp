@@ -1,6 +1,7 @@
 namespace RetroSharp.GameBoy.Tests;
 
 using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Text.Json;
 using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
@@ -53,6 +54,39 @@ public sealed class GameBoyMusicTests
         Assert.True(ContainsSequence(rom, [0x24, 0x77]), "Compiled trace should preserve NR50 writes.");
         Assert.True(ContainsSequence(rom, [0x25, 0xFF]), "Compiled trace should preserve NR51 writes.");
         Assert.True(ContainsSequence(rom, [0x30, 0x12]), "Compiled trace should preserve wave RAM writes.");
+    }
+
+    [Fact]
+    public void Compiles_vgz_vgm_input_through_existing_gbapu_repack()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzip(
+            Path.Combine(directory, "stage.gb.vgz"),
+            chipClockOffset: 0x80,
+            chipClockHz: 4_194_304,
+            command: 0xB3,
+            [0x14, 0x77],
+            waitSamples: 735,
+            [0x04, 0x87]);
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  music.Asset(stage_theme, "stage.vgz");
+                                  audio.Init();
+                                  music.Play(stage_theme);
+                                  loop {
+                                      video.WaitVBlank();
+                                      audio.Update();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x24, 0x77]), "VGM DMG register writes should be compiled into the GBAPU stream.");
+        Assert.True(ContainsSequence(rom, [0x14, 0x87]), "VGM trigger writes should survive the existing GBAPU repack.");
     }
 
     [Fact]
@@ -629,6 +663,49 @@ public sealed class GameBoyMusicTests
             new GameBoyApuTraceMetadata("Large Trace"),
             events);
         GameBoyApuTraceBinary.Write(path, trace);
+    }
+
+    private static void WriteVgmGzip(
+        string path,
+        int chipClockOffset,
+        int chipClockHz,
+        byte command,
+        byte[] firstPayload,
+        int waitSamples,
+        byte[] secondPayload)
+    {
+        var commands = new List<byte> { command };
+        commands.AddRange(firstPayload);
+        commands.Add(0x61);
+        commands.Add((byte)(waitSamples & 0xFF));
+        commands.Add((byte)(waitSamples >> 8));
+        commands.Add(command);
+        commands.AddRange(secondPayload);
+        commands.Add(0x66);
+
+        var bytes = new byte[0xC0 + commands.Count];
+        bytes[0] = (byte)'V';
+        bytes[1] = (byte)'g';
+        bytes[2] = (byte)'m';
+        bytes[3] = (byte)' ';
+        WriteUInt32(bytes, 0x08, 0x00000161);
+        WriteUInt32(bytes, 0x18, (uint)(waitSamples * 2));
+        WriteUInt32(bytes, 0x34, 0x8C);
+        WriteUInt32(bytes, chipClockOffset, (uint)chipClockHz);
+        commands.CopyTo(bytes, 0xC0);
+        WriteUInt32(bytes, 0x04, (uint)(bytes.Length - 4));
+
+        using var file = File.Create(path);
+        using var gzip = new GZipStream(file, CompressionLevel.SmallestSize);
+        gzip.Write(bytes);
+    }
+
+    private static void WriteUInt32(byte[] bytes, int offset, uint value)
+    {
+        bytes[offset] = (byte)(value & 0xFF);
+        bytes[offset + 1] = (byte)((value >> 8) & 0xFF);
+        bytes[offset + 2] = (byte)((value >> 16) & 0xFF);
+        bytes[offset + 3] = (byte)(value >> 24);
     }
 
     private static byte TriggerValue(int frame) => (byte)(0x80 | (frame & 0x7F));
