@@ -220,6 +220,48 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Bool_flags_lower_like_int_flags_with_explicit_comparisons()
+    {
+        const string intSource = """
+                                 type Pixel = i16;
+                                 struct S { Pixel grounded; Pixel moving; Pixel x; }
+                                 inline void step(this S s, Pixel grounded) {
+                                     if (grounded != 0) { s.x += 1; }
+                                     if (s.grounded == 0) { s.x += 1; }
+                                 }
+                                 void main() {
+                                     video_init();
+                                     S s; s.grounded = 1; s.moving = 0; s.x = 0;
+                                     s.step(s.grounded);
+                                     Pixel frame = s.grounded switch { 0 => 4, _ => s.moving switch { 0 => 0, _ => 7 } };
+                                     i16 sink = frame + s.x;
+                                     if (sink != 0) { video_present(); }
+                                     return;
+                                 }
+                                 """;
+
+        const string boolSource = """
+                                  type Pixel = i16;
+                                  struct S { bool grounded; bool moving; Pixel x; }
+                                  inline void step(this S s, bool grounded) {
+                                      if (grounded) { s.x += 1; }
+                                      if (!s.grounded) { s.x += 1; }
+                                  }
+                                  void main() {
+                                      video_init();
+                                      S s; s.grounded = true; s.moving = false; s.x = 0;
+                                      s.step(s.grounded);
+                                      Pixel frame = s.grounded switch { false => 4, _ => s.moving switch { false => 0, _ => 7 } };
+                                      i16 sink = frame + s.x;
+                                      if (sink != 0) { video_present(); }
+                                      return;
+                                  }
+                                  """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(intSource), NesRomCompiler.CompileSource(boolSource));
+    }
+
+    [Fact]
     public void Compiles_expression_bodied_value_functions_like_single_return_helpers()
     {
         const string blockSource = """
