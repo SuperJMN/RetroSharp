@@ -139,15 +139,15 @@ class PlayerState {
     }
 
     inline void HandleJumpInput() {
-        if (button_just_pressed(a) != 0) {
+        if (button_just_pressed(Button.A) != 0) {
             if (grounded != 0) {
                 StartJump();
             }
         }
 
         if (jumping != 0) {
-            jumpTicks = button_hold_ticks(a);
-            if (button_down(a) != 0) {
+            jumpTicks = button_hold_ticks(Button.A);
+            if (button_down(Button.A) != 0) {
                 if (jumpTicks < Jump.BoostTicks) {
                     if ((jumpTicks & Jump.BoostTickMask) != 0) {
                         velocityY -= 1;
@@ -155,7 +155,7 @@ class PlayerState {
                 }
             }
 
-            if (button_just_released(a) != 0) {
+            if (button_just_released(Button.A) != 0) {
                 jumping = 0;
             }
         }
@@ -246,7 +246,7 @@ class CameraState {
 
     inline void HoldDirection(Pixel grounded) {
         if (grounded != 0) {
-            if (button_down(b) != 0) {
+            if (button_down(Button.B) != 0) {
                 AccelerateRun();
             } else {
                 DecelerateToWalk();
@@ -349,11 +349,11 @@ class CameraState {
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY) {
         let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
         Pixel desiredDirection = HorizontalMotion.None;
-        if (button_down(right) != 0) {
+        if (button_down(Button.Right) != 0) {
             desiredDirection = HorizontalMotion.Right;
         }
 
-        if (button_down(left) != 0) {
+        if (button_down(Button.Left) != 0) {
             desiredDirection = HorizontalMotion.Left;
         }
 
