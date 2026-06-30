@@ -1,6 +1,6 @@
 # Compile-Time Operand Intrinsics
 
-Status: SAL-8.1 design note and golden-characterization contract.
+Status: SAL-8.2 mechanism implemented; later SAL-8 slices still decide the sprite and collision migrations.
 
 This note answers the open SAL-8 question from issue #158: how a target intrinsic can carry operands that must be resolved at compile time, such as a sprite asset id, a constant sprite palette slot, enum collision flags, or a world id, while keeping the language layer target-neutral.
 
@@ -50,18 +50,32 @@ A new compile-time parameter type or marker in the language is rejected. RetroSh
 
 ## Resolution Flow
 
-`TargetIntrinsicResolver` should continue reading `[target]` and `[intrinsic]` from the extern declaration, then resolve the named intrinsic through the active target's `TargetIntrinsicCatalog`. The resolved `TargetIntrinsicDescriptor` is the authoritative source for compile-time operand roles.
+`TargetIntrinsicResolver` continues reading `[target]` and `[intrinsic]` from the extern declaration, then resolves the named intrinsic through the active target's `TargetIntrinsicCatalog`. The resolved `TargetIntrinsicDescriptor` is the authoritative source for compile-time operand roles.
 
 The SDK/frontend collector reads call operands using the descriptor:
 
 1. Runtime slots are read as the existing bounded SDK operand forms (`SdkByteExpression`, `bool`-like values, or void parameters).
 2. `AssetRef` slots are read as identifiers and resolved to the same asset ids that `ReadDrawLogicalSprite` uses today.
 3. `ConstPaletteSlot` and `EnumFlags` slots are read with constant/enum folding and validated at the SDK/target boundary.
-4. `WorldId` slots are read as compile-time resource identifiers, defaulting to `"default"` for current world/collision operations.
+4. `WorldId` slots are read as compile-time resource identifiers. The current proof accepts the existing string-literal form such as `"default"` so it does not require new grammar.
 
 Per-target lowerers then emit through the same machinery that current `Sdk2DOperation` lowering uses. For `sprite.Draw`, the lowerer still resolves metasprite geometry from target asset metadata. For collision, `camera.AabbTiles` and `camera.AabbHitTop` still preserve their capability checks and the `255` no-hit result contract.
 
 The parser, AST, ABI, and classic `RetroSharp.Generation.Intermediate` IR do not gain sprite, camera, world, asset, generic, or expression-tree concepts. This is SDK/frontend plus target-intrinsic metadata.
+
+## Implemented Proof
+
+SAL-8.2 adds the descriptor-role machinery and a minimal non-sprite proof intrinsic on Game Boy:
+
+```csharp
+[target("gb")]
+[intrinsic("world_tile_flags_for_world")]
+extern i16 flags_for_world(i16 world, i16 x, i16 y);
+```
+
+The active Game Boy descriptor marks slot `0` as `WorldId` and leaves `x`/`y` as the two runtime operands. `flags_for_world("default", x, y)` lowers byte-identically to `world_tile_flags_at(x, y)`. A local variable in that slot is rejected before lowering, proving the compile-time operand is not turned into a runtime argument or temporary.
+
+This proof is deliberately not a new public portable SDK surface. It exists to validate the descriptor role and resolver path before SAL-8.3 wires `sprite.Draw`.
 
 ## Operation-Specific Guidance
 

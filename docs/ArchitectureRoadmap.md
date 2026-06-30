@@ -222,6 +222,15 @@ intrinsic. This proves the pattern extends from void leaf calls to argument-taki
 value-returning queries (parameterized `inline` helpers substitute their arguments
 into the operation operands without introducing temporaries, so the bytes match).
 
+SAL-8.2 adds the missing compile-time operand role mechanism to `TargetIntrinsicDescriptor`
+without changing parser, AST, ABI, or classic IR. Descriptors can now mark source call slots
+as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or `WorldId`, and the SDK/frontend resolver
+separates those compile-time operands from runtime operands before operation collection. The
+minimal proof is a Game Boy `world_tile_flags_for_world` intrinsic whose `WorldId` slot lowers
+byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting runtime locals
+in that slot. This proves the mechanism only; `sprite.Draw` and collision migration remain
+separate SAL-8.3/SAL-8.5 decisions.
+
 The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
 #139) refined it with evidence rather than assumption. Wrapping the heavy calls in
 ordinary parameterized `inline` helpers is **byte-identical** for `camera.SetPosition()`,
@@ -253,8 +262,8 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
 value query (`world.TileFlagsAt`), and the camera position/apply pair. `sprite.Draw` and the
-streaming/collision operations remain compiler-recognized operations until compile-time-operand
-intrinsics exist. Not everything must become a library. The SAL-8.1 design note
+streaming/collision operations remain compiler-recognized until their compile-time-operand
+intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
 ([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow
 descriptor-role form for those future intrinsics and records the byte-identity goldens that
 later SAL-8 slices must preserve.

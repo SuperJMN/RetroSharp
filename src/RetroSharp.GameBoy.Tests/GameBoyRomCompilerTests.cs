@@ -612,6 +612,99 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compile_time_operand_slot_rejects_runtime_value()
+    {
+        const string source = """
+                              [target("gb")]
+                              [intrinsic("world_tile_flags_for_world")]
+                              extern i16 flags_for_world(i16 world, i16 x, i16 y);
+
+                              void main() {
+                                  world.Column(0, 1, 2);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 10, 2);
+                                  i16 selectedWorld = 0;
+                                  i16 flags = flags_for_world(selectedWorld, 0, 8);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("flags_for_world argument 1 is compile-time WorldId and cannot use runtime local 'selectedWorld'.", exception.Message);
+    }
+
+    [Fact]
+    public void Minimal_compile_time_operand_intrinsic_is_byte_identical()
+    {
+        const string direct = """
+                              void main() {
+                                  world.Column(0, 1, 2);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 10, 2);
+                                  i16 flags = world_tile_flags_at(0, 8);
+                              }
+                              """;
+
+        const string intrinsic = """
+                                 [target("gb")]
+                                 [intrinsic("world_tile_flags_for_world")]
+                                 extern i16 flags_for_world(i16 world, i16 x, i16 y);
+
+                                 void main() {
+                                     world.Column(0, 1, 2);
+                                     world.Flags(0, 0, 1);
+                                     world.Map(1, 10, 2);
+                                     i16 flags = flags_for_world("default", 0, 8);
+                                 }
+                                 """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(intrinsic));
+    }
+
+    [Fact]
+    public void Single_descriptor_covers_multiple_assets_without_duplication()
+    {
+        var descriptor = TargetIntrinsicDescriptor.DrawLogicalSprite(
+            "sprite_draw",
+            runtimeArity: 4,
+            compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]);
+        var catalog = new TargetIntrinsicCatalog("gb", "Game Boy", [descriptor]);
+        var function = ExternIntrinsic("gb", "sprite_draw", "__sprite_draw");
+
+        var first = TargetIntrinsicResolver.ResolveCall(
+            function,
+            new FunctionCall("__sprite_draw", [new IdentifierSyntax("player"), new ConstantSyntax("24"), new ConstantSyntax("32"), new ConstantSyntax("0"), new ConstantSyntax("0")]),
+            catalog);
+        var second = TargetIntrinsicResolver.ResolveCall(
+            function,
+            new FunctionCall("__sprite_draw", [new IdentifierSyntax("enemy"), new ConstantSyntax("24"), new ConstantSyntax("32"), new ConstantSyntax("0"), new ConstantSyntax("0")]),
+            catalog);
+
+        Assert.Same(descriptor, first.Descriptor);
+        Assert.Same(descriptor, second.Descriptor);
+        Assert.Equal("player", Assert.Single(first.CompileTimeOperands).Identifier);
+        Assert.Equal("enemy", Assert.Single(second.CompileTimeOperands).Identifier);
+        Assert.Equal(1, catalog.Intrinsics.Count);
+    }
+
+    [Fact]
+    public void Language_ir_gains_no_framework_concepts()
+    {
+        var intermediateFiles = Directory.GetFiles(
+            RepositoryDirectory("src/RetroSharp.Generation.Intermediate"),
+            "*.cs",
+            SearchOption.AllDirectories);
+
+        var intermediateSource = string.Join("\n", intermediateFiles.Select(File.ReadAllText));
+
+        Assert.DoesNotContain("AssetRef", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstPaletteSlot", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnumFlags", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("WorldId", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("TargetIntrinsic", intermediateSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Compiles_receiver_method_calls_like_static_helper_calls()
     {
         const string staticSource = """
@@ -6708,6 +6801,38 @@ public class GameBoyRomCompilerTests
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private static string RepositoryDirectory(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"Could not find repository directory '{relativePath}'.");
+    }
+
+    private static FunctionSyntax ExternIntrinsic(string target, string intrinsic, string functionName)
+    {
+        return new FunctionSyntax(
+            "void",
+            functionName,
+            [],
+            new BlockSyntax([]),
+            isExtern: true,
+            attributes:
+            [
+                new FunctionAttributeSyntax("target", [new ConstantSyntax($"\"{target}\"")]),
+                new FunctionAttributeSyntax("intrinsic", [new ConstantSyntax($"\"{intrinsic}\"")]),
+            ]);
     }
 
     private static int CountOccurrences(string text, string value)

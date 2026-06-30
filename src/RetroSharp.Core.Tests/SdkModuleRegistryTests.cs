@@ -90,4 +90,38 @@ public sealed class SdkModuleRegistryTests
         Assert.Equal(TargetIntrinsicOperation.PollInput, pollInput.Operation);
         Assert.Equal(0, pollInput.Arity);
     }
+
+    [Fact]
+    public void Intrinsic_extern_can_declare_compile_time_operand()
+    {
+        var descriptor = TargetIntrinsicDescriptor.ReadWorldTileFlags(
+            "world_tile_flags_for_world",
+            runtimeArity: 2,
+            compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId)]);
+
+        Assert.Equal("world_tile_flags_for_world", descriptor.Name);
+        Assert.Equal(TargetIntrinsicOperation.ReadWorldTileFlags, descriptor.Operation);
+        Assert.Equal(2, descriptor.RuntimeArity);
+        Assert.Equal(3, descriptor.Arity);
+        var operand = Assert.Single(descriptor.CompileTimeOperands);
+        Assert.Equal(0, operand.Slot);
+        Assert.Equal(TargetIntrinsicOperandRole.WorldId, operand.Role);
+    }
+
+    [Fact]
+    public void Compile_time_operand_is_modeled_as_descriptor_role_not_language_generic()
+    {
+        var descriptor = TargetIntrinsicDescriptor.DrawLogicalSprite(
+            "sprite_draw",
+            runtimeArity: 4,
+            compileTimeOperands:
+            [
+                new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef),
+                new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.ConstPaletteSlot),
+            ]);
+
+        Assert.Equal(TargetIntrinsicOperation.DrawLogicalSprite, descriptor.Operation);
+        Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
+        Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.ConstPaletteSlot);
+    }
 }

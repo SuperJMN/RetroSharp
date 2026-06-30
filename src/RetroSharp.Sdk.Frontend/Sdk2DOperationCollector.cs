@@ -379,6 +379,7 @@ public static class Sdk2DOperationCollector
         private readonly List<Sdk2DStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
+        private readonly HashSet<string> runtimeIdentifiers = [];
         private List<Sdk2DStreamItem> currentItems;
 
         public Collector(
@@ -452,6 +453,7 @@ public static class Sdk2DOperationCollector
             switch (statement)
             {
                 case DeclarationSyntax declaration:
+                    runtimeIdentifiers.Add(declaration.Name);
                     if (declaration.ArrayLength.HasValue)
                     {
                         CollectExpression(declaration.ArrayLength.Value);
@@ -568,9 +570,8 @@ public static class Sdk2DOperationCollector
                 return false;
             }
 
-            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
-            SdkCallReader.RequireArity(call, intrinsic.Arity);
-            switch (intrinsic.Operation)
+            var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
+            switch (resolved.Descriptor.Operation)
             {
                 case TargetIntrinsicOperation.SetCameraPosition:
                     CollectCameraSetPosition(call);
@@ -579,7 +580,7 @@ public static class Sdk2DOperationCollector
                     CollectCameraApply(call);
                     break;
                 default:
-                    if (TryOperationFor(intrinsic, out var operation))
+                    if (TryOperationFor(resolved.Descriptor, out var operation))
                     {
                         AddOp(operation);
                     }
@@ -721,13 +722,13 @@ public static class Sdk2DOperationCollector
                 return false;
             }
 
-            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
-            if (intrinsic.Operation != TargetIntrinsicOperation.ReadWorldTileFlags)
+            var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
+            if (resolved.Descriptor.Operation != TargetIntrinsicOperation.ReadWorldTileFlags)
             {
                 return false;
             }
 
-            CollectWorldTileFlagsAt(call);
+            CollectWorldTileFlagsAt(resolved);
             return true;
         }
 
@@ -738,6 +739,22 @@ public static class Sdk2DOperationCollector
             var worldX = ReadByteExpression(args[0], "world_tile_flags_at argument 1");
             var worldY = ReadByteExpression(args[1], "world_tile_flags_at argument 2");
             AddOp(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
+        }
+
+        private void CollectWorldTileFlagsAt(ResolvedTargetIntrinsicCall resolved)
+        {
+            if (resolved.RuntimeOperands is not [var worldXArg, var worldYArg])
+            {
+                throw new InvalidOperationException(
+                    $"{resolved.Descriptor.Name} expects 2 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+            }
+
+            var worldId = resolved.CompileTimeOperands
+                .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.WorldId)
+                ?.Identifier ?? "default";
+            var worldX = ReadByteExpression(worldXArg.Expression, $"{resolved.Descriptor.Name} argument {worldXArg.Slot + 1}");
+            var worldY = ReadByteExpression(worldYArg.Expression, $"{resolved.Descriptor.Name} argument {worldYArg.Slot + 1}");
+            AddOp(new Sdk2DOperation.ReadWorldTileFlags(worldId, worldX, worldY));
         }
 
         private void CollectCameraAabbTiles(FunctionCall call)
