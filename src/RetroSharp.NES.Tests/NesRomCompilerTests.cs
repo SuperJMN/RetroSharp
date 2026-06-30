@@ -509,6 +509,17 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Nes_sdk_library_does_not_expose_capability_gated_world_tile_flags_helper()
+    {
+        // world.TileFlagsAt(...) is gated on the WorldTileFlags collision query,
+        // which NES does not declare. The injected NES library must not expose it.
+        var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.DoesNotContain("class world", library, StringComparison.Ordinal);
+        Assert.DoesNotContain("world_tile_flags_at", library, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Injected_nes_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """

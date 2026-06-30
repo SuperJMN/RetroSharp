@@ -338,6 +338,11 @@ public static class SdkAudioOperationCollector
                 return false;
             }
 
+            if (function.IsExtern)
+            {
+                return false;
+            }
+
             if (!userFunctionCallStack.Add(function.Name))
             {
                 throw new InvalidOperationException($"Recursive {targetName} user function call '{function.Name}' is not supported.");

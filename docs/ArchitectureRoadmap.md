@@ -206,6 +206,16 @@ consume but ignore it. `TargetProgramSelector` filters
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
 
+The library can also carry **capability-gated, value-returning** members. Game Boy
+catalogs a `world_tile_flags_at` intrinsic and exposes `world.TileFlagsAt(x, y)` — a
+two-argument query that returns the tile flags as a value, lowering byte-identically
+to the existing `Sdk2DOperation.ReadWorldTileFlags` path. NES does not declare the
+`WorldTileFlags` collision query, so `SdkLibrarySource` does not inject the `world`
+class for NES at all; the helper only appears on targets whose catalog declares the
+intrinsic. This proves the pattern extends from void leaf calls to argument-taking,
+value-returning queries (parameterized `inline` helpers substitute their arguments
+into the operation operands without introducing temporaries, so the bytes match).
+
 The migration boundary remains deliberate. `camera.SetPosition()` and
 `camera.Apply()` stay operation-backed for now because their behavior is not a
 simple leaf intrinsic: collection records scroll axes, validates target

@@ -5,6 +5,7 @@ public enum TargetIntrinsicOperation
     WaitFrame,
     PollInput,
     UpdateAudio,
+    ReadWorldTileFlags,
 }
 
 public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOperation Operation, int Arity)
@@ -22,6 +23,11 @@ public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOpera
     public static TargetIntrinsicDescriptor UpdateAudio(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.UpdateAudio, arity);
+    }
+
+    public static TargetIntrinsicDescriptor ReadWorldTileFlags(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ReadWorldTileFlags, arity);
     }
 }
 

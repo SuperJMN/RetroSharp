@@ -251,6 +251,30 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Compiles_world_tile_flags_at_library_helper_over_game_boy_intrinsic_like_sdk_operation()
+    {
+        const string direct = """
+                              void main() {
+                                  world_column(0, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 11, 2);
+                                  i16 worldX = 0;
+                                  i16 flags = world_tile_flags_at(worldX, 8);
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   world_column(0, 0, 4);
+                                   world_flags(0, 0, 1);
+                                   world_map(1, 11, 2);
+                                   i16 worldX = 0;
+                                   i16 flags = world.TileFlagsAt(worldX, 8);
+                               }
+                               """;
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct, WriteSpriteAsset()), GameBoyRomCompiler.CompileSource(library, WriteSpriteAsset()));
+    }
+
+    [Fact]
     public void Collects_world_tile_flags_query_with_byte_backed_coordinates()
     {
         const string source = """
