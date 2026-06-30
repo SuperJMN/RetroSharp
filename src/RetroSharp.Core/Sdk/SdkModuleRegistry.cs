@@ -10,6 +10,8 @@ public static class SdkModuleRegistry
 {
     private static readonly SdkModuleDescriptor[] ModuleDescriptors =
     [
+        // Transitional lowercase facade receivers. Kept as aliases during the
+        // PascalCase migration (#157); do not remove while samples/docs still use them.
         LibraryModule("video", "video"),
         LibraryModule("input", "input"),
         LibraryModule("camera", "camera"),
@@ -25,6 +27,22 @@ public static class SdkModuleRegistry
         LibraryModule("animation", "animation"),
         LibraryModule("audio", "audio"),
         LibraryModule("music", "music"),
+
+        // Canonical C# PascalCase static facade classes (#157). Each maps to the same
+        // flat call prefix as its lowercase alias, so lowering is byte-identical.
+        LibraryModule("Video", "video"),
+        LibraryModule("Input", "input"),
+        LibraryModule("Camera", "camera"),
+        LibraryModule("Sprite", "sprite"),
+        LibraryModule("Palette", "palette"),
+        LibraryModule("Tilemap", "tilemap"),
+        LibraryModule("Map", "map"),
+        LibraryModule("World", "world"),
+        LibraryModule("Hud", "hud"),
+        LibraryModule("Scroll", "scroll"),
+        LibraryModule("Animation", "animation"),
+        LibraryModule("Audio", "audio"),
+        LibraryModule("Music", "music"),
     ];
 
     private static readonly Dictionary<string, SdkModuleDescriptor> Modules = ModuleDescriptors

@@ -16,6 +16,34 @@ public sealed class SdkModuleRegistryTests
         Assert.Equal("video_wait_vblank", video.ResolveCallName("WaitVBlank"));
     }
 
+    [Theory]
+    [InlineData("Video", "video")]
+    [InlineData("Input", "input")]
+    [InlineData("Camera", "camera")]
+    [InlineData("Sprite", "sprite")]
+    [InlineData("Palette", "palette")]
+    [InlineData("Tilemap", "tilemap")]
+    [InlineData("Map", "map")]
+    [InlineData("World", "world")]
+    [InlineData("Hud", "hud")]
+    [InlineData("Scroll", "scroll")]
+    [InlineData("Animation", "animation")]
+    [InlineData("Audio", "audio")]
+    [InlineData("Music", "music")]
+    public void Pascalcase_facade_is_alias_of_lowercase_module(string pascalCase, string lowercase)
+    {
+        var facade = SdkModuleRegistry.FindModule(pascalCase);
+
+        Assert.NotNull(facade);
+        Assert.Equal(SdkModuleKind.Library, facade.Kind);
+
+        var lower = SdkModuleRegistry.FindModule(lowercase);
+        Assert.NotNull(lower);
+
+        Assert.Equal(lower.CallPrefix, facade.CallPrefix);
+        Assert.Equal(lower.ResolveCallName("Draw"), facade.ResolveCallName("Draw"));
+    }
+
     [Fact]
     public void Target_intrinsic_catalog_exposes_declared_intrinsics()
     {
