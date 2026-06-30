@@ -101,6 +101,8 @@ For PNG assets, a generic path can be specialized per target without changing so
 
 The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
+On Game Boy, `sprite.Draw(...)` is injected as an SDK library helper over a target intrinsic whose descriptor treats the sprite asset id and palette slot as compile-time operands. The collector still produces `Sdk2DOperation.DrawLogicalSprite`, so capability checks, frame-budget checks, and emitted bytes stay aligned with the legacy `sprite_draw(...)` compatibility spelling.
+
 ### Actor framework slice
 
 The current actor framework frontend is source sugar over fixed storage. It does
@@ -465,4 +467,4 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite.Asset(...)` and `sprite.Draw(...)` calls are the portable SDK surface.
+The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite.Asset(...)` and `sprite.Draw(...)` calls are the portable SDK surface. Game Boy currently lowers `sprite.Draw(...)` through the injected SDK library helper; `sprite_draw(...)` remains accepted as a compatibility alias.

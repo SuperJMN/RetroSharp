@@ -546,6 +546,106 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Sprite_draw_via_library_helper_is_byte_identical_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123", "32103210")));
+
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 80, 0, false, 1);
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   video.Init();
+                                   sprite.Asset(player, "player.sprite.json");
+                                   sprite.Draw(player, 72, 80, 0, false, 1);
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("class sprite", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct, baseDirectory), GameBoyRomCompiler.CompileSource(library, baseDirectory));
+    }
+
+    [Fact]
+    public void Runner_shaped_sprite_draw_is_byte_identical_gb()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        var libraryRom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var legacyRom = GameBoyRomCompiler.CompileSource(
+            SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source.Replace("sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
+            Path.GetDirectoryName(sourcePath));
+
+        Assert.Equal(legacyRom, libraryRom);
+    }
+
+    [Fact]
+    public void Sprite_draw_library_preserves_capability_and_budget_checks_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string paletteSource = """
+                                     void main() {
+                                         video.Init();
+                                         sprite.Asset(player, "player.sprite.json");
+                                         sprite.Draw(player, 72, 64, 0, false, 2);
+                                     }
+                                     """;
+
+        var paletteException = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(paletteSource, baseDirectory));
+        Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.", paletteException.Message);
+
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 41).Select(index => $"        sprite.Draw(player, {index % 20}, {(index % 4) * 20}, 0);"));
+        var budgetSource = """
+                           void main() {
+                               video.Init();
+                               sprite.Asset(player, "player.sprite.json");
+                               loop {
+                                   video.WaitVBlank();
+
+                           """ + draws + """
+                               }
+                           }
+                           """;
+
+        var budgetException = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(budgetSource, baseDirectory));
+        Assert.Equal(
+            "Target 'gb' supports 40 hardware sprites per frame, but 164 are required for drawing logical sprites in one frame.",
+            budgetException.Message);
+    }
+
+    [Fact]
+    public void Legacy_sprite_draw_builtin_still_compiles_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123", "32103210")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 80, 0);
+                              }
+                              """;
+
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, baseDirectory).Length);
+    }
+
+    [Fact]
     public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """

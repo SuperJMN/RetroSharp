@@ -98,7 +98,7 @@ Intrinsic work belongs here:
 | `Input.HoldTicks(...)` | Portable SDK | Accepted current variable-height jump seam. |
 | `button_pressed(...)` | Transitional/intrinsic-like | Direct-read compatibility path. Prefer tick-based API. |
 | `sprite_asset(...)` | Portable SDK candidate | Needs target-neutral asset contract and palette slots. |
-| `sprite_draw(...)` | Portable SDK candidate | Replace raw flags with named `flipX` and palette slot. |
+| `sprite_draw(...)` | Transitional compatibility alias | Game Boy `sprite.Draw(...)` now lowers through a compile-time-operand target intrinsic; the snake_case builtin remains accepted. |
 | `Sprite.Width(...)` | Portable SDK | Add `sprite_height(...)`. |
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
@@ -228,8 +228,14 @@ as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or `WorldId`, and the SDK/fronte
 separates those compile-time operands from runtime operands before operation collection. The
 minimal proof is a Game Boy `world_tile_flags_for_world` intrinsic whose `WorldId` slot lowers
 byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting runtime locals
-in that slot. This proves the mechanism only; `sprite.Draw` and collision migration remain
-separate SAL-8.3/SAL-8.5 decisions.
+in that slot.
+
+SAL-8.3 applies that mechanism to Game Boy `sprite.Draw`: the injected SDK library helper calls
+a `[target("gb")][intrinsic("sprite_draw")]` extern, the Game Boy descriptor marks the asset id
+as `AssetRef` and the palette slot as `ConstPaletteSlot`, and the collector turns the resolved
+call back into `Sdk2DOperation.DrawLogicalSprite`. This keeps metasprite resolution, capability
+validation, frame-budget validation, and emission byte-identical to the legacy `sprite_draw`
+builtin. Collision migration remains the separate SAL-8.5 decision.
 
 The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
 #139) refined it with evidence rather than assumption. Wrapping the heavy calls in
@@ -252,17 +258,17 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   does not shadow the rest of the `camera` module — `camera.Init`, `camera.AabbTiles`, and
   `camera.AabbHitTop` are not class members, so they still lower through the SDK module.
 - `sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
-  with runtime ones (X/Y/frame/flipX). A single `[intrinsic]` extern signature cannot carry a
-  compile-time asset reference as a runtime parameter, so a faithful migration needs either
-  per-asset specialized helpers or an intrinsic form that carries compile-time operands. Until
-  then sprite drawing **stays a capability-checked `Sdk2DOperation`**.
+  with runtime ones (X/Y/frame/flipX). Game Boy now uses the compile-time-operand descriptor
+  form, so the public `sprite.Draw(...)` helper can live in the injected SDK library while still
+  collecting to the same capability-checked `Sdk2DOperation`. The legacy `sprite_draw(...)`
+  spelling remains a compatibility alias during the transition.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) and camera-relative collision stay
   operations: they are mostly compiler-emitted and carry storage descriptors and capability
   checks, so a source-library form adds surface without removing the operation model.
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
-value query (`world.TileFlagsAt`), and the camera position/apply pair. `sprite.Draw` and the
-streaming/collision operations remain compiler-recognized until their compile-time-operand
+value query (`world.TileFlagsAt`), the camera position/apply pair, and Game Boy `sprite.Draw`.
+Streaming/collision operations remain compiler-recognized until their compile-time-operand
 intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
 ([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow
 descriptor-role form for those future intrinsics and records the byte-identity goldens that

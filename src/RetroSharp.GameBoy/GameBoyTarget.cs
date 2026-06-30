@@ -18,6 +18,14 @@ public static class GameBoyTarget
                 "world_tile_flags_for_world",
                 runtimeArity: 2,
                 compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId)]),
+            TargetIntrinsicDescriptor.DrawLogicalSprite(
+                "sprite_draw",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.ConstPaletteSlot),
+                ]),
             TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
             TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
         ]);

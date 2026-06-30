@@ -484,6 +484,29 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
+    public void Collects_sprite_draw_from_compile_time_operand_intrinsic()
+    {
+        const string source = """
+                              void main() {
+                                  i16 y = 80;
+                                  i16 frame = 1;
+                                  bool flipX = true;
+                                  sprite.Draw(player_run, 72, y, frame, flipX, 1);
+                              }
+                              """;
+
+        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
+        var draw = Assert.IsType<Sdk2DOperation.DrawLogicalSprite>(operation);
+
+        Assert.Equal("player_run", draw.SpriteId);
+        Assert.Equal(new SdkByteExpression.Constant(72), draw.X);
+        Assert.Equal(Local("y"), draw.Y);
+        Assert.Equal(Local("frame"), draw.Frame);
+        Assert.Equal(Local("flipX"), draw.FlipX);
+        Assert.Equal(1, draw.PaletteSlot);
+    }
+
+    [Fact]
     public void Collects_byte_operands_as_typed_storage_locations()
     {
         const string source = """

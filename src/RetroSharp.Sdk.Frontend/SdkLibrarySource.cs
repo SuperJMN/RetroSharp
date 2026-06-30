@@ -92,6 +92,25 @@ public static class SdkLibrarySource
                  """;
         }
 
+        if (catalog.TryResolve("sprite_draw", out var spriteDraw)
+            && spriteDraw.Operation == TargetIntrinsicOperation.DrawLogicalSprite)
+        {
+            library += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("sprite_draw")]
+                 extern void {{prefix}}_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX, i16 paletteSlot);
+
+                 class sprite
+                 {
+                     static inline void Draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX = false, i16 paletteSlot = 0)
+                     {
+                         {{prefix}}_sprite_draw(spriteId, x, y, frame, flipX, paletteSlot);
+                     }
+                 }
+
+                 """;
+        }
+
         return library;
     }
 
