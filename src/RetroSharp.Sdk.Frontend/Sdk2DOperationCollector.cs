@@ -684,6 +684,11 @@ public static class Sdk2DOperationCollector
                     CollectCameraScreenAabbHitTop(call);
                     break;
                 default:
+                    if (CollectTargetValueIntrinsic(call))
+                    {
+                        break;
+                    }
+
                     if (CollectUserValueFunction(call))
                     {
                         return;
@@ -693,6 +698,25 @@ public static class Sdk2DOperationCollector
             }
 
             CollectCallArguments(call);
+        }
+
+        private bool CollectTargetValueIntrinsic(FunctionCall call)
+        {
+            if (targetIntrinsics is null ||
+                !functions.TryGetValue(call.Name, out var function) ||
+                !function.IsExtern)
+            {
+                return false;
+            }
+
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
+            if (intrinsic.Operation != TargetIntrinsicOperation.ReadWorldTileFlags)
+            {
+                return false;
+            }
+
+            CollectWorldTileFlagsAt(call);
+            return true;
         }
 
         private void CollectWorldTileFlagsAt(FunctionCall call)
@@ -837,6 +861,11 @@ public static class Sdk2DOperationCollector
         private bool CollectUserValueFunction(FunctionCall call)
         {
             if (!functions.TryGetValue(call.Name, out var function))
+            {
+                return false;
+            }
+
+            if (function.IsExtern)
             {
                 return false;
             }
@@ -1177,6 +1206,11 @@ public static class Sdk2DOperationCollector
         private FrameBudgetState CollectUserValueFunction(FrameBudgetState state, FunctionCall call)
         {
             if (!functions.TryGetValue(call.Name, out var function))
+            {
+                return state;
+            }
+
+            if (function.IsExtern)
             {
                 return state;
             }

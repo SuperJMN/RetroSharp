@@ -4303,12 +4303,36 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitCameraSpanHasFlags(call);
                 break;
             default:
+                if (TryEmitTargetValueIntrinsic(call))
+                {
+                    break;
+                }
+
                 if (TryEmitUserValueFunction(call))
                 {
                     break;
                 }
 
                 throw new InvalidOperationException($"Unsupported Game Boy value API call '{call.Name}'.");
+        }
+    }
+
+    private bool TryEmitTargetValueIntrinsic(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function) || !function.IsExtern)
+        {
+            return false;
+        }
+
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, GameBoyTarget.Intrinsics);
+        switch (intrinsic.Operation)
+        {
+            case TargetIntrinsicOperation.ReadWorldTileFlags:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitReadWorldTileFlags(ConsumeSdkOperation<Sdk2DOperation.ReadWorldTileFlags>(call.Name));
+                return true;
+            default:
+                return false;
         }
     }
 

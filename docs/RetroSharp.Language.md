@@ -157,6 +157,12 @@ inline wrappers over target-selected extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
 non-matching variants before constant folding and function indexing, so portable
 helper code can share one helper name while selecting the correct target extern.
+Library helpers can be capability-gated and value-returning: Game Boy exposes
+`world.TileFlagsAt(x, y)` (a two-argument query returning the tile flags) over a
+`world_tile_flags_at` intrinsic, while NES — which lacks the world tile-flag
+collision query — does not inject the `world` class at all. Parameterized `inline`
+helpers substitute their arguments directly into the operation, so these calls stay
+byte-identical to the direct SDK form.
 Higher-level camera, sprite, and collision SDK calls still lower through
 capability-checked SDK operations rather than direct intrinsics.
 

@@ -13,6 +13,7 @@ public static class GameBoyTarget
             TargetIntrinsicDescriptor.WaitFrame("wait_vblank", arity: 0),
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
+            TargetIntrinsicDescriptor.ReadWorldTileFlags("world_tile_flags_at", arity: 2),
         ]);
 
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(
