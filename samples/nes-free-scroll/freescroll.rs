@@ -1,7 +1,7 @@
-enum World {
-    Width = 64,
-    Height = 60,
-    ViewHeight = 18
+static class World {
+    const i16 Width = 64;
+    const i16 Height = 60;
+    const i16 ViewHeight = 18;
 }
 
 void main() {

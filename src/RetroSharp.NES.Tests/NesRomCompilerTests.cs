@@ -186,6 +186,40 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_static_class_const_groups_like_enum_groups()
+    {
+        const string enumSource = """
+                                  enum World { Width = 2, StreamY = 10, Height = 2 }
+
+                                  void main() {
+                                      video_init();
+                                      world_column(0, 1, 2);
+                                      world_column(1, 3, 4);
+                                      world_map(World.Width, World.StreamY, World.Height);
+                                      camera_init(World.Width, World.StreamY, World.Height);
+                                      camera_set_position(4, 0);
+                                      return;
+                                  }
+                                  """;
+
+        const string staticClassSource = """
+                                          static class World { const i16 Width = 2; const i16 StreamY = 10; const i16 Height = 2; }
+
+                                          void main() {
+                                              video_init();
+                                              world_column(0, 1, 2);
+                                              world_column(1, 3, 4);
+                                              world_map(World.Width, World.StreamY, World.Height);
+                                              camera_init(World.Width, World.StreamY, World.Height);
+                                              camera_set_position(4, 0);
+                                              return;
+                                          }
+                                          """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(enumSource), NesRomCompiler.CompileSource(staticClassSource));
+    }
+
+    [Fact]
     public void Compiles_expression_bodied_value_functions_like_single_return_helpers()
     {
         const string blockSource = """

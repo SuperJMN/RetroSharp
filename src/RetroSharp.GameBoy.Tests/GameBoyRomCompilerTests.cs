@@ -4240,12 +4240,12 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("enum DeadZone", source);
+        Assert.Contains("static class DeadZone", source);
         Assert.Contains("Left = 64", source);
         Assert.Contains("Right = 96", source);
         Assert.Contains("Top = 56", source);
         Assert.Contains("Bottom = 88", source);
-        Assert.Contains("enum CameraBounds", source);
+        Assert.Contains("static class CameraBounds", source);
         Assert.Contains("MaxY = 196", source);
         Assert.Contains("StartX = 72", source);
         Assert.DoesNotContain("ScreenX = 72", source);
@@ -4335,6 +4335,59 @@ public class GameBoyRomCompilerTests
                                      """;
 
         Assert.Equal(GameBoyRomCompiler.CompileSource(flatSource), GameBoyRomCompiler.CompileSource(groupedSource));
+    }
+
+    [Fact]
+    public void Compiles_static_class_const_groups_like_enum_groups()
+    {
+        const string enumSource = """
+                                  enum World { Width = 16, StreamY = 9, Height = 5 }
+                                  enum Player { ScreenX = 72 }
+
+                                  void main() {
+                                      video_init();
+                                      world_column(0, 1, 2, 3, 4, 5);
+                                      world_flags(0, 0, 0, 1, 1, 1);
+                                      world_map(World.Width, World.StreamY, World.Height);
+                                      camera_init(World.Width, World.StreamY, World.Height);
+                                      i16 cameraX = 0;
+                                      i16 playerWorldX = cameraX + Player.ScreenX;
+                                      camera_set_position(cameraX, 0);
+                                  }
+                                  """;
+
+        const string staticClassSource = """
+                                          static class World { const i16 Width = 16; const i16 StreamY = 9; const i16 Height = 5; }
+                                          static class Player { const i16 ScreenX = 72; }
+
+                                          void main() {
+                                              video_init();
+                                              world_column(0, 1, 2, 3, 4, 5);
+                                              world_flags(0, 0, 0, 1, 1, 1);
+                                              world_map(World.Width, World.StreamY, World.Height);
+                                              camera_init(World.Width, World.StreamY, World.Height);
+                                              i16 cameraX = 0;
+                                              i16 playerWorldX = cameraX + Player.ScreenX;
+                                              camera_set_position(cameraX, 0);
+                                          }
+                                          """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(enumSource), GameBoyRomCompiler.CompileSource(staticClassSource));
+    }
+
+    [Fact]
+    public void Static_class_rejects_instance_members()
+    {
+        const string source = """
+                              static class World { const i16 Width = 16; i16 broken; }
+
+                              void main() {
+                                  video_init();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+        Assert.Contains("Static class 'World'", exception.Message);
     }
 
     [Fact]
@@ -4480,13 +4533,13 @@ public class GameBoyRomCompilerTests
     {
         var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
 
-        Assert.Contains("enum World", source);
+        Assert.Contains("static class World", source);
         Assert.Contains("Width = 48", source);
         Assert.Contains("Height = 96", source);
         Assert.Contains("StreamHeight = 96", source);
         Assert.Contains("SignedVelocityWrap = 128", source);
         Assert.Contains("PixelWidth = 384", source);
-        Assert.Contains("enum Player", source);
+        Assert.Contains("static class Player", source);
         Assert.Contains("StartX = 72", source);
         Assert.Contains("class PlayerState", source);
         Assert.Contains("inline void Reset(CameraState view)", source);

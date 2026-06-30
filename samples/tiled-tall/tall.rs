@@ -1,11 +1,11 @@
-enum World {
-    Width = 16,
-    StreamY = 0,
-    Height = 40
+static class World {
+    const i16 Width = 16;
+    const i16 StreamY = 0;
+    const i16 Height = 40;
 }
 
-enum Scroll {
-    MaxY = 176
+static class Scroll {
+    const i16 MaxY = 176;
 }
 
 void main() {

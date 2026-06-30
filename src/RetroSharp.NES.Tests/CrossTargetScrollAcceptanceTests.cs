@@ -163,8 +163,8 @@ public sealed class CrossTargetScrollAcceptanceTests
         var source = File.ReadAllText(samplePath);
 
         Assert.Contains("world.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
-        Assert.Contains("enum DeadZone", source, StringComparison.Ordinal);
-        Assert.Contains("enum CameraBounds", source, StringComparison.Ordinal);
+        Assert.Contains("static class DeadZone", source, StringComparison.Ordinal);
+        Assert.Contains("static class CameraBounds", source, StringComparison.Ordinal);
 
         var gbOperations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
         var gbCamera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(

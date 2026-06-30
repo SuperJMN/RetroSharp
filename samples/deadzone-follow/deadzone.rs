@@ -1,28 +1,28 @@
-enum World {
-    Width = 64,
-    StreamY = 0,
-    Height = 60
+static class World {
+    const i16 Width = 64;
+    const i16 StreamY = 0;
+    const i16 Height = 60;
 }
 
-enum DeadZone {
-    Left = 64,
-    Right = 96,
-    Top = 56,
-    Bottom = 88
+static class DeadZone {
+    const i16 Left = 64;
+    const i16 Right = 96;
+    const i16 Top = 56;
+    const i16 Bottom = 88;
 }
 
-enum CameraBounds {
-    MaxX = 248,
-    MaxY = 240
+static class CameraBounds {
+    const i16 MaxX = 248;
+    const i16 MaxY = 240;
 }
 
-enum PlayerPath {
-    StartX = 80,
-    StartY = 72,
-    MinX = 80,
-    MaxX = 232,
-    MinY = 72,
-    MaxY = 224
+static class PlayerPath {
+    const i16 StartX = 80;
+    const i16 StartY = 72;
+    const i16 MinX = 80;
+    const i16 MaxX = 232;
+    const i16 MinY = 72;
+    const i16 MaxY = 224;
 }
 
 void main() {
