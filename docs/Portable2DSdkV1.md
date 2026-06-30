@@ -438,7 +438,7 @@ void main() {
     loop {
         video.WaitVBlank();
         input.Poll();
-        let cameraX = button_hold_ticks(right);
+        let cameraX = button_hold_ticks(Button.Right);
         camera.SetPosition(cameraX, 0);
         camera.Apply();
         sprite.Draw(marker, 72, 72, 0, false, 0);

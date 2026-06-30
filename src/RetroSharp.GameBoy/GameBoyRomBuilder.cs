@@ -5487,7 +5487,23 @@ internal sealed class GameBoyRuntimeCompiler
 
     private static GameBoyButton ButtonArg(FunctionCall call, string context)
     {
-        var name = GameBoyVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), context);
+        var argument = call.Parameters.ElementAt(0);
+
+        // A `Button` enum member (e.g. Button.A) is constant-folded to its ordinal,
+        // which matches the canonical Buttons order, so resolve it by index. The bare
+        // lowercase identifier form (e.g. `a`) is kept as a transitional alias.
+        if (argument is ConstantSyntax)
+        {
+            var ordinal = GameBoyVideoProgram.ConstValue(argument, context);
+            if (ordinal < 0 || ordinal >= Buttons.Length)
+            {
+                throw new InvalidOperationException($"Unsupported Game Boy button ordinal '{ordinal}'.");
+            }
+
+            return Buttons[ordinal];
+        }
+
+        var name = GameBoyVideoProgram.IdentifierArg(argument, context);
         var button = Buttons.FirstOrDefault(button => button.Name == name);
         if (button.Name is null)
         {

@@ -209,7 +209,7 @@ void main() {
             }
         }
 
-        if (button_just_pressed(a) != 0) {
+        if (button_just_pressed(Button.A) != 0) {
             if (grounded != 0) {
                 velocityY = 252;
                 grounded = 0;
@@ -218,26 +218,26 @@ void main() {
         }
 
         if (jumping != 0) {
-            jumpTicks = button_hold_ticks(a);
-            if (button_down(a) != 0) {
+            jumpTicks = button_hold_ticks(Button.A);
+            if (button_down(Button.A) != 0) {
                 if (jumpTicks < 12) {
                     velocityY -= 1;
                 }
             }
 
-            if (button_just_released(a) != 0) {
+            if (button_just_released(Button.A) != 0) {
                 jumping = 0;
             }
         }
 
         moving = 0;
-        if (button_down(right) != 0) {
+        if (button_down(Button.Right) != 0) {
             moving = 1;
             displayFlipX = false;
             cameraX += 1;
         }
 
-        if (button_down(left) != 0) {
+        if (button_down(Button.Left) != 0) {
             moving = 1;
             displayFlipX = true;
             cameraX -= 1;

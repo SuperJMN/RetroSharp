@@ -10,6 +10,8 @@ public static class SdkLibrarySource
         var library = $$"""
                  const {{MarkerName(catalog.TargetId)}} = 1;
 
+                 enum Button { A, B, Select, Start, Right, Left, Up, Down }
+
                  [target("{{catalog.TargetId}}")]
                  [intrinsic("wait_frame")]
                  extern void {{prefix}}_wait_frame();

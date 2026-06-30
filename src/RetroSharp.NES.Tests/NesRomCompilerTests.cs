@@ -1281,6 +1281,40 @@ public class NesRomCompilerTests
         Assert.Equal(40976, rom.Length);
     }
 
+    [Theory]
+    [InlineData("a", "Button.A")]
+    [InlineData("b", "Button.B")]
+    [InlineData("select", "Button.Select")]
+    [InlineData("start", "Button.Start")]
+    [InlineData("right", "Button.Right")]
+    [InlineData("left", "Button.Left")]
+    [InlineData("up", "Button.Up")]
+    [InlineData("down", "Button.Down")]
+    public void Button_enum_member_lowers_like_bare_button_identifier(string bare, string enumMember)
+    {
+        string Program(string button) => $$"""
+                              void main() {
+                                  video_init();
+                                  i16 down = 0;
+                                  i16 pressed = 0;
+                                  i16 released = 0;
+                                  i16 held = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      input_poll();
+                                      down = button_down({{button}});
+                                      pressed = button_just_pressed({{button}});
+                                      released = button_just_released({{button}});
+                                      held = button_hold_ticks({{button}});
+                                  }
+                              }
+                              """;
+
+        Assert.Equal(
+            NesRomCompiler.CompileSource(Program(bare)),
+            NesRomCompiler.CompileSource(Program(enumMember)));
+    }
+
     [Fact]
     public void Compiles_tick_input_helpers_to_nes_controller_state()
     {

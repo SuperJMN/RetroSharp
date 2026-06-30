@@ -29,7 +29,7 @@ dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target 
 ## Notes
 
 - `audio.Update()` runs once per frame after `video.WaitVBlank()`; `input.Poll()` provides the
-  `button_just_pressed(start)` edge used to trigger the switch.
+  `button_just_pressed(Button.Start)` edge used to trigger the switch.
 - The sample has no graphics: it boots to a blank screen and plays BGM.
 
 ## Music credits
