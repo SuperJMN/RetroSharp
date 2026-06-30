@@ -4249,7 +4249,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Pixel y;", cameraBlock);
         Assert.Contains("x += 1;", cameraBlock);
         Assert.Contains("player.x += 1;", cameraBlock);
-        Assert.Contains("moving = 1;", cameraBlock);
+        Assert.Contains("moving = true;", cameraBlock);
         Assert.Contains("x -= 1;", cameraBlock);
         Assert.Contains("player.x -= 1;", cameraBlock);
         Assert.Contains("camera.SetPosition(x, y);", cameraBlock);
@@ -4258,7 +4258,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
-        Assert.Contains("if (view.moving != 0)", source);
+        Assert.Contains("if (view.moving)", source);
         Assert.Contains("animTick += view.speed;", source);
         Assert.Contains("animation.Frame(run, animTick)", source);
         Assert.DoesNotContain("i16 frame = 0;", source);
@@ -4373,6 +4373,48 @@ public class GameBoyRomCompilerTests
                                      """;
 
         Assert.Equal(GameBoyRomCompiler.CompileSource(flatSource), GameBoyRomCompiler.CompileSource(groupedSource));
+    }
+
+    [Fact]
+    public void Bool_flags_lower_like_int_flags_with_explicit_comparisons()
+    {
+        const string intSource = """
+                                 type Pixel = i16;
+                                 struct S { Pixel grounded; Pixel moving; Pixel x; }
+                                 inline void step(this S s, Pixel grounded) {
+                                     if (grounded != 0) { s.x += 1; }
+                                     if (s.grounded == 0) { s.x += 1; }
+                                 }
+                                 void main() {
+                                     video_init();
+                                     S s; s.grounded = 1; s.moving = 0; s.x = 0;
+                                     s.step(s.grounded);
+                                     Pixel frame = s.grounded switch { 0 => 4, _ => s.moving switch { 0 => 0, _ => 7 } };
+                                     i16 sink = frame + s.x;
+                                     if (sink != 0) { video_present(); }
+                                     return;
+                                 }
+                                 """;
+
+        const string boolSource = """
+                                  type Pixel = i16;
+                                  struct S { bool grounded; bool moving; Pixel x; }
+                                  inline void step(this S s, bool grounded) {
+                                      if (grounded) { s.x += 1; }
+                                      if (!s.grounded) { s.x += 1; }
+                                  }
+                                  void main() {
+                                      video_init();
+                                      S s; s.grounded = true; s.moving = false; s.x = 0;
+                                      s.step(s.grounded);
+                                      Pixel frame = s.grounded switch { false => 4, _ => s.moving switch { false => 0, _ => 7 } };
+                                      i16 sink = frame + s.x;
+                                      if (sink != 0) { video_present(); }
+                                      return;
+                                  }
+                                  """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(intSource), GameBoyRomCompiler.CompileSource(boolSource));
     }
 
     [Fact]
@@ -4581,9 +4623,9 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("animation.Clip(enemy_walk", source);
         Assert.DoesNotContain("sprites_clear();", source);
         Assert.Contains("displayFrame = grounded switch", source);
-        Assert.Contains("0 => 4", source);
+        Assert.Contains("false => 4", source);
         Assert.Contains("_ => animation.Frame(run, animTick)", source);
-        Assert.Contains("0 => 0", source);
+        Assert.Contains("false => 0", source);
         Assert.Contains("bool displayFlipX;", source);
         Assert.Contains("player.displayFlipX = true;", source);
         Assert.Contains("player.displayFlipX = false;", source);
@@ -5754,7 +5796,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Pixel speed;", cameraBlock);
         Assert.Contains("Pixel direction;", cameraBlock);
         Assert.Contains("Pixel movementRemainder;", cameraBlock);
-        Assert.Contains("inline void UpdateIntent(Pixel desiredDirection, Pixel grounded)", cameraBlock);
+        Assert.Contains("inline void UpdateIntent(Pixel desiredDirection, bool grounded)", cameraBlock);
         Assert.Contains("if (direction == HorizontalMotion.Right)", cameraBlock);
         Assert.Contains("if (direction == HorizontalMotion.Left)", cameraBlock);
         Assert.Contains("StartDirection(HorizontalMotion.Right);", cameraBlock);
@@ -5791,7 +5833,7 @@ public class GameBoyRomCompilerTests
         Assert.True(frameStart > cameraStart);
         var cameraBlock = source[cameraStart..frameStart];
 
-        Assert.Contains("inline void HoldDirection(Pixel grounded)", cameraBlock);
+        Assert.Contains("inline void HoldDirection(bool grounded)", cameraBlock);
         Assert.Contains("inline void AccelerateRun()", cameraBlock);
         Assert.Contains("inline void DecelerateToWalk()", cameraBlock);
         Assert.Contains("inline void ApplyFriction()", cameraBlock);
@@ -5806,7 +5848,7 @@ public class GameBoyRomCompilerTests
         // grounded, so holding B in the air preserves momentum instead of building extra speed.
         Assert.Contains("HoldDirection(grounded);", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
-        Assert.Contains("if (grounded != 0) {\n            if (button_down(Button.B) != 0) {", cameraBlock);
+        Assert.Contains("if (grounded) {\n            if (button_down(Button.B) != 0) {", cameraBlock);
         Assert.DoesNotContain("ApplyGroundAcceleration", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);
@@ -5852,9 +5894,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (gravityTick >= Jump.GravityFrames)", gravityBlock);
         Assert.Contains("velocityY += 1;", gravityBlock);
         Assert.Contains("if (velocityY != 0)", gravityBlock);
-        Assert.Contains("grounded = 0;", gravityBlock);
+        Assert.Contains("grounded = false;", gravityBlock);
         Assert.Contains("y += velocityY;", gravityBlock);
-        Assert.DoesNotContain("grounded = 0;\n        gravityTick++;", gravityBlock);
+        Assert.DoesNotContain("grounded = false;\n        gravityTick++;", gravityBlock);
 
         var jumpStart = source.IndexOf("inline void HandleJumpInput()", StringComparison.Ordinal);
         var animationStart = source.IndexOf("inline void UpdateRunAnimation(CameraState view)", StringComparison.Ordinal);
@@ -5876,7 +5918,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("Pixel footTile;", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("Pixel resetRequested;", source);
+        Assert.Contains("bool resetRequested;", source);
 
         Assert.Contains("""world.Load("maps/runner.tmj");""", source);
         Assert.DoesNotContain("world.Column(", source);
@@ -5904,12 +5946,12 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("BounceFromHazard", source);
         Assert.DoesNotContain("EnemyState", source);
         Assert.DoesNotContain("if (footTile != 3)", source);
-        Assert.Contains("if (player.grounded == 0)", source);
+        Assert.Contains("if (!player.grounded)", source);
         Assert.Contains("if (player.y >= Player.FallResetY)", source);
-        Assert.Contains("if (resetRequested != 0)", source);
+        Assert.Contains("if (resetRequested)", source);
         Assert.Contains("player.Reset(view);", source);
         Assert.Contains("velocityY = 0;", source);
-        Assert.Contains("jumping = 0;", source);
+        Assert.Contains("jumping = false;", source);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         AssertRunnerMbc1Rom(rom);
@@ -5951,7 +5993,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (y > Player.TopWrapY)", topClampBlock);
         Assert.Contains("y = 0;", topClampBlock);
         Assert.Contains("velocityY = 0;", topClampBlock);
-        Assert.Contains("jumping = 0;", topClampBlock);
+        Assert.Contains("jumping = false;", topClampBlock);
         var solidLandingStart = source.IndexOf("inline void ResolveSolidLanding", StringComparison.Ordinal);
         var fallStart = source.IndexOf("inline void ResolveFall", StringComparison.Ordinal);
         Assert.True(solidLandingStart >= 0);
@@ -5980,7 +6022,7 @@ public class GameBoyRomCompilerTests
         var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
         Assert.True(resetEnd > resetStart);
         var resetBlock = source[resetStart..resetEnd];
-        Assert.Contains("if (resetRequested != 0)", resetBlock);
+        Assert.Contains("if (resetRequested)", resetBlock);
         Assert.DoesNotContain("camera = 0;", resetBlock);
         Assert.DoesNotContain("camera.Init(", resetBlock);
         Assert.DoesNotContain("streamColumn = 20;", resetBlock);

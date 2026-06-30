@@ -68,11 +68,11 @@ class PlayerState {
     Pixel x;
     Pixel y;
     Pixel velocityY;
-    Pixel grounded;
+    bool grounded;
     Pixel displayFrame;
     bool displayFlipX;
     Pixel animTick;
-    Pixel jumping;
+    bool jumping;
     Pixel jumpTicks;
     Pixel gravityTick;
 
@@ -80,9 +80,9 @@ class PlayerState {
         x = view.x + Player.StartX;
         y = view.y + Player.StartY;
         velocityY = 0;
-        grounded = 1;
+        grounded = true;
         displayFrame = 0;
-        jumping = 0;
+        jumping = false;
         jumpTicks = 0;
         gravityTick = 0;
     }
@@ -94,14 +94,14 @@ class PlayerState {
             velocityY += 1;
         }
         if (velocityY != 0) {
-            grounded = 0;
+            grounded = false;
             y += velocityY;
         }
         if (velocityY >= World.SignedVelocityWrap) {
             if (y > Player.TopWrapY) {
                 y = 0;
                 velocityY = 0;
-                jumping = 0;
+                jumping = false;
             }
         }
     }
@@ -109,30 +109,30 @@ class PlayerState {
     inline void Land(Pixel targetY) {
         y = targetY;
         velocityY = 0;
-        grounded = 1;
-        jumping = 0;
+        grounded = true;
+        jumping = false;
         gravityTick = 0;
     }
 
     inline void BounceDown() {
         velocityY = Jump.BounceVelocity;
-        grounded = 0;
-        jumping = 0;
+        grounded = false;
+        jumping = false;
         gravityTick = 0;
     }
 
     inline void StartJump() {
         velocityY = Jump.Velocity;
-        grounded = 0;
-        jumping = 1;
+        grounded = false;
+        jumping = true;
         gravityTick = 0;
     }
 
-    inline void SelectDisplayFrame(Pixel moving) {
+    inline void SelectDisplayFrame(bool moving) {
         displayFrame = grounded switch {
-            0 => 4,
+            false => 4,
             _ => moving switch {
-                0 => 0,
+                false => 0,
                 _ => animation.Frame(run, animTick)
             }
         };
@@ -140,12 +140,12 @@ class PlayerState {
 
     inline void HandleJumpInput() {
         if (button_just_pressed(Button.A) != 0) {
-            if (grounded != 0) {
+            if (grounded) {
                 StartJump();
             }
         }
 
-        if (jumping != 0) {
+        if (jumping) {
             jumpTicks = button_hold_ticks(Button.A);
             if (button_down(Button.A) != 0) {
                 if (jumpTicks < Jump.BoostTicks) {
@@ -156,13 +156,13 @@ class PlayerState {
             }
 
             if (button_just_released(Button.A) != 0) {
-                jumping = 0;
+                jumping = false;
             }
         }
     }
 
     inline void UpdateRunAnimation(CameraState view) {
-        if (view.moving != 0) {
+        if (view.moving) {
             animTick += view.speed;
             if (animTick >= RunAnimation.CycleTicks) {
                 animTick -= RunAnimation.CycleTicks;
@@ -182,13 +182,13 @@ class CameraState {
     Pixel screenY;
     Pixel leftProbeX;
     Pixel rightProbeX;
-    Pixel moving;
+    bool moving;
     Pixel speed;
     Pixel direction;
     Pixel movementRemainder;
 
     inline void ResetMotion() {
-        moving = 0;
+        moving = false;
         speed = 0;
         direction = HorizontalMotion.None;
         movementRemainder = 0;
@@ -244,8 +244,8 @@ class CameraState {
         }
     }
 
-    inline void HoldDirection(Pixel grounded) {
-        if (grounded != 0) {
+    inline void HoldDirection(bool grounded) {
+        if (grounded) {
             if (button_down(Button.B) != 0) {
                 AccelerateRun();
             } else {
@@ -264,9 +264,9 @@ class CameraState {
         }
     }
 
-    inline void UpdateIntent(Pixel desiredDirection, Pixel grounded) {
+    inline void UpdateIntent(Pixel desiredDirection, bool grounded) {
         if (desiredDirection == HorizontalMotion.None) {
-            if (grounded != 0) {
+            if (grounded) {
                 ApplyFriction();
             }
         }
@@ -299,7 +299,7 @@ class CameraState {
         CaptureScreen(player);
         rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;
         if (camera.AabbTiles(rightProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
-            moving = 1;
+            moving = true;
             player.x += 1;
             if (screenX >= DeadZone.Right) {
                 x += 1;
@@ -313,7 +313,7 @@ class CameraState {
         CaptureScreen(player);
         leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;
         if (camera.AabbTiles(leftProbeX, wallProbeY, sprite_width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
-            moving = 1;
+            moving = true;
             player.x -= 1;
             if (screenX <= DeadZone.Left) {
                 if (x > 0) {
@@ -338,7 +338,7 @@ class CameraState {
     }
 
     inline void ApplyMotion(PlayerState player, Pixel wallProbeY) {
-        moving = 0;
+        moving = false;
         if (speed != 0) {
             movementRemainder += speed;
             ApplyMotionStep(player, wallProbeY);
@@ -365,11 +365,11 @@ class CameraState {
 
 class FrameState {
     Pixel footTile;
-    Pixel resetRequested;
+    bool resetRequested;
 
     inline void Begin() {
         footTile = CollisionProbe.NoTileHit;
-        resetRequested = 0;
+        resetRequested = false;
     }
 
     inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY) {
@@ -382,9 +382,9 @@ class FrameState {
     }
 
     inline void ResolveFall(PlayerState player) {
-        if (player.grounded == 0) {
+        if (!player.grounded) {
             if (player.y >= Player.FallResetY) {
-                resetRequested = 1;
+                resetRequested = true;
             }
         }
     }
@@ -399,7 +399,7 @@ class FrameState {
     }
 
     inline void ResolveReset(PlayerState player, CameraState view) {
-        if (resetRequested != 0) {
+        if (resetRequested) {
             footTile = CollisionProbe.NoTileHit;
             player.Reset(view);
             view.ResetMotion();

@@ -5,18 +5,18 @@ void main() {
     audio.Init();
     music.Play(terminate);
 
-    u8 onBlueOcean = 0;
+    bool onBlueOcean = false;
     loop {
         video.WaitVBlank();
         input.Poll();
         audio.Update();
         if (button_just_pressed(Button.Start) != 0) {
-            if (onBlueOcean == 0) {
+            if (!onBlueOcean) {
                 music.Play(blue_ocean);
-                onBlueOcean = 1;
+                onBlueOcean = true;
             } else {
                 music.Play(terminate);
-                onBlueOcean = 0;
+                onBlueOcean = false;
             }
         }
     }
