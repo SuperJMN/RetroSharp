@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-28.
+Last updated: 2026-06-30.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -28,6 +28,14 @@ This document preserves project knowledge that previously lived only in agent me
   for wider worlds, and staggered vertical row plus zero-palette attribute streaming
   for source-authored worlds taller than the buffer. NF-10 mapper-backed scale and
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
+- The NES four-screen background flicker (#130, stale scroll on streaming frames)
+  is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
+  drains one pending camera stream phase at VBlank entry in `video.WaitVBlank()`
+  before sprite DMA, restores PPUCTRL/PPUSCROLL before rendering resumes, and splits
+  a runtime row into four 8-tile `$2007` phases (plus a separate attribute phase) so
+  no single VBlank overruns budget. Regression tests live in `NesRomCompilerTests`
+  (`Nes_video_wait_vblank_applies_pending_camera_scroll_before_sprite_dma`,
+  `Nes_runtime_row_streaming_is_split_across_vblanks`).
 
 ## Project Shape
 
@@ -116,8 +124,12 @@ Progress (2026-06-14):
   (`SdkByteExpression.Variable` now carries a typed storage descriptor instead of an opaque
   formatted string), PL-E1 #118 (parser preserves target/intrinsic extern metadata and GB/NES
   prove a `wait_frame` source helper can lower through target intrinsics with identical bytes).
-  Earlier groundwork and audit context came from #101-#105. #103, #104, and #105 remain
-  separately tracked design debt rather than open work inside #106.
+  Earlier groundwork and audit context came from #101-#105. #103 is now resolved and
+  closed (module knowledge moved out of the parser into `RetroSharp.Core.Sdk.SdkModuleRegistry`,
+  and `RetroSharp.Parser.SdkDotCallResolver` is the single canonical dot-call decision
+  consumed by both constant folding and semantic analysis); only the narrow pathological
+  folder-scope case is a documented residual. #104 and #105 remain separately tracked
+  design debt rather than open work inside #106.
 - Sprite operation decision implemented 2026-06-14: X/Y/Frame are `SdkByteExpression`, FlipX
   is nullable `SdkByteExpression?`, PaletteSlot stays a constant int validated against target
   capabilities, and target lowerers resolve metasprite geometry from `SpriteId` and asset data
@@ -181,8 +193,14 @@ Progress (2026-06-14):
   policy, and AF-5.10 reduce O(spawns)/frame activation scans.
 
 Suggested next steps for the next agent, in order:
-1. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
+1. The previously open issues are now resolved in `master`: #130 (NES streaming flicker)
+   is fixed by `dd58910`, and #103 (unify dot-call/receiver lowering) is satisfied by
+   `SdkModuleRegistry` + the single-sourced `SdkDotCallResolver`. Both issues are closed.
+2. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
    portable target selection, and the remaining intrinsic catalog before migrating more SDK calls.
+3. Genuinely-open roadmap frontiers (tracked in docs, not issues): HUD/AR-10 (Game Boy window
+   HUD is achievable now and capability-gated; NES HUD needs NF-10 mapper IRQ), NF-10
+   (mapper-backed large NES levels), and Game Boy banking (`docs/GameBoyBankingRoadmap.md`).
 
 ## Game Boy Runner Lessons
 
