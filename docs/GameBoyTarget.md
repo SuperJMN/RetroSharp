@@ -100,7 +100,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - Conditional value expressions (`condition ? whenTrue : whenFalse`) over byte-backed branch expressions
 - `map_tile_at(...)`, `map_flags_at(...)`, `world_tile_flags_at(...)`, `collision_aabb_tiles(...)`, `camera_aabb_tiles(...)`, `camera_aabb_hit_top(...)`, `camera_screen_aabb_tiles(...)`, and `camera_screen_aabb_hit_top(...)` as value expressions for runtime map queries
 - `button_pressed(...)` as a value expression for joypad queries
-- `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` as tick-based input value expressions
+- `Input.IsDown(...)`, `Input.WasPressed(...)`, `Input.WasReleased(...)`, and `Input.HoldTicks(...)` as tick-based input value expressions
 - `true` and `false`
 
 Current numeric and enum locals are stored as one byte in WRAM. Types wider than one byte are accepted only as source-level convenience for this prototype. Type aliases are normalized to their underlying type before Game Boy lowering, so `type ActorIndex = u8;` has the same runtime shape as `u8`. Top-level constants, block-local constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members are substituted before ROM lowering and do not reserve WRAM. Integer literal spelling is source-only: decimal, `0x` hexadecimal, `0b` binary, `_`-separated, and `u8`/`i8`/`u16`/`i16` suffixed forms all fold to the same immediate value. Constant type annotations are optional; omitting one does not change the emitted code because the constant disappears before target lowering. Constant boolean literals normalize to `1` or `0`, and constant conditional expressions select one branch before ROM lowering. `sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive and pointer types; and the sum of field sizes for plain structs. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. `countof(array)` returns the declared element count of a fixed-size local array visible at that point. Block-local constants can reference earlier constants visible at that point, including simple integer expressions such as `StartX + 1`, then disappear from the runtime block. Plain local structs are flattened to adjacent WRAM byte slots for their fields, so `position.x` and `position.y` have the same runtime cost as two separately declared locals. Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to the same zero-fill plus direct field stores as declaring the struct and assigning those members by hand; field expressions are emitted in declaration order, shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are also flattened to adjacent WRAM byte slots; `values[0]` and `values[1]` compile to direct absolute loads/stores with no heap and no runtime indexing helper. Initializer lists such as `u8 values[4] = [1, seed, seed + 1];` lower to the same zero-fill plus direct element stores as declaring the array and assigning those constant indices by hand; `u8 values[] = [1, seed, seed + 1];` infers the fixed length `3` before lowering and emits the same bytes as the explicit length form. Omitted trailing elements remain zero when the explicit length is larger than the initializer list. Runtime element access such as `values[i]` computes `HL = base + i` and loads or stores through `HL`; it does not add an implicit bounds check or mask. Fixed-size local struct arrays reserve one flattened byte-sized field slot per element field, for example `actors[0].x`, `actors[0].y`, `actors[1].x`, and `actors[1].y`. Constant indexed field access uses the flattened field address directly. Runtime indexed field access such as `actors[i].x` computes `HL = actors[0].x + i * targetStructStride` and loads or stores through `HL`. Struct-array initializers such as `Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];` zero-fill the array and then emit direct field stores for listed fields. True `i16`/`u16` fields in struct arrays are rejected until mixed-width pool layout exists.
@@ -180,7 +180,7 @@ Runtime calls:
 - `camera.AabbHitTop(screenX, worldY, width, height, flags)`
 - `camera.ScreenAabbTiles(screenX, screenY, width, height, flags)`
 - `camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)`
-- `sprite_width(name)`
+- `Sprite.Width(name)`
 - `sprite.Set(id, x, y, tile, flags)`
 - `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])`
 - `tilemap_fill_column(column, y, height, tile)`
@@ -192,10 +192,10 @@ Runtime calls:
 - `animation.Clip(name, firstFrame, duration...)`
 - `animation.Frame(name, tick)`
 - `button_pressed(button)`
-- `button_down(button)`
-- `button_just_pressed(button)`
-- `button_just_released(button)`
-- `button_hold_ticks(button)`
+- `Input.IsDown(button)`
+- `Input.WasPressed(button)`
+- `Input.WasReleased(button)`
+- `Input.HoldTicks(button)`
 
 `scroll.Set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
@@ -235,7 +235,7 @@ void main() {
         video.WaitVBlank();
         input.Poll();
         audio.Update();
-        if (button_just_pressed(Button.Start) != 0) {
+        if (Input.WasPressed(Button.Start)) {
             if (onBoss == 0) {
                 music.Play(boss);
                 onBoss = 1;
@@ -257,9 +257,9 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits any queued column or row into the background tilemap. It runs at the top of the presentation phase after `video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. If the same frame also draws Game Boy sprites, issue `sprite.Draw(...)` first so direct OAM writes get the earliest VBlank cycles, then call `camera.Apply()` before gameplay updates. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `camera.SetPosition(...)` does; a program must call `camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. The row streamer writes the 21 visible columns in screen order and wraps both source and circular background columns as needed. The large per-row streamer is only emitted when the program can scroll vertically, and the two-slot staggered pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
-`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `sprite_width(name)` so collision follows the logical width declared by `sprite.Asset(...)`.
+`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `sprite.Asset(...)`.
 
-`camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` and `worldY` can be byte-backed runtime expressions; `width`, `height`, and `flags` are compile-time values, and `width` can use `sprite_width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
+`camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` and `worldY` can be byte-backed runtime expressions; `width`, `height`, and `flags` are compile-time values, and `width` can use `Sprite.Width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
 
 `camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the top world-pixel Y of the first overlapped tile whose flags match, or `255` when there is no hit. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
 
@@ -279,9 +279,9 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `world_tile_flags_at(worldX, worldY)` reads collision flags by world pixel coordinates. The Game Boy lowering divides each byte-backed coordinate by the 8x8 tile size, reads the generated world flag row table, and returns `0` when the coordinate falls outside the active world map from `world.Map(...)` or `world.Load(...)`. The language syntax intentionally omits a `level` argument while this prototype has one active world map; the SDK operation still records `WorldId = "default"` as the future extension point for named maps.
 
-`collision_aabb_tiles(x, y, width, height, flags)` returns `1` when any world tile overlapped by the pixel AABB has one of the requested flag bits, otherwise `0`. Width and height are compile-time values in this prototype, with `sprite_width(name)` accepted as a static width source. Zero width, zero height, or a zero flag mask returns `0`. This helper only reports overlap; actor movement and collision resolution remain source-level policy.
+`collision_aabb_tiles(x, y, width, height, flags)` returns `1` when any world tile overlapped by the pixel AABB has one of the requested flag bits, otherwise `0`. Width and height are compile-time values in this prototype, with `Sprite.Width(name)` accepted as a static width source. Zero width, zero height, or a zero flag mask returns `0`. This helper only reports overlap; actor movement and collision resolution remain source-level policy.
 
-`input.Poll()` snapshots the joypad for the current game tick. Call it once after `video.WaitVBlank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `button_down(button)` returns `1` while the button is down in the current snapshot, `button_just_pressed(button)` returns `1` only on the up-to-down transition, `button_just_released(button)` returns `1` only on the down-to-up transition, and `button_hold_ticks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks.
+`input.Poll()` snapshots the joypad for the current game tick. Call it once after `video.WaitVBlank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `Input.IsDown(button)` returns `true` while the button is down in the current snapshot, `Input.WasPressed(button)` returns `true` only on the up-to-down transition, `Input.WasReleased(button)` returns `true` only on the down-to-up transition, and `Input.HoldTicks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks. The snake_case builtins (`button_down`, `button_just_pressed`, `button_just_released`, `button_hold_ticks`, and `sprite_width`) remain accepted as transitional aliases and lower identically.
 
 `button_pressed(button)` remains supported as a compatibility direct joypad read and returns `1` when the named button is currently pressed or `0` otherwise. New gameplay code should prefer `input.Poll()` with the tick-based helpers. The `button` argument is a member of the built-in `Button` enum (`Button.A`, `Button.B`, `Button.Select`, `Button.Start`, `Button.Right`, `Button.Left`, `Button.Up`, `Button.Down`). The bare lowercase identifiers `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down` remain accepted as a transitional alias and lower to the same joypad masks.
 
@@ -378,7 +378,7 @@ Landed on 2026-06-01:
 
 Landed after the initial runner loop:
 
-- `input.Poll()`, `button_down(...)`, `button_just_pressed(...)`, `button_just_released(...)`, and `button_hold_ticks(...)` provide a tick-based input surface.
+- `input.Poll()`, `Input.IsDown(...)`, `Input.WasPressed(...)`, `Input.WasReleased(...)`, and `Input.HoldTicks(...)` provide a tick-based input surface.
 - The Game Boy runner uses the new input helpers for edge-triggered, variable-height jumping: holding A extends upward impulse for a bounded number of ticks, and releasing A cuts the extension.
 - The runner's horizontal movement, dead-zone camera state, and run animation now advance from a horizontal speed value rather than raw D-pad state: holding a direction moves at a base walk speed and faces that way immediately, holding B builds speed up to a higher run limit only while grounded (Mario has traction), airborne input preserves horizontal momentum without building or bleeding speed, releasing the D-pad coasts to a stop through ground friction, and pressing the opposite direction turns instantly instead of drifting backward.
 - `camera.SetPosition(x, y)` advances the runtime camera by at most one pixel per axis per call toward the requested low byte, using a signed 8-bit delta so source-level byte positions can wrap. The runner updates camera state per single-pixel movement step, then calls `camera.SetPosition` twice at the end of the frame so a two-pixel run frame can catch the 1px-per-call backend up without inlining the full 2D camera runtime at every collision probe.
@@ -402,11 +402,11 @@ Landed after the camera-runtime pass:
 
 - `camera.Init(...)`, `camera.Apply()`, `camera_move_right()`, `camera_move_left()`, and `camera_tile_column_at(...)` lift horizontal scrolling one layer above raw `SCX` writes and hand-managed streaming cursors.
 - The camera runtime owns 16-bit world X, sub-tile scroll state, circular background-map edge columns, source-map edge columns, and 8 px column streaming.
-- Camera span helpers remain available for source-map checks, including logical sprite widths through `sprite_width(...)`, but the runner no longer depends on them for player feet.
+- Camera span helpers remain available for source-map checks, including logical sprite widths through `Sprite.Width(...)`, but the runner no longer depends on them for player feet.
 
 Landed after the Collision V1 pass:
 
-- The runner stores player world X/Y, derives the actual screen X/Y from player position minus camera position, passes that byte-backed screen X into `camera.AabbTiles(...)` / `camera.AabbHitTop(...)`, and probes generated world flags with the logical width from `sprite_width(mario_player)`.
+- The runner stores player world X/Y, derives the actual screen X/Y from player position minus camera position, passes that byte-backed screen X into `camera.AabbTiles(...)` / `camera.AabbHitTop(...)`, and probes generated world flags with the logical width from `Sprite.Width(mario_player)`.
 - Camera span collision and world-space `collision_aabb_tiles(...)` remain available, but the runner uses the camera-relative AABB helper so long maps stay aligned after the camera scrolls beyond the source-local byte range.
 
 Landed after the landing-query pass:

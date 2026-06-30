@@ -53,6 +53,24 @@ public static class SdkModuleRegistry
         ["WaitVBlank"] = "wait_vblank",
     };
 
+    // Per-(module, method) full call-name overrides. The Input predicate facade
+    // methods lower to the existing flat button builtins, which use the `button`
+    // call prefix rather than the facade's `input` prefix. Both the canonical
+    // PascalCase facade (#157) and the transitional lowercase receiver resolve to
+    // the same builtins, so lowering stays byte-identical.
+    private static readonly Dictionary<(string Module, string Method), string> CallNameOverrides =
+        new()
+        {
+            [("Input", "IsDown")] = "button_down",
+            [("Input", "WasPressed")] = "button_just_pressed",
+            [("Input", "WasReleased")] = "button_just_released",
+            [("Input", "HoldTicks")] = "button_hold_ticks",
+            [("input", "IsDown")] = "button_down",
+            [("input", "WasPressed")] = "button_just_pressed",
+            [("input", "WasReleased")] = "button_just_released",
+            [("input", "HoldTicks")] = "button_hold_ticks",
+        };
+
     public static bool IsKnownModule(string module)
     {
         return Modules.ContainsKey(module);
@@ -71,7 +89,9 @@ public static class SdkModuleRegistry
             return false;
         }
 
-        callName = descriptor.ResolveCallName(method);
+        callName = CallNameOverrides.TryGetValue((module, method), out var overrideName)
+            ? overrideName
+            : descriptor.ResolveCallName(method);
         return true;
     }
 

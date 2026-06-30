@@ -119,7 +119,7 @@ void main() {
         }
 
         if (playerY >= 74) {
-            footTile = collision_aabb_tiles(playerWorldX, 32, sprite_width(mario_player), 8, 1);
+            footTile = collision_aabb_tiles(playerWorldX, 32, Sprite.Width(mario_player), 8, 1);
 
             if (footTile != 0) {
                 playerY = 73;
@@ -145,7 +145,7 @@ void main() {
             jumpTicks = 0;
         }
 
-        if (button_just_pressed(Button.A) != 0) {
+        if (Input.WasPressed(Button.A)) {
             if (grounded != 0) {
                 velocityY = 252;
                 grounded = 0;
@@ -154,26 +154,26 @@ void main() {
         }
 
         if (jumping != 0) {
-            jumpTicks = button_hold_ticks(Button.A);
-            if (button_down(Button.A) != 0) {
+            jumpTicks = Input.HoldTicks(Button.A);
+            if (Input.IsDown(Button.A)) {
                 if (jumpTicks < 12) {
                     velocityY -= 1;
                 }
             }
 
-            if (button_just_released(Button.A) != 0) {
+            if (Input.WasReleased(Button.A)) {
                 jumping = 0;
             }
         }
 
         moving = 0;
-        if (button_down(Button.Right) != 0) {
+        if (Input.IsDown(Button.Right)) {
             moving = 1;
             displayFlipX = false;
             cameraX += 1;
         }
 
-        if (button_down(Button.Left) != 0) {
+        if (Input.IsDown(Button.Left)) {
             moving = 1;
             displayFlipX = true;
             cameraX -= 1;

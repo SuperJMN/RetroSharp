@@ -17,10 +17,11 @@ The current source spelling is the SDK dot-call form, for example `video.WaitVBl
 | `video.Init()` | Initialize the target video path for samples that need explicit setup. This remains a narrow setup call while the SDK frame lifecycle is stabilized. |
 | `video.WaitVBlank()` | Wait for the next frame boundary. This maps to `Sdk2DOperation.WaitFrame`. |
 | `input.Poll()` | Snapshot controller state for the current tick. Call once per frame before tick-based button helpers. |
-| `button_down(button)` | Return `1` while the named button is down in the current poll. |
-| `button_just_pressed(button)` | Return `1` only on the up-to-down edge. |
-| `button_just_released(button)` | Return `1` only on the down-to-up edge. |
-| `button_hold_ticks(button)` | Return consecutive polls held, saturating at `255` and resetting to `0` on release. |
+| `Input.IsDown(button)` | Return `true` while the named button is down in the current poll. |
+| `Input.WasPressed(button)` | Return `true` only on the up-to-down edge. |
+| `Input.WasReleased(button)` | Return `true` only on the down-to-up edge. |
+| `Input.HoldTicks(button)` | Return consecutive polls held, saturating at `255` and resetting to `0` on release. |
+| `button` argument | A `Button` enum member (`Button.A`, `Button.Right`, ...). The snake_case `button_*`/`sprite_width` builtins and bare lowercase button identifiers remain as transitional aliases. |
 
 Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down`.
 
@@ -91,7 +92,7 @@ Targets may lower camera movement differently. The SDK contract is position-base
 | Signature | Semantics |
 | --- | --- |
 | `sprite.Asset(name, path[, frameWidth, frameHeight])` | Declare a logical sprite asset. PNG sheets use explicit frame dimensions; JSON assets remain a transitional compatibility format. |
-| `sprite_width(name)` | Return the logical sprite width known at compile time. |
+| `Sprite.Width(name)` | Return the logical sprite width known at compile time. |
 | `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` | Draw a logical sprite frame with portable horizontal flip and logical palette-slot selection. |
 | `animation.Clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
 | `animation.Frame(name, tick)` | Return the frame index for a tick in a declared clip. |
@@ -438,7 +439,7 @@ void main() {
     loop {
         video.WaitVBlank();
         input.Poll();
-        let cameraX = button_hold_ticks(Button.Right);
+        let cameraX = Input.HoldTicks(Button.Right);
         camera.SetPosition(cameraX, 0);
         camera.Apply();
         sprite.Draw(marker, 72, 72, 0, false, 0);

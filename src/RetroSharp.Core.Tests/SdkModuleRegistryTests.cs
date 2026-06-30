@@ -17,7 +17,34 @@ public sealed class SdkModuleRegistryTests
     }
 
     [Theory]
-    [InlineData("Video", "video")]
+    [InlineData("Input", "IsDown", "button_down")]
+    [InlineData("Input", "WasPressed", "button_just_pressed")]
+    [InlineData("Input", "WasReleased", "button_just_released")]
+    [InlineData("Input", "HoldTicks", "button_hold_ticks")]
+    [InlineData("input", "IsDown", "button_down")]
+    [InlineData("input", "WasReleased", "button_just_released")]
+    public void Input_predicate_methods_resolve_to_button_builtins(string module, string method, string expected)
+    {
+        Assert.True(SdkModuleRegistry.TryResolveCallName(module, method, out var callName));
+        Assert.Equal(expected, callName);
+    }
+
+    [Theory]
+    [InlineData("Sprite", "Width", "sprite_width")]
+    [InlineData("sprite", "Width", "sprite_width")]
+    public void Sprite_width_resolves_to_sprite_width_builtin(string module, string method, string expected)
+    {
+        Assert.True(SdkModuleRegistry.TryResolveCallName(module, method, out var callName));
+        Assert.Equal(expected, callName);
+    }
+
+    [Fact]
+    public void Input_poll_still_resolves_through_the_facade_prefix()
+    {
+        Assert.True(SdkModuleRegistry.TryResolveCallName("Input", "Poll", out var callName));
+        Assert.Equal("input_poll", callName);
+    }
+
     [InlineData("Input", "input")]
     [InlineData("Camera", "camera")]
     [InlineData("Sprite", "sprite")]
