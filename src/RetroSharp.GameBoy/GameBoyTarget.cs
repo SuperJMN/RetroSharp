@@ -1,9 +1,19 @@
 namespace RetroSharp.GameBoy;
 
+using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 
 public static class GameBoyTarget
 {
+    public static TargetIntrinsicCatalog Intrinsics { get; } = new(
+        "gb",
+        "Game Boy",
+        [
+            TargetIntrinsicDescriptor.WaitFrame("wait_frame", arity: 0),
+            TargetIntrinsicDescriptor.WaitFrame("wait_vblank", arity: 0),
+            TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
+        ]);
+
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(
         Name: "gb",
         SupportsBgm: true,

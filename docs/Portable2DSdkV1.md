@@ -8,7 +8,7 @@ The SDK is portable by capability, not by identical machine behavior. A call is 
 
 ## SDK v1 Surface
 
-The current source spelling is the SDK dot-call form, for example `video.WaitVBlank()` and `camera.SetPosition(x, y)`. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`.
+The current source spelling is the SDK dot-call form, for example `video.WaitVBlank()` and `camera.SetPosition(x, y)`. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`. `video.WaitVBlank()` and `input.Poll()` are now provided by an injected SDK source library over target intrinsics, while higher-level camera, sprite, world, audio, and collision calls remain capability-checked SDK operations or audio operations.
 
 ### Frame and input
 

@@ -30,17 +30,18 @@ public static class GameBoyRomCompiler
 
     private static GameBoyVideoProgram ParseVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
-            parse.Value,
+            targetProgram,
             GameBoyTarget.Capabilities,
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
             baseDirectory);
@@ -67,7 +68,8 @@ public static class GameBoyRomCompiler
             videoProgram.MainBlock,
             videoProgram.Functions,
             "Game Boy",
-            draw => DrawSpriteBudget(videoProgram, draw));
+            draw => DrawSpriteBudget(videoProgram, draw),
+            GameBoyTarget.Intrinsics);
         foreach (var budget in frameBudgets)
         {
             Sdk2DOperationValidator.ValidateFrameBudget(GameBoyTarget.Capabilities, budget);
@@ -255,7 +257,8 @@ internal sealed class GameBoyVideoProgram
             functions,
             "Game Boy",
             GameBoyTarget.Capabilities,
-            subroutineNames);
+            subroutineNames,
+            GameBoyTarget.Intrinsics);
         var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
         var result = new GameBoyVideoProgram
         {
@@ -355,6 +358,7 @@ internal sealed class GameBoyVideoProgram
                 return false;
             default:
                 return !functions.TryGetValue(call.Name, out var function)
+                       || function.IsExtern
                        || HasRuntimeWork(function.Block, functions);
         }
     }

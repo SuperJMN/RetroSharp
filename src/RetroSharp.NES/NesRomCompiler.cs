@@ -12,17 +12,18 @@ public static class NesRomCompiler
 {
     public static byte[] CompileSource(string source, string? baseDirectory = null)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
-            parse.Value,
+            targetProgram,
             NesTarget.Capabilities,
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
             baseDirectory);
@@ -33,31 +34,34 @@ public static class NesRomCompiler
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(string source, string? baseDirectory = null)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return Sdk2DOperationCollector.Collect(
             videoProgram.MainBlock,
             videoProgram.Functions,
             "NES",
-            NesTarget.Capabilities);
+            NesTarget.Capabilities,
+            NesTarget.Intrinsics);
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(string source, string? baseDirectory = null)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES");
@@ -69,7 +73,8 @@ public static class NesRomCompiler
             videoProgram.MainBlock,
             videoProgram.Functions,
             "NES",
-            NesTarget.Capabilities);
+            NesTarget.Capabilities,
+            NesTarget.Intrinsics);
         foreach (var operation in operations)
         {
             Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
@@ -79,7 +84,8 @@ public static class NesRomCompiler
             videoProgram.MainBlock,
             videoProgram.Functions,
             "NES",
-            draw => DrawSpriteBudget(videoProgram, draw));
+            draw => DrawSpriteBudget(videoProgram, draw),
+            NesTarget.Intrinsics);
         foreach (var budget in frameBudgets)
         {
             Sdk2DOperationValidator.ValidateFrameBudget(NesTarget.Capabilities, budget);
@@ -276,7 +282,8 @@ internal sealed class NesVideoProgram
             mainBlock,
             functions,
             "NES",
-            NesTarget.Capabilities);
+            NesTarget.Capabilities,
+            NesTarget.Intrinsics);
         return operations
             .OfType<Sdk2DOperation.SetCameraPosition>()
             .Any(operation => (operation.Axes & ScrollAxes.Vertical) != 0);
@@ -435,7 +442,7 @@ internal sealed class NesVideoProgram
     private void ApplyDerivedSpritePalettes()
     {
         var appliedPalettes = new Dictionary<int, byte[]>();
-        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES", NesTarget.Capabilities);
+        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES", NesTarget.Capabilities, NesTarget.Intrinsics);
         foreach (var operation in operations.OfType<Sdk2DOperation.DrawLogicalSprite>())
         {
             if (!spriteAssets.TryGetValue(operation.SpriteId, out var asset)

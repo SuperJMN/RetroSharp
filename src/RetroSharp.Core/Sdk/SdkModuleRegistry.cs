@@ -8,24 +8,27 @@ using System.Text;
 // front-end, which only consumes this contract to lower dot-call syntax.
 public static class SdkModuleRegistry
 {
-    private static readonly Dictionary<string, string> ModulePrefixes = new(StringComparer.Ordinal)
-    {
-        ["video"] = "video",
-        ["input"] = "input",
-        ["camera"] = "camera",
-        ["sprites"] = "sprite",
-        ["sprite"] = "sprite",
-        ["palette"] = "palette",
-        ["objectPalette"] = "object_palette",
-        ["tilemap"] = "tilemap",
-        ["map"] = "map",
-        ["world"] = "world",
-        ["hud"] = "hud",
-        ["scroll"] = "scroll",
-        ["animation"] = "animation",
-        ["audio"] = "audio",
-        ["music"] = "music",
-    };
+    private static readonly SdkModuleDescriptor[] ModuleDescriptors =
+    [
+        LibraryModule("video", "video"),
+        LibraryModule("input", "input"),
+        LibraryModule("camera", "camera"),
+        LibraryModule("sprites", "sprite"),
+        LibraryModule("sprite", "sprite"),
+        LibraryModule("palette", "palette"),
+        LibraryModule("objectPalette", "object_palette"),
+        LibraryModule("tilemap", "tilemap"),
+        LibraryModule("map", "map"),
+        LibraryModule("world", "world"),
+        LibraryModule("hud", "hud"),
+        LibraryModule("scroll", "scroll"),
+        LibraryModule("animation", "animation"),
+        LibraryModule("audio", "audio"),
+        LibraryModule("music", "music"),
+    ];
+
+    private static readonly Dictionary<string, SdkModuleDescriptor> Modules = ModuleDescriptors
+        .ToDictionary(module => module.Name, StringComparer.Ordinal);
 
     private static readonly Dictionary<string, string> MethodNames = new(StringComparer.Ordinal)
     {
@@ -34,26 +37,36 @@ public static class SdkModuleRegistry
 
     public static bool IsKnownModule(string module)
     {
-        return ModulePrefixes.ContainsKey(module);
+        return Modules.ContainsKey(module);
+    }
+
+    public static SdkModuleDescriptor? FindModule(string module)
+    {
+        return Modules.GetValueOrDefault(module);
     }
 
     public static bool TryResolveCallName(string module, string method, out string callName)
     {
-        if (!ModulePrefixes.TryGetValue(module, out var prefix))
+        if (!Modules.TryGetValue(module, out var descriptor))
         {
             callName = string.Empty;
             return false;
         }
 
-        callName = $"{prefix}_{MethodName(method)}";
+        callName = descriptor.ResolveCallName(method);
         return true;
     }
 
-    private static string MethodName(string method)
+    internal static string MethodName(string method)
     {
         return MethodNames.TryGetValue(method, out var name)
             ? name
             : ToSnakeCase(method);
+    }
+
+    private static SdkModuleDescriptor LibraryModule(string name, string callPrefix)
+    {
+        return new SdkModuleDescriptor(name, callPrefix, SdkModuleKind.Library);
     }
 
     private static string ToSnakeCase(string value)

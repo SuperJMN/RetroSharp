@@ -420,6 +420,98 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_input_poll_library_helper_over_game_boy_intrinsic_like_sdk_operation()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     input_poll();
+                                 }
+                                 """;
+
+        const string intrinsicSource = """
+                                       [target("gb")]
+                                       [intrinsic("poll_input")]
+                                       extern void gb_poll_input();
+
+                                       inline void poll_input() {
+                                           gb_poll_input();
+                                       }
+
+                                       void main() {
+                                           poll_input();
+                                       }
+                                       """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(sdkSource), GameBoyRomCompiler.CompileSource(intrinsicSource));
+    }
+
+    [Fact]
+    public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
+    {
+        const string source = """
+                              void main() {
+                                  video.WaitVBlank();
+                                  input.Poll();
+                              }
+                              """;
+        var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
+
+        var library = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("class video", library, StringComparison.Ordinal);
+        Assert.Contains("class input", library, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitLibrarySource), GameBoyRomCompiler.CompileSource(source));
+    }
+
+    [Fact]
+    public void Game_boy_selects_matching_target_intrinsic_variant_for_portable_helper()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     video_wait_vblank();
+                                 }
+                                 """;
+
+        const string source = """
+                              [target("gb")]
+                              [intrinsic("wait_frame")]
+                              extern void target_wait_frame();
+
+                              [target("nes")]
+                              [intrinsic("wait_frame")]
+                              extern void target_wait_frame();
+
+                              inline void wait_frame() {
+                                  target_wait_frame();
+                              }
+
+                              void main() {
+                                  wait_frame();
+                              }
+                              """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(sdkSource), GameBoyRomCompiler.CompileSource(source));
+    }
+
+    [Fact]
+    public void Unknown_game_boy_intrinsic_reports_target_catalog_error()
+    {
+        const string source = """
+                              [target("gb")]
+                              [intrinsic("read_magic")]
+                              extern void gb_read_magic();
+
+                              void main() {
+                                  gb_read_magic();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Target 'gb' does not support intrinsic 'read_magic' on extern function 'gb_read_magic'.", exception.Message);
+    }
+
+    [Fact]
     public void Compiles_receiver_method_calls_like_static_helper_calls()
     {
         const string staticSource = """

@@ -441,6 +441,98 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_input_poll_library_helper_over_nes_intrinsic_like_sdk_operation()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     input_poll();
+                                 }
+                                 """;
+
+        const string intrinsicSource = """
+                                       [target("nes")]
+                                       [intrinsic("poll_input")]
+                                       extern void nes_poll_input();
+
+                                       inline void poll_input() {
+                                           nes_poll_input();
+                                       }
+
+                                       void main() {
+                                           poll_input();
+                                       }
+                                       """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(sdkSource), NesRomCompiler.CompileSource(intrinsicSource));
+    }
+
+    [Fact]
+    public void Injected_nes_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
+    {
+        const string source = """
+                              void main() {
+                                  video.WaitVBlank();
+                                  input.Poll();
+                              }
+                              """;
+        var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
+
+        var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.Contains("class video", library, StringComparison.Ordinal);
+        Assert.Contains("class input", library, StringComparison.Ordinal);
+        Assert.Equal(NesRomCompiler.CompileSource(explicitLibrarySource), NesRomCompiler.CompileSource(source));
+    }
+
+    [Fact]
+    public void Nes_selects_matching_target_intrinsic_variant_for_portable_helper()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     video_wait_vblank();
+                                 }
+                                 """;
+
+        const string source = """
+                              [target("gb")]
+                              [intrinsic("wait_frame")]
+                              extern void target_wait_frame();
+
+                              [target("nes")]
+                              [intrinsic("wait_frame")]
+                              extern void target_wait_frame();
+
+                              inline void wait_frame() {
+                                  target_wait_frame();
+                              }
+
+                              void main() {
+                                  wait_frame();
+                              }
+                              """;
+
+        Assert.Equal(NesRomCompiler.CompileSource(sdkSource), NesRomCompiler.CompileSource(source));
+    }
+
+    [Fact]
+    public void Unknown_nes_intrinsic_reports_target_catalog_error()
+    {
+        const string source = """
+                              [target("nes")]
+                              [intrinsic("read_magic")]
+                              extern void nes_read_magic();
+
+                              void main() {
+                                  nes_read_magic();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("Target 'nes' does not support intrinsic 'read_magic' on extern function 'nes_read_magic'.", exception.Message);
+    }
+
+    [Fact]
     public void Nes_sdk_dot_calls_accept_vertical_camera_on_four_screen_target()
     {
         const string source = """
