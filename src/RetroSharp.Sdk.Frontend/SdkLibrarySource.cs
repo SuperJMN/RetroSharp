@@ -22,6 +22,14 @@ public static class SdkLibrarySource
                  [intrinsic("audio_update")]
                  extern void {{prefix}}_audio_update();
 
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_set_position")]
+                 extern void {{prefix}}_camera_set_position(i16 x, i16 y);
+
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_apply")]
+                 extern void {{prefix}}_camera_apply();
+
                  class video
                  {
                      static inline void WaitVBlank()
@@ -43,6 +51,19 @@ public static class SdkLibrarySource
                      static inline void Update()
                      {
                          {{prefix}}_audio_update();
+                     }
+                 }
+
+                 class camera
+                 {
+                     static inline void SetPosition(i16 x, i16 y)
+                     {
+                         {{prefix}}_camera_set_position(x, y);
+                     }
+
+                     static inline void Apply()
+                     {
+                         {{prefix}}_camera_apply();
                      }
                  }
 

@@ -13,6 +13,8 @@ public static class NesTarget
             TargetIntrinsicDescriptor.WaitFrame("wait_vblank", arity: 0),
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
+            TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
+            TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
         ]);
 
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(

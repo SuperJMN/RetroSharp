@@ -570,9 +570,21 @@ public static class Sdk2DOperationCollector
 
             var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
             SdkCallReader.RequireArity(call, intrinsic.Arity);
-            if (TryOperationFor(intrinsic, out var operation))
+            switch (intrinsic.Operation)
             {
-                AddOp(operation);
+                case TargetIntrinsicOperation.SetCameraPosition:
+                    CollectCameraSetPosition(call);
+                    break;
+                case TargetIntrinsicOperation.ApplyCamera:
+                    CollectCameraApply(call);
+                    break;
+                default:
+                    if (TryOperationFor(intrinsic, out var operation))
+                    {
+                        AddOp(operation);
+                    }
+
+                    break;
             }
 
             return true;

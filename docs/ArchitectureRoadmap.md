@@ -194,14 +194,20 @@ Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBo
 The first SDK-as-library slice is now in place. Each cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
-and `audio_update`. `RetroSharp.Sdk.Frontend` injects a small target-selected SDK
-library before parsing target compilations. That library defines `video`, `input`,
-and `audio` classes whose `video.WaitVBlank()`, `input.Poll()`, and `audio.Update()`
+`audio_update`, `camera_set_position`, and `camera_apply` (Game Boy additionally
+catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` injects a small
+target-selected SDK library before parsing target compilations. That library defines
+`video`, `input`, `audio`, and `camera` classes whose `video.WaitVBlank()`,
+`input.Poll()`, `audio.Update()`, `camera.SetPosition(x, y)`, and `camera.Apply()`
 helpers call `[target(...)] [intrinsic(...)] extern` declarations, and those helpers
 emit the same bytes as the previous SDK operation path. The `audio_update` intrinsic
 is collected by the separate `SdkAudioOperationCollector` (Game Boy lowers it from the
 audio operation stream, NES emits it inline), so the shared `Sdk2DOperation` collectors
-consume but ignore it. `TargetProgramSelector` filters
+consume but ignore it. The `camera_set_position`/`camera_apply` intrinsics route through
+the existing `SetCameraPosition`/`ApplyCamera` collection and emission, so their scroll-axis
+inference, capability checks, and frame-budget accounting are unchanged; injecting
+`class camera` does not shadow non-member camera calls (`camera.Init`, `camera.AabbTiles`,
+`camera.AabbHitTop` still lower through the SDK module). `TargetProgramSelector` filters
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
@@ -227,10 +233,15 @@ whether a call arrives directly or through an inlined helper, which means the cr
 streaming/frame-budget state is preserved.
 
 The remaining friction is at the **extern-intrinsic boundary**, not the language:
-- `camera.SetPosition()` / `camera.Apply()` carry only `i16`/void operands, so they are a
-  clean **GO** — migratable with the same wiring as SAL-4/SAL-5 (catalog entry, injected
-  helper over a `[target][intrinsic]` extern, collector/emitter routing to the existing
-  `SetCameraPosition`/`ApplyCamera` emission). Tracked as a follow-up, not done here.
+- `camera.SetPosition()` / `camera.Apply()` carry only `i16`/void operands, so they were a
+  clean **GO** and are now migrated (SAL-7): both targets catalog `camera_set_position`
+  (arity 2) and `camera_apply` (arity 0), `SdkLibrarySource` injects `class camera` with
+  `SetPosition`/`Apply` inline helpers over `[target][intrinsic]` externs, and the
+  collector/emitter route them to the existing `SetCameraPosition`/`ApplyCamera` emission
+  (Game Boy consumes from the operation stream; NES re-derives from the call, preserving its
+  `ScrollAxes.Horizontal` apply). Byte-identical on both targets. Injecting `class camera`
+  does not shadow the rest of the `camera` module — `camera.Init`, `camera.AabbTiles`, and
+  `camera.AabbHitTop` are not class members, so they still lower through the SDK module.
 - `sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
   with runtime ones (X/Y/frame/flipX). A single `[intrinsic]` extern signature cannot carry a
   compile-time asset reference as a runtime parameter, so a faithful migration needs either
@@ -240,8 +251,8 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   operations: they are mostly compiler-emitted and carry storage descriptors and capability
   checks, so a source-library form adds surface without removing the operation model.
 
-Net SAL-6 decision: the library pattern is proven to extend to the heavy tier mechanically;
-the next clean move is `camera.SetPosition`/`camera.Apply`, while `sprite.Draw` and the
+Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
+value query (`world.TileFlagsAt`), and the camera position/apply pair. `sprite.Draw` and the
 streaming/collision operations remain compiler-recognized operations until compile-time-operand
 intrinsics exist. Not everything must become a library.
 

@@ -517,6 +517,35 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_camera_library_helpers_over_game_boy_intrinsic_like_sdk_operations()
+    {
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 1, 2);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  i16 x = 4;
+                                  camera_set_position(x, 0);
+                                  camera_apply();
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   video.Init();
+                                   world.Column(0, 1, 2);
+                                   world.Map(1, 10, 2);
+                                   camera.Init(1, 10, 2);
+                                   i16 x = 4;
+                                   camera.SetPosition(x, 0);
+                                   camera.Apply();
+                               }
+                               """;
+        Assert.Contains("class camera", SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
     public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """

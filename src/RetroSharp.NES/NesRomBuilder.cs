@@ -1759,6 +1759,12 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.UpdateAudio:
                 EmitAudioUpdate();
                 return true;
+            case TargetIntrinsicOperation.SetCameraPosition:
+                EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
+                return true;
+            case TargetIntrinsicOperation.ApplyCamera:
+                EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
+                return true;
             default:
                 throw new NotSupportedException($"NES intrinsic lowering does not support {intrinsic.Operation} yet.");
         }

@@ -2422,6 +2422,12 @@ internal sealed class GameBoyRuntimeCompiler
             case TargetIntrinsicOperation.UpdateAudio:
                 EmitNextSdkAudioOperation<SdkAudioOperation.UpdateAudio>(call.Name);
                 return true;
+            case TargetIntrinsicOperation.SetCameraPosition:
+                EmitNextSdkOperation<Sdk2DOperation.SetCameraPosition>(call.Name);
+                return true;
+            case TargetIntrinsicOperation.ApplyCamera:
+                EmitNextSdkOperation<Sdk2DOperation.ApplyCamera>(call.Name);
+                return true;
             default:
                 throw new NotSupportedException($"Game Boy intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
