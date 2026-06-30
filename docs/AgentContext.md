@@ -151,6 +151,17 @@ Progress (2026-06-14):
   Source helpers over those externs emit the same bytes as the current `WaitFrame` SDK
   operation. Full SDK migration still needs module packaging, portable target selection, and
   a broader intrinsic catalog.
+- SAL-8 compile-time operand intrinsics landed after the initial prototype: target intrinsic
+  descriptors can mark call slots as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or
+  `WorldId` while leaving the language, parser AST, ABI, and classic IR target-neutral.
+  `sprite.Draw(...)` now comes from the injected SDK library over role-bearing `sprite_draw`
+  intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`
+  as the legacy `sprite_draw(...)` alias. Game Boy `camera.AabbTiles(...)` and
+  `camera.AabbHitTop(...)` also come from injected helpers over target intrinsics with a hidden
+  `"default"` world id and compile-time flag mask, still collecting to the same camera AABB
+  SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract.
+  Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
+  of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.
 - Active SDK v1 stabilization backlog after #106: none known after the collision, cross-target
   diagnostic, and logical palette slices landed.

@@ -98,7 +98,7 @@ Intrinsic work belongs here:
 | `Input.HoldTicks(...)` | Portable SDK | Accepted current variable-height jump seam. |
 | `button_pressed(...)` | Transitional/intrinsic-like | Direct-read compatibility path. Prefer tick-based API. |
 | `sprite_asset(...)` | Portable SDK candidate | Needs target-neutral asset contract and palette slots. |
-| `sprite_draw(...)` | Transitional compatibility alias | Game Boy `sprite.Draw(...)` now lowers through a compile-time-operand target intrinsic; the snake_case builtin remains accepted. |
+| `sprite_draw(...)` | Transitional compatibility alias | Game Boy and NES `sprite.Draw(...)` now lower through compile-time-operand target intrinsics; the snake_case builtin remains accepted. |
 | `Sprite.Width(...)` | Portable SDK | Add `sprite_height(...)`. |
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
