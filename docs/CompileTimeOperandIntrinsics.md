@@ -1,6 +1,6 @@
 # Compile-Time Operand Intrinsics
 
-Status: SAL-8.2 mechanism implemented; SAL-8.3 migrates Game Boy `sprite.Draw` onto the descriptor-role path. Collision migration remains a later SAL-8 slice.
+Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path. Collision migration remains a later SAL-8 slice.
 
 This note answers the open SAL-8 question from issue #158: how a target intrinsic can carry operands that must be resolved at compile time, such as a sprite asset id, a constant sprite palette slot, enum collision flags, or a world id, while keeping the language layer target-neutral.
 
@@ -16,7 +16,7 @@ The source declaration still selects an intrinsic with the existing target-intri
 extern void __retrosharp_gb_sprite_draw(...);
 ```
 
-The target catalog owns the compile-time contract for that intrinsic. The Game Boy descriptor for `sprite_draw` records role-bearing source call slots:
+The target catalog owns the compile-time contract for that intrinsic. The Game Boy and NES descriptors for `sprite_draw` record role-bearing source call slots:
 
 ```csharp
 TargetIntrinsicDescriptor.SpriteDraw(
@@ -75,17 +75,21 @@ extern i16 flags_for_world(i16 world, i16 x, i16 y);
 
 The active Game Boy descriptor marks slot `0` as `WorldId` and leaves `x`/`y` as the two runtime operands. `flags_for_world("default", x, y)` lowers byte-identically to `world_tile_flags_at(x, y)`. A local variable in that slot is rejected before lowering, proving the compile-time operand is not turned into a runtime argument or temporary.
 
-This proof is deliberately not a new public portable SDK surface. It exists to validate the descriptor role and resolver path that SAL-8.3 uses for `sprite.Draw`.
+This proof is deliberately not a new public portable SDK surface. It exists to validate the descriptor role and resolver path that SAL-8.3/SAL-8.4 use for `sprite.Draw`.
 
-SAL-8.3 wires Game Boy `sprite.Draw` through the injected SDK library helper:
+SAL-8.3/SAL-8.4 wire Game Boy and NES `sprite.Draw` through the injected SDK library helper:
 
 ```csharp
 [target("gb")]
 [intrinsic("sprite_draw")]
 extern void __retrosharp_gb_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX, i16 paletteSlot);
+
+[target("nes")]
+[intrinsic("sprite_draw")]
+extern void __retrosharp_nes_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX, i16 paletteSlot);
 ```
 
-The descriptor marks `spriteId` as `AssetRef` and `paletteSlot` as `ConstPaletteSlot`; X, Y, frame, and flipX remain runtime operands. The SDK/frontend collector resolves that call to the existing `Sdk2DOperation.DrawLogicalSprite`, so Game Boy metasprite geometry, palette-slot capability checks, frame-budget checks, and hardware sprite limits continue to use the same path as the legacy `sprite_draw(...)` builtin. Focused and runner-shaped tests assert byte identity against the legacy spelling.
+The descriptor marks `spriteId` as `AssetRef` and `paletteSlot` as `ConstPaletteSlot`; X, Y, frame, and flipX remain runtime operands. The SDK/frontend collector resolves that call to the existing `Sdk2DOperation.DrawLogicalSprite`, so target metasprite geometry, palette-slot capability checks, frame-budget checks, and hardware sprite limits continue to use the same path as the legacy `sprite_draw(...)` builtin. Focused and runner-shaped tests assert byte identity against the legacy spelling on both targets.
 
 ## Operation-Specific Guidance
 

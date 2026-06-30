@@ -13,6 +13,14 @@ public static class NesTarget
             TargetIntrinsicDescriptor.WaitFrame("wait_vblank", arity: 0),
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
+            TargetIntrinsicDescriptor.DrawLogicalSprite(
+                "sprite_draw",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.ConstPaletteSlot),
+                ]),
             TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
             TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
         ]);

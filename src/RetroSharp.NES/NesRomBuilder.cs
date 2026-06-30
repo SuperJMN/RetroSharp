@@ -1765,6 +1765,10 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.ApplyCamera:
                 EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
                 return true;
+            case TargetIntrinsicOperation.DrawLogicalSprite:
+                EmitSdkOperation(Sdk2DOperationCollector.ReadDrawLogicalSprite(
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                return true;
             default:
                 throw new NotSupportedException($"NES intrinsic lowering does not support {intrinsic.Operation} yet.");
         }

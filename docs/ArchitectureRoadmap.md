@@ -230,12 +230,13 @@ minimal proof is a Game Boy `world_tile_flags_for_world` intrinsic whose `WorldI
 byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting runtime locals
 in that slot.
 
-SAL-8.3 applies that mechanism to Game Boy `sprite.Draw`: the injected SDK library helper calls
-a `[target("gb")][intrinsic("sprite_draw")]` extern, the Game Boy descriptor marks the asset id
-as `AssetRef` and the palette slot as `ConstPaletteSlot`, and the collector turns the resolved
-call back into `Sdk2DOperation.DrawLogicalSprite`. This keeps metasprite resolution, capability
-validation, frame-budget validation, and emission byte-identical to the legacy `sprite_draw`
-builtin. Collision migration remains the separate SAL-8.5 decision.
+SAL-8.3 applies that mechanism to Game Boy `sprite.Draw`, and SAL-8.4 applies the same pattern
+to NES: the injected SDK library helper calls a target-specific `[intrinsic("sprite_draw")]`
+extern, each target descriptor marks the asset id as `AssetRef` and the palette slot as
+`ConstPaletteSlot`, and the collector turns the resolved call back into
+`Sdk2DOperation.DrawLogicalSprite`. This keeps metasprite resolution, capability validation,
+frame-budget validation, and emission byte-identical to the legacy `sprite_draw` builtin on both
+targets. Collision migration remains the separate SAL-8.5 decision.
 
 The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
 #139) refined it with evidence rather than assumption. Wrapping the heavy calls in
@@ -258,16 +259,17 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   does not shadow the rest of the `camera` module — `camera.Init`, `camera.AabbTiles`, and
   `camera.AabbHitTop` are not class members, so they still lower through the SDK module.
 - `sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
-  with runtime ones (X/Y/frame/flipX). Game Boy now uses the compile-time-operand descriptor
-  form, so the public `sprite.Draw(...)` helper can live in the injected SDK library while still
-  collecting to the same capability-checked `Sdk2DOperation`. The legacy `sprite_draw(...)`
-  spelling remains a compatibility alias during the transition.
+  with runtime ones (X/Y/frame/flipX). Game Boy and NES now use the compile-time-operand
+  descriptor form, so the public `sprite.Draw(...)` helper can live in the injected SDK library
+  while still collecting to the same capability-checked `Sdk2DOperation`. The legacy
+  `sprite_draw(...)` spelling remains a compatibility alias during the transition.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) and camera-relative collision stay
   operations: they are mostly compiler-emitted and carry storage descriptors and capability
   checks, so a source-library form adds surface without removing the operation model.
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
-value query (`world.TileFlagsAt`), the camera position/apply pair, and Game Boy `sprite.Draw`.
+value query (`world.TileFlagsAt`), the camera position/apply pair, and `sprite.Draw` on Game Boy
+and NES.
 Streaming/collision operations remain compiler-recognized until their compile-time-operand
 intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
 ([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow
