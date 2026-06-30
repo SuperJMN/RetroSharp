@@ -216,16 +216,34 @@ intrinsic. This proves the pattern extends from void leaf calls to argument-taki
 value-returning queries (parameterized `inline` helpers substitute their arguments
 into the operation operands without introducing temporaries, so the bytes match).
 
-The migration boundary remains deliberate. `camera.SetPosition()` and
-`camera.Apply()` stay operation-backed for now because their behavior is not a
-simple leaf intrinsic: collection records scroll axes, validates target
-capabilities, charges frame budgets, and feeds target-specific streaming state.
-Likewise sprite drawing and camera-relative collision remain `Sdk2DOperation`
-records because they carry asset geometry, palette slots, storage descriptors,
-and collision capability checks. The next clean library moves should be leaf
-helpers over a small target intrinsic catalog; higher-level camera/sprite/collision
-helpers need either more primitive intrinsics plus library code or should remain
-capability-checked operations.
+The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
+#139) refined it with evidence rather than assumption. Wrapping the heavy calls in
+ordinary parameterized `inline` helpers is **byte-identical** for `camera.SetPosition()`,
+`camera.Apply()`, and `sprite.Draw()` (regression tests
+`Inline_helper_wrapping_camera_set_position_is_byte_identical` and
+`Inline_helper_wrapping_sprite_draw_and_camera_apply_is_byte_identical`). So the
+inline/operand mechanics are not the blocker: the collected operation stream is identical
+whether a call arrives directly or through an inlined helper, which means the cross-call
+streaming/frame-budget state is preserved.
+
+The remaining friction is at the **extern-intrinsic boundary**, not the language:
+- `camera.SetPosition()` / `camera.Apply()` carry only `i16`/void operands, so they are a
+  clean **GO** — migratable with the same wiring as SAL-4/SAL-5 (catalog entry, injected
+  helper over a `[target][intrinsic]` extern, collector/emitter routing to the existing
+  `SetCameraPosition`/`ApplyCamera` emission). Tracked as a follow-up, not done here.
+- `sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
+  with runtime ones (X/Y/frame/flipX). A single `[intrinsic]` extern signature cannot carry a
+  compile-time asset reference as a runtime parameter, so a faithful migration needs either
+  per-asset specialized helpers or an intrinsic form that carries compile-time operands. Until
+  then sprite drawing **stays a capability-checked `Sdk2DOperation`**.
+- Internal streaming (`StreamMapColumn`/`StreamMapRow`) and camera-relative collision stay
+  operations: they are mostly compiler-emitted and carry storage descriptors and capability
+  checks, so a source-library form adds surface without removing the operation model.
+
+Net SAL-6 decision: the library pattern is proven to extend to the heavy tier mechanically;
+the next clean move is `camera.SetPosition`/`camera.Apply`, while `sprite.Draw` and the
+streaming/collision operations remain compiler-recognized operations until compile-time-operand
+intrinsics exist. Not everything must become a library.
 
 ## Layer Boundary and Golden Rule
 

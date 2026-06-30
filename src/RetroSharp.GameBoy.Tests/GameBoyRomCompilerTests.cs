@@ -362,6 +362,35 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Inline_helper_wrapping_camera_set_position_is_byte_identical()
+    {
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 1, 2);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  i16 x = 4;
+                                  camera_set_position(x, 0);
+                              }
+                              """;
+        const string wrapped = """
+                               inline void csp(i16 px) {
+                                   camera_set_position(px, 0);
+                               }
+                               void main() {
+                                   video_init();
+                                   world_column(0, 1, 2);
+                                   world_map(1, 10, 2);
+                                   camera_init(1, 10, 2);
+                                   i16 x = 4;
+                                   csp(x);
+                               }
+                               """;
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(wrapped));
+    }
+
+    [Fact]
     public void Compiles_sdk_namespaced_dot_calls_like_existing_sdk_functions()
     {
         const string functionSource = """
@@ -985,6 +1014,51 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xEA, 0x01, 0xFE]), "ROM should write sprite X into OAM.");
         Assert.True(ContainsSequence(rom, [0xFE, 0xA8]), "ROM should compare x with the wrap coordinate.");
         Assert.True(ContainsSequence(rom, [0x18]), "ROM should contain a relative loop jump.");
+    }
+
+    [Fact]
+    public void Inline_helper_wrapping_sprite_draw_and_camera_apply_is_byte_identical()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(
+                    8,
+                    16,
+                    "01230123",
+                    "32103210")));
+
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  world_column(0, 1, 2);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  sprite_asset(player_run, "player.sprite.json");
+                                  i16 sy = 80;
+                                  sprite_draw(player_run, 72, sy, 0);
+                                  camera_apply();
+                              }
+                              """;
+        const string wrapped = """
+                               inline void sd(i16 y) {
+                                   sprite_draw(player_run, 72, y, 0);
+                               }
+                               inline void ca() {
+                                   camera_apply();
+                               }
+                               void main() {
+                                   video_init();
+                                   world_column(0, 1, 2);
+                                   world_map(1, 10, 2);
+                                   camera_init(1, 10, 2);
+                                   sprite_asset(player_run, "player.sprite.json");
+                                   i16 sy = 80;
+                                   sd(sy);
+                                   ca();
+                               }
+                               """;
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct, baseDirectory), GameBoyRomCompiler.CompileSource(wrapped, baseDirectory));
     }
 
     [Fact]
