@@ -254,7 +254,10 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
 Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
 value query (`world.TileFlagsAt`), and the camera position/apply pair. `sprite.Draw` and the
 streaming/collision operations remain compiler-recognized operations until compile-time-operand
-intrinsics exist. Not everything must become a library.
+intrinsics exist. Not everything must become a library. The SAL-8.1 design note
+([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow
+descriptor-role form for those future intrinsics and records the byte-identity goldens that
+later SAL-8 slices must preserve.
 
 ## Layer Boundary and Golden Rule
 

@@ -1091,6 +1091,59 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Golden_sprite_draw_emission_is_pinned_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(
+                    8,
+                    16,
+                    "01230123",
+                    "32103210")));
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  sprite.Asset(player_run, "player.sprite.json");
+                                  sprite.Draw(player_run, 72, 80, 0, false, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal("5D42DDFDB36FD0FCE746A9960C0379D6F9DE6D747735D7498BB11261380D407C", Fingerprint(rom));
+    }
+
+    [Fact]
+    public void Golden_collision_aabb_emission_is_pinned_gb()
+    {
+        const string source = """
+                              void define_world() {
+                                  world.Column(0, 0, 4);
+                                  world.Column(1, 0, 4);
+                                  world.Column(2, 0, 4);
+                                  world.Flags(0, 0, 1);
+                                  world.Flags(1, 0, 1);
+                                  world.Flags(2, 0, 1);
+                                  world.Map(3, 11, 2);
+                                  camera.Init(3, 11, 2);
+                              }
+
+                              void main() {
+                                  define_world();
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                  i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal("A28DD8B270B2DFB77F210C7C04619F5775540300920EE8C4D474227D1623C303", Fingerprint(rom));
+    }
+
+    [Fact]
     public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -6566,6 +6619,11 @@ public class GameBoyRomCompilerTests
     private static int ReadLittleEndian16(byte[] bytes, int offset)
     {
         return bytes[offset] | bytes[offset + 1] << 8;
+    }
+
+    private static string Fingerprint(byte[] bytes)
+    {
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 
     private static string BytesAround(byte[] bytes, int offset)

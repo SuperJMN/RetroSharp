@@ -3411,6 +3411,71 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Golden_sprite_draw_emission_is_pinned_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  sprite.Asset(hero, "hero.nes.json");
+                                  loop {
+                                      video.WaitVBlank();
+                                      sprite.Draw(hero, 24, 32, 0, false, 2);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal("EBCA45A4F744B945E22D73422104BBAF7A5E88A28063CB4314E5F6AEC0C04D71", Fingerprint(rom));
+    }
+
+    [Fact]
+    public void Golden_collision_aabb_emission_is_pinned_nes()
+    {
+        const string source = """
+                              void main() {
+                                  world.Column(0, 1, 2);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 10, 2);
+                                  camera.Init(1, 10, 2);
+                                  loop {
+                                      video.WaitVBlank();
+                                      u8 footY = 16;
+                                      u8 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                      u8 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal("9F40E49489CCD1DEAD44DCA40FC3BC42E5CEFB6139FAD89F5339474304AF1872", Fingerprint(rom));
+    }
+
+    [Fact]
     public void Compiles_png_sprite_sheet_using_nes_platform_variant()
     {
         var baseDirectory = WriteSpritePng(
@@ -4021,6 +4086,11 @@ public class NesRomCompilerTests
     private static int ReadLittleEndian16(IReadOnlyList<byte> bytes, int offset)
     {
         return bytes[offset] | bytes[offset + 1] << 8;
+    }
+
+    private static string Fingerprint(byte[] bytes)
+    {
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 
     private static string BytesAround(IReadOnlyList<byte> bytes, int offset)
