@@ -3,6 +3,7 @@ namespace RetroSharp.GameBoy;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using RetroSharp.Core.Sdk;
 
 internal enum GameBoyMusicAssetKind
 {
@@ -38,6 +39,7 @@ internal static class GameBoyMusicAssetCompiler
         {
             "uge" => CompileSong(name, HugeSongReader.Read(asset.Path)),
             "gbapu" => CompileApuTrace(name, ReadApuTrace(asset.Path)),
+            "vgm" => CompileApuTrace(name, ReadVgmDmgTrace(asset.Path)),
             _ => throw new InvalidOperationException($"Game Boy music asset '{Path.GetFileName(path)}' has unsupported format '{asset.Format}'."),
         };
     }
@@ -49,8 +51,38 @@ internal static class GameBoyMusicAssetCompiler
             : GameBoyApuTraceFile.Read(path);
     }
 
+    private static GameBoyApuTrace ReadVgmDmgTrace(string path)
+    {
+        var stream = VgmImporter.Import(path, VgmChip.GameBoyDmg);
+        var events = new List<GameBoyApuTraceEvent>();
+        var previousCycle = 0L;
+        foreach (var frame in stream.Frames)
+        {
+            var absoluteCycle = checked(frame.Index * DmgFrameCycles);
+            foreach (var write in frame.Writes)
+            {
+                events.Add(new GameBoyApuTraceEvent(absoluteCycle - previousCycle, write.Address, write.Value));
+                previousCycle = absoluteCycle;
+            }
+        }
+
+        return new GameBoyApuTrace(
+            (int)DmgClockHz,
+            60,
+            checked(stream.DurationFrames * DmgFrameCycles),
+            checked(stream.LoopFrame * DmgFrameCycles),
+            new GameBoyApuTraceMetadata(Source: Path.GetFileName(path)),
+            events);
+    }
+
     private static ResolvedMusicAsset ResolveMusicAsset(string path)
     {
+        if (Path.GetExtension(path).Equals(".vgm", StringComparison.OrdinalIgnoreCase) ||
+            Path.GetExtension(path).Equals(".vgz", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ResolvedMusicAsset("vgm", path);
+        }
+
         if (Path.GetExtension(path).Equals(".uge", StringComparison.OrdinalIgnoreCase))
         {
             return new ResolvedMusicAsset("uge", path);
@@ -82,9 +114,10 @@ internal static class GameBoyMusicAssetCompiler
 
         var gbFormat = RequiredString(gb, "format", Path.GetFileName(path));
         if (!string.Equals(gbFormat, "uge", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(gbFormat, "gbapu", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(gbFormat, "gbapu", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(gbFormat, "vgm", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"Game Boy music asset '{Path.GetFileName(path)}' must use format 'uge' or 'gbapu', got '{gbFormat}'.");
+            throw new InvalidOperationException($"Game Boy music asset '{Path.GetFileName(path)}' must use format 'uge', 'gbapu', or 'vgm', got '{gbFormat}'.");
         }
 
         var relativePath = RequiredString(gb, "path", Path.GetFileName(path));

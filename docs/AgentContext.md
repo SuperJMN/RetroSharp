@@ -153,10 +153,10 @@ Progress (2026-06-14):
   tile-offset landing probe ladder while keeping the downward-velocity gate and
   `player.Land(...)` policy in source.
 - Runner-shaped NES parity decision: `samples/runner/runner.rs` is the shared Game Boy/NES runner
-  source. NES accepts the audio setup, `music.Play(...)`, and per-frame audio update as no-ops
-  until real BGM lowering exists. `NesRunnerAcceptanceTests` enforces that the shared source
-  builds for NES, while `CrossTargetScrollAcceptanceTests` verifies that runner-shaped
-  camera-relative collision lowers on both targets.
+  source. It declares `music/runner.vgz`, which resolves to per-target VGM/VGZ variants and
+  gives both Game Boy and NES real frame-driven BGM lowering. `NesRunnerAcceptanceTests`
+  enforces that the shared source builds for NES, while `CrossTargetScrollAcceptanceTests`
+  verifies that runner-shaped camera-relative collision lowers on both targets.
 - Logical palette decision implemented after #106: `palette.Background(slot, c0, c1, c2, c3)`
   and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
   Color values are logical tones `0..3`. Game Boy lowers background slot `0` to `BGP` and sprite

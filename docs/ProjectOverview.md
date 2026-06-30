@@ -58,8 +58,8 @@ The SDK currently covers:
   `camera.Apply()`.
 - Logical sprites, frame animation, flip, logical palette slots, and
   target-specific PNG variants.
-- Music declarations and per-frame audio update, with Game Boy `.uge` and
-  `.gbapu` support.
+- Music declarations and per-frame audio update, with Game Boy `.uge` /
+  `.gbapu` support and VGM/VGZ input for Game Boy and NES.
 - An actor framework slice for scalable platformer enemies using fixed pools,
   generated spawn helpers, direct branches, and existing SDK calls.
 
@@ -82,8 +82,7 @@ RetroSharp has two active cartridge targets:
   logical palettes, input, and Game Boy music playback.
 - NES: a direct iNES ROM compiler that shares the portable SDK operation path
   where possible, supports the runner source as target acceptance, and proves
-  scrolling, sprites, Tiled worlds, and many framework contracts while NES BGM
-  remains deferred.
+  scrolling, sprites, Tiled worlds, VGM/VGZ BGM, and many framework contracts.
 
 The original compiler path still parses RetroSharp, analyzes it, emits
 platform-agnostic intermediate code, and lowers that path to Z80 assembly. That

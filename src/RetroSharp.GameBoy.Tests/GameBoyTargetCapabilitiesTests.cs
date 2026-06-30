@@ -13,7 +13,7 @@ public sealed class GameBoyTargetCapabilitiesTests
         var capabilities = GameBoyTarget.AudioCapabilities;
 
         Assert.True(capabilities.SupportsBgm);
-        Assert.Equal(["uge", "gbapu"], capabilities.SupportedMusicFormats);
+        Assert.Equal(["uge", "gbapu", "vgm"], capabilities.SupportedMusicFormats);
     }
 
     [Fact]

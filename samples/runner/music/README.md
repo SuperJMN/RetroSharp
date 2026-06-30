@@ -6,6 +6,10 @@
 (captured from its playback and stored in the `retrosharp.gbapu` v2 format), and remains
 `CC-BY 2025` (Tronimal); the `.uge` is kept as the authoring source.
 
-`sml2_track1.gbapu` is the trace currently used by the runner sample. Confirm its provenance
-before redistributing packaged artifacts that include it. See `docs/GameBoyApuTraceFormat.md`
-for the format.
+`runner.gb.vgz` and `runner.nes.vgz` are the current runner BGM inputs. The shared source declares
+`music/runner.vgz`; the compiler resolves the `.gb.vgz` or `.nes.vgz` variant for the selected
+target and repacks the VGM register writes into the target's compact on-ROM stream.
+
+`sml2_track1.gbapu` is the previous Game Boy-only runner trace. Confirm its provenance before
+redistributing packaged artifacts that include it. See `docs/GameBoyApuTraceFormat.md` and
+`docs/NesApuTraceFormat.md` for the target repack formats.

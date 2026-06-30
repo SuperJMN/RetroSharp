@@ -7,7 +7,7 @@ public static class GameBoyTarget
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(
         Name: "gb",
         SupportsBgm: true,
-        SupportedMusicFormats: ["uge", "gbapu"]);
+        SupportedMusicFormats: ["uge", "gbapu", "vgm"]);
 
     public static Target2DCapabilities Capabilities { get; } = new(
         Name: "gb",

@@ -6,9 +6,8 @@ public static class NesTarget
 {
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(
         Name: "nes",
-        SupportsBgm: false,
-        SupportedMusicFormats: [],
-        AllowsBgmNoOp: true);
+        SupportsBgm: true,
+        SupportedMusicFormats: ["vgm"]);
 
     public static Target2DCapabilities Capabilities { get; } = new(
         Name: "nes",
