@@ -140,16 +140,19 @@ inline void WaitFrame() {
 
 The current Game Boy and NES cartridge targets resolve extern intrinsics through
 a per-target catalog. Both targets currently recognize `wait_frame`
-(`wait_vblank` is accepted as an alias) and `poll_input` on declarations whose
+(`wait_vblank` is accepted as an alias), `poll_input`, and `audio_update` on
+declarations whose
 `target(...)` matches the backend (`"gb"` or `"nes"`). Calling a source helper
-over those externs emits the same bytes as the current `Sdk2DOperation.WaitFrame`
-and `Sdk2DOperation.PollInput` paths, with no call ABI, stack setup, helper
+over those externs emits the same bytes as the current `Sdk2DOperation.WaitFrame`,
+`Sdk2DOperation.PollInput`, and `SdkAudioOperation.UpdateAudio` paths, with no call
+ABI, stack setup, helper
 thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline
 helpers: if a target does not recognize the declared intrinsic, compilation
 fails instead of emitting an empty function.
 
 Target compilation now injects a small SDK source library before parsing. For
-the first slice, that library defines `video.WaitVBlank()` and `input.Poll()` as
+the first slice, that library defines `video.WaitVBlank()`, `input.Poll()`, and
+`audio.Update()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
 non-matching variants before constant folding and function indexing, so portable

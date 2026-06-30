@@ -423,14 +423,20 @@ public static class Sdk2DOperationCollector
             return ops;
         }
 
-        private static Sdk2DOperation OperationFor(TargetIntrinsicDescriptor intrinsic)
+        private static bool TryOperationFor(TargetIntrinsicDescriptor intrinsic, out Sdk2DOperation operation)
         {
-            return intrinsic.Operation switch
+            switch (intrinsic.Operation)
             {
-                TargetIntrinsicOperation.WaitFrame => new Sdk2DOperation.WaitFrame(),
-                TargetIntrinsicOperation.PollInput => new Sdk2DOperation.PollInput(),
-                _ => throw new NotSupportedException($"SDK operation collection does not support target intrinsic {intrinsic.Operation} yet."),
-            };
+                case TargetIntrinsicOperation.WaitFrame:
+                    operation = new Sdk2DOperation.WaitFrame();
+                    return true;
+                case TargetIntrinsicOperation.PollInput:
+                    operation = new Sdk2DOperation.PollInput();
+                    return true;
+                default:
+                    operation = null!;
+                    return false;
+            }
         }
 
         public void CollectBlock(BlockSyntax block)
@@ -564,7 +570,11 @@ public static class Sdk2DOperationCollector
 
             var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
             SdkCallReader.RequireArity(call, intrinsic.Arity);
-            AddOp(OperationFor(intrinsic));
+            if (TryOperationFor(intrinsic, out var operation))
+            {
+                AddOp(operation);
+            }
+
             return true;
         }
 
@@ -1071,7 +1081,7 @@ public static class Sdk2DOperationCollector
             result = intrinsic.Operation switch
             {
                 TargetIntrinsicOperation.WaitFrame or TargetIntrinsicOperation.PollInput => state.CloseOpenFrames(),
-                _ => throw new NotSupportedException($"SDK frame-budget collection does not support target intrinsic {intrinsic.Operation} yet."),
+                _ => state,
             };
             return true;
         }

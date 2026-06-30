@@ -11,9 +11,10 @@ public static class SdkAudioOperationCollector
     public static IReadOnlyList<SdkAudioOperation> Collect(
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
-        string targetName)
+        string targetName,
+        TargetIntrinsicCatalog? targetIntrinsics = null)
     {
-        var collector = new Collector(functions, targetName);
+        var collector = new Collector(functions, targetName, targetIntrinsics: targetIntrinsics);
         collector.CollectBlock(mainBlock);
         return collector.Operations;
     }
@@ -22,9 +23,10 @@ public static class SdkAudioOperationCollector
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
-        IReadOnlySet<string> subroutineNames)
+        IReadOnlySet<string> subroutineNames,
+        TargetIntrinsicCatalog? targetIntrinsics = null)
     {
-        var collector = new Collector(functions, targetName, subroutineNames);
+        var collector = new Collector(functions, targetName, subroutineNames, targetIntrinsics);
         collector.CollectBlock(mainBlock);
         return collector.Program;
     }
@@ -32,9 +34,11 @@ public static class SdkAudioOperationCollector
     private sealed class Collector(
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
-        IReadOnlySet<string>? subroutineNames = null)
+        IReadOnlySet<string>? subroutineNames = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null)
     {
         private readonly IReadOnlySet<string> subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
+        private readonly TargetIntrinsicCatalog? targetIntrinsics = targetIntrinsics;
         private readonly List<SdkAudioStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<SdkAudioStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
@@ -171,10 +175,35 @@ public static class SdkAudioOperationCollector
                     CollectCallArguments(call);
                     break;
                 default:
+                    if (CollectTargetIntrinsic(call))
+                    {
+                        break;
+                    }
+
                     CollectCallArguments(call);
                     CollectUserFunction(call);
                     break;
             }
+        }
+
+        private bool CollectTargetIntrinsic(FunctionCall call)
+        {
+            if (targetIntrinsics is null ||
+                !functions.TryGetValue(call.Name, out var function) ||
+                !function.IsExtern)
+            {
+                return false;
+            }
+
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
+            if (intrinsic.Operation != TargetIntrinsicOperation.UpdateAudio)
+            {
+                return false;
+            }
+
+            SdkCallReader.RequireArity(call, intrinsic.Arity);
+            AddOp(new SdkAudioOperation.UpdateAudio());
+            return true;
         }
 
         private void CollectExpression(ExpressionSyntax expression)

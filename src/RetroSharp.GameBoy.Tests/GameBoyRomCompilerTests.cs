@@ -446,6 +446,48 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_audio_update_library_helper_over_game_boy_intrinsic_like_sdk_operation()
+    {
+        const string sdkSource = """
+                                 void main() {
+                                     audio_update();
+                                 }
+                                 """;
+
+        const string intrinsicSource = """
+                                       [target("gb")]
+                                       [intrinsic("audio_update")]
+                                       extern void gb_audio_update();
+
+                                       inline void audio_update() {
+                                           gb_audio_update();
+                                       }
+
+                                       void main() {
+                                           audio_update();
+                                       }
+                                       """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(sdkSource), GameBoyRomCompiler.CompileSource(intrinsicSource));
+    }
+
+    [Fact]
+    public void Injected_game_boy_audio_update_helper_keeps_surface_byte_identical()
+    {
+        const string source = """
+                              void main() {
+                                  audio.Init();
+                                  audio.Update();
+                              }
+                              """;
+        var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
+        var library = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("class audio", library, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(explicitLibrarySource), GameBoyRomCompiler.CompileSource(source));
+    }
+
+    [Fact]
     public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """

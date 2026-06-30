@@ -193,12 +193,15 @@ Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBo
 
 The first SDK-as-library slice is now in place. Each cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead of a one-off intrinsic switch; Game
-Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, and
-`poll_input`. `RetroSharp.Sdk.Frontend` injects a small target-selected SDK
-library before parsing target compilations. That library defines `video` and
-`input` classes whose `video.WaitVBlank()` and `input.Poll()` helpers call
-`[target(...)] [intrinsic(...)] extern` declarations, and those helpers emit the
-same bytes as the previous SDK operation path. `TargetProgramSelector` filters
+Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
+and `audio_update`. `RetroSharp.Sdk.Frontend` injects a small target-selected SDK
+library before parsing target compilations. That library defines `video`, `input`,
+and `audio` classes whose `video.WaitVBlank()`, `input.Poll()`, and `audio.Update()`
+helpers call `[target(...)] [intrinsic(...)] extern` declarations, and those helpers
+emit the same bytes as the previous SDK operation path. The `audio_update` intrinsic
+is collected by the separate `SdkAudioOperationCollector` (Game Boy lowers it from the
+audio operation stream, NES emits it inline), so the shared `Sdk2DOperation` collectors
+consume but ignore it. `TargetProgramSelector` filters
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.

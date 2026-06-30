@@ -4,6 +4,7 @@ public enum TargetIntrinsicOperation
 {
     WaitFrame,
     PollInput,
+    UpdateAudio,
 }
 
 public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOperation Operation, int Arity)
@@ -16,6 +17,11 @@ public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOpera
     public static TargetIntrinsicDescriptor PollInput(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.PollInput, arity);
+    }
+
+    public static TargetIntrinsicDescriptor UpdateAudio(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.UpdateAudio, arity);
     }
 }
 

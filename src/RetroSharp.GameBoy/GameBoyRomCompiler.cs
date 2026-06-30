@@ -259,7 +259,7 @@ internal sealed class GameBoyVideoProgram
             GameBoyTarget.Capabilities,
             subroutineNames,
             GameBoyTarget.Intrinsics);
-        var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames);
+        var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames, GameBoyTarget.Intrinsics);
         var result = new GameBoyVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
