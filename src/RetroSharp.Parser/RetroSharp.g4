@@ -11,7 +11,7 @@ typeAliasDeclaration: 'type' IDENTIFIER '=' type ';';
 structDeclaration: 'struct' IDENTIFIER '{' structField* '}';
 structField: type IDENTIFIER ';';
 
-classDeclaration: 'class' IDENTIFIER '{' classMember* '}';
+classDeclaration: 'static'? 'class' IDENTIFIER '{' classMember* '}';
 classMember: structField | classConstDeclaration | classStaticFunction | classFunction;
 classConstDeclaration: 'static'? constDeclaration;
 classFunction: functionModifier* attrs type IDENTIFIER '(' parameters? ')' (block | '=>' expression ';');

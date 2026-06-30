@@ -1,12 +1,12 @@
-enum World {
-    Width = 8,
-    StreamY = 10,
-    Height = 4
+static class World {
+    const i16 Width = 8;
+    const i16 StreamY = 10;
+    const i16 Height = 4;
 }
 
-enum Marker {
-    ScreenX = 72,
-    ScreenY = 72
+static class Marker {
+    const i16 ScreenX = 72;
+    const i16 ScreenY = 72;
 }
 
 void main() {

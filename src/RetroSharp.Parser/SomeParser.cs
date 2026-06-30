@@ -118,6 +118,7 @@ public class SomeParser
     private LoweredStaticClass ParseStaticClass(ClassDeclarationContext classContext)
     {
         var name = classContext.IDENTIFIER().GetText();
+        var isStatic = classContext.STATIC() is not null;
         var fields = classContext.classMember()
             .Select(member => member.structField())
             .Where(field => field is not null)
@@ -144,6 +145,12 @@ public class SomeParser
             .Where(function => function is not null)
             .Select(function => ParseClassStaticFunction(name, function!))
             .ToList();
+
+        if (isStatic && (fields.Count > 0 || parsedInstanceFunctions.Count > 0))
+        {
+            throw new InvalidOperationException(
+                $"Static class '{name}' may only declare const members and static methods, not instance fields or instance methods.");
+        }
 
         return new LoweredStaticClass(
             new StructSyntax(name, fields),

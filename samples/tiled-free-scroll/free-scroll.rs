@@ -1,7 +1,7 @@
-enum World {
-    Width = 50,
-    StreamY = 0,
-    Height = 60
+static class World {
+    const i16 Width = 50;
+    const i16 StreamY = 0;
+    const i16 Height = 60;
 }
 
 void main() {
