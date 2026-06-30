@@ -235,7 +235,7 @@ void main() {
         video.WaitVBlank();
         input.Poll();
         audio.Update();
-        if (button_just_pressed(start) != 0) {
+        if (button_just_pressed(Button.Start) != 0) {
             if (onBoss == 0) {
                 music.Play(boss);
                 onBoss = 1;
@@ -283,7 +283,7 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `input.Poll()` snapshots the joypad for the current game tick. Call it once after `video.WaitVBlank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `button_down(button)` returns `1` while the button is down in the current snapshot, `button_just_pressed(button)` returns `1` only on the up-to-down transition, `button_just_released(button)` returns `1` only on the down-to-up transition, and `button_hold_ticks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks.
 
-`button_pressed(button)` remains supported as a compatibility direct joypad read and returns `1` when the named button is currently pressed or `0` otherwise. New gameplay code should prefer `input.Poll()` with the tick-based helpers. Supported names are `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down`.
+`button_pressed(button)` remains supported as a compatibility direct joypad read and returns `1` when the named button is currently pressed or `0` otherwise. New gameplay code should prefer `input.Poll()` with the tick-based helpers. The `button` argument is a member of the built-in `Button` enum (`Button.A`, `Button.B`, `Button.Select`, `Button.Start`, `Button.Right`, `Button.Left`, `Button.Up`, `Button.Down`). The bare lowercase identifiers `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down` remain accepted as a transitional alias and lower to the same joypad masks.
 
 `sprite.Asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`; grayscale exports also map white to `1`, gray to `2`, and black to `3`.
 

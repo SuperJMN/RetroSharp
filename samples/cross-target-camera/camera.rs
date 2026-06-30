@@ -35,7 +35,7 @@ void main() {
     loop {
         video.WaitVBlank();
         input.Poll();
-        let cameraX = button_hold_ticks(right);
+        let cameraX = button_hold_ticks(Button.Right);
         u8 frame = 0;
         bool flipX = false;
         camera.SetPosition(cameraX, 0);

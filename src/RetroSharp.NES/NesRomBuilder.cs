@@ -4480,7 +4480,23 @@ internal sealed class NesRuntimeCompiler
 
     private NesButton ButtonArg(FunctionCall call, string context)
     {
-        var name = NesVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), context);
+        var argument = call.Parameters.ElementAt(0);
+
+        // A `Button` enum member (e.g. Button.A) is constant-folded to its ordinal,
+        // which matches the canonical Buttons order, so resolve it by index. The bare
+        // lowercase identifier form (e.g. `a`) is kept as a transitional alias.
+        if (argument is ConstantSyntax)
+        {
+            var ordinal = NesVideoProgram.ConstValue(argument, context);
+            if (ordinal < 0 || ordinal >= Buttons.Length)
+            {
+                throw new InvalidOperationException($"Unsupported NES button ordinal '{ordinal}'.");
+            }
+
+            return Buttons[ordinal];
+        }
+
+        var name = NesVideoProgram.IdentifierArg(argument, context);
         foreach (var button in Buttons)
         {
             if (button.Name == name)

@@ -4110,6 +4110,44 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0]), "ROM should execute the branch body when the button is pressed.");
     }
 
+    [Theory]
+    [InlineData("a", "Button.A")]
+    [InlineData("b", "Button.B")]
+    [InlineData("select", "Button.Select")]
+    [InlineData("start", "Button.Start")]
+    [InlineData("right", "Button.Right")]
+    [InlineData("left", "Button.Left")]
+    [InlineData("up", "Button.Up")]
+    [InlineData("down", "Button.Down")]
+    public void Button_enum_member_lowers_like_bare_button_identifier(string bare, string enumMember)
+    {
+        string Program(string button) => $$"""
+                              void main() {
+                                  video_init();
+                                  i16 held = 0;
+                                  i16 ticks = 0;
+                                  while (true) {
+                                      video_wait_vblank();
+                                      input_poll();
+                                      if (button_just_pressed({{button}}) != 0) {
+                                          held = 1;
+                                      }
+                                      if (button_down({{button}}) != 0) {
+                                          held = 2;
+                                      }
+                                      if (button_just_released({{button}}) != 0) {
+                                          held = 0;
+                                      }
+                                      ticks = button_hold_ticks({{button}});
+                                  }
+                              }
+                              """;
+
+        Assert.Equal(
+            GameBoyRomCompiler.CompileSource(Program(bare)),
+            GameBoyRomCompiler.CompileSource(Program(enumMember)));
+    }
+
     [Fact]
     public void Compiles_tick_input_api_for_variable_jump()
     {
@@ -4190,10 +4228,10 @@ public class GameBoyRomCompilerTests
         Assert.True(movementEnd > movementStart);
 
         var movementBlock = source[movementStart..movementEnd];
-        var rightStart = movementBlock.IndexOf("if (button_down(right) != 0)", StringComparison.Ordinal);
+        var rightStart = movementBlock.IndexOf("if (button_down(Button.Right) != 0)", StringComparison.Ordinal);
         Assert.True(rightStart >= 0, "Runner should gate forward movement with the D-pad right button.");
 
-        var leftStart = movementBlock.IndexOf("if (button_down(left) != 0)", StringComparison.Ordinal);
+        var leftStart = movementBlock.IndexOf("if (button_down(Button.Left) != 0)", StringComparison.Ordinal);
         Assert.True(leftStart >= 0, "Runner should gate backward movement with the D-pad left button.");
 
         var movementCall = source.IndexOf("view.HandleHorizontalInput(player, movementFootWorldY);", StringComparison.Ordinal);
@@ -5757,7 +5795,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline void AccelerateRun()", cameraBlock);
         Assert.Contains("inline void DecelerateToWalk()", cameraBlock);
         Assert.Contains("inline void ApplyFriction()", cameraBlock);
-        Assert.Contains("if (button_down(b) != 0)", cameraBlock);
+        Assert.Contains("if (button_down(Button.B) != 0)", cameraBlock);
         Assert.Contains("AccelerateRun();", cameraBlock);
         Assert.Contains("DecelerateToWalk();", cameraBlock);
         Assert.Contains("speed += HorizontalMotion.RunAcceleration;", cameraBlock);
@@ -5768,7 +5806,7 @@ public class GameBoyRomCompilerTests
         // grounded, so holding B in the air preserves momentum instead of building extra speed.
         Assert.Contains("HoldDirection(grounded);", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
-        Assert.Contains("if (grounded != 0) {\n            if (button_down(b) != 0) {", cameraBlock);
+        Assert.Contains("if (grounded != 0) {\n            if (button_down(Button.B) != 0) {", cameraBlock);
         Assert.DoesNotContain("ApplyGroundAcceleration", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);

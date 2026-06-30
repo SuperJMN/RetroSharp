@@ -205,7 +205,7 @@ Suggested next steps for the next agent, in order:
 ## Game Boy Runner Lessons
 
 - Normal runner debugging should start with the full app, then use `tools/gameboy/runner_diagnostics.py` to find the first failing diagnostic step before editing code.
-- `input.Poll()` is the frame/tick input boundary. New gameplay should use `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`.
+- `input.Poll()` is the frame/tick input boundary. New gameplay should use `button_down`, `button_just_pressed`, `button_just_released`, and `button_hold_ticks`. The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the injected SDK library source (`SdkLibrarySource`); bare lowercase identifiers (`a`, `right`, ...) remain accepted as a transitional alias and lower to the same masks.
 - `button_hold_ticks` saturates at `255` and is the accepted seam for variable-height jump timing.
 - On original DMG hardware, `JOYP` row selection must settle. The backend should select a row, read it several times, use the final sample, and deselect both rows with `0x30`.
 - `sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
