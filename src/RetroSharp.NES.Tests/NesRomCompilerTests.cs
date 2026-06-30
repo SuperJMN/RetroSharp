@@ -616,6 +616,173 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Sprite_draw_via_library_helper_is_byte_identical_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(hero, "hero.nes.json");
+                                  loop {
+                                      video_wait_vblank();
+                                      sprite_draw(hero, 24, 32, 0, false, 2);
+                                  }
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   video.Init();
+                                   sprite.Asset(hero, "hero.nes.json");
+                                   loop {
+                                       video.WaitVBlank();
+                                       sprite.Draw(hero, 24, 32, 0, false, 2);
+                                   }
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.Contains("class sprite", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(NesRomCompiler.CompileSource(direct, baseDirectory), NesRomCompiler.CompileSource(library, baseDirectory));
+    }
+
+    [Fact]
+    public void Runner_shaped_sprite_draw_is_byte_identical_nes()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        var libraryRom = NesRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var legacyRom = NesRomCompiler.CompileSource(
+            SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source.Replace("sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
+            Path.GetDirectoryName(sourcePath));
+
+        Assert.Equal(legacyRom, libraryRom);
+    }
+
+    [Fact]
+    public void Sprite_draw_library_preserves_capability_and_budget_checks_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string paletteSource = """
+                                     void main() {
+                                         sprite.Asset(hero, "hero.nes.json");
+                                         loop {
+                                             sprite.Draw(hero, 24, 32, 0, false, 4);
+                                         }
+                                     }
+                                     """;
+
+        var paletteException = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(paletteSource, baseDirectory));
+        Assert.Equal("Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.", paletteException.Message);
+
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 9).Select(index => $"        sprite.Draw(hero, {index * 8}, 24, 0);"));
+        var budgetSource = """
+                           void main() {
+                               video.Init();
+                               sprite.Asset(hero, "hero.nes.json");
+                               loop {
+                                   video.WaitVBlank();
+
+                           """ + draws + """
+                               }
+                           }
+                           """;
+
+        var budgetException = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(budgetSource, baseDirectory));
+        Assert.Equal(
+            "Target 'nes' supports 8 hardware sprites per scanline, but 9 are required on scanline 24 for drawing logical sprites in one frame.",
+            budgetException.Message);
+    }
+
+    [Fact]
+    public void Legacy_sprite_draw_builtin_still_compiles_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(hero, "hero.nes.json");
+                                  loop {
+                                      video_wait_vblank();
+                                      sprite_draw(hero, 24, 32, 0);
+                                  }
+                              }
+                              """;
+
+        Assert.Equal(40976, NesRomCompiler.CompileSource(source, baseDirectory).Length);
+    }
+
+    [Fact]
     public void Nes_sdk_library_does_not_expose_capability_gated_world_tile_flags_helper()
     {
         // world.TileFlagsAt(...) is gated on the WorldTileFlags collision query,
@@ -3411,6 +3578,71 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Golden_sprite_draw_emission_is_pinned_nes()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  sprite.Asset(hero, "hero.nes.json");
+                                  loop {
+                                      video.WaitVBlank();
+                                      sprite.Draw(hero, 24, 32, 0, false, 2);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal("EBCA45A4F744B945E22D73422104BBAF7A5E88A28063CB4314E5F6AEC0C04D71", Fingerprint(rom));
+    }
+
+    [Fact]
+    public void Golden_collision_aabb_emission_is_pinned_nes()
+    {
+        const string source = """
+                              void main() {
+                                  world.Column(0, 1, 2);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 10, 2);
+                                  camera.Init(1, 10, 2);
+                                  loop {
+                                      video.WaitVBlank();
+                                      u8 footY = 16;
+                                      u8 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                      u8 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal("9F40E49489CCD1DEAD44DCA40FC3BC42E5CEFB6139FAD89F5339474304AF1872", Fingerprint(rom));
+    }
+
+    [Fact]
     public void Compiles_png_sprite_sheet_using_nes_platform_variant()
     {
         var baseDirectory = WriteSpritePng(
@@ -4021,6 +4253,11 @@ public class NesRomCompilerTests
     private static int ReadLittleEndian16(IReadOnlyList<byte> bytes, int offset)
     {
         return bytes[offset] | bytes[offset + 1] << 8;
+    }
+
+    private static string Fingerprint(byte[] bytes)
+    {
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
     }
 
     private static string BytesAround(IReadOnlyList<byte> bytes, int offset)

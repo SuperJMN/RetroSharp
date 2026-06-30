@@ -546,6 +546,174 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Sprite_draw_via_library_helper_is_byte_identical_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123", "32103210")));
+
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 80, 0, false, 1);
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   video.Init();
+                                   sprite.Asset(player, "player.sprite.json");
+                                   sprite.Draw(player, 72, 80, 0, false, 1);
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("class sprite", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct, baseDirectory), GameBoyRomCompiler.CompileSource(library, baseDirectory));
+    }
+
+    [Fact]
+    public void Runner_shaped_sprite_draw_is_byte_identical_gb()
+    {
+        var sourcePath = RepositoryFile("samples/runner/runner.rs");
+        var source = File.ReadAllText(sourcePath);
+
+        var libraryRom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var legacyRom = GameBoyRomCompiler.CompileSource(
+            SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source.Replace("sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
+            Path.GetDirectoryName(sourcePath));
+
+        Assert.Equal(legacyRom, libraryRom);
+    }
+
+    [Fact]
+    public void Sprite_draw_library_preserves_capability_and_budget_checks_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+
+        const string paletteSource = """
+                                     void main() {
+                                         video.Init();
+                                         sprite.Asset(player, "player.sprite.json");
+                                         sprite.Draw(player, 72, 64, 0, false, 2);
+                                     }
+                                     """;
+
+        var paletteException = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(paletteSource, baseDirectory));
+        Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.", paletteException.Message);
+
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 41).Select(index => $"        sprite.Draw(player, {index % 20}, {(index % 4) * 20}, 0);"));
+        var budgetSource = """
+                           void main() {
+                               video.Init();
+                               sprite.Asset(player, "player.sprite.json");
+                               loop {
+                                   video.WaitVBlank();
+
+                           """ + draws + """
+                               }
+                           }
+                           """;
+
+        var budgetException = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(budgetSource, baseDirectory));
+        Assert.Equal(
+            "Target 'gb' supports 40 hardware sprites per frame, but 164 are required for drawing logical sprites in one frame.",
+            budgetException.Message);
+    }
+
+    [Fact]
+    public void Legacy_sprite_draw_builtin_still_compiles_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123", "32103210")));
+
+        const string source = """
+                              void main() {
+                                  video_init();
+                                  sprite_asset(player, "player.sprite.json");
+                                  sprite_draw(player, 72, 80, 0);
+                              }
+                              """;
+
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source, baseDirectory).Length);
+    }
+
+    [Fact]
+    public void Collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_gb()
+    {
+        const string direct = """
+                              void define_world() {
+                                  world_column(0, 0, 4);
+                                  world_column(1, 0, 4);
+                                  world_column(2, 0, 4);
+                                  world_flags(0, 0, 1);
+                                  world_flags(1, 0, 1);
+                                  world_flags(2, 0, 1);
+                                  world_map(3, 11, 2);
+                                  camera_init(3, 11, 2);
+                              }
+
+                              void main() {
+                                  define_world();
+                                  i16 footY = 16;
+                                  i16 hit = camera_aabb_tiles(72, footY - 8, 16, 16, 1);
+                                  i16 hitTop = camera_aabb_hit_top(72, footY - 8, 16, 16, 1);
+                              }
+                              """;
+        const string library = """
+                               void define_world() {
+                                   world.Column(0, 0, 4);
+                                   world.Column(1, 0, 4);
+                                   world.Column(2, 0, 4);
+                                   world.Flags(0, 0, 1);
+                                   world.Flags(1, 0, 1);
+                                   world.Flags(2, 0, 1);
+                                   world.Map(3, 11, 2);
+                                   camera.Init(3, 11, 2);
+                               }
+
+                               void main() {
+                                   define_world();
+                                   i16 footY = 16;
+                                   i16 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                   i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("[intrinsic(\"camera_aabb_tiles\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"camera_aabb_hit_top\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
+    public void Collision_capability_checks_preserved()
+    {
+        const string source = """
+                              void main() {
+                                  world.Column(0, 0, 4);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 11, 2);
+                                  camera.Init(1, 11, 2);
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(150, footY, 16, 8, 1);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("camera AABB screen span must fit within target 'gb' visible width 160.", exception.Message);
+    }
+
+    [Fact]
     public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """
@@ -609,6 +777,99 @@ public class GameBoyRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal("Target 'gb' does not support intrinsic 'read_magic' on extern function 'gb_read_magic'.", exception.Message);
+    }
+
+    [Fact]
+    public void Compile_time_operand_slot_rejects_runtime_value()
+    {
+        const string source = """
+                              [target("gb")]
+                              [intrinsic("world_tile_flags_for_world")]
+                              extern i16 flags_for_world(i16 world, i16 x, i16 y);
+
+                              void main() {
+                                  world.Column(0, 1, 2);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 10, 2);
+                                  i16 selectedWorld = 0;
+                                  i16 flags = flags_for_world(selectedWorld, 0, 8);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("flags_for_world argument 1 is compile-time WorldId and cannot use runtime local 'selectedWorld'.", exception.Message);
+    }
+
+    [Fact]
+    public void Minimal_compile_time_operand_intrinsic_is_byte_identical()
+    {
+        const string direct = """
+                              void main() {
+                                  world.Column(0, 1, 2);
+                                  world.Flags(0, 0, 1);
+                                  world.Map(1, 10, 2);
+                                  i16 flags = world_tile_flags_at(0, 8);
+                              }
+                              """;
+
+        const string intrinsic = """
+                                 [target("gb")]
+                                 [intrinsic("world_tile_flags_for_world")]
+                                 extern i16 flags_for_world(i16 world, i16 x, i16 y);
+
+                                 void main() {
+                                     world.Column(0, 1, 2);
+                                     world.Flags(0, 0, 1);
+                                     world.Map(1, 10, 2);
+                                     i16 flags = flags_for_world("default", 0, 8);
+                                 }
+                                 """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(intrinsic));
+    }
+
+    [Fact]
+    public void Single_descriptor_covers_multiple_assets_without_duplication()
+    {
+        var descriptor = TargetIntrinsicDescriptor.DrawLogicalSprite(
+            "sprite_draw",
+            runtimeArity: 4,
+            compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]);
+        var catalog = new TargetIntrinsicCatalog("gb", "Game Boy", [descriptor]);
+        var function = ExternIntrinsic("gb", "sprite_draw", "__sprite_draw");
+
+        var first = TargetIntrinsicResolver.ResolveCall(
+            function,
+            new FunctionCall("__sprite_draw", [new IdentifierSyntax("player"), new ConstantSyntax("24"), new ConstantSyntax("32"), new ConstantSyntax("0"), new ConstantSyntax("0")]),
+            catalog);
+        var second = TargetIntrinsicResolver.ResolveCall(
+            function,
+            new FunctionCall("__sprite_draw", [new IdentifierSyntax("enemy"), new ConstantSyntax("24"), new ConstantSyntax("32"), new ConstantSyntax("0"), new ConstantSyntax("0")]),
+            catalog);
+
+        Assert.Same(descriptor, first.Descriptor);
+        Assert.Same(descriptor, second.Descriptor);
+        Assert.Equal("player", Assert.Single(first.CompileTimeOperands).Identifier);
+        Assert.Equal("enemy", Assert.Single(second.CompileTimeOperands).Identifier);
+        Assert.Equal(1, catalog.Intrinsics.Count);
+    }
+
+    [Fact]
+    public void Language_ir_gains_no_framework_concepts()
+    {
+        var intermediateFiles = Directory.GetFiles(
+            RepositoryDirectory("src/RetroSharp.Generation.Intermediate"),
+            "*.cs",
+            SearchOption.AllDirectories);
+
+        var intermediateSource = string.Join("\n", intermediateFiles.Select(File.ReadAllText));
+
+        Assert.DoesNotContain("AssetRef", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConstPaletteSlot", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("EnumFlags", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("WorldId", intermediateSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("TargetIntrinsic", intermediateSource, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1088,6 +1349,59 @@ public class GameBoyRomCompilerTests
                                }
                                """;
         Assert.Equal(GameBoyRomCompiler.CompileSource(direct, baseDirectory), GameBoyRomCompiler.CompileSource(wrapped, baseDirectory));
+    }
+
+    [Fact]
+    public void Golden_sprite_draw_emission_is_pinned_gb()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(
+                    8,
+                    16,
+                    "01230123",
+                    "32103210")));
+
+        const string source = """
+                              void main() {
+                                  video.Init();
+                                  sprite.Asset(player_run, "player.sprite.json");
+                                  sprite.Draw(player_run, 72, 80, 0, false, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal("5D42DDFDB36FD0FCE746A9960C0379D6F9DE6D747735D7498BB11261380D407C", Fingerprint(rom));
+    }
+
+    [Fact]
+    public void Golden_collision_aabb_emission_is_pinned_gb()
+    {
+        const string source = """
+                              void define_world() {
+                                  world.Column(0, 0, 4);
+                                  world.Column(1, 0, 4);
+                                  world.Column(2, 0, 4);
+                                  world.Flags(0, 0, 1);
+                                  world.Flags(1, 0, 1);
+                                  world.Flags(2, 0, 1);
+                                  world.Map(3, 11, 2);
+                                  camera.Init(3, 11, 2);
+                              }
+
+                              void main() {
+                                  define_world();
+                                  i16 footY = 16;
+                                  i16 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                  i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal("A28DD8B270B2DFB77F210C7C04619F5775540300920EE8C4D474227D1623C303", Fingerprint(rom));
     }
 
     [Fact]
@@ -6568,6 +6882,11 @@ public class GameBoyRomCompilerTests
         return bytes[offset] | bytes[offset + 1] << 8;
     }
 
+    private static string Fingerprint(byte[] bytes)
+    {
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+    }
+
     private static string BytesAround(byte[] bytes, int offset)
     {
         var start = Math.Max(0, offset - 8);
@@ -6650,6 +6969,38 @@ public class GameBoyRomCompilerTests
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private static string RepositoryDirectory(string relativePath)
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, relativePath);
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new InvalidOperationException($"Could not find repository directory '{relativePath}'.");
+    }
+
+    private static FunctionSyntax ExternIntrinsic(string target, string intrinsic, string functionName)
+    {
+        return new FunctionSyntax(
+            "void",
+            functionName,
+            [],
+            new BlockSyntax([]),
+            isExtern: true,
+            attributes:
+            [
+                new FunctionAttributeSyntax("target", [new ConstantSyntax($"\"{target}\"")]),
+                new FunctionAttributeSyntax("intrinsic", [new ConstantSyntax($"\"{intrinsic}\"")]),
+            ]);
     }
 
     private static int CountOccurrences(string text, string value)

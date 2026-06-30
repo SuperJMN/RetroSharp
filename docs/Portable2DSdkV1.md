@@ -101,6 +101,8 @@ For PNG assets, a generic path can be specialized per target without changing so
 
 The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
+On Game Boy and NES, `sprite.Draw(...)` is injected as an SDK library helper over a target intrinsic whose descriptor treats the sprite asset id and palette slot as compile-time operands. The collector still produces `Sdk2DOperation.DrawLogicalSprite`, so capability checks, frame-budget checks, and emitted bytes stay aligned with the legacy `sprite_draw(...)` compatibility spelling.
+
 ### Actor framework slice
 
 The current actor framework frontend is source sugar over fixed storage. It does
@@ -412,6 +414,7 @@ Calls that expose raw hardware state are outside SDK v1. Examples include `scrol
 SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because several broader world/HUD contracts are still missing. It now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a 48x96 tile world and declares per-target VGM/VGZ background music; larger diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `world.Load(...)`.
 
 - `camera.AabbTiles(...)`, `camera.AabbHitTop(...)`, `camera.ScreenAabbTiles(...)`, and `camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
+- On Game Boy, `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations as the legacy snake_case compatibility calls.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
 - `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample with a 2-axis dead-zone camera and per-target VGM/VGZ music. `samples/tiled-tall/tall.rs` is Game Boy-only target-acceptance coverage for vertical Tiled `world.Load(...)` scrolling, while `samples/tiled-vscroll/vscroll.rs` covers the same vertical Tiled path on Game Boy and NES with a wider 40x60 map. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES over source-authored columns, `samples/tiled-diagonal/diag.rs` is Game Boy-only target-acceptance coverage for diagonal Tiled `world.Load(...)`, and `samples/tiled-free-scroll/free-scroll.rs` is Game Boy/NES target-acceptance coverage for diagonal Tiled `world.Load(...)`.
@@ -465,4 +468,4 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite.Asset(...)` and `sprite.Draw(...)` calls are the portable SDK surface.
+The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite.Asset(...)` and `sprite.Draw(...)` calls are the portable SDK surface. Game Boy and NES currently lower `sprite.Draw(...)` through the injected SDK library helper; `sprite_draw(...)` remains accepted as a compatibility alias.

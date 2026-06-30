@@ -6,12 +6,56 @@ public enum TargetIntrinsicOperation
     PollInput,
     UpdateAudio,
     ReadWorldTileFlags,
+    CameraAabbTiles,
+    CameraAabbHitTop,
     SetCameraPosition,
     ApplyCamera,
+    DrawLogicalSprite,
 }
 
-public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOperation Operation, int Arity)
+public enum TargetIntrinsicOperandRole
 {
+    AssetRef,
+    ConstPaletteSlot,
+    EnumFlags,
+    WorldId,
+}
+
+public sealed record TargetIntrinsicCompileTimeOperand(int Slot, TargetIntrinsicOperandRole Role);
+
+public sealed record TargetIntrinsicDescriptor
+{
+    public TargetIntrinsicDescriptor(
+        string name,
+        TargetIntrinsicOperation operation,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand>? compileTimeOperands = null)
+    {
+        if (runtimeArity < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(runtimeArity), "Runtime arity cannot be negative.");
+        }
+
+        Name = name;
+        Operation = operation;
+        RuntimeArity = runtimeArity;
+        CompileTimeOperands = (compileTimeOperands ?? []).OrderBy(operand => operand.Slot).ToArray();
+
+        var duplicate = CompileTimeOperands
+            .GroupBy(operand => operand.Slot)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new InvalidOperationException($"Intrinsic '{name}' declares compile-time operand slot {duplicate.Key + 1} more than once.");
+        }
+    }
+
+    public string Name { get; }
+    public TargetIntrinsicOperation Operation { get; }
+    public int RuntimeArity { get; }
+    public IReadOnlyList<TargetIntrinsicCompileTimeOperand> CompileTimeOperands { get; }
+    public int Arity => RuntimeArity + CompileTimeOperands.Count;
+
     public static TargetIntrinsicDescriptor WaitFrame(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.WaitFrame, arity);
@@ -32,14 +76,62 @@ public sealed record TargetIntrinsicDescriptor(string Name, TargetIntrinsicOpera
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ReadWorldTileFlags, arity);
     }
 
+    public static TargetIntrinsicDescriptor ReadWorldTileFlags(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.ReadWorldTileFlags,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
     public static TargetIntrinsicDescriptor SetCameraPosition(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.SetCameraPosition, arity);
     }
 
+    public static TargetIntrinsicDescriptor CameraAabbTiles(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.CameraAabbTiles,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
+    public static TargetIntrinsicDescriptor CameraAabbHitTop(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.CameraAabbHitTop,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
     public static TargetIntrinsicDescriptor ApplyCamera(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ApplyCamera, arity);
+    }
+
+    public static TargetIntrinsicDescriptor DrawLogicalSprite(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.DrawLogicalSprite,
+            runtimeArity,
+            compileTimeOperands);
     }
 }
 

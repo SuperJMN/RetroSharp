@@ -7,6 +7,44 @@ public static class SdkLibrarySource
     public static string ForTarget(TargetIntrinsicCatalog catalog)
     {
         var prefix = $"__retrosharp_{catalog.TargetId}";
+        var cameraAabbExterns = "";
+        var cameraAabbMethods = "";
+        if (catalog.TryResolve("camera_aabb_tiles", out var cameraAabbTiles)
+            && cameraAabbTiles.Operation == TargetIntrinsicOperation.CameraAabbTiles)
+        {
+            cameraAabbExterns += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_aabb_tiles")]
+                 extern i16 {{prefix}}_camera_aabb_tiles(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
+
+                 """;
+            cameraAabbMethods += $$"""
+
+                     static inline i16 AabbTiles(i16 screenX, i16 worldY, i16 width, i16 height, i16 flags)
+                     {
+                         return {{prefix}}_camera_aabb_tiles("default", screenX, worldY, width, height, flags);
+                     }
+                 """;
+        }
+
+        if (catalog.TryResolve("camera_aabb_hit_top", out var cameraAabbHitTop)
+            && cameraAabbHitTop.Operation == TargetIntrinsicOperation.CameraAabbHitTop)
+        {
+            cameraAabbExterns += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_aabb_hit_top")]
+                 extern i16 {{prefix}}_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
+
+                 """;
+            cameraAabbMethods += $$"""
+
+                     static inline i16 AabbHitTop(i16 screenX, i16 worldY, i16 width, i16 height, i16 flags)
+                     {
+                         return {{prefix}}_camera_aabb_hit_top("default", screenX, worldY, width, height, flags);
+                     }
+                 """;
+        }
+
         var library = $$"""
                  const {{MarkerName(catalog.TargetId)}} = 1;
 
@@ -32,6 +70,7 @@ public static class SdkLibrarySource
                  [intrinsic("camera_apply")]
                  extern void {{prefix}}_camera_apply();
 
+                 {{cameraAabbExterns}}
                  class video
                  {
                      static inline void WaitVBlank()
@@ -67,6 +106,7 @@ public static class SdkLibrarySource
                      {
                          {{prefix}}_camera_apply();
                      }
+                 {{cameraAabbMethods}}
                  }
 
                  """;
@@ -86,6 +126,25 @@ public static class SdkLibrarySource
                      static inline i16 TileFlagsAt(i16 x, i16 y)
                      {
                          return {{prefix}}_world_tile_flags_at(x, y);
+                     }
+                 }
+
+                 """;
+        }
+
+        if (catalog.TryResolve("sprite_draw", out var spriteDraw)
+            && spriteDraw.Operation == TargetIntrinsicOperation.DrawLogicalSprite)
+        {
+            library += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("sprite_draw")]
+                 extern void {{prefix}}_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX, i16 paletteSlot);
+
+                 class sprite
+                 {
+                     static inline void Draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX = false, i16 paletteSlot = 0)
+                     {
+                         {{prefix}}_sprite_draw(spriteId, x, y, frame, flipX, paletteSlot);
                      }
                  }
 

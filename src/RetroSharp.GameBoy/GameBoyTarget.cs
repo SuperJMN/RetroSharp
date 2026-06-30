@@ -14,6 +14,34 @@ public static class GameBoyTarget
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
             TargetIntrinsicDescriptor.ReadWorldTileFlags("world_tile_flags_at", arity: 2),
+            TargetIntrinsicDescriptor.ReadWorldTileFlags(
+                "world_tile_flags_for_world",
+                runtimeArity: 2,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId)]),
+            TargetIntrinsicDescriptor.DrawLogicalSprite(
+                "sprite_draw",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.ConstPaletteSlot),
+                ]),
+            TargetIntrinsicDescriptor.CameraAabbTiles(
+                "camera_aabb_tiles",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.EnumFlags),
+                ]),
+            TargetIntrinsicDescriptor.CameraAabbHitTop(
+                "camera_aabb_hit_top",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.EnumFlags),
+                ]),
             TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
             TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
         ]);

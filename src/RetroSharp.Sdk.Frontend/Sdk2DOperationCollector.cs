@@ -87,6 +87,42 @@ public static class Sdk2DOperationCollector
             SpriteTransform.None);
     }
 
+    public static Sdk2DOperation.DrawLogicalSprite ReadDrawLogicalSprite(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.DrawLogicalSprite)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.DrawLogicalSprite}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var xArg, var yArg, var frameArg, var flipXArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var spriteId = resolved.CompileTimeOperands
+            .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.AssetRef)
+            ?.Identifier
+            ?? throw new InvalidOperationException($"{resolved.Descriptor.Name} requires a compile-time sprite asset operand.");
+        var paletteSlot = resolved.CompileTimeOperands
+            .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.ConstPaletteSlot)
+            ?.Constant ?? 0;
+        var x = ReadByteExpression(xArg.Expression, $"{resolved.Descriptor.Name} argument {xArg.Slot + 1}");
+        var y = ReadByteExpression(yArg.Expression, $"{resolved.Descriptor.Name} argument {yArg.Slot + 1}");
+        var frame = ReadByteExpression(frameArg.Expression, $"{resolved.Descriptor.Name} argument {frameArg.Slot + 1}");
+        var flipX = ReadFlipXExpression(flipXArg.Expression, $"{resolved.Descriptor.Name} argument {flipXArg.Slot + 1}");
+
+        return new Sdk2DOperation.DrawLogicalSprite(
+            spriteId,
+            x,
+            y,
+            frame,
+            flipX,
+            paletteSlot,
+            SpriteTransform.None);
+    }
+
     public static Sdk2DOperation.StreamMapColumn ReadStreamMapColumn(FunctionCall call)
     {
         SdkCallReader.RequireArity(call, 4);
@@ -133,6 +169,41 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
+    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraAabbTiles)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.CameraAabbTiles}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var screenXArg, var worldYArg, var widthArg, var heightArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var worldId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.WorldId) ?? "default";
+        var flags = (WorldTileFlags)ConstRange(
+            CompileTimeConstant(resolved, TargetIntrinsicOperandRole.EnumFlags) ?? 0,
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_aabb_tiles argument 5");
+        var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_tiles argument 1");
+        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_tiles argument 2");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_tiles argument 3");
+        var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_tiles argument 4");
+
+        return new Sdk2DOperation.CameraAabbTiles(
+            WorldId: worldId,
+            ScreenX: screenX,
+            WorldY: worldY,
+            WorldYOffset: worldYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
     public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(FunctionCall call)
     {
         SdkCallReader.RequireArity(call, 5);
@@ -149,6 +220,41 @@ public static class Sdk2DOperationCollector
 
         return new Sdk2DOperation.CameraAabbHitTop(
             WorldId: "default",
+            ScreenX: screenX,
+            WorldY: worldY,
+            WorldYOffset: worldYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
+    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraAabbHitTop)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.CameraAabbHitTop}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var screenXArg, var worldYArg, var widthArg, var heightArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var worldId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.WorldId) ?? "default";
+        var flags = (WorldTileFlags)ConstRange(
+            CompileTimeConstant(resolved, TargetIntrinsicOperandRole.EnumFlags) ?? 0,
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_aabb_hit_top argument 5");
+        var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_hit_top argument 1");
+        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_hit_top argument 2");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_hit_top argument 3");
+        var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_hit_top argument 4");
+
+        return new Sdk2DOperation.CameraAabbHitTop(
+            WorldId: worldId,
             ScreenX: screenX,
             WorldY: worldY,
             WorldYOffset: worldYOffset,
@@ -276,12 +382,31 @@ public static class Sdk2DOperationCollector
     private static int ConstRange(ExpressionSyntax expression, int min, int max, string context)
     {
         var value = SdkCallReader.ConstValue(expression, context);
+        return ConstRange(value, min, max, context);
+    }
+
+    private static int ConstRange(int value, int min, int max, string context)
+    {
         if (value < min || value > max)
         {
             throw new InvalidOperationException($"{context} must be between {min} and {max}.");
         }
 
         return value;
+    }
+
+    private static string? CompileTimeIdentifier(ResolvedTargetIntrinsicCall resolved, TargetIntrinsicOperandRole role)
+    {
+        return resolved.CompileTimeOperands
+            .FirstOrDefault(operand => operand.Role == role)
+            ?.Identifier;
+    }
+
+    private static int? CompileTimeConstant(ResolvedTargetIntrinsicCall resolved, TargetIntrinsicOperandRole role)
+    {
+        return resolved.CompileTimeOperands
+            .FirstOrDefault(operand => operand.Role == role)
+            ?.Constant;
     }
 
     private static SdkAabbExtent ReadAabbExtent(ExpressionSyntax expression, string context)
@@ -326,13 +451,17 @@ public static class Sdk2DOperationCollector
             return null;
         }
 
-        var flipX = args[4];
+        return ReadFlipXExpression(args[4], "sprite_draw argument 5");
+    }
+
+    private static SdkByteExpression ReadFlipXExpression(ExpressionSyntax flipX, string context)
+    {
         if (TryConstValue(flipX, out var value) && value is not 0 and not 1)
         {
             throw new InvalidOperationException("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.");
         }
 
-        return ReadByteExpression(flipX, "sprite_draw argument 5");
+        return ReadByteExpression(flipX, context);
     }
 
     private static bool TryConstValue(ExpressionSyntax expression, out int value)
@@ -379,6 +508,7 @@ public static class Sdk2DOperationCollector
         private readonly List<Sdk2DStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
+        private readonly HashSet<string> runtimeIdentifiers = [];
         private List<Sdk2DStreamItem> currentItems;
 
         public Collector(
@@ -452,6 +582,7 @@ public static class Sdk2DOperationCollector
             switch (statement)
             {
                 case DeclarationSyntax declaration:
+                    runtimeIdentifiers.Add(declaration.Name);
                     if (declaration.ArrayLength.HasValue)
                     {
                         CollectExpression(declaration.ArrayLength.Value);
@@ -568,9 +699,8 @@ public static class Sdk2DOperationCollector
                 return false;
             }
 
-            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
-            SdkCallReader.RequireArity(call, intrinsic.Arity);
-            switch (intrinsic.Operation)
+            var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
+            switch (resolved.Descriptor.Operation)
             {
                 case TargetIntrinsicOperation.SetCameraPosition:
                     CollectCameraSetPosition(call);
@@ -578,8 +708,11 @@ public static class Sdk2DOperationCollector
                 case TargetIntrinsicOperation.ApplyCamera:
                     CollectCameraApply(call);
                     break;
+                case TargetIntrinsicOperation.DrawLogicalSprite:
+                    CollectDrawLogicalSprite(resolved);
+                    break;
                 default:
-                    if (TryOperationFor(intrinsic, out var operation))
+                    if (TryOperationFor(resolved.Descriptor, out var operation))
                     {
                         AddOp(operation);
                     }
@@ -604,6 +737,11 @@ public static class Sdk2DOperationCollector
         private void CollectDrawLogicalSprite(FunctionCall call)
         {
             AddOp(ReadDrawLogicalSprite(call));
+        }
+
+        private void CollectDrawLogicalSprite(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadDrawLogicalSprite(resolved));
         }
 
         private void CollectStreamMapColumn(FunctionCall call)
@@ -721,14 +859,21 @@ public static class Sdk2DOperationCollector
                 return false;
             }
 
-            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
-            if (intrinsic.Operation != TargetIntrinsicOperation.ReadWorldTileFlags)
+            var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
+            switch (resolved.Descriptor.Operation)
             {
-                return false;
+                case TargetIntrinsicOperation.ReadWorldTileFlags:
+                    CollectWorldTileFlagsAt(resolved);
+                    return true;
+                case TargetIntrinsicOperation.CameraAabbTiles:
+                    CollectCameraAabbTiles(resolved);
+                    return true;
+                case TargetIntrinsicOperation.CameraAabbHitTop:
+                    CollectCameraAabbHitTop(resolved);
+                    return true;
+                default:
+                    return false;
             }
-
-            CollectWorldTileFlagsAt(call);
-            return true;
         }
 
         private void CollectWorldTileFlagsAt(FunctionCall call)
@@ -740,14 +885,40 @@ public static class Sdk2DOperationCollector
             AddOp(new Sdk2DOperation.ReadWorldTileFlags("default", worldX, worldY));
         }
 
+        private void CollectWorldTileFlagsAt(ResolvedTargetIntrinsicCall resolved)
+        {
+            if (resolved.RuntimeOperands is not [var worldXArg, var worldYArg])
+            {
+                throw new InvalidOperationException(
+                    $"{resolved.Descriptor.Name} expects 2 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+            }
+
+            var worldId = resolved.CompileTimeOperands
+                .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.WorldId)
+                ?.Identifier ?? "default";
+            var worldX = ReadByteExpression(worldXArg.Expression, $"{resolved.Descriptor.Name} argument {worldXArg.Slot + 1}");
+            var worldY = ReadByteExpression(worldYArg.Expression, $"{resolved.Descriptor.Name} argument {worldYArg.Slot + 1}");
+            AddOp(new Sdk2DOperation.ReadWorldTileFlags(worldId, worldX, worldY));
+        }
+
         private void CollectCameraAabbTiles(FunctionCall call)
         {
             AddOp(ReadCameraAabbTiles(call));
         }
 
+        private void CollectCameraAabbTiles(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadCameraAabbTiles(resolved));
+        }
+
         private void CollectCameraAabbHitTop(FunctionCall call)
         {
             AddOp(ReadCameraAabbHitTop(call));
+        }
+
+        private void CollectCameraAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadCameraAabbHitTop(resolved));
         }
 
         private void CollectCameraScreenAabbTiles(FunctionCall call)
@@ -1117,11 +1288,12 @@ public static class Sdk2DOperationCollector
                 return false;
             }
 
-            var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
-            SdkCallReader.RequireArity(call, intrinsic.Arity);
-            result = intrinsic.Operation switch
+            var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
+            result = resolved.Descriptor.Operation switch
             {
                 TargetIntrinsicOperation.WaitFrame or TargetIntrinsicOperation.PollInput => state.CloseOpenFrames(),
+                TargetIntrinsicOperation.DrawLogicalSprite => state.AddBudget(
+                    drawSpriteBudget?.Invoke(ReadDrawLogicalSprite(resolved)) ?? Sdk2DFrameBudget.Empty),
                 _ => state,
             };
             return true;
