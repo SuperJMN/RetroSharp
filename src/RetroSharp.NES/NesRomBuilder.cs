@@ -493,12 +493,14 @@ internal sealed class NesRuntimeCompiler
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
+    private readonly Stack<InlineVariableScope> inlineVariableScopes = [];
     private readonly Stack<LoopTarget> loopTargets = [];
     private readonly IReadOnlySet<int> longForLoopIds;
     private readonly bool useFourScreenNametables;
     private byte nextVariableAddress = FirstVariableAddress;
     private int nextForLoopId;
     private int nextHardwareSprite;
+    private int nextInlineVariableScopeId;
     private NesCameraConfig? cameraConfig;
 
     public NesRuntimeCompiler(
@@ -673,7 +675,8 @@ internal sealed class NesRuntimeCompiler
             throw new InvalidOperationException($"NES target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
         }
 
-        if (!declaredVariables.Add(declaration.Name))
+        var declarationName = DeclareScopedVariableName(declaration.Name);
+        if (!declaredVariables.Add(declarationName))
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
@@ -684,7 +687,10 @@ internal sealed class NesRuntimeCompiler
         var elementAddresses = new List<byte>();
         for (var index = 0; index < length; index++)
         {
-            var address = DeclareVariable(IndexedElementName(declaration.Name, index));
+            var sourceName = IndexedElementName(declaration.Name, index);
+            var scopedName = IndexedElementName(declarationName, index);
+            MapScopedVariableName(sourceName, scopedName);
+            var address = DeclareVariable(scopedName);
             elementAddresses.Add(address);
             builder.LoadAImmediate(0);
             builder.StoreAZeroPage(address);
@@ -698,7 +704,8 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitStructArrayDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
     {
-        if (!declaredVariables.Add(declaration.Name))
+        var declarationName = DeclareScopedVariableName(declaration.Name);
+        if (!declaredVariables.Add(declarationName))
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
@@ -713,14 +720,17 @@ internal sealed class NesRuntimeCompiler
             throw new InvalidOperationException($"NES target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
         }
 
-        structArrays.Add(declaration.Name, new StructArrayLayout(stride, fieldOffsets));
+        structArrays.Add(declarationName, new StructArrayLayout(stride, fieldOffsets));
 
         var fieldNames = structSyntax.Fields.Select(field => field.Name).ToList();
         for (var index = 0; index < length; index++)
         {
             foreach (var field in structSyntax.Fields)
             {
-                var address = DeclareVariable(IndexedMemberName(declaration.Name, index, field.Name));
+                var sourceName = IndexedMemberName(declaration.Name, index, field.Name);
+                var scopedName = IndexedMemberName(declarationName, index, field.Name);
+                MapScopedVariableName(sourceName, scopedName);
+                var address = DeclareVariable(scopedName);
                 builder.LoadAImmediate(0);
                 builder.StoreAZeroPage(address);
             }
@@ -804,7 +814,7 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
     {
-        var address = DeclareVariable(declaration.Name);
+        var address = DeclareVariable(DeclareScopedVariableName(declaration.Name));
         TrackImmutable(declaration);
 
         if (declaration.Initialization.HasValue)
@@ -821,7 +831,8 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitStructDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
     {
-        if (!declaredVariables.Add(declaration.Name))
+        var declarationName = DeclareScopedVariableName(declaration.Name);
+        if (!declaredVariables.Add(declarationName))
         {
             throw new InvalidOperationException($"Variable '{declaration.Name}' is already declared.");
         }
@@ -837,7 +848,10 @@ internal sealed class NesRuntimeCompiler
                 throw new InvalidOperationException($"NES target does not support struct field type '{field.Type}' yet.");
             }
 
-            var address = DeclareVariable($"{declaration.Name}.{field.Name}");
+            var sourceName = $"{declaration.Name}.{field.Name}";
+            var scopedName = $"{declarationName}.{field.Name}";
+            MapScopedVariableName(sourceName, scopedName);
+            var address = DeclareVariable(scopedName);
             fieldAddresses.Add(field.Name, address);
             fieldNames.Add(field.Name);
             builder.LoadAImmediate(0);
@@ -913,8 +927,56 @@ internal sealed class NesRuntimeCompiler
     {
         if (declaration.IsImmutable)
         {
-            immutableVariables.Add(declaration.Name);
+            immutableVariables.Add(ScopedVariableName(declaration.Name));
         }
+    }
+
+    private void PushInlineVariableScope()
+    {
+        inlineVariableScopes.Push(new InlineVariableScope($"__retrosharp_inline_{++nextInlineVariableScopeId}"));
+    }
+
+    private void PopInlineVariableScope()
+    {
+        inlineVariableScopes.Pop();
+    }
+
+    private string DeclareScopedVariableName(string name)
+    {
+        if (!inlineVariableScopes.TryPeek(out var scope))
+        {
+            return name;
+        }
+
+        if (scope.Names.TryGetValue(name, out var scopedName))
+        {
+            return scopedName;
+        }
+
+        scopedName = $"{scope.Prefix}_{name}";
+        scope.Names.Add(name, scopedName);
+        return scopedName;
+    }
+
+    private void MapScopedVariableName(string name, string scopedName)
+    {
+        if (inlineVariableScopes.TryPeek(out var scope))
+        {
+            scope.Names[name] = scopedName;
+        }
+    }
+
+    private string ScopedVariableName(string name)
+    {
+        foreach (var scope in inlineVariableScopes)
+        {
+            if (scope.Names.TryGetValue(name, out var scopedName))
+            {
+                return scopedName;
+            }
+        }
+
+        return name;
     }
 
     private static bool IsByteBackedType(string type)
@@ -973,7 +1035,7 @@ internal sealed class NesRuntimeCompiler
 
     private void RequireMutableAssignmentTarget(LValue lValue)
     {
-        if (AssignedRoot(lValue) is { } name && immutableVariables.Contains(name))
+        if (AssignedRoot(lValue) is { } name && immutableVariables.Contains(ScopedVariableName(name)))
         {
             throw new InvalidOperationException($"Cannot assign to immutable local '{name}'.");
         }
@@ -1325,10 +1387,12 @@ internal sealed class NesRuntimeCompiler
 
         try
         {
+            PushInlineVariableScope();
             EmitBlock(ParameterSubstitution.Substitute(function, call, "NES"));
         }
         finally
         {
+            PopInlineVariableScope();
             userFunctionCallStack.Remove(function.Name);
         }
 
@@ -4282,7 +4346,7 @@ internal sealed class NesRuntimeCompiler
     {
         if (memberAccess.Target is IndexExpressionSyntax candidate
             && !TryConst(candidate.Index, out _)
-            && structArrays.ContainsKey(candidate.BaseIdentifier)
+            && structArrays.ContainsKey(ScopedVariableName(candidate.BaseIdentifier))
             && StructArrayLayoutFor(candidate.BaseIdentifier).FieldOffsets.ContainsKey(memberAccess.Member))
         {
             indexExpression = candidate;
@@ -4297,7 +4361,8 @@ internal sealed class NesRuntimeCompiler
 
     private StructArrayLayout StructArrayLayoutFor(string baseIdentifier)
     {
-        return structArrays.TryGetValue(baseIdentifier, out var layout)
+        var scopedBaseIdentifier = ScopedVariableName(baseIdentifier);
+        return structArrays.TryGetValue(scopedBaseIdentifier, out var layout)
             ? layout
             : throw new InvalidOperationException($"NES target has no struct array layout for '{baseIdentifier}'.");
     }
@@ -4654,7 +4719,8 @@ internal sealed class NesRuntimeCompiler
 
     private byte VariableAddress(string name)
     {
-        if (!variables.TryGetValue(name, out var address))
+        var scopedName = ScopedVariableName(name);
+        if (!variables.TryGetValue(scopedName, out var address))
         {
             throw new InvalidOperationException($"Use of undeclared variable '{name}'.");
         }
@@ -4663,6 +4729,17 @@ internal sealed class NesRuntimeCompiler
     }
 
     private readonly record struct NesButton(string Name, byte SnapshotMask, byte HoldTicksAddress);
+
+    private sealed class InlineVariableScope
+    {
+        public InlineVariableScope(string prefix)
+        {
+            Prefix = prefix;
+        }
+
+        public string Prefix { get; }
+        public Dictionary<string, string> Names { get; } = new(StringComparer.Ordinal);
+    }
 
     private readonly record struct NesCameraConfig(
         int MapWidth,

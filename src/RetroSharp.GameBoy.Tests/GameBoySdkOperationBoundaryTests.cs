@@ -399,8 +399,8 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 11, 2);
                                   Camera.Init(1, 11, 2);
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 8);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 8);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies[0].x = 24;
@@ -443,8 +443,8 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   Video.Init();
                                   Sprite.Asset(player_run, "player.sprite.json");
                                   Animation.Clip(walk, 0, 4, 4);
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, sprite: player_run, behavior: Walker, animation: walk);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: player_run, behavior: Walker, animation: walk);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies[0].animTick = 5;

@@ -186,6 +186,33 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Inlined_user_function_locals_are_unique_per_call()
+    {
+        const string source = """
+                              void apply_camera(u8 x) {
+                                  u8 scratch = x;
+                                  camera_set_position(scratch, 0);
+                                  return;
+                              }
+
+                              void Main() {
+                                  video_init();
+                                  world_column(0, 1, 2);
+                                  world_column(1, 3, 4);
+                                  world_map(2, 10, 2);
+                                  camera_init(2, 10, 2);
+                                  apply_camera(14);
+                                  apply_camera(15);
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(40976, rom.Length);
+    }
+
+    [Fact]
     public void Compiles_static_class_const_groups_like_enum_groups()
     {
         const string enumSource = """
@@ -2423,13 +2450,13 @@ public class NesRomCompilerTests
         const string actorSource = """
                                    void Main() {
                                        video_init();
-                                       actor.Pool(enemies, 0b10);
-                                       enemy.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
+                                       Actors.Pool(enemies, 0b10);
+                                       Enemies.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
-                                       enemies[0].health = enemy.Hp(enemies[0].kind);
-                                       enemies[0].vx = (i8)enemy.Speed(enemies[0].kind);
-                                       enemies[0].timer = enemy.Cooldown(enemies[0].kind);
+                                       enemies[0].health = Enemies.Hp(enemies[0].kind);
+                                       enemies[0].vx = (i8)Enemies.Speed(enemies[0].kind);
+                                       enemies[0].timer = Enemies.Cooldown(enemies[0].kind);
                                        return;
                                    }
                                    """;
@@ -2443,14 +2470,14 @@ public class NesRomCompilerTests
         const string source = """
                               void Main() {
                                   u8 capacity = 2;
-                                  actor.Pool(enemies, capacity);
+                                  Actors.Pool(enemies, capacity);
                                   return;
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
 
-        Assert.Equal("actor.Pool for 'enemies' requires a literal capacity from 1 to 255.", exception.Message);
+        Assert.Equal("Actors.Pool for 'enemies' requires a literal capacity from 1 to 255.", exception.Message);
     }
 
     [Fact]
@@ -2458,7 +2485,7 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 65);
+                                  Actors.Pool(enemies, 65);
                                   return;
                               }
                               """;
@@ -2483,10 +2510,10 @@ public class NesRomCompilerTests
                                   world_map(40, 10, 40);
                                   camera_init(40, 10, 40);
                                   Sprite.Asset(goomba, "goomba.nes.json");
-                                  actor.Pool(enemies, 2);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                  Actors.Pool(enemies, 2);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                   camera_set_position(0, 160);
-                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                   enemies.TouchTiles(0, 1);
                                   enemies.LandOnTiles(4, 12, 1);
                                   enemies.Draw();
@@ -2516,8 +2543,8 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Ghost);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Ghost);
                                   enemies.Update();
                                   return;
                               }
@@ -2541,8 +2568,8 @@ public class NesRomCompilerTests
                               void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "wide-goomba.nes.json");
-                                  actor.Pool(enemies, 23);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 23);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
@@ -2552,7 +2579,7 @@ public class NesRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'nes' supports 64 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 69 because capacity 23 times enemy.Def 'Goomba' sprite 'goomba' uses 3 hardware sprites.",
+            "Target 'nes' supports 64 hardware sprites per frame, but Actors.Pool for 'enemies' can draw up to 69 because capacity 23 times Enemies.Def 'Goomba' sprite 'goomba' uses 3 hardware sprites.",
             exception.Message);
     }
 
@@ -2569,8 +2596,8 @@ public class NesRomCompilerTests
                               void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.png", 8, 16);
-                                  actor.Pool(enemies, 8);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 8);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
@@ -2612,8 +2639,8 @@ public class NesRomCompilerTests
                               void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.nes.json");
-                                  actor.Pool(enemies, 9);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 9);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
@@ -2623,7 +2650,7 @@ public class NesRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'nes' supports 8 hardware sprites per scanline, but actor.Pool for 'enemies' can draw up to 9 on one scanline because capacity 9 times enemy.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
+            "Target 'nes' supports 8 hardware sprites per scanline, but Actors.Pool for 'enemies' can draw up to 9 on one scanline because capacity 9 times Enemies.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
             exception.Message);
     }
 
@@ -2677,8 +2704,8 @@ public class NesRomCompilerTests
         const string actorSource = """
                                    void Main() {
                                        video_init();
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 1);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, behavior: Walker, speed: 1, hp: 1);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
@@ -2783,8 +2810,8 @@ public class NesRomCompilerTests
                                    void Main() {
                                        video_init();
                                        Sprite.Asset(goomba, "goomba.nes.json");
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
@@ -2831,8 +2858,8 @@ public class NesRomCompilerTests
                                   world_map(1, 10, 2);
                                   camera_init(1, 10, 2);
                                   Sprite.Asset(goomba, "goomba.nes.json");
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies[0].x = 20;
@@ -2935,8 +2962,8 @@ public class NesRomCompilerTests
                                        world_flags(1, 0, 2);
                                        world_map(2, 10, 2);
                                        camera_init(2, 10, 2);
-                                       actor.Pool(enemies, 2);
-                                       enemy.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                       Actors.Pool(enemies, 2);
+                                       Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
@@ -3028,13 +3055,13 @@ public class NesRomCompilerTests
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, behavior: Walker);
-                                       enemy.Def(Bat, behavior: Flyer);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, behavior: Walker);
+                                       Enemies.Def(Bat, behavior: Flyer);
                                        camera_set_position(0, 0);
-                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                        camera_set_position(128, 0);
-                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                        return;
                                    }
                                    """;
