@@ -36,7 +36,7 @@ public sealed class NesRunnerAcceptanceTests
         var source = File.ReadAllText(sourcePath);
 
         var operations = NesRomCompiler.CollectSdkOperations(source, runnerDirectory);
-        Assert.Equal(2, operations.OfType<Sdk2DOperation.SetCameraPosition>().Count());
+        Assert.Equal(1, operations.OfType<Sdk2DOperation.SetCameraPosition>().Count());
         Assert.All(
             operations.OfType<Sdk2DOperation.SetCameraPosition>(),
             operation => Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, operation.Axes));

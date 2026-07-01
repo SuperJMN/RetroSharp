@@ -445,6 +445,13 @@ internal sealed class NesRuntimeCompiler
     private const ushort PendingCameraRowSourceColumnAddress = 0x0307;
     private const ushort PendingCameraRowPhaseAddress = 0x0308;
     private const ushort CameraScrollAppliedAddress = 0x0309;
+    private const ushort CameraWalkTargetAddress = 0x030A;
+    private const ushort CameraWalkStepsAddress = 0x030B;
+    // Camera.SetPosition walks the camera toward the requested position one pixel at a time, feeding
+    // single-pixel steps to the tracking/streaming routines. A single walk never crosses more than one
+    // tile boundary (8 px), matching the per-frame streaming budget (one queued column/row drained by
+    // Camera.Apply), so one SetPosition per frame can reach targets several pixels away.
+    private const byte CameraWalkMaxStepsPerFrame = 8;
     private const ushort MusicLoopPointerLowAddress = 0x0310;
     private const ushort MusicLoopPointerHighAddress = 0x0311;
     private const ushort OamDmaAddress = 0x4014;
@@ -2140,17 +2147,17 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(CameraScrollAppliedAddress);
         EmitSdkByteExpressionToA(operation.X);
-        builder.StoreAZeroPage(CameraNewXAddress);
         if (ShouldStreamColumnsForCamera(config))
         {
-            EmitStreamColumnForCameraPosition(config);
+            EmitWalkCameraAxisToTarget(CameraXAddress, CameraNewXAddress, () => EmitStreamColumnForCameraPosition(config), "nes_camera_x");
         }
         else if (config.MapWidth > 32)
         {
-            EmitTrackCameraXPosition(config);
+            EmitWalkCameraAxisToTarget(CameraXAddress, CameraNewXAddress, () => EmitTrackCameraXPosition(config), "nes_camera_x");
         }
         else
         {
+            builder.StoreAZeroPage(CameraNewXAddress);
             builder.LoadAZeroPage(CameraNewXAddress);
             builder.StoreAZeroPage(CameraXAddress);
             builder.LoadAZeroPage(CameraNewXAddress);
@@ -2168,16 +2175,70 @@ internal sealed class NesRuntimeCompiler
             }
 
             EmitSdkByteExpressionToA(operation.Y);
-            builder.StoreAZeroPage(CameraNewYAddress);
             if (config.MapHeight > 30)
             {
-                EmitTrackCameraYPosition(config);
+                EmitWalkCameraAxisToTarget(CameraYAddress, CameraNewYAddress, () => EmitTrackCameraYPosition(config), "nes_camera_y");
             }
             else
             {
-                EmitTrackShortCameraYPosition();
+                EmitWalkCameraAxisToTarget(CameraYAddress, CameraNewYAddress, EmitTrackShortCameraYPosition, "nes_camera_y");
             }
         }
+    }
+
+    // Walks the camera axis one pixel per step toward the target held in A on entry, driving the
+    // existing single-pixel tracking/streaming routine through the axis' "new position" scratch. The
+    // per-frame step budget bounds the walk to at most one tile crossing, honoring the streaming slot.
+    private void EmitWalkCameraAxisToTarget(byte currentAddress, byte stepTargetAddress, Action emitTrackStep, string labelPrefix)
+    {
+        var loopLabel = builder.CreateLabel(labelPrefix + "_walk");
+        var budgetOkLabel = builder.CreateLabel(labelPrefix + "_walk_budget_ok");
+        var reachedCheckLabel = builder.CreateLabel(labelPrefix + "_walk_moving");
+        var stepForwardLabel = builder.CreateLabel(labelPrefix + "_walk_forward");
+        var doStepLabel = builder.CreateLabel(labelPrefix + "_walk_step");
+        var endLabel = builder.CreateLabel(labelPrefix + "_walk_end");
+
+        builder.StoreAAbsolute(CameraWalkTargetAddress);
+        builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
+        builder.StoreAAbsolute(CameraWalkStepsAddress);
+
+        builder.Label(loopLabel);
+        builder.LoadAAbsolute(CameraWalkStepsAddress);
+        builder.BranchRelative(0xD0, budgetOkLabel); // BNE budgetOkLabel
+        builder.JumpAbsolute(endLabel);              // step budget spent (far jump)
+
+        builder.Label(budgetOkLabel);
+        builder.SetCarry();
+        builder.SubtractImmediate(1);
+        builder.StoreAAbsolute(CameraWalkStepsAddress);
+
+        builder.LoadAAbsolute(CameraWalkTargetAddress);
+        builder.SetCarry();
+        builder.SubtractZeroPage(currentAddress); // A = target - current (signed 8-bit)
+        builder.BranchRelative(0xD0, reachedCheckLabel); // BNE reachedCheckLabel
+        builder.JumpAbsolute(endLabel);                  // reached target (far jump)
+
+        builder.Label(reachedCheckLabel);
+        builder.CompareImmediate(0x80);
+        builder.BranchRelative(0x90, stepForwardLabel); // BCC stepForwardLabel: positive delta => step +1
+
+        builder.LoadAZeroPage(currentAddress);
+        builder.SetCarry();
+        builder.SubtractImmediate(1);
+        builder.StoreAZeroPage(stepTargetAddress);
+        builder.JumpAbsolute(doStepLabel);
+
+        builder.Label(stepForwardLabel);
+        builder.LoadAZeroPage(currentAddress);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAZeroPage(stepTargetAddress);
+
+        builder.Label(doStepLabel);
+        emitTrackStep();
+        builder.JumpAbsolute(loopLabel);
+
+        builder.Label(endLabel);
     }
 
     internal void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)

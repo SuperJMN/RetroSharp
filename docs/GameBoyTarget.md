@@ -20,6 +20,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Fine scroll | X and Y |
 | Background tile write budget | 21 tile writes per frame |
 | Camera stream scheduling | One visible background-map edge per VBlank; columns write 19 rows, rows write 21 columns, and diagonal movement uses separate pending column/row slots |
+| Camera positioning | `Camera.SetPosition(x, y)` walks the camera toward the requested position one pixel at a time, bounded to at most one tile crossing (≤8 px) per axis per call so a single call per frame reaches targets several pixels away without exceeding the one-edge-per-VBlank streaming budget |
 | Attribute write budget | 0 per frame on the current DMG target |
 | Hardware sprites | 40 total, 10 per scanline |
 | Sprite size modes | 8x8 and 8x16 |
@@ -385,7 +386,7 @@ Landed after the initial runner loop:
 - `Input.Poll()`, `Input.IsDown(...)`, `Input.WasPressed(...)`, `Input.WasReleased(...)`, and `Input.HoldTicks(...)` provide a tick-based input surface.
 - The Game Boy runner uses the new input helpers for edge-triggered, variable-height jumping: holding A extends upward impulse for a bounded number of ticks, and releasing A cuts the extension.
 - The runner's horizontal movement, dead-zone camera state, and run animation now advance from a horizontal speed value rather than raw D-pad state: holding a direction moves at a base walk speed and faces that way immediately, holding B builds speed up to a higher run limit only while grounded (Mario has traction), airborne input preserves horizontal momentum without building or bleeding speed, releasing the D-pad coasts to a stop through ground friction, and pressing the opposite direction turns instantly instead of drifting backward.
-- `Camera.SetPosition(x, y)` advances the runtime camera by at most one pixel per axis per call toward the requested low byte, using a signed 8-bit delta so source-level byte positions can wrap. The runner updates camera state per single-pixel movement step, then calls `Camera.SetPosition` twice at the end of the frame so a two-pixel run frame can catch the 1px-per-call backend up without inlining the full 2D camera runtime at every collision probe.
+- `Camera.SetPosition(x, y)` walks the runtime camera toward the requested low byte one pixel per step, using a signed 8-bit delta so source-level byte positions can wrap. Each call advances up to the per-frame streaming budget — at most one tile crossing (≤8 px) per axis — so a single `Camera.SetPosition` per frame reaches targets several pixels away (for example a two-pixel run frame) without inlining the full 2D camera runtime at every collision probe.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
 - `Sprite.Draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
 - `Palette.Background(...)` and `Palette.Sprite(...)` declare logical palette slots for SDK-shaped samples; the runner uses them instead of raw `Palette.Set(...)` and `ObjectPalette.Set(...)`.

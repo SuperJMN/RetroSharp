@@ -887,6 +887,13 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort CameraStreamSourceColumnScratchAddress = 0xC12A;
     private const ushort CameraStreamTargetColumnScratchAddress = 0xC12B;
     private const ushort CameraStreamColumnsRemainingAddress = 0xC12C;
+    private const ushort CameraSetPositionTargetAddress = 0xC12D;
+    private const ushort CameraSetPositionStepsRemainingAddress = 0xC12E;
+    // Camera.SetPosition walks the camera toward the requested position one pixel at a time. A single
+    // move never crosses more than one tile boundary (8 px), which is the per-frame streaming budget
+    // (one queued column/row drained by Camera.Apply). Capping the walk here keeps that invariant while
+    // letting one SetPosition per frame reach targets several pixels away.
+    private const byte CameraSetPositionMaxStepsPerFrame = 8;
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
@@ -3304,25 +3311,44 @@ internal sealed class GameBoyRuntimeCompiler
         string positiveLabelName,
         string endLabelName)
     {
+        var loopLabel = builder.CreateLabel(endLabelName + "_step");
         var movePositiveLabel = builder.CreateLabel(positiveLabelName);
         var endLabel = builder.CreateLabel(endLabelName);
 
+        // Cache the requested absolute position and walk the camera toward it, one pixel per step, up
+        // to the per-frame streaming budget. Reaching the target early exits the loop, so callers set
+        // the desired position once per frame instead of stepping the camera manually.
         emitRequestedPositionToA();
+        builder.StoreA(CameraSetPositionTargetAddress);
+        builder.LoadAImmediate(CameraSetPositionMaxStepsPerFrame);
+        builder.StoreA(CameraSetPositionStepsRemainingAddress);
+
+        builder.Label(loopLabel);
+
+        builder.LoadA(CameraSetPositionStepsRemainingAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel: streaming budget spent
+        builder.SubtractAImmediate(1);
+        builder.StoreA(CameraSetPositionStepsRemainingAddress);
+
+        builder.LoadA(CameraSetPositionTargetAddress);
         builder.LoadBFromA();
         builder.LoadA(currentLowAddress);
         builder.LoadCFromA();
         builder.LoadAFromB();
         builder.SubtractAFromC();
         builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel
+        builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel: reached target
         builder.CompareImmediate(128);
         builder.JumpAbsolute(0xDA, movePositiveLabel); // JP C,movePositiveLabel
 
         moveNegative();
-        builder.JumpAbsolute(endLabel);
+        builder.JumpAbsolute(loopLabel);
 
         builder.Label(movePositiveLabel);
         movePositive();
+        builder.JumpAbsolute(loopLabel);
+
         builder.Label(endLabel);
     }
 

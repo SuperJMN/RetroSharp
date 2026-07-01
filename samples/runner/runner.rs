@@ -200,11 +200,6 @@ class CameraState {
         Camera.SetPosition(x, y);
     }
 
-    inline void ApplyFramePosition() {
-        ApplyPosition();
-        ApplyPosition();
-    }
-
     inline void FollowPlayer(PlayerState player) {
         let screenY = ScreenY(player);
 
@@ -472,7 +467,7 @@ void Main() {
         player.HandleJumpInput();
         let movementFootWorldY = player.y + Player.FootOffset;
         view.HandleHorizontalInput(player, movementFootWorldY);
-        view.ApplyFramePosition();
+        view.ApplyPosition();
         player.UpdateRunAnimation(view);
 
     }

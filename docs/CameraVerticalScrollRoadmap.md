@@ -130,8 +130,10 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
 - Steps:
   - [x] Author a minimal source that calls `Camera.Init(...)` over a world that
     is **taller than the visible band** and moves the camera with non-zero Y, e.g.
-    `Camera.SetPosition(0, y)` where `y` ramps up/down per frame (respect the
-    ≤1px-per-call camera delta rule from memory: call once per single-pixel step).
+    `Camera.SetPosition(0, y)` where `y` ramps up/down per frame. As of the
+    per-frame walk change, `Camera.SetPosition` walks the camera toward the
+    requested position on its own (up to one tile crossing / ≤8 px per axis per
+    call), so a single call per frame suffices even when `y` moves several pixels.
   - [x] Keep horizontal at 0 first to isolate vertical; add diagonal only after
     VS-2 passes.
   - [x] Classify the sample in `samples/manifest.json` (NES is NOT portable for
@@ -404,7 +406,8 @@ test harness. Effort: a small epic; this is the risky part.
 
 - Both-axis source data exists: column source tables (horizontal) and row source
   tables (`MapRowLabel`, vertical).
-- `Camera.SetPosition` already moves ≤1px per axis and queues per axis; only the
+- `Camera.SetPosition` walks toward the target one pixel per step, bounded to at
+  most one tile crossing (≤8 px) per axis per call, and queues per axis; only the
   destination slot is single. `AxesFor(x, y)` already produces
   `Horizontal | Vertical` when both move.
 - Runner/actor ROMs are unaffected unless they adopt diagonal movement.

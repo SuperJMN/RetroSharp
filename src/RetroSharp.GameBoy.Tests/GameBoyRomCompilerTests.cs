@@ -1955,7 +1955,8 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xFA, 0xE0, 0xC0, 0x4F, 0x78, 0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compare modular camera X delta and keep a no-movement path.");
+        Assert.True(ContainsSequence(rom, [0xEA, 0x2D, 0xC1, 0x3E, 0x08, 0xEA, 0x2E, 0xC1]), "camera_set_position should cache the requested position and seed the per-frame step budget.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE0, 0xC0, 0x4F, 0x78, 0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compare modular camera X delta and keep a no-movement path.");
         Assert.True(ContainsSequence(rom, [0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compute requested-low minus current-low before choosing a step direction.");
         Assert.True(ContainsSequence(rom, [0xFE, 0x80, 0xDA]), "camera_set_position should treat small unsigned deltas as positive movement across byte wrap.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xC6, 0x01, 0xEA, 0xE0, 0xC0]), "camera_set_position should reuse the right-step camera movement path.");
@@ -1981,7 +1982,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xE8, 0xC0, 0xEA, 0xE9, 0xC0, 0xEA, 0xEA, 0xC0]), "camera_init should initialize the 16-bit world Y and fine scroll state.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xFA, 0xE8, 0xC0, 0x4F, 0x78, 0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compare modular camera Y delta and keep a no-movement path.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE8, 0xC0, 0x4F, 0x78, 0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compare modular camera Y delta and keep a no-movement path.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE8, 0xC0, 0xC6, 0x01, 0xEA, 0xE8, 0xC0]), "camera_set_position should reuse a down-step camera movement path.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xEA, 0xC0, 0xC6, 0x01, 0xEA, 0xEA, 0xC0, 0xFE, 0x08]), "camera_set_position should track fine Y tile-boundary crossings.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xE0, 0x43, 0xFA, 0xE8, 0xC0, 0xE0, 0x42]), "camera_apply should write camera X to SCX and camera Y to SCY.");
@@ -4700,8 +4701,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("x -= 1;", cameraBlock);
         Assert.Contains("player.x -= 1;", cameraBlock);
         Assert.Contains("Camera.SetPosition(x, y);", cameraBlock);
-        Assert.DoesNotContain("view.ApplyPosition();", source);
-        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
+        Assert.DoesNotContain("view.ApplyFramePosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyPosition();"));
         Assert.Contains("Camera.SetPosition(x, y);", cameraBlock);
         Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
@@ -4759,8 +4760,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (screenX <= DeadZone.Left)", cameraBlock);
         Assert.Contains("if (screenY > DeadZone.Bottom)", cameraBlock);
         Assert.Contains("Camera.SetPosition(x, y);", cameraBlock);
-        Assert.DoesNotContain("view.ApplyPosition();", source);
-        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
+        Assert.DoesNotContain("view.ApplyFramePosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyPosition();"));
 
         Assert.Contains("inline void PresentFrame(PlayerState player, CameraState view)", source);
         Assert.DoesNotContain("view.CaptureScreen(player);", source);
@@ -6374,8 +6375,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("player.x -= 1;", cameraBlock);
         Assert.Contains("x -= 1;", cameraBlock);
         Assert.DoesNotContain("Camera.SetPosition", motionBlock);
-        Assert.DoesNotContain("view.ApplyPosition();", source);
-        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
+        Assert.DoesNotContain("view.ApplyFramePosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyPosition();"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         AssertRunnerMbc1Rom(rom);
@@ -6516,8 +6517,8 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
         Assert.Contains("Camera.SetPosition(x, y);", source);
-        Assert.DoesNotContain("view.ApplyPosition();", source);
-        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
+        Assert.DoesNotContain("view.ApplyFramePosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyPosition();"));
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);
