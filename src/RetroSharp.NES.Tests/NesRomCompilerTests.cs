@@ -68,6 +68,37 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Explicit_sdk_import_mode_requires_the_portable2d_import_for_sdk_calls()
+    {
+        const string source = """
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => NesRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly));
+
+        Assert.Equal("SDK module 'Video' requires import 'RetroSharp.Portable2D'.", exception.Message);
+    }
+
+    [Fact]
+    public void Explicit_sdk_import_mode_uses_imported_portable2d_sdk()
+    {
+        const string source = """
+                              import RetroSharp.Portable2D;
+
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
+
+        Assert.Equal(40976, rom.Length);
+    }
+
+    [Fact]
     public void Rejects_unknown_imports()
     {
         const string source = """

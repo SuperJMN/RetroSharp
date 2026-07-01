@@ -85,7 +85,9 @@ can start with `import RetroSharp.Portable2D;` and use frame/input calls, Tiled
 `World.Load(...)`, collision flags, camera-relative AABB queries, logical
 palettes, logical sprites, animation, music declarations, and fixed-pool actor
 framework sugar. Game Boy and NES still auto-import that SDK for older samples;
-unknown imports are rejected.
+unknown imports are rejected. Compiler hosts can switch to explicit-only SDK
+imports and provide an `SdkLibraryRegistry` for additional source-level SDK
+libraries.
 
 Portability is capability-based, not magic. A shared source file is portable
 only when each selected target can support the requested scrolling mode, sprite
