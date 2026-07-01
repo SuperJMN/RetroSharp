@@ -231,6 +231,8 @@ internal sealed class NesVideoProgram
 
     public WorldMap2D? WorldMap { get; private set; }
 
+    public WorldTileGrid? WorldTileGrid { get; private set; }
+
     public IReadOnlyList<NesCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, NesCompiledSpriteAsset> SpriteAssets => spriteAssets;
@@ -619,7 +621,8 @@ internal sealed class NesVideoProgram
 
         ApplyWorldAttributes(world);
 
-        WorldMap = new WorldMap2D(world.Width, world.Height, world.WorldTileIds, world.WorldFlags);
+        WorldMap = new WorldMap2D(world.Width, world.Height, world.WorldFlags);
+        WorldTileGrid = new WorldTileGrid(world.Width, world.Height, world.WorldTileIds);
     }
 
     private void ApplyBackgroundTiles(NesTiledWorld world)
@@ -871,7 +874,8 @@ internal sealed class NesVideoProgram
             }
         }
 
-        WorldMap = new WorldMap2D(width, height, tileIds, tileFlags);
+        WorldMap = new WorldMap2D(width, height, tileFlags);
+        WorldTileGrid = new WorldTileGrid(width, height, tileIds);
     }
 
     private (int Index, byte[] Tiles) ParseColumnData(FunctionCall call)

@@ -66,14 +66,15 @@ public sealed class NesWorldLoadTests : IDisposable
         var program = BuildProgram(source);
 
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
         Assert.Equal(2, worldMap.Width);
         Assert.Equal(2, worldMap.Height);
         // The colored source tile (gid 1) generates a NES background tile; blank stays 0.
-        var generatedTileId = worldMap.TileIdAt(0, 0);
+        var generatedTileId = worldTileGrid.TileIdAt(0, 0);
         Assert.NotEqual(0, generatedTileId);
-        Assert.Equal(0, worldMap.TileIdAt(1, 0));
-        Assert.Equal(0, worldMap.TileIdAt(0, 1));
-        Assert.Equal(generatedTileId, worldMap.TileIdAt(1, 1));
+        Assert.Equal(0, worldTileGrid.TileIdAt(1, 0));
+        Assert.Equal(0, worldTileGrid.TileIdAt(0, 1));
+        Assert.Equal(generatedTileId, worldTileGrid.TileIdAt(1, 1));
 
         var background = Assert.Single(program.GeneratedBackgroundTiles);
         Assert.Equal(generatedTileId, background.FirstTile);
@@ -130,8 +131,9 @@ public sealed class NesWorldLoadTests : IDisposable
 
         var program = BuildProgram(source);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
-        Assert.Equal(0, worldMap.TileIdAt(0, 0));
+        Assert.Equal(0, worldTileGrid.TileIdAt(0, 0));
         Assert.Empty(program.GeneratedBackgroundTiles);
         Assert.Equal(0, program.NameTable[0]);
     }

@@ -205,6 +205,8 @@ internal sealed class GameBoyVideoProgram
 
     public WorldMap2D? WorldMap { get; private set; }
 
+    public WorldTileGrid? WorldTileGrid { get; private set; }
+
     public IReadOnlyList<GameBoyCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, GameBoyCompiledSpriteAsset> SpriteAssets => spriteAssets;
@@ -921,7 +923,7 @@ internal sealed class GameBoyVideoProgram
             }
         }
 
-        UseWorldMap(new WorldMap2D(width, height, tileIds, tileFlags), streamY);
+        UseWorldMap(new WorldMap2D(width, height, tileFlags), new WorldTileGrid(width, height, tileIds), streamY);
     }
 
     private void ApplyWorldLoad(FunctionCall call)
@@ -933,20 +935,22 @@ internal sealed class GameBoyVideoProgram
 
         ApplyBackgroundTiles(map);
         PopulateBackgroundStreamRows(map);
-        var worldMap = new WorldMap2D(map.Width, map.Height, map.WorldTileIds, map.WorldFlags);
-        PopulateWorldColumnsFromWorldMap(worldMap);
-        UseWorldMap(worldMap, map.StreamY);
+        var worldMap = new WorldMap2D(map.Width, map.Height, map.WorldFlags);
+        var tileGrid = new WorldTileGrid(map.Width, map.Height, map.WorldTileIds);
+        PopulateWorldColumnsFromWorldMap(worldMap, tileGrid);
+        UseWorldMap(worldMap, tileGrid, map.StreamY);
     }
 
-    private void UseWorldMap(WorldMap2D worldMap, int streamY)
+    private void UseWorldMap(WorldMap2D worldMap, WorldTileGrid tileGrid, int streamY)
     {
         WorldMap = worldMap;
-        GenerateMapColumnsFromWorldMap(worldMap);
+        WorldTileGrid = tileGrid;
+        GenerateMapColumnsFromWorldMap(worldMap, tileGrid);
         GenerateMapFlagColumnsFromWorldMap(worldMap);
-        ApplyWorldMapToTileMap(worldMap, streamY);
+        ApplyWorldMapToTileMap(worldMap, tileGrid, streamY);
     }
 
-    private void PopulateWorldColumnsFromWorldMap(WorldMap2D worldMap)
+    private void PopulateWorldColumnsFromWorldMap(WorldMap2D worldMap, WorldTileGrid tileGrid)
     {
         WorldColumns.Clear();
         WorldColumnHeight = worldMap.Height;
@@ -959,7 +963,7 @@ internal sealed class GameBoyVideoProgram
             var flags = new WorldTileFlags[worldMap.Height];
             for (var y = 0; y < worldMap.Height; y++)
             {
-                tiles[y] = CheckedByteTileId(worldMap.TileIdAt(x, y), x, y);
+                tiles[y] = CheckedByteTileId(tileGrid.TileIdAt(x, y), x, y);
                 flags[y] = worldMap.FlagsAt(x, y);
             }
 
@@ -1055,7 +1059,7 @@ internal sealed class GameBoyVideoProgram
         return (index, flags);
     }
 
-    private void GenerateMapColumnsFromWorldMap(WorldMap2D worldMap)
+    private void GenerateMapColumnsFromWorldMap(WorldMap2D worldMap, WorldTileGrid tileGrid)
     {
         MapColumns.Clear();
         MapColumnHeight = worldMap.Height;
@@ -1064,7 +1068,7 @@ internal sealed class GameBoyVideoProgram
             var tiles = new byte[worldMap.Height];
             for (var y = 0; y < worldMap.Height; y++)
             {
-                tiles[y] = CheckedByteTileId(worldMap.TileIdAt(x, y), x, y);
+                tiles[y] = CheckedByteTileId(tileGrid.TileIdAt(x, y), x, y);
             }
 
             MapColumns[x] = tiles;
@@ -1149,14 +1153,14 @@ internal sealed class GameBoyVideoProgram
         return (value & 1) == 0 ? value : value + 1;
     }
 
-    private void ApplyWorldMapToTileMap(WorldMap2D worldMap, int streamY)
+    private void ApplyWorldMapToTileMap(WorldMap2D worldMap, WorldTileGrid tileGrid, int streamY)
     {
         var rowsToPreload = Math.Min(worldMap.Height, 32 - streamY);
         for (var y = 0; y < rowsToPreload; y++)
         {
             for (var x = 0; x < 32; x++)
             {
-                SetTile(x, streamY + y, worldMap.TileIdAt(x % worldMap.Width, y));
+                SetTile(x, streamY + y, tileGrid.TileIdAt(x % worldMap.Width, y));
             }
         }
     }

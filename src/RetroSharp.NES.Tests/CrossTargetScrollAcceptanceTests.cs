@@ -196,17 +196,18 @@ public sealed class CrossTargetScrollAcceptanceTests
 
         var program = BuildNesProgram(source, sampleDirectory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
         Assert.Equal(50, worldMap.Width);
         Assert.Equal(60, worldMap.Height);
 
-        Assert.Equal(worldMap.TileIdAt(0, 0), NameTableTileAt(program, 0, 0));
-        Assert.Equal(worldMap.TileIdAt(49, 0), NameTableTileAt(program, 49, 0));
-        Assert.Equal(worldMap.TileIdAt(0, 0), NameTableTileAt(program, 50, 0));
-        Assert.Equal(worldMap.TileIdAt(13, 0), NameTableTileAt(program, 63, 0));
-        Assert.Equal(worldMap.TileIdAt(0, 59), NameTableTileAt(program, 0, 59));
-        Assert.Equal(worldMap.TileIdAt(49, 59), NameTableTileAt(program, 49, 59));
-        Assert.Equal(worldMap.TileIdAt(0, 59), NameTableTileAt(program, 50, 59));
-        Assert.Equal(worldMap.TileIdAt(13, 59), NameTableTileAt(program, 63, 59));
+        Assert.Equal(worldTileGrid.TileIdAt(0, 0), NameTableTileAt(program, 0, 0));
+        Assert.Equal(worldTileGrid.TileIdAt(49, 0), NameTableTileAt(program, 49, 0));
+        Assert.Equal(worldTileGrid.TileIdAt(0, 0), NameTableTileAt(program, 50, 0));
+        Assert.Equal(worldTileGrid.TileIdAt(13, 0), NameTableTileAt(program, 63, 0));
+        Assert.Equal(worldTileGrid.TileIdAt(0, 59), NameTableTileAt(program, 0, 59));
+        Assert.Equal(worldTileGrid.TileIdAt(49, 59), NameTableTileAt(program, 49, 59));
+        Assert.Equal(worldTileGrid.TileIdAt(0, 59), NameTableTileAt(program, 50, 59));
+        Assert.Equal(worldTileGrid.TileIdAt(13, 59), NameTableTileAt(program, 63, 59));
 
         AssertHasTileInNametable(program, 0);
         AssertHasTileInNametable(program, 1);

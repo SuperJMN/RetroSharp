@@ -150,7 +150,7 @@ public sealed class GameBoyRunnerAudioTempoTests
         var runnerDirectory = LocateRunnerDirectory();
         var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
         var program = CompileVideoProgram(source, runnerDirectory);
-        var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
         var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory))
         {
             CycleAccurateLy = true,
@@ -160,43 +160,43 @@ public sealed class GameBoyRunnerAudioTempoTests
 
         Run(cpu, ref frame, 130);
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "idle");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "idle");
 
         Run(cpu, ref frame, 18, "right", "b");
         Run(cpu, ref frame, 22, "right", "b", "a");
         Run(cpu, ref frame, 15, "right", "b");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "first platform diagonal scroll");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "first platform diagonal scroll");
 
         Run(cpu, ref frame, 22, "right", "b", "a");
         Run(cpu, ref frame, 15, "right", "b");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "second platform diagonal scroll");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "second platform diagonal scroll");
 
         Run(cpu, ref frame, 22, "right", "b", "a");
         Run(cpu, ref frame, 11, "right", "b");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "third platform diagonal scroll");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "third platform diagonal scroll");
 
         Run(cpu, ref frame, 30, "right", "b", "a");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "upper pyramid diagonal climb");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "upper pyramid diagonal climb");
 
         Run(cpu, ref frame, 20, "right", "b");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "upper pyramid vertical scroll");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "upper pyramid vertical scroll");
 
         Run(cpu, ref frame, 30, "right", "b", "a");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "top pyramid diagonal climb");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "top pyramid diagonal climb");
 
         Run(cpu, ref frame, 20, "right", "b");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "top pyramid vertical scroll");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "top pyramid vertical scroll");
 
         Run(cpu, ref frame, 75, "right", "b");
         AdvanceToAppliedCamera(cpu, ref frame);
-        AssertVisibleTilesMatchWorldMap(cpu, worldMap, "right edge high scroll");
+        AssertVisibleTilesMatchWorldMap(cpu, worldTileGrid, "right edge high scroll");
 
         static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
         {
@@ -216,7 +216,7 @@ public sealed class GameBoyRunnerAudioTempoTests
             frame = Math.Max(frame, (int)((cpu.Cycles + 70223) / 70224));
         }
 
-        static void AssertVisibleTilesMatchWorldMap(GameBoyTestCpu cpu, WorldMap2D worldMap, string label)
+        static void AssertVisibleTilesMatchWorldMap(GameBoyTestCpu cpu, WorldTileGrid worldTileGrid, string label)
         {
             var scx = cpu.IoRegister(0xFF43);
             var scy = cpu.IoRegister(0xFF42);
@@ -228,13 +228,13 @@ public sealed class GameBoyRunnerAudioTempoTests
 
             for (var screenRow = 0; screenRow < 18; screenRow++)
             {
-                var sourceRow = (cameraY + screenRow * 8) / 8 % worldMap.Height;
+                var sourceRow = (cameraY + screenRow * 8) / 8 % worldTileGrid.Height;
                 var bufferRow = (firstBufferRow + screenRow) % 32;
                 for (var screenColumn = 0; screenColumn < 20; screenColumn++)
                 {
-                    var sourceColumn = (cameraX + screenColumn * 8) / 8 % worldMap.Width;
+                    var sourceColumn = (cameraX + screenColumn * 8) / 8 % worldTileGrid.Width;
                     var bufferColumn = (firstBufferColumn + screenColumn) % 32;
-                    var expected = (byte)worldMap.TileIdAt(sourceColumn, sourceRow);
+                    var expected = (byte)worldTileGrid.TileIdAt(sourceColumn, sourceRow);
                     var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
                     if (actual != expected)
                     {

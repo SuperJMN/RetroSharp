@@ -5268,10 +5268,11 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(source);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
         Assert.Equal(16, worldMap.Width);
         Assert.Equal(4, worldMap.Height);
-        Assert.Equal(3, worldMap.TileIdAt(7, 2));
+        Assert.Equal(3, worldTileGrid.TileIdAt(7, 2));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(7, 2));
         Assert.Equal(4, program.TileMap[13 * 32]);
         Assert.Equal(5, program.TileMap[14 * 32]);
@@ -5319,9 +5320,10 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(source);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
         Assert.Equal(4, program.MapColumnHeight);
-        Assert.Equal(3, worldMap.TileIdAt(7, 2));
+        Assert.Equal(3, worldTileGrid.TileIdAt(7, 2));
         Assert.Equal(3, program.MapColumns[7][2]);
         Assert.Equal(0, program.MapColumns[13][2]);
         Assert.Equal(5, program.TileMap[14 * 32]);
@@ -5427,12 +5429,13 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(source, directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
         Assert.Equal(3, worldMap.Width);
         Assert.Equal(2, worldMap.Height);
-        Assert.Equal(6, worldMap.TileIdAt(0, 0));
-        Assert.Equal(7, worldMap.TileIdAt(2, 0));
-        Assert.Equal(8, worldMap.TileIdAt(0, 1));
+        Assert.Equal(6, worldTileGrid.TileIdAt(0, 0));
+        Assert.Equal(7, worldTileGrid.TileIdAt(2, 0));
+        Assert.Equal(8, worldTileGrid.TileIdAt(0, 1));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 0));
         Assert.Equal(WorldTileFlags.Platform, worldMap.FlagsAt(2, 0));
         Assert.Equal(WorldTileFlags.Hazard, worldMap.FlagsAt(0, 1));
@@ -5544,14 +5547,15 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(source, directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
-        Assert.Equal(8, worldMap.TileIdAt(0, 0));
-        Assert.Equal(8, worldMap.TileIdAt(1, 0));
-        Assert.Equal(8, worldMap.TileIdAt(2, 0));
+        Assert.Equal(8, worldTileGrid.TileIdAt(0, 0));
+        Assert.Equal(8, worldTileGrid.TileIdAt(1, 0));
+        Assert.Equal(8, worldTileGrid.TileIdAt(2, 0));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(0, 0));
-        Assert.Equal(7, worldMap.TileIdAt(0, 1));
+        Assert.Equal(7, worldTileGrid.TileIdAt(0, 1));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 1));
-        Assert.Equal(0, worldMap.TileIdAt(1, 1));
+        Assert.Equal(0, worldTileGrid.TileIdAt(1, 1));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(1, 1));
         Assert.Equal(6, program.TileMap[1 * 32]);
         Assert.Equal(7, program.TileMap[1 * 32 + 1]);
@@ -5802,15 +5806,16 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(source, directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
         Assert.Equal(6, worldMap.Width);
         Assert.Equal(4, worldMap.Height);
-        Assert.Equal(6, worldMap.TileIdAt(0, 0));
-        Assert.Equal(6, worldMap.TileIdAt(1, 0));
-        Assert.Equal(7, worldMap.TileIdAt(2, 0));
-        Assert.Equal(7, worldMap.TileIdAt(3, 0));
-        Assert.Equal(6, worldMap.TileIdAt(0, 1));
-        Assert.Equal(6, worldMap.TileIdAt(1, 1));
+        Assert.Equal(6, worldTileGrid.TileIdAt(0, 0));
+        Assert.Equal(6, worldTileGrid.TileIdAt(1, 0));
+        Assert.Equal(7, worldTileGrid.TileIdAt(2, 0));
+        Assert.Equal(7, worldTileGrid.TileIdAt(3, 0));
+        Assert.Equal(6, worldTileGrid.TileIdAt(0, 1));
+        Assert.Equal(6, worldTileGrid.TileIdAt(1, 1));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 0));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(1, 0));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 1));
@@ -5895,8 +5900,9 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(source, directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
 
-        Assert.Equal(0, worldMap.TileIdAt(0, 0));
+        Assert.Equal(0, worldTileGrid.TileIdAt(0, 0));
         Assert.Equal(0, program.TileMap[0]);
     }
 

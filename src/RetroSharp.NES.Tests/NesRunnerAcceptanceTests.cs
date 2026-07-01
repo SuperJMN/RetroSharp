@@ -53,13 +53,14 @@ public sealed class NesRunnerAcceptanceTests
         var source = File.ReadAllText(sourcePath);
         var program = CompileVideoProgram(source, runnerDirectory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
         var mismatches = new List<string>();
 
         for (var y = 0; y < Math.Min(worldMap.Height, 60); y++)
         {
             for (var x = 0; x < 64; x++)
             {
-                var expected = (byte)worldMap.TileIdAt(x % worldMap.Width, y);
+                var expected = (byte)worldTileGrid.TileIdAt(x % worldMap.Width, y);
                 var actual = NameTableTileAt(program, x, y);
                 if (actual != expected)
                 {

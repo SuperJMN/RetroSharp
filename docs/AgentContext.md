@@ -268,9 +268,10 @@ Pipeline shape (two phases, after #105 partial extraction):
   48x96 tile world. It keeps player collision keyed from the projected screen X and forces vertical
   plus horizontal camera movement on both Game Boy and NES; do not silently degrade unsupported
   camera axes in the collector.
-- Still target-coupled (open in #105): `WorldMap2D` still stores already-lowered target tile ids,
-  and per-pixel layer flattening stays per target because the blank-cell decision depends on the
-  generated pattern.
+- Portable/target split (#105 collision resource done): `WorldMap2D` now stores only dimensions and
+  per-tile `WorldTileFlags` (portable collision); already-lowered target background tile numbers live
+  in a separate `WorldTileGrid` owned by each target. Per-pixel layer flattening stays per target
+  because the blank-cell decision depends on the generated pattern.
 
 Important current behavior:
 

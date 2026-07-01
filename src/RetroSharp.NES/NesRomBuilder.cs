@@ -86,7 +86,7 @@ internal static class NesRomBuilder
         builder.Emit(program.Palette);
         builder.Label("nametable");
         builder.Emit(program.NameTable.Take(nameTableUploadByteCount).ToArray());
-        EmitWorldMapRows(builder, program.WorldMap);
+        EmitWorldMapRows(builder, program.WorldMap, program.WorldTileGrid);
         EmitWorldMapRowPointerTables(builder, program.WorldMap);
         EmitPpuRowAddressTables(builder, program.WorldMap);
         EmitWorldMapFlagRows(builder, program.WorldMap);
@@ -168,9 +168,9 @@ internal static class NesRomBuilder
         }
     }
 
-    private static void EmitWorldMapRows(PrgBuilder builder, WorldMap2D? worldMap)
+    private static void EmitWorldMapRows(PrgBuilder builder, WorldMap2D? worldMap, WorldTileGrid? tileGrid)
     {
-        if (worldMap is null)
+        if (worldMap is null || tileGrid is null)
         {
             return;
         }
@@ -180,7 +180,7 @@ internal static class NesRomBuilder
             builder.Label(WorldMapRowLabel(row));
             for (var column = 0; column < worldMap.Width; column++)
             {
-                var tileId = worldMap.TileIdAt(column, row);
+                var tileId = tileGrid.TileIdAt(column, row);
                 if (tileId is < 0 or > 255)
                 {
                     throw new InvalidOperationException("NES world map tile ids must fit one byte.");
