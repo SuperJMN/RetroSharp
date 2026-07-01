@@ -162,7 +162,7 @@ public sealed class CrossTargetScrollAcceptanceTests
         var sampleDirectory = Path.GetDirectoryName(samplePath);
         var source = File.ReadAllText(samplePath);
 
-        Assert.Contains("world.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
+        Assert.Contains("World.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
         Assert.Contains("static class DeadZone", source, StringComparison.Ordinal);
         Assert.Contains("static class CameraBounds", source, StringComparison.Ordinal);
 

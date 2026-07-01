@@ -13,8 +13,8 @@ The #106 portability-lowering slice is complete: SDK operation collection lives 
 
 The active SDK v1 stabilization backlog is now narrower than the original #106 epic:
 
-- #120 landed as `camera.AabbHitTop(...)`, a reusable tile-hit collision fact for landing resolution that stays below "platformer physics engine" scope.
-- #121 landed as logical `palette.Background(...)` and `palette.Sprite(...)` declarations so SDK-shaped samples do not depend on raw Game Boy palette writes.
+- #120 landed as `Camera.AabbHitTop(...)`, a reusable tile-hit collision fact for landing resolution that stays below "platformer physics engine" scope.
+- #121 landed as logical `Palette.Background(...)` and `Palette.Sprite(...)` declarations so SDK-shaped samples do not depend on raw Game Boy palette writes.
 - #122 adds a runner-shaped cross-target validation sample, or a precise NES capability diagnostic when the runner-shaped slice is not portable yet.
 
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 (unify language/SDK dot-call and receiver-lowering boundaries) is now resolved and closed: SDK module knowledge moved out of the parser into `RetroSharp.Core.Sdk.SdkModuleRegistry` (the parser's `SdkDotCallLowerer` only delegates to it), and `RetroSharp.Parser.SdkDotCallResolver` is the single canonical dot-call decision (a receiver in scope shadows a same-named SDK module; otherwise a known SDK module resolves as an SDK call) consumed by both constant folding and semantic analysis. The only residual is narrow and documented in `SdkDotCallResolver`: constant folding has no variable scope, so it detects receivers by method signature; unifying the pathological collision case (a receiver method named like an SDK method on a bare module) would need full scope in the folder and should be tracked separately if it ever needs to be addressed. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
@@ -98,7 +98,7 @@ Intrinsic work belongs here:
 | `Input.HoldTicks(...)` | Portable SDK | Accepted current variable-height jump seam. |
 | `button_pressed(...)` | Transitional/intrinsic-like | Direct-read compatibility path. Prefer tick-based API. |
 | `sprite_asset(...)` | Portable SDK candidate | Needs target-neutral asset contract and palette slots. |
-| `sprite_draw(...)` | Transitional compatibility alias | Game Boy and NES `sprite.Draw(...)` now lower through compile-time-operand target intrinsics; the snake_case builtin remains accepted. |
+| `sprite_draw(...)` | Transitional compatibility alias | Game Boy and NES `Sprite.Draw(...)` now lower through compile-time-operand target intrinsics; the snake_case builtin remains accepted. |
 | `Sprite.Width(...)` | Portable SDK | Add `sprite_height(...)`. |
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
@@ -187,7 +187,7 @@ Portable 2D calls should be represented as semantic operations before target low
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` is the first observable operation-creation boundary. It parses the current Game Boy source subset and returns the portable operations detected before `GameBoyRomBuilder` lowers anything to ROM bytes. The boundary recognizes frame/input, camera, HUD tile, world flag reads, logical sprite draw, and map-column streaming operations; raw or transitional calls such as `sprite_set(...)`, `scroll_set(...)`, direction-specific camera helpers, and raw tilemap writes remain on the direct target path until later roadmap tasks move them deliberately.
 
-The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only. The same collector also exposes `CollectFrameBudgets(...)`, a control-flow-aware budget pass that treats branches as alternatives and frame waits/input polls as frame boundaries. Targets supply resolved metasprite geometry for `sprite.Draw(...)`, allowing total hardware sprite checks and per-scanline checks when Y is constant; runtime Y positions remain outside static scanline proof.
+The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only. The same collector also exposes `CollectFrameBudgets(...)`, a control-flow-aware budget pass that treats branches as alternatives and frame waits/input polls as frame boundaries. Targets supply resolved metasprite geometry for `Sprite.Draw(...)`, allowing total hardware sprite checks and per-scanline checks when Y is constant; runtime Y positions remain outside static scanline proof.
 
 Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries runtime or constant screen X, runtime world Y, constant or `Sprite.Width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
@@ -197,24 +197,24 @@ Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input
 `audio_update`, `camera_set_position`, and `camera_apply` (Game Boy additionally
 catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` injects a small
 target-selected SDK library before parsing target compilations. That library defines
-`video`, `input`, `audio`, and `camera` classes whose `video.WaitVBlank()`,
-`input.Poll()`, `audio.Update()`, `camera.SetPosition(x, y)`, `camera.Apply()`, and
-catalog-gated helpers such as Game Boy `camera.AabbTiles(...)` /
-`camera.AabbHitTop(...)` call `[target(...)] [intrinsic(...)] extern` declarations, and those helpers
+`video`, `input`, `audio`, and `camera` classes whose `Video.WaitVBlank()`,
+`Input.Poll()`, `Audio.Update()`, `Camera.SetPosition(x, y)`, `Camera.Apply()`, and
+catalog-gated helpers such as Game Boy `Camera.AabbTiles(...)` /
+`Camera.AabbHitTop(...)` call `[target(...)] [intrinsic(...)] extern` declarations, and those helpers
 emit the same bytes as the previous SDK operation path. The `audio_update` intrinsic
 is collected by the separate `SdkAudioOperationCollector` (Game Boy lowers it from the
 audio operation stream, NES emits it inline), so the shared `Sdk2DOperation` collectors
 consume but ignore it. The `camera_set_position`/`camera_apply` intrinsics route through
 the existing `SetCameraPosition`/`ApplyCamera` collection and emission, so their scroll-axis
 inference, capability checks, and frame-budget accounting are unchanged; injecting
-`class camera` does not shadow methods that are not class members (`camera.Init` still lowers
+`class camera` does not shadow methods that are not class members (`Camera.Init` still lowers
 through the SDK module). `TargetProgramSelector` filters
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
 
 The library can also carry **capability-gated, value-returning** members. Game Boy
-catalogs a `world_tile_flags_at` intrinsic and exposes `world.TileFlagsAt(x, y)` — a
+catalogs a `world_tile_flags_at` intrinsic and exposes `World.TileFlagsAt(x, y)` — a
 two-argument query that returns the tile flags as a value, lowering byte-identically
 to the existing `Sdk2DOperation.ReadWorldTileFlags` path. NES does not declare the
 `WorldTileFlags` collision query, so `SdkLibrarySource` does not inject the `world`
@@ -231,7 +231,7 @@ minimal proof is a Game Boy `world_tile_flags_for_world` intrinsic whose `WorldI
 byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting runtime locals
 in that slot.
 
-SAL-8.3 applies that mechanism to Game Boy `sprite.Draw`, and SAL-8.4 applies the same pattern
+SAL-8.3 applies that mechanism to Game Boy `Sprite.Draw`, and SAL-8.4 applies the same pattern
 to NES: the injected SDK library helper calls a target-specific `[intrinsic("sprite_draw")]`
 extern, each target descriptor marks the asset id as `AssetRef` and the palette slot as
 `ConstPaletteSlot`, and the collector turns the resolved call back into
@@ -239,36 +239,36 @@ extern, each target descriptor marks the asset id as `AssetRef` and the palette 
 frame-budget validation, and emission byte-identical to the legacy `sprite_draw` builtin on both
 targets.
 
-SAL-8.5 applies the descriptor-role form to Game Boy `camera.AabbTiles` and
-`camera.AabbHitTop`. The injected camera helpers pass a hidden `"default"` `WorldId`, keep
+SAL-8.5 applies the descriptor-role form to Game Boy `Camera.AabbTiles` and
+`Camera.AabbHitTop`. The injected camera helpers pass a hidden `"default"` `WorldId`, keep
 `screenX`, `worldY`, `width`, and `height` in the substituted call expression, and mark the
 `flags` slot as `EnumFlags`. The collector resolves the extern call back into the existing
 `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop`, preserving `SdkAabbExtent` parsing
 (including `Sprite.Width(...)`), capability checks, byte identity, and the `255` no-hit
 contract.
 
-SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and
-`camera.AabbHitTop`, closing the last Game Boy/NES asymmetry for camera-relative AABB
+SAL-8.6 applies the same descriptor-role form to NES `Camera.AabbTiles` and
+`Camera.AabbHitTop`, closing the last Game Boy/NES asymmetry for camera-relative AABB
 collision. `NesTarget.Intrinsics` catalogs `camera_aabb_tiles` and `camera_aabb_hit_top`
 with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the same
-`camera.AabbTiles` / `camera.AabbHitTop` helpers for NES. The NES value-call path resolves the
+`Camera.AabbTiles` / `Camera.AabbHitTop` helpers for NES. The NES value-call path resolves the
 extern intrinsic and re-derives the same operation it already emitted from the legacy
 `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility
 alias, so `Golden_collision_aabb_emission_is_pinned_nes` stays byte-identical.
 
 SAL-8.9 extends the same descriptor-role form to screen-space camera collision on both targets:
 Game Boy and NES catalog `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the
-same hidden `WorldId` and `EnumFlags` slots, `SdkLibrarySource` injects `camera.ScreenAabbTiles`
-/ `camera.ScreenAabbHitTop` helpers, and the collector/emitter re-derive the same
+same hidden `WorldId` and `EnumFlags` slots, `SdkLibrarySource` injects `Camera.ScreenAabbTiles`
+/ `Camera.ScreenAabbHitTop` helpers, and the collector/emitter re-derive the same
 `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy
 `camera_screen_aabb_*(...)` builtins (kept as aliases). All four camera-relative collision
 queries now reach their operations through compile-time-operand intrinsics on both targets;
-the actor framework's generated `camera.ScreenAabb*` calls stay byte-identical.
+the actor framework's generated `Camera.ScreenAabb*` calls stay byte-identical.
 
 The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
 #139) refined it with evidence rather than assumption. Wrapping the heavy calls in
-ordinary parameterized `inline` helpers is **byte-identical** for `camera.SetPosition()`,
-`camera.Apply()`, and `sprite.Draw()` (regression tests
+ordinary parameterized `inline` helpers is **byte-identical** for `Camera.SetPosition()`,
+`Camera.Apply()`, and `Sprite.Draw()` (regression tests
 `Inline_helper_wrapping_camera_set_position_is_byte_identical` and
 `Inline_helper_wrapping_sprite_draw_and_camera_apply_is_byte_identical`). So the
 inline/operand mechanics are not the blocker: the collected operation stream is identical
@@ -276,28 +276,28 @@ whether a call arrives directly or through an inlined helper, which means the cr
 streaming/frame-budget state is preserved.
 
 The remaining friction is at the **extern-intrinsic boundary**, not the language:
-- `camera.SetPosition()` / `camera.Apply()` carry only `i16`/void operands, so they were a
+- `Camera.SetPosition()` / `Camera.Apply()` carry only `i16`/void operands, so they were a
   clean **GO** and are now migrated (SAL-7): both targets catalog `camera_set_position`
   (arity 2) and `camera_apply` (arity 0), `SdkLibrarySource` injects `class camera` with
   `SetPosition`/`Apply` inline helpers over `[target][intrinsic]` externs, and the
   collector/emitter route them to the existing `SetCameraPosition`/`ApplyCamera` emission
   (Game Boy consumes from the operation stream; NES re-derives from the call, preserving its
   `ScrollAxes.Horizontal` apply). Byte-identical on both targets. Injecting `class camera`
-  does not shadow methods that are not class members; `camera.Init` still lowers through the
+  does not shadow methods that are not class members; `Camera.Init` still lowers through the
   SDK module.
-- `sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
+- `Sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
   with runtime ones (X/Y/frame/flipX). Game Boy and NES now use the compile-time-operand
-  descriptor form, so the public `sprite.Draw(...)` helper can live in the injected SDK library
+  descriptor form, so the public `Sprite.Draw(...)` helper can live in the injected SDK library
   while still collecting to the same capability-checked `Sdk2DOperation`. The legacy
   `sprite_draw(...)` spelling remains a compatibility alias during the transition.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) stays compiler-emitted. Camera-relative
-  collision still collects to SDK operations, but Game Boy and NES public `camera.AabbTiles`,
-  `camera.AabbHitTop`, `camera.ScreenAabbTiles`, and `camera.ScreenAabbHitTop` now reach those
+  collision still collects to SDK operations, but Game Boy and NES public `Camera.AabbTiles`,
+  `Camera.AabbHitTop`, `Camera.ScreenAabbTiles`, and `Camera.ScreenAabbHitTop` now reach those
   operations through compile-time-operand intrinsics.
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, BGM control
-(`music.Play` / `music.Stop`), a capability-gated value query (`world.TileFlagsAt`), the
-camera position/apply pair, and `sprite.Draw` on Game Boy and NES, plus all four Game Boy and NES
+(`Music.Play` / `Music.Stop`), a capability-gated value query (`World.TileFlagsAt`), the
+camera position/apply pair, and `Sprite.Draw` on Game Boy and NES, plus all four Game Boy and NES
 camera-relative AABB collision queries (world-Y and screen-space forms).
 Streaming internals and non-migrated target-specific collision forms remain compiler-recognized
 until their compile-time-operand intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
@@ -466,7 +466,7 @@ Acceptance criteria:
 
 Purpose: add vertical scroll as a first-class camera capability.
 
-Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. Game Boy diagonal movement is exercised by `samples/nes-free-scroll/freescroll.rs` for source-authored columns, `samples/tiled-diagonal/diag.rs` for a 40x40 Tiled `world.Load(...)` map, and `samples/tiled-free-scroll/free-scroll.rs` for the cross-target Tiled diagonal path; the target declares staggered camera stream draining, queues pending column and row edges independently, and commits one visible background-map edge per VBlank inside the 21-tile write budget. The row and column streamers cover the visible 20x18 screen plus fine-scroll exposure, while sharing emitted loops so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path: it emits the iNES four-screen bit, uploads the initial four nametables at startup, tracks X/Y source camera state, writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled, accepts tall Tiled `world.Load(...)` maps on the four-screen vertical path, accepts diagonal Tiled maps that fit the four-screen 64x60 surface, streams horizontal columns for worlds wider than the buffer, and streams vertical rows plus zero-palette attribute refreshes for source-authored or imported worlds taller than the buffer. Mapper-backed scale, banking, and IRQ HUD remain in NF-10; see `docs/NesFreeScrollRoadmap.md`.
+Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. Game Boy diagonal movement is exercised by `samples/nes-free-scroll/freescroll.rs` for source-authored columns, `samples/tiled-diagonal/diag.rs` for a 40x40 Tiled `World.Load(...)` map, and `samples/tiled-free-scroll/free-scroll.rs` for the cross-target Tiled diagonal path; the target declares staggered camera stream draining, queues pending column and row edges independently, and commits one visible background-map edge per VBlank inside the 21-tile write budget. The row and column streamers cover the visible 20x18 screen plus fine-scroll exposure, while sharing emitted loops so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path: it emits the iNES four-screen bit, uploads the initial four nametables at startup, tracks X/Y source camera state, writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled, accepts tall Tiled `World.Load(...)` maps on the four-screen vertical path, accepts diagonal Tiled maps that fit the four-screen 64x60 surface, streams horizontal columns for worlds wider than the buffer, and streams vertical rows plus zero-palette attribute refreshes for source-authored or imported worlds taller than the buffer. Mapper-backed scale, banking, and IRQ HUD remain in NF-10; see `docs/NesFreeScrollRoadmap.md`.
 
 Tasks:
 
@@ -1175,7 +1175,7 @@ Design rules:
 - Every accepted form must lower before cartridge target emission to an existing call, inline helper substitution, expression tree, direct branch, direct local storage, or constant.
 - Dot syntax has two distinct meanings. `module.Call(...)` is a compile-time SDK/module call when the left side names a known module. `value.Method(...)` is a receiver method only when the left side is a resolved value with a known struct type.
 - Receiver methods are static source sugar. They do not introduce object identity, virtual dispatch, method tables, `this` objects, boxing, or hidden heap state.
-- Static configuration grouping should stay compile-time only. Current samples may use enum members as readable zero-cost groups such as `World.Width`, but the intended post-v1 surface is a dedicated `module` or `const group` form that lowers exactly like top-level constants.
+- Static configuration grouping should stay compile-time only. Current samples may use enum members as readable zero-cost groups such as `Level.Width`, but the intended post-v1 surface is a dedicated `module` or `const group` form that lowers exactly like top-level constants.
 - Lightweight object-oriented style is acceptable only for real mutable state represented by plain structs plus receiver methods, such as player or enemy state. It must remain opt-in source sugar over direct local storage and inline helper substitution.
 - `let` is a local immutable binding. It may fold to a constant when the initializer is compile-time evaluable, otherwise it uses the same local storage shape as an equivalent variable and rejects reassignment.
 - `inline` describes the already-supported parameter-substitution lowering. A helper marked `inline` must fail clearly if the current target cannot inline it.
@@ -1229,7 +1229,7 @@ Tasks:
 - Layer: language-to-SDK call surface.
 - Candidate files: parser grammar/syntax, call resolver, SDK operation collector, Game Boy/NES tests, docs.
 - Steps:
-  - [x] Parse SDK namespaced dot-call syntax such as `video.Init()`, `video.WaitVBlank()`, `input.Poll()`, `camera.SetPosition(x, y)`, and `world.Map(...)`.
+  - [x] Parse SDK namespaced dot-call syntax such as `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and `World.Map(...)`.
   - [x] Treat the left side as a compile-time SDK namespace/module when it names a known SDK module, not as a runtime object instance.
   - [x] Resolve calls statically to existing SDK functions such as `video_init()`, `video_wait_vblank()`, `input_poll()`, and `camera_set_position(...)`.
   - [x] Preserve target capability checks before lowering.
@@ -1380,11 +1380,11 @@ enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
 enemy.Def(Bat, sprite: bat, behavior: Flyer, speed: 2, hp: 1);
 enemy.Def(Turret, sprite: turret, behavior: Shooter, cooldown: 60);
 
-world.Load("level1.tmj");
+World.Load("level1.tmj");
 
 loop {
-    video.WaitVBlank();
-    input.Poll();
+    Video.WaitVBlank();
+    Input.Poll();
 
     enemies.Update();
     enemies.Draw();
@@ -1402,7 +1402,7 @@ Design rules:
 - Runtime actor state is explicit and byte-sized where possible: kind, active flag, x/y, vx/vy, state, timer, facing, animation tick, and health.
 - World/Tiled integration should support object-layer spawn data and optional camera-window activation so large levels do not require all enemies to be active at once.
 - Collision stays on the SDK collision query layer. The actor framework can provide reusable platformer policies, but it must not hide a full physics engine behind one opaque call.
-- Capability checks must account for hardware sprite count, scanline pressure, frame-budget-sensitive streaming, actor pool size, and target-specific unsupported behavior. The current actor draw path uses target-resolved metasprite geometry for pool-level frame and scanline diagnostics, then still runs through the shared frame-budget pass for the lowered `sprite.Draw(...)` operations.
+- Capability checks must account for hardware sprite count, scanline pressure, frame-budget-sensitive streaming, actor pool size, and target-specific unsupported behavior. The current actor draw path uses target-resolved metasprite geometry for pool-level frame and scanline diagnostics, then still runs through the shared frame-budget pass for the lowered `Sprite.Draw(...)` operations.
 - The same high-level actor definitions should either compile for Game Boy and NES or fail with target capability diagnostics that name the unsupported behavior.
 
 Tasks:
@@ -1479,7 +1479,7 @@ This gives the project a durable architecture before adding vertical scrolling, 
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It now uses a 2-axis dead-zone camera and variable projected screen-position collision over a tall 24x48 Tiled map that expands to a 48x96 tile world. It also declares per-target VGM/VGZ background music through the portable audio calls, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Larger diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` and the Tiled `world.Load(...)` path by `samples/tiled-free-scroll/free-scroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It now uses a 2-axis dead-zone camera and variable projected screen-position collision over a tall 24x48 Tiled map that expands to a 48x96 tile world. It also declares per-target VGM/VGZ background music through the portable audio calls, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Larger diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` and the Tiled `World.Load(...)` path by `samples/tiled-free-scroll/free-scroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
 
 The final cross-target sample should prove:
 

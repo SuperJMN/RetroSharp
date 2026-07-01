@@ -82,9 +82,9 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   the next off-screen visible-edge column while keeping the four nametables
   distinct.
 - Source-authored worlds taller than 60 rows queue the exposed vertical row at
-  tile-boundary time. `video.WaitVBlank()` drains one pending camera stream phase
+  tile-boundary time. `Video.WaitVBlank()` drains one pending camera stream phase
   at VBlank entry, before sprite DMA can consume the window; a later
-  `camera.Apply()` in the same frame is skipped unless the source changes camera
+  `Camera.Apply()` in the same frame is skipped unless the source changes camera
   state after the wait. Rows stream through a row-pointer table as four 8-tile
   phases plus a separate attribute phase. The attribute phase refreshes the
   worst-case 9 touched bytes with palette slot 0. Row tile writes are emitted as
@@ -101,7 +101,7 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
 - `samples/nes-free-scroll/freescroll.rs` remains the source-authored NES four-screen
   behavioral proof and now also builds for Game Boy, where the same diagonal source
   exercises the GB staggered one-edge-per-VBlank streaming policy. `samples/tiled-free-scroll/free-scroll.rs`
-  is the matching Tiled `world.Load(...)` diagonal proof inside the 64x60 four-screen surface.
+  is the matching Tiled `World.Load(...)` diagonal proof inside the 64x60 four-screen surface.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).
 
@@ -235,12 +235,12 @@ runtime VRAM streaming.
 
 Status: implemented with a deferred, staggered policy. A vertical boundary
 crossing queues the 32-tile row that is about to enter the visible window, not
-the full 64-tile four-screen row. `camera.Apply()` drains one pending row phase
+the full 64-tile four-screen row. `Camera.Apply()` drains one pending row phase
 during the caller's VBlank: four phases write 8 contiguous `$2007` tile bytes
 each, and a fifth phase refreshes the 9-byte worst-case attribute span. Every
 phase restores PPUCTRL/PPUSCROLL before rendering resumes. If a frame also
 crosses a horizontal boundary, the queued column and row are drained across
-separate `camera.Apply()` calls so no single VBlank combines both edges.
+separate `Camera.Apply()` calls so no single VBlank combines both edges.
 
 - Layer: NES target.
 - Files: `src/RetroSharp.NES/NesRomBuilder.cs` (stream helpers),
@@ -261,7 +261,7 @@ separate `camera.Apply()` calls so no single VBlank combines both edges.
 
 Status: implemented with the same deferred staggered policy as NF-4. Preloaded
 64x60 movement still only restores scroll registers. Larger source-authored
-worlds stream at most one column or one row phase per `camera.Apply()` VBlank; a
+worlds stream at most one column or one row phase per `Camera.Apply()` VBlank; a
 diagonal tile crossing queues both edges and drains them over successive frames
 before each frame's scroll restore.
 
@@ -392,7 +392,7 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
 | Free scroll attempted on 2 nametables → corner artifacts. | Require four-screen VRAM; reject otherwise. |
 | ADNES cannot emulate four-screen → cannot validate. | NF-0 extends ADNES first; optional Mesen2 cross-check. |
 | 240 coarse-Y wrap corrupts attribute fetch. | Map world Y → (nametable Y bit, 0..239); never write 240..255 to `$2005` Y. |
-| VBlank budget overrun (column + row + attributes + OAM DMA). | Camera movement queues streams and `camera.Apply()` drains at most one edge or 8-tile row phase per VBlank; row attributes are a separate phase, and runtime rows only reset `$2006` at nametable boundaries. Larger mapper-backed worlds remain NF-10. |
+| VBlank budget overrun (column + row + attributes + OAM DMA). | Camera movement queues streams and `Camera.Apply()` drains at most one edge or 8-tile row phase per VBlank; row attributes are a separate phase, and runtime rows only reset `$2006` at nametable boundaries. Larger mapper-backed worlds remain NF-10. |
 | Real-hardware four-screen needs cart SRAM. | Emulator-first demo; document the hardware caveat; mapper path in NF-10. |
 | Tracked NES ROMs change unexpectedly. | Gate four-screen behind explicit free-scroll request; keep horizontal path byte-identical. |
 

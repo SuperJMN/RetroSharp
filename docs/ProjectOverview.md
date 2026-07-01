@@ -50,12 +50,12 @@ same internally.
 
 The SDK currently covers:
 
-- Frame and input calls such as `video.WaitVBlank()` and `input.Poll()`.
+- Frame and input calls such as `Video.WaitVBlank()` and `Input.Poll()`.
 - Tick-based button helpers: down, just pressed, just released, and hold ticks.
 - Tiled world loading, tile flags, collision facts, and camera-relative AABB
   queries.
-- Position-based camera movement through `camera.SetPosition(x, y)` and
-  `camera.Apply()`.
+- Position-based camera movement through `Camera.SetPosition(x, y)` and
+  `Camera.Apply()`.
 - Logical sprites, frame animation, flip, logical palette slots, and
   target-specific PNG variants.
 - Music declarations and per-frame audio update, with Game Boy `.uge` /
@@ -78,7 +78,7 @@ direction.
 RetroSharp has two active cartridge targets:
 
 - Game Boy: a direct ROM compiler that emits ROM-only or MBC1 cartridges,
-  supports the runner sample, Tiled `world.Load(...)`, scrolling, sprites,
+  supports the runner sample, Tiled `World.Load(...)`, scrolling, sprites,
   logical palettes, input, and Game Boy music playback.
 - NES: a direct iNES ROM compiler that shares the portable SDK operation path
   where possible, supports the runner source as target acceptance, and proves

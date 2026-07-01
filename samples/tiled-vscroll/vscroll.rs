@@ -1,4 +1,4 @@
-static class World {
+static class Level {
     const i16 Width = 40;
     const i16 StreamY = 0;
     const i16 Height = 60;
@@ -10,19 +10,19 @@ static class Scroll {
 }
 
 void main() {
-    video.Init();
+    Video.Init();
 
-    world.Load("vscroll.tmj");
-    camera.Init(World.Width, World.StreamY, World.Height);
+    World.Load("vscroll.tmj");
+    Camera.Init(Level.Width, Level.StreamY, Level.Height);
 
     u8 cameraY = 0;
     u8 direction = 1;
     u8 holdTicks = 0;
 
     loop {
-        video.WaitVBlank();
-        camera.SetPosition(0, cameraY);
-        camera.Apply();
+        Video.WaitVBlank();
+        Camera.SetPosition(0, cameraY);
+        Camera.Apply();
 
         if (direction == 1) {
             if (cameraY < Scroll.MaxY) {

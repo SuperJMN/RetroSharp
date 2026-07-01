@@ -92,7 +92,7 @@ Key constants (`GameBoyRomBuilder.cs`): `BankSize=16384`, `FixedBankProgramStart
   their data bank into VRAM, and runtime map/background/flag row reads go through fixed-bank
   helpers that select the data bank, read the byte, restore the program bank, and return.
 - **Banked audio entry points:** when a program tail bank and banked music are both present,
-  `music.Play(...)` and `audio.Update()` call fixed-bank helpers. Those helpers can switch to the
+  `Music.Play(...)` and `Audio.Update()` call fixed-bank helpers. Those helpers can switch to the
   selected music bank, read or initialize music state, restore the program bank, and return, so
   RetroSharp source never needs manual bank switching even when the call site lives in
   `$4000-$7FFF`.
@@ -121,7 +121,7 @@ Key constants (`GameBoyRomBuilder.cs`): `BankSize=16384`, `FixedBankProgramStart
   data-bank metadata when the layout needs it.
 - If new read-only data categories are added, route any runtime reads through the same fixed-bank
   helper pattern instead of switching banks inline from code that may live in `$4000-$7FFF`.
-- `music.Play(...)` and `audio.Update()` now use fixed-bank helpers in the tail-program/banked-music
+- `Music.Play(...)` and `Audio.Update()` now use fixed-bank helpers in the tail-program/banked-music
   layout. If future audio operations need to select ROM banks, route them through the same pattern.
 
 ### Validation invariants

@@ -11,7 +11,7 @@ module.
 The format exists to preserve the audible output of an existing Game Boy music driver without
 embedding that driver in the generated ROM. It records timed writes to the DMG APU registers and
 Wave RAM, then the Game Boy compiler repacks those writes into a compact, deduplicated
-frame-driven stream consumed by `audio.Update()`.
+frame-driven stream consumed by `Audio.Update()`.
 
 ## What changed in v2
 
@@ -157,13 +157,13 @@ Direct asset:
 
 ```csharp
 void main() {
-    video.Init();
-    music.Asset(stage_theme, "music/stage.gbapu.json");
-    audio.Init();
-    music.Play(stage_theme);
+    Video.Init();
+    Music.Asset(stage_theme, "music/stage.gbapu.json");
+    Audio.Init();
+    Music.Play(stage_theme);
     loop {
-        video.WaitVBlank();
-        audio.Update();
+        Video.WaitVBlank();
+        Audio.Update();
     }
 }
 ```
@@ -182,7 +182,7 @@ Portable envelope:
 }
 ```
 
-`music.Asset(...)` can point directly to `.gbapu.json` or to a `retrosharp.music.v1` envelope whose `platforms.gb.format` is `gbapu`.
+`Music.Asset(...)` can point directly to `.gbapu.json` or to a `retrosharp.music.v1` envelope whose `platforms.gb.format` is `gbapu`.
 
 ## Compiler Packing
 
@@ -243,15 +243,15 @@ Current packing rules:
 
 ## Runtime Playback
 
-`audio.Init()` enables the APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, clears the BGM state, and clears the row cache shared with `.uge` playback.
+`Audio.Init()` enables the APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, clears the BGM state, and clears the row cache shared with `.uge` playback.
 
-`music.Play(theme)` records the music data pointer and sets the active music kind:
+`Music.Play(theme)` records the music data pointer and sets the active music kind:
 
 - `.uge` assets use the row-stream path.
 - `.gbapu` / `.gbapu.json` assets use the APU trace path and reset the order pointer to the first
   order entry.
 
-`audio.Update()` should be called once per frame after `video.WaitVBlank()`. For APU traces it:
+`Audio.Update()` should be called once per frame after `Video.WaitVBlank()`. For APU traces it:
 
 1. Checks whether the current wait counter is zero.
 2. If waiting, decrements the counter and exits.
@@ -263,7 +263,7 @@ Current packing rules:
 7. Wave block commands write 16 bytes to `FF30..FF3F`.
 8. The order entry `waitAfter` value becomes the next wait counter.
 9. If `waitAfter` is zero, the runtime immediately processes the next order entry in the same
-   `audio.Update()` call.
+   `Audio.Update()` call.
 
 The runtime is therefore frame-driven. The source trace keeps cycle precision, but today that precision is used only to choose frame groups.
 
@@ -293,7 +293,7 @@ v2 (marked **Resolved**); the remaining ones are inherent to a post-driver regis
    frame until a timer-interrupt player exists. The `replayHz` metadata is recorded for that work.
 
 6. Runtime bursts can become expensive.
-   Zero-wait order entries execute in one `audio.Update()` call. That avoids accidental one-frame gaps, but a dense trace can create a long write burst in VBlank-adjacent code.
+   Zero-wait order entries execute in one `Audio.Update()` call. That avoids accidental one-frame gaps, but a dense trace can create a long write burst in VBlank-adjacent code.
 
 7. The optimizer is conservative but not formally proven.
    It preserves trigger writes and `NR52`, and removes repeated non-trigger writes with the same value. That is reasonable for normal APU state writes, but this format has no explicit side-effect annotations beyond hardcoded register rules.

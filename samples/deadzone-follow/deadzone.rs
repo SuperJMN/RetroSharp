@@ -1,4 +1,4 @@
-static class World {
+static class Level {
     const i16 Width = 64;
     const i16 StreamY = 0;
     const i16 Height = 60;
@@ -26,11 +26,11 @@ static class PlayerPath {
 }
 
 void main() {
-    video.Init();
+    Video.Init();
 
-    world.Load("deadzone.tmj");
-    camera.Init(World.Width, World.StreamY, World.Height);
-    sprite.Asset(marker, "marker.json");
+    World.Load("deadzone.tmj");
+    Camera.Init(Level.Width, Level.StreamY, Level.Height);
+    Sprite.Asset(marker, "marker.json");
 
     u8 playerX = PlayerPath.StartX;
     u8 playerY = PlayerPath.StartY;
@@ -40,7 +40,7 @@ void main() {
     u8 stepY = 1;
 
     loop {
-        video.WaitVBlank();
+        Video.WaitVBlank();
 
         let screenX = playerX - cameraX;
         let screenY = playerY - cameraY;
@@ -65,12 +65,12 @@ void main() {
             }
         }
 
-        camera.SetPosition(cameraX, cameraY);
-        camera.Apply();
+        Camera.SetPosition(cameraX, cameraY);
+        Camera.Apply();
 
         let drawX = playerX - cameraX;
         let drawY = playerY - cameraY;
-        sprite.Draw(marker, drawX, drawY, 0, false, 0);
+        Sprite.Draw(marker, drawX, drawY, 0, false, 0);
 
         if (stepX == 1) {
             if (playerX < PlayerPath.MaxX) {

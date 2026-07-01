@@ -111,7 +111,7 @@ public sealed class GameBoyMusicTests
 
         var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
 
-        Assert.Contains("class music", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("class Music", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"music_play\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"music_stop\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Equal(

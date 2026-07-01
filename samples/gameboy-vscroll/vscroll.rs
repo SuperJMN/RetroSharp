@@ -1,4 +1,4 @@
-static class World {
+static class Level {
     const i16 Width = 2;
     const i16 StreamY = 0;
     const i16 SourceHeight = 24;
@@ -10,27 +10,27 @@ static class Scroll {
 }
 
 void main() {
-    video.Init();
+    Video.Init();
 
-    world.Column(0,
+    World.Column(0,
         1, 2, 3, 4, 5, 1, 2, 3,
         4, 5, 1, 2, 3, 4, 5, 1,
         2, 3, 4, 5, 1, 2, 3, 4);
-    world.Column(1,
+    World.Column(1,
         5, 4, 3, 2, 1, 5, 4, 3,
         2, 1, 5, 4, 3, 2, 1, 5,
         4, 3, 2, 1, 5, 4, 3, 2);
 
-    world.Map(World.Width, World.StreamY, World.SourceHeight);
-    camera.Init(World.Width, World.StreamY, World.VisibleHeight);
+    World.Map(Level.Width, Level.StreamY, Level.SourceHeight);
+    Camera.Init(Level.Width, Level.StreamY, Level.VisibleHeight);
 
     u8 cameraY = 0;
     u8 direction = 1;
 
     loop {
-        video.WaitVBlank();
-        camera.SetPosition(0, cameraY);
-        camera.Apply();
+        Video.WaitVBlank();
+        Camera.SetPosition(0, cameraY);
+        Camera.Apply();
 
         if (direction == 1) {
             if (cameraY < Scroll.MaxY) {

@@ -1,21 +1,21 @@
 void main() {
-    video.Init();
-    music.Asset(terminate, "music/terminate.gbapu");
-    music.Asset(blue_ocean, "music/blue_ocean_remix.uge");
-    audio.Init();
-    music.Play(terminate);
+    Video.Init();
+    Music.Asset(terminate, "music/terminate.gbapu");
+    Music.Asset(blue_ocean, "music/blue_ocean_remix.uge");
+    Audio.Init();
+    Music.Play(terminate);
 
     bool onBlueOcean = false;
     loop {
-        video.WaitVBlank();
-        input.Poll();
-        audio.Update();
+        Video.WaitVBlank();
+        Input.Poll();
+        Audio.Update();
         if (Input.WasPressed(Button.Start)) {
             if (!onBlueOcean) {
-                music.Play(blue_ocean);
+                Music.Play(blue_ocean);
                 onBlueOcean = true;
             } else {
-                music.Play(terminate);
+                Music.Play(terminate);
                 onBlueOcean = false;
             }
         }

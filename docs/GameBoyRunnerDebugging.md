@@ -87,7 +87,7 @@ The diagnostic samples under `samples/runner/diagnostics/` isolate the runner in
 | Step | Source | Use it to isolate |
 | --- | --- | --- |
 | 00 | `00-static-background.rs` | Generated tiles, palette, LCD startup, and static background setup. |
-| 01 | `01-world-platforms.rs` | World rows, platforms, holes, hazards, and `world.Map(...)` data. |
+| 01 | `01-world-platforms.rs` | World rows, platforms, holes, hazards, and `World.Map(...)` data. |
 | 02a | `02-flat-ground-camera.rs` | Player sprite, input, animation, jump, flat-ground collision, and cyclic camera movement. |
 | 02b | `02-player-camera.rs` | Player collision with wrapped foot probes, platforms, holes, hazards, jump, animation, and camera. |
 | 03 | `03-enemy-sprites.rs` | Enemy sprite drawing and animation in isolation. This is a wrap-loop diagnostic, not enemy AI. |
@@ -124,13 +124,13 @@ Use this table to avoid fixing the wrong layer:
 | Blank or white screen | LCD state, startup code, tilemap setup, emulator/debug bridge. |
 | Background shifted or missing under terrain | `GameBoyTiledMapImporter`, `GameBoyRomCompiler` initial tilemap fill, `retrosharpWorldY`, `retrosharpStreamY`. |
 | Background decorations above the band ghost/repeat every ~32 tiles while scrolling | Background-row streaming in `GameBoyRomBuilder` camera right/left steps and `PopulateBackgroundStreamRows`. |
-| Background blocks tear/glitch only while crossing a tile boundary (especially on heavy frames such as jumping or landing on a platform) | Camera tile streaming writing VRAM during active display, starting too late in the current VBlank, or writing the wrong visible edge for the current `SCX`/`SCY`; confirm `camera.Apply()` runs after a fresh VBlank edge and compare the 20x18 visible tile projection against the imported world map. Read `0xFF44` directly for `LY`; some debug bridges report a stale `LY` in compact PPU state. |
-| Player sprite pieces flicker, appear at fixed screen positions, or remain as non-scrolling "stickers" | Treat these as OAM/sprite artifacts first, not background tiles. Check that `sprite.Draw(...)` writes happen immediately after `video.WaitVBlank()` and before expensive `audio.Update()` bursts or camera streaming can push direct OAM writes past VBlank on real hardware. |
-| Collision does not match visible tiles | World flags, tileset `objectgroup`, explicit collision layer, `camera.AabbTiles(...)` vs `collision_aabb_tiles(...)`, actor camera/world coordinates. |
+| Background blocks tear/glitch only while crossing a tile boundary (especially on heavy frames such as jumping or landing on a platform) | Camera tile streaming writing VRAM during active display, starting too late in the current VBlank, or writing the wrong visible edge for the current `SCX`/`SCY`; confirm `Camera.Apply()` runs after a fresh VBlank edge and compare the 20x18 visible tile projection against the imported world map. Read `0xFF44` directly for `LY`; some debug bridges report a stale `LY` in compact PPU state. |
+| Player sprite pieces flicker, appear at fixed screen positions, or remain as non-scrolling "stickers" | Treat these as OAM/sprite artifacts first, not background tiles. Check that `Sprite.Draw(...)` writes happen immediately after `Video.WaitVBlank()` and before expensive `Audio.Update()` bursts or camera streaming can push direct OAM writes past VBlank on real hardware. |
+| Collision does not match visible tiles | World flags, tileset `objectgroup`, explicit collision layer, `Camera.AabbTiles(...)` vs `collision_aabb_tiles(...)`, actor camera/world coordinates. |
 | Player cannot jump in one zone | Frame order, reset before input, collision state clearing, `Input.WasPressed(...)`. |
 | Player walks into a pipe and snaps onto its top | Horizontal movement is missing or bypassing a lower-body wall probe; block camera motion before vertical landing resolution can reinterpret the side overlap as floor. |
-| Player passes up through a solid block / lands on top from below | Missing ceiling response and/or a landing search window that reaches above the feet. Add a head probe (`camera.AabbTiles(...)` above the head while rising) that bounces the actor down, and keep the landing search window feet-relative so descent cannot magnetise the actor up onto a block it just hit. |
-| Player snaps to platform while rising | Landing should be gated by descent, for example `velocityY < World.SignedVelocityWrap` and non-zero velocity. |
+| Player passes up through a solid block / lands on top from below | Missing ceiling response and/or a landing search window that reaches above the feet. Add a head probe (`Camera.AabbTiles(...)` above the head while rising) that bounces the actor down, and keep the landing search window feet-relative so descent cannot magnetise the actor up onto a block it just hit. |
+| Player snaps to platform while rising | Landing should be gated by descent, for example `velocityY < Level.SignedVelocityWrap` and non-zero velocity. |
 | Player teleports from top to ground | Byte-backed Y wrap; clamp before collision/reset checks. |
 | D-pad triggers A/B behavior on hardware | `JOYP` row settling in backend input lowering. |
 | Mirrored sprite shifts sideways | Logical sprite width vs padded hardware width in flip math. |

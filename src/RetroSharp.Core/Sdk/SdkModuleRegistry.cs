@@ -10,8 +10,11 @@ public static class SdkModuleRegistry
 {
     private static readonly SdkModuleDescriptor[] ModuleDescriptors =
     [
-        // Transitional lowercase facade receivers. Kept as aliases during the
-        // PascalCase migration (#157); do not remove while samples/docs still use them.
+        // Transitional lowercase facade receivers, kept as byte-identical aliases.
+        // Samples and docs now use the canonical PascalCase facades (#157); these
+        // lowercase modules remain for backward compatibility and for internal
+        // lowering paths (the injected lowercase `world` helper class and the actor
+        // framework's generated calls). Do not remove while any of those still use them.
         LibraryModule("video", "video"),
         LibraryModule("input", "input"),
         LibraryModule("camera", "camera"),

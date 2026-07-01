@@ -31,8 +31,8 @@ silently lowering to an expensive fallback.
 - Do **not** add genre-specific `Sdk2DOperation` cases for actors/behaviors.
   Behaviors are static dispatch (direct kind/behavior branches that call
   helpers), authored as a source/library layer over the
-  existing SDK calls (`sprite.Draw`, `camera.AabbTiles`, `camera.AabbHitTop`,
-  `animation.Frame`). Prefer intrinsic + library over a compiler operation.
+  existing SDK calls (`Sprite.Draw`, `Camera.AabbTiles`, `Camera.AabbHitTop`,
+  `Animation.Frame`). Prefer intrinsic + library over a compiler operation.
 - Pools have a compile-time maximum capacity and explicit fixed-layout storage.
 - Reject unbounded pools, dynamic allocation, function-pointer-like behavior
   values, and uncapped spawn sources.
@@ -86,7 +86,7 @@ silently lowering to an expensive fallback.
 - **AF-2.2/AF-2.3 basic behavior update/draw**. On Game Boy and NES,
   `enemies.Update()` and `enemies.Draw()` expand to grouped loops over
   `countof(enemies)`, skip inactive slots, dispatch by direct `kind` checks,
-  and draw through the existing `sprite.Draw` SDK call. `Update()` now covers
+  and draw through the existing `Sprite.Draw` SDK call. `Update()` now covers
   byte-sized static policies for `Walker` (`x += speed`), `Flyer` (`y +=
   speed`), `Patrol` (move by `facing`, tick `timer`, flip at `cooldown`),
   `Shooter` (tick `timer`, pulse `state` when `cooldown` is reached),
@@ -188,7 +188,7 @@ Candidate file names are guidance; inspect the real code paths first.
     inline logic; keep behavior state in actor fields.
   - [x] Generalize behavior dispatch for the broader behavior set without
     vtables, heap, delegates, closures, or function-pointer tables.
-  - [x] Reuse `camera.AabbTiles`/`camera.AabbHitTop` and animation/sprite SDK.
+  - [x] Reuse `Camera.AabbTiles`/`Camera.AabbHitTop` and animation/sprite SDK.
   - [x] Make Walker speed data-driven per enemy type.
   - [x] Make behavior speed, cooldown, and contact-damage constants data-driven
     per enemy type.
@@ -201,8 +201,8 @@ Candidate file names are guidance; inspect the real code paths first.
     against a hand-authored fixed-array implementation with no central source
     `switch`, virtual dispatch, heap allocation, or function-pointer tables.
   - [x] Tests prove actor animation and tile helpers lower through existing
-    `animation.Frame`, `sprite.Draw`, `camera.AabbTiles`, and
-    `camera.AabbHitTop` SDK calls on Game Boy, with cross-target acceptance for
+    `Animation.Frame`, `Sprite.Draw`, `Camera.AabbTiles`, and
+    `Camera.AabbHitTop` SDK calls on Game Boy, with cross-target acceptance for
     NES.
 - Depends on: AF-2.1.
 
@@ -307,8 +307,8 @@ Candidate file names are guidance; inspect the real code paths first.
     `enemies.TouchPlayer(...)`.
   - [x] Document the hand-authored low-level equivalent: `Actor pool[N]`,
     byte-sized fields including `xHi`, active-slot loops, direct `kind`
-    dispatch, camera-relative projection/cull, `camera.AabbTiles`,
-    `camera.AabbHitTop`, `sprite.Draw`, and `used[]` plus free-slot runtime
+    dispatch, camera-relative projection/cull, `Camera.AabbTiles`,
+    `Camera.AabbHitTop`, `Sprite.Draw`, and `used[]` plus free-slot runtime
     activation.
   - [x] Classify the new sample in `samples/manifest.json`.
   - [x] Flip Iteration 14 status in `ArchitectureRoadmap.md` to
@@ -326,7 +326,7 @@ This phase removes them, in priority order. The same guardrails apply: no heap,
 vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 
 #### AF-5.1: World-space actor positioning and camera-relative draw (priority 1)
-- Problem: actor `x`/`y` are screen-space bytes drawn with a raw `sprite.Draw(x, y)`.
+- Problem: actor `x`/`y` are screen-space bytes drawn with a raw `Sprite.Draw(x, y)`.
   When the camera scrolls, enemies stay glued to the screen instead of to world
   tiles. The acceptance sample hides this with a tiny non-scrolling world.
 - Layer: framework (+ language if world X needs more than one byte).

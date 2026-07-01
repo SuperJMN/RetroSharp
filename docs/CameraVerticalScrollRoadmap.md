@@ -21,7 +21,7 @@ current supported subset per target.
   a column and row independently and drains one visible background-map edge per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
-  coarse-Y wrap for maps that fit 64x60 tiles. Tall Tiled `world.Load(...)`
+  coarse-Y wrap for maps that fit 64x60 tiles. Tall Tiled `World.Load(...)`
   maps now enter that four-screen path when a vertical camera axis is used, and
   `samples/tiled-free-scroll/free-scroll.rs` proves diagonal Tiled maps inside
   the 64x60 four-screen surface. Runtime row, diagonal, and attribute streaming for larger worlds remains
@@ -54,14 +54,14 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
 - `samples/gameboy-vscroll/vscroll.rs` moves Y by one pixel per frame over a
   24-row source-authored map, scrolls down and back up, and builds as a Game Boy ROM.
   `samples/tiled-tall/tall.rs` proves the same vertical row streamer over a 16x40
-  Tiled `world.Load(...)` map whose full height is kept in the imported world rows.
+  Tiled `World.Load(...)` map whose full height is kept in the imported world rows.
   `samples/tiled-vscroll/vscroll.rs` builds for Game Boy and NES from a 40x60 Tiled
   map; NES uses it to prove four-screen vertical scroll over all four nametables.
   `samples/tiled-diagonal/diag.rs` moves X and Y together by one pixel per frame
-  over a 40x40 Tiled `world.Load(...)` map, proving that the imported rows and
+  over a 40x40 Tiled `World.Load(...)` map, proving that the imported rows and
   columns feed the staggered diagonal streamer.
   `samples/tiled-free-scroll/free-scroll.rs` moves X and Y together by one pixel
-  per frame over a 50x60 Tiled `world.Load(...)` map and builds for both Game Boy
+  per frame over a 50x60 Tiled `World.Load(...)` map and builds for both Game Boy
   and NES.
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
@@ -81,7 +81,7 @@ NES — bounded four-screen free scroll:
   `src/RetroSharp.NES/NesTarget.cs`.
 - `EmitSetCameraPosition` tracks Y for four-screen programs and rejects maps that
   cannot fit the preloaded surface.
-- `camera.Apply()` writes both nametable bits and both `$2005` scroll bytes while
+- `Camera.Apply()` writes both nametable bits and both `$2005` scroll bytes while
   avoiding invalid NES Y scroll values in the 240..255 range.
 - Runtime row/attribute streaming for larger NES worlds is implemented with the
   same one-edge-per-VBlank policy documented in `docs/NesFreeScrollRoadmap.md`.
@@ -128,16 +128,16 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
 - Files: new `samples/gameboy-vscroll/vscroll.rs` (target-intrinsic or
   target-acceptance), `samples/manifest.json`, `samples/README.md`.
 - Steps:
-  - [x] Author a minimal source that calls `camera.Init(...)` over a world that
+  - [x] Author a minimal source that calls `Camera.Init(...)` over a world that
     is **taller than the visible band** and moves the camera with non-zero Y, e.g.
-    `camera.SetPosition(0, y)` where `y` ramps up/down per frame (respect the
+    `Camera.SetPosition(0, y)` where `y` ramps up/down per frame (respect the
     ≤1px-per-call camera delta rule from memory: call once per single-pixel step).
   - [x] Keep horizontal at 0 first to isolate vertical; add diagonal only after
     VS-2 passes.
   - [x] Classify the sample in `samples/manifest.json` (NES is NOT portable for
     this sample — mark GB-only until Phase D).
 - How: model it on `samples/cross-target-camera/camera.rs` but drive Y instead of
-  X. Use `world.Load(...)` with a tall map or `world.Map(width, streamY, height)`
+  X. Use `World.Load(...)` with a tall map or `World.Map(width, streamY, height)`
   that leaves rows above/below the visible window (see VS-3).
 - Verify:
   - [x] `dotnet run ... --target gb` builds the ROM.
@@ -185,7 +185,7 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
     band is authored for horizontal streaming; vertical scroll needs real rows
     above and/or below the initial window.
   - [x] If the importer flattens to a fixed-height band, extend it to keep the
-    vertical extent the camera can reach, or provide a `world.Map(...)` path with
+    vertical extent the camera can reach, or provide a `World.Map(...)` path with
     explicit taller height for the sample.
   - [x] Keep `retrosharpWorldY` / `retrosharpStreamY` alignment intact (see
     `docs/AgentContext.md` Tiled section) so background and world layers stay
@@ -235,7 +235,7 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
   `docs/ArchitectureRoadmap.md` (Iteration 5 status + API classification table),
   `docs/AgentContext.md`.
 - Steps:
-  - [x] Document `camera.SetPosition(x, y)` with non-zero `y` as supported on GB,
+  - [x] Document `Camera.SetPosition(x, y)` with non-zero `y` as supported on GB,
     including the per-pixel call rule and the one-crossing-per-frame policy.
   - [x] Correct any remaining "horizontal-only" wording for GB.
   - [x] Update `samples/manifest.json` / `samples/README.md` for the new sample.
@@ -273,7 +273,7 @@ context for why NES Y needed a separate substrate decision.
   (MMC1/MMC3). Decide: (a) vertical-only mode that switches the iNES mirroring
   flag, or (b) move the NES target to a mapper that supports mirroring control.
 - **Scroll registers.** Vertical scroll uses `$2000` bit 1 (base nametable Y) and
-  the **second** `$2005` write (fine/coarse Y). `camera.Apply()` currently writes
+  the **second** `$2005` write (fine/coarse Y). `Camera.Apply()` currently writes
   `$2000` horizontal bit + horizontal `$2005` + zero Y; extend it to compute and
   write the Y nametable bit and Y scroll.
 - **The 240 wrap quirk.** Coarse Y wraps at 240 (30 rows), not 256. Writing
@@ -361,7 +361,7 @@ context for why NES Y needed a separate substrate decision.
 
 ## Phase E — Diagonal scroll (Strategy A implemented)
 
-Status: **implemented with staggered edge commits.** A `camera.SetPosition(x, y)`
+Status: **implemented with staggered edge commits.** A `Camera.SetPosition(x, y)`
 that moves both axes remains a diagonal SDK request; the collector does not
 degrade it to horizontal or vertical. Game Boy accepts it because
 `GameBoyTarget.Capabilities` declares staggered camera stream draining and each
@@ -404,7 +404,7 @@ test harness. Effort: a small epic; this is the risky part.
 
 - Both-axis source data exists: column source tables (horizontal) and row source
   tables (`MapRowLabel`, vertical).
-- `camera.SetPosition` already moves ≤1px per axis and queues per axis; only the
+- `Camera.SetPosition` already moves ≤1px per axis and queues per axis; only the
   destination slot is single. `AxesFor(x, y)` already produces
   `Horizontal | Vertical` when both move.
 - Runner/actor ROMs are unaffected unless they adopt diagonal movement.

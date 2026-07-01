@@ -67,7 +67,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate tall Tiled sample directory.");
         var source = File.ReadAllText(samplePath);
-        Assert.Contains("camera.Init(World.Width, World.StreamY, World.Height);", source, StringComparison.Ordinal);
+        Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.Height);", source, StringComparison.Ordinal);
 
         var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
         var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
@@ -195,8 +195,8 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate diagonal Tiled sample directory.");
         var source = File.ReadAllText(samplePath);
-        Assert.Contains("world.Load(\"diag.tmj\");", source, StringComparison.Ordinal);
-        Assert.Contains("camera.Init(World.Width, World.StreamY, World.Height);", source, StringComparison.Ordinal);
+        Assert.Contains("World.Load(\"diag.tmj\");", source, StringComparison.Ordinal);
+        Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.Height);", source, StringComparison.Ordinal);
 
         var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
         var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
@@ -283,7 +283,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             ?? throw new InvalidOperationException("Could not locate dead-zone follow sample directory.");
         var source = File.ReadAllText(samplePath);
 
-        Assert.Contains("world.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
+        Assert.Contains("World.Load(\"deadzone.tmj\");", source, StringComparison.Ordinal);
 
         var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);
         var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(

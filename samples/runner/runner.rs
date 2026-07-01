@@ -1,6 +1,6 @@
 type Pixel = i16;
 
-static class World {
+static class Level {
     const i16 Width = 48;
     const i16 StreamY = 0;
     const i16 Height = 96;
@@ -97,7 +97,7 @@ class PlayerState {
             grounded = false;
             y += velocityY;
         }
-        if (velocityY >= World.SignedVelocityWrap) {
+        if (velocityY >= Level.SignedVelocityWrap) {
             if (y > Player.TopWrapY) {
                 y = 0;
                 velocityY = 0;
@@ -133,7 +133,7 @@ class PlayerState {
             false => 4,
             _ => moving switch {
                 false => 0,
-                _ => animation.Frame(run, animTick)
+                _ => Animation.Frame(run, animTick)
             }
         };
     }
@@ -203,7 +203,7 @@ class CameraState {
     }
 
     inline void ApplyPosition() {
-        camera.SetPosition(x, y);
+        Camera.SetPosition(x, y);
     }
 
     inline void FollowPlayer(PlayerState player) {
@@ -298,7 +298,7 @@ class CameraState {
     inline void MoveRightOnePixel(PlayerState player, Pixel wallProbeY) {
         CaptureScreen(player);
         rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;
-        if (camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+        if (Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = true;
             player.x += 1;
             if (screenX >= DeadZone.Right) {
@@ -312,7 +312,7 @@ class CameraState {
     inline void MoveLeftOnePixel(PlayerState player, Pixel wallProbeY) {
         CaptureScreen(player);
         leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;
-        if (camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
+        if (Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = true;
             player.x -= 1;
             if (screenX <= DeadZone.Left) {
@@ -373,8 +373,8 @@ class FrameState {
     }
 
     inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY) {
-        if (player.velocityY < World.SignedVelocityWrap && player.velocityY != 0) {
-            footTile = camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
+        if (player.velocityY < Level.SignedVelocityWrap && player.velocityY != 0) {
+            footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
             if (footTile != CollisionProbe.NoTileHit) {
                 player.Land(footTile - Player.FootOffset);
             }
@@ -390,9 +390,9 @@ class FrameState {
     }
 
     inline void ResolveCeilingHit(PlayerState player, Pixel screenX, Pixel footWorldY) {
-        if (player.velocityY >= World.SignedVelocityWrap) {
+        if (player.velocityY >= Level.SignedVelocityWrap) {
             let headProbeY = footWorldY - CollisionProbe.CeilingProbeTopOffset;
-            if (camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0) {
+            if (Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0) {
                 player.BounceDown();
             }
         }
@@ -409,30 +409,30 @@ class FrameState {
 
 inline void PresentFrame(PlayerState player, CameraState view) {
     view.CaptureScreen(player);
-    video.WaitVBlank();
-    sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);
+    Video.WaitVBlank();
+    Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);
 }
 
 void setup_video() {
-    video.Init();
-    palette.Background(0, 0, 1, 2, 3);
-    palette.Sprite(0, 0, 0, 1, 3);
-    sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
-    animation.Clip(run, 1, 48, 48, 48);
-    sprite.Asset(goomba, "assets/goomba.png", 16, 16);
-    animation.Clip(goomba_walk, 0, 16, 16);
+    Video.Init();
+    Palette.Background(0, 0, 1, 2, 3);
+    Palette.Sprite(0, 0, 0, 1, 3);
+    Sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
+    Animation.Clip(run, 1, 48, 48, 48);
+    Sprite.Asset(goomba, "assets/goomba.png", 16, 16);
+    Animation.Clip(goomba_walk, 0, 16, 16);
     return;
 }
 
 void setup_audio() {
-    music.Asset(runner_theme, "music/runner.vgz");
-    audio.Init();
-    music.Play(runner_theme);
+    Music.Asset(runner_theme, "music/runner.vgz");
+    Audio.Init();
+    Music.Play(runner_theme);
     return;
 }
 
 void load_world() {
-    world.Load("maps/runner.tmj");
+    World.Load("maps/runner.tmj");
     return;
 }
 
@@ -440,7 +440,7 @@ void main() {
     setup_video();
     setup_audio();
     load_world();
-    camera.Init(World.Width, World.StreamY, World.StreamHeight);
+    Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
     PlayerState player;
     CameraState view;
     FrameState frame;
@@ -453,10 +453,10 @@ void main() {
 
     loop {
         PresentFrame(player, view);
-        camera.Apply();
+        Camera.Apply();
         goombas.Draw();
-        audio.Update();
-        input.Poll();
+        Audio.Update();
+        Input.Poll();
 
         actor.SpawnLayer(goombas, "maps/runner.tmj", "actors");
         goombaTick ^= 1;

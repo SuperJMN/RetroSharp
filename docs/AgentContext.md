@@ -30,7 +30,7 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
-  drains one pending camera stream phase at VBlank entry in `video.WaitVBlank()`
+  drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
   before sprite DMA, restores PPUCTRL/PPUSCROLL before rendering resumes, and splits
   a runtime row into four 8-tile `$2007` phases (plus a separate attribute phase) so
   no single VBlank overruns budget. Regression tests live in `NesRomCompilerTests`
@@ -71,16 +71,16 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - Higher-level syntax is welcome only when it remains zero-cost for 8-bit targets.
 - Restricted `class` syntax is source organization over fixed-layout values and static/receiver lowering; it is not managed-object semantics.
 - Future receiver-method ergonomics should stay in the plain-struct world, for example `actor.Move(dx, dy)` lowering to a statically resolved helper.
-- SDK dot calls such as `video.Init()`, `input.Poll()`, and `camera.SetPosition(x, y)` are static grouping syntax, not object instances.
+- SDK dot calls such as `Video.Init()`, `Input.Poll()`, and `Camera.SetPosition(x, y)` are static grouping syntax, not object instances.
 - Dot-call precedence is single-sourced in `RetroSharp.Parser.SdkDotCallResolver`: a receiver in scope shadows a same-named SDK module (lexical scoping), otherwise a known SDK module resolves as an SDK call. Constant folding and semantic analysis both consume it; the folder detects receivers by method signature because it has no variable scope.
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
 - The actor framework is source-to-source sugar in `RetroSharp.Sdk.Frontend`.
   `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called
   `enemy.*` helpers, and pool helper calls lower before target emission to fixed
   `Actor` arrays, constants, generated spawn helpers, `used[]`, direct `kind`
-  branches, and existing SDK calls such as `sprite.Draw`, `camera.AabbTiles`,
-  `camera.AabbHitTop`, `camera.ScreenAabbTiles`, `camera.ScreenAabbHitTop`,
-  and `animation.Frame`. Do not add actor-specific target intrinsics for this
+  branches, and existing SDK calls such as `Sprite.Draw`, `Camera.AabbTiles`,
+  `Camera.AabbHitTop`, `Camera.ScreenAabbTiles`, `Camera.ScreenAabbHitTop`,
+  and `Animation.Frame`. Do not add actor-specific target intrinsics for this
   slice.
 
 ## Portability Lowering Roadmap (epic #106)
@@ -154,23 +154,23 @@ Progress (2026-06-14):
 - SAL-8 compile-time operand intrinsics landed after the initial prototype: target intrinsic
   descriptors can mark call slots as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or
   `WorldId` while leaving the language, parser AST, ABI, and classic IR target-neutral.
-  `sprite.Draw(...)` now comes from the injected SDK library over role-bearing `sprite_draw`
+  `Sprite.Draw(...)` now comes from the injected SDK library over role-bearing `sprite_draw`
   intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`
-  as the legacy `sprite_draw(...)` alias. Game Boy and NES `camera.AabbTiles(...)` and
-  `camera.AabbHitTop(...)` also come from injected helpers over target intrinsics with a hidden
+  as the legacy `sprite_draw(...)` alias. Game Boy and NES `Camera.AabbTiles(...)` and
+  `Camera.AabbHitTop(...)` also come from injected helpers over target intrinsics with a hidden
   `"default"` world id and compile-time flag mask, still collecting to the same camera AABB
   SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract
   (NES migrated in SAL-8.6; the legacy `camera_aabb_tiles(...)`/`camera_aabb_hit_top(...)`
-  builtins remain compatibility aliases). SAL-8.9 then migrated `camera.ScreenAabbTiles(...)` /
-  `camera.ScreenAabbHitTop(...)` to the same intrinsic path on both targets (catalogued as
+  builtins remain compatibility aliases). SAL-8.9 then migrated `Camera.ScreenAabbTiles(...)` /
+  `Camera.ScreenAabbHitTop(...)` to the same intrinsic path on both targets (catalogued as
   `camera_screen_aabb_*` with hidden `WorldId`/`EnumFlags`), so all four camera-relative
-  collision queries share the intrinsic path; the actor framework's generated `camera.ScreenAabb*`
+  collision queries share the intrinsic path; the actor framework's generated `Camera.ScreenAabb*`
   calls stay byte-identical (`actors.gb`/`actors.nes` ROMs unchanged).
-  SAL-8.7 migrated Game Boy and NES `music.Play(...)` / `music.Stop()` to injected `class music`
+  SAL-8.7 migrated Game Boy and NES `Music.Play(...)` / `Music.Stop()` to injected `class music`
   helpers over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
   collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
-  `music_stop(...)` builtins remain aliases and `music.Asset(...)` stays on the SDK-module path.
-  SAL-8.8 completed the `audio` class by migrating `audio.Init()` to a void-leaf `audio_init`
+  `music_stop(...)` builtins remain aliases and `Music.Asset(...)` stays on the SDK-module path.
+  SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
@@ -179,10 +179,10 @@ Progress (2026-06-14):
 - Active SDK v1 stabilization backlog after #106: none known after the collision, cross-target
   diagnostic, and logical palette slices landed.
 - Camera-relative AABB decision implemented after #106 and extended to NES runner parity:
-  `camera.AabbTiles(...)` is a capability-gated SDK query for camera-relative AABBs; its
+  `Camera.AabbTiles(...)` is a capability-gated SDK query for camera-relative AABBs; its
   `screenX` operand may be literal or byte-backed. Game Boy and NES both declare and lower it
   through `Sdk2DOperation.CameraAabbTiles`.
-- Landing tile-hit decision implemented after #106: `camera.AabbHitTop(...)` is a
+- Landing tile-hit decision implemented after #106: `Camera.AabbHitTop(...)` is a
   capability-gated SDK query that returns the top world-pixel Y of the first matching tile in a
   caller-defined camera-relative AABB, or `255` when none hit. Game Boy and NES lower it
   through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
@@ -193,20 +193,20 @@ Progress (2026-06-14):
   gives both Game Boy and NES real frame-driven BGM lowering. `NesRunnerAcceptanceTests`
   enforces that the shared source builds for NES, while `CrossTargetScrollAcceptanceTests`
   verifies that runner-shaped camera-relative collision lowers on both targets.
-- Logical palette decision implemented after #106: `palette.Background(slot, c0, c1, c2, c3)`
-  and `palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
+- Logical palette decision implemented after #106: `Palette.Background(slot, c0, c1, c2, c3)`
+  and `Palette.Sprite(slot, c0, c1, c2, c3)` declare capability-checked logical palette slots.
   Color values are logical tones `0..3`. Game Boy lowers background slot `0` to `BGP` and sprite
   slots `0..1` to `OBP0/OBP1`; NES lowers background/sprite slots `0..3` into fixed grayscale
   entries by default; NES Tiled backgrounds can derive a universal background color plus up to
   four background palette slots and initial attribute bytes from placed tiles in the selected
   tileset PNG, and PNG sprite assets can derive the hardware sprite palette for the draw
   slot that uses them while preserving the background universal color. The runner now uses
-  `palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
+  `Palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
   `objectPalette.Set(...)`.
 - Actor framework runtime activation decision on branch `feature/actor-framework`: `actor.SpawnLayer`
   and `actor.SpawnWindow` no longer materialize Tiled spawns as active slots at compile time.
   They generate ROM-table spawn helpers plus a fixed per-layer `used[]` byte array and should be
-  called after `camera.SetPosition(...)` each frame. Slots recycle when actors leave the activation
+  called after `Camera.SetPosition(...)` each frame. Slots recycle when actors leave the activation
   window or source code clears `active`; authored spawns are one-shot and do not respawn after a
   successful activation. Capacity diagnostics use the maximum simultaneous spawns in the declared
   camera-relative window, not total layer count.
@@ -229,14 +229,14 @@ Suggested next steps for the next agent, in order:
 ## Game Boy Runner Lessons
 
 - Normal runner debugging should start with the full app, then use `tools/gameboy/runner_diagnostics.py` to find the first failing diagnostic step before editing code.
-- `input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the injected SDK library source (`SdkLibrarySource`). The snake_case builtins (`button_down`, `button_just_pressed`, ..., `sprite_width`) and bare lowercase button identifiers (`a`, `right`, ...) remain accepted as transitional aliases and lower to the same masks. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
+- `Input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the injected SDK library source (`SdkLibrarySource`). The snake_case builtins (`button_down`, `button_just_pressed`, ..., `sprite_width`) and bare lowercase button identifiers (`a`, `right`, ...) remain accepted as transitional aliases and lower to the same masks. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
 - `button_hold_ticks` saturates at `255` and is the accepted seam for variable-height jump timing.
 - On original DMG hardware, `JOYP` row selection must settle. The backend should select a row, read it several times, use the final sample, and deselect both rows with `0x30`.
-- `sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
-- Sprite PNG paths can be generic. `sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
+- `Sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
+- Sprite PNG paths can be generic. `Sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
 - Mirrored metasprites must preserve logical sprite width, not padded hardware footprint.
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
-- Collision over wider sprites should use logical sprite width through helpers such as `Sprite.Width(...)`; runner actors should project current screen X/Y from actor/player world position minus camera position, then pass byte-backed screen coordinates to `camera.AabbTiles(...)`/`camera.AabbHitTop(...)` or the fully screen-space `camera.ScreenAabbTiles(...)`/`camera.ScreenAabbHitTop(...)` forms so collision stays aligned with the visible camera after long scrolls.
+- Collision over wider sprites should use logical sprite width through helpers such as `Sprite.Width(...)`; runner actors should project current screen X/Y from actor/player world position minus camera position, then pass byte-backed screen coordinates to `Camera.AabbTiles(...)`/`Camera.AabbHitTop(...)` or the fully screen-space `Camera.ScreenAabbTiles(...)`/`Camera.ScreenAabbHitTop(...)` forms so collision stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
@@ -257,7 +257,7 @@ Pipeline shape (two phases, after #105 partial extraction):
   `LogicalTiledMap`, resolve target PNG variants for tileset images (`tiles.gb.png`/`tiles.nes.png`
   when present), decode tileset PNGs, and encode them into their own 2bpp tile byte layout (Game Boy
   interleaved planes from luminance tones; NES planar planes from derived palette indexes),
-  deduplicating and composing the background under blank world cells. `world.Load(path)` therefore
+  deduplicating and composing the background under blank world cells. `World.Load(path)` therefore
   lowers on both Game Boy and NES from the same source while keeping the editable `.tsx` pointed at
   one baseline PNG.
 - NES limitations: source map rows and columns must still fit the one-byte runtime, four-screen
@@ -275,7 +275,7 @@ Pipeline shape (two phases, after #105 partial extraction):
 
 Important current behavior:
 
-- `world.Load(path)` imports finite orthogonal Tiled JSON maps.
+- `World.Load(path)` imports finite orthogonal Tiled JSON maps.
 - External `.tsj` and `.tsx` tilesets with PNG images are accepted; target backends can substitute
   `.gb.png` or `.nes.png` variants for the tileset image while Tiled keeps editing against the base PNG.
 - Tiled source cells are expanded into Game Boy 8x8 cells; for example, a 16x16 source tile becomes a 2x2 Game Boy block.
@@ -285,7 +285,7 @@ Important current behavior:
 - Non-empty `world` cells overlay the background at the same Tiled coordinate.
 - Empty `world` cells keep the background tile underneath.
 - If `retrosharpWorldY` and `retrosharpStreamY` move the playable world slice, the background layer is shifted by the same amount so Tiled layers stay visually aligned.
-- Game Boy Tiled maps loaded through `world.Load(...)` can keep a world taller than the 32-row background buffer. Startup clips the initial preload to the circular tilemap, while the full imported height stays in ROM row tables for vertical camera streaming.
+- Game Boy Tiled maps loaded through `World.Load(...)` can keep a world taller than the 32-row background buffer. Startup clips the initial preload to the circular tilemap, while the full imported height stays in ROM row tables for vertical camera streaming.
 - Background rows above the streamed world band (GB rows `0..streamY-1`) are emitted as full-width source-map rows and streamed horizontally by the camera, so background decorations above the band scroll with the world instead of freezing/repeating every 32 tiles.
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.

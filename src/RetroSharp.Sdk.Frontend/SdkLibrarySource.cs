@@ -111,7 +111,7 @@ public static class SdkLibrarySource
                  extern void {{prefix}}_camera_apply();
 
                  {{cameraAabbExterns}}
-                 class video
+                 class Video
                  {
                      static inline void WaitVBlank()
                      {
@@ -119,7 +119,7 @@ public static class SdkLibrarySource
                      }
                  }
 
-                 class input
+                 class Input
                  {
                      static inline void Poll()
                      {
@@ -127,7 +127,7 @@ public static class SdkLibrarySource
                      }
                  }
 
-                 class audio
+                 class Audio
                  {
                      static inline void Init()
                      {
@@ -140,7 +140,7 @@ public static class SdkLibrarySource
                      }
                  }
 
-                 class camera
+                 class Camera
                  {
                      static inline void SetPosition(i16 x, i16 y)
                      {
@@ -185,7 +185,7 @@ public static class SdkLibrarySource
                  [intrinsic("sprite_draw")]
                  extern void {{prefix}}_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX, i16 paletteSlot);
 
-                 class sprite
+                 class Sprite
                  {
                      static inline void Draw(i16 spriteId, i16 x, i16 y, i16 frame, bool flipX = false, i16 paletteSlot = 0)
                      {
@@ -214,7 +214,7 @@ public static class SdkLibrarySource
                  [intrinsic("music_stop")]
                  extern void {{prefix}}_music_stop();
 
-                 class music
+                 class Music
                  {
                      static inline void Play(i16 theme)
                      {

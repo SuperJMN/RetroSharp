@@ -41,4 +41,4 @@ commandCount
 
 ## Runtime
 
-`audio.Init()` enables pulse, triangle, and noise channels through `$4015`, initializes `$4017`, and resets music state. `music.Play(theme)` points the runtime at the selected asset's order stream and loop point. `audio.Update()` should be called once per frame; it waits the compiled frame delay, decodes the next group body, and writes the contained values to `$4000-$4017`. Zero-wait order entries continue in the same `audio.Update()` call so dense bursts do not gain accidental blank frames.
+`Audio.Init()` enables pulse, triangle, and noise channels through `$4015`, initializes `$4017`, and resets music state. `Music.Play(theme)` points the runtime at the selected asset's order stream and loop point. `Audio.Update()` should be called once per frame; it waits the compiled frame delay, decodes the next group body, and writes the contained values to `$4000-$4017`. Zero-wait order entries continue in the same `Audio.Update()` call so dense bursts do not gain accidental blank frames.

@@ -1,6 +1,6 @@
 # Compile-Time Operand Intrinsics
 
-Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `music.Play` / `music.Stop` onto the audio target intrinsics; SAL-8.8 migrates Game Boy and NES `audio.Init` onto the `audio_init` void-leaf target intrinsic (no compile-time operands); SAL-8.9 migrates Game Boy and NES `camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` onto the descriptor-role path.
+Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `Sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `Camera.AabbTiles` and `Camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `Camera.AabbTiles` and `Camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `Music.Play` / `Music.Stop` onto the audio target intrinsics; SAL-8.8 migrates Game Boy and NES `Audio.Init` onto the `audio_init` void-leaf target intrinsic (no compile-time operands); SAL-8.9 migrates Game Boy and NES `Camera.ScreenAabbTiles` / `Camera.ScreenAabbHitTop` onto the descriptor-role path.
 
 This note answers the open SAL-8 question from issue #158: how a target intrinsic can carry operands that must be resolved at compile time, such as a sprite asset id, a constant sprite palette slot, enum collision flags, or a world id, while keeping the language layer target-neutral.
 
@@ -42,7 +42,7 @@ Do not add a general expression-tree operand role. Existing SDK operands such as
 
 ## Rejected Forms
 
-Generic-like syntax such as `sprite.Draw<player>(...)` is rejected. It would introduce template/generic grammar pressure into the language for a target-intrinsic problem.
+Generic-like syntax such as `Sprite.Draw<player>(...)` is rejected. It would introduce template/generic grammar pressure into the language for a target-intrinsic problem.
 
 Extra source attribute arguments such as `[intrinsic("sprite_draw", asset: player)]` are rejected for SAL-8. They bind the compile-time operand to an extern declaration instead of a call slot, which pushes toward per-asset declarations or custom attribute expression parsing.
 
@@ -59,7 +59,7 @@ The SDK/frontend collector reads call operands using the descriptor:
 3. `ConstPaletteSlot` and `EnumFlags` slots are read with constant/enum folding and validated at the SDK/target boundary.
 4. `WorldId` slots are read as compile-time resource identifiers. The current proof accepts the existing string-literal form such as `"default"` so it does not require new grammar.
 
-Per-target lowerers then emit through the same machinery that current `Sdk2DOperation` lowering uses. For `sprite.Draw`, the lowerer still resolves metasprite geometry from target asset metadata. For collision, `camera.AabbTiles` and `camera.AabbHitTop` still preserve their capability checks and the `255` no-hit result contract.
+Per-target lowerers then emit through the same machinery that current `Sdk2DOperation` lowering uses. For `Sprite.Draw`, the lowerer still resolves metasprite geometry from target asset metadata. For collision, `Camera.AabbTiles` and `Camera.AabbHitTop` still preserve their capability checks and the `255` no-hit result contract.
 
 The parser, AST, ABI, and classic `RetroSharp.Generation.Intermediate` IR do not gain sprite, camera, world, asset, generic, or expression-tree concepts. This is SDK/frontend plus target-intrinsic metadata.
 
@@ -75,9 +75,9 @@ extern i16 flags_for_world(i16 world, i16 x, i16 y);
 
 The active Game Boy descriptor marks slot `0` as `WorldId` and leaves `x`/`y` as the two runtime operands. `flags_for_world("default", x, y)` lowers byte-identically to `world_tile_flags_at(x, y)`. A local variable in that slot is rejected before lowering, proving the compile-time operand is not turned into a runtime argument or temporary.
 
-This proof is deliberately not a new public portable SDK surface. It exists to validate the descriptor role and resolver path that SAL-8.3/SAL-8.4 use for `sprite.Draw`.
+This proof is deliberately not a new public portable SDK surface. It exists to validate the descriptor role and resolver path that SAL-8.3/SAL-8.4 use for `Sprite.Draw`.
 
-SAL-8.3/SAL-8.4 wire Game Boy and NES `sprite.Draw` through the injected SDK library helper:
+SAL-8.3/SAL-8.4 wire Game Boy and NES `Sprite.Draw` through the injected SDK library helper:
 
 ```csharp
 [target("gb")]
@@ -91,7 +91,7 @@ extern void __retrosharp_nes_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, 
 
 The descriptor marks `spriteId` as `AssetRef` and `paletteSlot` as `ConstPaletteSlot`; X, Y, frame, and flipX remain runtime operands. The SDK/frontend collector resolves that call to the existing `Sdk2DOperation.DrawLogicalSprite`, so target metasprite geometry, palette-slot capability checks, frame-budget checks, and hardware sprite limits continue to use the same path as the legacy `sprite_draw(...)` builtin. Focused and runner-shaped tests assert byte identity against the legacy spelling on both targets.
 
-SAL-8.5 wires Game Boy `camera.AabbTiles` and `camera.AabbHitTop` through the injected SDK library helper:
+SAL-8.5 wires Game Boy `Camera.AabbTiles` and `Camera.AabbHitTop` through the injected SDK library helper:
 
 ```csharp
 [target("gb")]
@@ -105,7 +105,7 @@ extern i16 __retrosharp_gb_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 wor
 
 The injected public helpers pass `"default"` for the hidden `WorldId` slot and forward the public operands. The descriptors mark slot `0` as `WorldId` and slot `5` as `EnumFlags`; the collector still parses `screenX`, `worldY`, `width`, and `height` through the existing SDK readers, including `SdkAabbExtent` support for constants and `Sprite.Width(...)`. The result is the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` stream as the legacy compiler-recognized spelling, preserving byte identity, capability diagnostics, and the `255` no-hit contract.
 
-SAL-8.6 wires NES `camera.AabbTiles` and `camera.AabbHitTop` through the same descriptor-role form:
+SAL-8.6 wires NES `Camera.AabbTiles` and `Camera.AabbHitTop` through the same descriptor-role form:
 
 ```csharp
 [target("nes")]
@@ -117,11 +117,11 @@ extern i16 __retrosharp_nes_camera_aabb_tiles(i16 worldId, i16 screenX, i16 worl
 extern i16 __retrosharp_nes_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
 ```
 
-`NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the `camera.AabbTiles` / `camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias.
+`NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the `Camera.AabbTiles` / `Camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias.
 
-SAL-8.9 applies the identical descriptor-role form to the screen-space camera collision queries `camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` on **both** Game Boy and NES. Each target catalogs `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the same hidden `WorldId` (slot 0) and `EnumFlags` (slot 5), `SdkLibrarySource` injects the two `class camera` helpers, and the collector/emitter re-derive the same `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy `camera_screen_aabb_*(...)` builtins (kept as aliases). The actor framework, which lowers `enemies.TouchPlayer(...)` to `camera.ScreenAabb*` dot-calls, stays byte-identical (the `actors.gb`/`actors.nes` tracked ROMs are unchanged). This closes the `Aabb`-vs-`ScreenAabb` asymmetry, so all four camera-relative collision queries share the intrinsic path on both targets.
+SAL-8.9 applies the identical descriptor-role form to the screen-space camera collision queries `Camera.ScreenAabbTiles` / `Camera.ScreenAabbHitTop` on **both** Game Boy and NES. Each target catalogs `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the same hidden `WorldId` (slot 0) and `EnumFlags` (slot 5), `SdkLibrarySource` injects the two `class camera` helpers, and the collector/emitter re-derive the same `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy `camera_screen_aabb_*(...)` builtins (kept as aliases). The actor framework, which lowers `enemies.TouchPlayer(...)` to `Camera.ScreenAabb*` dot-calls, stays byte-identical (the `actors.gb`/`actors.nes` tracked ROMs are unchanged). This closes the `Aabb`-vs-`ScreenAabb` asymmetry, so all four camera-relative collision queries share the intrinsic path on both targets.
 
-SAL-8.7 wires Game Boy and NES `music.Play` / `music.Stop` through the audio target intrinsics:
+SAL-8.7 wires Game Boy and NES `Music.Play` / `Music.Stop` through the audio target intrinsics:
 
 ```csharp
 [target("gb")]
@@ -133,13 +133,13 @@ extern void __retrosharp_gb_music_play(i16 theme);
 extern void __retrosharp_gb_music_stop();
 ```
 
-`music_play` marks slot `0` as `AssetRef`, so the injected `music.Play(theme)` helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `SdkLibrarySource` injects `class music { Play, Stop }` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `music.Asset(...)` is not a class member and still lowers through the SDK module to `music_asset`.
+`music_play` marks slot `0` as `AssetRef`, so the injected `Music.Play(theme)` helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `SdkLibrarySource` injects `class music { Play, Stop }` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `Music.Asset(...)` is not a class member and still lowers through the SDK module to `music_asset`.
 
 ## Operation-Specific Guidance
 
-`sprite.Draw` is the central SAL-8 prototype. The descriptor-role form uses one operation descriptor for all assets and palette slots. The legacy `sprite_draw` builtin remains a transitional alias until a later roadmap item removes it.
+`Sprite.Draw` is the central SAL-8 prototype. The descriptor-role form uses one operation descriptor for all assets and palette slots. The legacy `sprite_draw` builtin remains a transitional alias until a later roadmap item removes it.
 
-Game Boy and NES `camera.AabbTiles` and `camera.AabbHitTop` use the same mechanism for the hidden `WorldId` and `EnumFlags` slots while keeping `SdkAabbExtent` as an SDK/frontend operand shape. Other target-specific collision forms may still record a gap and remain compiler-recognized operations if the composite operands cannot stay byte-identical and zero-cost.
+Game Boy and NES `Camera.AabbTiles` and `Camera.AabbHitTop` use the same mechanism for the hidden `WorldId` and `EnumFlags` slots while keeping `SdkAabbExtent` as an SDK/frontend operand shape. Other target-specific collision forms may still record a gap and remain compiler-recognized operations if the composite operands cannot stay byte-identical and zero-cost.
 
 `StreamMapColumn` and `StreamMapRow` stay compiler-emitted. They are effects of camera lowering, not public source calls that should be migrated to source library helpers in SAL-8.
 

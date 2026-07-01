@@ -55,7 +55,7 @@ Literals:
 - Current cartridge-target support: local structs with byte-backed fields lower to adjacent local storage slots. Named initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` zero-fill through the same declaration path, then emit direct field stores in declaration order; omitted fields remain zero. A field shorthand such as `{ x, y: seed + 1 }` is parsed as `{ x: x, y: seed + 1 }`. This is a zero-runtime abstraction over the same byte loads/stores used by separate locals.
 - Current cartridge-target support: local fixed-size arrays of byte-backed element types use `u8 values[4];` declarations and may use initializer lists such as `u8 values[4] = [1, seed, seed + 1];`. Initializer declarations can omit the length as `u8 values[] = [1, seed, seed + 1];`; the parser infers the fixed length from the listed element count before semantic and target lowering. Constant element access lowers to direct adjacent local storage slots such as `values[0]`, `values[1]`; runtime byte-backed index access computes an address from the array base and the index. Local fixed-size arrays of structs are supported when every field is byte-sized (`u8`, `i8`, `bool`, or enum), for example `Actor actors[8]; actors[i].x += 1;`. They lower to fixed flattened field storage such as `actors[0].x`, `actors[0].y`, `actors[1].x`, and runtime field access computes `fieldBase + index * targetStructStride`. Per-element initializer lists such as `Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];` zero-fill the whole array, then emit direct field stores for listed fields; omitted fields and omitted trailing elements remain zero. True `i16`/`u16` fields in struct arrays are rejected until mixed-width pool layout exists. `countof(values)` folds to the declared or inferred element count before target lowering. There is no heap allocation, implicit bounds check, implicit index mask, hidden helper, or array object.
 - Current cartridge-target support: top-level enums use qualified member access such as `Tile.Brick`. Explicit members use their literal value; implicit members start at `0` or continue from the previous member. Enum declarations do not reserve storage, and enum locals are byte-backed in the current cartridge target path.
-- Constant groups use a `static class` with `const` members, the idiomatic C# spelling for grouping related compile-time constants, for example `static class World { const i16 Width = 48; const i16 PixelWidth = 384; }`. Access stays `World.Width`, `Player.StartX`. A `static class` reserves no storage and may only declare `const` members and `static` methods (instance fields or instance methods are rejected); its `const` members fold into literal expressions exactly like top-level constants and `enum` members, so they are zero-cost. Reserve `enum` for genuine enumerations of named alternatives of one logical type (`Tile.Brick`, `CollisionFlag.Solid`); do not use an `enum` as a grab-bag namespace for unrelated magnitudes.
+- Constant groups use a `static class` with `const` members, the idiomatic C# spelling for grouping related compile-time constants, for example `static class Level { const i16 Width = 48; const i16 PixelWidth = 384; }`. Access stays `Level.Width`, `Player.StartX`. A `static class` reserves no storage and may only declare `const` members and `static` methods (instance fields or instance methods are rejected); its `const` members fold into literal expressions exactly like top-level constants and `enum` members, so they are zero-cost. Reserve `enum` for genuine enumerations of named alternatives of one logical type (`Tile.Brick`, `CollisionFlag.Solid`); do not use an `enum` as a grab-bag namespace for unrelated magnitudes.
 - Top-level and block-local `const` declarations name numeric or boolean literals, earlier constants visible at that point, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, simple integer constant expressions using arithmetic, shift, and bitwise operators, or conditional expressions whose condition selects a constant branch. Integer literals can use decimal, `0x` hexadecimal, `0b` binary, `_` digit separators, and `u8`, `i8`, `u16`, or `i16` suffixes. Their type annotation is optional because the value is folded into literal expressions before target lowering and does not reserve RAM or ROM storage by itself.
 - Attributes for layout (planned): [packed], [align(n)], [section(".name")], [bank(n)], [zeropage] (6502), etc.
 - const data → ROM. Non-const globals → static RAM. Locals → stack. Volatile for MMIO.
@@ -153,20 +153,20 @@ helpers: if a target does not recognize the declared intrinsic, compilation
 fails instead of emitting an empty function.
 
 Target compilation now injects a small SDK source library before parsing. That
-library defines `video.WaitVBlank()`, `input.Poll()`, `audio.Update()`,
-`camera.SetPosition(x, y)`, and `camera.Apply()` as
+library defines `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
+`Camera.SetPosition(x, y)`, and `Camera.Apply()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
 non-matching variants before constant folding and function indexing, so portable
 helper code can share one helper name while selecting the correct target extern.
 Library helpers can be capability-gated and value-returning: Game Boy exposes
-`world.TileFlagsAt(x, y)` (a two-argument query returning the tile flags) over a
+`World.TileFlagsAt(x, y)` (a two-argument query returning the tile flags) over a
 `world_tile_flags_at` intrinsic, while NES — which lacks the world tile-flag
 collision query — does not inject the `world` class at all. Parameterized `inline`
 helpers substitute their arguments directly into the operation, so these calls stay
 byte-identical to the direct SDK form. Injecting `class camera` exposes only
-`SetPosition`/`Apply`; the rest of the camera module (`camera.Init`,
-`camera.AabbTiles`, `camera.AabbHitTop`) is unaffected.
+`SetPosition`/`Apply`; the rest of the camera module (`Camera.Init`,
+`Camera.AabbTiles`, `Camera.AabbHitTop`) is unaffected.
 Higher-level sprite drawing and the streaming/collision SDK calls still lower through
 capability-checked SDK operations rather than direct intrinsics.
 
@@ -301,10 +301,10 @@ Iteration 12 adds source ergonomics only when the lowering remains static and pr
 - `inline` marks a helper that must use source-level substitution in the current cartridge targets. Explicit inline value helpers fail clearly if the body is not a single return expression.
 - `pure` marks a helper whose body must stay in the supported side-effect-free subset. It is validated before Game Boy/NES lowering and emits no runtime code by itself.
 - `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
-- `video.Init()`, `video.WaitVBlank()`, `input.Poll()`, `camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
+- `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
 - `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
 - Lightweight object-oriented style can use restricted `class` declarations for real mutable state such as `PlayerState` or `EnemyState`. A class value lowers to the same fixed storage model as a plain `struct`; instance methods lower to receiver helpers. Plain `struct` plus receiver methods remains the explicit equivalent form.
-- A `static class` with `const` members is the clean spelling for static configuration groups, for example `static class World { const i16 Width = 48; }` accessed as `World.Width` and `Player.StartX`, and it lowers exactly like top-level constants (compile-time folded, zero storage). Genuine enumerations stay `enum`.
+- A `static class` with `const` members is the clean spelling for static configuration groups, for example `static class Level { const i16 Width = 48; }` accessed as `Level.Width` and `Player.StartX`, and it lowers exactly like top-level constants (compile-time folded, zero storage). Genuine enumerations stay `enum`.
 - These forms are optional ergonomics. Authors can keep flat constants, flat locals, and direct helper calls when they want the most explicit source shape; the grouped or receiver-method spelling must lower to equivalent code.
 - `value |> Clamp(0, 120) |> SnapToTile()` rewrites left-to-right to nested static/helper calls and does not create a pipe object, iterator, delegate, or hidden range value.
 
@@ -313,7 +313,7 @@ Iteration 13 adds restricted static class syntax. This is source organization ov
 - `class Actor { u8 x; u8 y; void Move(i8 dx, i8 dy) { ... } }` lowers before target emission to a plain `struct Actor` plus receiver helpers such as `Move(this Actor actor, dx, dy)`.
 - Class fields use the same fixed-layout rules as structs. No object header, vtable pointer, runtime type id, monitor, allocator state, or hidden identity is inserted.
 - Non-virtual instance methods lower to statically resolved helpers or inline substitutions. `this` is the receiver parameter, not a heap object reference.
-- `static class World { const i16 Width = 48; const i16 PixelWidth = 384; }` declares a constant group accessed as `World.Width`. A `static class` reserves no storage, may only contain `const` members and `static` methods, and its constants fold like top-level constants. It is the idiomatic C# replacement for using an `enum` as a constant grab-bag.
+- `static class Level { const i16 Width = 48; const i16 PixelWidth = 384; }` declares a constant group accessed as `Level.Width`. A `static class` reserves no storage, may only contain `const` members and `static` methods, and its constants fold like top-level constants. It is the idiomatic C# replacement for using an `enum` as a constant grab-bag.
 - Static methods and constants lower like module helpers and compile-time constants.
 - Class values currently use the same declaration and initializer forms as structs, for example `Actor actor;` or `Actor actor = { x: 10, y: 20 };`. Future constructor-like syntax, if accepted, is only shorthand for zero-fill plus direct field stores or an explicit inline initializer helper. It must not allocate memory.
 - Inheritance, `virtual`, `override`, interfaces, `new` allocation, destructors, RTTI, `dynamic_cast`-style checks, and implicit lifetime management remain rejected unless a later roadmap defines an explicit opt-in cost model.

@@ -35,33 +35,33 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` exposes the first compiler boundary where portable 2D calls become semantic `Sdk2DOperation` records before Game Boy ROM lowering. The current boundary recognizes:
 
-- `video.WaitVBlank()` as `Sdk2DOperation.WaitFrame`
-- `input.Poll()` as `Sdk2DOperation.PollInput`
-- `camera.SetPosition(x, y)` as `Sdk2DOperation.SetCameraPosition`
-- `camera.Apply()` as `Sdk2DOperation.ApplyCamera`
-- `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` as `Sdk2DOperation.DrawLogicalSprite`
+- `Video.WaitVBlank()` as `Sdk2DOperation.WaitFrame`
+- `Input.Poll()` as `Sdk2DOperation.PollInput`
+- `Camera.SetPosition(x, y)` as `Sdk2DOperation.SetCameraPosition`
+- `Camera.Apply()` as `Sdk2DOperation.ApplyCamera`
+- `Sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` as `Sdk2DOperation.DrawLogicalSprite`
 - `map_stream_column(targetColumn, sourceColumn, y, height)` as `Sdk2DOperation.StreamMapColumn`
 - `world_tile_flags_at(worldX, worldY)` as `Sdk2DOperation.ReadWorldTileFlags`
-- `camera.AabbTiles(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbTiles`
-- `camera.AabbHitTop(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbHitTop`
-- `camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` as `Sdk2DOperation.CameraScreenAabbTiles`
-- `camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` as `Sdk2DOperation.CameraScreenAabbHitTop`
-- `hud.SetTile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
+- `Camera.AabbTiles(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbTiles`
+- `Camera.AabbHitTop(screenX, worldY, width, height, flags)` as `Sdk2DOperation.CameraAabbHitTop`
+- `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` as `Sdk2DOperation.CameraScreenAabbTiles`
+- `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` as `Sdk2DOperation.CameraScreenAabbHitTop`
+- `Hud.SetTile(window, x, y, tile)` as `Sdk2DOperation.SetHudTile`
 
 `GameBoyRomCompiler.CollectSdkAudioOperations(...)` exposes the parallel audio boundary where portable audio calls become semantic `SdkAudioOperation` records. The current boundary recognizes:
 
-- `audio.Init()` as `SdkAudioOperation.InitializeAudio`
-- `music.Play(name)` as `SdkAudioOperation.PlayMusic`
-- `audio.Update()` as `SdkAudioOperation.UpdateAudio`
-- `music.Stop()` as `SdkAudioOperation.StopMusic`
+- `Audio.Init()` as `SdkAudioOperation.InitializeAudio`
+- `Music.Play(name)` as `SdkAudioOperation.PlayMusic`
+- `Audio.Update()` as `SdkAudioOperation.UpdateAudio`
+- `Music.Stop()` as `SdkAudioOperation.StopMusic`
 
-`video.WaitVBlank()` and `input.Poll()` are now provided by the injected SDK source library as inline wrappers over Game Boy target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`). `audio.Init()`, `audio.Update()`, `music.Play(name)`, and `music.Stop()` are likewise provided by the injected SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop` target intrinsics (`music_play` carries the music asset as a compile-time `AssetRef` operand); the legacy `audio_init(...)`/`audio_update(...)`/`music_play(...)`/`music_stop(...)` builtins remain compatibility aliases and `music.Asset(...)` stays on the SDK-module path. The collector still records them as `Sdk2DOperation.WaitFrame`/`Sdk2DOperation.PollInput` and the matching `SdkAudioOperation` values, so byte emission and frame-budget boundaries remain identical to the older direct SDK operation path. Logical sprite draw, explicit map-column streaming, camera movement, HUD tiles, and camera-relative AABB collision still lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge. Game Boy compilation also runs the shared frame-budget pass, so multiple explicit map-column streams that exceed the 21-tile background write budget, more than 40 hardware sprites, or more than 10 constant-Y sprites on a scanline in one possible frame fail before lowering.
+`Video.WaitVBlank()` and `Input.Poll()` are now provided by the injected SDK source library as inline wrappers over Game Boy target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`). `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, and `Music.Stop()` are likewise provided by the injected SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop` target intrinsics (`music_play` carries the music asset as a compile-time `AssetRef` operand); the legacy `audio_init(...)`/`audio_update(...)`/`music_play(...)`/`music_stop(...)` builtins remain compatibility aliases and `Music.Asset(...)` stays on the SDK-module path. The collector still records them as `Sdk2DOperation.WaitFrame`/`Sdk2DOperation.PollInput` and the matching `SdkAudioOperation` values, so byte emission and frame-budget boundaries remain identical to the older direct SDK operation path. Logical sprite draw, explicit map-column streaming, camera movement, HUD tiles, and camera-relative AABB collision still lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge. Game Boy compilation also runs the shared frame-budget pass, so multiple explicit map-column streams that exceed the 21-tile background write budget, more than 40 hardware sprites, or more than 10 constant-Y sprites on a scanline in one possible frame fail before lowering.
 
-Target intrinsics and transitional helpers such as `sprite.Set(...)`, `scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
+Target intrinsics and transitional helpers such as `Sprite.Set(...)`, `scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
 ## Sample Classification
 
-Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` and `samples/gameboy-music/music-switch.rs` are `target-capability-spike` samples, `samples/gameboy-vscroll/vscroll.rs` is the Game Boy-only vertical camera `target-acceptance` sample over source-authored columns, `samples/tiled-tall/tall.rs` is the Game Boy-only vertical camera `target-acceptance` sample over a 16x40 Tiled `world.Load(...)` map, `samples/tiled-vscroll/vscroll.rs` is the Game Boy/NES vertical camera `target-acceptance` sample over a 40x60 Tiled `world.Load(...)` map, `samples/tiled-diagonal/diag.rs` is the Game Boy-only diagonal camera `target-acceptance` sample over a 40x40 Tiled `world.Load(...)` map, `samples/tiled-free-scroll/free-scroll.rs` is the Game Boy/NES diagonal camera `target-acceptance` sample over a 50x60 Tiled `world.Load(...)` map, `samples/nes-free-scroll/freescroll.rs` is the Game Boy/NES diagonal camera `target-acceptance` sample over source-authored columns, `samples/actor-framework/actors.rs` is the focused Game Boy/NES `target-acceptance` sample for the actor framework, and `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample because it exercises richer runner behavior than the stable portable SDK sample, including a 2-axis dead-zone camera over a tall 24x48 Tiled map and per-target VGM/VGZ background music.
+Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample. `samples/gameboy-drawing/drawing.rs` is a `target-intrinsic` sample, `samples/gameboy-hud/hud.rs` and `samples/gameboy-music/music-switch.rs` are `target-capability-spike` samples, `samples/gameboy-vscroll/vscroll.rs` is the Game Boy-only vertical camera `target-acceptance` sample over source-authored columns, `samples/tiled-tall/tall.rs` is the Game Boy-only vertical camera `target-acceptance` sample over a 16x40 Tiled `World.Load(...)` map, `samples/tiled-vscroll/vscroll.rs` is the Game Boy/NES vertical camera `target-acceptance` sample over a 40x60 Tiled `World.Load(...)` map, `samples/tiled-diagonal/diag.rs` is the Game Boy-only diagonal camera `target-acceptance` sample over a 40x40 Tiled `World.Load(...)` map, `samples/tiled-free-scroll/free-scroll.rs` is the Game Boy/NES diagonal camera `target-acceptance` sample over a 50x60 Tiled `World.Load(...)` map, `samples/nes-free-scroll/freescroll.rs` is the Game Boy/NES diagonal camera `target-acceptance` sample over source-authored columns, `samples/actor-framework/actors.rs` is the focused Game Boy/NES `target-acceptance` sample for the actor framework, and `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample because it exercises richer runner behavior than the stable portable SDK sample, including a 2-axis dead-zone camera over a tall 24x48 Tiled map and per-target VGM/VGZ background music.
 
 ## Supported Runtime Subset
 
@@ -78,7 +78,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - Plain local `struct` declarations whose fields are byte-backed types, with named and shorthand initializer lists
 - Fixed-size local arrays of byte-backed types with initializer lists, optional initializer-inferred lengths, and constant or byte-backed runtime index reads/writes, for example `u8 values[4] = [1, 2]` or `u8 values[] = [1, 2]`
 - Fixed-size local arrays of plain structs whose fields are byte-sized (`u8`, `i8`, `bool`, or enums), with constant or byte-backed runtime field reads/writes such as `actors[i].x`
-- Actor framework pool/definition sugar: `actor.Pool(...)`, `actor.SpawnLayer(...)`, `actor.SpawnWindow(...)`, `enemy.Def(...)`, and called `enemy.*` metadata helpers expand before Game Boy lowering to fixed `Actor` struct arrays, constants, inline helper branches, generated ROM-table spawn helpers, a fixed `used[]` activation byte array, and runtime camera-window activation loops from Tiled object layers; unused `enemy.*` lookup helpers are not generated and have zero byte cost; actor world X/Y use byte split storage (`x`/`y` low bytes plus `xHi`/`yHi` high bytes); `pool.Update()`/`pool.Draw()` support the basic byte-field behavior set (`Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`); optional `animation` metadata draws through `animation.Frame(...)`; actor draw reads camera X/Y once per generated draw loop and computes `screenX = worldX - cameraX` and `screenY = worldY - cameraY`; one-slot pools write offscreen coordinates for inactive or off-window slots and then call `sprite.Draw` through stable call sites so direct Game Boy OAM entries do not retain stale actor frames, while larger pools keep the current visible-actor draw/cull shape until per-slot OAM allocation is added; `pool.TouchTiles(...)`/`pool.LandOnTiles(...)` use the same per-phase camera cache and per-actor 2-axis projection before lowering through screen-space camera AABB SDK calls, while `pool.TouchPlayer(...)` compares the projected actor AABB against a literal player AABB in screen coordinates; drawn pool sprite pressure is checked as pool capacity times the largest target-resolved enemy metasprite against the Game Boy 40-sprite frame cap and 10-sprite scanline cap, spawn windows are checked against maximum simultaneously activatable spawns, and actor draw usage also participates in the shared frame-budget validation
+- Actor framework pool/definition sugar: `actor.Pool(...)`, `actor.SpawnLayer(...)`, `actor.SpawnWindow(...)`, `enemy.Def(...)`, and called `enemy.*` metadata helpers expand before Game Boy lowering to fixed `Actor` struct arrays, constants, inline helper branches, generated ROM-table spawn helpers, a fixed `used[]` activation byte array, and runtime camera-window activation loops from Tiled object layers; unused `enemy.*` lookup helpers are not generated and have zero byte cost; actor world X/Y use byte split storage (`x`/`y` low bytes plus `xHi`/`yHi` high bytes); `pool.Update()`/`pool.Draw()` support the basic byte-field behavior set (`Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`); optional `animation` metadata draws through `Animation.Frame(...)`; actor draw reads camera X/Y once per generated draw loop and computes `screenX = worldX - cameraX` and `screenY = worldY - cameraY`; one-slot pools write offscreen coordinates for inactive or off-window slots and then call `Sprite.Draw` through stable call sites so direct Game Boy OAM entries do not retain stale actor frames, while larger pools keep the current visible-actor draw/cull shape until per-slot OAM allocation is added; `pool.TouchTiles(...)`/`pool.LandOnTiles(...)` use the same per-phase camera cache and per-actor 2-axis projection before lowering through screen-space camera AABB SDK calls, while `pool.TouchPlayer(...)` compares the projected actor AABB against a literal player AABB in screen coordinates; drawn pool sprite pressure is checked as pool capacity times the largest target-resolved enemy metasprite against the Game Boy 40-sprite frame cap and 10-sprite scanline cap, spawn windows are checked against maximum simultaneously activatable spawns, and actor draw usage also participates in the shared frame-budget validation
 - Constant initializers
 - Assignment and compound assignment (`+=`, `-=`, `&=`, `|=`, `^=`) to local variables, `struct.field` lvalues, constant or byte-backed runtime array indices, and fixed struct-array field lvalues
 - Statement-only `++` and `--` on the same lvalues, including the increment slot of `for`
@@ -137,60 +137,60 @@ Conditional value expressions such as `moving != 0 ? fast : 0` lower to direct b
 
 ## Supported Video API
 
-The preferred source spelling is SDK dot-calls such as `video.Init()` and `camera.SetPosition(x, y)`. The older snake_case function names remain accepted as compatibility aliases and lower through the same target path.
+The preferred source spelling is SDK dot-calls such as `Video.Init()` and `Camera.SetPosition(x, y)`. The older snake_case function names remain accepted as compatibility aliases and lower through the same target path.
 
 Static setup calls:
 
-- `video.Init()`
-- `music.Asset(name, path)`
-- `palette.Set(index, color)`
+- `Video.Init()`
+- `Music.Asset(name, path)`
+- `Palette.Set(index, color)`
 - `objectPalette.Set(index, color)`
-- `palette.Background(slot, c0, c1, c2, c3)`
-- `palette.Sprite(slot, c0, c1, c2, c3)`
-- `sprite.Asset(name, path[, frameWidth, frameHeight])`
-- `world.Column(index, tile0, tile1, ...)`
-- `world.Flags(index, flags0, flags1, ...)`
+- `Palette.Background(slot, c0, c1, c2, c3)`
+- `Palette.Sprite(slot, c0, c1, c2, c3)`
+- `Sprite.Asset(name, path[, frameWidth, frameHeight])`
+- `World.Column(index, tile0, tile1, ...)`
+- `World.Flags(index, flags0, flags1, ...)`
 - `map_column(index, tile0, tile1, ...)`
-- `world.Map(width, streamY, height)`
-- `world.Load(path)`
-- `hud.SetTile(window, x, y, tile)`
-- `tilemap.Set(x, y, tile)`
-- `tilemap.Fill(x, y, width, height, tile)`
-- `video.Present()`
+- `World.Map(width, streamY, height)`
+- `World.Load(path)`
+- `Hud.SetTile(window, x, y, tile)`
+- `Tilemap.Set(x, y, tile)`
+- `Tilemap.Fill(x, y, width, height, tile)`
+- `Video.Present()`
 
 Runtime calls:
 
-- `video.WaitVBlank()`
-- `audio.Init()`
-- `audio.Update()`
-- `music.Play(name)`
-- `music.Stop()`
-- `input.Poll()`
+- `Video.WaitVBlank()`
+- `Audio.Init()`
+- `Audio.Update()`
+- `Music.Play(name)`
+- `Music.Stop()`
+- `Input.Poll()`
 - `scroll.Set(x, y)`
-- `camera.Init(mapWidth, streamY, streamHeight)`
-- `camera.SetPosition(x, y)`
-- `camera.Apply()`
+- `Camera.Init(mapWidth, streamY, streamHeight)`
+- `Camera.SetPosition(x, y)`
+- `Camera.Apply()`
 - `camera_move_right()`
 - `camera_move_left()`
 - `camera_tile_column_at(screenColumn)`
 - `camera_span_tile_at(screenX, widthPx, row)`
 - `camera_span_has_tile(screenX, widthPx, row, tile)`
 - `camera_span_has_flags(screenX, widthPx, row, flags)`
-- `camera.AabbTiles(screenX, worldY, width, height, flags)`
-- `camera.AabbHitTop(screenX, worldY, width, height, flags)`
-- `camera.ScreenAabbTiles(screenX, screenY, width, height, flags)`
-- `camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)`
+- `Camera.AabbTiles(screenX, worldY, width, height, flags)`
+- `Camera.AabbHitTop(screenX, worldY, width, height, flags)`
+- `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)`
+- `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)`
 - `Sprite.Width(name)`
-- `sprite.Set(id, x, y, tile, flags)`
-- `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])`
+- `Sprite.Set(id, x, y, tile, flags)`
+- `Sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])`
 - `tilemap_fill_column(column, y, height, tile)`
 - `map_stream_column(targetColumn, sourceColumn, y, height)`
 - `map_tile_at(sourceColumn, row)`
 - `map_flags_at(sourceColumn, row)`
 - `world_tile_flags_at(worldX, worldY)`
 - `collision_aabb_tiles(x, y, width, height, flags)`
-- `animation.Clip(name, firstFrame, duration...)`
-- `animation.Frame(name, tick)`
+- `Animation.Clip(name, firstFrame, duration...)`
+- `Animation.Frame(name, tick)`
 - `button_pressed(button)`
 - `Input.IsDown(button)`
 - `Input.WasPressed(button)`
@@ -199,11 +199,11 @@ Runtime calls:
 
 `scroll.Set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
-`music.Asset(name, path)` declares a BGM resource. `path` can point directly to a VGM/VGZ DMG register log, a hUGETracker `.uge` file, a transitional `.gbapu` binary trace (or a legacy `retrosharp.gbapu.v1` `.gbapu.json`), or to a `retrosharp.music.v1` JSON envelope whose `platforms.gb` entry has `format: "vgm"`, `format: "uge"`, or `format: "gbapu"` and a relative path. Generic paths use the same per-target variant convention as PNG assets: `music.Asset(theme, "music/runner.vgz")` resolves `music/runner.gb.vgz` on Game Boy when present, falling back to `music/runner.vgz`. The current Game Boy BGM runtime accepts `.uge` v6 songs with duty, wave, and noise channel rows, fixed ticks-per-row timing, compact wavetable data, and compact per-row channel event data. Effect `Cxy` is lowered as a row-level volume override; effects `2xx`, `3xx`, `Bxx`, and `Exx` are currently accepted as best-effort no-ops so real tracker songs can compile, but they do not yet reproduce hUGEDriver pitch slides, jumps, or note cuts exactly. Timer-based tempo, routine jump command values, tempo changes, panning, arpeggio, and other hUGETracker effects fail explicitly or remain unsupported because this runtime is frame-update driven through `audio.Update()`. When compiled program/data/music output exceeds the ROM-only limit, the compiler emits an MBC1 ROM automatically; user source does not select banks manually. The current foundation supports bank-aware fixed trampolines for multi-bank subroutine bodies, compiler-inserted fixed-bank continuations for linear main-flow fall-through, fixed-bank audio helpers, banked music, and banked read-only tile/tilemap/map-row data. Direct non-linear control-flow between different switchable banks is rejected explicitly unless it goes through a fixed-bank trampoline/helper instead of a raw cross-bank jump.
+`Music.Asset(name, path)` declares a BGM resource. `path` can point directly to a VGM/VGZ DMG register log, a hUGETracker `.uge` file, a transitional `.gbapu` binary trace (or a legacy `retrosharp.gbapu.v1` `.gbapu.json`), or to a `retrosharp.music.v1` JSON envelope whose `platforms.gb` entry has `format: "vgm"`, `format: "uge"`, or `format: "gbapu"` and a relative path. Generic paths use the same per-target variant convention as PNG assets: `Music.Asset(theme, "music/runner.vgz")` resolves `music/runner.gb.vgz` on Game Boy when present, falling back to `music/runner.vgz`. The current Game Boy BGM runtime accepts `.uge` v6 songs with duty, wave, and noise channel rows, fixed ticks-per-row timing, compact wavetable data, and compact per-row channel event data. Effect `Cxy` is lowered as a row-level volume override; effects `2xx`, `3xx`, `Bxx`, and `Exx` are currently accepted as best-effort no-ops so real tracker songs can compile, but they do not yet reproduce hUGEDriver pitch slides, jumps, or note cuts exactly. Timer-based tempo, routine jump command values, tempo changes, panning, arpeggio, and other hUGETracker effects fail explicitly or remain unsupported because this runtime is frame-update driven through `Audio.Update()`. When compiled program/data/music output exceeds the ROM-only limit, the compiler emits an MBC1 ROM automatically; user source does not select banks manually. The current foundation supports bank-aware fixed trampolines for multi-bank subroutine bodies, compiler-inserted fixed-bank continuations for linear main-flow fall-through, fixed-bank audio helpers, banked music, and banked read-only tile/tilemap/map-row data. Direct non-linear control-flow between different switchable banks is rejected explicitly unless it goes through a fixed-bank trampoline/helper instead of a raw cross-bank jump.
 
-VGM/VGZ is the preferred faithful input format. The importer reads DMG register writes, quantizes 44100 Hz waits into the same per-frame stream shape used by the current runtime, and then feeds the existing `.gbapu` v2 group-pool repack. `.gbapu` therefore remains the compact on-ROM representation and a transitional direct input path. It is not PCM and not a tracker module: it stores timed writes to the DMG APU registers `NR10`..`NR52` and wave RAM `$FF30`..`$FF3F`, with cycle deltas preserved in the source. The ROM compiler maps writes onto DMG VBlank frames (true 70224-cycle period), removes redundant non-trigger writes, deduplicates identical frame groups into a pool (v2 group-pool, stream marker `0x02`), and stores contiguous 16-byte Wave RAM uploads as block commands. The runtime replays all due commands from `audio.Update()`, so playback is frame-scheduled even though the source keeps finer timing for future runtimes. See `GameBoyApuTraceFormat.md` for the binary/JSON schema, generation flow, runtime packing, and limitations, and `GameBoyApuTraceFormatV2.md` for the design study.
+VGM/VGZ is the preferred faithful input format. The importer reads DMG register writes, quantizes 44100 Hz waits into the same per-frame stream shape used by the current runtime, and then feeds the existing `.gbapu` v2 group-pool repack. `.gbapu` therefore remains the compact on-ROM representation and a transitional direct input path. It is not PCM and not a tracker module: it stores timed writes to the DMG APU registers `NR10`..`NR52` and wave RAM `$FF30`..`$FF3F`, with cycle deltas preserved in the source. The ROM compiler maps writes onto DMG VBlank frames (true 70224-cycle period), removes redundant non-trigger writes, deduplicates identical frame groups into a pool (v2 group-pool, stream marker `0x02`), and stores contiguous 16-byte Wave RAM uploads as block commands. The runtime replays all due commands from `Audio.Update()`, so playback is frame-scheduled even though the source keeps finer timing for future runtimes. See `GameBoyApuTraceFormat.md` for the binary/JSON schema, generation flow, runtime packing, and limitations, and `GameBoyApuTraceFormatV2.md` for the design study.
 
-GBS files are not loaded directly by `music.Asset(...)`. Use an explicit export helper before compilation. For faithful playback, export the post-driver APU register trace (binary by default; the loop is auto-detected and trimmed to one body):
+GBS files are not loaded directly by `Music.Asset(...)`. Use an explicit export helper before compilation. For faithful playback, export the post-driver APU register trace (binary by default; the loop is auto-detected and trimmed to one body):
 
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
@@ -216,31 +216,31 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 
 The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. It captures `gbsplay -o iodumper` APU register writes, auto-detects the musical loop, records the GBS-derived `replayHz`, and preserves supported writes as a binary `.gbapu` trace. `--no-auto-loop`, `--loop-cycle <n>`, and `--emit-json` override the defaults; `gbapu-dump <file>` prints the register writes. RetroSharp does not load `.gbs` directly.
 
-`audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM runtime state. `music.Play(name)` points the runtime at the compiled song data and starts from row 0 or the first APU trace order entry. `audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a UGE row is due. For `.gbapu`, `audio.Update()` resolves the next order entry's pooled group body, replays all its APU register commands for the current frame, and then waits the compiled frame delay before the next entry. In a banked ROM, the generated audio runtime tracks the current music bank alongside the data pointer and switches MBC1 banks when sequential playback crosses a 16 KiB bank boundary. Call it once per frame after `video.WaitVBlank()`; if a frame also writes direct Game Boy OAM through `sprite.Draw(...)`, present sprites first so dense audio bursts cannot push OAM writes out of VBlank on real hardware. `music.Stop()` disables BGM playback and silences the active audio channels.
+`Audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM runtime state. `Music.Play(name)` points the runtime at the compiled song data and starts from row 0 or the first APU trace order entry. `Audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a UGE row is due. For `.gbapu`, `Audio.Update()` resolves the next order entry's pooled group body, replays all its APU register commands for the current frame, and then waits the compiled frame delay before the next entry. In a banked ROM, the generated audio runtime tracks the current music bank alongside the data pointer and switches MBC1 banks when sequential playback crosses a 16 KiB bank boundary. Call it once per frame after `Video.WaitVBlank()`; if a frame also writes direct Game Boy OAM through `Sprite.Draw(...)`, present sprites first so dense audio bursts cannot push OAM writes out of VBlank on real hardware. `Music.Stop()` disables BGM playback and silences the active audio channels.
 
 ### Multiple music themes
 
-You can declare any number of themes with `music.Asset(name, path)` (each name must be unique) and switch between them at runtime by calling `music.Play(other)`. Source code never touches ROM banks: when the combined program fits, every theme is stored inline in a 32 KiB ROM-only cartridge; when it does not, the compiler emits an MBC1 banked ROM and places each theme in its own ROM bank range. `music.Play(name)` reconfigures both the data pointer and the base bank for the requested theme, and the audio runtime resolves all later bank crossings relative to that theme's base, so a theme that lives in the high banks streams exactly like one in bank 1.
+You can declare any number of themes with `Music.Asset(name, path)` (each name must be unique) and switch between them at runtime by calling `Music.Play(other)`. Source code never touches ROM banks: when the combined program fits, every theme is stored inline in a 32 KiB ROM-only cartridge; when it does not, the compiler emits an MBC1 banked ROM and places each theme in its own ROM bank range. `Music.Play(name)` reconfigures both the data pointer and the base bank for the requested theme, and the audio runtime resolves all later bank crossings relative to that theme's base, so a theme that lives in the high banks streams exactly like one in bank 1.
 
 ```
 void main() {
-    video.Init();
-    music.Asset(overworld, "overworld.gbapu");
-    music.Asset(boss, "boss.uge");
-    audio.Init();
-    music.Play(overworld);
+    Video.Init();
+    Music.Asset(overworld, "overworld.gbapu");
+    Music.Asset(boss, "boss.uge");
+    Audio.Init();
+    Music.Play(overworld);
 
     u8 onBoss = 0;
     loop {
-        video.WaitVBlank();
-        input.Poll();
-        audio.Update();
+        Video.WaitVBlank();
+        Input.Poll();
+        Audio.Update();
         if (Input.WasPressed(Button.Start)) {
             if (onBoss == 0) {
-                music.Play(boss);
+                Music.Play(boss);
                 onBoss = 1;
             } else {
-                music.Play(overworld);
+                Music.Play(overworld);
                 onBoss = 0;
             }
         }
@@ -251,48 +251,48 @@ void main() {
 Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song), since each compiled theme carries its own runtime kind. Two limits still apply: the total amount of banked music is bounded by the current transparent MBC1 lowering (up to 32 banks / about 512 KiB ROMs, after which compilation fails with an explicit message), and each individual theme is bounded to 64 KiB by the `.gbapu` stream format. See `samples/gameboy-music/` for a runnable two-track example.
 
 
-`camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. For horizontal-only programs, `streamY + streamHeight` must fit inside the 32-row Game Boy background tilemap. Programs that actually move vertically with `camera.SetPosition(x, y)` may pass the full loaded source-map height; the runtime clips the initial circular VRAM window to the rows that fit while using the full generated source-row table for later vertical streaming. Call it after declaring the source map and before `camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
+`Camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. For horizontal-only programs, `streamY + streamHeight` must fit inside the 32-row Game Boy background tilemap. Programs that actually move vertically with `Camera.SetPosition(x, y)` may pass the full loaded source-map height; the runtime clips the initial circular VRAM window to the rows that fit while using the full generated source-row table for later vertical streaming. Call it after declaring the source map and before `Camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`camera.SetPosition(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants, locals, struct fields, or constant-index array elements. The current Game Boy lowering compares the requested low byte with the current camera low byte as an unsigned modular delta, then moves at most one pixel per axis toward the shortest step direction on each call. This keeps continuous movement stable across the Game Boy `SCX`/`SCY` byte wrap at 255 -> 0 while the runtime still maintains the internal 16-bit camera counters used by streaming. A tile-boundary crossing does not write VRAM itself: it advances the camera cursors and queues the exposed column (horizontal) or row (vertical) for deferred streaming, which `camera.Apply()` commits during VBlank. Single-axis programs use the original one-slot pending stream path, preserving their compact byte shape. Diagonal programs queue a pending column and row separately, then drain one visible background-map edge per VBlank inside the declared 21-tile write budget. The column streamer writes the 19 rows that can become visible with fine Y scroll, and the row streamer writes the 21 columns that can become visible with fine X scroll. The second diagonal edge can appear one frame later at 1px/frame movement. The SDK boundary never silently rewrites an unsupported camera request: a diagonal `camera.SetPosition(x, y)` remains diagonal and is accepted because `GameBoyTarget.Capabilities` declares staggered camera stream draining. The shared runner uses two `camera.SetPosition(x, y)` sync calls per frame after updating dead-zone camera state, `samples/gameboy-vscroll/vscroll.rs` exercises Y-only scrolling, and `samples/nes-free-scroll/freescroll.rs` plus `samples/tiled-free-scroll/free-scroll.rs` exercise diagonal X/Y scrolling on Game Boy and NES.
+`Camera.SetPosition(x, y)` is the current position-based camera API candidate. `x` and `y` can be byte-backed expressions such as constants, locals, struct fields, or constant-index array elements. The current Game Boy lowering compares the requested low byte with the current camera low byte as an unsigned modular delta, then moves at most one pixel per axis toward the shortest step direction on each call. This keeps continuous movement stable across the Game Boy `SCX`/`SCY` byte wrap at 255 -> 0 while the runtime still maintains the internal 16-bit camera counters used by streaming. A tile-boundary crossing does not write VRAM itself: it advances the camera cursors and queues the exposed column (horizontal) or row (vertical) for deferred streaming, which `Camera.Apply()` commits during VBlank. Single-axis programs use the original one-slot pending stream path, preserving their compact byte shape. Diagonal programs queue a pending column and row separately, then drain one visible background-map edge per VBlank inside the declared 21-tile write budget. The column streamer writes the 19 rows that can become visible with fine Y scroll, and the row streamer writes the 21 columns that can become visible with fine X scroll. The second diagonal edge can appear one frame later at 1px/frame movement. The SDK boundary never silently rewrites an unsupported camera request: a diagonal `Camera.SetPosition(x, y)` remains diagonal and is accepted because `GameBoyTarget.Capabilities` declares staggered camera stream draining. The shared runner uses two `Camera.SetPosition(x, y)` sync calls per frame after updating dead-zone camera state, `samples/gameboy-vscroll/vscroll.rs` exercises Y-only scrolling, and `samples/nes-free-scroll/freescroll.rs` plus `samples/tiled-free-scroll/free-scroll.rs` exercise diagonal X/Y scrolling on Game Boy and NES.
 
-`camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits any queued column or row into the background tilemap. It runs at the top of the presentation phase after `video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. If the same frame also draws Game Boy sprites, issue `sprite.Draw(...)` first so direct OAM writes get the earliest VBlank cycles, then call `camera.Apply()` before gameplay updates. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `camera.SetPosition(...)` does; a program must call `camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. The row streamer writes the 21 visible columns in screen order and wraps both source and circular background columns as needed. The large per-row streamer is only emitted when the program can scroll vertically, and the two-slot staggered pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
+`Camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits any queued column or row into the background tilemap. It runs at the top of the presentation phase after `Video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `Audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. If the same frame also draws Game Boy sprites, issue `Sprite.Draw(...)` first so direct OAM writes get the earliest VBlank cycles, then call `Camera.Apply()` before gameplay updates. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `Camera.SetPosition(...)` does; a program must call `Camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. The row streamer writes the 21 visible columns in screen order and wraps both source and circular background columns as needed. The large per-row streamer is only emitted when the program can scroll vertically, and the two-slot staggered pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
-`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `sprite.Asset(...)`.
+`camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `Sprite.Asset(...)`.
 
-`camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` and `worldY` can be byte-backed runtime expressions; `width`, `height`, and `flags` are compile-time values, and `width` can use `Sprite.Width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
+`Camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` and `worldY` can be byte-backed runtime expressions; `width`, `height`, and `flags` are compile-time values, and `width` can use `Sprite.Width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
 
-`camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the top world-pixel Y of the first overlapped tile whose flags match, or `255` when there is no hit. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
+`Camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the top world-pixel Y of the first overlapped tile whose flags match, or `255` when there is no hit. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
 
-The preferred `camera.AabbTiles(...)`, `camera.AabbHitTop(...)`, `camera.ScreenAabbTiles(...)`, and `camera.ScreenAabbHitTop(...)` spellings are injected by `SdkLibrarySource` as inline helpers over Game Boy target intrinsics. Those descriptors carry the hidden `"default"` world id and requested flag mask as compile-time operands while preserving the existing SDK operation shape, so collision capability checks, `Sprite.Width(...)` extents, emitted bytes, and the `255` no-hit sentinel remain shared with the legacy snake_case compatibility calls.
+The preferred `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` spellings are injected by `SdkLibrarySource` as inline helpers over Game Boy target intrinsics. Those descriptors carry the hidden `"default"` world id and requested flag mask as compile-time operands while preserving the existing SDK operation shape, so collision capability checks, `Sprite.Width(...)` extents, emitted bytes, and the `255` no-hit sentinel remain shared with the legacy snake_case compatibility calls.
 
-`camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space AABBs, adding the current camera X/Y state inside the backend. They are the actor-framework collision form for wide world Y actors; hit-top returns a screen-pixel top so the framework can add camera Y back into `y`/`yHi`.
+`Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space AABBs, adding the current camera X/Y state inside the backend. They are the actor-framework collision form for wide world Y actors; hit-top returns a screen-pixel top so the framework can add camera Y back into `y`/`yHi`.
 
-`palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `palette.Set(...)` and `objectPalette.Set(...)` remain available as target-intrinsic compatibility calls.
+`Palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `Palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `Palette.Set(...)` and `objectPalette.Set(...)` remain available as target-intrinsic compatibility calls.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
-`world.Column(index, ...)` defines one source-level world tile-id column. `world.Flags(index, ...)` defines the matching collision flag column using `0` for `Empty`, `1` for `Solid`, `2` for `Hazard`, and `4` for `Platform`; flag values can be combined. `world.Map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming and collision flag reads.
+`World.Column(index, ...)` defines one source-level world tile-id column. `World.Flags(index, ...)` defines the matching collision flag column using `0` for `Empty`, `1` for `Solid`, `2` for `Hazard`, and `4` for `Platform`; flag values can be combined. `World.Map(width, streamY, height)` builds the current portable `WorldMap2D` resource from those columns, fills the initial visible Game Boy background rows from that resource, and generates the source-map ROM row tables used by camera streaming and collision flag reads.
 
-`world.Load(path)` imports a finite orthogonal Tiled JSON map (`.tmj`) at compile time and builds the same `WorldMap2D`, source-map ROM rows, collision flags, generated Game Boy background tiles, and initial Game Boy background tilemap. The importer accepts unencoded JSON array tile-layer data, a required `world` tile layer, an optional `background` tile layer, and external `.tsj` or `.tsx` tilesets with PNG images. Tileset image paths can use the same target-variant convention as sprite PNGs: if a `.tsx` points at `tiles.png`, the Game Boy lowering first looks for `tiles.gb.png`, `tiles.GB.png`, `tiles.gameboy.png`, or `tiles.GameBoy.png` next to it, then falls back to `tiles.png`. Because the Game Boy target has one scrolling background tilemap, these Tiled authoring layers are flattened: `background` is the visual base, non-empty `world` cells overlay it, and empty `world` cells keep the background tile underneath at the same Tiled source coordinate. If `retrosharpWorldY` and `retrosharpStreamY` shift the playable world slice vertically, the background layer is shifted by the same amount before composition so the Tiled layers remain visually aligned. A loaded Tiled world can be taller than the 32-row Game Boy background buffer: startup preloads only the rows that fit the circular tilemap, while the full imported world height remains in ROM row tables for `camera.SetPosition(0, y)` vertical streaming. The background rows that sit above the streamed world band are also emitted as full-width source-map rows and streamed horizontally by the camera, so background decorations above the playable band scroll with the world across the whole map instead of staying frozen in the initial 32-column window. Collision flags remain independent from that visual composition. Tiled tile sizes must be positive multiples of 8. Source cells are expanded into Game Boy hardware cells instead of being downscaled: for example, a 16x16 Tiled tile becomes a 2x2 block of generated 8x8 Game Boy tiles. Each generated 8x8 tile is quantized to the four DMG color indexes, and repeated generated patterns are deduplicated. GID `0` remains empty. If there is no explicit `collision` tile layer, tile `objectgroup` rectangles in the tileset become `Solid` flags repeated across every generated sub-tile; optional `retrosharpCollision` or `retrosharpFlags` tile/object properties can name or number `Solid`, `Hazard`, and `Platform` flags. A `collision` layer is still accepted for compact direct flag values: `0` empty, `1` solid, `2` hazard, and `4` platform. The map must include integer custom property `retrosharpStreamY`, expressed in generated Game Boy 8x8 tile rows; optional `retrosharpWorldY` and `retrosharpWorldHeight` properties select source Tiled rows used by the streaming world before expansion.
+`World.Load(path)` imports a finite orthogonal Tiled JSON map (`.tmj`) at compile time and builds the same `WorldMap2D`, source-map ROM rows, collision flags, generated Game Boy background tiles, and initial Game Boy background tilemap. The importer accepts unencoded JSON array tile-layer data, a required `world` tile layer, an optional `background` tile layer, and external `.tsj` or `.tsx` tilesets with PNG images. Tileset image paths can use the same target-variant convention as sprite PNGs: if a `.tsx` points at `tiles.png`, the Game Boy lowering first looks for `tiles.gb.png`, `tiles.GB.png`, `tiles.gameboy.png`, or `tiles.GameBoy.png` next to it, then falls back to `tiles.png`. Because the Game Boy target has one scrolling background tilemap, these Tiled authoring layers are flattened: `background` is the visual base, non-empty `world` cells overlay it, and empty `world` cells keep the background tile underneath at the same Tiled source coordinate. If `retrosharpWorldY` and `retrosharpStreamY` shift the playable world slice vertically, the background layer is shifted by the same amount before composition so the Tiled layers remain visually aligned. A loaded Tiled world can be taller than the 32-row Game Boy background buffer: startup preloads only the rows that fit the circular tilemap, while the full imported world height remains in ROM row tables for `Camera.SetPosition(0, y)` vertical streaming. The background rows that sit above the streamed world band are also emitted as full-width source-map rows and streamed horizontally by the camera, so background decorations above the playable band scroll with the world across the whole map instead of staying frozen in the initial 32-column window. Collision flags remain independent from that visual composition. Tiled tile sizes must be positive multiples of 8. Source cells are expanded into Game Boy hardware cells instead of being downscaled: for example, a 16x16 Tiled tile becomes a 2x2 block of generated 8x8 Game Boy tiles. Each generated 8x8 tile is quantized to the four DMG color indexes, and repeated generated patterns are deduplicated. GID `0` remains empty. If there is no explicit `collision` tile layer, tile `objectgroup` rectangles in the tileset become `Solid` flags repeated across every generated sub-tile; optional `retrosharpCollision` or `retrosharpFlags` tile/object properties can name or number `Solid`, `Hazard`, and `Platform` flags. A `collision` layer is still accepted for compact direct flag values: `0` empty, `1` solid, `2` hazard, and `4` platform. The map must include integer custom property `retrosharpStreamY`, expressed in generated Game Boy 8x8 tile rows; optional `retrosharpWorldY` and `retrosharpWorldHeight` properties select source Tiled rows used by the streaming world before expansion.
 
-`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `world.Load(...)` for editable maps, or `world.Column(...)` plus `world.Flags(...)` for compact source-authored maps, so visual setup, streaming data, and collision flags can share the same world resource.
+`map_column(index, ...)` remains supported as a transitional compatibility call. New runner-level world data should use `World.Load(...)` for editable maps, or `World.Column(...)` plus `World.Flags(...)` for compact source-authored maps, so visual setup, streaming data, and collision flags can share the same world resource.
 
 `map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. `map_flags_at(sourceColumn, row)` reads the generated collision flag byte for the same source coordinate. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_flags_at(column, 2) != 0) { ... }`.
 
-`world_tile_flags_at(worldX, worldY)` reads collision flags by world pixel coordinates. The Game Boy lowering divides each byte-backed coordinate by the 8x8 tile size, reads the generated world flag row table, and returns `0` when the coordinate falls outside the active world map from `world.Map(...)` or `world.Load(...)`. The language syntax intentionally omits a `level` argument while this prototype has one active world map; the SDK operation still records `WorldId = "default"` as the future extension point for named maps.
+`world_tile_flags_at(worldX, worldY)` reads collision flags by world pixel coordinates. The Game Boy lowering divides each byte-backed coordinate by the 8x8 tile size, reads the generated world flag row table, and returns `0` when the coordinate falls outside the active world map from `World.Map(...)` or `World.Load(...)`. The language syntax intentionally omits a `level` argument while this prototype has one active world map; the SDK operation still records `WorldId = "default"` as the future extension point for named maps.
 
 `collision_aabb_tiles(x, y, width, height, flags)` returns `1` when any world tile overlapped by the pixel AABB has one of the requested flag bits, otherwise `0`. Width and height are compile-time values in this prototype, with `Sprite.Width(name)` accepted as a static width source. Zero width, zero height, or a zero flag mask returns `0`. This helper only reports overlap; actor movement and collision resolution remain source-level policy.
 
-`input.Poll()` snapshots the joypad for the current game tick. Call it once after `video.WaitVBlank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `Input.IsDown(button)` returns `true` while the button is down in the current snapshot, `Input.WasPressed(button)` returns `true` only on the up-to-down transition, `Input.WasReleased(button)` returns `true` only on the down-to-up transition, and `Input.HoldTicks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks. The snake_case builtins (`button_down`, `button_just_pressed`, `button_just_released`, `button_hold_ticks`, and `sprite_width`) remain accepted as transitional aliases and lower identically.
+`Input.Poll()` snapshots the joypad for the current game tick. Call it once after `Video.WaitVBlank()` before using the tick-based input helpers. The Game Boy backend reads each selected `JOYP` row several times before latching it and deselects both rows afterward, which avoids stale row reads on original DMG hardware. `Input.IsDown(button)` returns `true` while the button is down in the current snapshot, `Input.WasPressed(button)` returns `true` only on the up-to-down transition, `Input.WasReleased(button)` returns `true` only on the down-to-up transition, and `Input.HoldTicks(button)` returns the number of consecutive polls the button has been held, saturating at `255` and resetting to `0` when released. This supports variable-height jumps without introducing real-time clocks. The snake_case builtins (`button_down`, `button_just_pressed`, `button_just_released`, `button_hold_ticks`, and `sprite_width`) remain accepted as transitional aliases and lower identically.
 
-`button_pressed(button)` remains supported as a compatibility direct joypad read and returns `1` when the named button is currently pressed or `0` otherwise. New gameplay code should prefer `input.Poll()` with the tick-based helpers. The `button` argument is a member of the built-in `Button` enum (`Button.A`, `Button.B`, `Button.Select`, `Button.Start`, `Button.Right`, `Button.Left`, `Button.Up`, `Button.Down`). The bare lowercase identifiers `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down` remain accepted as a transitional alias and lower to the same joypad masks.
+`button_pressed(button)` remains supported as a compatibility direct joypad read and returns `1` when the named button is currently pressed or `0` otherwise. New gameplay code should prefer `Input.Poll()` with the tick-based helpers. The `button` argument is a member of the built-in `Button` enum (`Button.A`, `Button.B`, `Button.Select`, `Button.Start`, `Button.Right`, `Button.Left`, `Button.Up`, `Button.Down`). The bare lowercase identifiers `a`, `b`, `select`, `start`, `right`, `left`, `up`, and `down` remain accepted as a transitional alias and lower to the same joypad masks.
 
-`sprite.Asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`; grayscale exports also map white to `1`, gray to `2`, and black to `3`.
+`Sprite.Asset(name, path, frameWidth, frameHeight)` loads an editable PNG sprite sheet relative to the `.rs` file. Frames are laid out horizontally, which maps directly to a simple Aseprite export. Transparent pixels become Game Boy sprite color `0`; up to three opaque colors become sprite colors `1`, `2`, and `3`. The sample palette maps `#E0F8D0` to `1`, `#88C070` to `2`, and `#346856` to `3`; grayscale exports also map white to `1`, gray to `2`, and black to `3`.
 
 For example, a two-frame 16x16 runner can be referenced as:
 
 ```c
-sprite.Asset(player_run, "assets/player-run.gb.png", 16, 16);
+Sprite.Asset(player_run, "assets/player-run.gb.png", 16, 16);
 ```
 
 In Aseprite, edit at 1x and keep the transparent background. Export with a horizontal sheet:
@@ -303,7 +303,7 @@ aseprite -b assets/mario-run.aseprite --sheet assets/mario-run.gb.png --sheet-ty
 
 PNG frame dimensions do not need to be hardware-sized. The compiler pads each frame to Game Boy 8x16 hardware cells internally, so a 16x27 logical sprite is emitted as a 16x32 metasprite. Compiled assets now expose portable sprite metadata: logical width and height, a default origin at `(0, 0)`, a default full-size hitbox, palette slot count, and a default animation clip spanning the loaded frames. Animation clips carry frame indices, per-frame durations, frame-start ticks, and total duration; the default loaded-asset clip assigns one tick to each frame until authored animation data exists. Target lowering still uses the existing Game Boy metasprite pieces and tile data.
 
-`sprite.Asset(name, path)` is still supported as a transitional legacy path for the experimental JSON asset format. That format uses a `platforms.gb.frames` array. Each frame is a list of rows, and each character is a Game Boy color index from `0` to `3`.
+`Sprite.Asset(name, path)` is still supported as a transitional legacy path for the experimental JSON asset format. That format uses a `platforms.gb.frames` array. Each frame is a list of rows, and each character is a Game Boy color index from `0` to `3`.
 
 ```json
 {
@@ -320,13 +320,13 @@ PNG frame dimensions do not need to be hardware-sized. The compiler pads each fr
 }
 ```
 
-`sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Logical sizes like 16x27 are valid; the emitted hardware footprint is rounded up to 8x16 cells. The optional `flipX` argument is a portable boolean: any non-zero local value mirrors the logical metasprite horizontally, and the Game Boy backend lowers that choice to the OAM X-flip bit internally. The optional `paletteSlot` argument is a portable sprite palette slot validated against the target descriptor; Game Boy supports slots `0` and `1` and lowers slot `1` to the OBP1 OAM attribute bit. Raw OAM attribute bytes remain available through the target-intrinsic `sprite.Set(...)` API, not through portable `sprite.Draw(...)`.
+`Sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` draws a logical sprite. The compiler splits the selected Game Boy variant into 8x16 hardware sprites, generates tile data, assigns OAM entries, and treats `frame` as a logical animation frame index. Logical sizes like 16x27 are valid; the emitted hardware footprint is rounded up to 8x16 cells. The optional `flipX` argument is a portable boolean: any non-zero local value mirrors the logical metasprite horizontally, and the Game Boy backend lowers that choice to the OAM X-flip bit internally. The optional `paletteSlot` argument is a portable sprite palette slot validated against the target descriptor; Game Boy supports slots `0` and `1` and lowers slot `1` to the OBP1 OAM attribute bit. Raw OAM attribute bytes remain available through the target-intrinsic `Sprite.Set(...)` API, not through portable `Sprite.Draw(...)`.
 
-The preferred `sprite.Draw(...)` spelling is injected by `SdkLibrarySource` as an inline helper over the Game Boy `sprite_draw` target intrinsic. That intrinsic descriptor marks the sprite name as a compile-time asset reference and the palette slot as a compile-time constant while keeping X, Y, frame, and flipX as runtime operands. Collection still produces `Sdk2DOperation.DrawLogicalSprite`, so metasprite geometry lookup, capability validation, frame-budget validation, and ROM emission are shared with the legacy `sprite_draw(...)` compatibility builtin.
+The preferred `Sprite.Draw(...)` spelling is injected by `SdkLibrarySource` as an inline helper over the Game Boy `sprite_draw` target intrinsic. That intrinsic descriptor marks the sprite name as a compile-time asset reference and the palette slot as a compile-time constant while keeping X, Y, frame, and flipX as runtime operands. Collection still produces `Sdk2DOperation.DrawLogicalSprite`, so metasprite geometry lookup, capability validation, frame-budget validation, and ROM emission are shared with the legacy `sprite_draw(...)` compatibility builtin.
 
-`animation.Clip(name, firstFrame, duration...)` declares a portable animation clip resource. The first argument is a clip identifier, the second is the first logical frame index, and the remaining arguments are per-frame durations in ticks. `animation.Frame(name, tick)` returns the logical frame for a tick value and loops by the clip's total duration. Game Boy lowering keeps runtime state explicit in source, reduces dynamic ticks modulo the clip duration, then checks frame boundaries in declaration order.
+`Animation.Clip(name, firstFrame, duration...)` declares a portable animation clip resource. The first argument is a clip identifier, the second is the first logical frame index, and the remaining arguments are per-frame durations in ticks. `Animation.Frame(name, tick)` returns the logical frame for a tick value and loops by the clip's total duration. Game Boy lowering keeps runtime state explicit in source, reduces dynamic ticks modulo the clip duration, then checks frame boundaries in declaration order.
 
-`hud.SetTile(window, x, y, tile)` writes one static HUD tile into the Game Boy Window tilemap. The compiler validates the requested HUD mode through `GameBoyTarget.Capabilities`, copies the HUD tilemap to `$9C00`, sets the Window position to `WY=0` and `WX=7`, and enables the LCD Window layer only when a Window HUD tile is declared. The HUD tilemap is separate from the scrolling background/camera tilemap. Runtime HUD writes and configurable Window positions are not implemented yet. `split_scroll` is rejected through the target capability check.
+`Hud.SetTile(window, x, y, tile)` writes one static HUD tile into the Game Boy Window tilemap. The compiler validates the requested HUD mode through `GameBoyTarget.Capabilities`, copies the HUD tilemap to `$9C00`, sets the Window position to `WY=0` and `WX=7`, and enables the LCD Window layer only when a Window HUD tile is declared. The HUD tilemap is separate from the scrolling background/camera tilemap. Runtime HUD writes and configurable Window positions are not implemented yet. `split_scroll` is rejected through the target capability check.
 
 ## Short-Term Checklist
 
@@ -336,7 +336,7 @@ The preferred `sprite.Draw(...)` spelling is injected by `SdkLibrarySource` as a
 - [x] Add `scroll.Set(x, y)` over Game Boy `SCX`/`SCY`.
 - [x] Build a runner sample with a fixed actor and scrolling background.
 - [x] Stream new background columns every 8 pixels.
-- [x] Represent maps as source data instead of ad hoc `tilemap.Set` calls.
+- [x] Represent maps as source data instead of ad hoc `Tilemap.Set` calls.
 - [x] Load an editable logical sprite asset and lower it to Game Boy metasprites.
 - [x] Add collision against a simple tile row.
 - [x] Add input-driven jump from the Game Boy joypad.
@@ -351,17 +351,17 @@ The preferred `sprite.Draw(...)` spelling is injected by `SdkLibrarySource` as a
 - [x] Generate the runner's streaming map data from the same world resource.
 - [x] Generate collision flag tables from the same world resource.
 - [x] Add the first position-based camera API and SDK operation boundary.
-- [x] Reuse the existing horizontal camera runtime from `camera.SetPosition(...)`.
+- [x] Reuse the existing horizontal camera runtime from `Camera.SetPosition(...)`.
 - [x] Replace direction-specific camera helpers with a position-based camera API in the runner.
 - [x] Unify visual map data, streaming data, and collision flags into one world resource.
-- [x] Extend camera position state and `camera.Apply()` to vertical scroll.
+- [x] Extend camera position state and `Camera.Apply()` to vertical scroll.
 - [x] Stream visible background rows when vertical camera movement crosses tile boundaries.
 - [x] Preserve logical sprite metadata for loaded Game Boy sprite assets.
 - [x] Consume the collected SDK operation stream during Game Boy runtime lowering.
-- [x] Replace raw `sprite.Draw` flags with a portable `flipX` boolean.
-- [x] Add logical sprite palette slot selection to `sprite.Draw`.
-- [x] Add animation clip data and looping `animation.Frame(...)` lookup.
-- [x] Migrate the runner's run animation to an explicit tick plus `animation.Frame(...)`.
+- [x] Replace raw `Sprite.Draw` flags with a portable `flipX` boolean.
+- [x] Add logical sprite palette slot selection to `Sprite.Draw`.
+- [x] Add animation clip data and looping `Animation.Frame(...)` lookup.
+- [x] Migrate the runner's run animation to an explicit tick plus `Animation.Frame(...)`.
 - [x] Add world-coordinate tile flag queries through `world_tile_flags_at(...)`.
 - [x] Add boolean AABB tile collision queries through `collision_aabb_tiles(...)`.
 - [x] Add a NES parity spike for logical sprites, input, and horizontal camera scroll.
@@ -382,18 +382,18 @@ Landed on 2026-06-01:
 
 Landed after the initial runner loop:
 
-- `input.Poll()`, `Input.IsDown(...)`, `Input.WasPressed(...)`, `Input.WasReleased(...)`, and `Input.HoldTicks(...)` provide a tick-based input surface.
+- `Input.Poll()`, `Input.IsDown(...)`, `Input.WasPressed(...)`, `Input.WasReleased(...)`, and `Input.HoldTicks(...)` provide a tick-based input surface.
 - The Game Boy runner uses the new input helpers for edge-triggered, variable-height jumping: holding A extends upward impulse for a bounded number of ticks, and releasing A cuts the extension.
 - The runner's horizontal movement, dead-zone camera state, and run animation now advance from a horizontal speed value rather than raw D-pad state: holding a direction moves at a base walk speed and faces that way immediately, holding B builds speed up to a higher run limit only while grounded (Mario has traction), airborne input preserves horizontal momentum without building or bleeding speed, releasing the D-pad coasts to a stop through ground friction, and pressing the opposite direction turns instantly instead of drifting backward.
-- `camera.SetPosition(x, y)` advances the runtime camera by at most one pixel per axis per call toward the requested low byte, using a signed 8-bit delta so source-level byte positions can wrap. The runner updates camera state per single-pixel movement step, then calls `camera.SetPosition` twice at the end of the frame so a two-pixel run frame can catch the 1px-per-call backend up without inlining the full 2D camera runtime at every collision probe.
+- `Camera.SetPosition(x, y)` advances the runtime camera by at most one pixel per axis per call toward the requested low byte, using a signed 8-bit delta so source-level byte positions can wrap. The runner updates camera state per single-pixel movement step, then calls `Camera.SetPosition` twice at the end of the frame so a two-pixel run frame can catch the 1px-per-call backend up without inlining the full 2D camera runtime at every collision probe.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
-- `sprite.Draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
-- `palette.Background(...)` and `palette.Sprite(...)` declare logical palette slots for SDK-shaped samples; the runner uses them instead of raw `palette.Set(...)` and `objectPalette.Set(...)`.
-- `animation.Clip(...)` and `animation.Frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
+- `Sprite.Draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
+- `Palette.Background(...)` and `Palette.Sprite(...)` declare logical palette slots for SDK-shaped samples; the runner uses them instead of raw `Palette.Set(...)` and `objectPalette.Set(...)`.
+- `Animation.Clip(...)` and `Animation.Frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
 - `world_tile_flags_at(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
 - `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.
-- `camera.AabbTiles(...)` reports collision for camera-relative AABBs against the current camera view, including fine-scroll X alignment.
-- `camera.AabbHitTop(...)` reports the contacted tile's top world Y for a caller-defined camera-relative search AABB, using `255` as the no-hit sentinel.
+- `Camera.AabbTiles(...)` reports collision for camera-relative AABBs against the current camera view, including fine-scroll X alignment.
+- `Camera.AabbHitTop(...)` reports the contacted tile's top world Y for a caller-defined camera-relative search AABB, using `255` as the no-hit sentinel.
 
 Landed after the playable-loop pass:
 
@@ -404,18 +404,18 @@ Landed after the playable-loop pass:
 
 Landed after the camera-runtime pass:
 
-- `camera.Init(...)`, `camera.Apply()`, `camera_move_right()`, `camera_move_left()`, and `camera_tile_column_at(...)` lift horizontal scrolling one layer above raw `SCX` writes and hand-managed streaming cursors.
+- `Camera.Init(...)`, `Camera.Apply()`, `camera_move_right()`, `camera_move_left()`, and `camera_tile_column_at(...)` lift horizontal scrolling one layer above raw `SCX` writes and hand-managed streaming cursors.
 - The camera runtime owns 16-bit world X, sub-tile scroll state, circular background-map edge columns, source-map edge columns, and 8 px column streaming.
 - Camera span helpers remain available for source-map checks, including logical sprite widths through `Sprite.Width(...)`, but the runner no longer depends on them for player feet.
 
 Landed after the Collision V1 pass:
 
-- The runner stores player world X/Y, derives the actual screen X/Y from player position minus camera position, passes that byte-backed screen X into `camera.AabbTiles(...)` / `camera.AabbHitTop(...)`, and probes generated world flags with the logical width from `Sprite.Width(mario_player)`.
+- The runner stores player world X/Y, derives the actual screen X/Y from player position minus camera position, passes that byte-backed screen X into `Camera.AabbTiles(...)` / `Camera.AabbHitTop(...)`, and probes generated world flags with the logical width from `Sprite.Width(mario_player)`.
 - Camera span collision and world-space `collision_aabb_tiles(...)` remain available, but the runner uses the camera-relative AABB helper so long maps stay aligned after the camera scrolls beyond the source-local byte range.
 
 Landed after the landing-query pass:
 
-- The runner uses `camera.AabbHitTop(...)` to query the top edge of the first solid tile in a caller-defined landing search window, so descending actors can snap to stacked or multi-tile solids without copying a ladder of one-pixel probes.
+- The runner uses `Camera.AabbHitTop(...)` to query the top edge of the first solid tile in a caller-defined landing search window, so descending actors can snap to stacked or multi-tile solids without copying a ladder of one-pixel probes.
 - Landing policy remains source-owned: the runner still gates the query on downward velocity and calls `player.Land(...)` only when the query returns something other than `CollisionProbe.NoTileHit`.
 
 Landed after the NES portable spike:
@@ -426,20 +426,20 @@ Landed after the NES portable spike:
 
 Landed after the first HUD pass:
 
-- `hud.SetTile(window, x, y, tile)` compiles to the Game Boy Window tilemap at `$9C00` and enables the Window layer without sharing camera scroll state.
+- `Hud.SetTile(window, x, y, tile)` compiles to the Game Boy Window tilemap at `$9C00` and enables the Window layer without sharing camera scroll state.
 - `samples/gameboy-hud/hud.rs` builds as the first HUD sample and keeps Window restrictions explicit.
 
 Landed after the richer runner scene pass:
 
-- The runner imports `samples/runner/maps/runner.tmj` with `world.Load(...)`, combining editable 24x48 Tiled background/world layers, external `.tsx` tileset data, generated Game Boy background tiles, and collision flags in the shared Game Boy/NES runner ROMs.
+- The runner imports `samples/runner/maps/runner.tmj` with `World.Load(...)`, combining editable 24x48 Tiled background/world layers, external `.tsx` tileset data, generated Game Boy background tiles, and collision flags in the shared Game Boy/NES runner ROMs.
 - Tileset `objectgroup` rectangles now provide the runner's solid platform and ground collision flags without a separate hand-authored collision layer.
 - The runner scene focuses on the player, camera, Tiled map streaming, tileset-authored solid collision, fall reset, and variable-height jump over a 48x96 expanded tile world.
 
 Landed after the ceiling-collision pass:
 
-- Solid blocks now block the player from below: `FrameState.ResolveCeilingHit(...)` probes a short AABB over the head with `camera.AabbTiles(...)` while the actor is rising (`velocityY >= World.SignedVelocityWrap`) and calls `player.BounceDown()` on contact, cancelling the jump and applying a small downward velocity so the actor rebounds with a physical feel instead of passing through the block.
+- Solid blocks now block the player from below: `FrameState.ResolveCeilingHit(...)` probes a short AABB over the head with `Camera.AabbTiles(...)` while the actor is rising (`velocityY >= Level.SignedVelocityWrap`) and calls `player.BounceDown()` on contact, cancelling the jump and applying a small downward velocity so the actor rebounds with a physical feel instead of passing through the block.
 - The head probe is offset to the sprite's visible content, not its full cell. The player sheet is 32 px tall but the figure is bottom-aligned with ~4 px of transparent padding at the top, so the probe references the real head at `footWorldY - CeilingProbeTopOffset` with `CeilingProbeTopOffset = 28` (probe band `[footWorldY - 28, footWorldY - 24]`). This makes the impact register when the visible head reaches the block instead of a few pixels early.
-- The landing search window is now feet-relative (`LandingSearchTopOffset = 4`, `LandingSearchHeight = 12`) instead of spanning the whole sprite body, so `camera.AabbHitTop(...)` only snaps the actor onto a surface at or just below the feet. This stops a descending actor from being magnetised up onto a block whose underside it just hit, while preserving normal landing on ground and platforms approached from above. Both responses remain source-level policy in `samples/runner/runner.rs`.
+- The landing search window is now feet-relative (`LandingSearchTopOffset = 4`, `LandingSearchHeight = 12`) instead of spanning the whole sprite body, so `Camera.AabbHitTop(...)` only snaps the actor onto a surface at or just below the feet. This stops a descending actor from being magnetised up onto a block whose underside it just hit, while preserving normal landing on ground and platforms approached from above. Both responses remain source-level policy in `samples/runner/runner.rs`.
 
 ## Current Framework Backlog
 

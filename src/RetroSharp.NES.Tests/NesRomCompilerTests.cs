@@ -580,7 +580,7 @@ public class NesRomCompilerTests
         var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class audio", library, StringComparison.Ordinal);
+        Assert.Contains("class Audio", library, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(explicitLibrarySource), NesRomCompiler.CompileSource(source));
     }
 
@@ -633,7 +633,7 @@ public class NesRomCompilerTests
                                    return;
                                }
                                """;
-        Assert.Contains("class camera", SdkLibrarySource.ForTarget(NesTarget.Intrinsics), StringComparison.Ordinal);
+        Assert.Contains("class Camera", SdkLibrarySource.ForTarget(NesTarget.Intrinsics), StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
     }
 
@@ -686,7 +686,7 @@ public class NesRomCompilerTests
 
         var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class sprite", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("class Sprite", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(direct, baseDirectory), NesRomCompiler.CompileSource(library, baseDirectory));
     }
@@ -811,7 +811,7 @@ public class NesRomCompilerTests
         // which NES does not declare. The injected NES library must not expose it.
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.DoesNotContain("class world", library, StringComparison.Ordinal);
+        Assert.DoesNotContain("class World", library, StringComparison.Ordinal);
         Assert.DoesNotContain("world_tile_flags_at", library, StringComparison.Ordinal);
     }
 
@@ -828,8 +828,8 @@ public class NesRomCompilerTests
 
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class video", library, StringComparison.Ordinal);
-        Assert.Contains("class input", library, StringComparison.Ordinal);
+        Assert.Contains("class Video", library, StringComparison.Ordinal);
+        Assert.Contains("class Input", library, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(explicitLibrarySource), NesRomCompiler.CompileSource(source));
     }
 

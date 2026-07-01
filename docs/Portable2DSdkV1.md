@@ -8,15 +8,15 @@ The SDK is portable by capability, not by identical machine behavior. A call is 
 
 ## SDK v1 Surface
 
-The current source spelling is the SDK dot-call form, for example `video.WaitVBlank()` and `camera.SetPosition(x, y)`. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`. `video.WaitVBlank()` and `input.Poll()` are now provided by an injected SDK source library over target intrinsics, while higher-level camera, sprite, world, audio, and collision calls remain capability-checked SDK operations or audio operations.
+The current source spelling is the SDK dot-call form, for example `Video.WaitVBlank()` and `Camera.SetPosition(x, y)`. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`. `Video.WaitVBlank()` and `Input.Poll()` are now provided by an injected SDK source library over target intrinsics, while higher-level camera, sprite, world, audio, and collision calls remain capability-checked SDK operations or audio operations.
 
 ### Frame and input
 
 | Signature | Semantics |
 | --- | --- |
-| `video.Init()` | Initialize the target video path for samples that need explicit setup. This remains a narrow setup call while the SDK frame lifecycle is stabilized. |
-| `video.WaitVBlank()` | Wait for the next frame boundary. This maps to `Sdk2DOperation.WaitFrame`. |
-| `input.Poll()` | Snapshot controller state for the current tick. Call once per frame before tick-based button helpers. |
+| `Video.Init()` | Initialize the target video path for samples that need explicit setup. This remains a narrow setup call while the SDK frame lifecycle is stabilized. |
+| `Video.WaitVBlank()` | Wait for the next frame boundary. This maps to `Sdk2DOperation.WaitFrame`. |
+| `Input.Poll()` | Snapshot controller state for the current tick. Call once per frame before tick-based button helpers. |
 | `Input.IsDown(button)` | Return `true` while the named button is down in the current poll. |
 | `Input.WasPressed(button)` | Return `true` only on the up-to-down edge. |
 | `Input.WasReleased(button)` | Return `true` only on the down-to-up edge. |
@@ -29,11 +29,11 @@ Supported logical buttons are `a`, `b`, `select`, `start`, `right`, `left`, `up`
 
 | Signature | Semantics |
 | --- | --- |
-| `audio.Init()` | Initialize the target audio path and reset portable BGM playback state. |
-| `music.Asset(name, path)` | Declare a music resource. VGM/VGZ is the preferred faithful input; per-target variants such as `theme.gb.vgz` and `theme.nes.vgz` are resolved automatically when present. The portable envelope format is `retrosharp.music.v1` for explicit platform entries. |
-| `music.Play(name)` | Start the declared BGM resource. This maps to `SdkAudioOperation.PlayMusic` and is capability-checked through `TargetAudioCapabilities`. |
-| `music.Stop()` | Stop BGM playback. |
-| `audio.Update()` | Advance the target audio runtime once. Call it once per frame after the frame boundary for targets whose BGM runtime is tick-driven. |
+| `Audio.Init()` | Initialize the target audio path and reset portable BGM playback state. |
+| `Music.Asset(name, path)` | Declare a music resource. VGM/VGZ is the preferred faithful input; per-target variants such as `theme.gb.vgz` and `theme.nes.vgz` are resolved automatically when present. The portable envelope format is `retrosharp.music.v1` for explicit platform entries. |
+| `Music.Play(name)` | Start the declared BGM resource. This maps to `SdkAudioOperation.PlayMusic` and is capability-checked through `TargetAudioCapabilities`. |
+| `Music.Stop()` | Stop BGM playback. |
+| `Audio.Update()` | Advance the target audio runtime once. Call it once per frame after the frame boundary for targets whose BGM runtime is tick-driven. |
 
 The resource envelope intentionally allows one source-level theme to carry different target variants:
 
@@ -53,16 +53,16 @@ Game Boy currently accepts VGM/VGZ DMG register logs, hUGETracker `.uge` v6 reso
 
 | Signature | Semantics |
 | --- | --- |
-| `world.Column(index, tile0, tile1, ...)` | Define one source-level world column of tile ids. |
-| `world.Flags(index, flags0, flags1, ...)` | Define matching tile collision flags for a world column. |
-| `world.Map(width, streamY, height)` | Build the active `WorldMap2D` resource from declared columns and flags. |
-| `world.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
+| `World.Column(index, tile0, tile1, ...)` | Define one source-level world column of tile ids. |
+| `World.Flags(index, flags0, flags1, ...)` | Define matching tile collision flags for a world column. |
+| `World.Map(width, streamY, height)` | Build the active `WorldMap2D` resource from declared columns and flags. |
+| `World.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `world_tile_flags_at(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
-| `camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` and `worldY` may be literals or byte-backed runtime expressions, so fixed-screen actors and projected world-space actors can share the same SDK operation. |
-| `camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a camera-relative AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
-| `camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` | Return `1` if a screen-space AABB overlaps requested world flags after adding the current camera X/Y state. This is the actor/runtime form used when both actor axes are projected to screen bytes. |
-| `camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` | Return the top screen-pixel Y of the first/top overlapped tile matching the requested flags for a screen-space AABB, or `255` when there is no hit. Source/framework code can add the current camera Y bytes back when it needs to resolve a world Y. |
+| `Camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` and `worldY` may be literals or byte-backed runtime expressions, so fixed-screen actors and projected world-space actors can share the same SDK operation. |
+| `Camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a camera-relative AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
+| `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` | Return `1` if a screen-space AABB overlaps requested world flags after adding the current camera X/Y state. This is the actor/runtime form used when both actor axes are projected to screen bytes. |
+| `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` | Return the top screen-pixel Y of the first/top overlapped tile matching the requested flags for a screen-space AABB, or `255` when there is no hit. Source/framework code can add the current camera Y bytes back when it needs to resolve a world Y. |
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
 
@@ -72,36 +72,36 @@ For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editab
 
 | Signature | Semantics |
 | --- | --- |
-| `palette.Background(slot, c0, c1, c2, c3)` | Declare one logical background palette slot with four logical luminance tones `0..3`. |
-| `palette.Sprite(slot, c0, c1, c2, c3)` | Declare one logical sprite palette slot with four logical luminance tones `0..3`. |
+| `Palette.Background(slot, c0, c1, c2, c3)` | Declare one logical background palette slot with four logical luminance tones `0..3`. |
+| `Palette.Sprite(slot, c0, c1, c2, c3)` | Declare one logical sprite palette slot with four logical luminance tones `0..3`. |
 
-The slot is logical and capability-checked against the target descriptor. The four color values are target-independent luminance tones `0..3`; each backend maps them to its hardware palette representation. NES sprite PNG assets can derive a hardware sprite palette for the draw slot that uses the asset, while preserving the universal background color in sprite palette entry `0`. Raw `palette.Set(...)` and `objectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
+The slot is logical and capability-checked against the target descriptor. The four color values are target-independent luminance tones `0..3`; each backend maps them to its hardware palette representation. NES sprite PNG assets can derive a hardware sprite palette for the draw slot that uses the asset, while preserving the universal background color in sprite palette entry `0`. Raw `Palette.Set(...)` and `objectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
 
 ### Camera
 
 | Signature | Semantics |
 | --- | --- |
-| `camera.Init(mapWidth, streamY, streamHeight)` | Initialize camera state for the active world map. |
-| `camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
-| `camera.Apply()` | Apply the current camera state to the target during the frame. |
+| `Camera.Init(mapWidth, streamY, streamHeight)` | Initialize camera state for the active world map. |
+| `Camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
+| `Camera.Apply()` | Apply the current camera state to the target during the frame. |
 
-Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `camera.SetPosition(x, y)` with one-pixel-per-call stepping and row streaming during `camera.Apply()`. Diagonal Game Boy movement is accepted through the target's staggered camera-stream capability: a column and row can be pending together, but only one visible background-map edge is committed per VBlank inside the 21-tile budget. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
+Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `Camera.SetPosition(x, y)` with one-pixel-per-call stepping and row streaming during `Camera.Apply()`. Diagonal Game Boy movement is accepted through the target's staggered camera-stream capability: a column and row can be pending together, but only one visible background-map edge is committed per VBlank inside the 21-tile budget. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
 
 ### Logical sprites and animation
 
 | Signature | Semantics |
 | --- | --- |
-| `sprite.Asset(name, path[, frameWidth, frameHeight])` | Declare a logical sprite asset. PNG sheets use explicit frame dimensions; JSON assets remain a transitional compatibility format. |
+| `Sprite.Asset(name, path[, frameWidth, frameHeight])` | Declare a logical sprite asset. PNG sheets use explicit frame dimensions; JSON assets remain a transitional compatibility format. |
 | `Sprite.Width(name)` | Return the logical sprite width known at compile time. |
-| `sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` | Draw a logical sprite frame with portable horizontal flip and logical palette-slot selection. |
-| `animation.Clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
-| `animation.Frame(name, tick)` | Return the frame index for a tick in a declared clip. |
+| `Sprite.Draw(name, x, y, frame[, flipX[, paletteSlot]])` | Draw a logical sprite frame with portable horizontal flip and logical palette-slot selection. |
+| `Animation.Clip(name, firstFrame, duration...)` | Declare a looping frame-duration table. |
+| `Animation.Frame(name, tick)` | Return the frame index for a tick in a declared clip. |
 
 For PNG assets, a generic path can be specialized per target without changing source. If source asks for `Mario.png`, the selected target first looks for `Mario.gb.png`/`Mario.GameBoy.png` or `Mario.nes.png`/`Mario.NES.png` next to it, then falls back to `Mario.png`. Existing platform-suffixed source paths are normalized while searching for the selected target variant, so a transitional `Mario.gb.png` reference can still pick `Mario.nes.png` when compiling NES.
 
 The `x`, `y`, `frame`, and `flipX` arguments are byte-backed constants or storage locations in the shared SDK operation model. `flipX` is a portable boolean, not a raw hardware attribute byte. `paletteSlot` is a compile-time logical sprite palette slot checked against the target descriptor.
 
-On Game Boy and NES, `sprite.Draw(...)` is injected as an SDK library helper over a target intrinsic whose descriptor treats the sprite asset id and palette slot as compile-time operands. The collector still produces `Sdk2DOperation.DrawLogicalSprite`, so capability checks, frame-budget checks, and emitted bytes stay aligned with the legacy `sprite_draw(...)` compatibility spelling.
+On Game Boy and NES, `Sprite.Draw(...)` is injected as an SDK library helper over a target intrinsic whose descriptor treats the sprite asset id and palette slot as compile-time operands. The collector still produces `Sdk2DOperation.DrawLogicalSprite`, so capability checks, frame-budget checks, and emitted bytes stay aligned with the legacy `sprite_draw(...)` compatibility spelling.
 
 ### Actor framework slice
 
@@ -112,12 +112,12 @@ object identity, virtual dispatch, delegates, closures, or function pointers.
 | Signature | Semantics |
 | --- | --- |
 | `actor.Pool(name, capacity)` | Declare a fixed local actor pool. `capacity` must be a literal `1..255` and fit the fixed struct-array storage model. For `pool.Draw()`, targets validate `capacity * max(enemy metasprite hardware sprites)` against their sprite budget after JSON/PNG assets have been resolved. The frontend expands this to `Actor name[capacity];`, where `Actor` is a byte-sized framework state record. |
-| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` and `y` must fit `0..65535` and are split into low `x`/`y` plus high `xHi`/`yHi`. |
+| `actor.SpawnLayer(pool, "map.tmj", "layer")` | Read a Tiled object layer from the named map, keep its authored spawns as generated ROM-table helpers, and emit a runtime activation pass at the call site. Call it once per frame after `Camera.SetPosition(...)` to recycle actors outside the current camera window and activate newly visible spawns into free pool slots. Objects use a `kind` string property, Tiled `type`/`class`, or object `name` to select the actor kind; world `x` and `y` must fit `0..65535` and are split into low `x`/`y` plus high `xHi`/`yHi`. |
 | `actor.SpawnWindow(pool, "map.tmj", "layer", left, width)` | Read the same Tiled object layer, but activate against the camera-relative half-open window `[cameraX + left, cameraX + left + width)`. `left` and `width` are literal bytes. This is a runtime window, not compile-time filtering. |
 | `enemy.Def(name, sprite: asset, behavior: Behavior, animation: clip, speed: n, hp: n, cooldown: n, contactDamage: n, hitboxWidth: n, hitboxHeight: n)` | Declare byte-sized per-enemy metadata. `behavior`, `sprite`, and `animation` must be identifiers when supplied; numeric properties must be literal bytes. Omitted numeric properties default to `0`, except `hp`, which defaults to `1`. |
 | `enemy.Behavior(kind)`, `enemy.Speed(kind)`, `enemy.Hp(kind)`, `enemy.Cooldown(kind)`, `enemy.ContactDamage(kind)`, `enemy.HitboxWidth(kind)`, `enemy.HitboxHeight(kind)` | Return metadata for a runtime kind through generated inline helpers over constants. The frontend emits only helpers that source actually calls, so unused metadata helpers do not remain in the lowered program or add bytes. |
-| `pool.TouchTiles(yOffset, flags)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY` from world `x`/`xHi` and `y`/`yHi`, branch by kind, cull slots outside the visible camera window, and call `camera.ScreenAabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
-| `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY`, branch by kind, cull slots outside the visible camera window, and call `camera.ScreenAabbHitTop(...)` with the kind's literal hitbox width. On hit, add camera Y back to the returned screen top, assign actor `y`/`yHi`, clear `vy`, and set `state` to `1`. |
+| `pool.TouchTiles(yOffset, flags)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY` from world `x`/`xHi` and `y`/`yHi`, branch by kind, cull slots outside the visible camera window, and call `Camera.ScreenAabbTiles(...)` with the kind's literal hitbox width/height. On hit, set actor `state` to `contactDamage` or `1` when no damage is declared. |
+| `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY`, branch by kind, cull slots outside the visible camera window, and call `Camera.ScreenAabbHitTop(...)` with the kind's literal hitbox width. On hit, add camera Y back to the returned screen top, assign actor `y`/`yHi`, clear `vy`, and set `state` to `1`. |
 | `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY`, branch by kind, cull slots outside the visible camera window, and test each kind's literal hitbox against a literal player AABB in screen coordinates. On hit, set actor `state` to `contactDamage` or `1`. |
 
 `actor.Pool(...)` and `enemy.Def(...)` are accepted as statements inside the
@@ -127,7 +127,7 @@ fields are `kind`, `active`, `x`, `xHi`, `y`, `yHi`, `vx`, `vy`, `state`,
 position, paired with `xHi`/`yHi`; this keeps pooled fields byte-sized without
 requiring mixed-width struct array layout. Game Boy currently supports `pool.Update()` and
 `pool.Draw()` for the basic byte-field behavior set by expanding them to grouped
-loops over slots with direct kind checks and stable `sprite.Draw` calls.
+loops over slots with direct kind checks and stable `Sprite.Draw` calls.
 
 Spawn activation is one-shot per authored Tiled object. The frontend generates a
 fixed `used[]` byte array per spawn layer; a spawn is marked used only after it
@@ -147,10 +147,10 @@ for its generated loop and computes `screenX = actorWorldX - cameraX` and
 `screenY = actorWorldY - cameraY`. One-slot
 pools initialize draw coordinates to an offscreen Y, overwrite them only when
 the slot is active and inside the visible camera window, and emit ordinary
-`sprite.Draw(...)` calls through stable call sites so hardware sprite slots are
+`Sprite.Draw(...)` calls through stable call sites so hardware sprite slots are
 hidden rather than left stale. Larger pools keep the current camera-relative
 visible-actor draw/cull shape until a per-slot OAM allocation policy lands.
-Draw uses `animation.Frame(...)` when a definition declares an animation clip. Drawn pools
+Draw uses `Animation.Frame(...)` when a definition declares an animation clip. Drawn pools
 are checked against target sprite budgets with target-resolved metasprite
 geometry, so a pool of multi-sprite enemy definitions is charged by hardware
 sprite pieces rather than by actor slots. Aggregate hardware sprite usage is
@@ -163,7 +163,7 @@ separate phases and do not share a hoisted camera read across statements. The
 tile helpers emit ordinary camera screen-AABB SDK calls; they do not introduce
 actor-specific target intrinsics. Tiled spawn helpers read the same
 target-neutral map importer as
-`world.Load(...)` and lower to generated ROM-table helpers plus runtime fixed-slot
+`World.Load(...)` and lower to generated ROM-table helpers plus runtime fixed-slot
 activation before target lowering.
 
 #### Low-level equivalent pattern
@@ -299,12 +299,12 @@ void main() {
                     (((enemies[i].yHi == cameraYHi) && (enemies[i].y >= cameraY)) ||
                      ((enemies[i].yHi == cameraYHi + 1) && (enemies[i].y < cameraY))) &&
                     (screenY < 144)) {
-                    if (camera.ScreenAabbTiles(screenX, screenY,
+                    if (Camera.ScreenAabbTiles(screenX, screenY,
                             GoombaHitboxWidth, GoombaHitboxHeight, 1) != 0) {
                         enemies[i].state = 1;
                     }
 
-                    u8 hitTop = camera.ScreenAabbHitTop(screenX, screenY - 4,
+                    u8 hitTop = Camera.ScreenAabbHitTop(screenX, screenY - 4,
                         GoombaHitboxWidth, 12, 1);
                     if (hitTop != 255) {
                         enemies[i].y = hitTop;
@@ -323,7 +323,7 @@ void main() {
                         enemies[i].state = 1;
                     }
 
-                    sprite.Draw(goomba, screenX, screenY, 0, false, 0);
+                    Sprite.Draw(goomba, screenX, screenY, 0, false, 0);
                 }
             }
         }
@@ -341,7 +341,7 @@ an X-window scan and reads only the camera X bytes.
 
 | Signature | Semantics |
 | --- | --- |
-| `hud.SetTile(mode, x, y, tile)` | Declare one static HUD tile for a capability-gated HUD mode. |
+| `Hud.SetTile(mode, x, y, tile)` | Declare one static HUD tile for a capability-gated HUD mode. |
 
 Current mode names are `window`, `split_scroll`, `sprite_hud`, and `none`. `none` disables HUD and must compile as a no-op even on targets that declare no HUD support.
 
@@ -349,7 +349,7 @@ Current mode names are `window`, `split_scroll`, `sprite_hud`, and `none`. `none
 
 The compiler must validate portable SDK calls against `Target2DCapabilities` and `TargetAudioCapabilities` before target lowering.
 
-Static enforcement starts with per-operation checks, then applies a frame-budget pass for aggregate SDK budgets. The shared operation list remains flattened across control flow, so aggregate checks must not count that list directly. Instead, `Sdk2DOperationCollector.CollectFrameBudgets(...)` computes possible frame windows around `video.WaitVBlank()` and `input.Poll()`, treats `if`/`else` arms as exclusive alternatives, and validates the result through `Sdk2DOperationValidator.ValidateFrameBudget(...)`. Multiple explicit stream calls that exceed `MaxBackgroundTileWritesPerFrame` in one possible frame fail before target lowering.
+Static enforcement starts with per-operation checks, then applies a frame-budget pass for aggregate SDK budgets. The shared operation list remains flattened across control flow, so aggregate checks must not count that list directly. Instead, `Sdk2DOperationCollector.CollectFrameBudgets(...)` computes possible frame windows around `Video.WaitVBlank()` and `Input.Poll()`, treats `if`/`else` arms as exclusive alternatives, and validates the result through `Sdk2DOperationValidator.ValidateFrameBudget(...)`. Multiple explicit stream calls that exceed `MaxBackgroundTileWritesPerFrame` in one possible frame fail before target lowering.
 
 For logical sprites, targets feed their compiled metasprite geometry and hardware sprite size mode into the same frame-budget pass. The compiler rejects unsupported `SpriteSizeModes`, one possible frame that exceeds `SpriteCount`, and `MaxSpritesPerScanline` when the sprite draw uses a constant Y position. Actor pool draws receive an earlier target-aware diagnostic after sprite assets are compiled: for every drawn pool, `capacity * max(enemy.Def metasprite hardware sprites)` must fit `SpriteCount`, and `capacity * max(enemy.Def busiest-scanline hardware sprites)` must fit `MaxSpritesPerScanline`. That diagnostic names the pool and the enemy definition with the largest metasprite pressure. The frame-budget pass still validates the lowered draw operations with branch-as-alternative and frame-boundary semantics. Other runtime Y positions still cannot be placed on a specific scanline statically, so dynamic per-scanline overflow remains author/runtime responsibility outside the actor pool path. An unsound count over the flattened operation list would reject valid programs and is intentionally avoided. See issue #102.
 
@@ -366,7 +366,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | Logical sprites | Sprite count, sprite size modes, scanline limits, sprite transforms, and palette-slot count must fit the lowered metasprite. |
 | Animation | Clip frame indexes and durations must fit the declared logical asset. |
 | Actor framework | Pool capacity must be a literal fixed size, pooled fields are byte-sized, and enemy metadata must be literal/identifier data that can lower to constants and inline helper branches. |
-| Collision | `world.Map(...)` or `world.Load(...)` data and matching flag rows must exist before runtime collision reads. |
+| Collision | `World.Map(...)` or `World.Load(...)` data and matching flag rows must exist before runtime collision reads. |
 | Camera-relative collision | Target must declare `CameraRelativeAabb` or `CameraRelativeAabbHitTop` collision-query support for the requested query, and the screen span must fit the visible target width. |
 | HUD | Requested `HudMode` must be declared by the target, except `none`, which is always accepted as disabled HUD. |
 
@@ -374,17 +374,17 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 
 | API group | Game Boy | NES |
 | --- | --- | --- |
-| Frame/input | Supported. `video.WaitVBlank()` and `input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `input.Poll()` reads controller port `$4016`. |
-| World map setup | Supported. `world.Map(...)` and `world.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Four-screen free-scroll maps, including tall Tiled `world.Load(...)` maps, preload the initial 64x60 surface and keep source rows/columns in ROM for staggered runtime streaming beyond that buffer. |
-| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `camera.SetPosition(x, 0)` and `camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for horizontal-only maps wider than 32 columns. In four-screen free-scroll mode, X movement pans within the 64x60 buffer and streams wider worlds one edge per VBlank. |
+| Frame/input | Supported. `Video.WaitVBlank()` and `Input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `Input.Poll()` reads controller port `$4016`. |
+| World map setup | Supported. `World.Map(...)` and `World.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Four-screen free-scroll maps, including tall Tiled `World.Load(...)` maps, preload the initial 64x60 surface and keep source rows/columns in ROM for staggered runtime streaming beyond that buffer. |
+| Camera X | Supported with one-pixel stepping and column streaming. | Supported for `Camera.SetPosition(x, 0)` and `Camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for horizontal-only maps wider than 32 columns. In four-screen free-scroll mode, X movement pans within the 64x60 buffer and streams wider worlds one edge per VBlank. |
 | Camera Y | Supported with one-pixel stepping and row streaming. Diagonal movement uses a staggered one-edge-per-VBlank policy so a 19-row column or 21-column row crossing stays inside the 21-tile background write budget. | Supported through four-screen nametables. Maps up to 64x60 move without runtime tile writes; taller source-authored worlds stream the exposed 32-tile row and 9 touched attribute bytes with the staggered one-edge-per-VBlank policy. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
-| Palette declarations | Background slot `0` and sprite slots `0..1` through `palette.Background(...)` and `palette.Sprite(...)`. | Background and sprite slots `0..3` through `palette.Background(...)` and `palette.Sprite(...)`. |
+| Palette declarations | Background slot `0` and sprite slots `0..1` through `Palette.Background(...)` and `Palette.Sprite(...)`. | Background and sprite slots `0..3` through `Palette.Background(...)` and `Palette.Sprite(...)`. |
 | BGM | Supported for VGM/VGZ DMG logs, hUGETracker `.uge` v6 songs, and transitional `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Supported for VGM/VGZ 2A03 logs covering pulse, triangle, noise, `$4015`, and `$4017`; DPCM and expansion audio are deferred. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
 | Actor framework slice | `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called `enemy.*` metadata helpers, and `pool.Update()`/`pool.Draw()`/`pool.TouchTiles()`/`pool.LandOnTiles()`/`pool.TouchPlayer()` lower before Game Boy target emission to fixed struct arrays, constants, inline helper branches, generated spawn-table helpers, `used[]`, runtime activation, camera-relative 2-axis draw/collision/player contact, and the basic behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | The same source-to-source actor framework slice lowers before NES target emission with NES sprite/scanline budgets and 2-axis camera-relative actor draw/collision support. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
-| Camera-relative collision | Supported through `camera.AabbTiles(...)`/`camera.AabbHitTop(...)` for literal or byte-backed screen X plus world Y values, and `camera.ScreenAabbTiles(...)`/`camera.ScreenAabbHitTop(...)` for byte-backed screen X/Y values. | Supported through the same camera AABB and screen-AABB forms on horizontal and four-screen camera paths. |
+| Camera-relative collision | Supported through `Camera.AabbTiles(...)`/`Camera.AabbHitTop(...)` for literal or byte-backed screen X plus world Y values, and `Camera.ScreenAabbTiles(...)`/`Camera.ScreenAabbHitTop(...)` for byte-backed screen X/Y values. | Supported through the same camera AABB and screen-AABB forms on horizontal and four-screen camera paths. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |
 
 Use `samples/manifest.json` to identify which samples are portable. Currently `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample and builds for both Game Boy and NES.
@@ -407,17 +407,17 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Actor pool dynamic capacity | `actor.Pool for 'enemies' requires a literal capacity from 1 to 255.` |
 | Actor pool metasprite budget overflow | `Target 'gb' supports 40 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 42 because capacity 21 times enemy.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.` |
 
-Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `sprite.Set(...)`, `tilemap.Set(...)`, `tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `palette.Background(...)` and `palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
+Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `Sprite.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `Palette.Background(...)` and `Palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
 
 ## Current Stabilization Gaps
 
-SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because several broader world/HUD contracts are still missing. It now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a 48x96 tile world and declares per-target VGM/VGZ background music; larger diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `world.Load(...)`.
+SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because several broader world/HUD contracts are still missing. It now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a 48x96 tile world and declares per-target VGM/VGZ background music; larger diagonal free scroll is demonstrated by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `World.Load(...)`.
 
-- `camera.AabbTiles(...)`, `camera.AabbHitTop(...)`, `camera.ScreenAabbTiles(...)`, and `camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
-- On Game Boy, `camera.AabbTiles(...)` and `camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations as the legacy snake_case compatibility calls.
-- `collision_aabb_tiles(...)` still reports overlap only. Use `camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
-- Logical palette declarations now cover background and sprite palette slots through `palette.Background(...)` and `palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
-- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample with a 2-axis dead-zone camera and per-target VGM/VGZ music. `samples/tiled-tall/tall.rs` is Game Boy-only target-acceptance coverage for vertical Tiled `world.Load(...)` scrolling, while `samples/tiled-vscroll/vscroll.rs` covers the same vertical Tiled path on Game Boy and NES with a wider 40x60 map. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES over source-authored columns, `samples/tiled-diagonal/diag.rs` is Game Boy-only target-acceptance coverage for diagonal Tiled `world.Load(...)`, and `samples/tiled-free-scroll/free-scroll.rs` is Game Boy/NES target-acceptance coverage for diagonal Tiled `world.Load(...)`.
+- `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
+- On Game Boy, `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations as the legacy snake_case compatibility calls.
+- `collision_aabb_tiles(...)` still reports overlap only. Use `Camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
+- Logical palette declarations now cover background and sprite palette slots through `Palette.Background(...)` and `Palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors.
+- `samples/cross-target-camera/camera.rs` is the only `portable-sdk` sample. `samples/runner/runner.rs` remains a shared Game Boy/NES `target-acceptance` sample with a 2-axis dead-zone camera and per-target VGM/VGZ music. `samples/tiled-tall/tall.rs` is Game Boy-only target-acceptance coverage for vertical Tiled `World.Load(...)` scrolling, while `samples/tiled-vscroll/vscroll.rs` covers the same vertical Tiled path on Game Boy and NES with a wider 40x60 map. `samples/nes-free-scroll/freescroll.rs` is target-acceptance coverage for diagonal camera movement on Game Boy and NES over source-authored columns, `samples/tiled-diagonal/diag.rs` is Game Boy-only target-acceptance coverage for diagonal Tiled `World.Load(...)`, and `samples/tiled-free-scroll/free-scroll.rs` is Game Boy/NES target-acceptance coverage for diagonal Tiled `World.Load(...)`.
 
 ## Minimal Game Boy/NES Example
 
@@ -425,27 +425,27 @@ This shape is the current smallest portable sample. It uses unified world data, 
 
 ```c
 void main() {
-    video.Init();
+    Video.Init();
 
-    world.Column(0, 1, 2, 3, 4);
-    world.Column(1, 2, 3, 4, 5);
-    world.Column(2, 3, 4, 5, 1);
-    world.Column(3, 4, 5, 1, 2);
-    world.Flags(0, 0, 0, 1, 1);
-    world.Flags(1, 0, 0, 1, 1);
-    world.Flags(2, 0, 0, 1, 1);
-    world.Flags(3, 0, 0, 1, 1);
-    world.Map(4, 10, 4);
-    camera.Init(4, 10, 4);
-    sprite.Asset(marker, "marker.json");
+    World.Column(0, 1, 2, 3, 4);
+    World.Column(1, 2, 3, 4, 5);
+    World.Column(2, 3, 4, 5, 1);
+    World.Column(3, 4, 5, 1, 2);
+    World.Flags(0, 0, 0, 1, 1);
+    World.Flags(1, 0, 0, 1, 1);
+    World.Flags(2, 0, 0, 1, 1);
+    World.Flags(3, 0, 0, 1, 1);
+    World.Map(4, 10, 4);
+    Camera.Init(4, 10, 4);
+    Sprite.Asset(marker, "marker.json");
 
     loop {
-        video.WaitVBlank();
-        input.Poll();
+        Video.WaitVBlank();
+        Input.Poll();
         let cameraX = Input.HoldTicks(Button.Right);
-        camera.SetPosition(cameraX, 0);
-        camera.Apply();
-        sprite.Draw(marker, 72, 72, 0, false, 0);
+        Camera.SetPosition(cameraX, 0);
+        Camera.Apply();
+        Sprite.Draw(marker, 72, 72, 0, false, 0);
     }
 }
 ```
@@ -468,4 +468,4 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `sprite.Asset(...)` and `sprite.Draw(...)` calls are the portable SDK surface. Game Boy and NES currently lower `sprite.Draw(...)` through the injected SDK library helper; `sprite_draw(...)` remains accepted as a compatibility alias.
+The sample uses a target-variant JSON sprite asset (`platforms.gb` and `platforms.nes`). That asset format is transitional, but the source-level `Sprite.Asset(...)` and `Sprite.Draw(...)` calls are the portable SDK surface. Game Boy and NES currently lower `Sprite.Draw(...)` through the injected SDK library helper; `sprite_draw(...)` remains accepted as a compatibility alias.

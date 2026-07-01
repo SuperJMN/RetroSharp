@@ -1,4 +1,4 @@
-static class World {
+static class Level {
     const i16 Width = 8;
     const i16 StreamY = 10;
     const i16 Height = 4;
@@ -10,36 +10,36 @@ static class Marker {
 }
 
 void main() {
-    video.Init();
+    Video.Init();
 
-    world.Column(0, 1, 2, 3, 4);
-    world.Column(1, 2, 3, 4, 5);
-    world.Column(2, 3, 4, 5, 1);
-    world.Column(3, 4, 5, 1, 2);
-    world.Column(4, 5, 1, 2, 3);
-    world.Column(5, 1, 2, 3, 4);
-    world.Column(6, 2, 3, 4, 5);
-    world.Column(7, 3, 4, 5, 1);
-    world.Flags(0, 0, 0, 1, 1);
-    world.Flags(1, 0, 0, 1, 1);
-    world.Flags(2, 0, 0, 1, 1);
-    world.Flags(3, 0, 0, 1, 1);
-    world.Flags(4, 0, 0, 1, 1);
-    world.Flags(5, 0, 0, 1, 1);
-    world.Flags(6, 0, 0, 1, 1);
-    world.Flags(7, 0, 0, 1, 1);
-    world.Map(World.Width, World.StreamY, World.Height);
-    camera.Init(World.Width, World.StreamY, World.Height);
-    sprite.Asset(marker, "marker.json");
+    World.Column(0, 1, 2, 3, 4);
+    World.Column(1, 2, 3, 4, 5);
+    World.Column(2, 3, 4, 5, 1);
+    World.Column(3, 4, 5, 1, 2);
+    World.Column(4, 5, 1, 2, 3);
+    World.Column(5, 1, 2, 3, 4);
+    World.Column(6, 2, 3, 4, 5);
+    World.Column(7, 3, 4, 5, 1);
+    World.Flags(0, 0, 0, 1, 1);
+    World.Flags(1, 0, 0, 1, 1);
+    World.Flags(2, 0, 0, 1, 1);
+    World.Flags(3, 0, 0, 1, 1);
+    World.Flags(4, 0, 0, 1, 1);
+    World.Flags(5, 0, 0, 1, 1);
+    World.Flags(6, 0, 0, 1, 1);
+    World.Flags(7, 0, 0, 1, 1);
+    World.Map(Level.Width, Level.StreamY, Level.Height);
+    Camera.Init(Level.Width, Level.StreamY, Level.Height);
+    Sprite.Asset(marker, "marker.json");
 
     loop {
-        video.WaitVBlank();
-        input.Poll();
+        Video.WaitVBlank();
+        Input.Poll();
         let cameraX = Input.HoldTicks(Button.Right);
         u8 frame = 0;
         bool flipX = false;
-        camera.SetPosition(cameraX, 0);
-        camera.Apply();
-        sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, frame, flipX, 0);
+        Camera.SetPosition(cameraX, 0);
+        Camera.Apply();
+        Sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, frame, flipX, 0);
     }
 }
