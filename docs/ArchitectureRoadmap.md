@@ -194,14 +194,17 @@ Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBo
 The first SDK-as-library slice is now in place. Source can now declare
 `import RetroSharp.Portable2D;` to name the built-in portable SDK library
 explicitly; Game Boy and NES keep the legacy implicit import during the
-transition, and unknown imports fail compilation instead of being ignored. Each
-cartridge target exposes a
+transition by default, and unknown imports fail compilation instead of being
+ignored. Hosts can set `SdkLibraryImportMode.ExplicitOnly` to compile without
+the SDK unless it is imported, or supply a custom `SdkLibraryRegistry` so other
+import paths inject source-level SDK libraries. Each cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
 `audio_update`, `camera_set_position`, and `camera_apply` (Game Boy additionally
-catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` supplies a small
-target-selected SDK library for imported or legacy-autoimported target
-compilations. That library defines
+catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` resolves imported
+SDK libraries through the registry and supplies target-selected library source
+for imported or legacy-autoimported target compilations. The built-in
+`RetroSharp.Portable2D` library defines
 `video`, `input`, `audio`, and `camera` classes whose `Video.WaitVBlank()`,
 `Input.Poll()`, `Audio.Update()`, `Camera.SetPosition(x, y)`, `Camera.Apply()`, and
 catalog-gated helpers such as Game Boy `Camera.AabbTiles(...)` /

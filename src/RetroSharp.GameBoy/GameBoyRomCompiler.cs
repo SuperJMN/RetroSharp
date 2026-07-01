@@ -10,34 +10,51 @@ namespace RetroSharp.GameBoy;
 
 public static class GameBoyRomCompiler
 {
-    public static byte[] CompileSource(string source, string? baseDirectory = null)
+    public static byte[] CompileSource(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryRegistry? sdkLibraryRegistry = null)
     {
-        var videoProgram = ParseVideoProgram(source, baseDirectory);
+        var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry);
         ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.Build(videoProgram);
     }
 
-    public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(string source, string? baseDirectory = null)
+    public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryRegistry? sdkLibraryRegistry = null)
     {
-        return ParseVideoProgram(source, baseDirectory).SdkOperations;
+        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry).SdkOperations;
     }
 
-    public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(string source, string? baseDirectory = null)
+    public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryRegistry? sdkLibraryRegistry = null)
     {
-        return ParseVideoProgram(source, baseDirectory).SdkAudioOperations;
+        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry).SdkAudioOperations;
     }
 
-    private static GameBoyVideoProgram ParseVideoProgram(string source, string? baseDirectory)
+    private static GameBoyVideoProgram ParseVideoProgram(
+        string source,
+        string? baseDirectory,
+        SdkLibraryImportMode sdkImportMode,
+        SdkLibraryRegistry? sdkLibraryRegistry)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source));
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
-        SdkImportResolver.ValidateImports(targetProgram);
+        SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
+        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);

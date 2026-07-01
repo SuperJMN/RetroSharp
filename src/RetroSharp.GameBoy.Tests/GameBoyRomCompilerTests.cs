@@ -89,6 +89,91 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Built_in_portable2d_sdk_is_registered_as_an_importable_library()
+    {
+        Assert.True(SdkLibraryRegistry.Default.TryResolve("RetroSharp.Portable2D", out var library));
+
+        Assert.Contains("class Video", library!.SourceForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Explicit_sdk_import_mode_compiles_without_the_sdk()
+    {
+        const string source = """
+                              void Main() {
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void Explicit_sdk_import_mode_requires_the_portable2d_import_for_sdk_calls()
+    {
+        const string source = """
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly));
+
+        Assert.Equal("SDK module 'Video' requires import 'RetroSharp.Portable2D'.", exception.Message);
+    }
+
+    [Fact]
+    public void Explicit_sdk_import_mode_uses_imported_portable2d_sdk()
+    {
+        const string source = """
+                              import RetroSharp.Portable2D;
+
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void Imported_sdk_library_can_come_from_a_custom_registry()
+    {
+        var registry = new SdkLibraryRegistry(
+        [
+            new SdkLibrary(
+                "Acme.Empty",
+                _ => """
+                     class Video
+                     {
+                         static inline void WaitVBlank()
+                         {
+                         }
+                     }
+
+                     """)
+        ]);
+        const string source = """
+                              import Acme.Empty;
+
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(
+            source,
+            sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: registry);
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void Rejects_unknown_imports()
     {
         const string source = """

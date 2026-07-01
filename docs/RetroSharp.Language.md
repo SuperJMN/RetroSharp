@@ -156,8 +156,12 @@ fails instead of emitting an empty function.
 
 Target compilation accepts `import RetroSharp.Portable2D;` as the explicit SDK
 library import. Game Boy and NES still load the same small SDK source library
-implicitly for older samples, so this import is currently a compatibility-safe
-declaration rather than a visibility gate. The imported library defines
+implicitly for older samples by default, but compiler hosts can use
+`SdkLibraryImportMode.ExplicitOnly` to disable that compatibility autoimport.
+In explicit-only mode, SDK module calls require an imported library; source that
+does not use the SDK can compile without loading it. Hosts can also provide a
+custom `SdkLibraryRegistry` so additional import paths inject source-level SDK
+libraries. The imported built-in library defines
 `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
 `Camera.SetPosition(x, y)`, and `Camera.Apply()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
@@ -309,7 +313,7 @@ Iteration 12 adds source ergonomics only when the lowering remains static and pr
 - `inline` marks a helper that must use source-level substitution in the current cartridge targets. Explicit inline value helpers fail clearly if the body is not a single return expression.
 - `pure` marks a helper whose body must stay in the supported side-effect-free subset. It is validated before Game Boy/NES lowering and emits no runtime code by itself.
 - `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
-- `import RetroSharp.Portable2D;` imports the built-in portable SDK library explicitly. Game Boy and NES still auto-import it for existing samples; future SDK library slices should prefer explicit imports over new global magic.
+- `import RetroSharp.Portable2D;` imports the built-in portable SDK library explicitly. Game Boy and NES still auto-import it for existing samples by default, but `SdkLibraryImportMode.ExplicitOnly` disables that compatibility path; future SDK library slices should prefer explicit imports and registered SDK libraries over new global magic.
 - `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
 - `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
 - Lightweight object-oriented style can use restricted `class` declarations for real mutable state such as `PlayerState` or `EnemyState`. A class value lowers to the same fixed storage model as a plain `struct`; instance methods lower to receiver helpers. Plain `struct` plus receiver methods remains the explicit equivalent form.

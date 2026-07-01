@@ -235,41 +235,65 @@ public static class SdkLibrarySource
         return library;
     }
 
-    public static string Merge(TargetIntrinsicCatalog catalog, string source)
+    public static string Merge(
+        TargetIntrinsicCatalog catalog,
+        string source,
+        SdkLibraryImportMode importMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryRegistry? registry = null)
     {
         if (source.Contains(MarkerName(catalog.TargetId), StringComparison.Ordinal))
         {
             return source;
         }
 
-        var (imports, body) = SplitLeadingImports(source);
-        return imports + ForTarget(catalog) + body;
+        registry ??= SdkLibraryRegistry.Default;
+        var (imports, importPaths, body) = SplitLeadingImports(source);
+        var libraries = importPaths
+            .Select(importPath => registry.TryResolve(importPath, out var library) ? library : null)
+            .OfType<SdkLibrary>()
+            .DistinctBy(library => library.ImportPath)
+            .ToList();
+
+        if (importMode == SdkLibraryImportMode.LegacyAutoImport
+            && !libraries.Any(library => library.ImportPath == SdkImportResolver.Portable2D)
+            && registry.TryResolve(SdkImportResolver.Portable2D, out var portable2D))
+        {
+            libraries.Insert(0, portable2D!);
+        }
+
+        var librarySource = string.Concat(libraries.Select(library => library.SourceForTarget(catalog)));
+        return imports + librarySource + body;
     }
 
-    private static (string Imports, string Body) SplitLeadingImports(string source)
+    private static (string Imports, IReadOnlyList<string> ImportPaths, string Body) SplitLeadingImports(string source)
     {
         var lexer = new RetroSharpLexer(CharStreams.fromString(source));
         var tokens = lexer.GetAllTokens();
         var tokenIndex = 0;
         var importEnd = 0;
+        var importPaths = new List<string>();
 
         while (tokenIndex < tokens.Count && tokens[tokenIndex].Text == "import")
         {
+            tokenIndex++;
+            var path = "";
             while (tokenIndex < tokens.Count && tokens[tokenIndex].Text != ";")
             {
+                path += tokens[tokenIndex].Text;
                 tokenIndex++;
             }
 
             if (tokenIndex >= tokens.Count)
             {
-                return (source, string.Empty);
+                return (source, [], string.Empty);
             }
 
+            importPaths.Add(path);
             importEnd = tokens[tokenIndex].StopIndex + 1;
             tokenIndex++;
         }
 
-        return (source[..importEnd], source[importEnd..]);
+        return (source[..importEnd], importPaths, source[importEnd..]);
     }
 
     private static string MarkerName(string targetId)
