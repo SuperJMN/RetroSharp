@@ -75,10 +75,10 @@ silently lowering to an expensive fallback.
   rejected for struct arrays until that layout exists. Enemy positions for v1
   therefore use screen/world bytes or explicit split-byte fields.
 - **AF-2.1 — fixed actor pool and enemy definition model**. The shared SDK
-  frontend now expands `actor.Pool(enemies, 8)` to a fixed `Actor enemies[8]`
-  struct array and consumes `enemy.Def(...)` as byte-sized per-kind metadata.
+  frontend now expands `Actors.Pool(enemies, 8)` to a fixed `Actor enemies[8]`
+  struct array and consumes `Enemies.Def(...)` as byte-sized per-kind metadata.
   It generates kind/behavior constants and emits inline lookup helpers such as
-  `enemy.Speed(kind)`/`enemy.Hp(kind)` only when source calls that metadata API,
+  `Enemies.Speed(kind)`/`Enemies.Hp(kind)` only when source calls that metadata API,
   without adding `Sdk2DOperation` cases. Unused lookup helpers are not kept in
   the lowered program, so they have zero byte cost.
   `sprite` and behavior metadata must be identifiers, numeric metadata must be
@@ -165,7 +165,7 @@ Candidate file names are guidance; inspect the real code paths first.
     state, timer, facing, animation tick, health — byte-sized where possible.
   - [x] Define per-type metadata: validated sprite id, hitbox, behavior id,
     speed, hp, cooldown, contact damage.
-  - [x] Provide the authoring surface (`actor.Pool(...)` / `enemy.Def(...)` sugar
+  - [x] Provide the authoring surface (`Actors.Pool(...)` / `Enemies.Def(...)` sugar
     or an equivalent source/library pattern) that lowers to AF-0 arrays plus
     constant tables — not to new compiler operations.
   - [x] Reject unbounded pools and dynamic/function-pointer-like metadata with
@@ -243,7 +243,7 @@ Candidate file names are guidance; inspect the real code paths first.
 - Candidate files: activation logic, capacity checks, tests.
 - Steps:
   - [x] Activate spawns into fixed actor slots by a literal camera window.
-    Superseded by AF-5.3: `actor.SpawnLayer`/`actor.SpawnWindow` now generate
+    Superseded by AF-5.3: `Actors.SpawnLayer`/`Actors.SpawnWindow` now generate
     runtime camera-window activation rather than compile-time slot fills.
   - [x] Fail explicitly when a spawn layer/window can exceed declared pool
     capacity, now using the maximum simultaneously activatable authored spawns
@@ -301,8 +301,8 @@ Candidate file names are guidance; inspect the real code paths first.
   `docs/ArchitectureRoadmap.md`.
 - Steps:
   - [x] Document the actor API and the emitted storage/cost model after AF-5.1..AF-5.7:
-    `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`,
-    called `enemy.*` metadata helpers, `enemies.Update()`, `enemies.Draw()`,
+    `Actors.Pool`, `Actors.SpawnLayer`, `Actors.SpawnWindow`, `Enemies.Def`,
+    called `Enemies.*` metadata helpers, `enemies.Update()`, `enemies.Draw()`,
     `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and
     `enemies.TouchPlayer(...)`.
   - [x] Document the hand-authored low-level equivalent: `Actor pool[N]`,
@@ -362,7 +362,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Depends on: AF-5.1.
 
 #### AF-5.3: Runtime camera-window / room activation (priority 2)
-- Problem: before this slice, `actor.SpawnWindow` filtered spawns at compile
+- Problem: before this slice, `Actors.SpawnWindow` filtered spawns at compile
   time; every spawn was active from frame 0 and there was no runtime activation
   as the camera scrolled, so large levels could not keep distant enemies
   inactive. (Extends AF-3.2 from literal/compile-time windows to true runtime
@@ -481,7 +481,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
     reactivates predictably.
 
 #### AF-5.10: Reduce O(spawns)/frame activation scan cost (non-blocking)
-- Problem: every `actor.SpawnLayer(...)` / `actor.SpawnWindow(...)` call scans
+- Problem: every `Actors.SpawnLayer(...)` / `Actors.SpawnWindow(...)` call scans
   all authored spawns in that layer each frame, guarded by `used[]` and the
   camera window. This is predictable and small for the first sample, but wide
   levels need an indexed or cursor-based activation strategy.

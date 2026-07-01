@@ -74,7 +74,7 @@ public static class ActorFrameworkLowerer
         {
             if (structs.Any(structSyntax => structSyntax.Name == ActorStructName))
             {
-                throw new InvalidOperationException("actor.Pool cannot generate framework struct 'Actor' because a struct named 'Actor' is already declared.");
+                throw new InvalidOperationException("Actors.Pool cannot generate framework struct 'Actor' because a struct named 'Actor' is already declared.");
             }
 
             structs.Add(ActorStruct());
@@ -165,10 +165,10 @@ public static class ActorFrameworkLowerer
         {
             switch (statement)
             {
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } poolCall }:
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } poolCall }:
                     state.AddPool(ReadPool(poolCall));
                     break;
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "enemy", Method: "Def" } defCall }:
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Enemies", Method: "Def" } defCall }:
                     state.AddEnemyDef(ReadEnemyDef(defCall));
                     break;
             }
@@ -245,7 +245,7 @@ public static class ActorFrameworkLowerer
         if (frameSprites > capabilities.SpriteCount)
         {
             throw new InvalidOperationException(
-                $"Target '{capabilities.Name}' supports {capabilities.SpriteCount} hardware sprites per frame, but actor.Pool for '{pool.Name}' can draw up to {frameSprites} because capacity {pool.Capacity} times enemy.Def '{largestMetasprite.Def.Name}' sprite '{largestMetasprite.Def.Sprite}' uses {HardwareSpriteCountText(largestMetasprite.Geometry.HardwareSpriteCount)}.");
+                $"Target '{capabilities.Name}' supports {capabilities.SpriteCount} hardware sprites per frame, but Actors.Pool for '{pool.Name}' can draw up to {frameSprites} because capacity {pool.Capacity} times Enemies.Def '{largestMetasprite.Def.Name}' sprite '{largestMetasprite.Def.Sprite}' uses {HardwareSpriteCountText(largestMetasprite.Geometry.HardwareSpriteCount)}.");
         }
 
         var busiestScanline = enemyBudgets
@@ -256,7 +256,7 @@ public static class ActorFrameworkLowerer
         if (scanlineSprites > capabilities.MaxSpritesPerScanline)
         {
             throw new InvalidOperationException(
-                $"Target '{capabilities.Name}' supports {capabilities.MaxSpritesPerScanline} hardware sprites per scanline, but actor.Pool for '{pool.Name}' can draw up to {scanlineSprites} on one scanline because capacity {pool.Capacity} times enemy.Def '{busiestScanline.Def.Name}' sprite '{busiestScanline.Def.Sprite}' uses {HardwareSpriteCountText(busiestScanline.BusiestRelativeScanlineSprites)} on its busiest scanline.");
+                $"Target '{capabilities.Name}' supports {capabilities.MaxSpritesPerScanline} hardware sprites per scanline, but Actors.Pool for '{pool.Name}' can draw up to {scanlineSprites} on one scanline because capacity {pool.Capacity} times Enemies.Def '{busiestScanline.Def.Name}' sprite '{busiestScanline.Def.Sprite}' uses {HardwareSpriteCountText(busiestScanline.BusiestRelativeScanlineSprites)} on its busiest scanline.");
         }
     }
 
@@ -290,13 +290,13 @@ public static class ActorFrameworkLowerer
         {
             switch (statement)
             {
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } poolCall }:
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } poolCall }:
                     state.AddPool(ReadPool(poolCall));
                     break;
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "enemy", Method: "Def" } defCall }:
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Enemies", Method: "Def" } defCall }:
                     state.AddEnemyDef(ReadEnemyDef(defCall));
                     break;
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "SpawnLayer" or "SpawnWindow" } spawnCall }:
+                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall }:
                     state.AddSpawnLayer(ReadSpawnDirective(spawnCall, state.BaseDirectory));
                     break;
                 case IfElseSyntax ifElse:
@@ -341,13 +341,13 @@ public static class ActorFrameworkLowerer
         var parameters = call.Parameters.ToList();
         if (parameters.Count != 2 || parameters[0] is not IdentifierSyntax poolName)
         {
-            throw new InvalidOperationException("actor.Pool expects a pool identifier and a literal capacity.");
+            throw new InvalidOperationException("Actors.Pool expects a pool identifier and a literal capacity.");
         }
 
         var name = poolName.Identifier;
         if (!TryLiteralByte(parameters[1], out var capacity) || capacity == 0)
         {
-            throw new InvalidOperationException($"actor.Pool for '{name}' requires a literal capacity from 1 to 255.");
+            throw new InvalidOperationException($"Actors.Pool for '{name}' requires a literal capacity from 1 to 255.");
         }
 
         return new ActorPool(name, capacity);
@@ -358,30 +358,30 @@ public static class ActorFrameworkLowerer
         var parameters = call.Parameters.ToList();
         if (call.Method == "SpawnLayer" && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
         {
-            throw new InvalidOperationException("actor.SpawnLayer expects a pool identifier, a map path string, and a layer name string.");
+            throw new InvalidOperationException("Actors.SpawnLayer expects a pool identifier, a map path string, and a layer name string.");
         }
 
         if (call.Method == "SpawnWindow" && (parameters.Count != 5 || parameters[0] is not IdentifierSyntax))
         {
-            throw new InvalidOperationException("actor.SpawnWindow expects a pool identifier, a map path string, a layer name string, a literal left edge, and a literal width.");
+            throw new InvalidOperationException("Actors.SpawnWindow expects a pool identifier, a map path string, a layer name string, a literal left edge, and a literal width.");
         }
 
         var poolName = (IdentifierSyntax)parameters[0];
-        var mapPath = StringLiteral(parameters[1], "actor.SpawnLayer argument 2");
-        var layerName = StringLiteral(parameters[2], "actor.SpawnLayer argument 3");
+        var mapPath = StringLiteral(parameters[1], "Actors.SpawnLayer argument 2");
+        var layerName = StringLiteral(parameters[2], "Actors.SpawnLayer argument 3");
         var fullPath = Path.GetFullPath(Path.Combine(baseDirectory, mapPath));
         var map = LogicalTiledMapImporter.Load(fullPath);
         if (!map.ActorSpawnLayers.TryGetValue(layerName, out var spawns))
         {
-            throw new InvalidOperationException($"actor.SpawnLayer could not find object layer '{layerName}' in Tiled map '{Path.GetFileName(mapPath)}'.");
+            throw new InvalidOperationException($"Actors.SpawnLayer could not find object layer '{layerName}' in Tiled map '{Path.GetFileName(mapPath)}'.");
         }
 
         int? windowLeft = null;
         int? windowWidth = null;
         if (call.Method == "SpawnWindow")
         {
-            windowLeft = RequiredLiteralByte(parameters[3], "actor.SpawnWindow argument 4");
-            windowWidth = RequiredLiteralByte(parameters[4], "actor.SpawnWindow argument 5");
+            windowLeft = RequiredLiteralByte(parameters[3], "Actors.SpawnWindow argument 4");
+            windowWidth = RequiredLiteralByte(parameters[4], "Actors.SpawnWindow argument 5");
         }
 
         return new ActorSpawnLayer(call.Method, poolName.Identifier, mapPath, layerName, windowLeft, windowWidth, spawns, RuntimeName: string.Empty);
@@ -392,7 +392,7 @@ public static class ActorFrameworkLowerer
         var parameters = call.Parameters.ToList();
         if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax enemyName)
         {
-            throw new InvalidOperationException("enemy.Def expects an enemy identifier as its first argument.");
+            throw new InvalidOperationException("Enemies.Def expects an enemy identifier as its first argument.");
         }
 
         var namedArguments = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
@@ -400,12 +400,12 @@ public static class ActorFrameworkLowerer
         {
             if (parameter is not NamedArgumentSyntax namedArgument)
             {
-                throw new InvalidOperationException($"enemy.Def for '{enemyName.Identifier}' expects named arguments after the enemy identifier.");
+                throw new InvalidOperationException($"Enemies.Def for '{enemyName.Identifier}' expects named arguments after the enemy identifier.");
             }
 
             if (!namedArguments.TryAdd(namedArgument.Name, namedArgument.Expression))
             {
-                throw new InvalidOperationException($"enemy.Def for '{enemyName.Identifier}' supplies '{namedArgument.Name}' more than once.");
+                throw new InvalidOperationException($"Enemies.Def for '{enemyName.Identifier}' supplies '{namedArgument.Name}' more than once.");
             }
         }
 
@@ -428,7 +428,7 @@ public static class ActorFrameworkLowerer
         {
             if (name is not "sprite" and not "behavior" and not "animation" and not "speed" and not "hp" and not "cooldown" and not "contactDamage" and not "hitboxWidth" and not "hitboxHeight")
             {
-                throw new InvalidOperationException($"enemy.Def for '{enemyName.Identifier}' has unsupported property '{name}'.");
+                throw new InvalidOperationException($"Enemies.Def for '{enemyName.Identifier}' has unsupported property '{name}'.");
             }
         }
 
@@ -450,7 +450,7 @@ public static class ActorFrameworkLowerer
             return identifier.Identifier;
         }
 
-        throw new InvalidOperationException($"enemy.Def for '{enemyName}' requires '{name}' to be an identifier.");
+        throw new InvalidOperationException($"Enemies.Def for '{enemyName}' requires '{name}' to be an identifier.");
     }
 
     private static string RequiredIdentifier(
@@ -460,7 +460,7 @@ public static class ActorFrameworkLowerer
     {
         if (!arguments.TryGetValue(name, out var expression))
         {
-            throw new InvalidOperationException($"enemy.Def for '{enemyName}' requires '{name}'.");
+            throw new InvalidOperationException($"Enemies.Def for '{enemyName}' requires '{name}'.");
         }
 
         if (expression is IdentifierSyntax identifier)
@@ -468,7 +468,7 @@ public static class ActorFrameworkLowerer
             return identifier.Identifier;
         }
 
-        throw new InvalidOperationException($"enemy.Def for '{enemyName}' requires '{name}' to be an identifier.");
+        throw new InvalidOperationException($"Enemies.Def for '{enemyName}' requires '{name}' to be an identifier.");
     }
 
     private static int OptionalLiteralByte(
@@ -487,7 +487,7 @@ public static class ActorFrameworkLowerer
             return value;
         }
 
-        throw new InvalidOperationException($"enemy.Def for '{enemyName}' requires '{name}' to be a literal byte value.");
+        throw new InvalidOperationException($"Enemies.Def for '{enemyName}' requires '{name}' to be a literal byte value.");
     }
 
     private static bool TryLiteralByte(ExpressionSyntax expression, out int value)
@@ -539,13 +539,13 @@ public static class ActorFrameworkLowerer
 
     private static IEnumerable<StatementSyntax> RewriteStatements(StatementSyntax statement, ActorFrameworkState state)
     {
-        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "SpawnLayer" or "SpawnWindow" } spawnCall })
+        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall })
         {
             var spawnLayer = state.SpawnLayer(spawnCall);
             return RuntimeSpawnActivationStatements(spawnLayer, state.NextActivationPrefix(spawnLayer), state.ScreenWidth);
         }
 
-        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } poolCall })
+        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } poolCall })
         {
             return PoolDeclarations(state.Pool(poolCall), state);
         }
@@ -571,8 +571,8 @@ public static class ActorFrameworkLowerer
     {
         return statement switch
         {
-            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "actor", Method: "Pool" } } => null,
-            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "enemy", Method: "Def" } } => null,
+            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } } => null,
+            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Enemies", Method: "Def" } } => null,
             ConstDeclarationSyntax constant => new ConstDeclarationSyntax(
                 constant.TypeAnnotation,
                 constant.Name,
@@ -796,7 +796,7 @@ public static class ActorFrameworkLowerer
         var missingSprite = state.EnemyDefs.FirstOrDefault(def => def.Sprite is null);
         if (missingSprite is not null)
         {
-            throw new InvalidOperationException($"{pool.Name}.Draw requires enemy.Def for '{missingSprite.Name}' to declare a sprite identifier.");
+            throw new InvalidOperationException($"{pool.Name}.Draw requires Enemies.Def for '{missingSprite.Name}' to declare a sprite identifier.");
         }
 
         var indexName = $"__{pool.Name}_draw_i";
@@ -1573,7 +1573,7 @@ public static class ActorFrameworkLowerer
     {
         if (state.EnemyDefs.Count == 0)
         {
-            throw new InvalidOperationException($"{callName} requires at least one enemy.Def declaration.");
+            throw new InvalidOperationException($"{callName} requires at least one Enemies.Def declaration.");
         }
     }
 
@@ -1608,7 +1608,7 @@ public static class ActorFrameworkLowerer
     {
         if (branches.Count == 0)
         {
-            throw new InvalidOperationException($"{poolName} actor dispatch requires at least one enemy.Def declaration.");
+            throw new InvalidOperationException($"{poolName} actor dispatch requires at least one Enemies.Def declaration.");
         }
 
         var first = branches[0];
@@ -1648,8 +1648,8 @@ public static class ActorFrameworkLowerer
     {
         return expression switch
         {
-            SdkDotCallSyntax { Module: "enemy" } enemyCall => RewriteEnemyCall(enemyCall, state),
-            SdkDotCallSyntax { Module: "actor" } actorCall => throw new InvalidOperationException($"actor.{actorCall.Method} can only be used as a statement."),
+            SdkDotCallSyntax { Module: "Enemies" } enemyCall => RewriteEnemyCall(enemyCall, state),
+            SdkDotCallSyntax { Module: "Actors" } actorCall => throw new InvalidOperationException($"Actors.{actorCall.Method} can only be used as a statement."),
             AssignmentSyntax assignment => new AssignmentSyntax(RewriteLValue(assignment.Left, state), assignment.OperatorSymbol, RewriteExpression(assignment.Right, state)),
             BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
                 RewriteExpression(binary.Left, state),
@@ -1687,17 +1687,17 @@ public static class ActorFrameworkLowerer
     {
         if (call.Method == "Def")
         {
-            throw new InvalidOperationException("enemy.Def can only be used as a statement.");
+            throw new InvalidOperationException("Enemies.Def can only be used as a statement.");
         }
 
         if (!EnemyLookupFunctions.TryGetValue(call.Method, out var functionName))
         {
-            throw new InvalidOperationException($"Unknown actor framework enemy helper 'enemy.{call.Method}'.");
+            throw new InvalidOperationException($"Unknown actor framework enemy helper 'Enemies.{call.Method}'.");
         }
 
         if (state.EnemyDefs.Count == 0)
         {
-            throw new InvalidOperationException($"enemy.{call.Method} requires at least one enemy.Def declaration.");
+            throw new InvalidOperationException($"Enemies.{call.Method} requires at least one Enemies.Def declaration.");
         }
 
         state.RecordEnemyLookupMethod(call.Method);
@@ -1821,27 +1821,27 @@ public static class ActorFrameworkLowerer
 
         foreach (var def in state.EnemyDefs)
         {
-            yield return new GeneratedName(def.Name, $"enemy.Def '{def.Name}' kind constant");
-            yield return new GeneratedName($"{def.Name}Behavior", $"enemy.Def '{def.Name}' behavior constant");
-            yield return new GeneratedName($"{def.Name}Speed", $"enemy.Def '{def.Name}' speed constant");
-            yield return new GeneratedName($"{def.Name}Hp", $"enemy.Def '{def.Name}' hp constant");
-            yield return new GeneratedName($"{def.Name}Cooldown", $"enemy.Def '{def.Name}' cooldown constant");
-            yield return new GeneratedName($"{def.Name}ContactDamage", $"enemy.Def '{def.Name}' contact damage constant");
-            yield return new GeneratedName($"{def.Name}HitboxWidth", $"enemy.Def '{def.Name}' hitbox width constant");
-            yield return new GeneratedName($"{def.Name}HitboxHeight", $"enemy.Def '{def.Name}' hitbox height constant");
+            yield return new GeneratedName(def.Name, $"Enemies.Def '{def.Name}' kind constant");
+            yield return new GeneratedName($"{def.Name}Behavior", $"Enemies.Def '{def.Name}' behavior constant");
+            yield return new GeneratedName($"{def.Name}Speed", $"Enemies.Def '{def.Name}' speed constant");
+            yield return new GeneratedName($"{def.Name}Hp", $"Enemies.Def '{def.Name}' hp constant");
+            yield return new GeneratedName($"{def.Name}Cooldown", $"Enemies.Def '{def.Name}' cooldown constant");
+            yield return new GeneratedName($"{def.Name}ContactDamage", $"Enemies.Def '{def.Name}' contact damage constant");
+            yield return new GeneratedName($"{def.Name}HitboxWidth", $"Enemies.Def '{def.Name}' hitbox width constant");
+            yield return new GeneratedName($"{def.Name}HitboxHeight", $"Enemies.Def '{def.Name}' hitbox height constant");
         }
 
         foreach (var lookup in EnemyLookupFunctions.Where(pair => state.UsedEnemyLookupMethods.Contains(pair.Key)))
         {
-            yield return new GeneratedName(lookup.Value, $"enemy.{lookup.Key} lookup helper function");
+            yield return new GeneratedName(lookup.Value, $"Enemies.{lookup.Key} lookup helper function");
         }
 
         foreach (var layer in state.SpawnLayers.Where(layer => layer.Spawns.Count != 0))
         {
-            yield return new GeneratedName($"{layer.RuntimeName}_used", $"actor.{layer.MethodName} layer '{layer.LayerName}' used array");
+            yield return new GeneratedName($"{layer.RuntimeName}_used", $"Actors.{layer.MethodName} layer '{layer.LayerName}' used array");
             foreach (var fieldName in SpawnLookupFieldNames())
             {
-                yield return new GeneratedName($"{layer.RuntimeName}_{fieldName}", $"actor.{layer.MethodName} layer '{layer.LayerName}' {fieldName} lookup function");
+                yield return new GeneratedName($"{layer.RuntimeName}_{fieldName}", $"Actors.{layer.MethodName} layer '{layer.LayerName}' {fieldName} lookup function");
             }
         }
     }
@@ -2006,7 +2006,7 @@ public static class ActorFrameworkLowerer
         {
             if (!pools.TryAdd(pool.Name, pool))
             {
-                throw new InvalidOperationException($"actor.Pool for '{pool.Name}' is already declared.");
+                throw new InvalidOperationException($"Actors.Pool for '{pool.Name}' is already declared.");
             }
 
             poolsInOrder.Add(pool);
@@ -2027,7 +2027,7 @@ public static class ActorFrameworkLowerer
         {
             if (!enemyDefs.TryAdd(def.Name, def))
             {
-                throw new InvalidOperationException($"enemy.Def for '{def.Name}' is already declared.");
+                throw new InvalidOperationException($"Enemies.Def for '{def.Name}' is already declared.");
             }
 
             enemyDefsInOrder.Add(def);
@@ -2057,22 +2057,22 @@ public static class ActorFrameworkLowerer
             var parameters = call.Parameters.ToList();
             if (call.Method == "SpawnLayer" && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
             {
-                throw new InvalidOperationException("actor.SpawnLayer expects a pool identifier, a map path string, and a layer name string.");
+                throw new InvalidOperationException("Actors.SpawnLayer expects a pool identifier, a map path string, and a layer name string.");
             }
 
             if (call.Method == "SpawnWindow" && (parameters.Count != 5 || parameters[0] is not IdentifierSyntax))
             {
-                throw new InvalidOperationException("actor.SpawnWindow expects a pool identifier, a map path string, a layer name string, a literal left edge, and a literal width.");
+                throw new InvalidOperationException("Actors.SpawnWindow expects a pool identifier, a map path string, a layer name string, a literal left edge, and a literal width.");
             }
 
-            var windowLeft = call.Method == "SpawnWindow" ? RequiredLiteralByte(parameters[3], "actor.SpawnWindow argument 4") : (int?)null;
-            var windowWidth = call.Method == "SpawnWindow" ? RequiredLiteralByte(parameters[4], "actor.SpawnWindow argument 5") : (int?)null;
+            var windowLeft = call.Method == "SpawnWindow" ? RequiredLiteralByte(parameters[3], "Actors.SpawnWindow argument 4") : (int?)null;
+            var windowWidth = call.Method == "SpawnWindow" ? RequiredLiteralByte(parameters[4], "Actors.SpawnWindow argument 5") : (int?)null;
             var poolName = (IdentifierSyntax)parameters[0];
             var key = ActorSpawnLayerKey.From(
                 call.Method,
                 poolName.Identifier,
-                StringLiteral(parameters[1], "actor.SpawnLayer argument 2"),
-                StringLiteral(parameters[2], "actor.SpawnLayer argument 3"),
+                StringLiteral(parameters[1], "Actors.SpawnLayer argument 2"),
+                StringLiteral(parameters[2], "Actors.SpawnLayer argument 3"),
                 windowLeft,
                 windowWidth);
             return spawnLayers[key];
@@ -2096,26 +2096,26 @@ public static class ActorFrameworkLowerer
             {
                 if (!pools.TryGetValue(spawnLayer.PoolName, out var pool))
                 {
-                    throw new InvalidOperationException($"actor.SpawnLayer references undeclared pool '{spawnLayer.PoolName}'.");
+                    throw new InvalidOperationException($"Actors.SpawnLayer references undeclared pool '{spawnLayer.PoolName}'.");
                 }
 
                 if (spawnLayer.Spawns.Count > 255)
                 {
-                    throw new InvalidOperationException($"actor.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' reads {spawnLayer.Spawns.Count} spawn(s) from layer '{spawnLayer.LayerName}', exceeding the fixed runtime spawn table limit 255.");
+                    throw new InvalidOperationException($"Actors.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' reads {spawnLayer.Spawns.Count} spawn(s) from layer '{spawnLayer.LayerName}', exceeding the fixed runtime spawn table limit 255.");
                 }
 
                 var windowWidth = spawnLayer.WindowWidth ?? ScreenWidth;
                 var simultaneousSpawns = MaxSimultaneousSpawns(spawnLayer.Spawns, windowWidth);
                 if (simultaneousSpawns > pool.Capacity)
                 {
-                    throw new InvalidOperationException($"actor.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' can activate {simultaneousSpawns} spawn(s) in one camera window from layer '{spawnLayer.LayerName}', exceeding the declared capacity {pool.Capacity}.");
+                    throw new InvalidOperationException($"Actors.{spawnLayer.MethodName} for pool '{spawnLayer.PoolName}' can activate {simultaneousSpawns} spawn(s) in one camera window from layer '{spawnLayer.LayerName}', exceeding the declared capacity {pool.Capacity}.");
                 }
 
                 foreach (var spawn in spawnLayer.Spawns)
                 {
                     if (!enemyDefs.ContainsKey(spawn.Kind))
                     {
-                        throw new InvalidOperationException($"actor.SpawnLayer layer '{spawnLayer.LayerName}' references unknown actor kind '{spawn.Kind}'. Declare enemy.Def({spawn.Kind}, ...).");
+                        throw new InvalidOperationException($"Actors.SpawnLayer layer '{spawnLayer.LayerName}' references unknown actor kind '{spawn.Kind}'. Declare Enemies.Def({spawn.Kind}, ...).");
                     }
                 }
             }

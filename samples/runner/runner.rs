@@ -181,10 +181,6 @@ class PlayerState {
 class CameraState {
     Pixel x;
     Pixel y;
-    Pixel screenX;
-    Pixel screenY;
-    Pixel leftProbeX;
-    Pixel rightProbeX;
     bool moving;
     Pixel speed;
     Pixel direction;
@@ -200,17 +196,17 @@ class CameraState {
     inline pure Pixel ScreenX(PlayerState player) => player.x - x;
     inline pure Pixel ScreenY(PlayerState player) => player.y - y;
 
-    inline void CaptureScreen(PlayerState player) {
-        screenX = ScreenX(player);
-        screenY = ScreenY(player);
-    }
-
     inline void ApplyPosition() {
         Camera.SetPosition(x, y);
     }
 
+    inline void ApplyFramePosition() {
+        ApplyPosition();
+        ApplyPosition();
+    }
+
     inline void FollowPlayer(PlayerState player) {
-        CaptureScreen(player);
+        let screenY = ScreenY(player);
 
         if (screenY > DeadZone.Bottom) {
             if (y < CameraBounds.MaxY) {
@@ -299,8 +295,8 @@ class CameraState {
     }
 
     inline void MoveRightOnePixel(PlayerState player, Pixel wallProbeY) {
-        CaptureScreen(player);
-        rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;
+        let screenX = ScreenX(player);
+        let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;
         if (Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = true;
             player.x += 1;
@@ -313,8 +309,8 @@ class CameraState {
     }
 
     inline void MoveLeftOnePixel(PlayerState player, Pixel wallProbeY) {
-        CaptureScreen(player);
-        leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;
+        let screenX = ScreenX(player);
+        let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;
         if (Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0) {
             moving = true;
             player.x -= 1;
@@ -367,17 +363,15 @@ class CameraState {
 }
 
 class FrameState {
-    Pixel footTile;
     bool resetRequested;
 
     inline void Begin() {
-        footTile = CollisionProbe.NoTileHit;
         resetRequested = false;
     }
 
     inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY) {
         if (player.velocityY < Level.SignedVelocityWrap && player.velocityY != 0) {
-            footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
+            let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
             if (footTile != CollisionProbe.NoTileHit) {
                 player.Land(footTile - Player.FootOffset);
             }
@@ -403,7 +397,6 @@ class FrameState {
 
     inline void ResolveReset(PlayerState player, CameraState view) {
         if (resetRequested) {
-            footTile = CollisionProbe.NoTileHit;
             player.Reset(view);
             view.ResetMotion();
         }
@@ -411,9 +404,10 @@ class FrameState {
 }
 
 inline void PresentFrame(PlayerState player, CameraState view) {
-    view.CaptureScreen(player);
+    let screenX = view.ScreenX(player);
+    let screenY = view.ScreenY(player);
     Video.WaitVBlank();
-    Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);
+    Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);
 }
 
 void SetupVideo() {
@@ -448,8 +442,8 @@ void Main() {
     view.ResetMotion();
     player.Reset(view);
 
-    actor.Pool(goombas, 1);
-    enemy.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
+    Actors.Pool(goombas, 1);
+    Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
 
     loop {
         PresentFrame(player, view);
@@ -458,7 +452,7 @@ void Main() {
         Audio.Update();
         Input.Poll();
 
-        actor.SpawnLayer(goombas, "maps/runner.tmj", "actors");
+        Actors.SpawnLayer(goombas, "maps/runner.tmj", "actors");
         goombaTick ^= 1;
         if (goombaTick == 0) {
             goombas.Update();
@@ -468,18 +462,17 @@ void Main() {
         player.ApplyGravity();
 
         let footWorldY = player.y + Player.FootOffset;
-        view.CaptureScreen(player);
+        let screenX = view.ScreenX(player);
 
-        frame.ResolveSolidLanding(player, view.screenX, footWorldY);
-        frame.ResolveCeilingHit(player, view.screenX, footWorldY);
+        frame.ResolveSolidLanding(player, screenX, footWorldY);
+        frame.ResolveCeilingHit(player, screenX, footWorldY);
         frame.ResolveFall(player);
         frame.ResolveReset(player, view);
         view.FollowPlayer(player);
         player.HandleJumpInput();
         let movementFootWorldY = player.y + Player.FootOffset;
         view.HandleHorizontalInput(player, movementFootWorldY);
-        view.ApplyPosition();
-        view.ApplyPosition();
+        view.ApplyFramePosition();
         player.UpdateRunAnimation(view);
 
     }

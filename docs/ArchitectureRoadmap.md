@@ -1374,11 +1374,11 @@ The intended authoring model is declarative and platformer-oriented. A game shou
 Candidate source shape:
 
 ```c
-actor.Pool(enemies, 8);
+Actors.Pool(enemies, 8);
 
-enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
-enemy.Def(Bat, sprite: bat, behavior: Flyer, speed: 2, hp: 1);
-enemy.Def(Turret, sprite: turret, behavior: Shooter, cooldown: 60);
+Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+Enemies.Def(Bat, sprite: bat, behavior: Flyer, speed: 2, hp: 1);
+Enemies.Def(Turret, sprite: turret, behavior: Shooter, cooldown: 60);
 
 World.Load("level1.tmj");
 

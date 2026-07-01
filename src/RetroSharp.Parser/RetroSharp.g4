@@ -229,3 +229,7 @@ LITERAL_STRING: '"' ('\\"' | .)*? '"';
 
 // Spaces and line breaks (ignored)
 WS: [ \t\r\n]+ -> skip;
+
+// Comments (ignored). Line comments run to end of line; block comments are non-nesting.
+LINE_COMMENT: '//' ~[\r\n]* -> skip;
+BLOCK_COMMENT: '/*' .*? '*/' -> skip;

@@ -46,6 +46,28 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Comments_do_not_affect_game_boy_rom_bytes()
+    {
+        const string withoutComments = """
+                                       void Main() {
+                                           Video.Init();
+                                           Palette.Background(0, 0, 1, 2, 3);
+                                       }
+                                       """;
+        const string withComments = """
+                                    // Source-only documentation.
+                                    void Main() {
+                                        Video.Init(); /* zero-cost comment */
+                                        Palette.Background(0, 0, 1, 2, 3);
+                                    }
+                                    """;
+
+        Assert.Equal(
+            GameBoyRomCompiler.CompileSource(withoutComments),
+            GameBoyRomCompiler.CompileSource(withComments));
+    }
+
+    [Fact]
     public void Logical_palette_declarations_lower_to_game_boy_palette_registers()
     {
         const string source = """
@@ -3017,13 +3039,13 @@ public class GameBoyRomCompilerTests
         const string actorSource = """
                                    void Main() {
                                        video_init();
-                                       actor.Pool(enemies, 0b10);
-                                       enemy.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
+                                       Actors.Pool(enemies, 0b10);
+                                       Enemies.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
-                                       enemies[0].health = enemy.Hp(enemies[0].kind);
-                                       enemies[0].vx = (i8)enemy.Speed(enemies[0].kind);
-                                       enemies[0].timer = enemy.Cooldown(enemies[0].kind);
+                                       enemies[0].health = Enemies.Hp(enemies[0].kind);
+                                       enemies[0].vx = (i8)Enemies.Speed(enemies[0].kind);
+                                       enemies[0].timer = Enemies.Cooldown(enemies[0].kind);
                                    }
                                    """;
 
@@ -3043,14 +3065,14 @@ public class GameBoyRomCompilerTests
                               const GoombaSpeed = 7;
 
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, speed: 1);
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
-        Assert.Equal("actor framework cannot generate enemy.Def 'Goomba' speed constant named 'GoombaSpeed' because user constant 'GoombaSpeed' is already declared.", exception.Message);
+        Assert.Equal("actor framework cannot generate Enemies.Def 'Goomba' speed constant named 'GoombaSpeed' because user constant 'GoombaSpeed' is already declared.", exception.Message);
     }
 
     [Fact]
@@ -3058,15 +3080,15 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Walker, speed: 1);
-                                  enemy.Def(GoombaSpeed, behavior: Flyer);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, speed: 1);
+                                  Enemies.Def(GoombaSpeed, behavior: Flyer);
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
-        Assert.Equal("actor framework cannot generate enemy.Def 'GoombaSpeed' kind constant named 'GoombaSpeed' because enemy.Def 'Goomba' speed constant also generates 'GoombaSpeed'.", exception.Message);
+        Assert.Equal("actor framework cannot generate Enemies.Def 'GoombaSpeed' kind constant named 'GoombaSpeed' because Enemies.Def 'Goomba' speed constant also generates 'GoombaSpeed'.", exception.Message);
     }
 
     [Fact]
@@ -3074,18 +3096,18 @@ public class GameBoyRomCompilerTests
     {
         const string unusedSource = """
                                     void Main() {
-                                        actor.Pool(enemies, 1);
-                                        enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
+                                        Actors.Pool(enemies, 1);
+                                        Enemies.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
                                         enemies[0].kind = Goomba;
                                     }
                                     """;
 
         const string usedSource = """
                                   void Main() {
-                                      actor.Pool(enemies, 1);
-                                      enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
+                                      Actors.Pool(enemies, 1);
+                                      Enemies.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
                                       enemies[0].kind = Goomba;
-                                      enemies[0].vx = (i8)enemy.Speed(enemies[0].kind);
+                                      enemies[0].vx = (i8)Enemies.Speed(enemies[0].kind);
                                   }
                                   """;
 
@@ -3109,9 +3131,9 @@ public class GameBoyRomCompilerTests
                               void Main() {
                                   Sprite.Asset(goomba, "goomba.sprite.json");
                                   Sprite.Asset(bat, "bat.sprite.json");
-                                  actor.Pool(enemies, 2);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  enemy.Def(Bat, sprite: bat, behavior: Flyer, speed: 1);
+                                  Actors.Pool(enemies, 2);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Enemies.Def(Bat, sprite: bat, behavior: Flyer, speed: 1);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies[1].active = 1;
@@ -3149,8 +3171,8 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void Main() {
                                   Sprite.Asset(goomba, "goomba.sprite.json");
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies.Draw();
@@ -3188,10 +3210,10 @@ public class GameBoyRomCompilerTests
                                   world_map(40, 10, 40);
                                   camera_init(40, 10, 18);
                                   Sprite.Asset(goomba, "goomba.sprite.json");
-                                  actor.Pool(enemies, 2);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                  Actors.Pool(enemies, 2);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                   camera_set_position(0, 160);
-                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                   enemies.TouchTiles(0, 1);
                                   enemies.LandOnTiles(4, 12, 1);
                                   enemies.Draw();
@@ -3243,8 +3265,8 @@ public class GameBoyRomCompilerTests
                                   World.Map(1, 0, 40);
                                   Camera.Init(1, 0, 40);
                                   Sprite.Asset(goomba, "goomba.sprite.json");
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                   u8 cameraY = 0;
                                   for (u8 i = 0; i < 160; i += 1) {
                                       cameraY += 1;
@@ -3252,7 +3274,7 @@ public class GameBoyRomCompilerTests
                                       Video.WaitVBlank();
                                       Camera.Apply();
                                   }
-                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                   enemies.TouchTiles(0, 1);
                                   if (enemies[0].state == 1) {
                                       enemies[0].x = 32;
@@ -3281,13 +3303,13 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void Main() {
                                   u8 capacity = 2;
-                                  actor.Pool(enemies, capacity);
+                                  Actors.Pool(enemies, capacity);
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
-        Assert.Equal("actor.Pool for 'enemies' requires a literal capacity from 1 to 255.", exception.Message);
+        Assert.Equal("Actors.Pool for 'enemies' requires a literal capacity from 1 to 255.", exception.Message);
     }
 
     [Fact]
@@ -3295,7 +3317,7 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 41);
+                                  Actors.Pool(enemies, 41);
                               }
                               """;
 
@@ -3309,8 +3331,8 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Ghost);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Ghost);
                                   enemies.Update();
                               }
                               """;
@@ -3331,8 +3353,8 @@ public class GameBoyRomCompilerTests
                               void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "wide-goomba.sprite.json");
-                                  actor.Pool(enemies, 21);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 21);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                               }
@@ -3341,7 +3363,7 @@ public class GameBoyRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'gb' supports 40 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 42 because capacity 21 times enemy.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.",
+            "Target 'gb' supports 40 hardware sprites per frame, but Actors.Pool for 'enemies' can draw up to 42 because capacity 21 times Enemies.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.",
             exception.Message);
     }
 
@@ -3358,8 +3380,8 @@ public class GameBoyRomCompilerTests
                               void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.png", 8, 32);
-                                  actor.Pool(enemies, 10);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 10);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                               }
@@ -3381,8 +3403,8 @@ public class GameBoyRomCompilerTests
                               void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.sprite.json");
-                                  actor.Pool(enemies, 11);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Actors.Pool(enemies, 11);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                               }
@@ -3391,7 +3413,7 @@ public class GameBoyRomCompilerTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
         Assert.Equal(
-            "Target 'gb' supports 10 hardware sprites per scanline, but actor.Pool for 'enemies' can draw up to 11 on one scanline because capacity 11 times enemy.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
+            "Target 'gb' supports 10 hardware sprites per scanline, but Actors.Pool for 'enemies' can draw up to 11 on one scanline because capacity 11 times Enemies.Def 'Goomba' sprite 'goomba' uses 1 hardware sprite on its busiest scanline.",
             exception.Message);
     }
 
@@ -3478,8 +3500,8 @@ public class GameBoyRomCompilerTests
                                    void Main() {
                                        video_init();
                                        Sprite.Asset(goomba, "goomba.sprite.json");
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
@@ -3507,8 +3529,8 @@ public class GameBoyRomCompilerTests
                                   world_map(1, 10, 2);
                                   camera_init(1, 10, 2);
                                   Sprite.Asset(goomba, "goomba.sprite.json");
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies[0].x = 20;
@@ -3607,8 +3629,8 @@ public class GameBoyRomCompilerTests
                                        world_flags(1, 0, 2);
                                        world_map(2, 10, 2);
                                        camera_init(2, 10, 2);
-                                       actor.Pool(enemies, 2);
-                                       enemy.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
+                                       Actors.Pool(enemies, 2);
+                                       Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
@@ -3674,8 +3696,8 @@ public class GameBoyRomCompilerTests
         const string actorSource = """
                                    void Main() {
                                        video_init();
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, behavior: Walker, speed: 1, animation: walk);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, behavior: Walker, speed: 1, animation: walk);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies.Update();
@@ -3701,11 +3723,11 @@ public class GameBoyRomCompilerTests
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
-                                       actor.Pool(enemies, 2);
-                                       enemy.Def(Goomba, behavior: Walker);
-                                       enemy.Def(Bat, behavior: Flyer);
+                                       Actors.Pool(enemies, 2);
+                                       Enemies.Def(Goomba, behavior: Walker);
+                                       Enemies.Def(Bat, behavior: Flyer);
                                        camera_set_position(0, 0);
-                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                    }
                                    """;
 
@@ -3780,13 +3802,13 @@ public class GameBoyRomCompilerTests
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, behavior: Walker);
-                                       enemy.Def(Bat, behavior: Flyer);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, behavior: Walker);
+                                       Enemies.Def(Bat, behavior: Flyer);
                                        camera_set_position(0, 0);
-                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                        camera_set_position(128, 0);
-                                       actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                       Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                    }
                                    """;
 
@@ -3814,16 +3836,16 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Walker);
-                                  enemy.Def(Bat, behavior: Flyer);
-                                  actor.SpawnLayer(enemies, "level.tmj", "actors");
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker);
+                                  Enemies.Def(Bat, behavior: Flyer);
+                                  Actors.SpawnLayer(enemies, "level.tmj", "actors");
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
-        Assert.Equal("actor.SpawnLayer for pool 'enemies' can activate 2 spawn(s) in one camera window from layer 'actors', exceeding the declared capacity 1.", exception.Message);
+        Assert.Equal("Actors.SpawnLayer for pool 'enemies' can activate 2 spawn(s) in one camera window from layer 'actors', exceeding the declared capacity 1.", exception.Message);
     }
 
     [Fact]
@@ -3842,11 +3864,11 @@ public class GameBoyRomCompilerTests
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
-                                       actor.Pool(enemies, 1);
-                                       enemy.Def(Goomba, behavior: Walker);
-                                       enemy.Def(Bat, behavior: Flyer);
+                                       Actors.Pool(enemies, 1);
+                                       Enemies.Def(Goomba, behavior: Walker);
+                                       Enemies.Def(Bat, behavior: Flyer);
                                        camera_set_position(0, 0);
-                                       actor.SpawnWindow(enemies, "level.tmj", "actors", 0, 48);
+                                       Actors.SpawnWindow(enemies, "level.tmj", "actors", 0, 48);
                                    }
                                    """;
 
@@ -3861,8 +3883,8 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Walker, contactDamage: 2, hitboxWidth: 8, hitboxHeight: 8);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, contactDamage: 2, hitboxWidth: 8, hitboxHeight: 8);
                                   enemies[0].active = 1;
                                   enemies[0].kind = Goomba;
                                   enemies[0].x = 72;
@@ -3889,16 +3911,16 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  actor.Pool(enemies, 1);
-                                  enemy.Def(Goomba, behavior: Walker);
-                                  enemy.Def(Bat, behavior: Flyer);
-                                  actor.SpawnWindow(enemies, "level.tmj", "actors", 0, 128);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker);
+                                  Enemies.Def(Bat, behavior: Flyer);
+                                  Actors.SpawnWindow(enemies, "level.tmj", "actors", 0, 128);
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
 
-        Assert.Equal("actor.SpawnWindow for pool 'enemies' can activate 2 spawn(s) in one camera window from layer 'actors', exceeding the declared capacity 1.", exception.Message);
+        Assert.Equal("Actors.SpawnWindow for pool 'enemies' can activate 2 spawn(s) in one camera window from layer 'actors', exceeding the declared capacity 1.", exception.Message);
     }
 
     [Fact]
@@ -4031,13 +4053,13 @@ public class GameBoyRomCompilerTests
         const string actorSource = """
                                    void Main() {
                                        video_init();
-                                       actor.Pool(enemies, 6);
-                                       enemy.Def(Goomba, behavior: Walker, speed: 1);
-                                       enemy.Def(Bat, behavior: Flyer, speed: 2);
-                                       enemy.Def(Koopa, behavior: Patrol, speed: 1, cooldown: 3);
-                                       enemy.Def(Turret, behavior: Shooter, cooldown: 5);
-                                       enemy.Def(Seeker, behavior: Chaser, speed: 1);
-                                       enemy.Def(Spike, behavior: Hazard, contactDamage: 2);
+                                       Actors.Pool(enemies, 6);
+                                       Enemies.Def(Goomba, behavior: Walker, speed: 1);
+                                       Enemies.Def(Bat, behavior: Flyer, speed: 2);
+                                       Enemies.Def(Koopa, behavior: Patrol, speed: 1, cooldown: 3);
+                                       Enemies.Def(Turret, behavior: Shooter, cooldown: 5);
+                                       Enemies.Def(Seeker, behavior: Chaser, speed: 1);
+                                       Enemies.Def(Spike, behavior: Hazard, contactDamage: 2);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[1].active = 1;
@@ -4678,7 +4700,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("x -= 1;", cameraBlock);
         Assert.Contains("player.x -= 1;", cameraBlock);
         Assert.Contains("Camera.SetPosition(x, y);", cameraBlock);
-        Assert.Equal(2, CountOccurrences(source, "view.ApplyPosition();"));
+        Assert.DoesNotContain("view.ApplyPosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
         Assert.Contains("Camera.SetPosition(x, y);", cameraBlock);
         Assert.DoesNotContain("if (view.x > 0)", movementBlock);
         Assert.DoesNotContain("camera_move_right();", source);
@@ -4729,25 +4752,26 @@ public class GameBoyRomCompilerTests
         Assert.Contains("y = view.y + Player.StartY;", playerBlock);
         Assert.Contains("inline pure Pixel ScreenX(PlayerState player) => player.x - x;", cameraBlock);
         Assert.Contains("inline pure Pixel ScreenY(PlayerState player) => player.y - y;", cameraBlock);
-        Assert.Contains("Pixel screenX;", cameraBlock);
-        Assert.Contains("Pixel screenY;", cameraBlock);
+        Assert.DoesNotContain("Pixel screenX;", cameraBlock);
+        Assert.DoesNotContain("Pixel screenY;", cameraBlock);
         Assert.Contains("inline void FollowPlayer(PlayerState player)", cameraBlock);
         Assert.Contains("if (screenX >= DeadZone.Right)", cameraBlock);
         Assert.Contains("if (screenX <= DeadZone.Left)", cameraBlock);
         Assert.Contains("if (screenY > DeadZone.Bottom)", cameraBlock);
         Assert.Contains("Camera.SetPosition(x, y);", cameraBlock);
-        Assert.Equal(2, CountOccurrences(source, "view.ApplyPosition();"));
+        Assert.DoesNotContain("view.ApplyPosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
 
         Assert.Contains("inline void PresentFrame(PlayerState player, CameraState view)", source);
-        Assert.Contains("view.CaptureScreen(player);", source);
-        Assert.Contains("Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);", source);
+        Assert.DoesNotContain("view.CaptureScreen(player);", source);
+        Assert.Contains("Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);", source);
 
-        Assert.Contains("frame.ResolveSolidLanding(player, view.screenX, footWorldY);", source);
-        Assert.Contains("frame.ResolveCeilingHit(player, view.screenX, footWorldY);", source);
-        Assert.Contains("footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
+        Assert.Contains("frame.ResolveCeilingHit(player, screenX, footWorldY);", source);
+        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid)", source);
-        Assert.Contains("rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
-        Assert.Contains("leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
+        Assert.Contains("let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
+        Assert.Contains("let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
         Assert.Contains("Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
         Assert.Contains("Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
 
@@ -5054,7 +5078,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("player.ApplyGravity();", source);
         Assert.Contains("""World.Load("maps/runner.tmj");""", source);
         Assert.Contains("LoadWorld();", source);
-        Assert.Contains("Sprite.Draw(mario_player, view.screenX, view.screenY", source);
+        Assert.Contains("Sprite.Draw(mario_player, screenX, screenY", source);
         Assert.DoesNotContain("const WorldWidth", source);
         Assert.DoesNotContain("const PlayerScreenX", source);
         Assert.DoesNotContain("Pixel playerY =", source);
@@ -5077,8 +5101,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline void UpdateRunAnimation(CameraState view)", source);
         Assert.Contains("PresentFrame(player, view);", source);
         Assert.Contains("frame.Begin();", source);
-        Assert.Contains("view.CaptureScreen(player);", source);
-        Assert.Contains("frame.ResolveSolidLanding(player, view.screenX, footWorldY);", source);
+        Assert.DoesNotContain("view.CaptureScreen(player);", source);
+        Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
         Assert.Contains("frame.ResolveFall(player);", source);
         Assert.Contains("frame.ResolveReset(player, view);", source);
         Assert.Contains("player.HandleJumpInput();", source);
@@ -5108,7 +5132,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("player.displayFlipX = true;", source);
         Assert.Contains("player.displayFlipX = false;", source);
         Assert.DoesNotContain("displayFlags = 32;", source);
-        Assert.Contains("Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);", source);
+        Assert.Contains("Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);", source);
         Assert.DoesNotContain("enemy_slug", source);
         Assert.Equal(1, CountOccurrences(source, "Sprite.Draw("));
 
@@ -5164,7 +5188,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("view.screenX", source);
+        Assert.DoesNotContain("view.screenX", source);
         Assert.Contains("Player.FootOffset", source);
         Assert.Contains("CollisionProbe.LandingSearchHeight", source);
         Assert.Contains("CollisionProbe.NoTileHit", source);
@@ -5194,7 +5218,7 @@ public class GameBoyRomCompilerTests
         var gravity = source.IndexOf("player.ApplyGravity();", StringComparison.Ordinal);
         var audioUpdate = source.IndexOf("Audio.Update();", StringComparison.Ordinal);
         var cameraApply = source.IndexOf("Camera.Apply();", StringComparison.Ordinal);
-        var draw = source.IndexOf("Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
+        var draw = source.IndexOf("Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
         Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
@@ -5218,7 +5242,7 @@ public class GameBoyRomCompilerTests
         var vblankStart = source.IndexOf("Video.WaitVBlank();", StringComparison.Ordinal);
         var audioUpdate = source.IndexOf("Audio.Update();", StringComparison.Ordinal);
         var cameraApply = source.IndexOf("Camera.Apply();", StringComparison.Ordinal);
-        var draw = source.IndexOf("Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
+        var draw = source.IndexOf("Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
         Assert.True(vblankStart >= 0);
         Assert.True(audioUpdate > vblankStart, "Runner should tick the music runtime once after VBlank starts.");
         Assert.True(draw < cameraApply, "Runner should write OAM before other VBlank work can run long on real hardware.");
@@ -6191,7 +6215,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline void ResolveCeilingHit(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
         Assert.Contains("Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid)", source);
         Assert.Contains("player.BounceDown();", source);
-        Assert.Contains("frame.ResolveCeilingHit(player, view.screenX, footWorldY);", source);
+        Assert.Contains("frame.ResolveCeilingHit(player, screenX, footWorldY);", source);
 
         var ceilingStart = source.IndexOf("inline void ResolveCeilingHit", StringComparison.Ordinal);
         Assert.True(ceilingStart >= 0);
@@ -6200,8 +6224,8 @@ public class GameBoyRomCompilerTests
         var ceilingBlock = source[ceilingStart..ceilingEnd];
         Assert.Contains("player.velocityY >= Level.SignedVelocityWrap", ceilingBlock);
 
-        var landingCall = source.IndexOf("frame.ResolveSolidLanding(player, view.screenX, footWorldY);", StringComparison.Ordinal);
-        var ceilingCall = source.IndexOf("frame.ResolveCeilingHit(player, view.screenX, footWorldY);", StringComparison.Ordinal);
+        var landingCall = source.IndexOf("frame.ResolveSolidLanding(player, screenX, footWorldY);", StringComparison.Ordinal);
+        var ceilingCall = source.IndexOf("frame.ResolveCeilingHit(player, screenX, footWorldY);", StringComparison.Ordinal);
         var jumpInputCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
         Assert.True(ceilingCall > landingCall, "Ceiling resolution should run after solid landing resolution.");
         Assert.True(jumpInputCall > ceilingCall, "Ceiling resolution should clear the jump before jump input is consumed.");
@@ -6221,14 +6245,14 @@ public class GameBoyRomCompilerTests
         Assert.Contains("NoTileHit = 255", source);
         Assert.Contains("inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("if (footTile != CollisionProbe.NoTileHit)", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("CollisionProbe.TileSize2", source);
         Assert.DoesNotContain("CollisionProbe.TileSize3", source);
         Assert.DoesNotContain("CollisionProbe.TileSize4", source);
         Assert.DoesNotContain("landedWorldY", source);
-        Assert.Contains("frame.ResolveSolidLanding(player, view.screenX, footWorldY);", source);
+        Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
         Assert.DoesNotContain("collision_aabb_tiles(footLeftX, 0", source);
         Assert.DoesNotContain("playerWorldX", source);
         Assert.DoesNotContain("WrapWorldX", source);
@@ -6246,8 +6270,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("WallProbeHeight = 8", source);
         Assert.Contains("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", source);
         Assert.Contains("let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;", source);
-        Assert.Contains("rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
-        Assert.Contains("leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
+        Assert.Contains("let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
+        Assert.Contains("let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
         Assert.Contains("Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
         Assert.Contains("Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
         Assert.Contains("let movementFootWorldY = player.y + Player.FootOffset;", source);
@@ -6350,7 +6374,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("player.x -= 1;", cameraBlock);
         Assert.Contains("x -= 1;", cameraBlock);
         Assert.DoesNotContain("Camera.SetPosition", motionBlock);
-        Assert.Equal(2, CountOccurrences(source, "view.ApplyPosition();"));
+        Assert.DoesNotContain("view.ApplyPosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         AssertRunnerMbc1Rom(rom);
@@ -6400,7 +6425,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("Pixel footTile;", source);
+        Assert.DoesNotContain("Pixel footTile;", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
         Assert.Contains("bool resetRequested;", source);
 
@@ -6416,7 +6441,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("y = 0;", source);
         Assert.Contains("player.velocityY < Level.SignedVelocityWrap", source);
         Assert.Contains("player.velocityY != 0", source);
-        Assert.Contains("footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
@@ -6491,7 +6516,8 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
         Assert.Contains("Camera.SetPosition(x, y);", source);
-        Assert.Equal(2, CountOccurrences(source, "view.ApplyPosition();"));
+        Assert.DoesNotContain("view.ApplyPosition();", source);
+        Assert.Equal(1, CountOccurrences(source, "view.ApplyFramePosition();"));
         Assert.DoesNotContain("camera_move_right();", source);
         Assert.DoesNotContain("camera_move_left();", source);
         Assert.DoesNotContain("i16 screenLeftColumn = 0;", source);
@@ -6603,7 +6629,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("World.Map(", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
-        Assert.Contains("footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.velocityY < Level.SignedVelocityWrap", source);
         Assert.Contains("player.velocityY != 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);

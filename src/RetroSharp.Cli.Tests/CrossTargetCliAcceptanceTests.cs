@@ -37,7 +37,7 @@ public sealed class CrossTargetCliAcceptanceTests
         var source = File.ReadAllText(sample);
 
         Assert.Contains("""World.Load("actors.tmj");""", source);
-        Assert.Contains("""actor.SpawnLayer(enemies, "actors.tmj", "actors");""", source);
+        Assert.Contains("""Actors.SpawnLayer(enemies, "actors.tmj", "actors");""", source);
         Assert.Contains("""Camera.SetPosition(cameraX, 0);""", source);
         Assert.DoesNotContain("enemies[0].kind", source);
 

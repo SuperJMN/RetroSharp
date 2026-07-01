@@ -75,8 +75,8 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - Dot-call precedence is single-sourced in `RetroSharp.Parser.SdkDotCallResolver`: a receiver in scope shadows a same-named SDK module (lexical scoping), otherwise a known SDK module resolves as an SDK call. Constant folding and semantic analysis both consume it; the folder detects receivers by method signature because it has no variable scope.
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
 - The actor framework is source-to-source sugar in `RetroSharp.Sdk.Frontend`.
-  `actor.Pool`, `actor.SpawnLayer`, `actor.SpawnWindow`, `enemy.Def`, called
-  `enemy.*` helpers, and pool helper calls lower before target emission to fixed
+  `Actors.Pool`, `Actors.SpawnLayer`, `Actors.SpawnWindow`, `Enemies.Def`, called
+  `Enemies.*` helpers, and pool helper calls lower before target emission to fixed
   `Actor` arrays, constants, generated spawn helpers, `used[]`, direct `kind`
   branches, and existing SDK calls such as `Sprite.Draw`, `Camera.AabbTiles`,
   `Camera.AabbHitTop`, `Camera.ScreenAabbTiles`, `Camera.ScreenAabbHitTop`,
@@ -203,8 +203,8 @@ Progress (2026-06-14):
   slot that uses them while preserving the background universal color. The runner now uses
   `Palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
   `ObjectPalette.Set(...)`.
-- Actor framework runtime activation decision on branch `feature/actor-framework`: `actor.SpawnLayer`
-  and `actor.SpawnWindow` no longer materialize Tiled spawns as active slots at compile time.
+- Actor framework runtime activation decision on branch `feature/actor-framework`: `Actors.SpawnLayer`
+  and `Actors.SpawnWindow` no longer materialize Tiled spawns as active slots at compile time.
   They generate ROM-table spawn helpers plus a fixed per-layer `used[]` byte array and should be
   called after `Camera.SetPosition(...)` each frame. Slots recycle when actors leave the activation
   window or source code clears `active`; authored spawns are one-shot and do not respawn after a

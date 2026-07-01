@@ -41,6 +41,7 @@ Frontend sugar (aliases), optional:
 
 Literals:
 - Current support: decimal (`42`), hexadecimal (`0x2A`), binary (`0b1010_0000`), `_` separators, and width suffixes (`255u8`, `-1i8`, `0x1234u16`, `0b1010_0000u8`) in integer literals. These are source-level forms for the same integer value and lower to the same constants or immediates as unsuffixed decimal.
+- Comments are discarded by the lexer before parsing. Both line comments (`// ...`) and non-nesting block comments (`/* ... */`) are zero-cost source documentation and do not affect emitted bytes.
 - Without suffix, the default can be target-defined (e.g., u16).
 - Minimize implicit promotions; require explicit casts when width/sign changes.
 - Explicit casts use `(type)expr`. In the current cartridge targets they are validated against byte-backed local types and then lower as zero-cost expression markers: they do not add helper calls, temporaries, sign extension, or truncation code in this prototype.

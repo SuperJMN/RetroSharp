@@ -39,7 +39,7 @@ The repository now also contains early cartridge targets that compile a constrai
 - `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `Video.WaitVBlank()`, tick-based input polling, `Scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `Sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `Music.Asset(...)`, `Music.Play(...)`, and `Audio.Update()`.
 
 The actor framework acceptance slice lives in `samples/actor-framework`. It shows
-fixed actor pools, declarative `enemy.Def(...)` metadata, Tiled object-layer
+fixed actor pools, declarative `Enemies.Def(...)` metadata, Tiled object-layer
 spawns, runtime camera-window activation, and Game Boy/NES lowering without heap
 allocation or runtime dispatch. The roadmap is `docs/ActorFrameworkRoadmap.md`.
 

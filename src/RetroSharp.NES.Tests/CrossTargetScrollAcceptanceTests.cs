@@ -307,8 +307,8 @@ public sealed class CrossTargetScrollAcceptanceTests
                 Camera.Init(1, 10, 2);
                 Sprite.Asset(marker, "samples/cross-target-camera/marker.json");
                 Animation.Clip(walk, 0, 4);
-                actor.Pool(enemies, 1);
-                enemy.Def(Goomba, sprite: marker, behavior: Walker, speed: 1, animation: walk, hitboxWidth: 8, hitboxHeight: 8);
+                Actors.Pool(enemies, 1);
+                Enemies.Def(Goomba, sprite: marker, behavior: Walker, speed: 1, animation: walk, hitboxWidth: 8, hitboxHeight: 8);
                 enemies[0].active = 1;
                 enemies[0].kind = Goomba;
                 enemies[0].x = 72;
@@ -341,8 +341,8 @@ public sealed class CrossTargetScrollAcceptanceTests
                 World.Map(1, 10, 2);
                 Camera.Init(1, 10, 2);
                 Sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
-                actor.Pool(enemies, 2);
-                enemy.Def(PlayerProxy, sprite: player, behavior: Walker, speed: 1, hitboxWidth: 18, hitboxHeight: 32);
+                Actors.Pool(enemies, 2);
+                Enemies.Def(PlayerProxy, sprite: player, behavior: Walker, speed: 1, hitboxWidth: 18, hitboxHeight: 32);
                 enemies[0].active = 1;
                 enemies[0].kind = PlayerProxy;
                 enemies[0].x = 72;

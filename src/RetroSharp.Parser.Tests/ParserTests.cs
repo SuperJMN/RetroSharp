@@ -9,6 +9,20 @@ public class ParserTests
         AssertParse(source);
     }
 
+    [Fact]
+    public void Line_comment_is_ignored()
+    {
+        var source = "// header comment\ni16 main() { a = 12; // trailing comment\n }";
+        AssertParse(source, "i16 main() { a = 12; }");
+    }
+
+    [Fact]
+    public void Block_comment_is_ignored()
+    {
+        var source = "i16 main() { /* block\n spanning lines */ a = 12; }";
+        AssertParse(source, "i16 main() { a = 12; }");
+    }
+
     [Theory]
     [InlineData(42)]
     [InlineData(1)]
