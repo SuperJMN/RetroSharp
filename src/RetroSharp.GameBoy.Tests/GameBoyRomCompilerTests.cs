@@ -5067,7 +5067,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Width = 48", source);
         Assert.Contains("Height = 96", source);
         Assert.Contains("StreamHeight = 96", source);
-        Assert.Contains("SignedVelocityWrap = 128", source);
+        Assert.DoesNotContain("SignedVelocityWrap", source);
         Assert.Contains("PixelWidth = 384", source);
         Assert.Contains("static class Player", source);
         Assert.Contains("StartX = 72", source);
@@ -6223,7 +6223,7 @@ public class GameBoyRomCompilerTests
         var ceilingEnd = source.IndexOf("inline void ResolveReset", ceilingStart, StringComparison.Ordinal);
         Assert.True(ceilingEnd > ceilingStart);
         var ceilingBlock = source[ceilingStart..ceilingEnd];
-        Assert.Contains("player.velocityY >= Level.SignedVelocityWrap", ceilingBlock);
+        Assert.Contains("player.velocityY < 0", ceilingBlock);
 
         var landingCall = source.IndexOf("frame.ResolveSolidLanding(player, screenX, footWorldY);", StringComparison.Ordinal);
         var ceilingCall = source.IndexOf("frame.ResolveCeilingHit(player, screenX, footWorldY);", StringComparison.Ordinal);
@@ -6388,7 +6388,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("Velocity = 253", source);
+        Assert.Contains("Velocity = -3", source);
         Assert.Contains("BoostTicks = 12", source);
         Assert.Contains("GravityFrames = 2", source);
         Assert.Contains("BoostTickMask = 1", source);
@@ -6438,10 +6438,9 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("inline pure Pixel WrapWorldX(Pixel x) => x;", source);
         Assert.DoesNotContain("playerWorldX", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("if (velocityY >= Level.SignedVelocityWrap)", source);
+        Assert.Contains("if (velocityY < 0)", source);
         Assert.Contains("y = 0;", source);
-        Assert.Contains("player.velocityY < Level.SignedVelocityWrap", source);
-        Assert.Contains("player.velocityY != 0", source);
+        Assert.Contains("player.velocityY > 0", source);
         Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
@@ -6495,7 +6494,7 @@ public class GameBoyRomCompilerTests
             source.IndexOf("LoadWorld();", StringComparison.Ordinal));
         Assert.Contains("Camera.Apply();", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        var topClampStart = source.IndexOf("if (velocityY >= Level.SignedVelocityWrap)", StringComparison.Ordinal);
+        var topClampStart = source.IndexOf("if (velocityY < 0)", StringComparison.Ordinal);
         Assert.True(topClampStart >= 0);
         var footProbeStart = source.IndexOf("let footWorldY = player.y + Player.FootOffset;", StringComparison.Ordinal);
         Assert.True(footProbeStart > topClampStart, "Runner should clamp upward Y wrap before collision probes and reset checks.");
@@ -6509,8 +6508,7 @@ public class GameBoyRomCompilerTests
         Assert.True(solidLandingStart >= 0);
         Assert.True(fallStart > solidLandingStart);
         var solidLandingBlock = source[solidLandingStart..fallStart];
-        Assert.Contains("player.velocityY < Level.SignedVelocityWrap", solidLandingBlock);
-        Assert.Contains("player.velocityY != 0", solidLandingBlock);
+        Assert.Contains("player.velocityY > 0", solidLandingBlock);
         Assert.Contains("Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid)", solidLandingBlock);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", solidLandingBlock);
         Assert.DoesNotContain("camera_span_has_flags(", source);
@@ -6631,8 +6629,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
         Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
-        Assert.Contains("player.velocityY < Level.SignedVelocityWrap", source);
-        Assert.Contains("player.velocityY != 0", source);
+        Assert.Contains("player.velocityY > 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("failTile", source);
         Assert.DoesNotContain("hazardHit", source);
