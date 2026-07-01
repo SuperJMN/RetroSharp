@@ -47,15 +47,18 @@ static class Jump {
     const u8 BounceVelocity = 2;
 }
 
-enum HorizontalMotion {
+enum Direction {
     None = 0,
     Right = 1,
-    Left = 2,
-    WalkSpeed = 8,
-    RunMaxSpeed = 12,
-    SubpixelScale = 8,
-    RunAcceleration = 1,
-    Friction = 2
+    Left = 2
+}
+
+static class MotionSpeed {
+    const i16 Walk = 8;
+    const i16 RunMax = 12;
+    const i16 Subpixel = 8;
+    const i16 RunAcceleration = 1;
+    const i16 Friction = 2;
 }
 
 static class RunAnimation {
@@ -190,7 +193,7 @@ class CameraState {
     inline void ResetMotion() {
         moving = false;
         speed = 0;
-        direction = HorizontalMotion.None;
+        direction = Direction.None;
         movementRemainder = 0;
     }
 
@@ -222,24 +225,24 @@ class CameraState {
 
     inline void StartDirection(Pixel desiredDirection) {
         direction = desiredDirection;
-        speed = HorizontalMotion.WalkSpeed;
+        speed = MotionSpeed.Walk;
         movementRemainder = 0;
     }
 
     inline void AccelerateRun() {
-        if (speed < HorizontalMotion.RunMaxSpeed) {
-            speed += HorizontalMotion.RunAcceleration;
-            if (speed > HorizontalMotion.RunMaxSpeed) {
-                speed = HorizontalMotion.RunMaxSpeed;
+        if (speed < MotionSpeed.RunMax) {
+            speed += MotionSpeed.RunAcceleration;
+            if (speed > MotionSpeed.RunMax) {
+                speed = MotionSpeed.RunMax;
             }
         }
     }
 
     inline void DecelerateToWalk() {
-        if (speed > HorizontalMotion.WalkSpeed) {
-            speed -= HorizontalMotion.Friction;
-            if (speed < HorizontalMotion.WalkSpeed) {
-                speed = HorizontalMotion.WalkSpeed;
+        if (speed > MotionSpeed.Walk) {
+            speed -= MotionSpeed.Friction;
+            if (speed < MotionSpeed.Walk) {
+                speed = MotionSpeed.Walk;
             }
         }
     }
@@ -255,42 +258,42 @@ class CameraState {
     }
 
     inline void ApplyFriction() {
-        if (speed <= HorizontalMotion.Friction) {
+        if (speed <= MotionSpeed.Friction) {
             speed = 0;
             movementRemainder = 0;
-            direction = HorizontalMotion.None;
+            direction = Direction.None;
         } else {
-            speed -= HorizontalMotion.Friction;
+            speed -= MotionSpeed.Friction;
         }
     }
 
     inline void UpdateIntent(Pixel desiredDirection, bool grounded) {
-        if (desiredDirection == HorizontalMotion.None) {
+        if (desiredDirection == Direction.None) {
             if (grounded) {
                 ApplyFriction();
             }
         }
-        if (desiredDirection == HorizontalMotion.Right) {
-            if (direction == HorizontalMotion.Right) {
+        if (desiredDirection == Direction.Right) {
+            if (direction == Direction.Right) {
                 HoldDirection(grounded);
             } else {
-                StartDirection(HorizontalMotion.Right);
+                StartDirection(Direction.Right);
             }
         }
-        if (desiredDirection == HorizontalMotion.Left) {
-            if (direction == HorizontalMotion.Left) {
+        if (desiredDirection == Direction.Left) {
+            if (direction == Direction.Left) {
                 HoldDirection(grounded);
             } else {
-                StartDirection(HorizontalMotion.Left);
+                StartDirection(Direction.Left);
             }
         }
     }
 
     inline void UpdateFacing(PlayerState player) {
-        if (direction == HorizontalMotion.Right) {
+        if (direction == Direction.Right) {
             player.displayFlipX = false;
         }
-        if (direction == HorizontalMotion.Left) {
+        if (direction == Direction.Left) {
             player.displayFlipX = true;
         }
     }
@@ -326,12 +329,12 @@ class CameraState {
     }
 
     inline void ApplyMotionStep(PlayerState player, Pixel wallProbeY) {
-        if (movementRemainder >= HorizontalMotion.SubpixelScale) {
-            movementRemainder -= HorizontalMotion.SubpixelScale;
-            if (direction == HorizontalMotion.Right) {
+        if (movementRemainder >= MotionSpeed.Subpixel) {
+            movementRemainder -= MotionSpeed.Subpixel;
+            if (direction == Direction.Right) {
                 MoveRightOnePixel(player, wallProbeY);
             }
-            if (direction == HorizontalMotion.Left) {
+            if (direction == Direction.Left) {
                 MoveLeftOnePixel(player, wallProbeY);
             }
         }
@@ -348,13 +351,13 @@ class CameraState {
 
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY) {
         let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
-        Pixel desiredDirection = HorizontalMotion.None;
+        Pixel desiredDirection = Direction.None;
         if (Input.IsDown(Button.Right)) {
-            desiredDirection = HorizontalMotion.Right;
+            desiredDirection = Direction.Right;
         }
 
         if (Input.IsDown(Button.Left)) {
-            desiredDirection = HorizontalMotion.Left;
+            desiredDirection = Direction.Left;
         }
 
         UpdateIntent(desiredDirection, player.grounded);

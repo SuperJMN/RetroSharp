@@ -6264,10 +6264,10 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("enum HorizontalMotion", source);
-        Assert.Contains("WalkSpeed = 8", source);
-        Assert.Contains("RunMaxSpeed = 12", source);
-        Assert.Contains("SubpixelScale = 8", source);
+        Assert.Contains("enum Direction", source);
+        Assert.Contains("Walk = 8", source);
+        Assert.Contains("RunMax = 12", source);
+        Assert.Contains("Subpixel = 8", source);
         Assert.Contains("RunAcceleration = 1", source);
         Assert.Contains("Friction = 2", source);
 
@@ -6281,14 +6281,14 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Pixel direction;", cameraBlock);
         Assert.Contains("Pixel movementRemainder;", cameraBlock);
         Assert.Contains("inline void UpdateIntent(Pixel desiredDirection, bool grounded)", cameraBlock);
-        Assert.Contains("if (direction == HorizontalMotion.Right)", cameraBlock);
-        Assert.Contains("if (direction == HorizontalMotion.Left)", cameraBlock);
-        Assert.Contains("StartDirection(HorizontalMotion.Right);", cameraBlock);
-        Assert.Contains("StartDirection(HorizontalMotion.Left);", cameraBlock);
-        Assert.Contains("speed = HorizontalMotion.WalkSpeed;", cameraBlock);
+        Assert.Contains("if (direction == Direction.Right)", cameraBlock);
+        Assert.Contains("if (direction == Direction.Left)", cameraBlock);
+        Assert.Contains("StartDirection(Direction.Right);", cameraBlock);
+        Assert.Contains("StartDirection(Direction.Left);", cameraBlock);
+        Assert.Contains("speed = MotionSpeed.Walk;", cameraBlock);
         Assert.Contains("movementRemainder += speed;", cameraBlock);
         Assert.Contains("inline void ApplyMotionStep(PlayerState player, Pixel wallProbeY)", cameraBlock);
-        Assert.Contains("movementRemainder -= HorizontalMotion.SubpixelScale;", cameraBlock);
+        Assert.Contains("movementRemainder -= MotionSpeed.Subpixel;", cameraBlock);
         Assert.Contains("MoveRightOnePixel(player, wallProbeY);", cameraBlock);
         Assert.Contains("MoveLeftOnePixel(player, wallProbeY);", cameraBlock);
 
@@ -6308,7 +6308,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/runner/runner.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("RunMaxSpeed = 12", source);
+        Assert.Contains("RunMax = 12", source);
         Assert.Contains("RunAcceleration = 1", source);
 
         var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
@@ -6324,9 +6324,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (Input.IsDown(Button.B))", cameraBlock);
         Assert.Contains("AccelerateRun();", cameraBlock);
         Assert.Contains("DecelerateToWalk();", cameraBlock);
-        Assert.Contains("speed += HorizontalMotion.RunAcceleration;", cameraBlock);
-        Assert.Contains("speed -= HorizontalMotion.Friction;", cameraBlock);
-        Assert.Contains("direction = HorizontalMotion.None;", cameraBlock);
+        Assert.Contains("speed += MotionSpeed.RunAcceleration;", cameraBlock);
+        Assert.Contains("speed -= MotionSpeed.Friction;", cameraBlock);
+        Assert.Contains("direction = Direction.None;", cameraBlock);
 
         // Run speed only builds while Mario has traction: acceleration and ground friction are gated by
         // grounded, so holding B in the air preserves momentum instead of building extra speed.
@@ -6341,7 +6341,7 @@ public class GameBoyRomCompilerTests
         Assert.True(horizontalStart > motionStart);
         var motionBlock = cameraBlock[motionStart..horizontalStart];
         Assert.Equal(2, CountOccurrences(motionBlock, "ApplyMotionStep(player, wallProbeY);"));
-        Assert.DoesNotContain("while (movementRemainder >= HorizontalMotion.SubpixelScale)", motionBlock);
+        Assert.DoesNotContain("while (movementRemainder >= MotionSpeed.Subpixel)", motionBlock);
 
         // Regression guard: the camera state is advanced per single-pixel step, then synced twice per
         // frame so the 1px-per-call camera backend can catch up to a two-pixel run frame.
