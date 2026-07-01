@@ -19,6 +19,7 @@ public static class NesRomCompiler
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        SdkImportResolver.ValidateImports(targetProgram);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
@@ -41,6 +42,7 @@ public static class NesRomCompiler
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        SdkImportResolver.ValidateImports(targetProgram);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
@@ -61,6 +63,7 @@ public static class NesRomCompiler
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        SdkImportResolver.ValidateImports(targetProgram);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);

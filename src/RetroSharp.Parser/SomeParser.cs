@@ -53,6 +53,7 @@ public class SomeParser
 
     private ProgramSyntax ParseProgram(ProgramContext program)
     {
+        var imports = program.importDeclaration().Select(ParseImport);
         var aliases = program.typeAliasDeclaration().Select(ParseTypeAlias);
         var constants = program.constDeclaration().Select(ParseConstDeclaration);
         var enums = program.enumDeclaration().Select(ParseEnum);
@@ -64,12 +65,18 @@ public class SomeParser
             .SelectMany(staticClass => staticClass.StaticMethods)
             .ToDictionary(method => method.SourceName, method => method.FunctionName, StringComparer.Ordinal);
         var syntax = new ProgramSyntax(
+            imports.ToList(),
             aliases.ToList(),
             constants.Concat(classes.SelectMany(staticClass => staticClass.Constants)).ToList(),
             enums.ToList(),
             structs.Concat(classes.Select(staticClass => staticClass.Struct)).ToList(),
             classes.SelectMany(staticClass => staticClass.Functions).Concat(externs).Concat(funcs).ToList());
         return StaticClassLowerer.LowerStaticCalls(syntax, staticMethods);
+    }
+
+    private ImportSyntax ParseImport(ImportDeclarationContext importContext)
+    {
+        return new ImportSyntax(importContext.qualifiedIdentifier().GetText());
     }
 
     private TypeAliasSyntax ParseTypeAlias(TypeAliasDeclarationContext aliasContext)

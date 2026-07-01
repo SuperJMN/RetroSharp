@@ -1,6 +1,8 @@
 namespace RetroSharp.Sdk;
 
+using Antlr4.Runtime;
 using RetroSharp.Core.Sdk;
+using RetroSharp.Parser;
 
 public static class SdkLibrarySource
 {
@@ -235,9 +237,39 @@ public static class SdkLibrarySource
 
     public static string Merge(TargetIntrinsicCatalog catalog, string source)
     {
-        return source.Contains(MarkerName(catalog.TargetId), StringComparison.Ordinal)
-            ? source
-            : ForTarget(catalog) + source;
+        if (source.Contains(MarkerName(catalog.TargetId), StringComparison.Ordinal))
+        {
+            return source;
+        }
+
+        var (imports, body) = SplitLeadingImports(source);
+        return imports + ForTarget(catalog) + body;
+    }
+
+    private static (string Imports, string Body) SplitLeadingImports(string source)
+    {
+        var lexer = new RetroSharpLexer(CharStreams.fromString(source));
+        var tokens = lexer.GetAllTokens();
+        var tokenIndex = 0;
+        var importEnd = 0;
+
+        while (tokenIndex < tokens.Count && tokens[tokenIndex].Text == "import")
+        {
+            while (tokenIndex < tokens.Count && tokens[tokenIndex].Text != ";")
+            {
+                tokenIndex++;
+            }
+
+            if (tokenIndex >= tokens.Count)
+            {
+                return (source, string.Empty);
+            }
+
+            importEnd = tokens[tokenIndex].StopIndex + 1;
+            tokenIndex++;
+        }
+
+        return (source[..importEnd], source[importEnd..]);
     }
 
     private static string MarkerName(string targetId)

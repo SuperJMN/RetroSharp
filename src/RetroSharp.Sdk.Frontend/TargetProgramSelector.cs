@@ -8,6 +8,7 @@ public static class TargetProgramSelector
     public static ProgramSyntax Select(ProgramSyntax program, TargetIntrinsicCatalog catalog)
     {
         return new ProgramSyntax(
+            program.Imports,
             program.TypeAliases,
             program.Constants,
             program.Enums,

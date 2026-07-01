@@ -37,6 +37,7 @@ public static class GameBoyRomCompiler
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+        SdkImportResolver.ValidateImports(targetProgram);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);

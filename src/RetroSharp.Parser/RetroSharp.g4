@@ -1,7 +1,10 @@
 ﻿grammar RetroSharp;
 
 // We define the main rule that starts parsing the file
-program: (typeAliasDeclaration | constDeclaration | enumDeclaration | structDeclaration | classDeclaration | variableDeclaration | externFunction | function)* EOF;
+program: importDeclaration* (typeAliasDeclaration | constDeclaration | enumDeclaration | structDeclaration | classDeclaration | variableDeclaration | externFunction | function)* EOF;
+
+importDeclaration: 'import' qualifiedIdentifier ';';
+qualifiedIdentifier: IDENTIFIER ('.' IDENTIFIER)*;
 
 enumDeclaration: 'enum' IDENTIFIER '{' enumMember (',' enumMember)* ','? '}';
 enumMember: IDENTIFIER ('=' expression)?;

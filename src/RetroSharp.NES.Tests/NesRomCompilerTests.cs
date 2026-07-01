@@ -47,6 +47,42 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Portable2D_import_does_not_affect_nes_rom_bytes()
+    {
+        const string implicitSdk = """
+                                   void Main() {
+                                       Video.WaitVBlank();
+                                   }
+                                   """;
+        const string explicitSdk = """
+                                   import RetroSharp.Portable2D;
+
+                                   void Main() {
+                                       Video.WaitVBlank();
+                                   }
+                                   """;
+
+        Assert.Equal(
+            NesRomCompiler.CompileSource(implicitSdk),
+            NesRomCompiler.CompileSource(explicitSdk));
+    }
+
+    [Fact]
+    public void Rejects_unknown_imports()
+    {
+        const string source = """
+                              import RetroSharp.Experimental;
+
+                              void Main() {
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal("Unknown import 'RetroSharp.Experimental'.", exception.Message);
+    }
+
+    [Fact]
     public void Logical_palette_declarations_map_tones_to_nes_grayscale_palette_slots()
     {
         const string source = """

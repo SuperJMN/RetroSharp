@@ -37,7 +37,7 @@ public static class TypeAliasResolver
                 function.Attributes))
             .ToList();
 
-        return new ProgramSyntax([], constants, program.Enums, structs, functions);
+        return new ProgramSyntax(program.Imports, [], constants, program.Enums, structs, functions);
     }
 
     private static IReadOnlyDictionary<string, string> BuildAliasTable(IEnumerable<TypeAliasSyntax> typeAliases)

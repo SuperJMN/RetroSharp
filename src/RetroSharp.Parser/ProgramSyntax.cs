@@ -2,6 +2,7 @@
 
 public class ProgramSyntax : Syntax
 {
+    public IList<ImportSyntax> Imports { get; }
     public IList<TypeAliasSyntax> TypeAliases { get; }
     public IList<ConstDeclarationSyntax> Constants { get; }
     public IList<EnumSyntax> Enums { get; }
@@ -29,7 +30,13 @@ public class ProgramSyntax : Syntax
     }
 
     public ProgramSyntax(IList<TypeAliasSyntax> typeAliases, IList<ConstDeclarationSyntax> constants, IList<EnumSyntax> enums, IList<StructSyntax> structs, IList<FunctionSyntax> functions)
+        : this([], typeAliases, constants, enums, structs, functions)
     {
+    }
+
+    public ProgramSyntax(IList<ImportSyntax> imports, IList<TypeAliasSyntax> typeAliases, IList<ConstDeclarationSyntax> constants, IList<EnumSyntax> enums, IList<StructSyntax> structs, IList<FunctionSyntax> functions)
+    {
+        Imports = imports;
         TypeAliases = typeAliases;
         Constants = constants;
         Enums = enums;

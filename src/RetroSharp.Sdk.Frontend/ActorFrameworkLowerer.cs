@@ -101,6 +101,7 @@ public static class ActorFrameworkLowerer
             .ToList();
 
         return new ProgramSyntax(
+            program.Imports,
             program.TypeAliases,
             program.Constants.Concat(GeneratedConstants(state.EnemyDefs)).ToList(),
             program.Enums,

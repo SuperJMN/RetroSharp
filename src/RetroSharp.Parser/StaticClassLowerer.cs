@@ -58,7 +58,7 @@ internal static class StaticClassLowerer
                 function.Attributes))
             .ToList();
 
-        return new ProgramSyntax(program.TypeAliases, constants, program.Enums, program.Structs, functions);
+        return new ProgramSyntax(program.Imports, program.TypeAliases, constants, program.Enums, program.Structs, functions);
     }
 
     private static BlockSyntax RewriteInstanceBlock(

@@ -81,9 +81,11 @@ i16 Main()
 
 The portable 2D SDK gives game code a common vocabulary for tile-and-sprite
 machines while keeping each target's limits explicit. Current SDK-shaped code
-can use frame/input calls, Tiled `World.Load(...)`, collision flags,
-camera-relative AABB queries, logical palettes, logical sprites, animation,
-music declarations, and fixed-pool actor framework sugar.
+can start with `import RetroSharp.Portable2D;` and use frame/input calls, Tiled
+`World.Load(...)`, collision flags, camera-relative AABB queries, logical
+palettes, logical sprites, animation, music declarations, and fixed-pool actor
+framework sugar. Game Boy and NES still auto-import that SDK for older samples;
+unknown imports are rejected.
 
 Portability is capability-based, not magic. A shared source file is portable
 only when each selected target can support the requested scrolling mode, sprite
