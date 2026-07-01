@@ -151,6 +151,40 @@ public static class SdkLibrarySource
                  """;
         }
 
+        // Capability-gated library member: targets that catalog music_play/music_stop
+        // (Game Boy and NES today) expose music.Play(...) / music.Stop() over their BGM
+        // target intrinsics. music.Asset(...) is not a class member and still lowers
+        // through the SDK module.
+        if (catalog.TryResolve("music_play", out var musicPlay)
+            && musicPlay.Operation == TargetIntrinsicOperation.PlayMusic
+            && catalog.TryResolve("music_stop", out var musicStop)
+            && musicStop.Operation == TargetIntrinsicOperation.StopMusic)
+        {
+            library += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("music_play")]
+                 extern void {{prefix}}_music_play(i16 theme);
+
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("music_stop")]
+                 extern void {{prefix}}_music_stop();
+
+                 class music
+                 {
+                     static inline void Play(i16 theme)
+                     {
+                         {{prefix}}_music_play(theme);
+                     }
+
+                     static inline void Stop()
+                     {
+                         {{prefix}}_music_stop();
+                     }
+                 }
+
+                 """;
+        }
+
         return library;
     }
 

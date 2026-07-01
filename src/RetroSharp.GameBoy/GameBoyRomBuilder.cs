@@ -2422,6 +2422,12 @@ internal sealed class GameBoyRuntimeCompiler
             case TargetIntrinsicOperation.UpdateAudio:
                 EmitNextSdkAudioOperation<SdkAudioOperation.UpdateAudio>(call.Name);
                 return true;
+            case TargetIntrinsicOperation.PlayMusic:
+                EmitNextSdkAudioOperation<SdkAudioOperation.PlayMusic>(call.Name);
+                return true;
+            case TargetIntrinsicOperation.StopMusic:
+                EmitNextSdkAudioOperation<SdkAudioOperation.StopMusic>(call.Name);
+                return true;
             case TargetIntrinsicOperation.SetCameraPosition:
                 EmitNextSdkOperation<Sdk2DOperation.SetCameraPosition>(call.Name);
                 return true;

@@ -5,6 +5,8 @@ public enum TargetIntrinsicOperation
     WaitFrame,
     PollInput,
     UpdateAudio,
+    PlayMusic,
+    StopMusic,
     ReadWorldTileFlags,
     CameraAabbTiles,
     CameraAabbHitTop,
@@ -69,6 +71,23 @@ public sealed record TargetIntrinsicDescriptor
     public static TargetIntrinsicDescriptor UpdateAudio(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.UpdateAudio, arity);
+    }
+
+    public static TargetIntrinsicDescriptor PlayMusic(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.PlayMusic,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
+    public static TargetIntrinsicDescriptor StopMusic(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.StopMusic, arity);
     }
 
     public static TargetIntrinsicDescriptor ReadWorldTileFlags(string name, int arity)

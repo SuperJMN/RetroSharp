@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Text.Json;
 using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class GameBoyMusicTests
@@ -54,6 +55,68 @@ public sealed class GameBoyMusicTests
         Assert.True(ContainsSequence(rom, [0x24, 0x77]), "Compiled trace should preserve NR50 writes.");
         Assert.True(ContainsSequence(rom, [0x25, 0xFF]), "Compiled trace should preserve NR51 writes.");
         Assert.True(ContainsSequence(rom, [0x30, 0x12]), "Compiled trace should preserve wave RAM writes.");
+    }
+
+    [Fact]
+    public void Music_play_stop_via_library_helpers_are_byte_identical()
+    {
+        var baseDirectory = WriteGbApuTrace(
+            "stage.gbapu.json",
+            """
+            {
+              "format": "retrosharp.gbapu.v1",
+              "clockHz": 4194304,
+              "framesPerSecond": 60,
+              "durationCycles": 140448,
+              "loopCycle": 0,
+              "metadata": {
+                "title": "Trace Fixture"
+              },
+              "events": [
+                { "deltaCycles": 0, "address": "FF24", "value": "77" },
+                { "deltaCycles": 0, "address": "FF25", "value": "FF" },
+                { "deltaCycles": 70224, "address": "FF12", "value": "F0" },
+                { "deltaCycles": 0, "address": "FF14", "value": "87" },
+                { "deltaCycles": 0, "address": "FF30", "value": "12" }
+              ]
+            }
+            """);
+
+        const string direct = """
+                              void main() {
+                                  video_init();
+                                  music_asset(stage_theme, "stage.gbapu.json");
+                                  audio_init();
+                                  music_play(stage_theme);
+                                  music_stop();
+                                  loop {
+                                      video_wait_vblank();
+                                      audio_update();
+                                  }
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   video.Init();
+                                   music.Asset(stage_theme, "stage.gbapu.json");
+                                   audio.Init();
+                                   music.Play(stage_theme);
+                                   music.Stop();
+                                   loop {
+                                       video.WaitVBlank();
+                                       audio.Update();
+                                   }
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("class music", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"music_play\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"music_stop\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(
+            GameBoyRomCompiler.CompileSource(direct, baseDirectory),
+            GameBoyRomCompiler.CompileSource(library, baseDirectory));
     }
 
     [Fact]

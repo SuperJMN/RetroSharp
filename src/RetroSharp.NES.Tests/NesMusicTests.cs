@@ -2,6 +2,7 @@ namespace RetroSharp.NES.Tests;
 
 using System.IO.Compression;
 using RetroSharp.NES;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class NesMusicTests
@@ -58,6 +59,48 @@ public sealed class NesMusicTests
         Assert.True(ContainsSequence(rom, [0xA9, 0x0F, 0x8D, 0x15, 0x40]), "audio.Init should enable NES pulse/triangle/noise channels through $4015.");
         Assert.True(ContainsSequence(rom, [0x8D, 0x00, 0x40]), "audio.Update should be able to write pulse 1 register $4000.");
         Assert.True(ContainsSequence(rom, [0x8D, 0x04, 0x40]), "audio.Update should be able to write pulse 2 register $4004.");
+    }
+
+    [Fact]
+    public void Music_play_stop_via_library_helpers_are_byte_identical_nes()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzip(
+            Path.Combine(directory, "stage.nes.vgz"),
+            command: 0xB4,
+            [0x00, 0x30],
+            waitSamples: 735,
+            [0x04, 0x7F]);
+
+        const string direct = """
+                              void main() {
+                                  music_asset(stage_theme, "stage.vgz");
+                                  audio_init();
+                                  music_play(stage_theme);
+                                  audio_update();
+                                  music_stop();
+                                  return;
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   music.Asset(stage_theme, "stage.vgz");
+                                   audio.Init();
+                                   music.Play(stage_theme);
+                                   audio.Update();
+                                   music.Stop();
+                                   return;
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.Contains("class music", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"music_play\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"music_stop\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(
+            NesRomCompiler.CompileSource(direct, directory),
+            NesRomCompiler.CompileSource(library, directory));
     }
 
     private static void WriteVgmGzip(string path, byte command, byte[] firstPayload, int waitSamples, byte[] secondPayload)

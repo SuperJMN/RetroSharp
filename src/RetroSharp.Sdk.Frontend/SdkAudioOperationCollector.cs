@@ -196,14 +196,28 @@ public static class SdkAudioOperationCollector
             }
 
             var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
-            if (intrinsic.Operation != TargetIntrinsicOperation.UpdateAudio)
+            switch (intrinsic.Operation)
             {
-                return false;
+                case TargetIntrinsicOperation.UpdateAudio:
+                    SdkCallReader.RequireArity(call, intrinsic.Arity);
+                    AddOp(new SdkAudioOperation.UpdateAudio());
+                    return true;
+                case TargetIntrinsicOperation.StopMusic:
+                    SdkCallReader.RequireArity(call, intrinsic.Arity);
+                    AddOp(new SdkAudioOperation.StopMusic());
+                    return true;
+                case TargetIntrinsicOperation.PlayMusic:
+                    var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
+                    var themeId = resolved.CompileTimeOperands
+                        .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.AssetRef)
+                        ?.Identifier
+                        ?? throw new InvalidOperationException(
+                            $"Intrinsic '{intrinsic.Name}' requires a compile-time music asset operand.");
+                    AddOp(new SdkAudioOperation.PlayMusic(themeId));
+                    return true;
+                default:
+                    return false;
             }
-
-            SdkCallReader.RequireArity(call, intrinsic.Arity);
-            AddOp(new SdkAudioOperation.UpdateAudio());
-            return true;
         }
 
         private void CollectExpression(ExpressionSyntax expression)

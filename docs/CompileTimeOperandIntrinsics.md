@@ -1,6 +1,6 @@
 # Compile-Time Operand Intrinsics
 
-Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`.
+Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `music.Play` / `music.Stop` onto the audio target intrinsics.
 
 This note answers the open SAL-8 question from issue #158: how a target intrinsic can carry operands that must be resolved at compile time, such as a sprite asset id, a constant sprite palette slot, enum collision flags, or a world id, while keeping the language layer target-neutral.
 
@@ -118,6 +118,20 @@ extern i16 __retrosharp_nes_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 wo
 ```
 
 `NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the `camera.AabbTiles` / `camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias. `camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` stay on the SDK-module/builtin path and are not migrated by SAL-8.6.
+
+SAL-8.7 wires Game Boy and NES `music.Play` / `music.Stop` through the audio target intrinsics:
+
+```csharp
+[target("gb")]
+[intrinsic("music_play")]
+extern void __retrosharp_gb_music_play(i16 theme);
+
+[target("gb")]
+[intrinsic("music_stop")]
+extern void __retrosharp_gb_music_stop();
+```
+
+`music_play` marks slot `0` as `AssetRef`, so the injected `music.Play(theme)` helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `SdkLibrarySource` injects `class music { Play, Stop }` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `music.Asset(...)` is not a class member and still lowers through the SDK module to `music_asset`.
 
 ## Operation-Specific Guidance
 

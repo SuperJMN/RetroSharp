@@ -13,6 +13,11 @@ public static class GameBoyTarget
             TargetIntrinsicDescriptor.WaitFrame("wait_vblank", arity: 0),
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
+            TargetIntrinsicDescriptor.PlayMusic(
+                "music_play",
+                runtimeArity: 0,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            TargetIntrinsicDescriptor.StopMusic("music_stop", arity: 0),
             TargetIntrinsicDescriptor.ReadWorldTileFlags("world_tile_flags_at", arity: 2),
             TargetIntrinsicDescriptor.ReadWorldTileFlags(
                 "world_tile_flags_for_world",

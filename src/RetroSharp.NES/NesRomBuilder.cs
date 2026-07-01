@@ -1759,6 +1759,12 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.UpdateAudio:
                 EmitAudioUpdate();
                 return true;
+            case TargetIntrinsicOperation.PlayMusic:
+                EmitMusicPlay(call);
+                return true;
+            case TargetIntrinsicOperation.StopMusic:
+                EmitMusicStop();
+                return true;
             case TargetIntrinsicOperation.SetCameraPosition:
                 EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
                 return true;

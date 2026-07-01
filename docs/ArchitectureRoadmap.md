@@ -286,9 +286,10 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   collision still collects to SDK operations, but Game Boy and NES public `camera.AabbTiles` and
   `camera.AabbHitTop` now reach those operations through compile-time-operand intrinsics.
 
-Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
-value query (`world.TileFlagsAt`), the camera position/apply pair, and `sprite.Draw` on Game Boy
-and NES, plus Game Boy and NES camera-relative AABB collision queries.
+Net decision: the library pattern now covers frame/input/audio leaf calls, BGM control
+(`music.Play` / `music.Stop`), a capability-gated value query (`world.TileFlagsAt`), the
+camera position/apply pair, and `sprite.Draw` on Game Boy and NES, plus Game Boy and NES
+camera-relative AABB collision queries.
 Streaming internals and non-migrated target-specific collision forms remain compiler-recognized
 until their compile-time-operand intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
 ([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow

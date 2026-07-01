@@ -162,6 +162,10 @@ Progress (2026-06-14):
   SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract
   (NES migrated in SAL-8.6; the legacy `camera_aabb_tiles(...)`/`camera_aabb_hit_top(...)`
   builtins remain compatibility aliases and `camera.ScreenAabb*` stays on the builtin path).
+  SAL-8.7 migrated Game Boy and NES `music.Play(...)` / `music.Stop()` to injected `class music`
+  helpers over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
+  collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
+  `music_stop(...)` builtins remain aliases and `music.Asset(...)` stays on the SDK-module path.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.
