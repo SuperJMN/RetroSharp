@@ -156,10 +156,12 @@ Progress (2026-06-14):
   `WorldId` while leaving the language, parser AST, ABI, and classic IR target-neutral.
   `sprite.Draw(...)` now comes from the injected SDK library over role-bearing `sprite_draw`
   intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`
-  as the legacy `sprite_draw(...)` alias. Game Boy `camera.AabbTiles(...)` and
+  as the legacy `sprite_draw(...)` alias. Game Boy and NES `camera.AabbTiles(...)` and
   `camera.AabbHitTop(...)` also come from injected helpers over target intrinsics with a hidden
   `"default"` world id and compile-time flag mask, still collecting to the same camera AABB
-  SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract.
+  SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract
+  (NES migrated in SAL-8.6; the legacy `camera_aabb_tiles(...)`/`camera_aabb_hit_top(...)`
+  builtins remain compatibility aliases and `camera.ScreenAabb*` stays on the builtin path).
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.

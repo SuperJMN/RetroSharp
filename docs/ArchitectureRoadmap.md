@@ -247,6 +247,16 @@ SAL-8.5 applies the descriptor-role form to Game Boy `camera.AabbTiles` and
 (including `Sprite.Width(...)`), capability checks, byte identity, and the `255` no-hit
 contract.
 
+SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and
+`camera.AabbHitTop`, closing the last Game Boy/NES asymmetry for camera-relative AABB
+collision. `NesTarget.Intrinsics` catalogs `camera_aabb_tiles` and `camera_aabb_hit_top`
+with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the same
+`camera.AabbTiles` / `camera.AabbHitTop` helpers for NES. The NES value-call path resolves the
+extern intrinsic and re-derives the same operation it already emitted from the legacy
+`camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility
+alias, so `Golden_collision_aabb_emission_is_pinned_nes` stays byte-identical.
+`camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` remain on the SDK-module/builtin path.
+
 The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
 #139) refined it with evidence rather than assumption. Wrapping the heavy calls in
 ordinary parameterized `inline` helpers is **byte-identical** for `camera.SetPosition()`,
@@ -273,12 +283,12 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   while still collecting to the same capability-checked `Sdk2DOperation`. The legacy
   `sprite_draw(...)` spelling remains a compatibility alias during the transition.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) stays compiler-emitted. Camera-relative
-  collision still collects to SDK operations, but Game Boy public `camera.AabbTiles` and
+  collision still collects to SDK operations, but Game Boy and NES public `camera.AabbTiles` and
   `camera.AabbHitTop` now reach those operations through compile-time-operand intrinsics.
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, a capability-gated
 value query (`world.TileFlagsAt`), the camera position/apply pair, and `sprite.Draw` on Game Boy
-and NES, plus Game Boy camera-relative AABB collision queries.
+and NES, plus Game Boy and NES camera-relative AABB collision queries.
 Streaming internals and non-migrated target-specific collision forms remain compiler-recognized
 until their compile-time-operand intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
 ([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow

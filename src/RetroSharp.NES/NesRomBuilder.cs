@@ -4397,12 +4397,42 @@ internal sealed class NesRuntimeCompiler
 
                 break;
             default:
+                if (TryEmitTargetValueIntrinsic(call))
+                {
+                    break;
+                }
+
                 if (TryEmitUserValueFunction(call))
                 {
                     break;
                 }
 
                 throw new InvalidOperationException($"Unsupported NES value API call '{call.Name}'.");
+        }
+    }
+
+    private bool TryEmitTargetValueIntrinsic(FunctionCall call)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function) || !function.IsExtern)
+        {
+            return false;
+        }
+
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, NesTarget.Intrinsics);
+        switch (intrinsic.Operation)
+        {
+            case TargetIntrinsicOperation.CameraAabbTiles:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbTiles(
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                return true;
+            case TargetIntrinsicOperation.CameraAabbHitTop:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                return true;
+            default:
+                return false;
         }
     }
 
