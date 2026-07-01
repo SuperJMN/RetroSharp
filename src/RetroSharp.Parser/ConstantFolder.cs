@@ -39,7 +39,7 @@ public static class ConstantFolder
             function.IsExtern,
             function.Attributes)).ToList();
 
-        return new ProgramSyntax(program.TypeAliases, program.Constants, program.Enums, program.Structs, functions);
+        return new ProgramSyntax(program.Imports, program.TypeAliases, program.Constants, program.Enums, program.Structs, functions);
     }
 
     private static IReadOnlyDictionary<string, int> BuildTypeSizeTable(IEnumerable<EnumSyntax> enums, IEnumerable<StructSyntax> structs)

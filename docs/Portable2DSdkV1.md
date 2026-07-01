@@ -8,7 +8,7 @@ The SDK is portable by capability, not by identical machine behavior. A call is 
 
 ## SDK v1 Surface
 
-The current source spelling is the SDK dot-call form, for example `Video.WaitVBlank()` and `Camera.SetPosition(x, y)`. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`. `Video.WaitVBlank()` and `Input.Poll()` are now provided by an injected SDK source library over target intrinsics, while higher-level camera, sprite, world, audio, and collision calls remain capability-checked SDK operations or audio operations.
+The current source spelling is `import RetroSharp.Portable2D;` followed by SDK dot-call forms such as `Video.WaitVBlank()` and `Camera.SetPosition(x, y)`. Game Boy and NES still auto-import `RetroSharp.Portable2D` for existing samples, but explicit import is the forward-compatible source shape and unknown imports are rejected. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`. `Video.WaitVBlank()` and `Input.Poll()` are now provided by an SDK source library over target intrinsics, while higher-level camera, sprite, world, audio, and collision calls remain capability-checked SDK operations or audio operations.
 
 ### Frame and input
 

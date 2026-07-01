@@ -1,7 +1,7 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-06-30.
+Last updated: 2026-07-01.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
@@ -191,12 +191,17 @@ The collector itself is target-neutral and lives in a dedicated SDK-frontend ass
 
 Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries runtime or constant screen X, runtime world Y, constant or `Sprite.Width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
-The first SDK-as-library slice is now in place. Each cartridge target exposes a
+The first SDK-as-library slice is now in place. Source can now declare
+`import RetroSharp.Portable2D;` to name the built-in portable SDK library
+explicitly; Game Boy and NES keep the legacy implicit import during the
+transition, and unknown imports fail compilation instead of being ignored. Each
+cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
 `audio_update`, `camera_set_position`, and `camera_apply` (Game Boy additionally
-catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` injects a small
-target-selected SDK library before parsing target compilations. That library defines
+catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` supplies a small
+target-selected SDK library for imported or legacy-autoimported target
+compilations. That library defines
 `video`, `input`, `audio`, and `camera` classes whose `Video.WaitVBlank()`,
 `Input.Poll()`, `Audio.Update()`, `Camera.SetPosition(x, y)`, `Camera.Apply()`, and
 catalog-gated helpers such as Game Boy `Camera.AabbTiles(...)` /

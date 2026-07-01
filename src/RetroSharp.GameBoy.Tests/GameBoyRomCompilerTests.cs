@@ -68,6 +68,42 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Portable2D_import_does_not_affect_game_boy_rom_bytes()
+    {
+        const string implicitSdk = """
+                                   void Main() {
+                                       Video.WaitVBlank();
+                                   }
+                                   """;
+        const string explicitSdk = """
+                                   import RetroSharp.Portable2D;
+
+                                   void Main() {
+                                       Video.WaitVBlank();
+                                   }
+                                   """;
+
+        Assert.Equal(
+            GameBoyRomCompiler.CompileSource(implicitSdk),
+            GameBoyRomCompiler.CompileSource(explicitSdk));
+    }
+
+    [Fact]
+    public void Rejects_unknown_imports()
+    {
+        const string source = """
+                              import RetroSharp.Experimental;
+
+                              void Main() {
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Unknown import 'RetroSharp.Experimental'.", exception.Message);
+    }
+
+    [Fact]
     public void Logical_palette_declarations_lower_to_game_boy_palette_registers()
     {
         const string source = """

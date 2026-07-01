@@ -68,6 +68,22 @@ public class ParserTests
     }
 
     [Fact]
+    public void Import_declaration()
+    {
+        var result = new SomeParser().Parse("import RetroSharp.Portable2D; void Main() { }");
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error : "");
+        result.Value.Imports.Should().ContainSingle().Which.Path.Should().Be("RetroSharp.Portable2D");
+    }
+
+    [Fact]
+    public void Import_declarations_must_precede_other_declarations()
+    {
+        new SomeParser().Parse("void Main() { } import RetroSharp.Portable2D;")
+            .Should().Fail();
+    }
+
+    [Fact]
     public void Function_with_arguments()
     {
         var source = @"i16 main(i16 a, i16 b) { }";

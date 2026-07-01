@@ -27,6 +27,11 @@ public class PrintNodeVisitor : ISyntaxVisitor
 
     public void VisitProgram(ProgramSyntax programSyntax)
     {
+        foreach (var import in programSyntax.Imports)
+        {
+            import.Accept(this);
+        }
+
         foreach (var typeAlias in programSyntax.TypeAliases)
         {
             typeAlias.Accept(this);
@@ -51,6 +56,11 @@ public class PrintNodeVisitor : ISyntaxVisitor
         {
             function.Accept(this);
         }
+    }
+
+    public void VisitImport(ImportSyntax importSyntax)
+    {
+        resultBuilder.AppendLine($"import {importSyntax.Path};");
     }
 
     public void VisitTypeAlias(TypeAliasSyntax typeAlias)

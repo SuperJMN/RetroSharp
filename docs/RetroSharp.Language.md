@@ -2,7 +2,7 @@
 
 This document captures the current design decisions for RetroSharp, a C#-inspired language targeting 8-bit systems with zero hidden runtime. It focuses on explicit cost, portability, and predictable code generation.
 
-Status: Language v1 preview. Type aliases, top-level and block-local numeric constants with optional type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, top-level enums, restricted `static class` declarations with `const` members and `static` methods for zero-cost constant groups, plain local structs with named and shorthand initializer lists, `.` member access, fixed-size local arrays of byte-backed values or byte-sized structs, initializer lists for byte-backed value arrays and byte-sized struct arrays, initializer-inferred lengths for byte-backed value arrays, constant or runtime index access, struct-array field access such as `actors[i].x`, explicit casts, arithmetic and bitwise compound assignment, statement-only `++`/`--`, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, half-open range membership expressions, `while`, `do while`, `loop`, short-circuit logical conditions including unary `!`, byte-backed conditional value expressions with `condition ? whenTrue : whenFalse`, C-style `for` loops, half-open range `for` loops, `break`/`continue`, and inline helper functions with parameters, named arguments, default parameter values, single return expressions, or `=>` expression bodies are implemented for the front-end and the current Game Boy/NES cartridge targets; pointer-based member access and full ABI layout work remain planned.
+Status: Language v1 preview. Top-level import declarations for built-in compile-time libraries, type aliases, top-level and block-local numeric constants with optional type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, top-level enums, restricted `static class` declarations with `const` members and `static` methods for zero-cost constant groups, plain local structs with named and shorthand initializer lists, `.` member access, fixed-size local arrays of byte-backed values or byte-sized structs, initializer lists for byte-backed value arrays and byte-sized struct arrays, initializer-inferred lengths for byte-backed value arrays, constant or runtime index access, struct-array field access such as `actors[i].x`, explicit casts, arithmetic and bitwise compound assignment, statement-only `++`/`--`, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, half-open range membership expressions, `while`, `do while`, `loop`, short-circuit logical conditions including unary `!`, byte-backed conditional value expressions with `condition ? whenTrue : whenFalse`, C-style `for` loops, half-open range `for` loops, `break`/`continue`, and inline helper functions with parameters, named arguments, default parameter values, single return expressions, or `=>` expression bodies are implemented for the front-end and the current Game Boy/NES cartridge targets; pointer-based member access and full ABI layout work remain planned.
 
 ---
 
@@ -154,8 +154,11 @@ thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline
 helpers: if a target does not recognize the declared intrinsic, compilation
 fails instead of emitting an empty function.
 
-Target compilation now injects a small SDK source library before parsing. That
-library defines `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
+Target compilation accepts `import RetroSharp.Portable2D;` as the explicit SDK
+library import. Game Boy and NES still load the same small SDK source library
+implicitly for older samples, so this import is currently a compatibility-safe
+declaration rather than a visibility gate. The imported library defines
+`Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
 `Camera.SetPosition(x, y)`, and `Camera.Apply()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
@@ -179,6 +182,9 @@ capability-checked SDK operations rather than direct intrinsics.
 Current parser support includes top-level plain enum and struct declarations, identifier-based member access as an expression and as an lvalue, member access through fixed-size array elements such as `actors[i].x`, and local fixed-size array declarations with constant or byte-backed runtime index reads/writes. Pointer/member forms remain planned.
 
 ```
+Program       = ImportDecl* TopLevelDecl* EOF ;
+ImportDecl    = "import" QualifiedIdent ";" ;
+QualifiedIdent = Ident ("." Ident)* ;
 ConstDecl     = "const" Type? Ident "=" ConstExpr ";" ;
 TypeAlias     = "type" Ident "=" Type ";" ;
 ConstExpr     = Literal | EarlierConstIdent | SizeOf | OffsetOf | CountOf
@@ -303,6 +309,7 @@ Iteration 12 adds source ergonomics only when the lowering remains static and pr
 - `inline` marks a helper that must use source-level substitution in the current cartridge targets. Explicit inline value helpers fail clearly if the body is not a single return expression.
 - `pure` marks a helper whose body must stay in the supported side-effect-free subset. It is validated before Game Boy/NES lowering and emits no runtime code by itself.
 - `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
+- `import RetroSharp.Portable2D;` imports the built-in portable SDK library explicitly. Game Boy and NES still auto-import it for existing samples; future SDK library slices should prefer explicit imports over new global magic.
 - `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
 - `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
 - Lightweight object-oriented style can use restricted `class` declarations for real mutable state such as `PlayerState` or `EnemyState`. A class value lowers to the same fixed storage model as a plain `struct`; instance methods lower to receiver helpers. Plain `struct` plus receiver methods remains the explicit equivalent form.

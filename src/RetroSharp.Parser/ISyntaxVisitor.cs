@@ -4,6 +4,7 @@ public interface ISyntaxVisitor
 {
     void VisitBlock(BlockSyntax programSyntax);
     void VisitProgram(ProgramSyntax programSyntax);
+    void VisitImport(ImportSyntax importSyntax);
     void VisitTypeAlias(TypeAliasSyntax typeAlias);
     void VisitConstDeclaration(ConstDeclarationSyntax constDeclaration);
     void VisitEnum(EnumSyntax enumSyntax);
