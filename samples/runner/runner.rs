@@ -424,19 +424,16 @@ void SetupVideo() {
     Animation.Clip(run, 1, 48, 48, 48);
     Sprite.Asset(goomba, "assets/goomba.png", 16, 16);
     Animation.Clip(goomba_walk, 0, 16, 16);
-    return;
 }
 
 void SetupAudio() {
     Music.Asset(runner_theme, "music/runner.vgz");
     Audio.Init();
     Music.Play(runner_theme);
-    return;
 }
 
 void LoadWorld() {
     World.Load("maps/runner.tmj");
-    return;
 }
 
 void Main() {
