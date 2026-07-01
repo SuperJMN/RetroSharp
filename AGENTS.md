@@ -102,12 +102,12 @@ Recommended flow:
 1. Start every slice from an up-to-date `master` on a dedicated branch named `agent/<short-slug>` (for example `agent/music-play-stop-intrinsics`).
 2. Make focused, self-contained commits with descriptive messages. Follow the existing convention when a slice maps to a roadmap item (for example `SAL-8.7: migrate gb/nes Music.Play/Stop to audio target intrinsics`).
 3. Run the relevant validation before each merge (`dotnet test RetroSharp.sln -m:1`, `git diff --check`, and regenerate tracked ROMs when their source changed).
-4. Merge the validated branch into `master` locally. Prefer a fast-forward (`git merge --ff-only <branch>`) for a linear slice; use `--no-ff` when you want to preserve the branch boundary.
+4. When the slice is validated and it is time to land it, integrate into `master` **by default via a pull request**: push the branch, open a PR (`gh pr create --base master`), and merge it (`gh pr merge <number> --squash --delete-branch`). This PR + merge flow is the default whenever no other integration strategy is specified. A local fast-forward merge (`git merge --ff-only <branch>`) is only for when it is explicitly requested; use `--no-ff` when you want to preserve the branch boundary.
 5. Keep unrelated local changes intact: never revert or overwrite work you did not author for this task.
 
 Use git worktrees when you need real parallelism — several independent slices in flight at once, or a long build/test running in one tree while you edit another. Create one with `git worktree add ../RetroSharp-<slug> -b agent/<slug>` so each workstream has its own branch and working directory instead of thrashing a single checkout. Remove finished trees with `git worktree remove`.
 
-Push only when asked. When asked to push:
+Push only when asked (opening the PR above is the guarded "land it" step). When asked to push or land:
 
 1. Re-check `git status --short --branch`.
 2. Re-check `git submodule status --recursive`.
