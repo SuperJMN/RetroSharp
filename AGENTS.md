@@ -93,9 +93,21 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 - Original DMG hardware needs settled `JOYP` row reads. If d-pad input bleeds into A/B behavior, treat it as backend/runtime behavior first, not as sample logic.
 - Byte-backed target values can wrap. Clamp vertical runner state before collision/reset code when working near the top of the scene.
 
-## Publication Workflow
+## Branching and Publication Workflow
 
-Only commit or push when asked. When asked to push:
+Prefer a clean branch-based workflow over working directly on `master`. Commit freely on feature branches; treat pushing as the guarded step.
+
+Recommended flow:
+
+1. Start every slice from an up-to-date `master` on a dedicated branch named `agent/<short-slug>` (for example `agent/music-play-stop-intrinsics`).
+2. Make focused, self-contained commits with descriptive messages. Follow the existing convention when a slice maps to a roadmap item (for example `SAL-8.7: migrate gb/nes music.Play/Stop to audio target intrinsics`).
+3. Run the relevant validation before each merge (`dotnet test RetroSharp.sln -m:1`, `git diff --check`, and regenerate tracked ROMs when their source changed).
+4. Merge the validated branch into `master` locally. Prefer a fast-forward (`git merge --ff-only <branch>`) for a linear slice; use `--no-ff` when you want to preserve the branch boundary.
+5. Keep unrelated local changes intact: never revert or overwrite work you did not author for this task.
+
+Use git worktrees when you need real parallelism — several independent slices in flight at once, or a long build/test running in one tree while you edit another. Create one with `git worktree add ../RetroSharp-<slug> -b agent/<slug>` so each workstream has its own branch and working directory instead of thrashing a single checkout. Remove finished trees with `git worktree remove`.
+
+Push only when asked. When asked to push:
 
 1. Re-check `git status --short --branch`.
 2. Re-check `git submodule status --recursive`.
