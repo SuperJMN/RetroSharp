@@ -3169,8 +3169,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("u8 __enemies_draw_y_Goomba=144;", lowered);
         Assert.Contains("__enemies_draw_x_Goomba=__enemies_draw_screen_x;", lowered);
         Assert.Contains("__enemies_draw_y_Goomba=__enemies_draw_screen_y;", lowered);
-        Assert.Contains("sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);", lowered);
-        Assert.Equal(1, CountOccurrences(lowered, "sprite.Draw(goomba"));
+        Assert.Contains("Sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);", lowered);
+        Assert.Equal(1, CountOccurrences(lowered, "Sprite.Draw(goomba"));
     }
 
     [Fact]
@@ -3210,9 +3210,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline u8 __enemies_spawn_0_y(u8 index)=>5;", lowered);
         Assert.Contains("inline u8 __enemies_spawn_0_yHi(u8 index)=>1;", lowered);
         Assert.Contains("u8 __enemies_touch_screen_y=enemies[__enemies_touch_i].y-__enemies_touch_camera_y_lo;", lowered);
-        Assert.Contains("camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
-        Assert.Contains("camera.ScreenAabbHitTop(__enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
-        Assert.Contains("sprite.Draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
+        Assert.Contains("Camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains("Camera.ScreenAabbHitTop(__enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
+        Assert.Contains("Sprite.Draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
     }
 
     [Fact]

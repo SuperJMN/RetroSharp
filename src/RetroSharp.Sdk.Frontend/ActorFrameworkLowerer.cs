@@ -840,7 +840,7 @@ public static class ActorFrameworkLowerer
                 frameVariable,
                 Maybe<ExpressionSyntax>.None,
                 Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                    "animation",
+                    "Animation",
                     "Frame",
                     [
                         new IdentifierSyntax(def.Animation),
@@ -880,7 +880,7 @@ public static class ActorFrameworkLowerer
             Maybe<BlockSyntax>.None));
 
         statements.Add(new ExpressionStatementSyntax(new SdkDotCallSyntax(
-            "sprite",
+            "Sprite",
             "Draw",
             [
                 new IdentifierSyntax(def.Sprite!),
@@ -907,7 +907,7 @@ public static class ActorFrameworkLowerer
                 frameVariable,
                 Maybe<ExpressionSyntax>.None,
                 Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                    "animation",
+                    "Animation",
                     "Frame",
                     [
                         new IdentifierSyntax(def.Animation),
@@ -920,7 +920,7 @@ public static class ActorFrameworkLowerer
             projection.Visible,
             new BlockSyntax([
                 new ExpressionStatementSyntax(new SdkDotCallSyntax(
-                    "sprite",
+                    "Sprite",
                     "Draw",
                     [
                         new IdentifierSyntax(def.Sprite!),
@@ -968,7 +968,7 @@ public static class ActorFrameworkLowerer
         var collision = new IfElseSyntax(
             new BinaryExpressionSyntax(
                 new SdkDotCallSyntax(
-                    "camera",
+                    "Camera",
                     "ScreenAabbTiles",
                     [
                         projection.ScreenX,
@@ -1026,7 +1026,7 @@ public static class ActorFrameworkLowerer
             hitTop,
             Maybe<ExpressionSyntax>.None,
             Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                "camera",
+                "Camera",
                 "ScreenAabbHitTop",
                 [
                     projection.ScreenX,
