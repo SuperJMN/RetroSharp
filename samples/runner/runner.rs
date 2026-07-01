@@ -5,7 +5,6 @@ static class Level {
     const i16 StreamY = 0;
     const i16 Height = 96;
     const i16 StreamHeight = 96;
-    const i16 SignedVelocityWrap = 128;
     const i16 PixelWidth = 384;
 }
 
@@ -40,11 +39,11 @@ static class CollisionProbe {
 }
 
 static class Jump {
-    const u8 Velocity = 253;
+    const i8 Velocity = -3;
     const u8 BoostTicks = 12;
     const u8 GravityFrames = 2;
     const u8 BoostTickMask = 1;
-    const u8 BounceVelocity = 2;
+    const i8 BounceVelocity = 2;
 }
 
 enum Direction {
@@ -70,7 +69,7 @@ enum CollisionFlag { None = 0, Solid = 1 }
 class PlayerState {
     Pixel x;
     Pixel y;
-    Pixel velocityY;
+    i8 velocityY;
     bool grounded;
     Pixel displayFrame;
     bool displayFlipX;
@@ -100,7 +99,7 @@ class PlayerState {
             grounded = false;
             y += velocityY;
         }
-        if (velocityY >= Level.SignedVelocityWrap) {
+        if (velocityY < 0) {
             if (y > Player.TopWrapY) {
                 y = 0;
                 velocityY = 0;
@@ -365,7 +364,7 @@ class FrameState {
     }
 
     inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY) {
-        if (player.velocityY < Level.SignedVelocityWrap && player.velocityY != 0) {
+        if (player.velocityY > 0) {
             let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
             if (footTile != CollisionProbe.NoTileHit) {
                 player.Land(footTile - Player.FootOffset);
@@ -382,7 +381,7 @@ class FrameState {
     }
 
     inline void ResolveCeilingHit(PlayerState player, Pixel screenX, Pixel footWorldY) {
-        if (player.velocityY >= Level.SignedVelocityWrap) {
+        if (player.velocityY < 0) {
             let headProbeY = footWorldY - CollisionProbe.CeilingProbeTopOffset;
             if (Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0) {
                 player.BounceDown();

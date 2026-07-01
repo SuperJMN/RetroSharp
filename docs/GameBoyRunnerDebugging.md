@@ -130,7 +130,7 @@ Use this table to avoid fixing the wrong layer:
 | Player cannot jump in one zone | Frame order, reset before input, collision state clearing, `Input.WasPressed(...)`. |
 | Player walks into a pipe and snaps onto its top | Horizontal movement is missing or bypassing a lower-body wall probe; block camera motion before vertical landing resolution can reinterpret the side overlap as floor. |
 | Player passes up through a solid block / lands on top from below | Missing ceiling response and/or a landing search window that reaches above the feet. Add a head probe (`Camera.AabbTiles(...)` above the head while rising) that bounces the actor down, and keep the landing search window feet-relative so descent cannot magnetise the actor up onto a block it just hit. |
-| Player snaps to platform while rising | Landing should be gated by descent, for example `velocityY < Level.SignedVelocityWrap` and non-zero velocity. |
+| Player snaps to platform while rising | Landing should be gated by descent, for example `player.velocityY > 0` (signed `i8`; positive means falling). |
 | Player teleports from top to ground | Byte-backed Y wrap; clamp before collision/reset checks. |
 | D-pad triggers A/B behavior on hardware | `JOYP` row settling in backend input lowering. |
 | Mirrored sprite shifts sideways | Logical sprite width vs padded hardware width in flip math. |

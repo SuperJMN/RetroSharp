@@ -498,6 +498,7 @@ internal sealed class NesRuntimeCompiler
     private readonly Dictionary<string, byte> variables = [];
     private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
+    private readonly HashSet<string> signedByteLocations = [];
     private readonly HashSet<string> immutableVariables = [];
     private readonly HashSet<string> userFunctionCallStack = [];
     private readonly Stack<InlineVariableScope> inlineVariableScopes = [];
@@ -821,8 +822,10 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
     {
-        var address = DeclareVariable(DeclareScopedVariableName(declaration.Name));
+        var scopedName = DeclareScopedVariableName(declaration.Name);
+        var address = DeclareVariable(scopedName);
         TrackImmutable(declaration);
+        TrackSignedByteType(declaration.Type, scopedName);
 
         if (declaration.Initialization.HasValue)
         {
@@ -859,6 +862,7 @@ internal sealed class NesRuntimeCompiler
             var scopedName = $"{declarationName}.{field.Name}";
             MapScopedVariableName(sourceName, scopedName);
             var address = DeclareVariable(scopedName);
+            TrackSignedByteType(field.Type, scopedName);
             fieldAddresses.Add(field.Name, address);
             fieldNames.Add(field.Name);
             builder.LoadAImmediate(0);
@@ -936,6 +940,39 @@ internal sealed class NesRuntimeCompiler
         {
             immutableVariables.Add(ScopedVariableName(declaration.Name));
         }
+    }
+
+    // i8 is the signed byte type: relational comparisons on i8 operands use signed ordering. Other
+    // byte-backed types (u8/u16/i16/bool/enum) keep unsigned comparison, matching how the samples use
+    // i16 for 0..255 positions.
+    private void TrackSignedByteType(string type, string scopedName)
+    {
+        if (type == "i8")
+        {
+            signedByteLocations.Add(scopedName);
+        }
+    }
+
+    private bool IsSignedRelationalOperand(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            IdentifierSyntax identifier => signedByteLocations.Contains(ScopedVariableName(identifier.Identifier)),
+            MemberAccessSyntax memberAccess when HasIdentifierRoot(memberAccess) =>
+                signedByteLocations.Contains(ScopedVariableName(NesVideoProgram.MemberAccessName(memberAccess))),
+            _ => false,
+        };
+    }
+
+    private static bool HasIdentifierRoot(MemberAccessSyntax memberAccess)
+    {
+        ExpressionSyntax current = memberAccess;
+        while (current is MemberAccessSyntax member)
+        {
+            current = member.Target;
+        }
+
+        return current is IdentifierSyntax;
     }
 
     private void PushInlineVariableScope()
@@ -1731,10 +1768,17 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
     {
+        var signed = IsSignedRelationalOperand(binary.Left) || IsSignedRelationalOperand(binary.Right);
+
         if (TryConst(binary.Right, out var rightConstant))
         {
             EmitExpressionToA(binary.Left);
-            builder.CompareImmediate(rightConstant);
+            if (signed)
+            {
+                builder.XorImmediate(0x80);
+            }
+
+            builder.CompareImmediate(signed ? rightConstant ^ 0x80 : rightConstant);
             EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
             return;
         }
@@ -1742,13 +1786,38 @@ internal sealed class NesRuntimeCompiler
         if (TryConst(binary.Left, out var leftConstant))
         {
             EmitExpressionToA(binary.Right);
-            builder.CompareImmediate(leftConstant);
+            if (signed)
+            {
+                builder.XorImmediate(0x80);
+            }
+
+            builder.CompareImmediate(signed ? leftConstant ^ 0x80 : leftConstant);
             EmitRelationalFalseJump(FlipRelationalOperator(binary.Operator.Symbol), falseLabel);
             return;
         }
 
-        EmitCompare(binary.Left, binary.Right);
+        EmitRelationalCompare(binary.Left, binary.Right, signed);
         EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
+    }
+
+    // Signed relational comparison reuses the unsigned CMP path after flipping both operands' sign bit
+    // (EOR #$80), which maps signed [-128,127] onto unsigned [0,255] while preserving order.
+    private void EmitRelationalCompare(ExpressionSyntax left, ExpressionSyntax right, bool signed)
+    {
+        if (!signed)
+        {
+            EmitCompare(left, right);
+            return;
+        }
+
+        EmitExpressionToA(left);
+        builder.XorImmediate(0x80);
+        builder.PushA();
+        EmitExpressionToA(right);
+        builder.XorImmediate(0x80);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.PullA();
+        builder.CompareZeroPage(ExpressionScratchAddress);
     }
 
     private void EmitRelationalFalseJump(string op, string falseLabel)
@@ -4975,9 +5044,9 @@ internal sealed class PrgBuilder
 
     private static byte CheckedByte(int value)
     {
-        if (value is < 0 or > 255)
+        if (value is < -128 or > 255)
         {
-            throw new InvalidOperationException($"NES byte immediate must be between 0 and 255, got {value}.");
+            throw new InvalidOperationException($"NES byte immediate must be between -128 and 255, got {value}.");
         }
 
         return (byte)value;
