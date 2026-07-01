@@ -4,10 +4,10 @@ void setup_video() {
     Palette.Set(1, 1);
     Palette.Set(2, 2);
     Palette.Set(3, 3);
-    objectPalette.Set(0, 0);
-    objectPalette.Set(1, 0);
-    objectPalette.Set(2, 1);
-    objectPalette.Set(3, 3);
+    ObjectPalette.Set(0, 0);
+    ObjectPalette.Set(1, 0);
+    ObjectPalette.Set(2, 1);
+    ObjectPalette.Set(3, 3);
     Sprite.Asset(enemy_slug, "../assets/enemy-slug.gb.png", 16, 16);
     Animation.Clip(enemy_walk, 0, 12, 12);
     return;

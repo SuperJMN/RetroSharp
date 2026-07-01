@@ -37,13 +37,13 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "stage.gbapu.json");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.gbapu.json");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -97,14 +97,14 @@ public sealed class GameBoyMusicTests
                               """;
         const string library = """
                                void main() {
-                                   video.Init();
-                                   music.Asset(stage_theme, "stage.gbapu.json");
-                                   audio.Init();
-                                   music.Play(stage_theme);
-                                   music.Stop();
+                                   Video.Init();
+                                   Music.Asset(stage_theme, "stage.gbapu.json");
+                                   Audio.Init();
+                                   Music.Play(stage_theme);
+                                   Music.Stop();
                                    loop {
-                                       video.WaitVBlank();
-                                       audio.Update();
+                                       Video.WaitVBlank();
+                                       Audio.Update();
                                    }
                                }
                                """;
@@ -134,13 +134,13 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "stage.vgz");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.vgz");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -161,13 +161,13 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "large.gbapu");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "large.gbapu");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -234,27 +234,27 @@ public sealed class GameBoyMusicTests
     public void Multiple_music_themes_can_be_declared_and_switched_at_runtime()
     {
         // Two distinct themes (told apart by the APU register they drive). The program starts theme A,
-        // then switches to theme B via music.Play(...). Both must play their own data in order.
+        // then switches to theme B via Music.Play(...). Both must play their own data in order.
         var directory = CreateTempDirectory();
         WriteLargeGbApuTrace(Path.Combine(directory, "theme_a.gbapu"), frameCount: 200, register: 0xFF14);
         WriteLargeGbApuTrace(Path.Combine(directory, "theme_b.gbapu"), frameCount: 200, register: 0xFF19);
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(theme_a, "theme_a.gbapu");
-                                  music.Asset(theme_b, "theme_b.gbapu");
-                                  audio.Init();
-                                  music.Play(theme_a);
+                                  Video.Init();
+                                  Music.Asset(theme_a, "theme_a.gbapu");
+                                  Music.Asset(theme_b, "theme_b.gbapu");
+                                  Audio.Init();
+                                  Music.Play(theme_a);
                                   u8 ticks = 0;
                                   u8 switched = 0;
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                       ticks = ticks + 1;
                                       if (ticks == 80) {
                                           if (switched == 0) {
-                                              music.Play(theme_b);
+                                              Music.Play(theme_b);
                                               switched = 1;
                                           }
                                       }
@@ -289,24 +289,24 @@ public sealed class GameBoyMusicTests
         // 16-bit frame counter (two u8s) so the switch can happen after theme A has crossed its boundary.
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(theme_a, "theme_a.gbapu");
-                                  music.Asset(theme_b, "theme_b.gbapu");
-                                  audio.Init();
-                                  music.Play(theme_a);
+                                  Video.Init();
+                                  Music.Asset(theme_a, "theme_a.gbapu");
+                                  Music.Asset(theme_b, "theme_b.gbapu");
+                                  Audio.Init();
+                                  Music.Play(theme_a);
                                   u8 lo = 0;
                                   u8 hi = 0;
                                   u8 switched = 0;
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                       lo = lo + 1;
                                       if (lo == 0) {
                                           hi = hi + 1;
                                       }
                                       if (hi == 24) {
                                           if (switched == 0) {
-                                              music.Play(theme_b);
+                                              Music.Play(theme_b);
                                               switched = 1;
                                           }
                                       }
@@ -493,13 +493,13 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "stage.music.json");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.music.json");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -533,13 +533,13 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "stage.gbapu.json");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.gbapu.json");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -571,15 +571,15 @@ public sealed class GameBoyMusicTests
     {
         const string source = """
                               void start() {
-                                  music.Play(stage_theme);
+                                  Music.Play(stage_theme);
                               }
 
                               void main() {
-                                  audio.Init();
+                                  Audio.Init();
                                   start();
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -606,14 +606,14 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "stage.music.json");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.music.json");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
 
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -621,11 +621,11 @@ public sealed class GameBoyMusicTests
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x80, 0xE0, 0x26]), "audio.Init should enable NR52.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0xFF, 0xE0, 0x25]), "audio.Init should route all channels to both terminals through NR51.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x77, 0xE0, 0x24]), "audio.Init should set balanced master volume through NR50.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x12]), "audio.Update should write CH1 envelope NR12.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x14]), "audio.Update should trigger CH1 through NR14.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x80, 0xE0, 0x26]), "Audio.Init should enable NR52.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0xFF, 0xE0, 0x25]), "Audio.Init should route all channels to both terminals through NR51.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x77, 0xE0, 0x24]), "Audio.Init should set balanced master volume through NR50.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x12]), "Audio.Update should write CH1 envelope NR12.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x14]), "Audio.Update should trigger CH1 through NR14.");
     }
 
     [Fact]
@@ -637,7 +637,7 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  music.Asset(stage_theme, "stage.music.json");
+                                  Music.Asset(stage_theme, "stage.music.json");
                               }
                               """;
 
@@ -654,14 +654,14 @@ public sealed class GameBoyMusicTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  music.Asset(stage_theme, "stage.music.json");
-                                  audio.Init();
-                                  music.Play(stage_theme);
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.music.json");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
 
                                   loop {
-                                      video.WaitVBlank();
-                                      audio.Update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;
@@ -669,10 +669,10 @@ public sealed class GameBoyMusicTests
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xE0, 0x1A]), "audio.Update should enable CH3 through NR30.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x30]), "audio.Update should write wave RAM.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x21]), "audio.Update should write CH4 envelope NR42.");
-        Assert.True(ContainsSequence(rom, [0xE0, 0x23]), "audio.Update should trigger CH4 through NR44.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x1A]), "Audio.Update should enable CH3 through NR30.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x30]), "Audio.Update should write wave RAM.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x21]), "Audio.Update should write CH4 envelope NR42.");
+        Assert.True(ContainsSequence(rom, [0xE0, 0x23]), "Audio.Update should trigger CH4 through NR44.");
     }
 
     private static string CreateTempDirectory()
@@ -787,13 +787,13 @@ public sealed class GameBoyMusicTests
     private static string MinimalPlaybackSource(string assetFileName) =>
         $$"""
           void main() {
-              video.Init();
-              music.Asset(stage_theme, "{{assetFileName}}");
-              audio.Init();
-              music.Play(stage_theme);
+              Video.Init();
+              Music.Asset(stage_theme, "{{assetFileName}}");
+              Audio.Init();
+              Music.Play(stage_theme);
               loop {
-                  video.WaitVBlank();
-                  audio.Update();
+                  Video.WaitVBlank();
+                  Audio.Update();
               }
           }
           """;

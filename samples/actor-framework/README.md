@@ -29,7 +29,7 @@ dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target 
 The collision layer keeps the second tile row solid, while the authored spawns
 sit at different world X columns on that row. The sample starts with the distant
 Koopa outside the camera window and no slot assigned to it; each frame calls
-`actor.SpawnLayer(...)` after `camera.SetPosition(...)`, so the offscreen slot is
+`actor.SpawnLayer(...)` after `Camera.SetPosition(...)`, so the offscreen slot is
 recycled and the Koopa activates when scrolling reaches its world X. The source
 still has no global enemy-kind switch in `main`.
 

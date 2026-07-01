@@ -268,7 +268,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                    world_flags(0, 0, 1);
                                    world_map(1, 11, 2);
                                    i16 worldX = 0;
-                                   i16 flags = world.TileFlagsAt(worldX, 8);
+                                   i16 flags = World.TileFlagsAt(worldX, 8);
                                }
                                """;
         Assert.Equal(GameBoyRomCompiler.CompileSource(direct, WriteSpriteAsset()), GameBoyRomCompiler.CompileSource(library, WriteSpriteAsset()));
@@ -305,7 +305,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   world_map(1, 11, 2);
                                   camera_init(1, 11, 2);
                                   i16 footY = 16;
-                                  i16 hit = camera.AabbTiles(72, footY, 16, 8, 1);
+                                  i16 hit = Camera.AabbTiles(72, footY, 16, 8, 1);
                               }
                               """;
 
@@ -332,7 +332,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   camera_init(1, 11, 2);
                                   sprite_asset(player_run, "player.sprite.json");
                                   i16 footY = 16;
-                                  i16 hit = camera.AabbTiles(72, footY, sprite_width(player_run), 8, 1);
+                                  i16 hit = Camera.AabbTiles(72, footY, sprite_width(player_run), 8, 1);
                               }
                               """;
 
@@ -352,7 +352,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   world_map(1, 11, 2);
                                   camera_init(1, 11, 2);
                                   i16 footY = 16;
-                                  i16 hit = camera.AabbTiles(72, footY - 8, 16, 8, 1);
+                                  i16 hit = Camera.AabbTiles(72, footY - 8, 16, 8, 1);
                               }
                               """;
 
@@ -374,7 +374,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   camera_init(1, 11, 2);
                                   sprite_asset(player_run, "player.sprite.json");
                                   i16 footY = 40;
-                                  i16 hitTop = camera.AabbHitTop(72, footY - 32, sprite_width(player_run), 40, 1);
+                                  i16 hitTop = Camera.AabbHitTop(72, footY - 32, sprite_width(player_run), 40, 1);
                               }
                               """;
 
@@ -395,10 +395,10 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void main() {
-                                  world.Column(0, 0, 4);
-                                  world.Flags(0, 0, 1);
-                                  world.Map(1, 11, 2);
-                                  camera.Init(1, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
+                                  Camera.Init(1, 11, 2);
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 8);
                                   enemies[0].active = 1;
@@ -440,9 +440,9 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void main() {
-                                  video.Init();
-                                  sprite.Asset(player_run, "player.sprite.json");
-                                  animation.Clip(walk, 0, 4, 4);
+                                  Video.Init();
+                                  Sprite.Asset(player_run, "player.sprite.json");
+                                  Animation.Clip(walk, 0, 4, 4);
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, sprite: player_run, behavior: Walker, animation: walk);
                                   enemies[0].active = 1;
@@ -491,7 +491,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   i16 y = 80;
                                   i16 frame = 1;
                                   bool flipX = true;
-                                  sprite.Draw(player_run, 72, y, frame, flipX, 1);
+                                  Sprite.Draw(player_run, 72, y, frame, flipX, 1);
                               }
                               """;
 

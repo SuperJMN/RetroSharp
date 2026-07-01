@@ -4,10 +4,10 @@ void setup_video() {
     Palette.Set(1, 1);
     Palette.Set(2, 2);
     Palette.Set(3, 3);
-    objectPalette.Set(0, 0);
-    objectPalette.Set(1, 0);
-    objectPalette.Set(2, 1);
-    objectPalette.Set(3, 3);
+    ObjectPalette.Set(0, 0);
+    ObjectPalette.Set(1, 0);
+    ObjectPalette.Set(2, 1);
+    ObjectPalette.Set(3, 3);
     Sprite.Asset(mario_player, "../assets/mario-player.gb.png", 18, 32);
     Animation.Clip(run, 1, 6, 6, 6);
     return;

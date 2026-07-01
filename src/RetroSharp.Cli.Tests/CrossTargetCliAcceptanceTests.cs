@@ -105,8 +105,8 @@ public sealed class CrossTargetCliAcceptanceTests
             sourcePath,
             """
             void main() {
-                video.Init();
-                hud.SetTile(window, 0, 0, 1);
+                Video.Init();
+                Hud.SetTile(window, 0, 0, 1);
                 return;
             }
             """);

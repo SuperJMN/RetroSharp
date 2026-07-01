@@ -20,11 +20,11 @@ flatpak run --command=retroarch org.libretro.RetroArch \
 
 Supported target-intrinsic static calls:
 
-- `video.Init()`
-- `palette.Set(index, color)`
-- `tilemap.Set(x, y, tile)`
-- `tilemap.Fill(x, y, width, height, tile)`
-- `video.Present()`
+- `Video.Init()`
+- `Palette.Set(index, color)`
+- `Tilemap.Set(x, y, tile)`
+- `Tilemap.Fill(x, y, width, height, tile)`
+- `Video.Present()`
 
 Parameterless helper functions can group those calls. This sample uses top-level `const` values and a tile enum so static target-intrinsic data has names without changing the emitted setup work.
 

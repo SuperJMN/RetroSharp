@@ -51,17 +51,17 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  video.Init();
-                                  palette.Background(2, 0, 1, 2, 3);
-                                  palette.Sprite(3, 0, 0, 1, 3);
+                                  Video.Init();
+                                  Palette.Background(2, 0, 1, 2, 3);
+                                  Palette.Sprite(3, 0, 0, 1, 3);
                               }
                               """;
 
         var rom = NesRomCompiler.CompileSource(source);
 
         Assert.Equal(40976, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x30, 0x10, 0x00, 0x0F]), "palette.Background should map logical light-to-dark tones to NES grayscale colors.");
-        Assert.True(ContainsSequence(rom, [0x30, 0x30, 0x10, 0x0F]), "palette.Sprite should map the runner's logical sprite tones to NES grayscale colors.");
+        Assert.True(ContainsSequence(rom, [0x30, 0x10, 0x00, 0x0F]), "Palette.Background should map logical light-to-dark tones to NES grayscale colors.");
+        Assert.True(ContainsSequence(rom, [0x30, 0x30, 0x10, 0x0F]), "Palette.Sprite should map the runner's logical sprite tones to NES grayscale colors.");
     }
 
     [Fact]
@@ -69,8 +69,8 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  video.Init();
-                                  palette.Sprite(4, 15, 17, 34, 51);
+                                  Video.Init();
+                                  Palette.Sprite(4, 15, 17, 34, 51);
                               }
                               """;
 
@@ -475,14 +475,14 @@ public class NesRomCompilerTests
 
         const string dotSource = """
                                  void main() {
-                                     video.Init();
-                                     world.Column(0, 1, 2);
-                                     world.Column(1, 3, 4);
-                                     world.Map(2, 10, 2);
-                                     camera.Init(2, 10, 2);
-                                     camera.SetPosition(4, 0);
-                                     video.WaitVBlank();
-                                     input.Poll();
+                                     Video.Init();
+                                     World.Column(0, 1, 2);
+                                     World.Column(1, 3, 4);
+                                     World.Map(2, 10, 2);
+                                     Camera.Init(2, 10, 2);
+                                     Camera.SetPosition(4, 0);
+                                     Video.WaitVBlank();
+                                     Input.Poll();
                                      return;
                                  }
                                  """;
@@ -573,8 +573,8 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  audio.Init();
-                                  audio.Update();
+                                  Audio.Init();
+                                  Audio.Update();
                               }
                               """;
         var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
@@ -595,8 +595,8 @@ public class NesRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   audio.Init();
-                                   audio.Update();
+                                   Audio.Init();
+                                   Audio.Update();
                                }
                                """;
 
@@ -623,13 +623,13 @@ public class NesRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   video.Init();
-                                   world.Column(0, 1, 2);
-                                   world.Map(1, 10, 2);
-                                   camera.Init(1, 10, 2);
+                                   Video.Init();
+                                   World.Column(0, 1, 2);
+                                   World.Map(1, 10, 2);
+                                   Camera.Init(1, 10, 2);
                                    i16 x = 4;
-                                   camera.SetPosition(x, 0);
-                                   camera.Apply();
+                                   Camera.SetPosition(x, 0);
+                                   Camera.Apply();
                                    return;
                                }
                                """;
@@ -675,11 +675,11 @@ public class NesRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   video.Init();
-                                   sprite.Asset(hero, "hero.nes.json");
+                                   Video.Init();
+                                   Sprite.Asset(hero, "hero.nes.json");
                                    loop {
-                                       video.WaitVBlank();
-                                       sprite.Draw(hero, 24, 32, 0, false, 2);
+                                       Video.WaitVBlank();
+                                       Sprite.Draw(hero, 24, 32, 0, false, 2);
                                    }
                                }
                                """;
@@ -699,7 +699,7 @@ public class NesRomCompilerTests
 
         var libraryRom = NesRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
         var legacyRom = NesRomCompiler.CompileSource(
-            SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source.Replace("sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
+            SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
             Path.GetDirectoryName(sourcePath));
 
         Assert.Equal(legacyRom, libraryRom);
@@ -733,9 +733,9 @@ public class NesRomCompilerTests
 
         const string paletteSource = """
                                      void main() {
-                                         sprite.Asset(hero, "hero.nes.json");
+                                         Sprite.Asset(hero, "hero.nes.json");
                                          loop {
-                                             sprite.Draw(hero, 24, 32, 0, false, 4);
+                                             Sprite.Draw(hero, 24, 32, 0, false, 4);
                                          }
                                      }
                                      """;
@@ -745,13 +745,13 @@ public class NesRomCompilerTests
 
         var draws = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 9).Select(index => $"        sprite.Draw(hero, {index * 8}, 24, 0);"));
+            Enumerable.Range(0, 9).Select(index => $"        Sprite.Draw(hero, {index * 8}, 24, 0);"));
         var budgetSource = """
                            void main() {
-                               video.Init();
-                               sprite.Asset(hero, "hero.nes.json");
+                               Video.Init();
+                               Sprite.Asset(hero, "hero.nes.json");
                                loop {
-                                   video.WaitVBlank();
+                                   Video.WaitVBlank();
 
                            """ + draws + """
                                }
@@ -807,7 +807,7 @@ public class NesRomCompilerTests
     [Fact]
     public void Nes_sdk_library_does_not_expose_capability_gated_world_tile_flags_helper()
     {
-        // world.TileFlagsAt(...) is gated on the WorldTileFlags collision query,
+        // World.TileFlagsAt(...) is gated on the WorldTileFlags collision query,
         // which NES does not declare. The injected NES library must not expose it.
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
@@ -820,8 +820,8 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  video.WaitVBlank();
-                                  input.Poll();
+                                  Video.WaitVBlank();
+                                  Input.Poll();
                               }
                               """;
         var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
@@ -890,8 +890,8 @@ public class NesRomCompilerTests
                                   world_column(0, 1, 2);
                                   world_column(1, 3, 4);
                                   world_map(2, 10, 2);
-                                  camera.Init(2, 10, 2);
-                                  camera.SetPosition(4, 1);
+                                  Camera.Init(2, 10, 2);
+                                  Camera.SetPosition(4, 1);
                                   return;
                               }
                               """;
@@ -2482,7 +2482,7 @@ public class NesRomCompilerTests
                                   world_column(0, 0, 0);
                                   world_map(40, 10, 40);
                                   camera_init(40, 10, 40);
-                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  Sprite.Asset(goomba, "goomba.nes.json");
                                   actor.Pool(enemies, 2);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                   camera_set_position(0, 160);
@@ -2540,10 +2540,10 @@ public class NesRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  sprite.Asset(goomba, "wide-goomba.nes.json");
+                                  Sprite.Asset(goomba, "wide-goomba.nes.json");
                                   actor.Pool(enemies, 23);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
                               }
@@ -2568,10 +2568,10 @@ public class NesRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  sprite.Asset(goomba, "goomba.png", 8, 16);
+                                  Sprite.Asset(goomba, "goomba.png", 8, 16);
                                   actor.Pool(enemies, 8);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
                               }
@@ -2611,10 +2611,10 @@ public class NesRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  Sprite.Asset(goomba, "goomba.nes.json");
                                   actor.Pool(enemies, 9);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
                               }
@@ -2739,13 +2739,13 @@ public class NesRomCompilerTests
 
                                     void main() {
                                         video_init();
-                                        sprite.Asset(goomba, "goomba.nes.json");
+                                        Sprite.Asset(goomba, "goomba.nes.json");
                                         Actor enemies[1];
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
                                         enemies[0].x = 24;
                                         enemies[0].y = 48;
-                                        video.WaitVBlank();
+                                        Video.WaitVBlank();
 
                                         u8 __enemies_draw_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_draw_camera_x_hi = __rs_actor_camera_x_hi();
@@ -2771,7 +2771,7 @@ public class NesRomCompilerTests
                                                         __enemies_draw_y_Goomba = __enemies_draw_screen_y;
                                                     }
                                                 }
-                                                sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
+                                                Sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
                                             }
                                         }
 
@@ -2782,14 +2782,14 @@ public class NesRomCompilerTests
         const string actorSource = """
                                    void main() {
                                        video_init();
-                                       sprite.Asset(goomba, "goomba.nes.json");
+                                       Sprite.Asset(goomba, "goomba.nes.json");
                                        actor.Pool(enemies, 1);
                                        enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
                                        enemies[0].y = 48;
-                                       video.WaitVBlank();
+                                       Video.WaitVBlank();
                                        enemies.Draw();
                                        return;
                                    }
@@ -2830,7 +2830,7 @@ public class NesRomCompilerTests
                                   world_column(0, 0, 0);
                                   world_map(1, 10, 2);
                                   camera_init(1, 10, 2);
-                                  sprite.Asset(goomba, "goomba.nes.json");
+                                  Sprite.Asset(goomba, "goomba.nes.json");
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                   enemies[0].active = 1;
@@ -2839,7 +2839,7 @@ public class NesRomCompilerTests
                                   enemies[0].xHi = 0;
                                   enemies[0].y = 48;
                                   camera_set_position(4, 0);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
                               }
@@ -2915,7 +2915,7 @@ public class NesRomCompilerTests
                                                 }
                                                 if (enemies[__enemies_touch_i].kind == Goomba) {
                                                     if ((__enemies_touch_visible_x != 0) && (__enemies_touch_visible_y != 0)) {
-                                                        if (camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1) != 0) {
+                                                        if (Camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1) != 0) {
                                                             enemies[__enemies_touch_i].state = 1;
                                                         }
                                                     }
@@ -3627,11 +3627,11 @@ public class NesRomCompilerTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  sprite.Asset(hero, "hero.nes.json");
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.nes.json");
                                   loop {
-                                      video.WaitVBlank();
-                                      sprite.Draw(hero, 24, 32, 0, false, 2);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, false, 2);
                                   }
                               }
                               """;
@@ -3646,15 +3646,15 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  world.Column(0, 1, 2);
-                                  world.Flags(0, 0, 1);
-                                  world.Map(1, 10, 2);
-                                  camera.Init(1, 10, 2);
+                                  World.Column(0, 1, 2);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
                                   loop {
-                                      video.WaitVBlank();
+                                      Video.WaitVBlank();
                                       u8 footY = 16;
-                                      u8 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                      u8 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                      u8 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                      u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                                   }
                               }
                               """;
@@ -3680,13 +3680,13 @@ public class NesRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   world.Column(0, 1, 2);
-                                   world.Flags(0, 0, 1);
-                                   world.Map(1, 10, 2);
-                                   camera.Init(1, 10, 2);
+                                   World.Column(0, 1, 2);
+                                   World.Flags(0, 0, 1);
+                                   World.Map(1, 10, 2);
+                                   Camera.Init(1, 10, 2);
                                    u8 footY = 16;
-                                   u8 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                   u8 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                   u8 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                   u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                                }
                                """;
 
@@ -3714,14 +3714,14 @@ public class NesRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   world.Column(0, 1, 2);
-                                   world.Flags(0, 0, 1);
-                                   world.Map(1, 10, 2);
-                                   camera.Init(1, 10, 2);
+                                   World.Column(0, 1, 2);
+                                   World.Flags(0, 0, 1);
+                                   World.Map(1, 10, 2);
+                                   Camera.Init(1, 10, 2);
                                    u8 screenX = 40;
                                    u8 screenY = 16;
-                                   u8 hit = camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
-                                   u8 hitTop = camera.ScreenAabbHitTop(screenX, screenY, 16, 16, 1);
+                                   u8 hit = Camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
+                                   u8 hitTop = Camera.ScreenAabbHitTop(screenX, screenY, 16, 16, 1);
                                }
                                """;
 
@@ -3788,8 +3788,8 @@ public class NesRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  palette.Background(0, 0, 1, 2, 3);
-                                  palette.Sprite(0, 0, 0, 1, 3);
+                                  Palette.Background(0, 0, 1, 2, 3);
+                                  Palette.Sprite(0, 0, 0, 1, 3);
                                   sprite_asset(hero, "hero.png", 8, 8);
                                   while (true) {
                                       video_wait_vblank();
@@ -4047,7 +4047,7 @@ public class NesRomCompilerTests
                                       video_wait_vblank();
                                       u8 x = button_hold_ticks(right);
                                       camera_set_position(x, 0);
-                                      u8 hit = camera.AabbTiles(72, 8, 16, 8, 1);
+                                      u8 hit = Camera.AabbTiles(72, 8, 16, 8, 1);
                                   }
                               }
                               """;
@@ -4058,7 +4058,7 @@ public class NesRomCompilerTests
         Assert.Equal(40976, rom.Length);
         Assert.True(
             ContainsSequence(prg, [0xA5, 0xE0, 0x29, 0x07, 0x18, 0x69, 0x48, 0x4A, 0x4A, 0x4A, 0x18, 0x65, 0xE1]),
-            "camera.AabbTiles should combine camera fine X with the absolute source tile, not the wrapped scroll byte.");
+            "Camera.AabbTiles should combine camera fine X with the absolute source tile, not the wrapped scroll byte.");
     }
 
     [Fact]

@@ -10,35 +10,16 @@ public static class SdkModuleRegistry
 {
     private static readonly SdkModuleDescriptor[] ModuleDescriptors =
     [
-        // Transitional lowercase facade receivers, kept as byte-identical aliases.
-        // Samples, docs, and the actor-framework lowerer now emit the canonical
-        // PascalCase facades (#157); these lowercase modules remain only for backward
-        // compatibility and for the injected lowercase `world` helper class (kept
-        // lowercase so it does not collide with a user `World` config class). Do not
-        // remove while either still uses them.
-        LibraryModule("video", "video"),
-        LibraryModule("input", "input"),
-        LibraryModule("camera", "camera"),
-        LibraryModule("sprites", "sprite"),
-        LibraryModule("sprite", "sprite"),
-        LibraryModule("palette", "palette"),
-        LibraryModule("objectPalette", "object_palette"),
-        LibraryModule("tilemap", "tilemap"),
-        LibraryModule("map", "map"),
-        LibraryModule("world", "world"),
-        LibraryModule("hud", "hud"),
-        LibraryModule("scroll", "scroll"),
-        LibraryModule("animation", "animation"),
-        LibraryModule("audio", "audio"),
-        LibraryModule("music", "music"),
-
-        // Canonical C# PascalCase static facade classes (#157). Each maps to the same
-        // flat call prefix as its lowercase alias, so lowering is byte-identical.
+        // Canonical C# PascalCase static facade classes (#157). These are the only
+        // accepted SDK dot-call receivers; the earlier transitional lowercase aliases
+        // were removed once samples, docs, tests, and the actor-framework lowerer all
+        // emitted PascalCase. Each maps to a flat `prefix_method` call name.
         LibraryModule("Video", "video"),
         LibraryModule("Input", "input"),
         LibraryModule("Camera", "camera"),
         LibraryModule("Sprite", "sprite"),
         LibraryModule("Palette", "palette"),
+        LibraryModule("ObjectPalette", "object_palette"),
         LibraryModule("Tilemap", "tilemap"),
         LibraryModule("Map", "map"),
         LibraryModule("World", "world"),
@@ -59,9 +40,8 @@ public static class SdkModuleRegistry
 
     // Per-(module, method) full call-name overrides. The Input predicate facade
     // methods lower to the existing flat button builtins, which use the `button`
-    // call prefix rather than the facade's `input` prefix. Both the canonical
-    // PascalCase facade (#157) and the transitional lowercase receiver resolve to
-    // the same builtins, so lowering stays byte-identical.
+    // call prefix rather than the facade's `input` prefix, so lowering stays
+    // byte-identical.
     private static readonly Dictionary<(string Module, string Method), string> CallNameOverrides =
         new()
         {
@@ -69,10 +49,6 @@ public static class SdkModuleRegistry
             [("Input", "WasPressed")] = "button_just_pressed",
             [("Input", "WasReleased")] = "button_just_released",
             [("Input", "HoldTicks")] = "button_hold_ticks",
-            [("input", "IsDown")] = "button_down",
-            [("input", "WasPressed")] = "button_just_pressed",
-            [("input", "WasReleased")] = "button_just_released",
-            [("input", "HoldTicks")] = "button_hold_ticks",
         };
 
     public static bool IsKnownModule(string module)

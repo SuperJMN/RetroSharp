@@ -2,7 +2,7 @@
 
 Sample Layer: `target-acceptance`
 
-This sample exercises diagonal camera movement from a 50x60 Tiled map loaded with `world.Load(...)`. The map fits inside the NES four-screen 64x60 surface while still crossing both nametable axes; Game Boy builds the same source and uses its staggered diagonal streaming path.
+This sample exercises diagonal camera movement from a 50x60 Tiled map loaded with `World.Load(...)`. The map fits inside the NES four-screen 64x60 surface while still crossing both nametable axes; Game Boy builds the same source and uses its staggered diagonal streaming path.
 
 Build the Game Boy ROM:
 

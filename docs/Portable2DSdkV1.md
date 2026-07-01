@@ -75,7 +75,7 @@ For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editab
 | `Palette.Background(slot, c0, c1, c2, c3)` | Declare one logical background palette slot with four logical luminance tones `0..3`. |
 | `Palette.Sprite(slot, c0, c1, c2, c3)` | Declare one logical sprite palette slot with four logical luminance tones `0..3`. |
 
-The slot is logical and capability-checked against the target descriptor. The four color values are target-independent luminance tones `0..3`; each backend maps them to its hardware palette representation. NES sprite PNG assets can derive a hardware sprite palette for the draw slot that uses the asset, while preserving the universal background color in sprite palette entry `0`. Raw `Palette.Set(...)` and `objectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
+The slot is logical and capability-checked against the target descriptor. The four color values are target-independent luminance tones `0..3`; each backend maps them to its hardware palette representation. NES sprite PNG assets can derive a hardware sprite palette for the draw slot that uses the asset, while preserving the universal background color in sprite palette entry `0`. Raw `Palette.Set(...)` and `ObjectPalette.Set(...)` remain target-intrinsic compatibility calls and are not the SDK v1 palette declaration surface.
 
 ### Camera
 
@@ -407,7 +407,7 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Actor pool dynamic capacity | `actor.Pool for 'enemies' requires a literal capacity from 1 to 255.` |
 | Actor pool metasprite budget overflow | `Target 'gb' supports 40 hardware sprites per frame, but actor.Pool for 'enemies' can draw up to 42 because capacity 21 times enemy.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.` |
 
-Calls that expose raw hardware state are outside SDK v1. Examples include `scroll.Set(...)`, `Sprite.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `objectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `Palette.Background(...)` and `Palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
+Calls that expose raw hardware state are outside SDK v1. Examples include `Scroll.Set(...)`, `Sprite.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `ObjectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `Palette.Background(...)` and `Palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
 
 ## Current Stabilization Gaps
 

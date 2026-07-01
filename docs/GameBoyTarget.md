@@ -57,7 +57,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 
 `Video.WaitVBlank()` and `Input.Poll()` are now provided by the injected SDK source library as inline wrappers over Game Boy target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`). `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, and `Music.Stop()` are likewise provided by the injected SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop` target intrinsics (`music_play` carries the music asset as a compile-time `AssetRef` operand); the legacy `audio_init(...)`/`audio_update(...)`/`music_play(...)`/`music_stop(...)` builtins remain compatibility aliases and `Music.Asset(...)` stays on the SDK-module path. The collector still records them as `Sdk2DOperation.WaitFrame`/`Sdk2DOperation.PollInput` and the matching `SdkAudioOperation` values, so byte emission and frame-budget boundaries remain identical to the older direct SDK operation path. Logical sprite draw, explicit map-column streaming, camera movement, HUD tiles, and camera-relative AABB collision still lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge. Game Boy compilation also runs the shared frame-budget pass, so multiple explicit map-column streams that exceed the 21-tile background write budget, more than 40 hardware sprites, or more than 10 constant-Y sprites on a scanline in one possible frame fail before lowering.
 
-Target intrinsics and transitional helpers such as `Sprite.Set(...)`, `scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
+Target intrinsics and transitional helpers such as `Sprite.Set(...)`, `Scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
 ## Sample Classification
 
@@ -144,7 +144,7 @@ Static setup calls:
 - `Video.Init()`
 - `Music.Asset(name, path)`
 - `Palette.Set(index, color)`
-- `objectPalette.Set(index, color)`
+- `ObjectPalette.Set(index, color)`
 - `Palette.Background(slot, c0, c1, c2, c3)`
 - `Palette.Sprite(slot, c0, c1, c2, c3)`
 - `Sprite.Asset(name, path[, frameWidth, frameHeight])`
@@ -166,7 +166,7 @@ Runtime calls:
 - `Music.Play(name)`
 - `Music.Stop()`
 - `Input.Poll()`
-- `scroll.Set(x, y)`
+- `Scroll.Set(x, y)`
 - `Camera.Init(mapWidth, streamY, streamHeight)`
 - `Camera.SetPosition(x, y)`
 - `Camera.Apply()`
@@ -197,7 +197,7 @@ Runtime calls:
 - `Input.WasReleased(button)`
 - `Input.HoldTicks(button)`
 
-`scroll.Set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
+`Scroll.Set(x, y)` writes `x` to `SCX` and `y` to `SCY`. On Game Boy this gives hardware background scroll over the 256x256 background map.
 
 `Music.Asset(name, path)` declares a BGM resource. `path` can point directly to a VGM/VGZ DMG register log, a hUGETracker `.uge` file, a transitional `.gbapu` binary trace (or a legacy `retrosharp.gbapu.v1` `.gbapu.json`), or to a `retrosharp.music.v1` JSON envelope whose `platforms.gb` entry has `format: "vgm"`, `format: "uge"`, or `format: "gbapu"` and a relative path. Generic paths use the same per-target variant convention as PNG assets: `Music.Asset(theme, "music/runner.vgz")` resolves `music/runner.gb.vgz` on Game Boy when present, falling back to `music/runner.vgz`. The current Game Boy BGM runtime accepts `.uge` v6 songs with duty, wave, and noise channel rows, fixed ticks-per-row timing, compact wavetable data, and compact per-row channel event data. Effect `Cxy` is lowered as a row-level volume override; effects `2xx`, `3xx`, `Bxx`, and `Exx` are currently accepted as best-effort no-ops so real tracker songs can compile, but they do not yet reproduce hUGEDriver pitch slides, jumps, or note cuts exactly. Timer-based tempo, routine jump command values, tempo changes, panning, arpeggio, and other hUGETracker effects fail explicitly or remain unsupported because this runtime is frame-update driven through `Audio.Update()`. When compiled program/data/music output exceeds the ROM-only limit, the compiler emits an MBC1 ROM automatically; user source does not select banks manually. The current foundation supports bank-aware fixed trampolines for multi-bank subroutine bodies, compiler-inserted fixed-bank continuations for linear main-flow fall-through, fixed-bank audio helpers, banked music, and banked read-only tile/tilemap/map-row data. Direct non-linear control-flow between different switchable banks is rejected explicitly unless it goes through a fixed-bank trampoline/helper instead of a raw cross-bank jump.
 
@@ -267,7 +267,7 @@ The preferred `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenA
 
 `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space AABBs, adding the current camera X/Y state inside the backend. They are the actor-framework collision form for wide world Y actors; hit-top returns a screen-pixel top so the framework can add camera Y back into `y`/`yHi`.
 
-`Palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `Palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `Palette.Set(...)` and `objectPalette.Set(...)` remain available as target-intrinsic compatibility calls.
+`Palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `Palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `Palette.Set(...)` and `ObjectPalette.Set(...)` remain available as target-intrinsic compatibility calls.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
 
@@ -333,7 +333,7 @@ The preferred `Sprite.Draw(...)` spelling is injected by `SdkLibrarySource` as a
 - [x] Parse `while`.
 - [x] Generate a real Game Boy runtime loop.
 - [x] Move sprites by writing OAM during the loop.
-- [x] Add `scroll.Set(x, y)` over Game Boy `SCX`/`SCY`.
+- [x] Add `Scroll.Set(x, y)` over Game Boy `SCX`/`SCY`.
 - [x] Build a runner sample with a fixed actor and scrolling background.
 - [x] Stream new background columns every 8 pixels.
 - [x] Represent maps as source data instead of ad hoc `Tilemap.Set` calls.
@@ -388,7 +388,7 @@ Landed after the initial runner loop:
 - `Camera.SetPosition(x, y)` advances the runtime camera by at most one pixel per axis per call toward the requested low byte, using a signed 8-bit delta so source-level byte positions can wrap. The runner updates camera state per single-pixel movement step, then calls `Camera.SetPosition` twice at the end of the frame so a two-pixel run frame can catch the 1px-per-call backend up without inlining the full 2D camera runtime at every collision probe.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
 - `Sprite.Draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
-- `Palette.Background(...)` and `Palette.Sprite(...)` declare logical palette slots for SDK-shaped samples; the runner uses them instead of raw `Palette.Set(...)` and `objectPalette.Set(...)`.
+- `Palette.Background(...)` and `Palette.Sprite(...)` declare logical palette slots for SDK-shaped samples; the runner uses them instead of raw `Palette.Set(...)` and `ObjectPalette.Set(...)`.
 - `Animation.Clip(...)` and `Animation.Frame(...)` now express the runner's run cycle while keeping `animTick`, idle, and jump state explicit in source.
 - `world_tile_flags_at(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
 - `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.

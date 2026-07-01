@@ -14,9 +14,9 @@ public sealed class GameBoyRunnerAudioTempoTests
     [Fact]
     public void Music_tempo_stays_locked_to_frames_while_the_camera_scrolls()
     {
-        // audio.Update() must advance the music exactly once per real frame whether or not the
+        // Audio.Update() must advance the music exactly once per real frame whether or not the
         // camera is streaming new map columns. Before the deferred-commit fix, a tile-boundary
-        // crossing spent a whole extra VBlank inside the streaming path while audio.Update() was
+        // crossing spent a whole extra VBlank inside the streaming path while Audio.Update() was
         // still only called once per loop iteration, so the music slowed down during scrolling.
         var runnerDirectory = LocateRunnerDirectory();
         var source = File.ReadAllText(Path.Combine(runnerDirectory, "runner.rs"));
@@ -275,7 +275,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     [Fact]
     public void Deferred_camera_commit_streams_columns_into_vram_during_apply()
     {
-        // The deferred-commit camera streaming only writes VRAM from camera.Apply (during the
+        // The deferred-commit camera streaming only writes VRAM from Camera.Apply (during the
         // top-of-frame VBlank). A program that scrolls and applies the camera every frame must
         // therefore still mutate the background tilemap as new columns are exposed; a program that
         // applies without moving must leave it untouched.
@@ -313,7 +313,7 @@ public sealed class GameBoyRunnerAudioTempoTests
             Assert.InRange(scrollingCpu.Vram(address), (byte)0, (byte)24);
         }
 
-        Assert.True(scrolled, "Scrolling did not stream any new columns into the background tilemap during camera.Apply.");
+        Assert.True(scrolled, "Scrolling did not stream any new columns into the background tilemap during Camera.Apply.");
     }
 
     [Fact]

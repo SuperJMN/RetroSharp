@@ -22,9 +22,9 @@ public sealed class GameBoyBankingRoadmapTests
     {
         const string source = """
             void main() {
-                video.Init();
+                Video.Init();
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                 }
             }
             """;
@@ -43,13 +43,13 @@ public sealed class GameBoyBankingRoadmapTests
         var directory = RepositoryDirectory("samples/runner/music");
         var source = $$"""
             void main() {
-                video.Init();
-                music.Asset(theme, "delight.gbapu");
-                audio.Init();
-                music.Play(theme);
+                Video.Init();
+                Music.Asset(theme, "delight.gbapu");
+                Audio.Init();
+                Music.Play(theme);
                 loop {
-                    video.WaitVBlank();
-                    audio.Update();
+                    Video.WaitVBlank();
+                    Audio.Update();
                 }
             }
             """;
@@ -67,11 +67,11 @@ public sealed class GameBoyBankingRoadmapTests
         // CALL/RET subroutine instead of being inlined at every call site.
         const string source = """
             void bump() {
-                video.WaitVBlank();
+                Video.WaitVBlank();
             }
 
             void main() {
-                video.Init();
+                Video.Init();
                 loop {
                     bump();
                     bump();
@@ -106,15 +106,15 @@ public sealed class GameBoyBankingRoadmapTests
         // (passed via a fixed WRAM slot) at runtime.
         const string source = """
             void store_frame(i16 value) {
-                sprite.Draw(player, 16, 16, value, false, 0);
+                Sprite.Draw(player, 16, 16, value, false, 0);
             }
 
             void main() {
-                video.Init();
-                sprite.Asset(player, "assets/mario-player.png", 18, 32);
-                animation.Clip(walk, 1, 4, 4);
+                Video.Init();
+                Sprite.Asset(player, "assets/mario-player.png", 18, 32);
+                Animation.Clip(walk, 1, 4, 4);
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     store_frame(2);
                     store_frame(3);
                 }
@@ -298,16 +298,16 @@ public sealed class GameBoyBankingRoadmapTests
         var keyword = inline ? "inline " : string.Empty;
         return $$"""
             {{keyword}}void paint() {
-                video.WaitVBlank();
-                input.Poll();
-                video.WaitVBlank();
-                input.Poll();
+                Video.WaitVBlank();
+                Input.Poll();
+                Video.WaitVBlank();
+                Input.Poll();
             }
 
             void main() {
-                video.Init();
+                Video.Init();
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     paint();
                     paint();
                     paint();
@@ -333,19 +333,19 @@ public sealed class GameBoyBankingRoadmapTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 2500));
         return """
             void tick_input() {
-                input.Poll();
+                Input.Poll();
             }
 
             void main() {
-                video.Init();
-                music.Asset(theme, "large.gbapu");
-                audio.Init();
-                music.Play(theme);
+                Video.Init();
+                Music.Asset(theme, "large.gbapu");
+                Audio.Init();
+                Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
                 loop {
-                    video.WaitVBlank();
-                    audio.Update();
+                    Video.WaitVBlank();
+                    Audio.Update();
                     tick_input();
                     tick_input();
                 }
@@ -370,9 +370,9 @@ public sealed class GameBoyBankingRoadmapTests
         }
 
         builder.AppendLine("void main() {");
-        builder.AppendLine("    video.Init();");
+        builder.AppendLine("    Video.Init();");
         builder.AppendLine("    loop {");
-        builder.AppendLine("        video.WaitVBlank();");
+        builder.AppendLine("        Video.WaitVBlank();");
         for (var function = 0; function < 12; function++)
         {
             builder.AppendLine($"        chunk{function}();");
@@ -388,7 +388,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var builder = new System.Text.StringBuilder();
         builder.AppendLine("void main() {");
-        builder.AppendLine("    video.Init();");
+        builder.AppendLine("    Video.Init();");
         builder.AppendLine("    u8 x = 0;");
         for (var i = 0; i < 6000; i++)
         {
@@ -396,7 +396,7 @@ public sealed class GameBoyBankingRoadmapTests
         }
 
         builder.AppendLine("    loop {");
-        builder.AppendLine("        video.WaitVBlank();");
+        builder.AppendLine("        Video.WaitVBlank();");
         builder.AppendLine("        sprite_set(0, 8, 16, 9, 0);");
         builder.AppendLine("    }");
         builder.AppendLine("}");
@@ -407,7 +407,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var builder = new System.Text.StringBuilder();
         builder.AppendLine("void main() {");
-        builder.AppendLine("    video.Init();");
+        builder.AppendLine("    Video.Init();");
         builder.AppendLine("    u8 x = 0;");
         for (var i = 0; i < 2600; i++)
         {
@@ -415,7 +415,7 @@ public sealed class GameBoyBankingRoadmapTests
         }
 
         builder.AppendLine("    loop {");
-        builder.AppendLine("        video.WaitVBlank();");
+        builder.AppendLine("        Video.WaitVBlank();");
         for (var i = 0; i < 3000; i++)
         {
             builder.AppendLine("        x += 1;");
@@ -431,19 +431,19 @@ public sealed class GameBoyBankingRoadmapTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
             void main() {
-                video.Init();
-                sprite.Asset(player0, "player.png", 18, 32);
-                sprite.Asset(player1, "player.png", 18, 32);
-                sprite.Asset(player2, "player.png", 18, 32);
-                sprite.Asset(player3, "player.png", 18, 32);
-                music.Asset(theme, "large.gbapu");
-                audio.Init();
-                music.Play(theme);
+                Video.Init();
+                Sprite.Asset(player0, "player.png", 18, 32);
+                Sprite.Asset(player1, "player.png", 18, 32);
+                Sprite.Asset(player2, "player.png", 18, 32);
+                Sprite.Asset(player3, "player.png", 18, 32);
+                Music.Asset(theme, "large.gbapu");
+                Audio.Init();
+                Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
                 loop {
-                    video.WaitVBlank();
-                    audio.Update();
+                    Video.WaitVBlank();
+                    Audio.Update();
                 }
             }
             """;
@@ -454,19 +454,19 @@ public sealed class GameBoyBankingRoadmapTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
             void main() {
-                video.Init();
-                sprite.Asset(player0, "player.png", 18, 32);
-                sprite.Asset(player1, "player.png", 18, 32);
-                sprite.Asset(player2, "player.png", 18, 32);
-                sprite.Asset(player3, "player.png", 18, 32);
+                Video.Init();
+                Sprite.Asset(player0, "player.png", 18, 32);
+                Sprite.Asset(player1, "player.png", 18, 32);
+                Sprite.Asset(player2, "player.png", 18, 32);
+                Sprite.Asset(player3, "player.png", 18, 32);
             """ + MapColumns(200, 16) + """
-                music.Asset(theme, "large.gbapu");
-                audio.Init();
-                music.Play(theme);
+                Music.Asset(theme, "large.gbapu");
+                Audio.Init();
+                Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     u8 tile = map_tile_at(2, 1);
                     sprite_set(0, 8, 16, tile, 0);
                 }
@@ -479,15 +479,15 @@ public sealed class GameBoyBankingRoadmapTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
             void main() {
-                video.Init();
-                music.Asset(theme, "large.gbapu");
-                audio.Init();
-                music.Play(theme);
+                Video.Init();
+                Music.Asset(theme, "large.gbapu");
+                Audio.Init();
+                Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
                 loop {
-                    video.WaitVBlank();
-                    audio.Update();
+                    Video.WaitVBlank();
+                    Audio.Update();
                 }
             }
             """;
@@ -498,15 +498,15 @@ public sealed class GameBoyBankingRoadmapTests
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
             void main() {
-                video.Init();
-                music.Asset(theme, "large.gbapu");
-                audio.Init();
+                Video.Init();
+                Music.Asset(theme, "large.gbapu");
+                Audio.Init();
                 u8 x = 0;
             """ + filler + """
-                music.Play(theme);
+                Music.Play(theme);
                 loop {
-                    video.WaitVBlank();
-                    audio.Update();
+                    Video.WaitVBlank();
+                    Audio.Update();
                 }
             }
             """;

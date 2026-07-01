@@ -35,8 +35,8 @@ RetroSharp's original compiler path uses a multi-stage pipeline:
 
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
-- `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, four-screen 2-axis camera movement, Tiled `world.Load(...)`, runtime animation helpers, camera-relative runner collision, and VGM/VGZ-sourced 2A03 BGM playback. HUD and generic world-space collision are still not implemented.
-- `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `video.WaitVBlank()`, tick-based input polling, `scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `music.Asset(...)`, `music.Play(...)`, and `audio.Update()`.
+- `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, four-screen 2-axis camera movement, Tiled `World.Load(...)`, runtime animation helpers, camera-relative runner collision, and VGM/VGZ-sourced 2A03 BGM playback. HUD and generic world-space collision are still not implemented.
+- `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `Video.WaitVBlank()`, tick-based input polling, `Scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `Sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `Music.Asset(...)`, `Music.Play(...)`, and `Audio.Update()`.
 
 The actor framework acceptance slice lives in `samples/actor-framework`. It shows
 fixed actor pools, declarative `enemy.Def(...)` metadata, Tiled object-layer
@@ -81,7 +81,7 @@ i16 main()
 
 The portable 2D SDK gives game code a common vocabulary for tile-and-sprite
 machines while keeping each target's limits explicit. Current SDK-shaped code
-can use frame/input calls, Tiled `world.Load(...)`, collision flags,
+can use frame/input calls, Tiled `World.Load(...)`, collision flags,
 camera-relative AABB queries, logical palettes, logical sprites, animation,
 music declarations, and fixed-pool actor framework sugar.
 
@@ -150,12 +150,12 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 This writes a compact binary `.gbapu` (use `--emit-json` for a JSON debug view, or `gbapu-dump
 <file>` to print the register writes). The loop is auto-detected and the capture is trimmed to one
 loop body (`--no-auto-loop`/`--loop-cycle` override). Use the result directly with
-`music.Asset(...)`. The source keeps cycle deltas for every supported APU register write; the ROM
+`Music.Asset(...)`. The source keeps cycle deltas for every supported APU register write; the ROM
 compiler maps them onto DMG VBlank frames, removes redundant non-trigger writes, deduplicates
 repeated frame groups into a pool, and stores full Wave RAM uploads as compact block commands for
-`audio.Update()` playback.
+`Audio.Update()` playback.
 
-The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. GBS files are not loaded directly by `music.Asset(...)`. See [`docs/GameBoyApuTraceFormat.md`](docs/GameBoyApuTraceFormat.md) for the format shape, runtime use, limitations, and future alternatives.
+The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. GBS files are not loaded directly by `Music.Asset(...)`. See [`docs/GameBoyApuTraceFormat.md`](docs/GameBoyApuTraceFormat.md) for the format shape, runtime use, limitations, and future alternatives.
 
 Build the first cross-target camera sample for both cartridge targets:
 

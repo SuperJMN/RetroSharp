@@ -8,12 +8,14 @@ public sealed class SdkModuleRegistryTests
     [Fact]
     public void Known_sdk_modules_are_declared_as_library_modules()
     {
-        var video = SdkModuleRegistry.FindModule("video");
+        var video = SdkModuleRegistry.FindModule("Video");
 
         Assert.NotNull(video);
         Assert.Equal(SdkModuleKind.Library, video.Kind);
         Assert.Equal("video", video.CallPrefix);
         Assert.Equal("video_wait_vblank", video.ResolveCallName("WaitVBlank"));
+
+        Assert.Null(SdkModuleRegistry.FindModule("video"));
     }
 
     [Theory]
@@ -21,8 +23,6 @@ public sealed class SdkModuleRegistryTests
     [InlineData("Input", "WasPressed", "button_just_pressed")]
     [InlineData("Input", "WasReleased", "button_just_released")]
     [InlineData("Input", "HoldTicks", "button_hold_ticks")]
-    [InlineData("input", "IsDown", "button_down")]
-    [InlineData("input", "WasReleased", "button_just_released")]
     public void Input_predicate_methods_resolve_to_button_builtins(string module, string method, string expected)
     {
         Assert.True(SdkModuleRegistry.TryResolveCallName(module, method, out var callName));
@@ -31,7 +31,6 @@ public sealed class SdkModuleRegistryTests
 
     [Theory]
     [InlineData("Sprite", "Width", "sprite_width")]
-    [InlineData("sprite", "Width", "sprite_width")]
     public void Sprite_width_resolves_to_sprite_width_builtin(string module, string method, string expected)
     {
         Assert.True(SdkModuleRegistry.TryResolveCallName(module, method, out var callName));
@@ -45,30 +44,18 @@ public sealed class SdkModuleRegistryTests
         Assert.Equal("input_poll", callName);
     }
 
-    [InlineData("Input", "input")]
-    [InlineData("Camera", "camera")]
-    [InlineData("Sprite", "sprite")]
-    [InlineData("Palette", "palette")]
-    [InlineData("Tilemap", "tilemap")]
-    [InlineData("Map", "map")]
-    [InlineData("World", "world")]
-    [InlineData("Hud", "hud")]
-    [InlineData("Scroll", "scroll")]
-    [InlineData("Animation", "animation")]
-    [InlineData("Audio", "audio")]
-    [InlineData("Music", "music")]
-    public void Pascalcase_facade_is_alias_of_lowercase_module(string pascalCase, string lowercase)
+    [Theory]
+    [InlineData("video")]
+    [InlineData("camera")]
+    [InlineData("sprite")]
+    [InlineData("world")]
+    [InlineData("audio")]
+    [InlineData("music")]
+    [InlineData("objectPalette")]
+    public void Lowercase_facade_aliases_are_no_longer_recognized(string lowercase)
     {
-        var facade = SdkModuleRegistry.FindModule(pascalCase);
-
-        Assert.NotNull(facade);
-        Assert.Equal(SdkModuleKind.Library, facade.Kind);
-
-        var lower = SdkModuleRegistry.FindModule(lowercase);
-        Assert.NotNull(lower);
-
-        Assert.Equal(lower.CallPrefix, facade.CallPrefix);
-        Assert.Equal(lower.ResolveCallName("Draw"), facade.ResolveCallName("Draw"));
+        Assert.False(SdkModuleRegistry.IsKnownModule(lowercase));
+        Assert.Null(SdkModuleRegistry.FindModule(lowercase));
     }
 
     [Fact]

@@ -2,7 +2,7 @@
 
 Sample Layer: `target-acceptance`
 
-This sample exercises the Game Boy camera's vertical SDK path. It uses `camera.SetPosition(0, y)` with a byte-backed Y value that moves by one pixel per frame, scrolls down, reverses, and scrolls back up over a world taller than the visible 18-tile band.
+This sample exercises the Game Boy camera's vertical SDK path. It uses `Camera.SetPosition(0, y)` with a byte-backed Y value that moves by one pixel per frame, scrolls down, reverses, and scrolls back up over a world taller than the visible 18-tile band.
 
 Build the Game Boy ROM:
 

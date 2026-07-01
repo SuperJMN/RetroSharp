@@ -292,9 +292,9 @@ public class ParserTests
         var source = """
                      void main()
                      {
-                        video.Init();
-                        input.Poll();
-                        camera.SetPosition(4, 0);
+                        Video.Init();
+                        Input.Poll();
+                        Camera.SetPosition(4, 0);
                      }
                      """;
         AssertParse(source);
@@ -303,13 +303,13 @@ public class ParserTests
     [Fact]
     public void Sdk_namespaced_dot_call_is_preserved_in_the_ast()
     {
-        var result = new SomeParser().Parse("void main(){ video.Init(); }");
+        var result = new SomeParser().Parse("void main(){ Video.Init(); }");
 
         result.Should().Succeed();
         var function = Assert.Single(result.Value.Functions);
         var statement = Assert.IsType<ExpressionStatementSyntax>(Assert.Single(function.Block.Statements));
         var call = Assert.IsType<SdkDotCallSyntax>(statement.Expression);
-        call.Module.Should().Be("video");
+        call.Module.Should().Be("Video");
         call.Method.Should().Be("Init");
     }
 
@@ -438,7 +438,7 @@ public class ParserTests
                               void main()
                               {
                                  Port video;
-                                 video.WaitVBlank();
+                                 Video.WaitVBlank();
                               }
                               """;
 
@@ -460,7 +460,7 @@ public class ParserTests
                                 void main()
                                 {
                                  Port video;
-                                 video.WaitVBlank();
+                                 Video.WaitVBlank();
                                 }
                                 """;
 

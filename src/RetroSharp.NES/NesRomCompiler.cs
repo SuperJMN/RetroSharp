@@ -460,7 +460,7 @@ internal sealed class NesVideoProgram
                 && !existingPalette.SequenceEqual(asset.SuggestedPalette))
             {
                 throw new InvalidOperationException(
-                    $"NES sprite palette slot {operation.PaletteSlot} is used by multiple PNG sprite assets with different derived palettes. Use palette.Set(...) or draw them with different palette slots.");
+                    $"NES sprite palette slot {operation.PaletteSlot} is used by multiple PNG sprite assets with different derived palettes. Use Palette.Set(...) or draw them with different palette slots.");
             }
 
             ApplySpritePalette(operation.PaletteSlot, asset.SuggestedPalette);
@@ -575,7 +575,7 @@ internal sealed class NesVideoProgram
         var generatedCount = world.GeneratedTileData.Length / 16;
         if (nextSpriteTile + generatedCount > 256)
         {
-            throw new InvalidOperationException("NES world.Load background tiles exceed the available CHR pattern table.");
+            throw new InvalidOperationException("NES World.Load background tiles exceed the available CHR pattern table.");
         }
 
         if (generatedCount > 0)
@@ -651,7 +651,7 @@ internal sealed class NesVideoProgram
     {
         if (colors.Count != 16)
         {
-            throw new InvalidOperationException("NES world.Load background palette derivation must produce four background palettes.");
+            throw new InvalidOperationException("NES World.Load background palette derivation must produce four background palettes.");
         }
 
         for (var slot = 0; slot < 4; slot++)

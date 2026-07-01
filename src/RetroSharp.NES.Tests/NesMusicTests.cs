@@ -39,10 +39,10 @@ public sealed class NesMusicTests
 
         const string source = """
                               void main() {
-                                  music.Asset(stage_theme, "stage.vgz");
-                                  audio.Init();
-                                  music.Play(stage_theme);
-                                  audio.Update();
+                                  Music.Asset(stage_theme, "stage.vgz");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
+                                  Audio.Update();
                                   return;
                               }
                               """;
@@ -56,9 +56,9 @@ public sealed class NesMusicTests
         Assert.True(NesTarget.AudioCapabilities.SupportsBgm);
         Assert.False(NesTarget.AudioCapabilities.AllowsBgmNoOp);
         Assert.Contains("vgm", NesTarget.AudioCapabilities.SupportedMusicFormats);
-        Assert.True(ContainsSequence(rom, [0xA9, 0x0F, 0x8D, 0x15, 0x40]), "audio.Init should enable NES pulse/triangle/noise channels through $4015.");
-        Assert.True(ContainsSequence(rom, [0x8D, 0x00, 0x40]), "audio.Update should be able to write pulse 1 register $4000.");
-        Assert.True(ContainsSequence(rom, [0x8D, 0x04, 0x40]), "audio.Update should be able to write pulse 2 register $4004.");
+        Assert.True(ContainsSequence(rom, [0xA9, 0x0F, 0x8D, 0x15, 0x40]), "Audio.Init should enable NES pulse/triangle/noise channels through $4015.");
+        Assert.True(ContainsSequence(rom, [0x8D, 0x00, 0x40]), "Audio.Update should be able to write pulse 1 register $4000.");
+        Assert.True(ContainsSequence(rom, [0x8D, 0x04, 0x40]), "Audio.Update should be able to write pulse 2 register $4004.");
     }
 
     [Fact]
@@ -84,11 +84,11 @@ public sealed class NesMusicTests
                               """;
         const string library = """
                                void main() {
-                                   music.Asset(stage_theme, "stage.vgz");
-                                   audio.Init();
-                                   music.Play(stage_theme);
-                                   audio.Update();
-                                   music.Stop();
+                                   Music.Asset(stage_theme, "stage.vgz");
+                                   Audio.Init();
+                                   Music.Play(stage_theme);
+                                   Audio.Update();
+                                   Music.Stop();
                                    return;
                                }
                                """;

@@ -15,7 +15,7 @@ public static class SdkAudioOperationValidator
             case SdkAudioOperation.PlayMusic play:
                 if (string.IsNullOrWhiteSpace(play.ThemeId))
                 {
-                    throw new InvalidOperationException("music.Play theme id must not be empty.");
+                    throw new InvalidOperationException("Music.Play theme id must not be empty.");
                 }
 
                 if (!capabilities.SupportsBgm && !capabilities.AllowsBgmNoOp)

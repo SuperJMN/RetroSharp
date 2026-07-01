@@ -86,10 +86,10 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 - NES and Game Boy both use per-target VGM/VGZ runner music variants via `music/runner.vgz`; do not treat NES audio calls as no-ops.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
-- The runner now uses `world.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
+- The runner now uses `World.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
 - Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
 - Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
-- `input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Prefer `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`) over the direct `button_pressed` read and the snake_case `button_*`/`sprite_width` builtins, which remain only as transitional aliases.
+- `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Prefer `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`) over the direct `button_pressed` read and the snake_case `button_*`/`sprite_width` builtins, which remain only as transitional aliases.
 - Original DMG hardware needs settled `JOYP` row reads. If d-pad input bleeds into A/B behavior, treat it as backend/runtime behavior first, not as sample logic.
 - Byte-backed target values can wrap. Clamp vertical runner state before collision/reset code when working near the top of the scene.
 
@@ -100,7 +100,7 @@ Prefer a clean branch-based workflow over working directly on `master`. Commit f
 Recommended flow:
 
 1. Start every slice from an up-to-date `master` on a dedicated branch named `agent/<short-slug>` (for example `agent/music-play-stop-intrinsics`).
-2. Make focused, self-contained commits with descriptive messages. Follow the existing convention when a slice maps to a roadmap item (for example `SAL-8.7: migrate gb/nes music.Play/Stop to audio target intrinsics`).
+2. Make focused, self-contained commits with descriptive messages. Follow the existing convention when a slice maps to a roadmap item (for example `SAL-8.7: migrate gb/nes Music.Play/Stop to audio target intrinsics`).
 3. Run the relevant validation before each merge (`dotnet test RetroSharp.sln -m:1`, `git diff --check`, and regenerate tracked ROMs when their source changed).
 4. Merge the validated branch into `master` locally. Prefer a fast-forward (`git merge --ff-only <branch>`) for a linear slice; use `--no-ff` when you want to preserve the branch boundary.
 5. Keep unrelated local changes intact: never revert or overwrite work you did not author for this task.

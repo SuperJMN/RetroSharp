@@ -50,19 +50,19 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  video.Init();
-                                  palette.Background(0, 0, 1, 2, 3);
-                                  palette.Sprite(0, 0, 0, 1, 3);
-                                  palette.Sprite(1, 0, 3, 2, 1);
+                                  Video.Init();
+                                  Palette.Background(0, 0, 1, 2, 3);
+                                  Palette.Sprite(0, 0, 0, 1, 3);
+                                  Palette.Sprite(1, 0, 3, 2, 1);
                               }
                               """;
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0xE4, 0xE0, 0x47]), "palette.Background should lower slot 0 to BGP.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "palette.Sprite slot 0 should lower to OBP0.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x6C, 0xE0, 0x49]), "palette.Sprite slot 1 should lower to OBP1.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0xE4, 0xE0, 0x47]), "Palette.Background should lower slot 0 to BGP.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "Palette.Sprite slot 0 should lower to OBP0.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x6C, 0xE0, 0x49]), "Palette.Sprite slot 1 should lower to OBP1.");
     }
 
     [Fact]
@@ -70,8 +70,8 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  video.Init();
-                                  palette.Sprite(2, 0, 1, 2, 3);
+                                  Video.Init();
+                                  Palette.Sprite(2, 0, 1, 2, 3);
                               }
                               """;
 
@@ -408,14 +408,14 @@ public class GameBoyRomCompilerTests
 
         const string dotSource = """
                                  void main() {
-                                     video.Init();
-                                     world.Column(0, 1, 2);
-                                     world.Column(1, 3, 4);
-                                     world.Map(2, 10, 2);
-                                     camera.Init(2, 10, 2);
-                                     camera.SetPosition(4, 0);
-                                     video.WaitVBlank();
-                                     input.Poll();
+                                     Video.Init();
+                                     World.Column(0, 1, 2);
+                                     World.Column(1, 3, 4);
+                                     World.Map(2, 10, 2);
+                                     Camera.Init(2, 10, 2);
+                                     Camera.SetPosition(4, 0);
+                                     Video.WaitVBlank();
+                                     Input.Poll();
                                  }
                                  """;
 
@@ -511,8 +511,8 @@ public class GameBoyRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   audio.Init();
-                                   audio.Update();
+                                   Audio.Init();
+                                   Audio.Update();
                                }
                                """;
 
@@ -527,8 +527,8 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  audio.Init();
-                                  audio.Update();
+                                  Audio.Init();
+                                  Audio.Update();
                               }
                               """;
         var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
@@ -554,13 +554,13 @@ public class GameBoyRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   video.Init();
-                                   world.Column(0, 1, 2);
-                                   world.Map(1, 10, 2);
-                                   camera.Init(1, 10, 2);
+                                   Video.Init();
+                                   World.Column(0, 1, 2);
+                                   World.Map(1, 10, 2);
+                                   Camera.Init(1, 10, 2);
                                    i16 x = 4;
-                                   camera.SetPosition(x, 0);
-                                   camera.Apply();
+                                   Camera.SetPosition(x, 0);
+                                   Camera.Apply();
                                }
                                """;
         Assert.Contains("class Camera", SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
@@ -583,9 +583,9 @@ public class GameBoyRomCompilerTests
                               """;
         const string library = """
                                void main() {
-                                   video.Init();
-                                   sprite.Asset(player, "player.sprite.json");
-                                   sprite.Draw(player, 72, 80, 0, false, 1);
+                                   Video.Init();
+                                   Sprite.Asset(player, "player.sprite.json");
+                                   Sprite.Draw(player, 72, 80, 0, false, 1);
                                }
                                """;
 
@@ -619,9 +619,9 @@ public class GameBoyRomCompilerTests
 
         const string paletteSource = """
                                      void main() {
-                                         video.Init();
-                                         sprite.Asset(player, "player.sprite.json");
-                                         sprite.Draw(player, 72, 64, 0, false, 2);
+                                         Video.Init();
+                                         Sprite.Asset(player, "player.sprite.json");
+                                         Sprite.Draw(player, 72, 64, 0, false, 2);
                                      }
                                      """;
 
@@ -630,13 +630,13 @@ public class GameBoyRomCompilerTests
 
         var draws = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 41).Select(index => $"        sprite.Draw(player, {index % 20}, {(index % 4) * 20}, 0);"));
+            Enumerable.Range(0, 41).Select(index => $"        Sprite.Draw(player, {index % 20}, {(index % 4) * 20}, 0);"));
         var budgetSource = """
                            void main() {
-                               video.Init();
-                               sprite.Asset(player, "player.sprite.json");
+                               Video.Init();
+                               Sprite.Asset(player, "player.sprite.json");
                                loop {
-                                   video.WaitVBlank();
+                                   Video.WaitVBlank();
 
                            """ + draws + """
                                }
@@ -691,21 +691,21 @@ public class GameBoyRomCompilerTests
                               """;
         const string library = """
                                void define_world() {
-                                   world.Column(0, 0, 4);
-                                   world.Column(1, 0, 4);
-                                   world.Column(2, 0, 4);
-                                   world.Flags(0, 0, 1);
-                                   world.Flags(1, 0, 1);
-                                   world.Flags(2, 0, 1);
-                                   world.Map(3, 11, 2);
-                                   camera.Init(3, 11, 2);
+                                   World.Column(0, 0, 4);
+                                   World.Column(1, 0, 4);
+                                   World.Column(2, 0, 4);
+                                   World.Flags(0, 0, 1);
+                                   World.Flags(1, 0, 1);
+                                   World.Flags(2, 0, 1);
+                                   World.Map(3, 11, 2);
+                                   Camera.Init(3, 11, 2);
                                }
 
                                void main() {
                                    define_world();
                                    i16 footY = 16;
-                                   i16 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                   i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                   i16 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                   i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                                }
                                """;
 
@@ -741,22 +741,22 @@ public class GameBoyRomCompilerTests
                               """;
         const string library = """
                                void define_world() {
-                                   world.Column(0, 0, 4);
-                                   world.Column(1, 0, 4);
-                                   world.Column(2, 0, 4);
-                                   world.Flags(0, 0, 1);
-                                   world.Flags(1, 0, 1);
-                                   world.Flags(2, 0, 1);
-                                   world.Map(3, 11, 2);
-                                   camera.Init(3, 11, 2);
+                                   World.Column(0, 0, 4);
+                                   World.Column(1, 0, 4);
+                                   World.Column(2, 0, 4);
+                                   World.Flags(0, 0, 1);
+                                   World.Flags(1, 0, 1);
+                                   World.Flags(2, 0, 1);
+                                   World.Map(3, 11, 2);
+                                   Camera.Init(3, 11, 2);
                                }
 
                                void main() {
                                    define_world();
                                    i16 screenX = 40;
                                    i16 screenY = 16;
-                                   i16 hit = camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
-                                   i16 hitTop = camera.ScreenAabbHitTop(screenX, screenY, 16, 16, 1);
+                                   i16 hit = Camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
+                                   i16 hitTop = Camera.ScreenAabbHitTop(screenX, screenY, 16, 16, 1);
                                }
                                """;
 
@@ -772,12 +772,12 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  world.Column(0, 0, 4);
-                                  world.Flags(0, 0, 1);
-                                  world.Map(1, 11, 2);
-                                  camera.Init(1, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
+                                  Camera.Init(1, 11, 2);
                                   i16 footY = 16;
-                                  i16 hit = camera.AabbTiles(150, footY, 16, 8, 1);
+                                  i16 hit = Camera.AabbTiles(150, footY, 16, 8, 1);
                               }
                               """;
 
@@ -791,8 +791,8 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  video.WaitVBlank();
-                                  input.Poll();
+                                  Video.WaitVBlank();
+                                  Input.Poll();
                               }
                               """;
         var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
@@ -861,9 +861,9 @@ public class GameBoyRomCompilerTests
                               extern i16 flags_for_world(i16 world, i16 x, i16 y);
 
                               void main() {
-                                  world.Column(0, 1, 2);
-                                  world.Flags(0, 0, 1);
-                                  world.Map(1, 10, 2);
+                                  World.Column(0, 1, 2);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
                                   i16 selectedWorld = 0;
                                   i16 flags = flags_for_world(selectedWorld, 0, 8);
                               }
@@ -879,9 +879,9 @@ public class GameBoyRomCompilerTests
     {
         const string direct = """
                               void main() {
-                                  world.Column(0, 1, 2);
-                                  world.Flags(0, 0, 1);
-                                  world.Map(1, 10, 2);
+                                  World.Column(0, 1, 2);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
                                   i16 flags = world_tile_flags_at(0, 8);
                               }
                               """;
@@ -892,9 +892,9 @@ public class GameBoyRomCompilerTests
                                  extern i16 flags_for_world(i16 world, i16 x, i16 y);
 
                                  void main() {
-                                     world.Column(0, 1, 2);
-                                     world.Flags(0, 0, 1);
-                                     world.Map(1, 10, 2);
+                                     World.Column(0, 1, 2);
+                                     World.Flags(0, 0, 1);
+                                     World.Map(1, 10, 2);
                                      i16 flags = flags_for_world("default", 0, 8);
                                  }
                                  """;
@@ -1438,9 +1438,9 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  sprite.Asset(player_run, "player.sprite.json");
-                                  sprite.Draw(player_run, 72, 80, 0, false, 1);
+                                  Video.Init();
+                                  Sprite.Asset(player_run, "player.sprite.json");
+                                  Sprite.Draw(player_run, 72, 80, 0, false, 1);
                               }
                               """;
 
@@ -1454,21 +1454,21 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void define_world() {
-                                  world.Column(0, 0, 4);
-                                  world.Column(1, 0, 4);
-                                  world.Column(2, 0, 4);
-                                  world.Flags(0, 0, 1);
-                                  world.Flags(1, 0, 1);
-                                  world.Flags(2, 0, 1);
-                                  world.Map(3, 11, 2);
-                                  camera.Init(3, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Column(1, 0, 4);
+                                  World.Column(2, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Flags(1, 0, 1);
+                                  World.Flags(2, 0, 1);
+                                  World.Map(3, 11, 2);
+                                  Camera.Init(3, 11, 2);
                               }
 
                               void main() {
                                   define_world();
                                   i16 footY = 16;
-                                  i16 hit = camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                  i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                  i16 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                  i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                               }
                               """;
 
@@ -3107,8 +3107,8 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  sprite.Asset(goomba, "goomba.sprite.json");
-                                  sprite.Asset(bat, "bat.sprite.json");
+                                  Sprite.Asset(goomba, "goomba.sprite.json");
+                                  Sprite.Asset(bat, "bat.sprite.json");
                                   actor.Pool(enemies, 2);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   enemy.Def(Bat, sprite: bat, behavior: Flyer, speed: 1);
@@ -3148,7 +3148,7 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               void main() {
-                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
                                   enemies[0].active = 1;
@@ -3187,7 +3187,7 @@ public class GameBoyRomCompilerTests
                                   world_column(0, 0, 0);
                                   world_map(40, 10, 40);
                                   camera_init(40, 10, 18);
-                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 2);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                   camera_set_position(0, 160);
@@ -3227,30 +3227,30 @@ public class GameBoyRomCompilerTests
         File.WriteAllText(Path.Combine(baseDirectory, "goomba.sprite.json"), SpriteJson(Rows(8, 16, "11111111")));
         const string source = """
                               void main() {
-                                  video.Init();
-                                  world.Column(0,
+                                  Video.Init();
+                                  World.Column(0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       1, 0, 0, 0, 0, 0, 0, 0);
-                                  world.Flags(0,
+                                  World.Flags(0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
                                       1, 0, 0, 0, 0, 0, 0, 0);
-                                  world.Map(1, 0, 40);
-                                  camera.Init(1, 0, 40);
-                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  World.Map(1, 0, 40);
+                                  Camera.Init(1, 0, 40);
+                                  Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                   u8 cameraY = 0;
                                   for (u8 i = 0; i < 160; i += 1) {
                                       cameraY += 1;
-                                      camera.SetPosition(0, cameraY);
-                                      video.WaitVBlank();
-                                      camera.Apply();
+                                      Camera.SetPosition(0, cameraY);
+                                      Video.WaitVBlank();
+                                      Camera.Apply();
                                   }
                                   actor.SpawnLayer(enemies, "level.tmj", "actors");
                                   enemies.TouchTiles(0, 1);
@@ -3260,9 +3260,9 @@ public class GameBoyRomCompilerTests
                                       enemies[0].x = 16;
                                   }
                                   loop {
-                                      video.WaitVBlank();
+                                      Video.WaitVBlank();
                                       enemies.Draw();
-                                      camera.Apply();
+                                      Camera.Apply();
                                   }
                               }
                               """;
@@ -3330,10 +3330,10 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  sprite.Asset(goomba, "wide-goomba.sprite.json");
+                                  Sprite.Asset(goomba, "wide-goomba.sprite.json");
                                   actor.Pool(enemies, 21);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                               }
                               """;
@@ -3357,10 +3357,10 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  sprite.Asset(goomba, "goomba.png", 8, 32);
+                                  Sprite.Asset(goomba, "goomba.png", 8, 32);
                                   actor.Pool(enemies, 10);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                               }
                               """;
@@ -3380,10 +3380,10 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void main() {
                                   video_init();
-                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 11);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                               }
                               """;
@@ -3425,13 +3425,13 @@ public class GameBoyRomCompilerTests
 
                                     void main() {
                                         video_init();
-                                        sprite.Asset(goomba, "goomba.sprite.json");
+                                        Sprite.Asset(goomba, "goomba.sprite.json");
                                         Actor enemies[1];
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
                                         enemies[0].x = 24;
                                         enemies[0].y = 48;
-                                        video.WaitVBlank();
+                                        Video.WaitVBlank();
 
                                         for (u8 __enemies_update_i = 0; __enemies_update_i < countof(enemies); __enemies_update_i += 1) {
                                             if (enemies[__enemies_update_i].active != 0) {
@@ -3468,7 +3468,7 @@ public class GameBoyRomCompilerTests
                                                         __enemies_draw_y_Goomba = __enemies_draw_screen_y;
                                                     }
                                                 }
-                                                sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
+                                                Sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);
                                             }
                                         }
                                     }
@@ -3477,14 +3477,14 @@ public class GameBoyRomCompilerTests
         const string actorSource = """
                                    void main() {
                                        video_init();
-                                       sprite.Asset(goomba, "goomba.sprite.json");
+                                       Sprite.Asset(goomba, "goomba.sprite.json");
                                        actor.Pool(enemies, 1);
                                        enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                        enemies[0].active = 1;
                                        enemies[0].kind = Goomba;
                                        enemies[0].x = 24;
                                        enemies[0].y = 48;
-                                       video.WaitVBlank();
+                                       Video.WaitVBlank();
                                        enemies.Update();
                                        enemies.Draw();
                                    }
@@ -3506,7 +3506,7 @@ public class GameBoyRomCompilerTests
                                   world_column(0, 0, 0);
                                   world_map(1, 10, 2);
                                   camera_init(1, 10, 2);
-                                  sprite.Asset(goomba, "goomba.sprite.json");
+                                  Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
                                   enemies[0].active = 1;
@@ -3515,7 +3515,7 @@ public class GameBoyRomCompilerTests
                                   enemies[0].xHi = 0;
                                   enemies[0].y = 48;
                                   camera_set_position(4, 0);
-                                  video.WaitVBlank();
+                                  Video.WaitVBlank();
                                   enemies.Draw();
                               }
                               """;
@@ -3589,7 +3589,7 @@ public class GameBoyRomCompilerTests
                                                 }
                                                 if (enemies[__enemies_touch_i].kind == Goomba) {
                                                     if ((__enemies_touch_visible_x != 0) && (__enemies_touch_visible_y != 0)) {
-                                                        if (camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1) != 0) {
+                                                        if (Camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1) != 0) {
                                                             enemies[__enemies_touch_i].state = 1;
                                                         }
                                                     }
@@ -4820,15 +4820,15 @@ public class GameBoyRomCompilerTests
                                   """;
 
         const string staticClassSource = """
-                                          static class World { const i16 Width = 16; const i16 StreamY = 9; const i16 Height = 5; }
+                                          static class Level { const i16 Width = 16; const i16 StreamY = 9; const i16 Height = 5; }
                                           static class Player { const i16 ScreenX = 72; }
 
                                           void main() {
                                               video_init();
                                               world_column(0, 1, 2, 3, 4, 5);
                                               world_flags(0, 0, 0, 1, 1, 1);
-                                              world_map(World.Width, World.StreamY, World.Height);
-                                              camera_init(World.Width, World.StreamY, World.Height);
+                                              world_map(Level.Width, Level.StreamY, Level.Height);
+                                              camera_init(Level.Width, Level.StreamY, Level.Height);
                                               i16 cameraX = 0;
                                               i16 playerWorldX = cameraX + Player.ScreenX;
                                               camera_set_position(cameraX, 0);
@@ -4842,7 +4842,7 @@ public class GameBoyRomCompilerTests
     public void Static_class_rejects_instance_members()
     {
         const string source = """
-                              static class World { const i16 Width = 16; i16 broken; }
+                              static class Level { const i16 Width = 16; i16 broken; }
 
                               void main() {
                                   video_init();
@@ -4850,7 +4850,7 @@ public class GameBoyRomCompilerTests
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
-        Assert.Contains("Static class 'World'", exception.Message);
+        Assert.Contains("Static class 'Level'", exception.Message);
     }
 
     [Fact]
@@ -5146,11 +5146,11 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Palette.Background(0, 0, 1, 2, 3);", source);
         Assert.Contains("Palette.Sprite(0, 0, 0, 1, 3);", source);
         Assert.DoesNotContain("Palette.Set(", source);
-        Assert.DoesNotContain("objectPalette.Set(", source);
-        Assert.DoesNotContain("objectPalette.Set(1, 1);", source);
-        Assert.DoesNotContain("objectPalette.Set(2, 2);", source);
-        Assert.DoesNotContain("objectPalette.Set(1, 2);", source);
-        Assert.DoesNotContain("objectPalette.Set(2, 3);", source);
+        Assert.DoesNotContain("ObjectPalette.Set(", source);
+        Assert.DoesNotContain("ObjectPalette.Set(1, 1);", source);
+        Assert.DoesNotContain("ObjectPalette.Set(2, 2);", source);
+        Assert.DoesNotContain("ObjectPalette.Set(1, 2);", source);
+        Assert.DoesNotContain("ObjectPalette.Set(2, 3);", source);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
 
@@ -5232,7 +5232,7 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
         AssertRunnerMbc1Rom(rom);
         Assert.True(ContainsSequence(rom, [0x3E, 0x80, 0xE0, 0x26]), "Runner BGM should enable NR52.");
-        Assert.True(ContainsSequence(rom, [0xE2]), "Runner gbapu playback should write dynamic APU register offsets through LDH (C),A during audio.Update.");
+        Assert.True(ContainsSequence(rom, [0xE2]), "Runner gbapu playback should write dynamic APU register offsets through LDH (C),A during Audio.Update.");
     }
 
     [Fact]
@@ -5421,8 +5421,8 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  world.Load("level.tmj");
-                                  camera.Init(3, 5, 2);
+                                  World.Load("level.tmj");
+                                  Camera.Init(3, 5, 2);
                                   return;
                               }
                               """;
@@ -5539,8 +5539,8 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  world.Load("level.tmj");
-                                  camera.Init(3, 2, 2);
+                                  World.Load("level.tmj");
+                                  Camera.Init(3, 2, 2);
                                   return;
                               }
                               """;
@@ -5656,12 +5656,12 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  world.Load("level.tmj");
-                                  camera.Init(3, 2, 2);
+                                  World.Load("level.tmj");
+                                  Camera.Init(3, 2, 2);
                                   loop {
-                                      video.WaitVBlank();
-                                      camera.Apply();
-                                      camera.SetPosition(1, 0);
+                                      Video.WaitVBlank();
+                                      Camera.Apply();
+                                      Camera.SetPosition(1, 0);
                                   }
                               }
                               """;
@@ -5671,7 +5671,7 @@ public class GameBoyRomCompilerTests
         // The world band starts at GB row 2 (0x9840). The background region above the band
         // (GB rows 0..1) must also stream when scrolling, writing GB row 0 at 0x9800. A crossing
         // queues the edge column for deferred streaming; both directions feed the same pending
-        // slot, so camera.Apply commits one column stream into the background tilemap.
+        // slot, so Camera.Apply commits one column stream into the background tilemap.
         Assert.True(
             ContainsSequence(rom, [0xFA, 0xE4, 0xC0, 0xEA, 0x1A, 0xC1]),
             "a rightward crossing should queue the right background edge column for deferred streaming.");
@@ -5680,15 +5680,15 @@ public class GameBoyRomCompilerTests
             "a leftward crossing should queue the left background edge column for deferred streaming.");
         Assert.True(
             ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x6F, 0x26, 0x98, 0x0E]),
-            "camera.Apply should stream the queued background row above the band into GB row 0 (0x9800).");
+            "Camera.Apply should stream the queued background row above the band into GB row 0 (0x9800).");
 
         // The deferred commit replaces the old per-crossing extra WaitVBlank: streaming now happens
-        // only from camera.Apply, at the top of the frame inside VBlank, so a scrolling frame costs a
-        // single VBlank (and a single audio.Update tick). The move steps must no longer busy-wait on LY
-        // themselves; the streaming is gated by the queued-kind dispatch in camera.Apply instead.
+        // only from Camera.Apply, at the top of the frame inside VBlank, so a scrolling frame costs a
+        // single VBlank (and a single Audio.Update tick). The move steps must no longer busy-wait on LY
+        // themselves; the streaming is gated by the queued-kind dispatch in Camera.Apply instead.
         Assert.True(
             ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]),
-            "camera.Apply should dispatch the deferred stream on the queued kind.");
+            "Camera.Apply should dispatch the deferred stream on the queued kind.");
     }
 
     [Fact]
@@ -5704,11 +5704,11 @@ public class GameBoyRomCompilerTests
                               void main() {
                                   define_world();
                                   world_map(2, 9, 14);
-                                  camera.Init(2, 9, 14);
+                                  Camera.Init(2, 9, 14);
                                   loop {
-                                      video.WaitVBlank();
-                                      camera.Apply();
-                                      camera.SetPosition(8, 0);
+                                      Video.WaitVBlank();
+                                      Camera.Apply();
+                                      Camera.SetPosition(8, 0);
                                   }
                               }
                               """;
@@ -5798,8 +5798,8 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  world.Load("level.tmj");
-                                  camera.Init(6, 4, 4);
+                                  World.Load("level.tmj");
+                                  Camera.Init(6, 4, 4);
                                   return;
                               }
                               """;
@@ -5892,8 +5892,8 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  world.Load("level.tmj");
-                                  camera.Init(1, 0, 1);
+                                  World.Load("level.tmj");
+                                  Camera.Init(1, 0, 1);
                                   return;
                               }
                               """;
@@ -5962,10 +5962,10 @@ public class GameBoyRomCompilerTests
 
         const string source = """
                               void main() {
-                                  video.Init();
-                                  sprite.Asset(player, "player.sprite.json");
-                                  world.Load("level.tmj");
-                                  sprite.Draw(player, 8, 8, 0);
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  World.Load("level.tmj");
+                                  Sprite.Draw(player, 8, 8, 0);
                                   return;
                               }
                               """;
@@ -6130,7 +6130,7 @@ public class GameBoyRomCompilerTests
                                   world_map(4, 11, 2);
                                   camera_init(4, 11, 2);
                                   i16 y = 8;
-                                  i16 hit = camera.AabbTiles(72, y, 18, 8, 1);
+                                  i16 hit = Camera.AabbTiles(72, y, 18, 8, 1);
                                   return;
                               }
                               """;
@@ -6143,8 +6143,8 @@ public class GameBoyRomCompilerTests
             "Camera.AabbTiles should derive the source column from camera fine X plus the visible screen X.");
         Assert.True(
             ContainsSequence(rom, [0xFA, 0xE2, 0xC0, 0xC6, 0x59, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]),
-            "camera.AabbTiles should include the far edge of the sprite-width span.");
-        Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "camera.AabbTiles should mask requested collision flags.");
+            "Camera.AabbTiles should include the far edge of the sprite-width span.");
+        Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Camera.AabbTiles should mask requested collision flags.");
     }
 
     [Fact]
@@ -6165,7 +6165,7 @@ public class GameBoyRomCompilerTests
                               void main() {
                                   define_world();
                                   i16 footY = 16;
-                                  i16 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                                  i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                                   return;
                               }
                               """;
@@ -6173,8 +6173,8 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0xFF]), "camera.AabbHitTop should return 255 when no overlapped tile has the requested flags.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0xF8, 0xE6, 0xF8]), "camera.AabbHitTop should apply the search offset and return the hit tile's top world Y.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0xFF]), "Camera.AabbHitTop should return 255 when no overlapped tile has the requested flags.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0xF8, 0xE6, 0xF8]), "Camera.AabbHitTop should apply the search offset and return the hit tile's top world Y.");
     }
 
     [Fact]

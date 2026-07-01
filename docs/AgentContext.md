@@ -202,7 +202,7 @@ Progress (2026-06-14):
   tileset PNG, and PNG sprite assets can derive the hardware sprite palette for the draw
   slot that uses them while preserving the background universal color. The runner now uses
   `Palette.Sprite(0, 0, 0, 1, 3)`, preserving accepted `OBP0 = 0xD0`, without raw
-  `objectPalette.Set(...)`.
+  `ObjectPalette.Set(...)`.
 - Actor framework runtime activation decision on branch `feature/actor-framework`: `actor.SpawnLayer`
   and `actor.SpawnWindow` no longer materialize Tiled spawns as active slots at compile time.
   They generate ROM-table spawn helpers plus a fixed per-layer `used[]` byte array and should be

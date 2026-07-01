@@ -8,8 +8,8 @@ using RetroSharp.Parser;
 using Xunit;
 
 // Acceptance: a Tiled map imported through the shared target-neutral
-// LogicalTiledMap lands on NES via world.Load, generating NES background CHR and
-// the nametable from the same source a Game Boy world.Load would consume.
+// LogicalTiledMap lands on NES via World.Load, generating NES background CHR and
+// the nametable from the same source a Game Boy World.Load would consume.
 public sealed class NesWorldLoadTests : IDisposable
 {
     private readonly string directory = Path.Combine(Path.GetTempPath(), "retrosharp-nes-worldload-" + Guid.NewGuid().ToString("N"));
@@ -58,8 +58,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -124,8 +124,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -184,8 +184,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -252,8 +252,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -329,8 +329,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -378,8 +378,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -431,8 +431,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -505,8 +505,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -575,8 +575,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -626,8 +626,8 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
+                Video.Init();
+                World.Load("level.tmj");
             }
             """;
 
@@ -677,19 +677,19 @@ public sealed class NesWorldLoadTests : IDisposable
         }
         """);
 
-        // A world imported with world.Load feeds the same camera scroll path that
-        // world.Map does, so the camera lowers on both targets from one source.
+        // A world imported with World.Load feeds the same camera scroll path that
+        // World.Map does, so the camera lowers on both targets from one source.
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
-                camera.Init(2, 0, 2);
+                Video.Init();
+                World.Load("level.tmj");
+                Camera.Init(2, 0, 2);
                 loop {
-                    video.WaitVBlank();
-                    input.Poll();
+                    Video.WaitVBlank();
+                    Input.Poll();
                     let cx = button_hold_ticks(right);
-                    camera.SetPosition(cx, 0);
-                    camera.Apply();
+                    Camera.SetPosition(cx, 0);
+                    Camera.Apply();
                 }
             }
             """;
@@ -742,12 +742,12 @@ public sealed class NesWorldLoadTests : IDisposable
 
         const string source = """
             void main() {
-                video.Init();
-                world.Load("level.tmj");
-                camera.Init(1, 0, 60);
+                Video.Init();
+                World.Load("level.tmj");
+                Camera.Init(1, 0, 60);
                 u8 y = 8;
-                camera.SetPosition(0, y);
-                camera.Apply();
+                Camera.SetPosition(0, y);
+                Camera.Apply();
             }
             """;
 
@@ -757,10 +757,10 @@ public sealed class NesWorldLoadTests : IDisposable
         Assert.Equal(0x08, rom[6] & 0x08);
         Assert.True(
             ContainsSequence(prg, [0xA4, 0xE3, 0xB1, 0xE8, 0x8D, 0x07, 0x20]),
-            "A Tiled world.Load row beyond the initial four-screen surface should stream through the runtime-selected world row pointer.");
+            "A Tiled World.Load row beyond the initial four-screen surface should stream through the runtime-selected world row pointer.");
         Assert.True(
             ContainsSequence(prg, [0xA9, 0x09, 0x85, 0xEF]),
-            "A Tiled world.Load streamed row should refresh the worst-case 9 touched row-attribute bytes.");
+            "A Tiled World.Load streamed row should refresh the worst-case 9 touched row-attribute bytes.");
     }
 
     private NesVideoProgram BuildProgram(string source)

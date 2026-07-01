@@ -11,10 +11,10 @@ dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target 
 
 ## What it shows
 
-- Declaring more than one theme with `music.Asset(name, path)` (each name unique).
+- Declaring more than one theme with `Music.Asset(name, path)` (each name unique).
 - Mixing formats: `music/terminate.gbapu` is an APU-register trace and `music/blue_ocean_remix.uge`
   is a hUGETracker song. Each compiled theme carries its own runtime kind.
-- Switching themes at runtime with `music.Play(other)` -- here on the **START** button.
+- Switching themes at runtime with `Music.Play(other)` -- here on the **START** button.
 - No manual bank handling in source: the compiler stores each theme on its own and, when the
   combined program outgrows a 32 KiB ROM-only cartridge, emits an MBC1 banked ROM and resolves
   every bank switch inside the generated audio runtime. These two themes happen to pack into a
@@ -28,7 +28,7 @@ dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target 
 
 ## Notes
 
-- `audio.Update()` runs once per frame after `video.WaitVBlank()`; `input.Poll()` provides the
+- `Audio.Update()` runs once per frame after `Video.WaitVBlank()`; `Input.Poll()` provides the
   `Input.WasPressed(Button.Start)` edge used to trigger the switch.
 - The sample has no graphics: it boots to a blank screen and plays BGM.
 

@@ -867,9 +867,9 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort MusicCurrentBankAddress = 0xC116;
     private const ushort MusicScratchBankAddress = 0xC117;
     private const ushort MusicDataCursorBankAddress = 0xC118;
-    // Deferred camera streaming: camera.SetPosition queues at most one column/row crossing per
-    // frame here; camera.Apply drains it to VRAM during the top-of-frame VBlank. This keeps each
-    // main-loop iteration to a single VBlank so audio.Update() stays locked to the frame rate.
+    // Deferred camera streaming: Camera.SetPosition queues at most one column/row crossing per
+    // frame here; Camera.Apply drains it to VRAM during the top-of-frame VBlank. This keeps each
+    // main-loop iteration to a single VBlank so Audio.Update() stays locked to the frame rate.
     private const ushort PendingStreamKindAddress = 0xC119;   // 0=none, 1=column, 2=row
     private const ushort PendingStreamTargetAddress = 0xC11A; // background column or row index
     private const ushort PendingStreamSourceAddress = 0xC11B; // source-map column or row index
@@ -1923,7 +1923,7 @@ internal sealed class GameBoyRuntimeCompiler
     {
         if (!program.MusicAssets.TryGetValue(operation.ThemeId, out var asset))
         {
-            throw new InvalidOperationException($"Unknown Game Boy music asset '{operation.ThemeId}'. Declare it with music.Asset(...).");
+            throw new InvalidOperationException($"Unknown Game Boy music asset '{operation.ThemeId}'. Declare it with Music.Asset(...).");
         }
 
         if (romLayout.UsesBankedMusic)
@@ -3052,7 +3052,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         // Drain any column/row queued by last frame's camera move into VRAM now, while we are at the
         // top of the frame inside VBlank. This replaces the per-crossing extra WaitVBlank, so a
-        // scrolling frame no longer costs two VBlanks for a single audio.Update().
+        // scrolling frame no longer costs two VBlanks for a single Audio.Update().
         EmitCommitPendingStream(config);
 
         builder.LoadA(CameraXLowAddress);
@@ -3069,7 +3069,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        // Rows are only ever queued by camera.SetPosition with a non-zero Y (the up/down move steps
+        // Rows are only ever queued by Camera.SetPosition with a non-zero Y (the up/down move steps
         // are unreachable otherwise), so only emit the large row streamer when the program can
         // actually scroll vertically. The column streamer is small and always emitted.
         var emitRowCommit = ProgramQueuesRowStreaming();

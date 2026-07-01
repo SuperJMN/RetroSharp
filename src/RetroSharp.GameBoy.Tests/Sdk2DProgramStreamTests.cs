@@ -12,12 +12,12 @@ public sealed class Sdk2DProgramStreamTests
 {
     private const string Source = """
         void tick() {
-            video.WaitVBlank();
-            input.Poll();
+            Video.WaitVBlank();
+            Input.Poll();
         }
 
         void main() {
-            video.Init();
+            Video.Init();
             loop {
                 tick();
                 tick();
@@ -91,12 +91,12 @@ public sealed class Sdk2DProgramStreamTests
     {
         const string source = """
             void tick_audio() {
-                audio.Update();
+                Audio.Update();
             }
 
             void main() {
-                video.Init();
-                audio.Init();
+                Video.Init();
+                Audio.Init();
                 loop {
                     tick_audio();
                     tick_audio();

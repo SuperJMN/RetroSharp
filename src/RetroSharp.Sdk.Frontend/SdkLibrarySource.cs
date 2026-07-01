@@ -158,7 +158,7 @@ public static class SdkLibrarySource
 
         // Capability-gated library member: only the targets that catalog the
         // world_tile_flags_at intrinsic (Game Boy today; NES lacks the world
-        // tile-flag collision query) expose world.TileFlagsAt(...).
+        // tile-flag collision query) expose World.TileFlagsAt(...).
         if (catalog.TryResolve("world_tile_flags_at", out _))
         {
             library += $$"""
@@ -166,7 +166,7 @@ public static class SdkLibrarySource
                  [intrinsic("world_tile_flags_at")]
                  extern i16 {{prefix}}_world_tile_flags_at(i16 x, i16 y);
 
-                 class world
+                 class World
                  {
                      static inline i16 TileFlagsAt(i16 x, i16 y)
                      {
@@ -197,8 +197,8 @@ public static class SdkLibrarySource
         }
 
         // Capability-gated library member: targets that catalog music_play/music_stop
-        // (Game Boy and NES today) expose music.Play(...) / music.Stop() over their BGM
-        // target intrinsics. music.Asset(...) is not a class member and still lowers
+        // (Game Boy and NES today) expose Music.Play(...) / Music.Stop() over their BGM
+        // target intrinsics. Music.Asset(...) is not a class member and still lowers
         // through the SDK module.
         if (catalog.TryResolve("music_play", out var musicPlay)
             && musicPlay.Operation == TargetIntrinsicOperation.PlayMusic

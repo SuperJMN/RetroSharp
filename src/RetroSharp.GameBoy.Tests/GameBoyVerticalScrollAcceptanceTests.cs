@@ -108,7 +108,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             }
         }
 
-        Assert.True(observedFreshRow, "The tall Tiled world.Load sample did not stream fresh rows into the wrapped background buffer.");
+        Assert.True(observedFreshRow, "The tall Tiled World.Load sample did not stream fresh rows into the wrapped background buffer.");
     }
 
     [Fact]
@@ -271,8 +271,8 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             }
         }
 
-        Assert.True(observedFreshColumn, $"The diagonal Tiled world.Load sample did not stream a fresh wrapped column. Max changed rows: {maxChangedRows}.");
-        Assert.True(observedFreshRow, $"The diagonal Tiled world.Load sample did not stream a fresh wrapped row. Max changed columns: {maxChangedColumns}.");
+        Assert.True(observedFreshColumn, $"The diagonal Tiled World.Load sample did not stream a fresh wrapped column. Max changed rows: {maxChangedRows}.");
+        Assert.True(observedFreshRow, $"The diagonal Tiled World.Load sample did not stream a fresh wrapped row. Max changed columns: {maxChangedColumns}.");
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     private static string StationarySource(string source)
     {
         return source
-            .Replace("camera.SetPosition(0, cameraY);", "camera.SetPosition(0, 0);", StringComparison.Ordinal)
+            .Replace("Camera.SetPosition(0, cameraY);", "Camera.SetPosition(0, 0);", StringComparison.Ordinal)
             .Replace("if (direction == 1) {", "if (false) {", StringComparison.Ordinal);
     }
 
@@ -330,7 +330,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         return source
             .Replace("cameraX += stepX;", "cameraX = 0;", StringComparison.Ordinal)
             .Replace("cameraY += stepY;", "cameraY = 0;", StringComparison.Ordinal)
-            .Replace("camera.SetPosition(cameraX, cameraY);", "camera.SetPosition(0, 0);", StringComparison.Ordinal);
+            .Replace("Camera.SetPosition(cameraX, cameraY);", "Camera.SetPosition(0, 0);", StringComparison.Ordinal);
     }
 
     private static string StationaryTallTiledSource(string source)

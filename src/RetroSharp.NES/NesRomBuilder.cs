@@ -349,7 +349,7 @@ internal static class NesRomBuilder
             var offset = background.FirstTile * 16;
             if (offset + background.Data.Length > chr.Length)
             {
-                throw new InvalidOperationException("NES world.Load background tiles exceed CHR ROM size.");
+                throw new InvalidOperationException("NES World.Load background tiles exceed CHR ROM size.");
             }
 
             background.Data.CopyTo(chr, offset);

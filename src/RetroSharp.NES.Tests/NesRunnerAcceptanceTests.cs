@@ -86,14 +86,14 @@ public sealed class NesRunnerAcceptanceTests
     {
         const string source = """
             void main() {
-                animation.Clip(run, 1, 6, 6, 6);
-                sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
+                Animation.Clip(run, 1, 6, 6, 6);
+                Sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
                 u8 tick = 0;
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     tick++;
-                    let frame = animation.Frame(run, tick);
-                    sprite.Draw(player, 72, 88, frame, false, 0);
+                    let frame = Animation.Frame(run, tick);
+                    Sprite.Draw(player, 72, 88, frame, false, 0);
                 }
             }
             """;

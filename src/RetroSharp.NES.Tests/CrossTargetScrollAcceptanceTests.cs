@@ -25,29 +25,29 @@ public sealed class CrossTargetScrollAcceptanceTests
         }
 
         void main() {
-            video.Init();
+            Video.Init();
 
-            world.Column(0, 1, 2, 3, 4);
-            world.Column(1, 2, 3, 4, 5);
-            world.Column(2, 3, 4, 5, 1);
-            world.Column(3, 4, 5, 1, 2);
-            world.Column(4, 5, 1, 2, 3);
-            world.Column(5, 1, 2, 3, 4);
-            world.Column(6, 2, 3, 4, 5);
-            world.Column(7, 3, 4, 5, 1);
-            world.Map(World.Width, World.StreamY, World.Height);
-            camera.Init(World.Width, World.StreamY, World.Height);
-            sprite.Asset(marker, "samples/cross-target-camera/marker.json");
+            World.Column(0, 1, 2, 3, 4);
+            World.Column(1, 2, 3, 4, 5);
+            World.Column(2, 3, 4, 5, 1);
+            World.Column(3, 4, 5, 1, 2);
+            World.Column(4, 5, 1, 2, 3);
+            World.Column(5, 1, 2, 3, 4);
+            World.Column(6, 2, 3, 4, 5);
+            World.Column(7, 3, 4, 5, 1);
+            World.Map(World.Width, World.StreamY, World.Height);
+            Camera.Init(World.Width, World.StreamY, World.Height);
+            Sprite.Asset(marker, "samples/cross-target-camera/marker.json");
 
             loop {
-                video.WaitVBlank();
-                input.Poll();
+                Video.WaitVBlank();
+                Input.Poll();
                 let cameraX = button_hold_ticks(right);
                 u8 frame = 0;
                 bool flipX = false;
-                camera.SetPosition(cameraX, 0);
-                camera.Apply();
-                sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, frame, flipX, 0);
+                Camera.SetPosition(cameraX, 0);
+                Camera.Apply();
+                Sprite.Draw(marker, Marker.ScreenX, Marker.ScreenY, frame, flipX, 0);
             }
         }
         """;
@@ -230,13 +230,13 @@ public sealed class CrossTargetScrollAcceptanceTests
     {
         const string verticalSource = """
             void main() {
-                world.Column(0, 1, 2);
-                world.Map(1, 10, 2);
-                camera.Init(1, 10, 2);
+                World.Column(0, 1, 2);
+                World.Map(1, 10, 2);
+                Camera.Init(1, 10, 2);
                 loop {
-                    video.WaitVBlank();
-                    camera.SetPosition(0, 1);
-                    camera.Apply();
+                    Video.WaitVBlank();
+                    Camera.SetPosition(0, 1);
+                    Camera.Apply();
                 }
             }
             """;
@@ -253,14 +253,14 @@ public sealed class CrossTargetScrollAcceptanceTests
     {
         const string collisionSource = """
             void main() {
-                world.Column(0, 1, 2);
-                world.Flags(0, 0, 1);
-                world.Map(1, 10, 2);
-                camera.Init(1, 10, 2);
+                World.Column(0, 1, 2);
+                World.Flags(0, 0, 1);
+                World.Map(1, 10, 2);
+                Camera.Init(1, 10, 2);
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     u8 footY = 8;
-                    u8 hit = camera.AabbTiles(72, footY, 16, 8, 1);
+                    u8 hit = Camera.AabbTiles(72, footY, 16, 8, 1);
                 }
             }
             """;
@@ -277,14 +277,14 @@ public sealed class CrossTargetScrollAcceptanceTests
     {
         const string collisionSource = """
             void main() {
-                world.Column(0, 1, 2);
-                world.Flags(0, 0, 1);
-                world.Map(1, 10, 2);
-                camera.Init(1, 10, 2);
+                World.Column(0, 1, 2);
+                World.Flags(0, 0, 1);
+                World.Map(1, 10, 2);
+                Camera.Init(1, 10, 2);
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     u8 footY = 16;
-                    u8 hitTop = camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                    u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                 }
             }
             """;
@@ -301,12 +301,12 @@ public sealed class CrossTargetScrollAcceptanceTests
     {
         const string actorSource = """
             void main() {
-                world.Column(0, 1, 2);
-                world.Flags(0, 0, 1);
-                world.Map(1, 10, 2);
-                camera.Init(1, 10, 2);
-                sprite.Asset(marker, "samples/cross-target-camera/marker.json");
-                animation.Clip(walk, 0, 4);
+                World.Column(0, 1, 2);
+                World.Flags(0, 0, 1);
+                World.Map(1, 10, 2);
+                Camera.Init(1, 10, 2);
+                Sprite.Asset(marker, "samples/cross-target-camera/marker.json");
+                Animation.Clip(walk, 0, 4);
                 actor.Pool(enemies, 1);
                 enemy.Def(Goomba, sprite: marker, behavior: Walker, speed: 1, animation: walk, hitboxWidth: 8, hitboxHeight: 8);
                 enemies[0].active = 1;
@@ -316,7 +316,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 enemies[0].y = 16;
 
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     enemies.Update();
                     enemies.TouchTiles(0, 1);
                     enemies.LandOnTiles(4, 12, 1);
@@ -337,10 +337,10 @@ public sealed class CrossTargetScrollAcceptanceTests
     {
         const string actorSource = """
             void main() {
-                world.Column(0, 1, 2);
-                world.Map(1, 10, 2);
-                camera.Init(1, 10, 2);
-                sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
+                World.Column(0, 1, 2);
+                World.Map(1, 10, 2);
+                Camera.Init(1, 10, 2);
+                Sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
                 actor.Pool(enemies, 2);
                 enemy.Def(PlayerProxy, sprite: player, behavior: Walker, speed: 1, hitboxWidth: 18, hitboxHeight: 32);
                 enemies[0].active = 1;
@@ -350,7 +350,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 enemies[0].y = 32;
 
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     enemies.Draw();
                 }
             }
@@ -391,7 +391,7 @@ public sealed class CrossTargetScrollAcceptanceTests
         var columns = string.Join(
             Environment.NewLine,
             Enumerable.Range(0, width).Select(index =>
-                $"            world.Column({index}, {WideColumnTiles(index, height)});"));
+                $"            World.Column({index}, {WideColumnTiles(index, height)});"));
 
         return $$"""
             enum World {
@@ -401,17 +401,17 @@ public sealed class CrossTargetScrollAcceptanceTests
             }
 
             void main() {
-                video.Init();
+                Video.Init();
             {{columns}}
-                world.Map(World.Width, World.StreamY, World.Height);
-                camera.Init(World.Width, World.StreamY, World.Height);
+                World.Map(World.Width, World.StreamY, World.Height);
+                Camera.Init(World.Width, World.StreamY, World.Height);
 
                 loop {
-                    video.WaitVBlank();
-                    input.Poll();
+                    Video.WaitVBlank();
+                    Input.Poll();
                     let cameraX = button_hold_ticks(right);
-                    camera.SetPosition(cameraX, 0);
-                    camera.Apply();
+                    Camera.SetPosition(cameraX, 0);
+                    Camera.Apply();
                 }
             }
             """;
@@ -422,20 +422,20 @@ public sealed class CrossTargetScrollAcceptanceTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
         return $$"""
             void main() {
-                video.Init();
-                world.Column(0, {{tallColumn}});
-                world.Column(63, {{tallColumn}});
-                world.Map(64, 0, 60);
-                camera.Init(64, 0, 60);
+                Video.Init();
+                World.Column(0, {{tallColumn}});
+                World.Column(63, {{tallColumn}});
+                World.Map(64, 0, 60);
+                Camera.Init(64, 0, 60);
 
                 u8 cameraX = 0;
                 u8 cameraY = 0;
                 loop {
-                    video.WaitVBlank();
+                    Video.WaitVBlank();
                     cameraX += 1;
                     cameraY += 1;
-                    camera.SetPosition(cameraX, cameraY);
-                    camera.Apply();
+                    Camera.SetPosition(cameraX, cameraY);
+                    Camera.Apply();
                 }
             }
             """;
