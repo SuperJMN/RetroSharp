@@ -48,6 +48,22 @@ public static class GameBoyTarget
                     new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId),
                     new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.EnumFlags),
                 ]),
+            TargetIntrinsicDescriptor.CameraScreenAabbTiles(
+                "camera_screen_aabb_tiles",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.EnumFlags),
+                ]),
+            TargetIntrinsicDescriptor.CameraScreenAabbHitTop(
+                "camera_screen_aabb_hit_top",
+                runtimeArity: 4,
+                compileTimeOperands:
+                [
+                    new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId),
+                    new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.EnumFlags),
+                ]),
             TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
             TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
         ]);

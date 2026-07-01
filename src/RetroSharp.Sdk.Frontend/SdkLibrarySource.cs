@@ -45,6 +45,42 @@ public static class SdkLibrarySource
                  """;
         }
 
+        if (catalog.TryResolve("camera_screen_aabb_tiles", out var cameraScreenAabbTiles)
+            && cameraScreenAabbTiles.Operation == TargetIntrinsicOperation.CameraScreenAabbTiles)
+        {
+            cameraAabbExterns += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_screen_aabb_tiles")]
+                 extern i16 {{prefix}}_camera_screen_aabb_tiles(i16 worldId, i16 screenX, i16 screenY, i16 width, i16 height, i16 flags);
+
+                 """;
+            cameraAabbMethods += $$"""
+
+                     static inline i16 ScreenAabbTiles(i16 screenX, i16 screenY, i16 width, i16 height, i16 flags)
+                     {
+                         return {{prefix}}_camera_screen_aabb_tiles("default", screenX, screenY, width, height, flags);
+                     }
+                 """;
+        }
+
+        if (catalog.TryResolve("camera_screen_aabb_hit_top", out var cameraScreenAabbHitTop)
+            && cameraScreenAabbHitTop.Operation == TargetIntrinsicOperation.CameraScreenAabbHitTop)
+        {
+            cameraAabbExterns += $$"""
+                 [target("{{catalog.TargetId}}")]
+                 [intrinsic("camera_screen_aabb_hit_top")]
+                 extern i16 {{prefix}}_camera_screen_aabb_hit_top(i16 worldId, i16 screenX, i16 screenY, i16 width, i16 height, i16 flags);
+
+                 """;
+            cameraAabbMethods += $$"""
+
+                     static inline i16 ScreenAabbHitTop(i16 screenX, i16 screenY, i16 width, i16 height, i16 flags)
+                     {
+                         return {{prefix}}_camera_screen_aabb_hit_top("default", screenX, screenY, width, height, flags);
+                     }
+                 """;
+        }
+
         var library = $$"""
                  const {{MarkerName(catalog.TargetId)}} = 1;
 

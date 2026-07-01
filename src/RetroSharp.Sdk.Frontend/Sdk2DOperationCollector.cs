@@ -287,6 +287,41 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
+    public static Sdk2DOperation.CameraScreenAabbTiles ReadCameraScreenAabbTiles(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraScreenAabbTiles)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.CameraScreenAabbTiles}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var screenXArg, var screenYArg, var widthArg, var heightArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var worldId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.WorldId) ?? "default";
+        var flags = (WorldTileFlags)ConstRange(
+            CompileTimeConstant(resolved, TargetIntrinsicOperandRole.EnumFlags) ?? 0,
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_screen_aabb_tiles argument 5");
+        var screenX = ReadByteExpression(screenXArg.Expression, "camera_screen_aabb_tiles argument 1");
+        var (screenY, screenYOffset) = ReadByteExpressionWithConstantOffset(screenYArg.Expression, "camera_screen_aabb_tiles argument 2");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_screen_aabb_tiles argument 3");
+        var height = ConstRange(heightArg.Expression, 0, 255, "camera_screen_aabb_tiles argument 4");
+
+        return new Sdk2DOperation.CameraScreenAabbTiles(
+            WorldId: worldId,
+            ScreenX: screenX,
+            ScreenY: screenY,
+            ScreenYOffset: screenYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
     public static Sdk2DOperation.CameraScreenAabbHitTop ReadCameraScreenAabbHitTop(FunctionCall call)
     {
         SdkCallReader.RequireArity(call, 5);
@@ -303,6 +338,41 @@ public static class Sdk2DOperationCollector
 
         return new Sdk2DOperation.CameraScreenAabbHitTop(
             WorldId: "default",
+            ScreenX: screenX,
+            ScreenY: screenY,
+            ScreenYOffset: screenYOffset,
+            Width: width,
+            Height: height,
+            Flags: flags);
+    }
+
+    public static Sdk2DOperation.CameraScreenAabbHitTop ReadCameraScreenAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+    {
+        if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraScreenAabbHitTop)
+        {
+            throw new InvalidOperationException(
+                $"Intrinsic '{resolved.Descriptor.Name}' is {resolved.Descriptor.Operation}, not {TargetIntrinsicOperation.CameraScreenAabbHitTop}.");
+        }
+
+        if (resolved.RuntimeOperands is not [var screenXArg, var screenYArg, var widthArg, var heightArg])
+        {
+            throw new InvalidOperationException(
+                $"{resolved.Descriptor.Name} expects 4 runtime arguments, got {resolved.RuntimeOperands.Count}.");
+        }
+
+        var worldId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.WorldId) ?? "default";
+        var flags = (WorldTileFlags)ConstRange(
+            CompileTimeConstant(resolved, TargetIntrinsicOperandRole.EnumFlags) ?? 0,
+            0,
+            (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
+            "camera_screen_aabb_hit_top argument 5");
+        var screenX = ReadByteExpression(screenXArg.Expression, "camera_screen_aabb_hit_top argument 1");
+        var (screenY, screenYOffset) = ReadByteExpressionWithConstantOffset(screenYArg.Expression, "camera_screen_aabb_hit_top argument 2");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_screen_aabb_hit_top argument 3");
+        var height = ConstRange(heightArg.Expression, 0, 255, "camera_screen_aabb_hit_top argument 4");
+
+        return new Sdk2DOperation.CameraScreenAabbHitTop(
+            WorldId: worldId,
             ScreenX: screenX,
             ScreenY: screenY,
             ScreenYOffset: screenYOffset,
@@ -871,6 +941,12 @@ public static class Sdk2DOperationCollector
                 case TargetIntrinsicOperation.CameraAabbHitTop:
                     CollectCameraAabbHitTop(resolved);
                     return true;
+                case TargetIntrinsicOperation.CameraScreenAabbTiles:
+                    CollectCameraScreenAabbTiles(resolved);
+                    return true;
+                case TargetIntrinsicOperation.CameraScreenAabbHitTop:
+                    CollectCameraScreenAabbHitTop(resolved);
+                    return true;
                 default:
                     return false;
             }
@@ -926,9 +1002,19 @@ public static class Sdk2DOperationCollector
             AddOp(ReadCameraScreenAabbTiles(call));
         }
 
+        private void CollectCameraScreenAabbTiles(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadCameraScreenAabbTiles(resolved));
+        }
+
         private void CollectCameraScreenAabbHitTop(FunctionCall call)
         {
             AddOp(ReadCameraScreenAabbHitTop(call));
+        }
+
+        private void CollectCameraScreenAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+        {
+            AddOp(ReadCameraScreenAabbHitTop(resolved));
         }
 
         private void CollectCallArguments(FunctionCall call)

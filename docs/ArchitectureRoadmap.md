@@ -17,7 +17,7 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 - #121 landed as logical `palette.Background(...)` and `palette.Sprite(...)` declarations so SDK-shaped samples do not depend on raw Game Boy palette writes.
 - #122 adds a runner-shaped cross-target validation sample, or a precise NES capability diagnostic when the runner-shaped slice is not portable yet.
 
-Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 (unify language/SDK dot-call and receiver-lowering boundaries) is now resolved and closed: SDK module knowledge moved out of the parser into `RetroSharp.Core.Sdk.SdkModuleRegistry` (the parser's `SdkDotCallLowerer` only delegates to it), and `RetroSharp.Parser.SdkDotCallResolver` is the single canonical dot-call decision (a receiver in scope shadows a same-named SDK module; otherwise a known SDK module resolves as an SDK call) consumed by both constant folding and semantic analysis. The only residual is narrow and documented in `SdkDotCallResolver`: constant folding has no variable scope, so it detects receivers by method signature; unifying the pathological collision case (a receiver method named like an SDK method on a bare module) would need full scope in the folder and should be tracked separately if it ever needs to be addressed. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The remaining coupling is that `WorldMap2D` still stores already-lowered target tile ids and NES does not consume the neutral map yet.
+Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 (unify language/SDK dot-call and receiver-lowering boundaries) is now resolved and closed: SDK module knowledge moved out of the parser into `RetroSharp.Core.Sdk.SdkModuleRegistry` (the parser's `SdkDotCallLowerer` only delegates to it), and `RetroSharp.Parser.SdkDotCallResolver` is the single canonical dot-call decision (a receiver in scope shadows a same-named SDK module; otherwise a known SDK module resolves as an SDK call) consumed by both constant folding and semantic analysis. The only residual is narrow and documented in `SdkDotCallResolver`: constant folding has no variable scope, so it detects receivers by method signature; unifying the pathological collision case (a receiver method named like an SDK method on a bare module) would need full scope in the folder and should be tracked separately if it ever needs to be addressed. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. The remaining coupling is that `WorldMap2D` still stores already-lowered target tile ids: each target's importer deduplicates and quantizes tiles and writes target tile numbers into the portable resource, so the "portable" world map still carries target-specific tile payload.
 
 ## Goals
 
@@ -255,7 +255,15 @@ with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the sam
 extern intrinsic and re-derives the same operation it already emitted from the legacy
 `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility
 alias, so `Golden_collision_aabb_emission_is_pinned_nes` stays byte-identical.
-`camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` remain on the SDK-module/builtin path.
+
+SAL-8.9 extends the same descriptor-role form to screen-space camera collision on both targets:
+Game Boy and NES catalog `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the
+same hidden `WorldId` and `EnumFlags` slots, `SdkLibrarySource` injects `camera.ScreenAabbTiles`
+/ `camera.ScreenAabbHitTop` helpers, and the collector/emitter re-derive the same
+`Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy
+`camera_screen_aabb_*(...)` builtins (kept as aliases). All four camera-relative collision
+queries now reach their operations through compile-time-operand intrinsics on both targets;
+the actor framework's generated `camera.ScreenAabb*` calls stay byte-identical.
 
 The migration boundary remains deliberate, and the SAL-6 feasibility spike (epic
 #139) refined it with evidence rather than assumption. Wrapping the heavy calls in
@@ -283,13 +291,14 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   while still collecting to the same capability-checked `Sdk2DOperation`. The legacy
   `sprite_draw(...)` spelling remains a compatibility alias during the transition.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) stays compiler-emitted. Camera-relative
-  collision still collects to SDK operations, but Game Boy and NES public `camera.AabbTiles` and
-  `camera.AabbHitTop` now reach those operations through compile-time-operand intrinsics.
+  collision still collects to SDK operations, but Game Boy and NES public `camera.AabbTiles`,
+  `camera.AabbHitTop`, `camera.ScreenAabbTiles`, and `camera.ScreenAabbHitTop` now reach those
+  operations through compile-time-operand intrinsics.
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, BGM control
 (`music.Play` / `music.Stop`), a capability-gated value query (`world.TileFlagsAt`), the
-camera position/apply pair, and `sprite.Draw` on Game Boy and NES, plus Game Boy and NES
-camera-relative AABB collision queries.
+camera position/apply pair, and `sprite.Draw` on Game Boy and NES, plus all four Game Boy and NES
+camera-relative AABB collision queries (world-Y and screen-space forms).
 Streaming internals and non-migrated target-specific collision forms remain compiler-recognized
 until their compile-time-operand intrinsic migrations are proven. Not everything must become a library. The SAL-8 design note
 ([`docs/CompileTimeOperandIntrinsics.md`](CompileTimeOperandIntrinsics.md)) chooses the narrow

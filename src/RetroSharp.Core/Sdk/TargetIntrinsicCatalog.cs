@@ -11,6 +11,8 @@ public enum TargetIntrinsicOperation
     ReadWorldTileFlags,
     CameraAabbTiles,
     CameraAabbHitTop,
+    CameraScreenAabbTiles,
+    CameraScreenAabbHitTop,
     SetCameraPosition,
     ApplyCamera,
     DrawLogicalSprite,
@@ -138,6 +140,30 @@ public sealed record TargetIntrinsicDescriptor
         return new TargetIntrinsicDescriptor(
             name,
             TargetIntrinsicOperation.CameraAabbHitTop,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
+    public static TargetIntrinsicDescriptor CameraScreenAabbTiles(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.CameraScreenAabbTiles,
+            runtimeArity,
+            compileTimeOperands);
+    }
+
+    public static TargetIntrinsicDescriptor CameraScreenAabbHitTop(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.CameraScreenAabbHitTop,
             runtimeArity,
             compileTimeOperands);
     }

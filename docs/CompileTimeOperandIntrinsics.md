@@ -1,6 +1,6 @@
 # Compile-Time Operand Intrinsics
 
-Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `music.Play` / `music.Stop` onto the audio target intrinsics; SAL-8.8 migrates Game Boy and NES `audio.Init` onto the `audio_init` void-leaf target intrinsic (no compile-time operands).
+Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `music.Play` / `music.Stop` onto the audio target intrinsics; SAL-8.8 migrates Game Boy and NES `audio.Init` onto the `audio_init` void-leaf target intrinsic (no compile-time operands); SAL-8.9 migrates Game Boy and NES `camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` onto the descriptor-role path.
 
 This note answers the open SAL-8 question from issue #158: how a target intrinsic can carry operands that must be resolved at compile time, such as a sprite asset id, a constant sprite palette slot, enum collision flags, or a world id, while keeping the language layer target-neutral.
 
@@ -117,7 +117,9 @@ extern i16 __retrosharp_nes_camera_aabb_tiles(i16 worldId, i16 screenX, i16 worl
 extern i16 __retrosharp_nes_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
 ```
 
-`NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the `camera.AabbTiles` / `camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias. `camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` stay on the SDK-module/builtin path and are not migrated by SAL-8.6.
+`NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the `camera.AabbTiles` / `camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias.
+
+SAL-8.9 applies the identical descriptor-role form to the screen-space camera collision queries `camera.ScreenAabbTiles` / `camera.ScreenAabbHitTop` on **both** Game Boy and NES. Each target catalogs `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the same hidden `WorldId` (slot 0) and `EnumFlags` (slot 5), `SdkLibrarySource` injects the two `class camera` helpers, and the collector/emitter re-derive the same `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy `camera_screen_aabb_*(...)` builtins (kept as aliases). The actor framework, which lowers `enemies.TouchPlayer(...)` to `camera.ScreenAabb*` dot-calls, stays byte-identical (the `actors.gb`/`actors.nes` tracked ROMs are unchanged). This closes the `Aabb`-vs-`ScreenAabb` asymmetry, so all four camera-relative collision queries share the intrinsic path on both targets.
 
 SAL-8.7 wires Game Boy and NES `music.Play` / `music.Stop` through the audio target intrinsics:
 

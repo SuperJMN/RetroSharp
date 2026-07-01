@@ -4357,6 +4357,14 @@ internal sealed class GameBoyRuntimeCompiler
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraAabbHitTop>(call.Name));
                 return true;
+            case TargetIntrinsicOperation.CameraScreenAabbTiles:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitCameraScreenAabbTiles(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbTiles>(call.Name));
+                return true;
+            case TargetIntrinsicOperation.CameraScreenAabbHitTop:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitCameraScreenAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbHitTop>(call.Name));
+                return true;
             default:
                 return false;
         }

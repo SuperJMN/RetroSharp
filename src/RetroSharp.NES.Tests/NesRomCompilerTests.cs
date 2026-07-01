@@ -3698,6 +3698,41 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Screen_collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_nes()
+    {
+        const string direct = """
+                              void main() {
+                                  world_column(0, 1, 2);
+                                  world_flags(0, 0, 1);
+                                  world_map(1, 10, 2);
+                                  camera_init(1, 10, 2);
+                                  u8 screenX = 40;
+                                  u8 screenY = 16;
+                                  u8 hit = camera_screen_aabb_tiles(screenX, screenY, 16, 16, 1);
+                                  u8 hitTop = camera_screen_aabb_hit_top(screenX, screenY, 16, 16, 1);
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   world.Column(0, 1, 2);
+                                   world.Flags(0, 0, 1);
+                                   world.Map(1, 10, 2);
+                                   camera.Init(1, 10, 2);
+                                   u8 screenX = 40;
+                                   u8 screenY = 16;
+                                   u8 hit = camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
+                                   u8 hitTop = camera.ScreenAabbHitTop(screenX, screenY, 16, 16, 1);
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.Contains("[intrinsic(\"camera_screen_aabb_tiles\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"camera_screen_aabb_hit_top\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
     public void Compiles_png_sprite_sheet_using_nes_platform_variant()
     {
         var baseDirectory = WriteSpritePng(

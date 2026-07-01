@@ -161,7 +161,11 @@ Progress (2026-06-14):
   `"default"` world id and compile-time flag mask, still collecting to the same camera AABB
   SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract
   (NES migrated in SAL-8.6; the legacy `camera_aabb_tiles(...)`/`camera_aabb_hit_top(...)`
-  builtins remain compatibility aliases and `camera.ScreenAabb*` stays on the builtin path).
+  builtins remain compatibility aliases). SAL-8.9 then migrated `camera.ScreenAabbTiles(...)` /
+  `camera.ScreenAabbHitTop(...)` to the same intrinsic path on both targets (catalogued as
+  `camera_screen_aabb_*` with hidden `WorldId`/`EnumFlags`), so all four camera-relative
+  collision queries share the intrinsic path; the actor framework's generated `camera.ScreenAabb*`
+  calls stay byte-identical (`actors.gb`/`actors.nes` ROMs unchanged).
   SAL-8.7 migrated Game Boy and NES `music.Play(...)` / `music.Stop()` to injected `class music`
   helpers over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
   collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/

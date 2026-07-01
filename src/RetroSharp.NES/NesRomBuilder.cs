@@ -4440,6 +4440,16 @@ internal sealed class NesRuntimeCompiler
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(
                     TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
                 return true;
+            case TargetIntrinsicOperation.CameraScreenAabbTiles:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbTiles(
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                return true;
+            case TargetIntrinsicOperation.CameraScreenAabbHitTop:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbHitTop(
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                return true;
             default:
                 return false;
         }
