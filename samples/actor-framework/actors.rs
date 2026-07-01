@@ -4,7 +4,7 @@ static class Level {
     const i16 Height = 2;
 }
 
-void main() {
+void Main() {
     Video.Init();
     World.Load("actors.tmj");
     Camera.Init(Level.Width, Level.StreamY, Level.Height);

@@ -257,8 +257,8 @@ internal sealed class NesVideoProgram
     {
         program = ConstantFolder.Fold(program);
 
-        var main = program.Functions.FirstOrDefault(f => f.Name == "main")
-                   ?? throw new InvalidOperationException("NES target requires a main function.");
+        var main = program.Functions.FirstOrDefault(f => f.Name == "Main")
+                   ?? throw new InvalidOperationException("NES target requires a Main function.");
 
         var functions = BuildFunctionIndex(program.Functions);
         var enums = BuildEnumIndex(program.Enums);

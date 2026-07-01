@@ -16,7 +16,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_video_api_calls_to_a_game_boy_rom()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   palette_set(0, 0);
                                   palette_set(1, 1);
@@ -49,7 +49,7 @@ public class GameBoyRomCompilerTests
     public void Logical_palette_declarations_lower_to_game_boy_palette_registers()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Palette.Background(0, 0, 1, 2, 3);
                                   Palette.Sprite(0, 0, 0, 1, 3);
@@ -69,7 +69,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_logical_sprite_palette_slots_outside_game_boy_capabilities()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Palette.Sprite(2, 0, 1, 2, 3);
                               }
@@ -84,7 +84,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_parameterless_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         palette_set(0, 0);
                                         palette_set(1, 1);
@@ -108,7 +108,7 @@ public class GameBoyRomCompilerTests
                                           return;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           setup_palette();
                                           draw_mark();
@@ -124,7 +124,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_parameterized_static_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         tilemap_set(14, 12, 1);
                                         tilemap_set(15, 12, 2);
@@ -139,7 +139,7 @@ public class GameBoyRomCompilerTests
                                           return;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           draw_tile(14, 1);
                                           draw_tile(15, 2);
@@ -155,7 +155,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_parameterized_runtime_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         i16 x = 0;
                                         scroll_set(4, 0);
@@ -169,7 +169,7 @@ public class GameBoyRomCompilerTests
                                           return;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           i16 x = 0;
                                           apply_scroll(4);
@@ -188,7 +188,7 @@ public class GameBoyRomCompilerTests
                                        return moving != 0 ? fast : 0;
                                    }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        u8 moving = 1;
                                        u8 fast = 2;
@@ -199,7 +199,7 @@ public class GameBoyRomCompilerTests
         const string expressionSource = """
                                         u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;
 
-                                        void main() {
+                                        void Main() {
                                             video_init();
                                             u8 moving = 1;
                                             u8 fast = 2;
@@ -216,7 +216,7 @@ public class GameBoyRomCompilerTests
         const string explicitSource = """
                                       u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4, 5);
                                       }
@@ -225,7 +225,7 @@ public class GameBoyRomCompilerTests
         const string omittedSource = """
                                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          u8 next = step(4);
                                      }
@@ -240,7 +240,7 @@ public class GameBoyRomCompilerTests
         const string explicitSource = """
                                       u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4, 5);
                                       }
@@ -249,7 +249,7 @@ public class GameBoyRomCompilerTests
         const string namedSource = """
                                    u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        u8 next = step(amount: 5, value: 4);
                                    }
@@ -258,7 +258,7 @@ public class GameBoyRomCompilerTests
         const string omittedNamedSource = """
                                           u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                          void main() {
+                                          void Main() {
                                               video_init();
                                               u8 next = step(value: 4);
                                           }
@@ -273,7 +273,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_immutable_let_binding_like_equivalent_local_storage()
     {
         const string variableSource = """
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 speed = 2;
                                           u8 next = speed + 1;
@@ -283,7 +283,7 @@ public class GameBoyRomCompilerTests
                                       """;
 
         const string letSource = """
-                                 void main() {
+                                 void Main() {
                                      video_init();
                                      let speed = 2;
                                      u8 next = speed + 1;
@@ -301,7 +301,7 @@ public class GameBoyRomCompilerTests
         const string implicitSource = """
                                       u8 step(u8 value, u8 amount = 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4);
                                       }
@@ -310,7 +310,7 @@ public class GameBoyRomCompilerTests
         const string explicitSource = """
                                       inline pure u8 step(u8 value, u8 amount = 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4);
                                       }
@@ -323,7 +323,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_switch_expression_like_equivalent_conditional_expression()
     {
         const string conditionalSource = """
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 state = 2;
                                              u8 speed = state == 0 ? 0 : state == 1 ? 2 : state >= 2 && state < 5 ? 3 : 1;
@@ -333,7 +333,7 @@ public class GameBoyRomCompilerTests
                                          """;
 
         const string switchSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         u8 state = 2;
                                         u8 speed = state switch { 0 => 0, 1 => 2, 2..5 => 3, _ => 1 };
@@ -351,7 +351,7 @@ public class GameBoyRomCompilerTests
         const string source = """
                               u8 next(u8 value) => value + 1;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 speed = next(1) switch { 0 => 0, _ => 1 };
                               }
@@ -365,7 +365,7 @@ public class GameBoyRomCompilerTests
     public void Inline_helper_wrapping_camera_set_position_is_byte_identical()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2);
                                   world_map(1, 10, 2);
@@ -378,7 +378,7 @@ public class GameBoyRomCompilerTests
                                inline void csp(i16 px) {
                                    camera_set_position(px, 0);
                                }
-                               void main() {
+                               void Main() {
                                    video_init();
                                    world_column(0, 1, 2);
                                    world_map(1, 10, 2);
@@ -394,7 +394,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_sdk_namespaced_dot_calls_like_existing_sdk_functions()
     {
         const string functionSource = """
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           world_column(0, 1, 2);
                                           world_column(1, 3, 4);
@@ -407,7 +407,7 @@ public class GameBoyRomCompilerTests
                                       """;
 
         const string dotSource = """
-                                 void main() {
+                                 void Main() {
                                      Video.Init();
                                      World.Column(0, 1, 2);
                                      World.Column(1, 3, 4);
@@ -426,7 +426,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_wait_frame_library_helper_over_game_boy_intrinsic_like_sdk_operation()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      video_wait_vblank();
                                  }
                                  """;
@@ -440,7 +440,7 @@ public class GameBoyRomCompilerTests
                                            gb_wait_frame();
                                        }
 
-                                       void main() {
+                                       void Main() {
                                            wait_frame();
                                        }
                                        """;
@@ -452,7 +452,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_input_poll_library_helper_over_game_boy_intrinsic_like_sdk_operation()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      input_poll();
                                  }
                                  """;
@@ -466,7 +466,7 @@ public class GameBoyRomCompilerTests
                                            gb_poll_input();
                                        }
 
-                                       void main() {
+                                       void Main() {
                                            poll_input();
                                        }
                                        """;
@@ -478,7 +478,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_audio_update_library_helper_over_game_boy_intrinsic_like_sdk_operation()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      audio_update();
                                  }
                                  """;
@@ -492,7 +492,7 @@ public class GameBoyRomCompilerTests
                                            gb_audio_update();
                                        }
 
-                                       void main() {
+                                       void Main() {
                                            audio_update();
                                        }
                                        """;
@@ -504,13 +504,13 @@ public class GameBoyRomCompilerTests
     public void Audio_init_via_library_helper_is_byte_identical_gb()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   audio_init();
                                   audio_update();
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Audio.Init();
                                    Audio.Update();
                                }
@@ -526,7 +526,7 @@ public class GameBoyRomCompilerTests
     public void Injected_game_boy_audio_update_helper_keeps_surface_byte_identical()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Audio.Init();
                                   Audio.Update();
                               }
@@ -542,7 +542,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_camera_library_helpers_over_game_boy_intrinsic_like_sdk_operations()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2);
                                   world_map(1, 10, 2);
@@ -553,7 +553,7 @@ public class GameBoyRomCompilerTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Video.Init();
                                    World.Column(0, 1, 2);
                                    World.Map(1, 10, 2);
@@ -575,14 +575,14 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(8, 16, "01230123", "32103210")));
 
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   sprite_draw(player, 72, 80, 0, false, 1);
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Video.Init();
                                    Sprite.Asset(player, "player.sprite.json");
                                    Sprite.Draw(player, 72, 80, 0, false, 1);
@@ -618,7 +618,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string paletteSource = """
-                                     void main() {
+                                     void Main() {
                                          Video.Init();
                                          Sprite.Asset(player, "player.sprite.json");
                                          Sprite.Draw(player, 72, 64, 0, false, 2);
@@ -632,7 +632,7 @@ public class GameBoyRomCompilerTests
             Environment.NewLine,
             Enumerable.Range(0, 41).Select(index => $"        Sprite.Draw(player, {index % 20}, {(index % 4) * 20}, 0);"));
         var budgetSource = """
-                           void main() {
+                           void Main() {
                                Video.Init();
                                Sprite.Asset(player, "player.sprite.json");
                                loop {
@@ -657,7 +657,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(8, 16, "01230123", "32103210")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   sprite_draw(player, 72, 80, 0);
@@ -671,7 +671,7 @@ public class GameBoyRomCompilerTests
     public void Collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_gb()
     {
         const string direct = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4);
                                   world_column(1, 0, 4);
                                   world_column(2, 0, 4);
@@ -682,15 +682,15 @@ public class GameBoyRomCompilerTests
                                   camera_init(3, 11, 2);
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   i16 footY = 16;
                                   i16 hit = camera_aabb_tiles(72, footY - 8, 16, 16, 1);
                                   i16 hitTop = camera_aabb_hit_top(72, footY - 8, 16, 16, 1);
                               }
                               """;
         const string library = """
-                               void define_world() {
+                               void DefineWorld() {
                                    World.Column(0, 0, 4);
                                    World.Column(1, 0, 4);
                                    World.Column(2, 0, 4);
@@ -701,8 +701,8 @@ public class GameBoyRomCompilerTests
                                    Camera.Init(3, 11, 2);
                                }
 
-                               void main() {
-                                   define_world();
+                               void Main() {
+                                   DefineWorld();
                                    i16 footY = 16;
                                    i16 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
                                    i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
@@ -720,7 +720,7 @@ public class GameBoyRomCompilerTests
     public void Screen_collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_gb()
     {
         const string direct = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4);
                                   world_column(1, 0, 4);
                                   world_column(2, 0, 4);
@@ -731,8 +731,8 @@ public class GameBoyRomCompilerTests
                                   camera_init(3, 11, 2);
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   i16 screenX = 40;
                                   i16 screenY = 16;
                                   i16 hit = camera_screen_aabb_tiles(screenX, screenY, 16, 16, 1);
@@ -740,7 +740,7 @@ public class GameBoyRomCompilerTests
                               }
                               """;
         const string library = """
-                               void define_world() {
+                               void DefineWorld() {
                                    World.Column(0, 0, 4);
                                    World.Column(1, 0, 4);
                                    World.Column(2, 0, 4);
@@ -751,8 +751,8 @@ public class GameBoyRomCompilerTests
                                    Camera.Init(3, 11, 2);
                                }
 
-                               void main() {
-                                   define_world();
+                               void Main() {
+                                   DefineWorld();
                                    i16 screenX = 40;
                                    i16 screenY = 16;
                                    i16 hit = Camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
@@ -771,7 +771,7 @@ public class GameBoyRomCompilerTests
     public void Collision_capability_checks_preserved()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Column(0, 0, 4);
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 11, 2);
@@ -790,7 +790,7 @@ public class GameBoyRomCompilerTests
     public void Injected_game_boy_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.WaitVBlank();
                                   Input.Poll();
                               }
@@ -808,7 +808,7 @@ public class GameBoyRomCompilerTests
     public void Game_boy_selects_matching_target_intrinsic_variant_for_portable_helper()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      video_wait_vblank();
                                  }
                                  """;
@@ -826,7 +826,7 @@ public class GameBoyRomCompilerTests
                                   target_wait_frame();
                               }
 
-                              void main() {
+                              void Main() {
                                   wait_frame();
                               }
                               """;
@@ -842,7 +842,7 @@ public class GameBoyRomCompilerTests
                               [intrinsic("read_magic")]
                               extern void gb_read_magic();
 
-                              void main() {
+                              void Main() {
                                   gb_read_magic();
                               }
                               """;
@@ -860,7 +860,7 @@ public class GameBoyRomCompilerTests
                               [intrinsic("world_tile_flags_for_world")]
                               extern i16 flags_for_world(i16 world, i16 x, i16 y);
 
-                              void main() {
+                              void Main() {
                                   World.Column(0, 1, 2);
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 10, 2);
@@ -878,7 +878,7 @@ public class GameBoyRomCompilerTests
     public void Minimal_compile_time_operand_intrinsic_is_byte_identical()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   World.Column(0, 1, 2);
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 10, 2);
@@ -891,7 +891,7 @@ public class GameBoyRomCompilerTests
                                  [intrinsic("world_tile_flags_for_world")]
                                  extern i16 flags_for_world(i16 world, i16 x, i16 y);
 
-                                 void main() {
+                                 void Main() {
                                      World.Column(0, 1, 2);
                                      World.Flags(0, 0, 1);
                                      World.Map(1, 10, 2);
@@ -955,7 +955,7 @@ public class GameBoyRomCompilerTests
                                         actor.x += dx;
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor;
                                         Move(actor, 2);
@@ -969,7 +969,7 @@ public class GameBoyRomCompilerTests
                                           actor.x += dx;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           Actor actor;
                                           actor.Move(2);
@@ -989,7 +989,7 @@ public class GameBoyRomCompilerTests
                                         actor.x += dx;
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor;
                                         actor.Move(2);
@@ -1005,7 +1005,7 @@ public class GameBoyRomCompilerTests
                                        }
                                    }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Actor actor;
                                        actor.Move(2);
@@ -1029,7 +1029,7 @@ public class GameBoyRomCompilerTests
                                         Nudge(actor);
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor;
                                         actor.Move();
@@ -1049,7 +1049,7 @@ public class GameBoyRomCompilerTests
                                        }
                                    }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Actor actor;
                                        actor.Move();
@@ -1071,7 +1071,7 @@ public class GameBoyRomCompilerTests
 
                                   struct Actor { u8 x; }
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       Actor actor = { x: Step };
                                       actor.x = Apply(actor.x);
@@ -1089,7 +1089,7 @@ public class GameBoyRomCompilerTests
 
                                    class Actor { u8 x; }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Actor actor = { x: Tuning.Step };
                                        actor.x = Tuning.Apply(actor.x);
@@ -1109,7 +1109,7 @@ public class GameBoyRomCompilerTests
                                         actor.x += dx;
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor video;
                                         if (true) {
@@ -1125,7 +1125,7 @@ public class GameBoyRomCompilerTests
                                           actor.x += dx;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           Actor video;
                                           if (true) {
@@ -1144,7 +1144,7 @@ public class GameBoyRomCompilerTests
                                     u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
                                     u8 SnapToTile(u8 value) => value & 0xF8;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         u8 value = 130;
                                         u8 snapped = SnapToTile(Clamp(value, 0, 120));
@@ -1155,7 +1155,7 @@ public class GameBoyRomCompilerTests
                                       u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
                                       u8 SnapToTile(u8 value) => value & 0xF8;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 value = 130;
                                           u8 snapped = value |> Clamp(0, 120) |> SnapToTile();
@@ -1173,7 +1173,7 @@ public class GameBoyRomCompilerTests
                                     u8 X(this Actor actor) => actor.x;
                                     u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor = { x: 130 };
                                         u8 clamped = Clamp(X(actor), max: 120);
@@ -1185,7 +1185,7 @@ public class GameBoyRomCompilerTests
                                       u8 X(this Actor actor) => actor.x;
                                       u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           Actor actor = { x: 130 };
                                           u8 clamped = actor.X() |> Clamp(max: 120);
@@ -1203,7 +1203,7 @@ public class GameBoyRomCompilerTests
                                                                                                                  video_init();
                                                                                                              }
 
-                                                                                                             void main() {
+                                                                                                             void Main() {
                                                                                                                  draw();
                                                                                                              }
                                                                                                              """));
@@ -1213,7 +1213,7 @@ public class GameBoyRomCompilerTests
                                                                                                         u8 next(u8 value) => value + 1;
                                                                                                         pure u8 step(u8 value) => next(value);
 
-                                                                                                        void main() {
+                                                                                                        void Main() {
                                                                                                             video_init();
                                                                                                             u8 result = step(4);
                                                                                                         }
@@ -1230,7 +1230,7 @@ public class GameBoyRomCompilerTests
                                   return next;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 result = step(4);
                               }
@@ -1244,7 +1244,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_game_boy_assignment_to_immutable_let_binding()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   let speed = 2;
                                   speed = 3;
@@ -1259,7 +1259,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_game_boy_compound_and_postfix_mutation_of_immutable_let_binding()
     {
         var compound = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource("""
-                                                                                                      void main() {
+                                                                                                      void Main() {
                                                                                                           video_init();
                                                                                                           let speed = 2;
                                                                                                           speed += 1;
@@ -1268,7 +1268,7 @@ public class GameBoyRomCompilerTests
         Assert.Equal("Cannot assign to immutable local 'speed'.", compound.Message);
 
         var postfix = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource("""
-                                                                                                     void main() {
+                                                                                                     void Main() {
                                                                                                          video_init();
                                                                                                          let speed = 2;
                                                                                                          speed++;
@@ -1283,7 +1283,7 @@ public class GameBoyRomCompilerTests
         var sourcePath = RepositoryFile("samples/gameboy-drawing/drawing.rs");
         var source = File.ReadAllText(sourcePath);
 
-        Assert.Contains("void draw_face()", source);
+        Assert.Contains("void DrawFace()", source);
 
         var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
 
@@ -1294,7 +1294,7 @@ public class GameBoyRomCompilerTests
     public void Hud_set_tile_collects_window_operation_and_compiles_to_game_boy_window_tilemap()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   hud_set_tile(window, 1, 0, 5);
                                   return;
@@ -1321,7 +1321,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_split_scroll_hud_mode_through_capability_check()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   hud_set_tile(split_scroll, 0, 0, 1);
                                   return;
@@ -1352,7 +1352,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_runtime_sprite_loop_to_a_game_boy_rom()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   palette_set(0, 0);
                                   palette_set(1, 1);
@@ -1392,7 +1392,7 @@ public class GameBoyRomCompilerTests
                     "32103210")));
 
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2);
                                   world_map(1, 10, 2);
@@ -1410,7 +1410,7 @@ public class GameBoyRomCompilerTests
                                inline void ca() {
                                    camera_apply();
                                }
-                               void main() {
+                               void Main() {
                                    video_init();
                                    world_column(0, 1, 2);
                                    world_map(1, 10, 2);
@@ -1437,7 +1437,7 @@ public class GameBoyRomCompilerTests
                     "32103210")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Sprite.Asset(player_run, "player.sprite.json");
                                   Sprite.Draw(player_run, 72, 80, 0, false, 1);
@@ -1453,7 +1453,7 @@ public class GameBoyRomCompilerTests
     public void Golden_collision_aabb_emission_is_pinned_gb()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   World.Column(0, 0, 4);
                                   World.Column(1, 0, 4);
                                   World.Column(2, 0, 4);
@@ -1464,8 +1464,8 @@ public class GameBoyRomCompilerTests
                                   Camera.Init(3, 11, 2);
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   i16 footY = 16;
                                   i16 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
                                   i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
@@ -1490,7 +1490,7 @@ public class GameBoyRomCompilerTests
                     "32103210")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player_run, "player.sprite.json");
                                   sprite_draw(player_run, 72, 80, 0);
@@ -1514,7 +1514,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(big_player, "player.sprite.json");
                                   sprite_draw(big_player, 72, 64, 0);
@@ -1538,7 +1538,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(big_player, "player.sprite.json");
                                   bool flipX = true;
@@ -1565,7 +1565,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   sprite_draw(player, 72, 64, 0, false, 1);
@@ -1586,7 +1586,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   sprite_draw(player, 72, 64, 0, true, 1);
@@ -1603,7 +1603,7 @@ public class GameBoyRomCompilerTests
     public void Animation_frame_maps_constant_ticks_through_looping_clip_data()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   animation_clip(run, 1, 6, 6, 6);
                                   sprite_set(0, 72, 80, animation_frame(run, 0), 0);
@@ -1628,7 +1628,7 @@ public class GameBoyRomCompilerTests
     public void Animation_frame_lowers_dynamic_ticks_with_predictable_modulo_and_boundary_checks()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   animation_clip(run, 1, 6, 6, 6);
                                   i16 tick = 18;
@@ -1656,7 +1656,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   sprite_draw(player, 72, 64, 0, false, 2);
@@ -1676,7 +1676,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(18, 16)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   bool flipX = true;
@@ -1700,7 +1700,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 32)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player, "player.sprite.json");
                                   sprite_draw(player, 72, 64, 0, 32);
@@ -1722,7 +1722,7 @@ public class GameBoyRomCompilerTests
                 Rows(8, 16, "32103210")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player_run, "player.sprite.json");
                                   i16 frame = 1;
@@ -1755,7 +1755,7 @@ public class GameBoyRomCompilerTests
                 "0123012300000000"));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player_run, "player-run.gb.png", 16, 16);
                                   i16 frame = 1;
@@ -1780,7 +1780,7 @@ public class GameBoyRomCompilerTests
             Rows(8, 16, "11111111"));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(player_run, "player-run.png", 8, 16);
                                   sprite_draw(player_run, 72, 80, 0);
@@ -1807,7 +1807,7 @@ public class GameBoyRomCompilerTests
             Rows(16, 27, "0231000000000000"));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(mario_run, "mario-run.gb.png", 16, 27);
                                   sprite_draw(mario_run, 72, 77, 0);
@@ -1831,7 +1831,7 @@ public class GameBoyRomCompilerTests
             Rows(16, 27, "3210000000000000"));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(mario_run, "mario-run.gb.png", 16, 27);
                                   sprite_draw(mario_run, 72, 77, 0);
@@ -1848,7 +1848,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_scroll_set_to_game_boy_scroll_register_writes()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 camera = 0;
                                   while (true) {
@@ -1870,7 +1870,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_camera_runtime_to_world_scroll_state_and_streaming()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 0, 0, 4, 5);
                                   map_column(1, 0, 0, 4, 5);
@@ -1919,7 +1919,7 @@ public class GameBoyRomCompilerTests
     public void Camera_set_position_compares_requested_x_before_reusing_camera_steps()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 0, 0, 4, 5);
                                   map_column(1, 0, 0, 4, 5);
@@ -1944,7 +1944,7 @@ public class GameBoyRomCompilerTests
     public void Camera_set_position_tracks_y_state_and_applies_vertical_scroll()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 0, 0, 4, 5);
                                   map_column(1, 0, 0, 4, 5);
@@ -1969,7 +1969,7 @@ public class GameBoyRomCompilerTests
     public void Camera_set_position_streams_bottom_row_when_y_crosses_tile_down()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 0, 1, 2, 3, 4, 5);
                                   world_column(1, 6, 7, 8, 9, 10, 11);
@@ -1998,7 +1998,7 @@ public class GameBoyRomCompilerTests
     public void Camera_set_position_streams_top_row_when_y_crosses_tile_up()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 0, 1, 2, 3, 4, 5);
                                   world_column(1, 6, 7, 8, 9, 10, 11);
@@ -2025,7 +2025,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 0, 0, 4, 5);
                                   map_column(1, 0, 0, 4, 5);
@@ -2071,7 +2071,7 @@ public class GameBoyRomCompilerTests
             Rows(33, 16, new string('1', 33)));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(mario_player, "player-wide.gb.png", 33, 16);
                                   map_column(0, 0, 0, 4, 5);
@@ -2116,7 +2116,7 @@ public class GameBoyRomCompilerTests
     public void Video_wait_vblank_waits_for_the_next_vblank_edge()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   while (true) {
                                       video_wait_vblank();
@@ -2136,7 +2136,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_tilemap_fill_column_to_runtime_vram_writes()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 column = 20;
                                   while (true) {
@@ -2158,7 +2158,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_long_runtime_loop_with_column_streaming()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 camera = 0;
                                   i16 fine = 0;
@@ -2205,7 +2205,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_map_columns_to_rom_data_and_streams_them_to_vram()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 1, 2, 3, 4);
                                   map_column(1, 5, 6, 7, 8);
@@ -2234,7 +2234,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_map_tile_lookup_as_a_runtime_expression()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 1, 0);
                                   map_column(1, 0, 2);
@@ -2258,7 +2258,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_relational_condition_against_a_constant()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 y = 80;
                                   i16 grounded = 0;
@@ -2279,7 +2279,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_addition_between_runtime_locals()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 y = 40;
                                   i16 velocity = 3;
@@ -2302,7 +2302,7 @@ public class GameBoyRomCompilerTests
                                   i16 y;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Vec2 position;
                                   position.x = 40;
@@ -2328,7 +2328,7 @@ public class GameBoyRomCompilerTests
                                           u8 y;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 seed = 4;
                                           Vec2 position;
@@ -2343,7 +2343,7 @@ public class GameBoyRomCompilerTests
                                              u8 y;
                                          }
 
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 seed = 4;
                                              Vec2 position = { y: seed + 1, x: 2 };
@@ -2362,7 +2362,7 @@ public class GameBoyRomCompilerTests
                                           u8 y;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 x = 2;
                                           u8 y = 4;
@@ -2378,7 +2378,7 @@ public class GameBoyRomCompilerTests
                                              u8 y;
                                          }
 
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 x = 2;
                                              u8 y = 4;
@@ -2402,7 +2402,7 @@ public class GameBoyRomCompilerTests
 
                               type Position = Vec2;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   ActorIndex actor = 7;
                                   Position position;
@@ -2426,7 +2426,7 @@ public class GameBoyRomCompilerTests
                               const u8 StartX = 40;
                               const u8 Velocity = StartX - 37;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 x = StartX;
                                   i16 velocity = Velocity;
@@ -2446,7 +2446,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_local_const_identifiers_as_immediates_without_local_storage()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   const u8 StartX = 40;
                                   const u8 Velocity = StartX + 1;
@@ -2471,7 +2471,7 @@ public class GameBoyRomCompilerTests
                               const UseFast = true;
                               const Speed = UseFast ? 2 : 0;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 speed = Speed;
                               }
@@ -2490,7 +2490,7 @@ public class GameBoyRomCompilerTests
                                      const Mask = 160;
                                      const Tile = 42;
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          u8 flags = Mask | 15;
                                          u8 tile = Tile;
@@ -2502,7 +2502,7 @@ public class GameBoyRomCompilerTests
                                      const Mask = 0b1010_0000;
                                      const Tile = 0x2A;
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          u8 flags = Mask | 0x0F;
                                          u8 tile = Tile;
@@ -2523,7 +2523,7 @@ public class GameBoyRomCompilerTests
                                   bool active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 actorSize = sizeof(Actor);
                                   u8 pointerSize = sizeof(ptr<u8>);
@@ -2549,7 +2549,7 @@ public class GameBoyRomCompilerTests
                                   bool active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 yOffset = offsetof(Actor, y);
                                   u8 activeOffset = offsetof(Actor, active);
@@ -2573,7 +2573,7 @@ public class GameBoyRomCompilerTests
                               const u8 First = 0;
                               const u8 Second = 1;
 
-                              void main() {
+                              void Main() {
                                   u8 values[Count];
                                   values[First] = 40;
                                   values[Second] = values[First];
@@ -2591,7 +2591,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_fixed_size_array_initializer_like_explicit_assignments()
     {
         const string explicitSource = """
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 seed = 3;
                                           u8 values[4];
@@ -2603,7 +2603,7 @@ public class GameBoyRomCompilerTests
                                       """;
 
         const string initializerSource = """
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 seed = 3;
                                              u8 values[4] = [1, seed, seed + 1];
@@ -2624,7 +2624,7 @@ public class GameBoyRomCompilerTests
                                           bool active;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 seed = 3;
                                           Actor actors[3];
@@ -2642,7 +2642,7 @@ public class GameBoyRomCompilerTests
                                              bool active;
                                          }
 
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 seed = 3;
                                              Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];
@@ -2657,7 +2657,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_array_initializer_with_inferred_length_like_explicit_length()
     {
         const string explicitLengthSource = """
-                                            void main() {
+                                            void Main() {
                                                 video_init();
                                                 u8 seed = 3;
                                                 u8 values[3] = [1, seed, seed + 1];
@@ -2666,7 +2666,7 @@ public class GameBoyRomCompilerTests
                                             """;
 
         const string inferredLengthSource = """
-                                            void main() {
+                                            void Main() {
                                                 video_init();
                                                 u8 seed = 3;
                                                 u8 values[] = [1, seed, seed + 1];
@@ -2681,7 +2681,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_countof_fixed_size_array_as_immediate_without_runtime_code()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 values[4];
                                   u8 size = countof(values);
@@ -2706,7 +2706,7 @@ public class GameBoyRomCompilerTests
                                   Bonus
                               }
 
-                              void main() {
+                              void Main() {
                                   Tile tile = Tile.Brick;
                                   Tile bonus = Tile.Bonus;
                                   bonus = tile;
@@ -2725,7 +2725,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_compound_assignment_as_direct_lvalue_arithmetic()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 1;
                                   u8 y = 2;
                                   x += y;
@@ -2744,7 +2744,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_nested_variable_subtraction_without_reusing_expression_scratch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 a = 10;
                                   u8 b = 7;
                                   u8 c = 2;
@@ -2763,7 +2763,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_nested_variable_relational_compare_without_reusing_expression_scratch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 a = 9;
                                   u8 b = 4;
                                   u8 c = 8;
@@ -2786,7 +2786,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_nested_variable_equality_compare_without_reusing_expression_scratch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 a = 9;
                                   u8 b = 4;
                                   u8 c = 8;
@@ -2813,7 +2813,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_for_loop_to_direct_branching_without_helper_calls()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i = 0; i < 3; i += 1) {
                                       x += i;
@@ -2833,7 +2833,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_increment_decrement_and_for_postfix_increment_as_direct_arithmetic()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   x++;
                                   x--;
@@ -2855,7 +2855,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_range_for_loop_as_direct_counted_loop()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i in 0..3) {
                                       x += i;
@@ -2876,7 +2876,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_runtime_indexed_array_access_without_helper_calls()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 values[4];
                                   u8 i = 1;
                                   values[i] += 1;
@@ -2900,7 +2900,7 @@ public class GameBoyRomCompilerTests
                                   bool active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Actor actors[3];
                                   u8 i = 2;
@@ -2930,7 +2930,7 @@ public class GameBoyRomCompilerTests
                                   u8 active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Actor actors[3] = [{ active: 1, x: 4 }, { x: 9 }, { active: 1, x: 12 }];
                                   for (u8 i = 0; i < countof(actors); i += 1) {
@@ -2958,7 +2958,7 @@ public class GameBoyRomCompilerTests
                                   u8 y;
                               }
 
-                              void main() {
+                              void Main() {
                                   Actor actors[2];
                               }
                               """;
@@ -3003,7 +3003,7 @@ public class GameBoyRomCompilerTests
                                     inline u8 enemy_hp(u8 kind) => kind == Goomba ? GoombaHp : 0;
                                     inline u8 enemy_cooldown(u8 kind) => kind == Goomba ? GoombaCooldown : 0;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor enemies[2];
                                         enemies[0].active = 1;
@@ -3015,7 +3015,7 @@ public class GameBoyRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        actor.Pool(enemies, 0b10);
                                        enemy.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
@@ -3042,7 +3042,7 @@ public class GameBoyRomCompilerTests
         const string source = """
                               const GoombaSpeed = 7;
 
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Walker, speed: 1);
                               }
@@ -3057,7 +3057,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_actor_generated_name_collision_between_directives()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Walker, speed: 1);
                                   enemy.Def(GoombaSpeed, behavior: Flyer);
@@ -3073,7 +3073,7 @@ public class GameBoyRomCompilerTests
     public void Prunes_unused_enemy_lookup_helpers_until_author_calls_metadata_api()
     {
         const string unusedSource = """
-                                    void main() {
+                                    void Main() {
                                         actor.Pool(enemies, 1);
                                         enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
                                         enemies[0].kind = Goomba;
@@ -3081,7 +3081,7 @@ public class GameBoyRomCompilerTests
                                     """;
 
         const string usedSource = """
-                                  void main() {
+                                  void Main() {
                                       actor.Pool(enemies, 1);
                                       enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 2);
                                       enemies[0].kind = Goomba;
@@ -3106,7 +3106,7 @@ public class GameBoyRomCompilerTests
     public void Actor_draw_hoists_camera_x_projection_once_per_phase_loop()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Sprite.Asset(goomba, "goomba.sprite.json");
                                   Sprite.Asset(bat, "bat.sprite.json");
                                   actor.Pool(enemies, 2);
@@ -3147,7 +3147,7 @@ public class GameBoyRomCompilerTests
     public void Actor_draw_hides_offscreen_slots_without_skipping_the_sprite_call()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
@@ -3183,7 +3183,7 @@ public class GameBoyRomCompilerTests
             ]
             """);
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 0);
                                   world_map(40, 10, 40);
                                   camera_init(40, 10, 18);
@@ -3226,7 +3226,7 @@ public class GameBoyRomCompilerTests
             """);
         File.WriteAllText(Path.Combine(baseDirectory, "goomba.sprite.json"), SpriteJson(Rows(8, 16, "11111111")));
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   World.Column(0,
                                       0, 0, 0, 0, 0, 0, 0, 0,
@@ -3279,7 +3279,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_actor_pool_without_literal_capacity()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 capacity = 2;
                                   actor.Pool(enemies, capacity);
                               }
@@ -3294,7 +3294,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_actor_pool_above_game_boy_struct_array_storage_capacity()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 41);
                               }
                               """;
@@ -3308,7 +3308,7 @@ public class GameBoyRomCompilerTests
     public void Rejects_unknown_actor_behavior_with_named_diagnostic_on_game_boy()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Ghost);
                                   enemies.Update();
@@ -3328,7 +3328,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(16, 16, "1111111111111111")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "wide-goomba.sprite.json");
                                   actor.Pool(enemies, 21);
@@ -3355,7 +3355,7 @@ public class GameBoyRomCompilerTests
             Rows(8, 32, Enumerable.Repeat("11111111", 32).ToArray()));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.png", 8, 32);
                                   actor.Pool(enemies, 10);
@@ -3378,7 +3378,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(8, 16, "11111111")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.sprite.json");
                                   actor.Pool(enemies, 11);
@@ -3423,7 +3423,7 @@ public class GameBoyRomCompilerTests
                                     const Goomba = 1;
                                     const GoombaSpeed = 1;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Sprite.Asset(goomba, "goomba.sprite.json");
                                         Actor enemies[1];
@@ -3475,7 +3475,7 @@ public class GameBoyRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Sprite.Asset(goomba, "goomba.sprite.json");
                                        actor.Pool(enemies, 1);
@@ -3501,7 +3501,7 @@ public class GameBoyRomCompilerTests
             SpriteJson(Rows(8, 16, "11111111")));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 0, 0);
                                   world_map(1, 10, 2);
@@ -3551,7 +3551,7 @@ public class GameBoyRomCompilerTests
                                     const Walker = 1;
                                     const Goomba = 1;
 
-                                    void main() {
+                                    void Main() {
                                         world_column(0, 0, 0);
                                         world_flags(0, 0, 1);
                                         world_column(1, 0, 0);
@@ -3600,7 +3600,7 @@ public class GameBoyRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        world_column(0, 0, 0);
                                        world_flags(0, 0, 1);
                                        world_column(1, 0, 0);
@@ -3651,7 +3651,7 @@ public class GameBoyRomCompilerTests
                                     const Goomba = 1;
                                     const GoombaSpeed = 1;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor enemies[1];
                                         enemies[0].active = 1;
@@ -3672,7 +3672,7 @@ public class GameBoyRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        actor.Pool(enemies, 1);
                                        enemy.Def(Goomba, behavior: Walker, speed: 1, animation: walk);
@@ -3697,7 +3697,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
@@ -3760,7 +3760,7 @@ public class GameBoyRomCompilerTests
                              inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 
-                             void main() {
+                             void Main() {
                                  world_column(0, 0, 0);
                                  world_map(40, 10, 2);
                                  camera_init(40, 10, 2);
@@ -3776,7 +3776,7 @@ public class GameBoyRomCompilerTests
                              """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
@@ -3813,7 +3813,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Walker);
                                   enemy.Def(Bat, behavior: Flyer);
@@ -3838,7 +3838,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
@@ -3860,7 +3860,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_actor_touch_player_helper_for_player_contact()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Walker, contactDamage: 2, hitboxWidth: 8, hitboxHeight: 8);
                                   enemies[0].active = 1;
@@ -3888,7 +3888,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Walker);
                                   enemy.Def(Bat, behavior: Flyer);
@@ -3942,7 +3942,7 @@ public class GameBoyRomCompilerTests
                                     const Spike = 6;
                                     const SpikeContactDamage = 2;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor enemies[6];
                                         enemies[0].active = 1;
@@ -4029,7 +4029,7 @@ public class GameBoyRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        actor.Pool(enemies, 6);
                                        enemy.Def(Goomba, behavior: Walker, speed: 1);
@@ -4064,7 +4064,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   loop {
                                       x++;
@@ -4096,7 +4096,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_break_and_continue_as_direct_for_loop_jumps()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i = 0; i < 4; i += 1) {
                                       if (i == 1) {
@@ -4132,7 +4132,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_do_while_continue_to_condition_check()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   do {
                                       x++;
@@ -4163,7 +4163,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_logical_conditions_with_short_circuit_branches()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   u8 y = 1;
                                   u8 z = 0;
@@ -4195,7 +4195,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_range_membership_condition_like_explicit_bounds_checks()
     {
         const string explicitSource = """
-                                      void main() {
+                                      void Main() {
                                           u8 tile = 2;
                                           u8 hit = 0;
                                           if (tile >= 1 && tile < 4) {
@@ -4205,7 +4205,7 @@ public class GameBoyRomCompilerTests
                                       """;
 
         const string membershipSource = """
-                                        void main() {
+                                        void Main() {
                                             u8 tile = 2;
                                             u8 hit = 0;
                                             if (tile in 1..4) {
@@ -4221,7 +4221,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_unary_not_condition_by_inverting_the_branch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   if (!(x != 0)) {
                                       x += 1;
@@ -4240,7 +4240,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_else_if_chain_as_nested_direct_branches()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   if (x == 0) {
                                       x += 1;
@@ -4266,7 +4266,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_switch_as_direct_compare_branches_without_runtime_helper()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 state = 1;
                                   u8 value;
@@ -4299,7 +4299,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_switch_case_with_multiple_values_as_direct_compares()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 state = 1;
                                   u8 value;
                                   switch (state) {
@@ -4326,7 +4326,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_switch_case_with_half_open_range_as_direct_bounds_checks()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 state = 2;
                                   u8 value;
                                   switch (state) {
@@ -4354,7 +4354,7 @@ public class GameBoyRomCompilerTests
     {
         const string source = """
                               const BaseValue = 4;
-                              void main() {
+                              void Main() {
                                   u8 value = BaseValue;
                                   const NextValue = BaseValue + 1;
                                   value = NextValue;
@@ -4375,7 +4375,7 @@ public class GameBoyRomCompilerTests
                               const Solid = 1;
                               const Hazard = 2;
                               const Toggle = 4;
-                              void main() {
+                              void Main() {
                                   u8 flags = 0;
                                   flags |= Solid;
                                   flags &= ~Hazard;
@@ -4403,7 +4403,7 @@ public class GameBoyRomCompilerTests
                                   return flags & ~mask;
                               }
 
-                              void main() {
+                              void Main() {
                                   u8 flags = 0;
                                   flags = set_flag(flags, 1);
                                   flags = clear_flag(flags, 2);
@@ -4421,7 +4421,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_explicit_casts_as_zero_cost_expression_markers()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 flags = 0;
                                   u16 wide = 1;
                                   flags = (u8)(wide | 2);
@@ -4438,7 +4438,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_logical_value_expressions_as_direct_boolean_materialization()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 1;
                                   u8 y = 0;
                                   u8 both = x != 0 && y != 0;
@@ -4462,7 +4462,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_conditional_value_expressions_as_direct_branches()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 moving = 1;
                                   u8 fast = 2;
                                   u8 speed = moving != 0 ? fast : 0;
@@ -4481,7 +4481,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_button_pressed_as_a_runtime_expression()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 jumped = 0;
                                   if (button_pressed(a) != 0) {
@@ -4509,7 +4509,7 @@ public class GameBoyRomCompilerTests
     public void Button_enum_member_lowers_like_bare_button_identifier(string bare, string enumMember)
     {
         string Program(string button) => $$"""
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 held = 0;
                                   i16 ticks = 0;
@@ -4539,7 +4539,7 @@ public class GameBoyRomCompilerTests
     public void Input_facade_predicates_lower_like_button_builtins()
     {
         const string builtinSource = """
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          i16 w = 0;
                                          i16 h = 0;
@@ -4555,7 +4555,7 @@ public class GameBoyRomCompilerTests
                                      """;
 
         const string facadeSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         i16 w = 0;
                                         i16 h = 0;
@@ -4577,7 +4577,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_tick_input_api_for_variable_jump()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 grounded = 1;
                                   i16 velocityY = 0;
@@ -4624,7 +4624,7 @@ public class GameBoyRomCompilerTests
     public void Input_poll_settles_joypad_rows_before_latching_buttons()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   while (true) {
                                       video_wait_vblank();
@@ -4769,7 +4769,7 @@ public class GameBoyRomCompilerTests
                                   const WorldHeight = 5;
                                   const PlayerScreenX = 72;
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       world_column(0, 1, 2, 3, 4, 5);
                                       world_flags(0, 0, 0, 1, 1, 1);
@@ -4785,7 +4785,7 @@ public class GameBoyRomCompilerTests
                                      enum World { Width = 16, StreamY = 9, Height = 5 }
                                      enum Player { ScreenX = 72 }
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          world_column(0, 1, 2, 3, 4, 5);
                                          world_flags(0, 0, 0, 1, 1, 1);
@@ -4807,7 +4807,7 @@ public class GameBoyRomCompilerTests
                                   enum World { Width = 16, StreamY = 9, Height = 5 }
                                   enum Player { ScreenX = 72 }
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       world_column(0, 1, 2, 3, 4, 5);
                                       world_flags(0, 0, 0, 1, 1, 1);
@@ -4823,7 +4823,7 @@ public class GameBoyRomCompilerTests
                                           static class Level { const i16 Width = 16; const i16 StreamY = 9; const i16 Height = 5; }
                                           static class Player { const i16 ScreenX = 72; }
 
-                                          void main() {
+                                          void Main() {
                                               video_init();
                                               world_column(0, 1, 2, 3, 4, 5);
                                               world_flags(0, 0, 0, 1, 1, 1);
@@ -4844,7 +4844,7 @@ public class GameBoyRomCompilerTests
         const string source = """
                               static class Level { const i16 Width = 16; i16 broken; }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                               }
                               """;
@@ -4863,7 +4863,7 @@ public class GameBoyRomCompilerTests
                                      if (grounded != 0) { s.x += 1; }
                                      if (s.grounded == 0) { s.x += 1; }
                                  }
-                                 void main() {
+                                 void Main() {
                                      video_init();
                                      S s; s.grounded = 1; s.moving = 0; s.x = 0;
                                      s.step(s.grounded);
@@ -4881,7 +4881,7 @@ public class GameBoyRomCompilerTests
                                       if (grounded) { s.x += 1; }
                                       if (!s.grounded) { s.x += 1; }
                                   }
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       S s; s.grounded = true; s.moving = false; s.x = 0;
                                       s.step(s.grounded);
@@ -4902,7 +4902,7 @@ public class GameBoyRomCompilerTests
                                   type Pixel = i16;
                                   enum Player { StartY = 73 }
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       Pixel playerY = 0;
                                       Pixel velocityY = 0;
@@ -4944,7 +4944,7 @@ public class GameBoyRomCompilerTests
                                           player.y += player.velocityY;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           PlayerState player;
                                           player.Reset();
@@ -4961,7 +4961,7 @@ public class GameBoyRomCompilerTests
         const string flatSource = """
                                   type Pixel = i16;
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       world_column(0, 1, 2);
                                       world_flags(0, 0, 1);
@@ -5017,7 +5017,7 @@ public class GameBoyRomCompilerTests
                                           }
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           world_column(0, 1, 2);
                                           world_flags(0, 0, 1);
@@ -5053,7 +5053,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("player.Reset(view);", source);
         Assert.Contains("player.ApplyGravity();", source);
         Assert.Contains("""World.Load("maps/runner.tmj");""", source);
-        Assert.Contains("load_world();", source);
+        Assert.Contains("LoadWorld();", source);
         Assert.Contains("Sprite.Draw(mario_player, view.screenX, view.screenY", source);
         Assert.DoesNotContain("const WorldWidth", source);
         Assert.DoesNotContain("const PlayerScreenX", source);
@@ -5259,7 +5259,7 @@ public class GameBoyRomCompilerTests
                                   return;
                               }
 
-                              void main() {
+                              void Main() {
                                   define_level_columns();
                                   world_map(16, 11, 4);
                                   return;
@@ -5290,7 +5290,7 @@ public class GameBoyRomCompilerTests
     public void World_map_generates_streaming_columns_from_world_columns()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 0, 4, 5);
                                   world_column(1, 0, 0, 4, 5);
                                   world_column(2, 0, 5, 4, 5);
@@ -5310,8 +5310,8 @@ public class GameBoyRomCompilerTests
                                   return;
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   world_map(16, 11, 4);
                                   camera_init(16, 11, 4);
                                   return;
@@ -5420,7 +5420,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Load("level.tmj");
                                   Camera.Init(3, 5, 2);
                                   return;
@@ -5538,7 +5538,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Load("level.tmj");
                                   Camera.Init(3, 2, 2);
                                   return;
@@ -5655,7 +5655,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Load("level.tmj");
                                   Camera.Init(3, 2, 2);
                                   loop {
@@ -5695,14 +5695,14 @@ public class GameBoyRomCompilerTests
     public void Camera_horizontal_streaming_fills_configured_visible_world_rows()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
                                   world_column(1, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28);
                                   return;
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   world_map(2, 9, 14);
                                   Camera.Init(2, 9, 14);
                                   loop {
@@ -5797,7 +5797,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Load("level.tmj");
                                   Camera.Init(6, 4, 4);
                                   return;
@@ -5891,7 +5891,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Load("level.tmj");
                                   Camera.Init(1, 0, 1);
                                   return;
@@ -5961,7 +5961,7 @@ public class GameBoyRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Sprite.Asset(player, "player.sprite.json");
                                   World.Load("level.tmj");
@@ -5980,7 +5980,7 @@ public class GameBoyRomCompilerTests
     public void World_map_generates_collision_flags_and_lowers_flag_queries()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4);
                                   world_column(1, 3, 5);
                                   world_flags(0, 0, 1);
@@ -5988,8 +5988,8 @@ public class GameBoyRomCompilerTests
                                   return;
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   world_map(2, 11, 2);
                                   camera_init(2, 11, 2);
                                   i16 column = 1;
@@ -6028,7 +6028,7 @@ public class GameBoyRomCompilerTests
     public void World_tile_flags_at_reads_world_pixel_coordinates_and_bounds_to_empty()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4);
                                   world_column(1, 3, 5);
                                   world_flags(0, 0, 1);
@@ -6036,8 +6036,8 @@ public class GameBoyRomCompilerTests
                                   return;
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   world_map(2, 11, 2);
                                   i16 worldX = 8;
                                   i16 worldY = 0;
@@ -6076,7 +6076,7 @@ public class GameBoyRomCompilerTests
     public void Collision_aabb_tiles_checks_each_overlapped_world_tile()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4, 0);
                                   world_column(1, 3, 5, 0);
                                   world_column(2, 0, 0, 6);
@@ -6086,8 +6086,8 @@ public class GameBoyRomCompilerTests
                                   return;
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   world_map(3, 11, 3);
                                   i16 x = 7;
                                   i16 y = 8;
@@ -6113,7 +6113,7 @@ public class GameBoyRomCompilerTests
     public void Camera_aabb_tiles_checks_each_overlapped_tile_against_visible_camera_columns()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4);
                                   world_column(1, 0, 5);
                                   world_column(2, 0, 6);
@@ -6125,8 +6125,8 @@ public class GameBoyRomCompilerTests
                                   return;
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   world_map(4, 11, 2);
                                   camera_init(4, 11, 2);
                                   i16 y = 8;
@@ -6151,7 +6151,7 @@ public class GameBoyRomCompilerTests
     public void Camera_aabb_hit_top_returns_top_edge_of_first_overlapped_tile()
     {
         const string source = """
-                              void define_world() {
+                              void DefineWorld() {
                                   world_column(0, 0, 4);
                                   world_column(1, 0, 4);
                                   world_column(2, 0, 4);
@@ -6162,8 +6162,8 @@ public class GameBoyRomCompilerTests
                                   camera_init(3, 11, 2);
                               }
 
-                              void main() {
-                                  define_world();
+                              void Main() {
+                                  DefineWorld();
                                   i16 footY = 16;
                                   i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                                   return;
@@ -6449,9 +6449,9 @@ public class GameBoyRomCompilerTests
 
         Assert.DoesNotContain("void draw_starting_scene()", source);
         Assert.DoesNotContain("tilemap_fill(", source);
-        Assert.DoesNotContain("void draw_background()", source);
+        Assert.DoesNotContain("void DrawBackground()", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
-        Assert.Contains("void load_world()", source);
+        Assert.Contains("void LoadWorld()", source);
         Assert.Contains("""World.Load("maps/runner.tmj");""", source);
         Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner.tmj")));
         Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner-tiles.tsj")));
@@ -6466,7 +6466,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);", source);
         Assert.True(
             source.IndexOf("Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);", StringComparison.Ordinal) >
-            source.IndexOf("load_world();", StringComparison.Ordinal));
+            source.IndexOf("LoadWorld();", StringComparison.Ordinal));
         Assert.Contains("Camera.Apply();", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
         var topClampStart = source.IndexOf("if (velocityY >= Level.SignedVelocityWrap)", StringComparison.Ordinal);
@@ -6503,7 +6503,7 @@ public class GameBoyRomCompilerTests
 
         var resetStart = source.IndexOf("inline void ResolveReset(PlayerState player, CameraState view)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
-        var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
+        var resetEnd = source.IndexOf("void SetupVideo()", resetStart, StringComparison.Ordinal);
         Assert.True(resetEnd > resetStart);
         var resetBlock = source[resetStart..resetEnd];
         Assert.Contains("if (resetRequested)", resetBlock);
@@ -6613,7 +6613,7 @@ public class GameBoyRomCompilerTests
 
         var resetStart = source.IndexOf("inline void ResolveReset(PlayerState player, CameraState view)", StringComparison.Ordinal);
         Assert.True(resetStart >= 0);
-        var resetEnd = source.IndexOf("void setup_video()", resetStart, StringComparison.Ordinal);
+        var resetEnd = source.IndexOf("void SetupVideo()", resetStart, StringComparison.Ordinal);
         Assert.True(resetEnd > resetStart);
         var resetBlock = source[resetStart..resetEnd];
         Assert.DoesNotContain("frame = 0;", resetBlock);
@@ -6633,7 +6633,7 @@ public class GameBoyRomCompilerTests
     public void Compiles_long_if_body_with_map_streaming()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 0, 0, 3, 5);
                                   map_column(1, 0, 5, 3, 5);

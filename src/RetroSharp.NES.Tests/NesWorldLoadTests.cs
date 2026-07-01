@@ -57,7 +57,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -123,7 +123,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -183,7 +183,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -251,7 +251,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -328,7 +328,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -377,7 +377,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -430,7 +430,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -504,7 +504,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -574,7 +574,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -625,7 +625,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
             }
@@ -680,7 +680,7 @@ public sealed class NesWorldLoadTests : IDisposable
         // A world imported with World.Load feeds the same camera scroll path that
         // World.Map does, so the camera lowers on both targets from one source.
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
                 Camera.Init(2, 0, 2);
@@ -741,7 +741,7 @@ public sealed class NesWorldLoadTests : IDisposable
         """);
 
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Load("level.tmj");
                 Camera.Init(1, 0, 60);

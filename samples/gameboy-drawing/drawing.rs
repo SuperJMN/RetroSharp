@@ -3,7 +3,7 @@ const MapHeight = 32;
 
 enum Tile { Empty = 0, Face = 1, Eye = 2, Mouth = 3, Platform = 4, PlatformEdge = 5 }
 
-void setup_video() {
+void SetupVideo() {
     Video.Init();
     Palette.Set(0, Tile.Empty);
     Palette.Set(1, Tile.Face);
@@ -12,12 +12,12 @@ void setup_video() {
     return;
 }
 
-void clear_background() {
+void ClearBackground() {
     Tilemap.Fill(0, 0, MapWidth, MapHeight, Tile.Empty);
     return;
 }
 
-void draw_face() {
+void DrawFace() {
     Tilemap.Set(7, 4, Tile.Face);
     Tilemap.Set(8, 4, Tile.Face);
     Tilemap.Set(9, 4, Tile.Face);
@@ -66,7 +66,7 @@ void draw_face() {
     return;
 }
 
-void draw_platform() {
+void DrawPlatform() {
     Tilemap.Set(7, 12, Tile.PlatformEdge);
     Tilemap.Set(8, 12, Tile.Platform);
     Tilemap.Set(9, 12, Tile.Platform);
@@ -76,11 +76,11 @@ void draw_platform() {
     return;
 }
 
-void main() {
-    setup_video();
-    clear_background();
-    draw_face();
-    draw_platform();
+void Main() {
+    SetupVideo();
+    ClearBackground();
+    DrawFace();
+    DrawPlatform();
     Video.Present();
     return;
 }

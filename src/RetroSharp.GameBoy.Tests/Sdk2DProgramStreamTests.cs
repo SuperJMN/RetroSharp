@@ -16,7 +16,7 @@ public sealed class Sdk2DProgramStreamTests
             Input.Poll();
         }
 
-        void main() {
+        void Main() {
             Video.Init();
             loop {
                 tick();
@@ -94,7 +94,7 @@ public sealed class Sdk2DProgramStreamTests
                 Audio.Update();
             }
 
-            void main() {
+            void Main() {
                 Video.Init();
                 Audio.Init();
                 loop {

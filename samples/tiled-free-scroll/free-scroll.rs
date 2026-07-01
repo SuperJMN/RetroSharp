@@ -4,7 +4,7 @@ static class Level {
     const i16 Height = 60;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Load("free-scroll.tmj");

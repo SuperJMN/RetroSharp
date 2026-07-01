@@ -12,7 +12,7 @@ public class SemanticAnalyzerScopeTests
     [Fact]
     public void Locals_do_not_leak_out_of_function_scope()
     {
-        // program: void main() { i16 a; }
+        // program: void Main() { i16 a; }
         var decl = new DeclarationSyntax("i16", "a", Maybe<ExpressionSyntax>.None);
         var block = new BlockSyntax(new List<StatementSyntax> { decl });
         var func = new FunctionSyntax("void", "main", new List<ParameterSyntax>(), block);
@@ -34,7 +34,7 @@ public class SemanticAnalyzerScopeTests
     [Fact]
     public void Declared_variable_is_visible_in_following_statement_within_block()
     {
-        // void main() { i16 a; a; }
+        // void Main() { i16 a; a; }
         var decl = new DeclarationSyntax("i16", "a", Maybe<ExpressionSyntax>.None);
         var use = new ExpressionStatementSyntax(new IdentifierSyntax("a"));
         var block = new BlockSyntax(new List<StatementSyntax> { decl, use });
@@ -56,7 +56,7 @@ public class SemanticAnalyzerScopeTests
     [Fact]
     public void Undeclared_variable_reports_error()
     {
-        // void main() { b; }
+        // void Main() { b; }
         var use = new ExpressionStatementSyntax(new IdentifierSyntax("b"));
         var block = new BlockSyntax(new List<StatementSyntax> { use });
         var func = new FunctionSyntax("void", "main", new List<ParameterSyntax>(), block);

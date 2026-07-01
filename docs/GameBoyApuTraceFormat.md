@@ -156,7 +156,7 @@ Unknown top-level JSON properties are currently ignored by the reader. Required 
 Direct asset:
 
 ```csharp
-void main() {
+void Main() {
     Video.Init();
     Music.Asset(stage_theme, "music/stage.gbapu.json");
     Audio.Init();

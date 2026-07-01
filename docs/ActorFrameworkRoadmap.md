@@ -15,7 +15,7 @@ already landed on this branch, and tracks the remaining follow-ups in Phase 5.
 The goal: let a game declare a small, fixed actor pool and several enemy types
 (sprite, hitbox, animation, behavior, constants), then update and draw the
 active pool through stable calls — **without** a hand-written global
-enemy-kind `switch` in `main`, and **without** heap, GC, vtables, RTTI,
+enemy-kind `switch` in `Main`, and **without** heap, GC, vtables, RTTI,
 inheritance, interfaces, delegates, closures, function pointers, or hidden
 object identity. Every accepted form must lower to fixed arrays, constant
 tables, direct branches, and static/inline helper calls.
@@ -281,7 +281,7 @@ Candidate file names are guidance; inspect the real code paths first.
   - [x] Extend that sample with literal-window activation, map collision, and
     animation.
   - [x] Add a focused player-contact helper test.
-  - [x] Keep the source free of a hand-written global enemy-kind `switch` in `main`.
+  - [x] Keep the source free of a hand-written global enemy-kind `switch` in `Main`.
   - [x] Validate Game Boy first, then NES where the behavior set is supported.
   - [x] Regenerate the actor-framework sample ROMs via
     `tools/gameboy/generate_sample_roms.py`.

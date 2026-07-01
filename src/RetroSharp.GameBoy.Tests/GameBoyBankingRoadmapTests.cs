@@ -21,7 +21,7 @@ public sealed class GameBoyBankingRoadmapTests
     public void Small_program_stays_rom_only_and_unbanked()
     {
         const string source = """
-            void main() {
+            void Main() {
                 Video.Init();
                 loop {
                     Video.WaitVBlank();
@@ -42,7 +42,7 @@ public sealed class GameBoyBankingRoadmapTests
         // work does not regress it.
         var directory = RepositoryDirectory("samples/runner/music");
         var source = $$"""
-            void main() {
+            void Main() {
                 Video.Init();
                 Music.Asset(theme, "delight.gbapu");
                 Audio.Init();
@@ -70,7 +70,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Video.WaitVBlank();
             }
 
-            void main() {
+            void Main() {
                 Video.Init();
                 loop {
                     bump();
@@ -109,7 +109,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Sprite.Draw(player, 16, 16, value, false, 0);
             }
 
-            void main() {
+            void Main() {
                 Video.Init();
                 Sprite.Asset(player, "assets/mario-player.png", 18, 32);
                 Animation.Clip(walk, 1, 4, 4);
@@ -304,7 +304,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Input.Poll();
             }
 
-            void main() {
+            void Main() {
                 Video.Init();
                 loop {
                     Video.WaitVBlank();
@@ -336,7 +336,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Input.Poll();
             }
 
-            void main() {
+            void Main() {
                 Video.Init();
                 Music.Asset(theme, "large.gbapu");
                 Audio.Init();
@@ -369,7 +369,7 @@ public sealed class GameBoyBankingRoadmapTests
             builder.AppendLine();
         }
 
-        builder.AppendLine("void main() {");
+        builder.AppendLine("void Main() {");
         builder.AppendLine("    Video.Init();");
         builder.AppendLine("    loop {");
         builder.AppendLine("        Video.WaitVBlank();");
@@ -387,7 +387,7 @@ public sealed class GameBoyBankingRoadmapTests
     private static string ProgramWithLargeMainFlow()
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("void main() {");
+        builder.AppendLine("void Main() {");
         builder.AppendLine("    Video.Init();");
         builder.AppendLine("    u8 x = 0;");
         for (var i = 0; i < 6000; i++)
@@ -406,7 +406,7 @@ public sealed class GameBoyBankingRoadmapTests
     private static string ProgramWithLoopBackEdgeAcrossProgramBanks()
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("void main() {");
+        builder.AppendLine("void Main() {");
         builder.AppendLine("    Video.Init();");
         builder.AppendLine("    u8 x = 0;");
         for (var i = 0; i < 2600; i++)
@@ -430,7 +430,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
-            void main() {
+            void Main() {
                 Video.Init();
                 Sprite.Asset(player0, "player.png", 18, 32);
                 Sprite.Asset(player1, "player.png", 18, 32);
@@ -453,7 +453,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
-            void main() {
+            void Main() {
                 Video.Init();
                 Sprite.Asset(player0, "player.png", 18, 32);
                 Sprite.Asset(player1, "player.png", 18, 32);
@@ -478,7 +478,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
-            void main() {
+            void Main() {
                 Video.Init();
                 Music.Asset(theme, "large.gbapu");
                 Audio.Init();
@@ -497,7 +497,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var filler = string.Join(Environment.NewLine, Enumerable.Repeat("    x += 1;", 3500));
         return """
-            void main() {
+            void Main() {
                 Video.Init();
                 Music.Asset(theme, "large.gbapu");
                 Audio.Init();

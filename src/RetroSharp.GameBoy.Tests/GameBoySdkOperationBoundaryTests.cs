@@ -40,7 +40,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var builder = new GbBuilder();
         var program = ProgramWithOverriddenSdkOperations(
             """
-            void main() {
+            void Main() {
                 video_init();
                 sprite_asset(player_run, "player.sprite.json");
                 sprite_draw(player_run, 72, 80, 0);
@@ -77,7 +77,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var compiler = CreateRuntimeCompiler(
             builder,
             """
-            void main() {
+            void Main() {
                 video_init();
                 sprite_asset(player_run, "player.sprite.json");
             }
@@ -108,7 +108,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var compiler = CreateRuntimeCompiler(
             builder,
             """
-            void main() {
+            void Main() {
                 video_init();
                 map_column(0, 1, 2, 3, 4);
                 map_column(1, 5, 6, 7, 8);
@@ -136,7 +136,7 @@ public sealed class GameBoySdkOperationBoundaryTests
 
     private static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder)
     {
-        var program = GameBoyVideoProgram.FromProgram(new SomeParser().Parse("void main() { }").Value);
+        var program = GameBoyVideoProgram.FromProgram(new SomeParser().Parse("void Main() { }").Value);
         return new GameBoyRuntimeCompiler(builder, program);
     }
 
@@ -165,7 +165,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   return;
                               }
 
-                              void main() {
+                              void Main() {
                                   while (true) {
                                       video_wait_vblank();
                                       tick();
@@ -188,7 +188,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_camera_set_position_with_byte_backed_expressions()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   map_column(0, 0, 4);
                                   map_column(1, 0, 4);
                                   camera_init(2, 11, 2);
@@ -221,7 +221,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_camera_set_position_with_vertical_axis_when_y_can_move()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   map_column(0, 0, 4);
                                   map_column(1, 0, 4);
                                   camera_init(2, 11, 2);
@@ -254,7 +254,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Compiles_world_tile_flags_at_library_helper_over_game_boy_intrinsic_like_sdk_operation()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 4);
                                   world_flags(0, 0, 1);
                                   world_map(1, 11, 2);
@@ -263,7 +263,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    world_column(0, 0, 4);
                                    world_flags(0, 0, 1);
                                    world_map(1, 11, 2);
@@ -278,7 +278,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_world_tile_flags_query_with_byte_backed_coordinates()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 4);
                                   world_flags(0, 0, 1);
                                   world_map(1, 11, 2);
@@ -299,7 +299,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_camera_aabb_tiles_query_with_byte_backed_world_y()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 4);
                                   world_flags(0, 0, 1);
                                   world_map(1, 11, 2);
@@ -325,7 +325,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_camera_aabb_tiles_query_with_sprite_width_extent()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 4);
                                   world_flags(0, 0, 1);
                                   world_map(1, 11, 2);
@@ -346,7 +346,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_camera_aabb_tiles_query_with_constant_world_y_offset()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 4);
                                   world_flags(0, 0, 1);
                                   world_map(1, 11, 2);
@@ -367,7 +367,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_camera_aabb_hit_top_query_with_sprite_width_and_search_offset()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 4);
                                   world_flags(0, 0, 1);
                                   world_map(1, 11, 2);
@@ -394,7 +394,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_actor_pool_tile_helpers_as_camera_aabb_operations()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Column(0, 0, 4);
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 11, 2);
@@ -439,7 +439,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_actor_draw_with_animation_frame_as_sprite_draw_frame()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Sprite.Asset(player_run, "player.sprite.json");
                                   Animation.Clip(walk, 0, 4, 4);
@@ -463,7 +463,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_sprite_draw_with_runtime_operands()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   i16 y = 80;
                                   i16 frame = 1;
                                   bool flipX = true;
@@ -487,7 +487,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_sprite_draw_from_compile_time_operand_intrinsic()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   i16 y = 80;
                                   i16 frame = 1;
                                   bool flipX = true;
@@ -512,7 +512,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         const string source = """
                               struct Actor { u8 x; }
 
-                              void main() {
+                              void Main() {
                                   Actor actor = { x: 24 };
                                   u8 frames[3] = [0, 1, 2];
                                   sprite_draw(player_run, actor.x, frames[2], 0);
@@ -530,7 +530,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Collects_stream_map_column_before_game_boy_lowering()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   map_column(0, 1, 2, 3, 4);
                                   map_column(1, 5, 6, 7, 8);
                                   i16 targetColumn = 20;
@@ -552,7 +552,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Compilation_rejects_combined_streaming_that_exceeds_one_frame_budget()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
                                   i16 targetColumn = 20;
@@ -580,7 +580,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   map_stream_column(targetColumn, sourceColumn, 0, 17);
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
                                   i16 targetColumn = 20;
@@ -604,7 +604,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Compilation_validates_branch_alternatives_as_exclusive_frame_paths()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
                                   i16 targetColumn = 20;
@@ -630,7 +630,7 @@ public sealed class GameBoySdkOperationBoundaryTests
             Environment.NewLine,
             Enumerable.Range(0, 41).Select(index => $"        sprite_draw(player_run, {index % 20}, {(index % 4) * 20}, 0);"));
         var source = """
-                     void main() {
+                     void Main() {
                          video_init();
                          sprite_asset(player_run, "player.sprite.json");
                          while (true) {
@@ -655,7 +655,7 @@ public sealed class GameBoySdkOperationBoundaryTests
             Environment.NewLine,
             Enumerable.Range(0, 11).Select(index => $"        sprite_draw(player_run, {index * 8}, 16, 0);"));
         var source = """
-                     void main() {
+                     void Main() {
                          video_init();
                          sprite_asset(player_run, "player.sprite.json");
                          while (true) {
@@ -677,7 +677,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Camera_set_position_accepts_diagonal_movement_on_game_boy_with_staggered_streaming_budget()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   map_column(0, 0, 4);
                                   map_column(1, 0, 4);
                                   camera_init(2, 11, 2);
@@ -703,7 +703,7 @@ public sealed class GameBoySdkOperationBoundaryTests
     public void Camera_set_position_validates_arity_at_the_sdk_boundary()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   camera_set_position(0);
                               }
                               """;

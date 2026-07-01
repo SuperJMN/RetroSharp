@@ -24,7 +24,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             ScreenY = 72
         }
 
-        void main() {
+        void Main() {
             Video.Init();
 
             World.Column(0, 1, 2, 3, 4);
@@ -229,7 +229,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     public void Vertical_only_camera_still_lowers_on_game_boy_and_nes()
     {
         const string verticalSource = """
-            void main() {
+            void Main() {
                 World.Column(0, 1, 2);
                 World.Map(1, 10, 2);
                 Camera.Init(1, 10, 2);
@@ -252,7 +252,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     public void Runner_shaped_camera_collision_lowers_on_nes()
     {
         const string collisionSource = """
-            void main() {
+            void Main() {
                 World.Column(0, 1, 2);
                 World.Flags(0, 0, 1);
                 World.Map(1, 10, 2);
@@ -276,7 +276,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     public void Runner_shaped_camera_hit_top_lowers_on_nes()
     {
         const string collisionSource = """
-            void main() {
+            void Main() {
                 World.Column(0, 1, 2);
                 World.Flags(0, 0, 1);
                 World.Map(1, 10, 2);
@@ -300,7 +300,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     public void Actor_framework_animation_and_tile_helpers_lower_on_game_boy_and_nes()
     {
         const string actorSource = """
-            void main() {
+            void Main() {
                 World.Column(0, 1, 2);
                 World.Flags(0, 0, 1);
                 World.Map(1, 10, 2);
@@ -336,7 +336,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     public void Same_actor_pool_with_multi_sprite_png_compiles_on_game_boy_and_nes_when_it_fits_each_budget()
     {
         const string actorSource = """
-            void main() {
+            void Main() {
                 World.Column(0, 1, 2);
                 World.Map(1, 10, 2);
                 Camera.Init(1, 10, 2);
@@ -400,7 +400,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 Height = {{height}}
             }
 
-            void main() {
+            void Main() {
                 Video.Init();
             {{columns}}
                 World.Map(World.Width, World.StreamY, World.Height);
@@ -421,7 +421,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
         return $$"""
-            void main() {
+            void Main() {
                 Video.Init();
                 World.Column(0, {{tallColumn}});
                 World.Column(63, {{tallColumn}});

@@ -1,4 +1,4 @@
-void setup_video() {
+void SetupVideo() {
     Video.Init();
     Palette.Set(0, 0);
     Palette.Set(1, 1);
@@ -13,7 +13,7 @@ void setup_video() {
     return;
 }
 
-void draw_background() {
+void DrawBackground() {
     Tilemap.Set(2, 4, 1);
     Tilemap.Set(3, 4, 1);
     Tilemap.Set(4, 5, 1);
@@ -37,7 +37,7 @@ void draw_background() {
     return;
 }
 
-void define_world() {
+void DefineWorld() {
     World.Column(0, 0, 0, 2, 0, 4, 5);
     World.Column(1, 0, 0, 2, 0, 4, 5);
     World.Column(2, 0, 0, 0, 0, 4, 5);
@@ -73,10 +73,10 @@ void define_world() {
     return;
 }
 
-void main() {
-    setup_video();
-    draw_background();
-    define_world();
+void Main() {
+    SetupVideo();
+    DrawBackground();
+    DefineWorld();
     World.Map(16, 9, 6);
     Camera.Init(16, 9, 6);
     i16 cameraX = 0;

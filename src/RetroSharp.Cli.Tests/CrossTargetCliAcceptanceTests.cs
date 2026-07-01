@@ -104,7 +104,7 @@ public sealed class CrossTargetCliAcceptanceTests
         File.WriteAllText(
             sourcePath,
             """
-            void main() {
+            void Main() {
                 Video.Init();
                 Hud.SetTile(window, 0, 0, 1);
                 return;

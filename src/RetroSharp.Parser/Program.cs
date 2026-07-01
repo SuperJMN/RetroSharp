@@ -6,7 +6,7 @@ public class Program
 {
     static void Main(string[] args)
     {
-        Try("void main(){ int a; a = 12; }");
+        Try("void Main(){ int a; a = 12; }");
     }
 
     static void Try(string input)

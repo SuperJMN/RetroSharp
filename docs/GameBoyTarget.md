@@ -65,7 +65,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 
 ## Supported Runtime Subset
 
-- `void main()`
+- `void Main()`
 - Top-level and block-local `const` declarations, with or without type annotations, folded into literal expressions
 - Type aliases normalized to their underlying type before Game Boy lowering
 - `sizeof(type)` folded into literal byte-size expressions for primitive, pointer, enum, and plain struct types
@@ -223,7 +223,7 @@ The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. I
 You can declare any number of themes with `Music.Asset(name, path)` (each name must be unique) and switch between them at runtime by calling `Music.Play(other)`. Source code never touches ROM banks: when the combined program fits, every theme is stored inline in a 32 KiB ROM-only cartridge; when it does not, the compiler emits an MBC1 banked ROM and places each theme in its own ROM bank range. `Music.Play(name)` reconfigures both the data pointer and the base bank for the requested theme, and the audio runtime resolves all later bank crossings relative to that theme's base, so a theme that lives in the high banks streams exactly like one in bank 1.
 
 ```
-void main() {
+void Main() {
     Video.Init();
     Music.Asset(overworld, "overworld.gbapu");
     Music.Asset(boss, "boss.uge");

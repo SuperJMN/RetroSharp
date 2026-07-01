@@ -9,7 +9,7 @@ static class Scroll {
     const i16 MaxY = 120;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Column(0,

@@ -1,6 +1,6 @@
 enum HudTile { Blank = 0, One = 1, Two = 2, Three = 3, Icon = 5 }
 
-void main() {
+void Main() {
     Video.Init();
     Palette.Set(0, HudTile.Blank);
     Palette.Set(1, HudTile.One);

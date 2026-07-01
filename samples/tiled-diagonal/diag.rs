@@ -8,7 +8,7 @@ static class Scroll {
     const i16 Max = 160;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Load("diag.tmj");

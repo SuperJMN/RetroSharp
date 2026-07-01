@@ -8,7 +8,7 @@ static class Scroll {
     const i16 MaxY = 176;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Load("tall.tmj");

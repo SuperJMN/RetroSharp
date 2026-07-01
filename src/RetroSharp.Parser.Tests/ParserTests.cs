@@ -162,7 +162,7 @@ public class ParserTests
     public void Do_while_loop()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         do
@@ -199,7 +199,7 @@ public class ParserTests
         var source = """
                      u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;
 
-                     void main()
+                     void Main()
                      {
                         u8 moving = 1;
                         u8 fast = 2;
@@ -215,7 +215,7 @@ public class ParserTests
         var source = """
                      inline pure u8 step(u8 value) => value + 1;
 
-                     void main()
+                     void Main()
                      {
                         u8 next = step(4);
                      }
@@ -240,7 +240,7 @@ public class ParserTests
         var source = """
                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                     void main()
+                     void Main()
                      {
                         u8 next = step(4);
                      }
@@ -252,7 +252,7 @@ public class ParserTests
     public void Switch_expression()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 state = 2;
                         u8 speed = state switch { 0 => 0, 1, 2 => 3, 3..6 => 5, _ => 1 };
@@ -264,7 +264,7 @@ public class ParserTests
     [Fact]
     public void Switch_expression_is_preserved_in_the_ast()
     {
-        var result = new SomeParser().Parse("void main(){ u8 state = 2; u8 speed = state switch { 0 => 0, _ => 1 }; }");
+        var result = new SomeParser().Parse("void Main(){ u8 state = 2; u8 speed = state switch { 0 => 0, _ => 1 }; }");
 
         result.Should().Succeed();
         var function = Assert.Single(result.Value.Functions);
@@ -278,7 +278,7 @@ public class ParserTests
         var source = """
                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                     void main()
+                     void Main()
                      {
                         u8 next = step(amount: 5, value: 4);
                      }
@@ -290,7 +290,7 @@ public class ParserTests
     public void Sdk_namespaced_dot_calls()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         Video.Init();
                         Input.Poll();
@@ -303,7 +303,7 @@ public class ParserTests
     [Fact]
     public void Sdk_namespaced_dot_call_is_preserved_in_the_ast()
     {
-        var result = new SomeParser().Parse("void main(){ Video.Init(); }");
+        var result = new SomeParser().Parse("void Main(){ Video.Init(); }");
 
         result.Should().Succeed();
         var function = Assert.Single(result.Value.Functions);
@@ -327,7 +327,7 @@ public class ParserTests
                         actor.x += dx;
                      }
 
-                     void main()
+                     void Main()
                      {
                         Actor actor;
                         actor.Move(2);
@@ -350,7 +350,7 @@ public class ParserTests
                                  }
                               }
 
-                              void main()
+                              void Main()
                               {
                                  Actor actor;
                                  actor.Move(2);
@@ -366,7 +366,7 @@ public class ParserTests
                                 {
                                  actor.x += dx;
                                 }
-                                void main()
+                                void Main()
                                 {
                                  Actor actor;
                                  actor.Move(2);
@@ -435,7 +435,7 @@ public class ParserTests
                                  video.value = 1;
                               }
 
-                              void main()
+                              void Main()
                               {
                                  Port video;
                                  Video.WaitVBlank();
@@ -457,7 +457,7 @@ public class ParserTests
                                 {
                                  video.value = 1;
                                 }
-                                void main()
+                                void Main()
                                 {
                                  Port video;
                                  Video.WaitVBlank();
@@ -491,7 +491,7 @@ public class ParserTests
                      u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
                      u8 SnapToTile(u8 value) => value & 0xF8;
 
-                     void main()
+                     void Main()
                      {
                         u8 value = 130;
                         u8 snapped = value |> Clamp(0, 120) |> SnapToTile();
@@ -503,7 +503,7 @@ public class ParserTests
     [Fact]
     public void Pipeline_expression_is_preserved_in_the_ast()
     {
-        var result = new SomeParser().Parse("void main(){ u8 snapped = value |> Clamp(0, 120) |> SnapToTile(); }");
+        var result = new SomeParser().Parse("void Main(){ u8 snapped = value |> Clamp(0, 120) |> SnapToTile(); }");
 
         result.Should().Succeed();
         var function = Assert.Single(result.Value.Functions);
@@ -521,7 +521,7 @@ public class ParserTests
                         i16 y;
                      }
 
-                     void main()
+                     void Main()
                      {
                         Vec2 position;
                         position.x = 12;
@@ -541,7 +541,7 @@ public class ParserTests
                         u8 y;
                      }
 
-                     void main()
+                     void Main()
                      {
                         Vec2 position = { x: 12, y: 7 };
                      }
@@ -559,7 +559,7 @@ public class ParserTests
                         u8 y;
                      }
 
-                     void main()
+                     void Main()
                      {
                         u8 x = 12;
                         u8 y = 7;
@@ -573,7 +573,7 @@ public class ParserTests
                           u8 y;
                        }
 
-                       void main()
+                       void Main()
                        {
                           u8 x = 12;
                           u8 y = 7;
@@ -596,7 +596,7 @@ public class ParserTests
                         u8 y;
                      }
 
-                     void main()
+                     void Main()
                      {
                         ActorIndex actor = 1;
                         Position position;
@@ -612,7 +612,7 @@ public class ParserTests
         var source = """
                      const u8 StartX = 40;
 
-                     void main()
+                     void Main()
                      {
                         i16 x = StartX;
                      }
@@ -624,7 +624,7 @@ public class ParserTests
     public void Local_const_declaration()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         const u8 StartX = 40;
                         const u8 StartY = StartX;
@@ -644,7 +644,7 @@ public class ParserTests
                         u16 y;
                      }
 
-                     void main()
+                     void Main()
                      {
                         const u8 Vec2Size = sizeof(Vec2);
                         const u8 PointerSize = sizeof(ptr<u8>);
@@ -665,7 +665,7 @@ public class ParserTests
                         bool active;
                      }
 
-                     void main()
+                     void Main()
                      {
                         const u8 YOffset = offsetof(Actor, y);
                         u8 bytes[offsetof(Actor, active)];
@@ -685,7 +685,7 @@ public class ParserTests
                         Up = 8
                      }
 
-                     void main()
+                     void Main()
                      {
                         Direction direction = Direction.Right;
                      }
@@ -697,7 +697,7 @@ public class ParserTests
     public void Fixed_size_array_declaration_and_constant_index_access()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 values[4];
                         values[0] = 40;
@@ -711,7 +711,7 @@ public class ParserTests
     public void Fixed_size_array_initializer()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 values[3] = [1, 2, 3];
                      }
@@ -730,7 +730,7 @@ public class ParserTests
                         bool active;
                      }
 
-                     void main()
+                     void Main()
                      {
                         u8 seed = 3;
                         Actor actors[2] = [{ x: 1, active: 1 }, { y: seed + 1 }];
@@ -743,13 +743,13 @@ public class ParserTests
     public void Fixed_size_array_initializer_can_infer_length()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 values[] = [1, 2, 3];
                      }
                      """;
         var expected = """
-                       void main()
+                       void Main()
                        {
                           u8 values[3] = [1, 2, 3];
                        }
@@ -761,7 +761,7 @@ public class ParserTests
     public void Countof_fixed_size_array_expression()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 values[4];
                         const u8 Count = countof(values);
@@ -775,7 +775,7 @@ public class ParserTests
     public void Countof_does_not_cross_scalar_shadow()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 values[4];
                         if (true)
@@ -796,7 +796,7 @@ public class ParserTests
     public void Compound_assignment()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 1;
                         x += 2;
@@ -813,7 +813,7 @@ public class ParserTests
                      const Solid=1;
                      const Hazard=2;
                      const Toggle=4;
-                     void main()
+                     void Main()
                      {
                         u8 flags = 0;
                         flags |= Solid;
@@ -836,7 +836,7 @@ public class ParserTests
                         return flags | mask;
                      }
 
-                     void main()
+                     void Main()
                      {
                         u8 flags = 0;
                         flags = set_flag(flags, 1);
@@ -849,7 +849,7 @@ public class ParserTests
     public void Explicit_cast_expression()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u16 wide = 1;
                         u8 narrowed = (u8)(wide | 2);
@@ -862,7 +862,7 @@ public class ParserTests
     public void Increment_and_decrement_statements()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 1;
                         x++;
@@ -876,7 +876,7 @@ public class ParserTests
     public void For_loop_with_local_initializer_and_compound_increment()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         for (u8 i = 0; i < 3; i += 1)
@@ -892,7 +892,7 @@ public class ParserTests
     public void For_loop_with_postfix_increment()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         for (u8 i = 0; i < 3; i++)
@@ -908,7 +908,7 @@ public class ParserTests
     public void Range_for_loop()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         for (u8 i in 0..3)
@@ -924,7 +924,7 @@ public class ParserTests
     public void Bare_loop_statement()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         loop
@@ -948,7 +948,7 @@ public class ParserTests
     public void Fixed_size_array_runtime_index_access()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 values[4];
                         u8 i = 1;
@@ -969,7 +969,7 @@ public class ParserTests
                         bool active;
                      }
 
-                     void main()
+                     void Main()
                      {
                         Actor actors[3];
                         u8 i = 1;
@@ -984,7 +984,7 @@ public class ParserTests
     public void For_loop_with_break_and_continue()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         for (u8 i = 0; i < 4; i += 1)
@@ -1008,7 +1008,7 @@ public class ParserTests
     public void Logical_conditions_preserve_both_operands()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         u8 y = 1;
@@ -1029,7 +1029,7 @@ public class ParserTests
     public void Range_membership_condition()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 tile = 2;
                         if (tile in 1..4)
@@ -1039,7 +1039,7 @@ public class ParserTests
                      }
                      """;
         var expected = """
-                       void main()
+                       void Main()
                        {
                           u8 tile = 2;
                           if (tile >= 1 && tile < 4)
@@ -1055,7 +1055,7 @@ public class ParserTests
     public void Logical_value_expressions()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         u8 y = 1;
@@ -1071,7 +1071,7 @@ public class ParserTests
     public void Conditional_value_expression()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 moving = 1;
                         u8 speed = moving != 0 ? 2 : 0;
@@ -1084,7 +1084,7 @@ public class ParserTests
     public void Conditional_value_expression_as_binary_operand_keeps_parentheses()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 moving = 1;
                         u8 speed = (moving != 0 ? 2 : 0) + 1;
@@ -1097,7 +1097,7 @@ public class ParserTests
     public void Unary_not_condition()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         if (!(x != 0))
@@ -1113,7 +1113,7 @@ public class ParserTests
     public void Else_if_chain()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 x = 0;
                         if (x == 0)
@@ -1137,7 +1137,7 @@ public class ParserTests
     public void Switch_statement_without_fallthrough()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 state = 1;
                         u8 value;
@@ -1165,7 +1165,7 @@ public class ParserTests
     public void Switch_case_with_multiple_values()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 state = 1;
                         u8 value;
@@ -1189,7 +1189,7 @@ public class ParserTests
     public void Switch_case_with_half_open_range()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         u8 state = 2;
                         u8 value;
@@ -1214,7 +1214,7 @@ public class ParserTests
     {
         var source = """
                      const StartX=7;
-                     void main()
+                     void Main()
                      {
                         u8 x=StartX;
                         const NextX=StartX+1;
@@ -1230,7 +1230,7 @@ public class ParserTests
         var source = """
                      const Mask = 0b1010_0000;
                      const Tile = 0x2A;
-                     void main()
+                     void Main()
                      {
                         u8 flags = Mask | 0x0F;
                         u8 tile = Tile;
@@ -1245,7 +1245,7 @@ public class ParserTests
     public void Immutable_let_local_binding()
     {
         var source = """
-                     void main()
+                     void Main()
                      {
                         let speed = 2;
                         u8 next = speed + 1;
@@ -1257,7 +1257,7 @@ public class ParserTests
     [Fact]
     public void Immutable_let_local_binding_is_not_parsed_as_a_user_type()
     {
-        var result = new SomeParser().Parse("void main(){ let speed = 2; }");
+        var result = new SomeParser().Parse("void Main(){ let speed = 2; }");
 
         result.Should().Succeed();
         var function = Assert.Single(result.Value.Functions);
@@ -1269,7 +1269,7 @@ public class ParserTests
     [Fact]
     public void Top_level_let_binding_is_rejected()
     {
-        new SomeParser().Parse("let speed = 2; void main(){}")
+        new SomeParser().Parse("let speed = 2; void Main(){}")
             .Should().Fail();
     }
 
@@ -1282,7 +1282,7 @@ public class ParserTests
             [intrinsic("wait_frame")]
             extern void gb_wait_frame();
 
-            void main() { }
+            void Main() { }
             """);
 
         result.Should().Succeed();

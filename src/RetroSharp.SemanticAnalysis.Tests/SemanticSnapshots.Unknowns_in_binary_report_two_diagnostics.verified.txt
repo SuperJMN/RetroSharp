@@ -1,4 +1,4 @@
-void main()
+void Main()
 {
 	i16 c;
 	c=<Unknown 'a'>+<Unknown 'b'>;

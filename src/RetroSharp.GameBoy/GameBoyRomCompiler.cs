@@ -247,8 +247,8 @@ internal sealed class GameBoyVideoProgram
     {
         program = ConstantFolder.Fold(program);
 
-        var main = program.Functions.FirstOrDefault(f => f.Name == "main")
-                   ?? throw new InvalidOperationException("Game Boy target requires a main function.");
+        var main = program.Functions.FirstOrDefault(f => f.Name == "Main")
+                   ?? throw new InvalidOperationException("Game Boy target requires a Main function.");
 
         var functions = BuildFunctionIndex(program.Functions);
         var enums = BuildEnumIndex(program.Enums);
@@ -288,7 +288,7 @@ internal sealed class GameBoyVideoProgram
         CountCalls(mainBlock, callCounts);
         foreach (var function in functions.Values)
         {
-            if (function.Name == "main" || function.IsExtern)
+            if (function.Name == "Main" || function.IsExtern)
             {
                 continue;
             }

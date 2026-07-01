@@ -413,7 +413,7 @@ inline void PresentFrame(PlayerState player, CameraState view) {
     Sprite.Draw(mario_player, view.screenX, view.screenY, player.displayFrame, player.displayFlipX, 0);
 }
 
-void setup_video() {
+void SetupVideo() {
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
     Palette.Sprite(0, 0, 0, 1, 3);
@@ -424,22 +424,22 @@ void setup_video() {
     return;
 }
 
-void setup_audio() {
+void SetupAudio() {
     Music.Asset(runner_theme, "music/runner.vgz");
     Audio.Init();
     Music.Play(runner_theme);
     return;
 }
 
-void load_world() {
+void LoadWorld() {
     World.Load("maps/runner.tmj");
     return;
 }
 
-void main() {
-    setup_video();
-    setup_audio();
-    load_world();
+void Main() {
+    SetupVideo();
+    SetupAudio();
+    LoadWorld();
     Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
     PlayerState player;
     CameraState view;

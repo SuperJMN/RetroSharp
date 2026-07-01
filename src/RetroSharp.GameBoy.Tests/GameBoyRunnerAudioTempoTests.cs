@@ -395,7 +395,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     {
         var movement = move ? "camera_move_right();" : "";
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            {{columns}}
                            camera_init(24, 11, 4);

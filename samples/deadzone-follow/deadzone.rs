@@ -25,7 +25,7 @@ static class PlayerPath {
     const i16 MaxY = 224;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Load("deadzone.tmj");

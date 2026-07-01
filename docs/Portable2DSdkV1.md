@@ -224,7 +224,7 @@ inline u8 __enemies_spawn_0_facing(u8 index) => 0;
 inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
 inline u8 __enemies_spawn_0_health(u8 index) => 0;
 
-void main() {
+void Main() {
     Actor enemies[2];
     u8 __enemies_spawn_0_used[2];
 
@@ -424,7 +424,7 @@ SDK v1 is usable for the current cross-target camera sample, and the runner-shap
 This shape is the current smallest portable sample. It uses unified world data, tick input, horizontal camera positioning, and logical sprite drawing while avoiding raw target calls.
 
 ```c
-void main() {
+void Main() {
     Video.Init();
 
     World.Column(0, 1, 2, 3, 4);

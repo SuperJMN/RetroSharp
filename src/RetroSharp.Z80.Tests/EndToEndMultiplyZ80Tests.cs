@@ -16,7 +16,7 @@ public class EndToEndMultiplyZ80Tests
     [Fact]
     public void Main_return_two_times_three_sets_HL_to_6()
     {
-        // Build semantic model: void main() { return 2 * 3; }
+        // Build semantic model: void Main() { return 2 * 3; }
         var two = new ConstantNode(2);
         var three = new ConstantNode(3);
         var mul = new BinaryExpressionNode(two, three, RetroSharp.Core.Operator.Get("*"));

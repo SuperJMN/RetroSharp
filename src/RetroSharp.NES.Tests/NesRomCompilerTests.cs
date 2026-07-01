@@ -14,7 +14,7 @@ public class NesRomCompilerTests
     public void Compiles_video_api_calls_to_an_ines_rom()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   palette_set(0, 15);
                                   palette_set(1, 39);
@@ -50,7 +50,7 @@ public class NesRomCompilerTests
     public void Logical_palette_declarations_map_tones_to_nes_grayscale_palette_slots()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Palette.Background(2, 0, 1, 2, 3);
                                   Palette.Sprite(3, 0, 0, 1, 3);
@@ -68,7 +68,7 @@ public class NesRomCompilerTests
     public void Rejects_logical_palette_sprite_slots_outside_nes_capabilities()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Palette.Sprite(4, 15, 17, 34, 51);
                               }
@@ -83,7 +83,7 @@ public class NesRomCompilerTests
     public void Compiles_parameterless_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         palette_set(0, 15);
                                         palette_set(1, 39);
@@ -107,7 +107,7 @@ public class NesRomCompilerTests
                                           return;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           setup_palette();
                                           draw_mark();
@@ -123,7 +123,7 @@ public class NesRomCompilerTests
     public void Compiles_parameterized_static_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         tilemap_set(14, 12, 1);
                                         tilemap_set(15, 12, 2);
@@ -138,7 +138,7 @@ public class NesRomCompilerTests
                                           return;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           draw_tile(14, 1);
                                           draw_tile(15, 2);
@@ -154,7 +154,7 @@ public class NesRomCompilerTests
     public void Compiles_parameterized_runtime_user_functions_like_inline_video_blocks()
     {
         const string directSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         world_column(0, 1, 2);
                                         world_column(1, 3, 4);
@@ -171,7 +171,7 @@ public class NesRomCompilerTests
                                           return;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           world_column(0, 1, 2);
                                           world_column(1, 3, 4);
@@ -191,7 +191,7 @@ public class NesRomCompilerTests
         const string enumSource = """
                                   enum World { Width = 2, StreamY = 10, Height = 2 }
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       world_column(0, 1, 2);
                                       world_column(1, 3, 4);
@@ -205,7 +205,7 @@ public class NesRomCompilerTests
         const string staticClassSource = """
                                           static class World { const i16 Width = 2; const i16 StreamY = 10; const i16 Height = 2; }
 
-                                          void main() {
+                                          void Main() {
                                               video_init();
                                               world_column(0, 1, 2);
                                               world_column(1, 3, 4);
@@ -229,7 +229,7 @@ public class NesRomCompilerTests
                                      if (grounded != 0) { s.x += 1; }
                                      if (s.grounded == 0) { s.x += 1; }
                                  }
-                                 void main() {
+                                 void Main() {
                                      video_init();
                                      S s; s.grounded = 1; s.moving = 0; s.x = 0;
                                      s.step(s.grounded);
@@ -247,7 +247,7 @@ public class NesRomCompilerTests
                                       if (grounded) { s.x += 1; }
                                       if (!s.grounded) { s.x += 1; }
                                   }
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       S s; s.grounded = true; s.moving = false; s.x = 0;
                                       s.step(s.grounded);
@@ -269,7 +269,7 @@ public class NesRomCompilerTests
                                        return moving != 0 ? fast : 0;
                                    }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        u8 moving = 1;
                                        u8 fast = 2;
@@ -281,7 +281,7 @@ public class NesRomCompilerTests
         const string expressionSource = """
                                         u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;
 
-                                        void main() {
+                                        void Main() {
                                             video_init();
                                             u8 moving = 1;
                                             u8 fast = 2;
@@ -299,7 +299,7 @@ public class NesRomCompilerTests
         const string explicitSource = """
                                       u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4, 5);
                                           return;
@@ -309,7 +309,7 @@ public class NesRomCompilerTests
         const string omittedSource = """
                                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          u8 next = step(4);
                                          return;
@@ -325,7 +325,7 @@ public class NesRomCompilerTests
         const string explicitSource = """
                                       u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4, 5);
                                           return;
@@ -335,7 +335,7 @@ public class NesRomCompilerTests
         const string namedSource = """
                                    u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        u8 next = step(amount: 5, value: 4);
                                        return;
@@ -345,7 +345,7 @@ public class NesRomCompilerTests
         const string omittedNamedSource = """
                                           u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
-                                          void main() {
+                                          void Main() {
                                               video_init();
                                               u8 next = step(value: 4);
                                               return;
@@ -361,7 +361,7 @@ public class NesRomCompilerTests
     public void Compiles_immutable_let_binding_like_equivalent_local_storage()
     {
         const string variableSource = """
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 speed = 2;
                                           u8 next = speed + 1;
@@ -372,7 +372,7 @@ public class NesRomCompilerTests
                                       """;
 
         const string letSource = """
-                                 void main() {
+                                 void Main() {
                                      video_init();
                                      let speed = 2;
                                      u8 next = speed + 1;
@@ -391,7 +391,7 @@ public class NesRomCompilerTests
         const string implicitSource = """
                                       u8 step(u8 value, u8 amount = 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4);
                                           return;
@@ -401,7 +401,7 @@ public class NesRomCompilerTests
         const string explicitSource = """
                                       inline pure u8 step(u8 value, u8 amount = 1) => value + amount;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 next = step(4);
                                           return;
@@ -415,7 +415,7 @@ public class NesRomCompilerTests
     public void Compiles_switch_expression_like_equivalent_conditional_expression()
     {
         const string conditionalSource = """
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 state = 2;
                                              u8 speed = state == 0 ? 0 : state == 1 ? 2 : state >= 2 && state < 5 ? 3 : 1;
@@ -426,7 +426,7 @@ public class NesRomCompilerTests
                                          """;
 
         const string switchSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         u8 state = 2;
                                         u8 speed = state switch { 0 => 0, 1 => 2, 2..5 => 3, _ => 1 };
@@ -445,7 +445,7 @@ public class NesRomCompilerTests
         const string source = """
                               u8 next(u8 value) => value + 1;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 speed = next(1) switch { 0 => 0, _ => 1 };
                                   return;
@@ -460,7 +460,7 @@ public class NesRomCompilerTests
     public void Compiles_sdk_namespaced_dot_calls_like_existing_sdk_functions()
     {
         const string functionSource = """
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           world_column(0, 1, 2);
                                           world_column(1, 3, 4);
@@ -474,7 +474,7 @@ public class NesRomCompilerTests
                                       """;
 
         const string dotSource = """
-                                 void main() {
+                                 void Main() {
                                      Video.Init();
                                      World.Column(0, 1, 2);
                                      World.Column(1, 3, 4);
@@ -494,7 +494,7 @@ public class NesRomCompilerTests
     public void Compiles_wait_frame_library_helper_over_nes_intrinsic_like_sdk_operation()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      video_wait_vblank();
                                  }
                                  """;
@@ -508,7 +508,7 @@ public class NesRomCompilerTests
                                            nes_wait_frame();
                                        }
 
-                                       void main() {
+                                       void Main() {
                                            wait_frame();
                                        }
                                        """;
@@ -520,7 +520,7 @@ public class NesRomCompilerTests
     public void Compiles_input_poll_library_helper_over_nes_intrinsic_like_sdk_operation()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      input_poll();
                                  }
                                  """;
@@ -534,7 +534,7 @@ public class NesRomCompilerTests
                                            nes_poll_input();
                                        }
 
-                                       void main() {
+                                       void Main() {
                                            poll_input();
                                        }
                                        """;
@@ -546,7 +546,7 @@ public class NesRomCompilerTests
     public void Compiles_audio_update_library_helper_over_nes_intrinsic_like_sdk_operation()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      audio_update();
                                  }
                                  """;
@@ -560,7 +560,7 @@ public class NesRomCompilerTests
                                            nes_audio_update();
                                        }
 
-                                       void main() {
+                                       void Main() {
                                            audio_update();
                                        }
                                        """;
@@ -572,7 +572,7 @@ public class NesRomCompilerTests
     public void Injected_nes_audio_update_helper_keeps_surface_byte_identical()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Audio.Init();
                                   Audio.Update();
                               }
@@ -588,13 +588,13 @@ public class NesRomCompilerTests
     public void Audio_init_via_library_helper_is_byte_identical_nes()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   audio_init();
                                   audio_update();
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Audio.Init();
                                    Audio.Update();
                                }
@@ -610,7 +610,7 @@ public class NesRomCompilerTests
     public void Compiles_camera_library_helpers_over_nes_intrinsic_like_sdk_operations()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2);
                                   world_map(1, 10, 2);
@@ -622,7 +622,7 @@ public class NesRomCompilerTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Video.Init();
                                    World.Column(0, 1, 2);
                                    World.Map(1, 10, 2);
@@ -664,7 +664,7 @@ public class NesRomCompilerTests
             """);
 
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(hero, "hero.nes.json");
                                   loop {
@@ -674,7 +674,7 @@ public class NesRomCompilerTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Video.Init();
                                    Sprite.Asset(hero, "hero.nes.json");
                                    loop {
@@ -732,7 +732,7 @@ public class NesRomCompilerTests
             """);
 
         const string paletteSource = """
-                                     void main() {
+                                     void Main() {
                                          Sprite.Asset(hero, "hero.nes.json");
                                          loop {
                                              Sprite.Draw(hero, 24, 32, 0, false, 4);
@@ -747,7 +747,7 @@ public class NesRomCompilerTests
             Environment.NewLine,
             Enumerable.Range(0, 9).Select(index => $"        Sprite.Draw(hero, {index * 8}, 24, 0);"));
         var budgetSource = """
-                           void main() {
+                           void Main() {
                                Video.Init();
                                Sprite.Asset(hero, "hero.nes.json");
                                loop {
@@ -791,7 +791,7 @@ public class NesRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(hero, "hero.nes.json");
                                   loop {
@@ -819,7 +819,7 @@ public class NesRomCompilerTests
     public void Injected_nes_sdk_library_helpers_keep_video_and_input_surface_byte_identical()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.WaitVBlank();
                                   Input.Poll();
                               }
@@ -837,7 +837,7 @@ public class NesRomCompilerTests
     public void Nes_selects_matching_target_intrinsic_variant_for_portable_helper()
     {
         const string sdkSource = """
-                                 void main() {
+                                 void Main() {
                                      video_wait_vblank();
                                  }
                                  """;
@@ -855,7 +855,7 @@ public class NesRomCompilerTests
                                   target_wait_frame();
                               }
 
-                              void main() {
+                              void Main() {
                                   wait_frame();
                               }
                               """;
@@ -871,7 +871,7 @@ public class NesRomCompilerTests
                               [intrinsic("read_magic")]
                               extern void nes_read_magic();
 
-                              void main() {
+                              void Main() {
                                   nes_read_magic();
                               }
                               """;
@@ -885,7 +885,7 @@ public class NesRomCompilerTests
     public void Nes_sdk_dot_calls_accept_vertical_camera_on_four_screen_target()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2);
                                   world_column(1, 3, 4);
@@ -905,7 +905,7 @@ public class NesRomCompilerTests
     public void Nes_lowers_explicit_stream_map_row_to_ppu_row_writes()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2, 3, 4);
                                   world_column(1, 5, 6, 7, 8);
@@ -932,7 +932,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{tallColumn}});
                            world_map(1, 0, 61);
@@ -953,7 +953,7 @@ public class NesRomCompilerTests
     {
         var column = string.Join(", ", Enumerable.Range(0, 14).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{column}});
                            world_column(67, {{column}});
@@ -982,7 +982,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{tallColumn}});
                            world_map(1, 0, 61);
@@ -1009,7 +1009,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{tallColumn}});
                            world_map(1, 0, 61);
@@ -1034,7 +1034,7 @@ public class NesRomCompilerTests
     public void Nes_video_wait_vblank_waits_for_the_next_vblank_edge()
     {
         const string source = """
-                       void main() {
+                       void Main() {
                            video_init();
                            loop {
                                video_wait_vblank();
@@ -1054,7 +1054,7 @@ public class NesRomCompilerTests
     public void Nes_video_wait_vblank_applies_pending_camera_scroll_before_sprite_dma()
     {
         const string source = """
-                       void main() {
+                       void Main() {
                            video_init();
                            palette_sprite(0, 0, 1, 2, 3);
                            world_column(0, 1);
@@ -1089,7 +1089,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{tallColumn}});
                            world_map(1, 0, 61);
@@ -1114,7 +1114,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{tallColumn}});
                            world_map(1, 0, 61);
@@ -1147,7 +1147,7 @@ public class NesRomCompilerTests
                                         actor.x += dx;
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor;
                                         Move(actor, 2);
@@ -1162,7 +1162,7 @@ public class NesRomCompilerTests
                                           actor.x += dx;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           Actor actor;
                                           actor.Move(2);
@@ -1183,7 +1183,7 @@ public class NesRomCompilerTests
                                         actor.x += dx;
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor;
                                         actor.Move(2);
@@ -1200,7 +1200,7 @@ public class NesRomCompilerTests
                                        }
                                    }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Actor actor;
                                        actor.Move(2);
@@ -1225,7 +1225,7 @@ public class NesRomCompilerTests
                                         Nudge(actor);
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor;
                                         actor.Move();
@@ -1246,7 +1246,7 @@ public class NesRomCompilerTests
                                        }
                                    }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Actor actor;
                                        actor.Move();
@@ -1269,7 +1269,7 @@ public class NesRomCompilerTests
 
                                   struct Actor { u8 x; }
 
-                                  void main() {
+                                  void Main() {
                                       video_init();
                                       Actor actor = { x: Step };
                                       actor.x = Apply(actor.x);
@@ -1288,7 +1288,7 @@ public class NesRomCompilerTests
 
                                    class Actor { u8 x; }
 
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Actor actor = { x: Tuning.Step };
                                        actor.x = Tuning.Apply(actor.x);
@@ -1309,7 +1309,7 @@ public class NesRomCompilerTests
                                         actor.x += dx;
                                     }
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor video;
                                         if (true) {
@@ -1326,7 +1326,7 @@ public class NesRomCompilerTests
                                           actor.x += dx;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           Actor video;
                                           if (true) {
@@ -1346,7 +1346,7 @@ public class NesRomCompilerTests
                                     u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
                                     u8 SnapToTile(u8 value) => value & 0xF8;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         u8 value = 130;
                                         u8 snapped = SnapToTile(Clamp(value, 0, 120));
@@ -1358,7 +1358,7 @@ public class NesRomCompilerTests
                                       u8 Clamp(u8 value, u8 min, u8 max) => value < min ? min : value > max ? max : value;
                                       u8 SnapToTile(u8 value) => value & 0xF8;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 value = 130;
                                           u8 snapped = value |> Clamp(0, 120) |> SnapToTile();
@@ -1377,7 +1377,7 @@ public class NesRomCompilerTests
                                     u8 X(this Actor actor) => actor.x;
                                     u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor actor = { x: 130 };
                                         u8 clamped = Clamp(X(actor), max: 120);
@@ -1390,7 +1390,7 @@ public class NesRomCompilerTests
                                       u8 X(this Actor actor) => actor.x;
                                       u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           Actor actor = { x: 130 };
                                           u8 clamped = actor.X() |> Clamp(max: 120);
@@ -1409,7 +1409,7 @@ public class NesRomCompilerTests
                                                                                                              video_init();
                                                                                                          }
 
-                                                                                                         void main() {
+                                                                                                         void Main() {
                                                                                                              draw();
                                                                                                              return;
                                                                                                          }
@@ -1420,7 +1420,7 @@ public class NesRomCompilerTests
                                                                                                     u8 next(u8 value) => value + 1;
                                                                                                     pure u8 step(u8 value) => next(value);
 
-                                                                                                    void main() {
+                                                                                                    void Main() {
                                                                                                         video_init();
                                                                                                         u8 result = step(4);
                                                                                                         return;
@@ -1438,7 +1438,7 @@ public class NesRomCompilerTests
                                   return next;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 result = step(4);
                                   return;
@@ -1453,7 +1453,7 @@ public class NesRomCompilerTests
     public void Rejects_nes_assignment_to_immutable_let_binding()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   let speed = 2;
                                   speed = 3;
@@ -1469,7 +1469,7 @@ public class NesRomCompilerTests
     public void Rejects_nes_compound_and_postfix_mutation_of_immutable_let_binding()
     {
         var compound = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource("""
-                                                                                                  void main() {
+                                                                                                  void Main() {
                                                                                                       video_init();
                                                                                                       let speed = 2;
                                                                                                       speed += 1;
@@ -1479,7 +1479,7 @@ public class NesRomCompilerTests
         Assert.Equal("Cannot assign to immutable local 'speed'.", compound.Message);
 
         var postfix = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource("""
-                                                                                                 void main() {
+                                                                                                 void Main() {
                                                                                                      video_init();
                                                                                                      let speed = 2;
                                                                                                      speed++;
@@ -1494,7 +1494,7 @@ public class NesRomCompilerTests
     {
         var source = File.ReadAllText(RepositoryFile("samples/nes-drawing/drawing.rs"));
 
-        Assert.Contains("void draw_face()", source);
+        Assert.Contains("void DrawFace()", source);
 
         var rom = NesRomCompiler.CompileSource(source);
 
@@ -1516,7 +1516,7 @@ public class NesRomCompilerTests
     public void Rejects_window_hud_mode_through_nes_capability_check()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   hud_set_tile(window, 0, 0, 1);
                                   return;
@@ -1534,7 +1534,7 @@ public class NesRomCompilerTests
     public void Compiles_disabled_hud_mode_as_no_op_for_nes()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   hud_set_tile(none, 0, 0, 1);
                                   return;
@@ -1558,7 +1558,7 @@ public class NesRomCompilerTests
     public void Button_enum_member_lowers_like_bare_button_identifier(string bare, string enumMember)
     {
         string Program(string button) => $$"""
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 down = 0;
                                   i16 pressed = 0;
@@ -1584,7 +1584,7 @@ public class NesRomCompilerTests
     public void Input_facade_predicates_lower_like_button_builtins()
     {
         const string builtinSource = """
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          i16 w = 0;
                                          i16 h = 0;
@@ -1600,7 +1600,7 @@ public class NesRomCompilerTests
                                      """;
 
         const string facadeSource = """
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         i16 w = 0;
                                         i16 h = 0;
@@ -1622,7 +1622,7 @@ public class NesRomCompilerTests
     public void Compiles_tick_input_helpers_to_nes_controller_state()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 down = 0;
                                   i16 pressed = 0;
@@ -1660,7 +1660,7 @@ public class NesRomCompilerTests
                                   i16 y;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Vec2 position;
                                   position.x = 40;
@@ -1686,7 +1686,7 @@ public class NesRomCompilerTests
                                           u8 y;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 seed = 4;
                                           Vec2 position;
@@ -1702,7 +1702,7 @@ public class NesRomCompilerTests
                                              u8 y;
                                          }
 
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 seed = 4;
                                              Vec2 position = { y: seed + 1, x: 2 };
@@ -1722,7 +1722,7 @@ public class NesRomCompilerTests
                                           u8 y;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 x = 2;
                                           u8 y = 4;
@@ -1739,7 +1739,7 @@ public class NesRomCompilerTests
                                              u8 y;
                                          }
 
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 x = 2;
                                              u8 y = 4;
@@ -1764,7 +1764,7 @@ public class NesRomCompilerTests
 
                               type Position = Vec2;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   ActorIndex actor = 7;
                                   Position position;
@@ -1790,7 +1790,7 @@ public class NesRomCompilerTests
                               const u8 StartX = 40;
                               const u8 Copy = StartX - 39;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   i16 x = StartX;
                                   i16 y = Copy;
@@ -1812,7 +1812,7 @@ public class NesRomCompilerTests
     public void Compiles_local_const_identifiers_as_immediates_without_local_storage()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   const u8 StartX = 40;
                                   const u8 Copy = StartX + 1;
@@ -1839,7 +1839,7 @@ public class NesRomCompilerTests
                               const UseFast = true;
                               const Speed = UseFast ? 2 : 0;
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 speed = Speed;
                                   return;
@@ -1860,7 +1860,7 @@ public class NesRomCompilerTests
                                      const Mask = 160;
                                      const Tile = 42;
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          u8 flags = Mask | 15;
                                          u8 tile = Tile;
@@ -1873,7 +1873,7 @@ public class NesRomCompilerTests
                                      const Mask = 0b1010_0000;
                                      const Tile = 0x2A;
 
-                                     void main() {
+                                     void Main() {
                                          video_init();
                                          u8 flags = Mask | 0x0F;
                                          u8 tile = Tile;
@@ -1895,7 +1895,7 @@ public class NesRomCompilerTests
                                   bool active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 actorSize = sizeof(Actor);
                                   u8 pointerSize = sizeof(ptr<u8>);
@@ -1923,7 +1923,7 @@ public class NesRomCompilerTests
                                   bool active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 yOffset = offsetof(Actor, y);
                                   u8 activeOffset = offsetof(Actor, active);
@@ -1949,7 +1949,7 @@ public class NesRomCompilerTests
                               const u8 First = 0;
                               const u8 Second = 1;
 
-                              void main() {
+                              void Main() {
                                   u8 values[Count];
                                   values[First] = 40;
                                   values[Second] = values[First];
@@ -1968,7 +1968,7 @@ public class NesRomCompilerTests
     public void Compiles_fixed_size_array_initializer_like_explicit_assignments()
     {
         const string explicitSource = """
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 seed = 3;
                                           u8 values[4];
@@ -1981,7 +1981,7 @@ public class NesRomCompilerTests
                                       """;
 
         const string initializerSource = """
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 seed = 3;
                                              u8 values[4] = [1, seed, seed + 1];
@@ -2003,7 +2003,7 @@ public class NesRomCompilerTests
                                           bool active;
                                       }
 
-                                      void main() {
+                                      void Main() {
                                           video_init();
                                           u8 seed = 3;
                                           Actor actors[3];
@@ -2022,7 +2022,7 @@ public class NesRomCompilerTests
                                              bool active;
                                          }
 
-                                         void main() {
+                                         void Main() {
                                              video_init();
                                              u8 seed = 3;
                                              Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];
@@ -2038,7 +2038,7 @@ public class NesRomCompilerTests
     public void Compiles_array_initializer_with_inferred_length_like_explicit_length()
     {
         const string explicitLengthSource = """
-                                            void main() {
+                                            void Main() {
                                                 video_init();
                                                 u8 seed = 3;
                                                 u8 values[3] = [1, seed, seed + 1];
@@ -2048,7 +2048,7 @@ public class NesRomCompilerTests
                                             """;
 
         const string inferredLengthSource = """
-                                            void main() {
+                                            void Main() {
                                                 video_init();
                                                 u8 seed = 3;
                                                 u8 values[] = [1, seed, seed + 1];
@@ -2064,7 +2064,7 @@ public class NesRomCompilerTests
     public void Compiles_countof_fixed_size_array_as_immediate_without_runtime_code()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 values[4];
                                   u8 size = countof(values);
@@ -2091,7 +2091,7 @@ public class NesRomCompilerTests
                                   Bonus
                               }
 
-                              void main() {
+                              void Main() {
                                   Tile tile = Tile.Brick;
                                   Tile bonus = Tile.Bonus;
                                   bonus = tile;
@@ -2112,7 +2112,7 @@ public class NesRomCompilerTests
     public void Compiles_compound_assignment_as_direct_lvalue_arithmetic()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 1;
                                   u8 y = 2;
                                   x += y;
@@ -2133,7 +2133,7 @@ public class NesRomCompilerTests
     public void Compiles_nested_variable_subtraction_without_reusing_expression_scratch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 a = 10;
                                   u8 b = 7;
                                   u8 c = 2;
@@ -2153,7 +2153,7 @@ public class NesRomCompilerTests
     public void Compiles_nested_variable_relational_compare_without_reusing_expression_scratch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 a = 9;
                                   u8 b = 4;
                                   u8 c = 8;
@@ -2177,7 +2177,7 @@ public class NesRomCompilerTests
     public void Compiles_nested_variable_equality_compare_without_reusing_expression_scratch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 a = 9;
                                   u8 b = 4;
                                   u8 c = 8;
@@ -2205,7 +2205,7 @@ public class NesRomCompilerTests
     public void Compiles_for_loop_to_direct_branching_without_helper_calls()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i = 0; i < 3; i += 1) {
                                       x += i;
@@ -2227,7 +2227,7 @@ public class NesRomCompilerTests
     public void Compiles_increment_decrement_and_for_postfix_increment_as_direct_arithmetic()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   x++;
                                   x--;
@@ -2251,7 +2251,7 @@ public class NesRomCompilerTests
     public void Compiles_range_for_loop_as_direct_counted_loop()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i in 0..3) {
                                       x += i;
@@ -2274,7 +2274,7 @@ public class NesRomCompilerTests
     public void Compiles_runtime_indexed_array_access_without_helper_calls()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 values[4];
                                   u8 i = 1;
                                   values[i] += 1;
@@ -2300,7 +2300,7 @@ public class NesRomCompilerTests
                                   bool active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Actor actors[3];
                                   u8 i = 2;
@@ -2332,7 +2332,7 @@ public class NesRomCompilerTests
                                   u8 active;
                               }
 
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Actor actors[3] = [{ active: 1, x: 4 }, { x: 9 }, { active: 1, x: 12 }];
                                   for (u8 i = 0; i < countof(actors); i += 1) {
@@ -2362,7 +2362,7 @@ public class NesRomCompilerTests
                                   u8 y;
                               }
 
-                              void main() {
+                              void Main() {
                                   Actor actors[2];
                                   return;
                               }
@@ -2408,7 +2408,7 @@ public class NesRomCompilerTests
                                     inline u8 enemy_hp(u8 kind) => kind == Goomba ? GoombaHp : 0;
                                     inline u8 enemy_cooldown(u8 kind) => kind == Goomba ? GoombaCooldown : 0;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor enemies[2];
                                         enemies[0].active = 1;
@@ -2421,7 +2421,7 @@ public class NesRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        actor.Pool(enemies, 0b10);
                                        enemy.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
@@ -2441,7 +2441,7 @@ public class NesRomCompilerTests
     public void Rejects_actor_pool_without_literal_capacity()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 capacity = 2;
                                   actor.Pool(enemies, capacity);
                                   return;
@@ -2457,7 +2457,7 @@ public class NesRomCompilerTests
     public void Rejects_actor_pool_above_nes_struct_array_storage_capacity()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 65);
                                   return;
                               }
@@ -2478,7 +2478,7 @@ public class NesRomCompilerTests
             ]
             """);
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 0, 0);
                                   world_map(40, 10, 40);
                                   camera_init(40, 10, 40);
@@ -2515,7 +2515,7 @@ public class NesRomCompilerTests
     public void Rejects_unknown_actor_behavior_with_named_diagnostic_on_nes()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   actor.Pool(enemies, 1);
                                   enemy.Def(Goomba, behavior: Ghost);
                                   enemies.Update();
@@ -2538,7 +2538,7 @@ public class NesRomCompilerTests
             "{\"platforms\":{\"nes\":{\"frames\":[[" + rowJson + "]]}}}");
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "wide-goomba.nes.json");
                                   actor.Pool(enemies, 23);
@@ -2566,7 +2566,7 @@ public class NesRomCompilerTests
             Rows(8, 16, Enumerable.Repeat("11111111", 16).ToArray()));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.png", 8, 16);
                                   actor.Pool(enemies, 8);
@@ -2609,7 +2609,7 @@ public class NesRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Sprite.Asset(goomba, "goomba.nes.json");
                                   actor.Pool(enemies, 9);
@@ -2651,7 +2651,7 @@ public class NesRomCompilerTests
                                     const Goomba = 1;
                                     const GoombaSpeed = 1;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Actor enemies[1];
                                         enemies[0].active = 1;
@@ -2675,7 +2675,7 @@ public class NesRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        actor.Pool(enemies, 1);
                                        enemy.Def(Goomba, behavior: Walker, speed: 1, hp: 1);
@@ -2737,7 +2737,7 @@ public class NesRomCompilerTests
                                     const Walker = 1;
                                     const Goomba = 1;
 
-                                    void main() {
+                                    void Main() {
                                         video_init();
                                         Sprite.Asset(goomba, "goomba.nes.json");
                                         Actor enemies[1];
@@ -2780,7 +2780,7 @@ public class NesRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        video_init();
                                        Sprite.Asset(goomba, "goomba.nes.json");
                                        actor.Pool(enemies, 1);
@@ -2825,7 +2825,7 @@ public class NesRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 0, 0);
                                   world_map(1, 10, 2);
@@ -2877,7 +2877,7 @@ public class NesRomCompilerTests
                                     const Walker = 1;
                                     const Goomba = 1;
 
-                                    void main() {
+                                    void Main() {
                                         world_column(0, 0, 0);
                                         world_flags(0, 0, 1);
                                         world_column(1, 0, 0);
@@ -2928,7 +2928,7 @@ public class NesRomCompilerTests
                                     """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        world_column(0, 0, 0);
                                        world_flags(0, 0, 1);
                                        world_column(1, 0, 0);
@@ -3007,7 +3007,7 @@ public class NesRomCompilerTests
                              inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 
-                             void main() {
+                             void Main() {
                                  world_column(0, 0, 0);
                                  world_map(40, 10, 2);
                                  camera_init(40, 10, 2);
@@ -3024,7 +3024,7 @@ public class NesRomCompilerTests
                              """;
 
         const string actorSource = """
-                                   void main() {
+                                   void Main() {
                                        world_column(0, 0, 0);
                                        world_map(40, 10, 2);
                                        camera_init(40, 10, 2);
@@ -3054,7 +3054,7 @@ public class NesRomCompilerTests
     public void Compiles_bare_loop_break_and_continue_as_direct_jumps()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   loop {
                                       x++;
@@ -3088,7 +3088,7 @@ public class NesRomCompilerTests
     public void Compiles_break_and_continue_as_direct_for_loop_jumps()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i = 0; i < 4; i += 1) {
                                       if (i == 1) {
@@ -3123,7 +3123,7 @@ public class NesRomCompilerTests
     public void Compiles_short_for_loop_condition_as_direct_relative_branch_without_trampoline()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   for (u8 i = 0; i < 3; i += 1) {
                                       x += 1;
@@ -3149,7 +3149,7 @@ public class NesRomCompilerTests
     {
         var body = string.Join(Environment.NewLine, Enumerable.Repeat("x += 1;", 40));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            u8 x = 0;
                            for (u8 i = 0; i < 1; i += 1) {
                        {{body}}
@@ -3175,7 +3175,7 @@ public class NesRomCompilerTests
     public void Compiles_do_while_continue_to_condition_check()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   do {
                                       x++;
@@ -3207,7 +3207,7 @@ public class NesRomCompilerTests
     public void Compiles_logical_conditions_with_short_circuit_branches()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   u8 y = 1;
                                   u8 z = 0;
@@ -3242,7 +3242,7 @@ public class NesRomCompilerTests
     public void Compiles_range_membership_condition_like_explicit_bounds_checks()
     {
         const string explicitSource = """
-                                      void main() {
+                                      void Main() {
                                           u8 tile = 2;
                                           u8 hit = 0;
                                           if (tile >= 1 && tile < 4) {
@@ -3253,7 +3253,7 @@ public class NesRomCompilerTests
                                       """;
 
         const string membershipSource = """
-                                        void main() {
+                                        void Main() {
                                             u8 tile = 2;
                                             u8 hit = 0;
                                             if (tile in 1..4) {
@@ -3270,7 +3270,7 @@ public class NesRomCompilerTests
     public void Compiles_unary_not_condition_by_inverting_the_branch()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   if (!(x != 0)) {
                                       x += 1;
@@ -3291,7 +3291,7 @@ public class NesRomCompilerTests
     public void Compiles_else_if_chain_as_nested_direct_branches()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 0;
                                   if (x == 0) {
                                       x += 1;
@@ -3319,7 +3319,7 @@ public class NesRomCompilerTests
     public void Compiles_switch_as_direct_compare_branches_without_runtime_helper()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   u8 state = 1;
                                   u8 value;
@@ -3354,7 +3354,7 @@ public class NesRomCompilerTests
     public void Compiles_switch_case_with_multiple_values_as_direct_compares()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 state = 1;
                                   u8 value;
                                   switch (state) {
@@ -3383,7 +3383,7 @@ public class NesRomCompilerTests
     public void Compiles_switch_case_with_half_open_range_as_direct_bounds_checks()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 state = 2;
                                   u8 value;
                                   switch (state) {
@@ -3413,7 +3413,7 @@ public class NesRomCompilerTests
     {
         const string source = """
                               const BaseValue = 4;
-                              void main() {
+                              void Main() {
                                   u8 value = BaseValue;
                                   const NextValue = BaseValue + 1;
                                   value = NextValue;
@@ -3436,7 +3436,7 @@ public class NesRomCompilerTests
                               const Solid = 1;
                               const Hazard = 2;
                               const Toggle = 4;
-                              void main() {
+                              void Main() {
                                   u8 flags = 0;
                                   flags |= Solid;
                                   flags &= ~Hazard;
@@ -3466,7 +3466,7 @@ public class NesRomCompilerTests
                                   return flags & ~mask;
                               }
 
-                              void main() {
+                              void Main() {
                                   u8 flags = 0;
                                   flags = set_flag(flags, 1);
                                   flags = clear_flag(flags, 2);
@@ -3486,7 +3486,7 @@ public class NesRomCompilerTests
     public void Compiles_explicit_casts_as_zero_cost_expression_markers()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 flags = 0;
                                   u16 wide = 1;
                                   flags = (u8)(wide | 2);
@@ -3505,7 +3505,7 @@ public class NesRomCompilerTests
     public void Compiles_logical_value_expressions_as_direct_boolean_materialization()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 x = 1;
                                   u8 y = 0;
                                   u8 both = x != 0 && y != 0;
@@ -3531,7 +3531,7 @@ public class NesRomCompilerTests
     public void Compiles_conditional_value_expressions_as_direct_branches()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   u8 moving = 1;
                                   u8 fast = 2;
                                   u8 speed = moving != 0 ? fast : 0;
@@ -3575,7 +3575,7 @@ public class NesRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(hero, "hero.nes.json");
                                   while (true) {
@@ -3626,7 +3626,7 @@ public class NesRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Sprite.Asset(hero, "hero.nes.json");
                                   loop {
@@ -3645,7 +3645,7 @@ public class NesRomCompilerTests
     public void Golden_collision_aabb_emission_is_pinned_nes()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   World.Column(0, 1, 2);
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 10, 2);
@@ -3668,7 +3668,7 @@ public class NesRomCompilerTests
     public void Collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_nes()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 1, 2);
                                   world_flags(0, 0, 1);
                                   world_map(1, 10, 2);
@@ -3679,7 +3679,7 @@ public class NesRomCompilerTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    World.Column(0, 1, 2);
                                    World.Flags(0, 0, 1);
                                    World.Map(1, 10, 2);
@@ -3701,7 +3701,7 @@ public class NesRomCompilerTests
     public void Screen_collision_aabb_via_compile_time_operand_intrinsic_is_byte_identical_nes()
     {
         const string direct = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 1, 2);
                                   world_flags(0, 0, 1);
                                   world_map(1, 10, 2);
@@ -3713,7 +3713,7 @@ public class NesRomCompilerTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    World.Column(0, 1, 2);
                                    World.Flags(0, 0, 1);
                                    World.Map(1, 10, 2);
@@ -3742,7 +3742,7 @@ public class NesRomCompilerTests
             Rows(8, 8, Enumerable.Repeat("33333333", 8).ToArray()));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   sprite_asset(hero, "hero.png", 8, 8);
                                   while (true) {
@@ -3786,7 +3786,7 @@ public class NesRomCompilerTests
                 "33333333"));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   Palette.Background(0, 0, 1, 2, 3);
                                   Palette.Sprite(0, 0, 0, 1, 3);
@@ -3833,7 +3833,7 @@ public class NesRomCompilerTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   sprite_asset(hero, "hero.nes.json");
                                   while (true) {
                                       sprite_draw(hero, 24, 32, 0, 0, 4);
@@ -3856,7 +3856,7 @@ public class NesRomCompilerTests
             Rows(8, 8, Enumerable.Repeat("33333333", 8).ToArray()));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   sprite_asset(hero, "hero.nes.png", 8, 8);
                                   while (true) {
                                       sprite_draw(hero, 24, 32, 0, 0, 4);
@@ -3898,7 +3898,7 @@ public class NesRomCompilerTests
             Environment.NewLine,
             Enumerable.Range(0, 9).Select(index => $"        sprite_draw(hero, {index * 8}, 24, 0);"));
         var source = """
-                     void main() {
+                     void Main() {
                          video_init();
                          sprite_asset(hero, "hero.nes.json");
                          while (true) {
@@ -3926,7 +3926,7 @@ public class NesRomCompilerTests
             "{\"platforms\":{\"nes\":{\"frames\":[[" + rowJson + "]]}}}");
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   sprite_asset(wide, "wide.nes.json");
                                   while (true) {
                                       sprite_draw(wide, 0, 0, 0);
@@ -3943,7 +3943,7 @@ public class NesRomCompilerTests
     public void Compiles_horizontal_camera_path_from_world_map_to_nes_scroll()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   world_column(0, 1, 2);
                                   world_column(1, 3, 4);
@@ -3980,7 +3980,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            video_init();
                            world_column(0, {{tallColumn}});
                            world_column(63, {{tallColumn}});
@@ -4013,7 +4013,7 @@ public class NesRomCompilerTests
     {
         var column = string.Join(", ", Enumerable.Range(0, 14).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            world_column(0, {{column}});
                            world_map(1, 0, 14);
                            camera_init(1, 0, 14);
@@ -4038,7 +4038,7 @@ public class NesRomCompilerTests
     public void Camera_relative_collision_uses_absolute_camera_tile_after_scroll_wrap()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 1, 2);
                                   world_flags(0, 0, 1);
                                   world_map(68, 10, 2);
@@ -4066,7 +4066,7 @@ public class NesRomCompilerTests
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 96).Select(row => row % 4 + 1));
         var source = $$"""
-                       void main() {
+                       void Main() {
                            world_column(0, {{tallColumn}});
                            world_map(1, 0, 96);
                            camera_init(1, 0, 96);
@@ -4086,7 +4086,7 @@ public class NesRomCompilerTests
     public void Rejects_vertical_camera_stream_start_outside_four_screen_buffer()
     {
         const string source = """
-                              void main() {
+                              void Main() {
                                   world_column(0, 1);
                                   world_map(1, 0, 1);
                                   camera_init(1, 60, 1);

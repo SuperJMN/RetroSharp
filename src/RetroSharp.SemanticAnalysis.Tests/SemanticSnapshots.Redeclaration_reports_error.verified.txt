@@ -1,4 +1,4 @@
-void main()
+void Main()
 {
 	i16 a;
 	i16 a;

@@ -9,7 +9,7 @@ static class Marker {
     const i16 ScreenY = 72;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Column(0, 1, 2, 3, 4);

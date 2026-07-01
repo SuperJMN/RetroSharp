@@ -16,7 +16,7 @@ public class EndToEndZ80Tests
     [Fact]
     public void Main_return_constant_three_sets_HL_to_3()
     {
-        // Build semantic model: program { void main() { return 3; } }
+        // Build semantic model: program { void Main() { return 3; } }
         var retExpr = new ConstantNode(3);
         var ret = new ReturnNode(Maybe.From<ExpressionNode>(retExpr));
         var block = new BlockNode(new System.Collections.Generic.List<StatementNode> { ret });

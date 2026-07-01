@@ -1,4 +1,4 @@
-void setup_video() {
+void SetupVideo() {
     Video.Init();
     Palette.Set(0, 0);
     Palette.Set(1, 1);
@@ -7,7 +7,7 @@ void setup_video() {
     return;
 }
 
-void draw_background() {
+void DrawBackground() {
     Tilemap.Set(2, 4, 1);
     Tilemap.Set(3, 4, 1);
     Tilemap.Set(4, 5, 1);
@@ -31,9 +31,9 @@ void draw_background() {
     return;
 }
 
-void main() {
-    setup_video();
-    draw_background();
+void Main() {
+    SetupVideo();
+    DrawBackground();
 
     loop {
         Video.WaitVBlank();

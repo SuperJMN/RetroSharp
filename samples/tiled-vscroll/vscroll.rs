@@ -9,7 +9,7 @@ static class Scroll {
     const i16 HoldFrames = 32;
 }
 
-void main() {
+void Main() {
     Video.Init();
 
     World.Load("vscroll.tmj");

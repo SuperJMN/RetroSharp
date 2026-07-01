@@ -71,7 +71,7 @@ Right now, RetroSharp can compile simple programs with:
 
 Example program:
 ```csharp
-i16 main()
+i16 Main()
 {
     return 2 * 3 * 4;
 }

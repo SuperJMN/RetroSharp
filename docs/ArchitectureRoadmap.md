@@ -1452,7 +1452,7 @@ Tasks:
 - Candidate files: `samples/runner/runner.rs`, sample maps/assets, target acceptance tests, MCP/diagnostics docs.
 - Steps:
   - [x] Extend the runner or add a focused platformer acceptance sample with several enemy kinds, activation, map collision, player contact, and animation.
-  - [x] Keep the source free of a hand-written global enemy-kind switch in `main`.
+  - [x] Keep the source free of a hand-written global enemy-kind switch in `Main`.
   - [x] Validate the sample on Game Boy first, then NES where the declared behavior set is supported.
   - [x] Document the low-level equivalent pattern for authors who need to drop down to hand-authored arrays.
 - Verification:

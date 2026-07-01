@@ -36,7 +36,7 @@ public sealed class GameBoyMusicTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "stage.gbapu.json");
                                   Audio.Init();
@@ -83,7 +83,7 @@ public sealed class GameBoyMusicTests
             """);
 
         const string direct = """
-                              void main() {
+                              void Main() {
                                   video_init();
                                   music_asset(stage_theme, "stage.gbapu.json");
                                   audio_init();
@@ -96,7 +96,7 @@ public sealed class GameBoyMusicTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Video.Init();
                                    Music.Asset(stage_theme, "stage.gbapu.json");
                                    Audio.Init();
@@ -133,7 +133,7 @@ public sealed class GameBoyMusicTests
             [0x04, 0x87]);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "stage.vgz");
                                   Audio.Init();
@@ -160,7 +160,7 @@ public sealed class GameBoyMusicTests
         WriteLargeGbApuTrace(musicPath, frameCount: 12000);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "large.gbapu");
                                   Audio.Init();
@@ -240,7 +240,7 @@ public sealed class GameBoyMusicTests
         WriteLargeGbApuTrace(Path.Combine(directory, "theme_b.gbapu"), frameCount: 200, register: 0xFF19);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(theme_a, "theme_a.gbapu");
                                   Music.Asset(theme_b, "theme_b.gbapu");
@@ -288,7 +288,7 @@ public sealed class GameBoyMusicTests
 
         // 16-bit frame counter (two u8s) so the switch can happen after theme A has crossed its boundary.
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(theme_a, "theme_a.gbapu");
                                   Music.Asset(theme_b, "theme_b.gbapu");
@@ -492,7 +492,7 @@ public sealed class GameBoyMusicTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "stage.music.json");
                                   Audio.Init();
@@ -532,7 +532,7 @@ public sealed class GameBoyMusicTests
             """);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "stage.gbapu.json");
                                   Audio.Init();
@@ -574,7 +574,7 @@ public sealed class GameBoyMusicTests
                                   Music.Play(stage_theme);
                               }
 
-                              void main() {
+                              void Main() {
                                   Audio.Init();
                                   start();
                                   loop {
@@ -605,7 +605,7 @@ public sealed class GameBoyMusicTests
         HugeFixture.WriteSong(Path.Combine(directory, "stage.uge"));
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "stage.music.json");
                                   Audio.Init();
@@ -636,7 +636,7 @@ public sealed class GameBoyMusicTests
         HugeFixture.WriteSong(Path.Combine(directory, "stage.uge"), timerPlayback: true);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Music.Asset(stage_theme, "stage.music.json");
                               }
                               """;
@@ -653,7 +653,7 @@ public sealed class GameBoyMusicTests
         HugeFixture.WriteSong(Path.Combine(directory, "stage.uge"), includeWave: true, includeNoise: true, includeVolumeEffect: true);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Video.Init();
                                   Music.Asset(stage_theme, "stage.music.json");
                                   Audio.Init();
@@ -786,7 +786,7 @@ public sealed class GameBoyMusicTests
 
     private static string MinimalPlaybackSource(string assetFileName) =>
         $$"""
-          void main() {
+          void Main() {
               Video.Init();
               Music.Asset(stage_theme, "{{assetFileName}}");
               Audio.Init();

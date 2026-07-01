@@ -38,7 +38,7 @@ public sealed class NesMusicTests
             [0x04, 0x7F]);
 
         const string source = """
-                              void main() {
+                              void Main() {
                                   Music.Asset(stage_theme, "stage.vgz");
                                   Audio.Init();
                                   Music.Play(stage_theme);
@@ -73,7 +73,7 @@ public sealed class NesMusicTests
             [0x04, 0x7F]);
 
         const string direct = """
-                              void main() {
+                              void Main() {
                                   music_asset(stage_theme, "stage.vgz");
                                   audio_init();
                                   music_play(stage_theme);
@@ -83,7 +83,7 @@ public sealed class NesMusicTests
                               }
                               """;
         const string library = """
-                               void main() {
+                               void Main() {
                                    Music.Asset(stage_theme, "stage.vgz");
                                    Audio.Init();
                                    Music.Play(stage_theme);

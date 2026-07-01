@@ -85,7 +85,7 @@ public sealed class NesRunnerAcceptanceTests
     public void Nes_lowers_runtime_animation_frame_for_runner_state()
     {
         const string source = """
-            void main() {
+            void Main() {
                 Animation.Clip(run, 1, 6, 6, 6);
                 Sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
                 u8 tick = 0;
