@@ -59,6 +59,10 @@ public static class SdkLibrarySource
                  extern void {{prefix}}_poll_input();
 
                  [target("{{catalog.TargetId}}")]
+                 [intrinsic("audio_init")]
+                 extern void {{prefix}}_audio_init();
+
+                 [target("{{catalog.TargetId}}")]
                  [intrinsic("audio_update")]
                  extern void {{prefix}}_audio_update();
 
@@ -89,6 +93,11 @@ public static class SdkLibrarySource
 
                  class audio
                  {
+                     static inline void Init()
+                     {
+                         {{prefix}}_audio_init();
+                     }
+
                      static inline void Update()
                      {
                          {{prefix}}_audio_update();

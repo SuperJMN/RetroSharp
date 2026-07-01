@@ -501,6 +501,28 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Audio_init_via_library_helper_is_byte_identical_gb()
+    {
+        const string direct = """
+                              void main() {
+                                  audio_init();
+                                  audio_update();
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   audio.Init();
+                                   audio.Update();
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("[intrinsic(\"audio_init\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
     public void Injected_game_boy_audio_update_helper_keeps_surface_byte_identical()
     {
         const string source = """

@@ -1759,6 +1759,9 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.UpdateAudio:
                 EmitAudioUpdate();
                 return true;
+            case TargetIntrinsicOperation.InitializeAudio:
+                EmitAudioInit();
+                return true;
             case TargetIntrinsicOperation.PlayMusic:
                 EmitMusicPlay(call);
                 return true;

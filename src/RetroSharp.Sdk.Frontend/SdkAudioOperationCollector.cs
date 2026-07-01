@@ -198,6 +198,10 @@ public static class SdkAudioOperationCollector
             var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
             switch (intrinsic.Operation)
             {
+                case TargetIntrinsicOperation.InitializeAudio:
+                    SdkCallReader.RequireArity(call, intrinsic.Arity);
+                    AddOp(new SdkAudioOperation.InitializeAudio());
+                    return true;
                 case TargetIntrinsicOperation.UpdateAudio:
                     SdkCallReader.RequireArity(call, intrinsic.Arity);
                     AddOp(new SdkAudioOperation.UpdateAudio());

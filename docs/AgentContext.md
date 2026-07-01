@@ -166,6 +166,9 @@ Progress (2026-06-14):
   helpers over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
   collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
   `music_stop(...)` builtins remain aliases and `music.Asset(...)` stays on the SDK-module path.
+  SAL-8.8 completed the `audio` class by migrating `audio.Init()` to a void-leaf `audio_init`
+  target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
+  `audio_init(...)` builtin kept as an alias.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.

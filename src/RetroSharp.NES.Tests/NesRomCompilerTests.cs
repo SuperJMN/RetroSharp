@@ -585,6 +585,28 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Audio_init_via_library_helper_is_byte_identical_nes()
+    {
+        const string direct = """
+                              void main() {
+                                  audio_init();
+                                  audio_update();
+                              }
+                              """;
+        const string library = """
+                               void main() {
+                                   audio.Init();
+                                   audio.Update();
+                               }
+                               """;
+
+        var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
+
+        Assert.Contains("[intrinsic(\"audio_init\")]", sdkLibrary, StringComparison.Ordinal);
+        Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
+    }
+
+    [Fact]
     public void Compiles_camera_library_helpers_over_nes_intrinsic_like_sdk_operations()
     {
         const string direct = """

@@ -1,6 +1,6 @@
 # Compile-Time Operand Intrinsics
 
-Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `music.Play` / `music.Stop` onto the audio target intrinsics.
+Status: SAL-8.2 mechanism implemented; SAL-8.3 and SAL-8.4 migrate Game Boy and NES `sprite.Draw` onto the descriptor-role path; SAL-8.5 migrates Game Boy `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.6 applies the same descriptor-role form to NES `camera.AabbTiles` and `camera.AabbHitTop`; SAL-8.7 migrates Game Boy and NES `music.Play` / `music.Stop` onto the audio target intrinsics; SAL-8.8 migrates Game Boy and NES `audio.Init` onto the `audio_init` void-leaf target intrinsic (no compile-time operands).
 
 This note answers the open SAL-8 question from issue #158: how a target intrinsic can carry operands that must be resolved at compile time, such as a sprite asset id, a constant sprite palette slot, enum collision flags, or a world id, while keeping the language layer target-neutral.
 
