@@ -41,18 +41,15 @@ The project uses Azure DevOps Pipelines for continuous integration and deploymen
    - Calculates version using GitVersion
    - Updates project version
    - Packages the RetroSharp CLI tool
-   - Publishes to NuGet (main branch) or dry-run (other branches)
+   - Publishes to NuGet (master branch) or dry-run (other branches)
    - Tests tool installation
 
 ### Versioning Strategy
 
-The project uses [GitVersion](https://gitversion.net/) with GitHubFlow workflow:
+The project uses [GitVersion](https://gitversion.net/) with the GitHubFlow workflow:
 
-- **main**: Production releases (no pre-release suffix)
-- **develop**: Alpha builds (`-alpha.X`)
-- **feature/***: Feature builds (`-alpha.BranchName.X`)
-- **hotfix/***: Hotfix builds (`-beta.X`)
-- **release/***: Release candidates (`-beta.X`)
+- **master**: Production releases (no pre-release suffix)
+- **feature branches** (any non-`master` branch, e.g. `feature/*`, `agent/*`): pre-release builds (`-<branch>.X`)
 
 ### Local Development Commands
 
@@ -90,23 +87,21 @@ dotnetdeployer --config dotnetdeployer.yml            # Publish to NuGet
 
 ### Branch Strategy
 
-- `main`: Stable releases
-- `develop`: Integration branch for new features
-- `feature/*`: Feature development
-- `hotfix/*`: Critical bug fixes
-- `release/*`: Release preparation
+GitHubFlow: `master` is the single long-lived branch and always holds stable, releasable code. All work happens on short-lived branches taken from `master` and merged back into it.
+
+- `master`: stable, releasable at all times
+- short-lived branches (e.g. `feature/*`, `agent/*`): all development, merged back into `master`
 
 ### Publishing Process
 
-1. **Development**: Work on feature branches, merge to `develop`
-2. **Pre-release**: Create `release/*` branch from `develop`
-3. **Release**: Merge `release/*` to `main`
-4. **Hotfixes**: Create `hotfix/*` from `main`, merge back to both `main` and `develop`
+1. **Development**: Create a short-lived branch from `master`, then open a pull request back into `master`.
+2. **Review and validate**: Build and tests must pass on the branch.
+3. **Release**: Merge the branch into `master`; the pipeline publishes a stable package from `master`.
 
 The pipeline automatically:
 - Builds and tests all changes
-- Creates pre-release packages for non-main branches
-- Publishes stable releases from `main` branch
+- Creates pre-release packages for non-`master` branches
+- Publishes stable releases from the `master` branch
 - Tests the generated tool package
 
 ## Tool Architecture
