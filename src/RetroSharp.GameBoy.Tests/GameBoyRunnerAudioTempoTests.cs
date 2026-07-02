@@ -19,7 +19,7 @@ public sealed class GameBoyRunnerAudioTempoTests
         // crossing spent a whole extra VBlank inside the streaming path while Audio.Update() was
         // still only called once per loop iteration, so the music slowed down during scrolling.
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         const int frames = 1200;
@@ -45,7 +45,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Shared_runner_keeps_tracked_game_boy_rom_byte_identical()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var compiled = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
         var tracked = File.ReadAllBytes(Path.Combine(runnerDirectory, "bin", "runner.gb"));
 
@@ -56,7 +56,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Runner_dead_zone_camera_stays_still_then_follows_right_input()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
@@ -86,7 +86,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Runner_free_scroll_camera_follows_platform_climb_in_two_axes()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
@@ -148,7 +148,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Runner_free_scroll_keeps_visible_game_boy_background_tiles_aligned_with_world_map()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var program = CompileVideoProgram(source, runnerDirectory);
         var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
         var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory))
@@ -320,7 +320,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Runner_writes_oam_only_during_vblank_while_scrolling()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
@@ -345,7 +345,7 @@ public sealed class GameBoyRunnerAudioTempoTests
     public void Runner_streams_background_tilemap_only_during_vblank_while_climbing()
     {
         var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };

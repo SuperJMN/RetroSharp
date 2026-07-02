@@ -18,7 +18,7 @@ public sealed class NesRunnerAcceptanceTests
     [Fact]
     public void Nes_runner_sample_compiles_with_vgm_audio()
     {
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
 
         Assert.Equal(40976, rom.Length);
@@ -31,7 +31,7 @@ public sealed class NesRunnerAcceptanceTests
     public void Nes_runner_uses_dead_zone_2d_camera_path()
     {
         var runnerDirectory = RunnerSample.Directory;
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
 
         var operations = NesRomCompiler.CollectSdkOperations(source, runnerDirectory);
         Assert.Equal(1, operations.OfType<Sdk2DOperation.SetCameraPosition>().Count());
@@ -47,7 +47,7 @@ public sealed class NesRunnerAcceptanceTests
     public void Nes_runner_initial_four_screen_nametables_match_imported_world_tiles()
     {
         var runnerDirectory = RunnerSample.Directory;
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var program = CompileVideoProgram(source, runnerDirectory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
         var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);

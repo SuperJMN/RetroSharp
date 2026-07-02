@@ -204,8 +204,9 @@ namespaces with `rootNamespace`, `sourceRoot`, and
 become namespace segments at compile time: `src/player/rules.rs` belongs to
 `Root.Player`, and `src/camera/rules.rs` belongs to `Root.Camera`. The source
 language does not allocate namespace objects or runtime metadata; the compiler
-rewrites declarations and path-qualified static references to unique internal
-identifiers before normal target lowering. `Main` remains the entry point name.
+rewrites declarations plus path-qualified type names, top-level function calls,
+and static references to unique internal identifiers before normal target
+lowering. `Main` remains the entry point name.
 
 ---
 
@@ -217,6 +218,8 @@ Current parser support includes top-level plain enum and struct declarations, id
 Program       = ImportDecl* TopLevelDecl* EOF ;
 ImportDecl    = "import" QualifiedIdent ";" ;
 QualifiedIdent = Ident ("." Ident)* ;
+Type          = "void" | "u8" | "i8" | "u16" | "i16" | "bool"
+              | "ptr" "<" Type ">" | QualifiedIdent ;
 ConstDecl     = "const" Type? Ident "=" ConstExpr ";" ;
 TypeAlias     = "type" Ident "=" Type ";" ;
 ConstExpr     = Literal | EarlierConstIdent | SizeOf | OffsetOf | CountOf
@@ -234,6 +237,7 @@ Statement     = ConstDecl | VarDecl | Assignment ";" | PostfixMutation ";" | If 
 Function      = Type Ident "(" Parameters? ")" (Block | "=>" Expr ";") ;
 Parameter     = Type Ident ("=" Expr)? ;
 FunctionCall  = Ident "(" Arguments? ")" ;
+DotCall       = Ident ("." Ident)+ "(" Arguments? ")" ;
 Arguments     = Argument ("," Argument)* ;
 Argument      = Ident ":" Expr | Expr ;
 VarDeclarator = Type Ident ("[" Expr? "]")? ("=" VariableInitializer)? ;
@@ -262,7 +266,7 @@ MemberAccess  = (Ident | IndexAccess) ("." Ident)+ ;
 IndexAccess   = Ident "[" Expr "]" ;
 
 Primary       = Number | Char | "true" | "false"
-              | SizeOf | OffsetOf | CountOf | FunctionCall | MemberAccess | IndexAccess | Ident | "(" Expr ")" ;
+              | SizeOf | OffsetOf | CountOf | DotCall | FunctionCall | MemberAccess | IndexAccess | Ident | "(" Expr ")" ;
 ```
 
 The semantic analyzer resolves type aliases, declared constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enum members, struct fields, struct initializer fields including shorthand fields, array element access, member access through array elements, array initializer elements, initializer-inferred fixed array lengths, statement-only postfix mutations, explicit `loop` blocks, half-open range `for` loops, no-fallthrough `switch` cases, half-open range membership expressions, conditional value expressions, and named helper-argument expressions through compile-time tables and structured scopes. Game Boy and NES normalize aliases to their underlying types, fold top-level and block-local constants with or without type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members into literals, lower named helper arguments and defaults to positional parameter substitutions, lower struct and byte-backed array initializer lists to the same direct stores as explicit assignments, lower `loop` blocks to `while (true)`, lower range `for` loops to counted `for` loops, lower `++`/`--` to compound assignments, lower `switch` statements to `if`/`else` compare chains, lower multi-value cases to short-circuit `||` comparisons, lower half-open range cases and `value in start..end` expressions to `>=` and `<` short-circuit bounds checks, lower logical value expressions and `condition ? whenTrue : whenFalse` to direct branch materialization, lower bitwise flag operations to direct AND/OR/XOR instructions, and lower current local struct fields and fixed array elements by flattening names such as `position.x`, `values[0]`, and `actors[0].x` into adjacent local byte storage. Runtime struct-array field access computes the field base plus `index * targetStructStride`, where current cartridge targets require byte-sized fields and reject mixed-width struct arrays.

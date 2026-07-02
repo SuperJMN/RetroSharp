@@ -130,11 +130,7 @@ public static class PhysicalNamespaceSourceComposer
 
         foreach (var type in Descendants<TypeContext>(unit.Program))
         {
-            if (type.IDENTIFIER() is { } identifier
-                && resolver.ResolveUnqualified(unit, identifier.GetText(), DefinitionKind.Type) is { } resolved)
-            {
-                AddTokenReplacement(replacements, identifier.Symbol, resolved);
-            }
+            AddTypeReplacement(replacements, unit, resolver, type);
         }
 
         foreach (var call in Descendants<FunctionCallContext>(unit.Program))
@@ -148,12 +144,7 @@ public static class PhysicalNamespaceSourceComposer
 
         foreach (var call in Descendants<SdkDotCallContext>(unit.Program))
         {
-            var identifiers = call.IDENTIFIER();
-            var module = identifiers[0];
-            if (resolver.ResolveUnqualified(unit, module.GetText(), DefinitionKind.Type) is { } resolved)
-            {
-                AddTokenReplacement(replacements, module.Symbol, resolved);
-            }
+            AddSdkDotCallReplacement(replacements, unit, resolver, call);
         }
 
         foreach (var memberAccess in Descendants<MemberAccessContext>(unit.Program))
@@ -169,6 +160,58 @@ public static class PhysicalNamespaceSourceComposer
         if (unit.RewriteDeclarations)
         {
             AddTokenReplacement(replacements, token, unit.InternalName(token.Text));
+        }
+    }
+
+    private static void AddTypeReplacement(
+        List<TextReplacement> replacements,
+        SourceUnit unit,
+        DefinitionResolver resolver,
+        TypeContext type)
+    {
+        if (type.qualifiedIdentifier() is not { } qualifiedIdentifier)
+        {
+            return;
+        }
+
+        var identifiers = qualifiedIdentifier.IDENTIFIER()
+            .Select(identifier => identifier.Symbol)
+            .ToArray();
+        if (ResolvePath(unit, resolver, identifiers, DefinitionKind.Type) is { } resolved)
+        {
+            AddRangeReplacement(replacements, identifiers[0], identifiers[^1], resolved);
+        }
+    }
+
+    private static void AddSdkDotCallReplacement(
+        List<TextReplacement> replacements,
+        SourceUnit unit,
+        DefinitionResolver resolver,
+        SdkDotCallContext call)
+    {
+        var identifiers = call.IDENTIFIER()
+            .Select(identifier => identifier.Symbol)
+            .ToArray();
+        if (identifiers.Length < 2)
+        {
+            return;
+        }
+
+        if (ResolvePath(unit, resolver, identifiers, DefinitionKind.Function) is { } resolvedFunction)
+        {
+            AddRangeReplacement(replacements, identifiers[0], identifiers[^1], resolvedFunction);
+            return;
+        }
+
+        for (var prefixLength = identifiers.Length - 1; prefixLength >= 1; prefixLength--)
+        {
+            if (ResolvePath(unit, resolver, identifiers.Take(prefixLength).ToArray(), DefinitionKind.Type) is not { } resolvedType)
+            {
+                continue;
+            }
+
+            AddRangeReplacement(replacements, identifiers[0], identifiers[prefixLength - 1], resolvedType);
+            return;
         }
     }
 
@@ -202,6 +245,16 @@ public static class PhysicalNamespaceSourceComposer
             AddRangeReplacement(replacements, identifiers[0], identifiers[prefixLength - 1], resolved);
             return;
         }
+    }
+
+    private static string? ResolvePath(
+        SourceUnit unit,
+        DefinitionResolver resolver,
+        IReadOnlyList<IToken> identifiers,
+        DefinitionKind kind)
+    {
+        var path = identifiers.Select(identifier => identifier.Text).ToArray();
+        return resolver.ResolveQualified(unit, path, kind);
     }
 
     private static string ApplyReplacements(string source, IReadOnlyCollection<TextReplacement> replacements)

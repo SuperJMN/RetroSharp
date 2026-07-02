@@ -208,8 +208,9 @@ no version solving, package feed, transitive dependency graph, binary library
 ABI, per-package asset root, or target-backend plugin model is promised yet.
 Project and library manifests can also enable `namespaceMode: "physical"` with a
 `rootNamespace` and `sourceRoot`; this derives compile-time namespaces from
-source folders and rewrites those names to unique internal symbols before target
-lowering, without runtime metadata or dispatch. Each cartridge target exposes a
+source folders and rewrites path-qualified type names, top-level function calls,
+and static references to unique internal symbols before target lowering, without
+runtime metadata or dispatch. Each cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead
 of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
