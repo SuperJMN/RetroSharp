@@ -59,7 +59,8 @@ public static class GameBoyRomCompiler
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
         SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
-        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(

@@ -1,6 +1,6 @@
 namespace RetroSharp.Parser;
 
-internal static class StaticClassLowerer
+public static class StaticClassLowerer
 {
     public static FunctionSyntax LowerInstanceMethod(
         string className,

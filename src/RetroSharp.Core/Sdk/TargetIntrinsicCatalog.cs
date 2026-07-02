@@ -9,6 +9,7 @@ public enum TargetIntrinsicOperation
     PlayMusic,
     StopMusic,
     ReadWorldTileFlags,
+    InitializeCamera,
     CameraAabbTiles,
     CameraAabbHitTop,
     CameraScreenAabbTiles,
@@ -16,6 +17,8 @@ public enum TargetIntrinsicOperation
     SetCameraPosition,
     ApplyCamera,
     DrawLogicalSprite,
+    ReadSpriteWidth,
+    ReadAnimationFrame,
 }
 
 public enum TargetIntrinsicReturnKind
@@ -167,6 +170,11 @@ public sealed record TargetIntrinsicDescriptor
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.SetCameraPosition, TargetIntrinsicReturnKind.Void, arity);
     }
 
+    public static TargetIntrinsicDescriptor InitializeCamera(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.InitializeCamera, TargetIntrinsicReturnKind.Void, arity);
+    }
+
     public static TargetIntrinsicDescriptor CameraAabbTiles(
         string name,
         int runtimeArity,
@@ -240,6 +248,33 @@ public sealed record TargetIntrinsicDescriptor
             runtimeArity,
             compileTimeOperands,
             [TargetIntrinsicCapabilityRequirement.LogicalSprites]);
+    }
+
+    public static TargetIntrinsicDescriptor ReadSpriteWidth(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.ReadSpriteWidth,
+            TargetIntrinsicReturnKind.I16,
+            runtimeArity,
+            compileTimeOperands,
+            [TargetIntrinsicCapabilityRequirement.LogicalSprites]);
+    }
+
+    public static TargetIntrinsicDescriptor ReadAnimationFrame(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.ReadAnimationFrame,
+            TargetIntrinsicReturnKind.I16,
+            runtimeArity,
+            compileTimeOperands);
     }
 }
 

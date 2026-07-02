@@ -769,7 +769,8 @@ public sealed class NesWorldLoadTests : IDisposable
         var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
-        var lowered = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, directory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, directory);
+        var lowered = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         return NesVideoProgram.FromProgram(lowered, directory);
     }
 

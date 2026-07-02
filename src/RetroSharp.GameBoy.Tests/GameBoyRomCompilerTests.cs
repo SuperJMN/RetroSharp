@@ -7421,7 +7421,8 @@ public class GameBoyRomCompilerTests
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
-        var lowered = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var lowered = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
     }
 }

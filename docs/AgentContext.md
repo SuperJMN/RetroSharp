@@ -192,7 +192,15 @@ Progress (2026-06-14):
   `Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`,
   `Palette.Sprite`, and `Animation.Clip` are declared in `RetroSharp.Portable2D`
   with `[resource(...)]` metadata and resolved to generic resource declaration
-  descriptors before target-specific asset loading. Legacy flat declaration calls
+  descriptors instead of target-specific public-name switches.
+  SDKLIB-6 moved remaining complex package-backed facades out of
+  `SdkModuleRegistry` call-name lowering: `Camera.Init`, all four `Camera.*Aabb*`
+  helpers, `Sprite.Width`, `Sprite.Draw`, `Animation.Frame`, and `Music.Play`/`Stop`
+  are now provided by `RetroSharp.Portable2D` source methods over target intrinsics.
+  Actor-framework generated `Sprite.Draw`, `Animation.Frame`, and `Camera.ScreenAabb*`
+  calls are resolved against those source-package static methods after actor lowering,
+  so generated actor code no longer relies on public SDK names being hard-coded in the
+  module registry. Legacy flat declaration calls
   such as `sprite_asset(...)`, `world_load(...)`, and `music_asset(...)` remain
   compatibility aliases.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
