@@ -349,7 +349,7 @@ internal static class NesRomBuilder
             var offset = background.FirstTile * 16;
             if (offset + background.Data.Length > chr.Length)
             {
-                throw new InvalidOperationException("NES World.Load background tiles exceed CHR ROM size.");
+                throw new InvalidOperationException("NES generated background tiles exceed CHR ROM size.");
             }
 
             background.Data.CopyTo(chr, offset);
@@ -447,10 +447,10 @@ internal sealed class NesRuntimeCompiler
     private const ushort CameraScrollAppliedAddress = 0x0309;
     private const ushort CameraWalkTargetAddress = 0x030A;
     private const ushort CameraWalkStepsAddress = 0x030B;
-    // Camera.SetPosition walks the camera toward the requested position one pixel at a time, feeding
+    // Camera movement walks the camera toward the requested position one pixel at a time, feeding
     // single-pixel steps to the tracking/streaming routines. A single walk never crosses more than one
     // tile boundary (8 px), matching the per-frame streaming budget (one queued column/row drained by
-    // Camera.Apply), so one SetPosition per frame can reach targets several pixels away.
+    // camera apply), so one position update per frame can reach targets several pixels away.
     private const byte CameraWalkMaxStepsPerFrame = 8;
     private const ushort MusicLoopPointerLowAddress = 0x0310;
     private const ushort MusicLoopPointerHighAddress = 0x0311;
