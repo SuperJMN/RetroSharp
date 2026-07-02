@@ -145,13 +145,17 @@ public static class Sdk2DOperationCollector
         return new Sdk2DOperation.StreamMapRow(targetRow, sourceRow, x, width);
     }
 
-    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(FunctionCall call)
+    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(
+        FunctionCall call,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var screenX = ReadByteExpression(args[0], "camera_aabb_tiles argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_tiles argument 2");
-        var width = ReadAabbExtent(args[2], "camera_aabb_tiles argument 3");
+        var width = ReadAabbExtent(args[2], "camera_aabb_tiles argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(args[3], 0, 255, "camera_aabb_tiles argument 4");
         var flags = (WorldTileFlags)ConstRange(
             args[4],
@@ -169,7 +173,11 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(ResolvedTargetIntrinsicCall resolved)
+    public static Sdk2DOperation.CameraAabbTiles ReadCameraAabbTiles(
+        ResolvedTargetIntrinsicCall resolved,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraAabbTiles)
         {
@@ -191,7 +199,7 @@ public static class Sdk2DOperationCollector
             "camera_aabb_tiles argument 5");
         var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_tiles argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_tiles argument 2");
-        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_tiles argument 3");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_tiles argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_tiles argument 4");
 
         return new Sdk2DOperation.CameraAabbTiles(
@@ -204,13 +212,17 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(FunctionCall call)
+    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(
+        FunctionCall call,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var screenX = ReadByteExpression(args[0], "camera_aabb_hit_top argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_hit_top argument 2");
-        var width = ReadAabbExtent(args[2], "camera_aabb_hit_top argument 3");
+        var width = ReadAabbExtent(args[2], "camera_aabb_hit_top argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(args[3], 0, 255, "camera_aabb_hit_top argument 4");
         var flags = (WorldTileFlags)ConstRange(
             args[4],
@@ -228,7 +240,11 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+    public static Sdk2DOperation.CameraAabbHitTop ReadCameraAabbHitTop(
+        ResolvedTargetIntrinsicCall resolved,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraAabbHitTop)
         {
@@ -250,7 +266,7 @@ public static class Sdk2DOperationCollector
             "camera_aabb_hit_top argument 5");
         var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_hit_top argument 1");
         var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_hit_top argument 2");
-        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_hit_top argument 3");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_hit_top argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_hit_top argument 4");
 
         return new Sdk2DOperation.CameraAabbHitTop(
@@ -263,13 +279,17 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraScreenAabbTiles ReadCameraScreenAabbTiles(FunctionCall call)
+    public static Sdk2DOperation.CameraScreenAabbTiles ReadCameraScreenAabbTiles(
+        FunctionCall call,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var screenX = ReadByteExpression(args[0], "camera_screen_aabb_tiles argument 1");
         var (screenY, screenYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_screen_aabb_tiles argument 2");
-        var width = ReadAabbExtent(args[2], "camera_screen_aabb_tiles argument 3");
+        var width = ReadAabbExtent(args[2], "camera_screen_aabb_tiles argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(args[3], 0, 255, "camera_screen_aabb_tiles argument 4");
         var flags = (WorldTileFlags)ConstRange(
             args[4],
@@ -287,7 +307,11 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraScreenAabbTiles ReadCameraScreenAabbTiles(ResolvedTargetIntrinsicCall resolved)
+    public static Sdk2DOperation.CameraScreenAabbTiles ReadCameraScreenAabbTiles(
+        ResolvedTargetIntrinsicCall resolved,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraScreenAabbTiles)
         {
@@ -309,7 +333,7 @@ public static class Sdk2DOperationCollector
             "camera_screen_aabb_tiles argument 5");
         var screenX = ReadByteExpression(screenXArg.Expression, "camera_screen_aabb_tiles argument 1");
         var (screenY, screenYOffset) = ReadByteExpressionWithConstantOffset(screenYArg.Expression, "camera_screen_aabb_tiles argument 2");
-        var width = ReadAabbExtent(widthArg.Expression, "camera_screen_aabb_tiles argument 3");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_screen_aabb_tiles argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(heightArg.Expression, 0, 255, "camera_screen_aabb_tiles argument 4");
 
         return new Sdk2DOperation.CameraScreenAabbTiles(
@@ -322,13 +346,17 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraScreenAabbHitTop ReadCameraScreenAabbHitTop(FunctionCall call)
+    public static Sdk2DOperation.CameraScreenAabbHitTop ReadCameraScreenAabbHitTop(
+        FunctionCall call,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var screenX = ReadByteExpression(args[0], "camera_screen_aabb_hit_top argument 1");
         var (screenY, screenYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_screen_aabb_hit_top argument 2");
-        var width = ReadAabbExtent(args[2], "camera_screen_aabb_hit_top argument 3");
+        var width = ReadAabbExtent(args[2], "camera_screen_aabb_hit_top argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(args[3], 0, 255, "camera_screen_aabb_hit_top argument 4");
         var flags = (WorldTileFlags)ConstRange(
             args[4],
@@ -346,7 +374,11 @@ public static class Sdk2DOperationCollector
             Flags: flags);
     }
 
-    public static Sdk2DOperation.CameraScreenAabbHitTop ReadCameraScreenAabbHitTop(ResolvedTargetIntrinsicCall resolved)
+    public static Sdk2DOperation.CameraScreenAabbHitTop ReadCameraScreenAabbHitTop(
+        ResolvedTargetIntrinsicCall resolved,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        IReadOnlySet<string>? runtimeIdentifiers = null)
     {
         if (resolved.Descriptor.Operation != TargetIntrinsicOperation.CameraScreenAabbHitTop)
         {
@@ -368,7 +400,7 @@ public static class Sdk2DOperationCollector
             "camera_screen_aabb_hit_top argument 5");
         var screenX = ReadByteExpression(screenXArg.Expression, "camera_screen_aabb_hit_top argument 1");
         var (screenY, screenYOffset) = ReadByteExpressionWithConstantOffset(screenYArg.Expression, "camera_screen_aabb_hit_top argument 2");
-        var width = ReadAabbExtent(widthArg.Expression, "camera_screen_aabb_hit_top argument 3");
+        var width = ReadAabbExtent(widthArg.Expression, "camera_screen_aabb_hit_top argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(heightArg.Expression, 0, 255, "camera_screen_aabb_hit_top argument 4");
 
         return new Sdk2DOperation.CameraScreenAabbHitTop(
@@ -479,15 +511,80 @@ public static class Sdk2DOperationCollector
             ?.Constant;
     }
 
-    private static SdkAabbExtent ReadAabbExtent(ExpressionSyntax expression, string context)
+    private static SdkAabbExtent ReadAabbExtent(
+        ExpressionSyntax expression,
+        string context,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions,
+        TargetIntrinsicCatalog? targetIntrinsics,
+        IReadOnlySet<string>? runtimeIdentifiers)
     {
-        if (expression is FunctionCall { Name: "sprite_width" } spriteWidthCall)
+        if (TryReadSpriteWidth(expression, functions, targetIntrinsics, runtimeIdentifiers, out var spriteId))
         {
-            SdkCallReader.RequireArity(spriteWidthCall, 1);
-            return new SdkAabbExtent.SpriteWidth(SdkCallReader.IdentifierArg(spriteWidthCall.Parameters.ElementAt(0), "sprite_width argument 1"));
+            return new SdkAabbExtent.SpriteWidth(spriteId);
         }
 
         return new SdkAabbExtent.Constant(ConstRange(expression, 0, 255, context));
+    }
+
+    private static bool TryReadSpriteWidth(
+        ExpressionSyntax expression,
+        IReadOnlyDictionary<string, FunctionSyntax>? functions,
+        TargetIntrinsicCatalog? targetIntrinsics,
+        IReadOnlySet<string>? runtimeIdentifiers,
+        out string spriteId)
+    {
+        spriteId = string.Empty;
+        if (expression is CastSyntax cast)
+        {
+            return TryReadSpriteWidth(cast.Expression, functions, targetIntrinsics, runtimeIdentifiers, out spriteId);
+        }
+
+        if (expression is not FunctionCall call)
+        {
+            return false;
+        }
+
+        if (call.Name == "sprite_width")
+        {
+            SdkCallReader.RequireArity(call, 1);
+            spriteId = SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "sprite_width argument 1");
+            return true;
+        }
+
+        if (functions is null || !functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
+        {
+            if (targetIntrinsics is null || TargetAttributeReader.StringArgument(function, "intrinsic") is null)
+            {
+                return false;
+            }
+
+            var resolved = TargetIntrinsicResolver.ResolveCall(
+                function,
+                call,
+                targetIntrinsics,
+                runtimeIdentifiers ?? new HashSet<string>());
+            if (resolved.Descriptor.Operation != TargetIntrinsicOperation.ReadSpriteWidth)
+            {
+                return false;
+            }
+
+            spriteId = CompileTimeIdentifier(resolved, TargetIntrinsicOperandRole.AssetRef)
+                       ?? throw new InvalidOperationException($"{resolved.Descriptor.Name} requires a compile-time sprite asset operand.");
+            return true;
+        }
+
+        if (function.Block.Statements is not [ReturnSyntax { Expression.HasValue: true }])
+        {
+            return false;
+        }
+
+        var returned = ParameterSubstitution.SubstituteReturnExpression(function, call, "SDK");
+        return TryReadSpriteWidth(returned, functions, targetIntrinsics, runtimeIdentifiers, out spriteId);
     }
 
     private static (SdkByteExpression Expression, int Offset) ReadByteExpressionWithConstantOffset(ExpressionSyntax expression, string context)
@@ -958,6 +1055,9 @@ public static class Sdk2DOperationCollector
                 case TargetIntrinsicOperation.CameraScreenAabbHitTop:
                     CollectCameraScreenAabbHitTop(resolved);
                     return true;
+                case TargetIntrinsicOperation.ReadSpriteWidth:
+                case TargetIntrinsicOperation.ReadAnimationFrame:
+                    return true;
                 default:
                     return false;
             }
@@ -990,42 +1090,42 @@ public static class Sdk2DOperationCollector
 
         private void CollectCameraAabbTiles(FunctionCall call)
         {
-            AddOp(ReadCameraAabbTiles(call));
+            AddOp(ReadCameraAabbTiles(call, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraAabbTiles(ResolvedTargetIntrinsicCall resolved)
         {
-            AddOp(ReadCameraAabbTiles(resolved));
+            AddOp(ReadCameraAabbTiles(resolved, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraAabbHitTop(FunctionCall call)
         {
-            AddOp(ReadCameraAabbHitTop(call));
+            AddOp(ReadCameraAabbHitTop(call, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraAabbHitTop(ResolvedTargetIntrinsicCall resolved)
         {
-            AddOp(ReadCameraAabbHitTop(resolved));
+            AddOp(ReadCameraAabbHitTop(resolved, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraScreenAabbTiles(FunctionCall call)
         {
-            AddOp(ReadCameraScreenAabbTiles(call));
+            AddOp(ReadCameraScreenAabbTiles(call, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraScreenAabbTiles(ResolvedTargetIntrinsicCall resolved)
         {
-            AddOp(ReadCameraScreenAabbTiles(resolved));
+            AddOp(ReadCameraScreenAabbTiles(resolved, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraScreenAabbHitTop(FunctionCall call)
         {
-            AddOp(ReadCameraScreenAabbHitTop(call));
+            AddOp(ReadCameraScreenAabbHitTop(call, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCameraScreenAabbHitTop(ResolvedTargetIntrinsicCall resolved)
         {
-            AddOp(ReadCameraScreenAabbHitTop(resolved));
+            AddOp(ReadCameraScreenAabbHitTop(resolved, functions, targetIntrinsics, runtimeIdentifiers));
         }
 
         private void CollectCallArguments(FunctionCall call)

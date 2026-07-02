@@ -1,3 +1,6 @@
+[intrinsic("camera_init")]
+extern void portable2d_camera_init(i16 mapWidth, i16 streamY, i16 streamHeight);
+
 [intrinsic("camera_set_position")]
 extern void portable2d_camera_set_position(i16 x, i16 y);
 
@@ -18,6 +21,11 @@ extern i16 portable2d_camera_screen_aabb_hit_top(i16 worldId, i16 screenX, i16 s
 
 class Camera
 {
+    static inline void Init(i16 mapWidth, i16 streamY, i16 streamHeight)
+    {
+        portable2d_camera_init(mapWidth, streamY, streamHeight);
+    }
+
     static inline void SetPosition(i16 x, i16 y)
     {
         portable2d_camera_set_position(x, y);

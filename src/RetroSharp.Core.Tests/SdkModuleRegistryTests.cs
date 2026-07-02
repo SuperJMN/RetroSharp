@@ -30,16 +30,9 @@ public sealed class SdkModuleRegistryTests
     }
 
     [Theory]
-    [InlineData("Sprite", "Width", "sprite_width")]
-    public void Sprite_width_resolves_to_sprite_width_builtin(string module, string method, string expected)
-    {
-        Assert.True(SdkModuleRegistry.TryResolveCallName(module, method, out var callName));
-        Assert.Equal(expected, callName);
-    }
-
-    [Theory]
     [InlineData("Video", "WaitVBlank")]
     [InlineData("Input", "Poll")]
+    [InlineData("Camera", "Init")]
     [InlineData("Audio", "Init")]
     [InlineData("Audio", "Update")]
     [InlineData("Camera", "SetPosition")]
@@ -57,6 +50,21 @@ public sealed class SdkModuleRegistryTests
     [InlineData("Palette", "Sprite")]
     [InlineData("Animation", "Clip")]
     public void Resource_facades_are_source_package_declarations_not_legacy_module_mappings(string module, string method)
+    {
+        Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
+    }
+
+    [Theory]
+    [InlineData("Camera", "AabbTiles")]
+    [InlineData("Camera", "AabbHitTop")]
+    [InlineData("Camera", "ScreenAabbTiles")]
+    [InlineData("Camera", "ScreenAabbHitTop")]
+    [InlineData("Sprite", "Width")]
+    [InlineData("Sprite", "Draw")]
+    [InlineData("Animation", "Frame")]
+    [InlineData("Music", "Play")]
+    [InlineData("Music", "Stop")]
+    public void Complex_package_facades_are_source_package_methods_not_legacy_module_mappings(string module, string method)
     {
         Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
     }
@@ -135,6 +143,36 @@ public sealed class SdkModuleRegistryTests
         Assert.Contains(TargetIntrinsicCapabilityRequirement.LogicalSprites, descriptor.RequiredCapabilities);
         Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
         Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.ConstPaletteSlot);
+    }
+
+    [Theory]
+    [InlineData("sprite_width", TargetIntrinsicOperation.ReadSpriteWidth, TargetIntrinsicReturnKind.I16, 0)]
+    [InlineData("animation_frame", TargetIntrinsicOperation.ReadAnimationFrame, TargetIntrinsicReturnKind.I16, 1)]
+    public void Complex_value_intrinsics_can_be_declared_with_compile_time_asset_operands(
+        string intrinsicId,
+        TargetIntrinsicOperation operation,
+        TargetIntrinsicReturnKind returnKind,
+        int runtimeArity)
+    {
+        var descriptor = operation switch
+        {
+            TargetIntrinsicOperation.ReadSpriteWidth => TargetIntrinsicDescriptor.ReadSpriteWidth(
+                intrinsicId,
+                runtimeArity,
+                [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            TargetIntrinsicOperation.ReadAnimationFrame => TargetIntrinsicDescriptor.ReadAnimationFrame(
+                intrinsicId,
+                runtimeArity,
+                [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            _ => throw new InvalidOperationException()
+        };
+
+        Assert.Equal(operation, descriptor.Operation);
+        Assert.Equal(returnKind, descriptor.ReturnKind);
+        Assert.Equal(runtimeArity, descriptor.RuntimeArity);
+        var operand = Assert.Single(descriptor.CompileTimeOperands);
+        Assert.Equal(0, operand.Slot);
+        Assert.Equal(TargetIntrinsicOperandRole.AssetRef, operand.Role);
     }
 
     [Theory]

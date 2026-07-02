@@ -24,6 +24,7 @@ public static class GameBoyTarget
                 "world_tile_flags_for_world",
                 runtimeArity: 2,
                 compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId)]),
+            TargetIntrinsicDescriptor.InitializeCamera("camera_init", arity: 3),
             TargetIntrinsicDescriptor.DrawLogicalSprite(
                 "sprite_draw",
                 runtimeArity: 4,
@@ -32,6 +33,14 @@ public static class GameBoyTarget
                     new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef),
                     new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.ConstPaletteSlot),
                 ]),
+            TargetIntrinsicDescriptor.ReadSpriteWidth(
+                "sprite_width",
+                runtimeArity: 0,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            TargetIntrinsicDescriptor.ReadAnimationFrame(
+                "animation_frame",
+                runtimeArity: 1,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
             TargetIntrinsicDescriptor.CameraAabbTiles(
                 "camera_aabb_tiles",
                 runtimeArity: 4,

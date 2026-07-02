@@ -2548,6 +2548,9 @@ internal sealed class GameBoyRuntimeCompiler
             case TargetIntrinsicOperation.StopMusic:
                 EmitNextSdkAudioOperation<SdkAudioOperation.StopMusic>(call.Name);
                 return true;
+            case TargetIntrinsicOperation.InitializeCamera:
+                EmitCameraInit(call);
+                return true;
             case TargetIntrinsicOperation.SetCameraPosition:
                 EmitNextSdkOperation<Sdk2DOperation.SetCameraPosition>(call.Name);
                 return true;
@@ -4535,6 +4538,16 @@ internal sealed class GameBoyRuntimeCompiler
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraScreenAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbHitTop>(call.Name));
                 return true;
+            case TargetIntrinsicOperation.ReadSpriteWidth:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, GameBoyTarget.Intrinsics);
+                EmitSpriteWidth(call);
+                return true;
+            case TargetIntrinsicOperation.ReadAnimationFrame:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, GameBoyTarget.Intrinsics);
+                EmitAnimationFrame(call);
+                return true;
             default:
                 return false;
         }
@@ -5975,12 +5988,62 @@ internal sealed class GameBoyRuntimeCompiler
             return ConstRuntimeValue(cast.Expression, context);
         }
 
-        if (expression is FunctionCall { Name: "sprite_width" } spriteWidthCall)
+        if (TrySpriteWidth(expression, out var spriteWidth))
         {
-            return SpriteWidth(spriteWidthCall);
+            return spriteWidth;
         }
 
         return GameBoyVideoProgram.ConstValue(expression, context);
+    }
+
+    private bool TrySpriteWidth(ExpressionSyntax expression, out int width)
+    {
+        width = 0;
+        if (expression is CastSyntax cast)
+        {
+            return TrySpriteWidth(cast.Expression, out width);
+        }
+
+        if (expression is not FunctionCall call)
+        {
+            return false;
+        }
+
+        if (call.Name == "sprite_width")
+        {
+            width = SpriteWidth(call);
+            return true;
+        }
+
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
+        {
+            if (TargetAttributeReader.StringArgument(function, "intrinsic") is null)
+            {
+                return false;
+            }
+
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, GameBoyTarget.Intrinsics);
+            if (intrinsic.Operation != TargetIntrinsicOperation.ReadSpriteWidth)
+            {
+                return false;
+            }
+
+            width = SpriteWidth(call);
+            return true;
+        }
+
+        if (function.Block.Statements is not [ReturnSyntax { Expression.HasValue: true }])
+        {
+            return false;
+        }
+
+        var returned = ParameterSubstitution.SubstituteReturnExpression(function, call, "Game Boy");
+        return TrySpriteWidth(returned, out width);
     }
 
     private static string IndexedElementName(string baseIdentifier, int index)

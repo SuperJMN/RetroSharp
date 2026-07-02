@@ -19,6 +19,7 @@ public static class NesTarget
                 runtimeArity: 0,
                 compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
             TargetIntrinsicDescriptor.StopMusic("music_stop", arity: 0),
+            TargetIntrinsicDescriptor.InitializeCamera("camera_init", arity: 3),
             TargetIntrinsicDescriptor.DrawLogicalSprite(
                 "sprite_draw",
                 runtimeArity: 4,
@@ -27,6 +28,14 @@ public static class NesTarget
                     new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef),
                     new TargetIntrinsicCompileTimeOperand(5, TargetIntrinsicOperandRole.ConstPaletteSlot),
                 ]),
+            TargetIntrinsicDescriptor.ReadSpriteWidth(
+                "sprite_width",
+                runtimeArity: 0,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            TargetIntrinsicDescriptor.ReadAnimationFrame(
+                "animation_frame",
+                runtimeArity: 1,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
             TargetIntrinsicDescriptor.CameraAabbTiles(
                 "camera_aabb_tiles",
                 runtimeArity: 4,

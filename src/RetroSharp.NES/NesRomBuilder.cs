@@ -1919,6 +1919,9 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.StopMusic:
                 EmitMusicStop();
                 return true;
+            case TargetIntrinsicOperation.InitializeCamera:
+                EmitCameraInit(call);
+                return true;
             case TargetIntrinsicOperation.SetCameraPosition:
                 EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
                 return true;
@@ -4639,22 +4642,40 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.CameraAabbTiles:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbTiles(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    program.Functions,
+                    NesTarget.Intrinsics));
                 return true;
             case TargetIntrinsicOperation.CameraAabbHitTop:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    program.Functions,
+                    NesTarget.Intrinsics));
                 return true;
             case TargetIntrinsicOperation.CameraScreenAabbTiles:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbTiles(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    program.Functions,
+                    NesTarget.Intrinsics));
                 return true;
             case TargetIntrinsicOperation.CameraScreenAabbHitTop:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbHitTop(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    program.Functions,
+                    NesTarget.Intrinsics));
+                return true;
+            case TargetIntrinsicOperation.ReadSpriteWidth:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics);
+                EmitSpriteWidth(call);
+                return true;
+            case TargetIntrinsicOperation.ReadAnimationFrame:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics);
+                EmitAnimationFrame(call);
                 return true;
             default:
                 return false;

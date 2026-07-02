@@ -26,7 +26,8 @@ public static class NesRomCompiler
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
         SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
-        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
@@ -55,7 +56,8 @@ public static class NesRomCompiler
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
         SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
-        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return Sdk2DOperationCollector.Collect(
@@ -82,7 +84,8 @@ public static class NesRomCompiler
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
         SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
-        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES", NesTarget.Intrinsics);

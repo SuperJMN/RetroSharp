@@ -36,7 +36,8 @@ public sealed class Sdk2DProgramStreamTests
         var parse = new SomeParser().Parse(merged);
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
-        var lowered = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var lowered = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         return GameBoyVideoProgram.FromProgram(lowered, null);
     }
 

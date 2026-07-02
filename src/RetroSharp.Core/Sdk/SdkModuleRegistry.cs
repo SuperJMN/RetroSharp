@@ -50,17 +50,29 @@ public static class SdkModuleRegistry
     [
         ("Video", "WaitVBlank"),
         ("Input", "Poll"),
+        ("Camera", "Init"),
         ("Audio", "Init"),
         ("Audio", "Update"),
         ("Camera", "SetPosition"),
         ("Camera", "Apply"),
+        ("Camera", "AabbTiles"),
+        ("Camera", "AabbHitTop"),
+        ("Camera", "ScreenAabbTiles"),
+        ("Camera", "ScreenAabbHitTop"),
         ("Sprite", "Asset"),
+        ("Sprite", "Width"),
+        ("Sprite", "Draw"),
         ("World", "Load"),
         ("Music", "Asset"),
+        ("Music", "Play"),
+        ("Music", "Stop"),
         ("Palette", "Background"),
         ("Palette", "Sprite"),
         ("Animation", "Clip"),
+        ("Animation", "Frame"),
     ];
+
+    public static IReadOnlyCollection<(string Module, string Method)> SourcePackageOnlyMethodNames => SourcePackageOnlyMethods;
 
     public static bool IsKnownModule(string module)
     {
@@ -74,7 +86,7 @@ public static class SdkModuleRegistry
 
     public static bool TryResolveCallName(string module, string method, out string callName)
     {
-        if (SourcePackageOnlyMethods.Contains((module, method)))
+        if (IsSourcePackageOnlyMethod(module, method))
         {
             callName = string.Empty;
             return false;
@@ -90,6 +102,11 @@ public static class SdkModuleRegistry
             ? overrideName
             : descriptor.ResolveCallName(method);
         return true;
+    }
+
+    public static bool IsSourcePackageOnlyMethod(string module, string method)
+    {
+        return SourcePackageOnlyMethods.Contains((module, method));
     }
 
     internal static string MethodName(string method)
