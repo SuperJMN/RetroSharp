@@ -5690,7 +5690,9 @@ internal sealed class GameBoyRuntimeCompiler
             return Buttons[ordinal];
         }
 
-        var name = GameBoyVideoProgram.IdentifierArg(argument, context);
+        var name = argument is MemberAccessSyntax memberAccess
+            ? memberAccess.Member.ToLowerInvariant()
+            : GameBoyVideoProgram.IdentifierArg(argument, context);
         var button = Buttons.FirstOrDefault(button => button.Name == name);
         if (button.Name is null)
         {

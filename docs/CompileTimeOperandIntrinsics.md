@@ -77,7 +77,7 @@ The active Game Boy descriptor marks slot `0` as `WorldId` and leaves `x`/`y` as
 
 This proof is deliberately not a new public portable SDK surface. It exists to validate the descriptor role and resolver path that SAL-8.3/SAL-8.4 use for `Sprite.Draw`.
 
-SAL-8.3/SAL-8.4 wire Game Boy and NES `Sprite.Draw` through the injected SDK library helper:
+SAL-8.3/SAL-8.4 wire Game Boy and NES `Sprite.Draw` through the `RetroSharp.Portable2D` source package helper:
 
 ```csharp
 [target("gb")]
@@ -91,7 +91,7 @@ extern void __retrosharp_nes_sprite_draw(i16 spriteId, i16 x, i16 y, i16 frame, 
 
 The descriptor marks `spriteId` as `AssetRef` and `paletteSlot` as `ConstPaletteSlot`; X, Y, frame, and flipX remain runtime operands. The SDK/frontend collector resolves that call to the existing `Sdk2DOperation.DrawLogicalSprite`, so target metasprite geometry, palette-slot capability checks, frame-budget checks, and hardware sprite limits continue to use the same path as the legacy `sprite_draw(...)` builtin. Focused and runner-shaped tests assert byte identity against the legacy spelling on both targets.
 
-SAL-8.5 wires Game Boy `Camera.AabbTiles` and `Camera.AabbHitTop` through the injected SDK library helper:
+SAL-8.5 wires Game Boy `Camera.AabbTiles` and `Camera.AabbHitTop` through the `RetroSharp.Portable2D` source package helper:
 
 ```csharp
 [target("gb")]
@@ -103,7 +103,7 @@ extern i16 __retrosharp_gb_camera_aabb_tiles(i16 worldId, i16 screenX, i16 world
 extern i16 __retrosharp_gb_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
 ```
 
-The injected public helpers pass `"default"` for the hidden `WorldId` slot and forward the public operands. The descriptors mark slot `0` as `WorldId` and slot `5` as `EnumFlags`; the collector still parses `screenX`, `worldY`, `width`, and `height` through the existing SDK readers, including `SdkAabbExtent` support for constants and `Sprite.Width(...)`. The result is the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` stream as the legacy compiler-recognized spelling, preserving byte identity, capability diagnostics, and the `255` no-hit contract.
+The package helpers pass `"default"` for the hidden `WorldId` slot and forward the public operands. The descriptors mark slot `0` as `WorldId` and slot `5` as `EnumFlags`; the collector still parses `screenX`, `worldY`, `width`, and `height` through the existing SDK readers, including `SdkAabbExtent` support for constants and `Sprite.Width(...)`. The result is the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` stream as the legacy compiler-recognized spelling, preserving byte identity, capability diagnostics, and the `255` no-hit contract.
 
 SAL-8.6 wires NES `Camera.AabbTiles` and `Camera.AabbHitTop` through the same descriptor-role form:
 
@@ -117,9 +117,9 @@ extern i16 __retrosharp_nes_camera_aabb_tiles(i16 worldId, i16 screenX, i16 worl
 extern i16 __retrosharp_nes_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
 ```
 
-`NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the `Camera.AabbTiles` / `Camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias.
+`NesTarget.Intrinsics` catalogs both intrinsics with the same `WorldId`/`EnumFlags` slots, so `RetroSharp.Portable2D` declares the `Camera.AabbTiles` / `Camera.AabbHitTop` helpers for NES too. The NES value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` it already emitted from the legacy `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility alias.
 
-SAL-8.9 applies the identical descriptor-role form to the screen-space camera collision queries `Camera.ScreenAabbTiles` / `Camera.ScreenAabbHitTop` on **both** Game Boy and NES. Each target catalogs `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the same hidden `WorldId` (slot 0) and `EnumFlags` (slot 5), `SdkLibrarySource` injects the two `class camera` helpers, and the collector/emitter re-derive the same `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy `camera_screen_aabb_*(...)` builtins (kept as aliases). The actor framework, which lowers `enemies.TouchPlayer(...)` to `Camera.ScreenAabb*` dot-calls, stays byte-identical (the `actors.gb`/`actors.nes` tracked ROMs are unchanged). This closes the `Aabb`-vs-`ScreenAabb` asymmetry, so all four camera-relative collision queries share the intrinsic path on both targets.
+SAL-8.9 applies the identical descriptor-role form to the screen-space camera collision queries `Camera.ScreenAabbTiles` / `Camera.ScreenAabbHitTop` on **both** Game Boy and NES. Each target catalogs `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the same hidden `WorldId` (slot 0) and `EnumFlags` (slot 5), `RetroSharp.Portable2D` declares the two `Camera` helpers, and the collector/emitter re-derive the same `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy `camera_screen_aabb_*(...)` builtins (kept as aliases). The actor framework, which lowers `enemies.TouchPlayer(...)` to `Camera.ScreenAabb*` dot-calls, stays byte-identical (the `actors.gb`/`actors.nes` tracked ROMs are unchanged). This closes the `Aabb`-vs-`ScreenAabb` asymmetry, so all four camera-relative collision queries share the intrinsic path on both targets.
 
 SAL-8.7 wires Game Boy and NES `Music.Play` / `Music.Stop` through the audio target intrinsics:
 
@@ -133,7 +133,7 @@ extern void __retrosharp_gb_music_play(i16 theme);
 extern void __retrosharp_gb_music_stop();
 ```
 
-`music_play` marks slot `0` as `AssetRef`, so the injected `Music.Play(theme)` helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `SdkLibrarySource` injects `class music { Play, Stop }` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `Music.Asset(...)` is not a class member and still lowers through the SDK module to `music_asset`.
+`music_play` marks slot `0` as `AssetRef`, so the `Music.Play(theme)` package helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `RetroSharp.Portable2D` declares `Music.Play` and `Music.Stop` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `Music.Asset(...)` is not a class member and still lowers through the SDK module to `music_asset`.
 
 ## Operation-Specific Guidance
 

@@ -691,7 +691,7 @@ public class NesRomCompilerTests
         var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class Audio", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Audio", library, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(explicitLibrarySource), NesRomCompiler.CompileSource(source));
     }
 
@@ -744,7 +744,7 @@ public class NesRomCompilerTests
                                    return;
                                }
                                """;
-        Assert.Contains("class Camera", SdkLibrarySource.ForTarget(NesTarget.Intrinsics), StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Camera", SdkLibrarySource.ForTarget(NesTarget.Intrinsics), StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(direct), NesRomCompiler.CompileSource(library));
     }
 
@@ -797,7 +797,7 @@ public class NesRomCompilerTests
 
         var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class Sprite", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Sprite", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(direct, baseDirectory), NesRomCompiler.CompileSource(library, baseDirectory));
     }
@@ -915,14 +915,15 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Nes_sdk_library_does_not_expose_capability_gated_world_tile_flags_helper()
+    public void Nes_sdk_library_keeps_world_tile_flags_helper_target_gated()
     {
-        // World.TileFlagsAt(...) is gated on the WorldTileFlags collision query,
-        // which NES does not declare. The injected NES library must not expose it.
+        // World.TileFlagsAt(...) is gated to Game Boy in source, then removed by
+        // target selection before NES duplicate-name and intrinsic resolution.
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.DoesNotContain("class World", library, StringComparison.Ordinal);
-        Assert.DoesNotContain("world_tile_flags_at", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_World", library, StringComparison.Ordinal);
+        Assert.Contains("[target(\"gb\")]", library, StringComparison.Ordinal);
+        Assert.Contains("[intrinsic(\"world_tile_flags_at\")]", library, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -938,8 +939,8 @@ public class NesRomCompilerTests
 
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class Video", library, StringComparison.Ordinal);
-        Assert.Contains("class Input", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Video", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Input", library, StringComparison.Ordinal);
         Assert.Equal(NesRomCompiler.CompileSource(explicitLibrarySource), NesRomCompiler.CompileSource(source));
     }
 

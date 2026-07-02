@@ -49,7 +49,17 @@ public static class PhysicalNamespaceSourceComposer
     {
         foreach (var declaration in unit.Program.classDeclaration())
         {
-            yield return Definition.Type(unit, declaration.IDENTIFIER().GetText(), unit.InternalName(declaration.IDENTIFIER().GetText()));
+            var className = declaration.IDENTIFIER().GetText();
+            var internalName = unit.InternalName(className);
+            yield return Definition.Type(unit, className, internalName);
+
+            foreach (var member in declaration.classMember())
+            {
+                if (member.classStaticFunction() is { } staticFunction)
+                {
+                    yield return Definition.StaticMethod(unit, className, staticFunction.IDENTIFIER().GetText(), internalName);
+                }
+            }
         }
 
         foreach (var declaration in unit.Program.structDeclaration())
@@ -208,15 +218,11 @@ public static class PhysicalNamespaceSourceComposer
             return;
         }
 
-        for (var prefixLength = identifiers.Length - 1; prefixLength >= 1; prefixLength--)
+        var receiverPath = identifiers.Take(identifiers.Length - 1).ToArray();
+        var methodName = identifiers[^1].Text;
+        if (resolver.ResolveStaticMethodReceiver(unit, receiverPath, methodName) is { } resolvedType)
         {
-            if (ResolvePath(unit, resolver, identifiers.Take(prefixLength).ToArray(), DefinitionKind.Type) is not { } resolvedType)
-            {
-                continue;
-            }
-
-            AddRangeReplacement(replacements, identifiers[0], identifiers[prefixLength - 1], resolvedType);
-            return;
+            AddRangeReplacement(replacements, identifiers[0], identifiers[^2], resolvedType);
         }
     }
 
@@ -477,6 +483,9 @@ public static class PhysicalNamespaceSourceComposer
         public static Definition Type(SourceUnit unit, string name, string internalName) =>
             new(unit, unit.Namespace, name, internalName, DefinitionKind.Type);
 
+        public static Definition StaticMethod(SourceUnit unit, string className, string methodName, string internalName) =>
+            new(unit, unit.Namespace, $"{className}.{methodName}", internalName, DefinitionKind.StaticMethod);
+
         public static Definition Function(SourceUnit unit, string name, string internalName) =>
             new(unit, unit.Namespace, name, internalName, DefinitionKind.Function);
 
@@ -539,6 +548,58 @@ public static class PhysicalNamespaceSourceComposer
             return matches.Length == 1 ? matches[0] : null;
         }
 
+        public string? ResolveStaticMethodReceiver(SourceUnit unit, IReadOnlyList<IToken> receiverPath, string methodName)
+        {
+            if (receiverPath.Count == 0)
+            {
+                return null;
+            }
+
+            var className = receiverPath[^1].Text;
+            var staticMethodName = $"{className}.{methodName}";
+            if (receiverPath.Count == 1)
+            {
+                var sameNamespace = definitions
+                    .Where(definition => definition.Kind == DefinitionKind.StaticMethod
+                                         && definition.Namespace == unit.Namespace
+                                         && definition.Name == staticMethodName)
+                    .ToArray();
+                if (sameNamespace.Length == 1)
+                {
+                    return sameNamespace[0].InternalName;
+                }
+
+                var openedNamespace = definitions
+                    .Where(definition => definition.Kind == DefinitionKind.StaticMethod
+                                         && unit.OpenNamespaces.Contains(definition.Namespace)
+                                         && definition.Name == staticMethodName)
+                    .ToArray();
+                if (openedNamespace.Length == 1)
+                {
+                    return openedNamespace[0].InternalName;
+                }
+
+                var global = definitions
+                    .Where(definition => definition.Kind == DefinitionKind.StaticMethod
+                                         && definition.Name == staticMethodName)
+                    .ToArray();
+                return global.Length == 1 ? global[0].InternalName : null;
+            }
+
+            var namespaceSegments = receiverPath
+                .Take(receiverPath.Count - 1)
+                .Select(identifier => NormalizePathSegment(identifier.Text))
+                .ToArray();
+            var candidateNamespace = string.Join(".", namespaceSegments);
+            var matches = definitions
+                .Where(definition => definition.Kind == DefinitionKind.StaticMethod
+                                     && definition.Name == staticMethodName
+                                     && NamespaceMatches(definition.Namespace, candidateNamespace, unit))
+                .Select(definition => definition.InternalName)
+                .ToArray();
+            return matches.Length == 1 ? matches[0] : null;
+        }
+
         private static bool NamespaceMatches(string definitionNamespace, string candidateNamespace, SourceUnit unit)
         {
             return definitionNamespace == candidateNamespace
@@ -552,6 +613,7 @@ public static class PhysicalNamespaceSourceComposer
         Type,
         Function,
         Constant,
+        StaticMethod,
     }
 
     private sealed record TextReplacement(int Start, int End, string Text);

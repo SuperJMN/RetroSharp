@@ -93,7 +93,35 @@ public class GameBoyRomCompilerTests
     {
         Assert.True(SdkLibraryRegistry.Default.TryResolve("RetroSharp.Portable2D", out var library));
 
-        Assert.Contains("class Video", library!.SourceForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Video", library!.SourceForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Built_in_portable2d_sdk_is_a_manifest_backed_source_package()
+    {
+        var packageDirectory = RepositoryDirectory("sdk/RetroSharp.Portable2D");
+        var manifestPath = Path.Combine(packageDirectory, "retrosharp-library.json");
+        var sourceRoot = Path.Combine(packageDirectory, "src");
+        var registry = SdkLibraryRegistry.FromDirectories([packageDirectory], includeDefaultLibraries: false);
+
+        Assert.True(File.Exists(manifestPath));
+        Assert.True(Directory.Exists(sourceRoot));
+        Assert.True(registry.TryResolve("RetroSharp.Portable2D", out var library));
+        Assert.Contains("class RetroSharp_Portable2D_Video", library!.SourceForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Portable2d_public_facade_source_is_not_embedded_in_csharp()
+    {
+        var source = File.ReadAllText(RepositoryFile("src/RetroSharp.Sdk.Frontend/SdkLibrarySource.cs"));
+
+        Assert.DoesNotContain("class Video", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class Input", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class Audio", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class Camera", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class Sprite", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class World", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("class Music", source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -774,7 +802,7 @@ public class GameBoyRomCompilerTests
         var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
         var library = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
 
-        Assert.Contains("class Audio", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Audio", library, StringComparison.Ordinal);
         Assert.Equal(GameBoyRomCompiler.CompileSource(explicitLibrarySource), GameBoyRomCompiler.CompileSource(source));
     }
 
@@ -803,7 +831,7 @@ public class GameBoyRomCompilerTests
                                    Camera.Apply();
                                }
                                """;
-        Assert.Contains("class Camera", SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Camera", SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics), StringComparison.Ordinal);
         Assert.Equal(GameBoyRomCompiler.CompileSource(direct), GameBoyRomCompiler.CompileSource(library));
     }
 
@@ -831,7 +859,7 @@ public class GameBoyRomCompilerTests
 
         var sdkLibrary = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
 
-        Assert.Contains("class Sprite", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Sprite", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"sprite_draw\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Equal(GameBoyRomCompiler.CompileSource(direct, baseDirectory), GameBoyRomCompiler.CompileSource(library, baseDirectory));
     }
@@ -1038,8 +1066,8 @@ public class GameBoyRomCompilerTests
 
         var library = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
 
-        Assert.Contains("class Video", library, StringComparison.Ordinal);
-        Assert.Contains("class Input", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Video", library, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Input", library, StringComparison.Ordinal);
         Assert.Equal(GameBoyRomCompiler.CompileSource(explicitLibrarySource), GameBoyRomCompiler.CompileSource(source));
     }
 

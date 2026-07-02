@@ -4744,7 +4744,9 @@ internal sealed class NesRuntimeCompiler
             return Buttons[ordinal];
         }
 
-        var name = NesVideoProgram.IdentifierArg(argument, context);
+        var name = argument is MemberAccessSyntax memberAccess
+            ? memberAccess.Member.ToLowerInvariant()
+            : NesVideoProgram.IdentifierArg(argument, context);
         foreach (var button in Buttons)
         {
             if (button.Name == name)
