@@ -411,13 +411,14 @@ public sealed class GameBoyRunnerAudioTempoTests
 
     private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var lowered = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+        var lowered = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
     }
 

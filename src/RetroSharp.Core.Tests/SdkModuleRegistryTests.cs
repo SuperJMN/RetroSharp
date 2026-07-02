@@ -13,7 +13,7 @@ public sealed class SdkModuleRegistryTests
         Assert.NotNull(video);
         Assert.Equal(SdkModuleKind.Library, video.Kind);
         Assert.Equal("video", video.CallPrefix);
-        Assert.Equal("video_wait_vblank", video.ResolveCallName("WaitVBlank"));
+        Assert.Equal("video_init", video.ResolveCallName("Init"));
 
         Assert.Null(SdkModuleRegistry.FindModule("video"));
     }
@@ -37,11 +37,16 @@ public sealed class SdkModuleRegistryTests
         Assert.Equal(expected, callName);
     }
 
-    [Fact]
-    public void Input_poll_still_resolves_through_the_facade_prefix()
+    [Theory]
+    [InlineData("Video", "WaitVBlank")]
+    [InlineData("Input", "Poll")]
+    [InlineData("Audio", "Init")]
+    [InlineData("Audio", "Update")]
+    [InlineData("Camera", "SetPosition")]
+    [InlineData("Camera", "Apply")]
+    public void Simple_runtime_facades_are_source_package_methods_not_legacy_module_mappings(string module, string method)
     {
-        Assert.True(SdkModuleRegistry.TryResolveCallName("Input", "Poll", out var callName));
-        Assert.Equal("input_poll", callName);
+        Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
     }
 
     [Theory]

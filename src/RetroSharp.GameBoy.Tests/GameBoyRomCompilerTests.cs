@@ -799,7 +799,11 @@ public class GameBoyRomCompilerTests
                                   Audio.Update();
                               }
                               """;
-        var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
+        var explicitLibrarySource = SdkLibrarySource.Merge(
+            GameBoyTarget.Intrinsics,
+            source,
+            SdkLibraryImportMode.ExplicitOnly,
+            libraryImportPaths: [SdkImportResolver.Portable2D]);
         var library = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
 
         Assert.Contains("class RetroSharp_Portable2D_Audio", library, StringComparison.Ordinal);
@@ -871,7 +875,9 @@ public class GameBoyRomCompilerTests
 
         var libraryRom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         var legacyRom = GameBoyRomCompiler.CompileSource(
-            SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
+            SdkLibrarySource.Merge(
+                GameBoyTarget.Intrinsics,
+                source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal)),
             RunnerSample.Directory);
 
         Assert.Equal(legacyRom, libraryRom);
@@ -1062,7 +1068,11 @@ public class GameBoyRomCompilerTests
                                   Input.Poll();
                               }
                               """;
-        var explicitLibrarySource = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source;
+        var explicitLibrarySource = SdkLibrarySource.Merge(
+            GameBoyTarget.Intrinsics,
+            source,
+            SdkLibraryImportMode.ExplicitOnly,
+            libraryImportPaths: [SdkImportResolver.Portable2D]);
 
         var library = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
 
@@ -7391,13 +7401,14 @@ public class GameBoyRomCompilerTests
 
     private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var lowered = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+        var lowered = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
     }
 }

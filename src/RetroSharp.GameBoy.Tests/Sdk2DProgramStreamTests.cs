@@ -27,9 +27,17 @@ public sealed class Sdk2DProgramStreamTests
 
     private static GameBoyVideoProgram Compile()
     {
-        var parse = new SomeParser().Parse(Source);
+        return Compile(Source);
+    }
+
+    private static GameBoyVideoProgram Compile(string source)
+    {
+        var merged = SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source);
+        var parse = new SomeParser().Parse(merged);
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
-        return GameBoyVideoProgram.FromProgram(parse.Value, null);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+        var lowered = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        return GameBoyVideoProgram.FromProgram(lowered, null);
     }
 
     [Fact]
@@ -40,13 +48,15 @@ public sealed class Sdk2DProgramStreamTests
             program.MainBlock,
             program.Functions,
             "Game Boy",
-            GameBoyTarget.Capabilities);
+            GameBoyTarget.Capabilities,
+            GameBoyTarget.Intrinsics);
         var streamed = Sdk2DOperationCollector.CollectProgram(
             program.MainBlock,
             program.Functions,
             "Game Boy",
             GameBoyTarget.Capabilities,
-            new HashSet<string>());
+            new HashSet<string>(),
+            GameBoyTarget.Intrinsics);
 
         Assert.Empty(streamed.Subroutines);
         var flattened = streamed.Main.Select(item => Assert.IsType<Sdk2DStreamItem.Op>(item).Operation).ToList();
@@ -62,7 +72,8 @@ public sealed class Sdk2DProgramStreamTests
             program.Functions,
             "Game Boy",
             GameBoyTarget.Capabilities,
-            new HashSet<string> { "tick" });
+            new HashSet<string> { "tick" },
+            GameBoyTarget.Intrinsics);
 
         // The two tick() calls become CallSubroutine markers in the main stream
         // instead of inlining tick's body twice.
@@ -103,15 +114,14 @@ public sealed class Sdk2DProgramStreamTests
                 }
             }
             """;
-        var parse = new SomeParser().Parse(source);
-        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
-        var program = GameBoyVideoProgram.FromProgram(parse.Value, null);
+        var program = Compile(source);
 
         var streamed = SdkAudioOperationCollector.CollectProgram(
             program.MainBlock,
             program.Functions,
             "Game Boy",
-            new HashSet<string> { "tick_audio" });
+            new HashSet<string> { "tick_audio" },
+            GameBoyTarget.Intrinsics);
 
         var markers = streamed.Main.OfType<SdkAudioStreamItem.CallSubroutine>().ToList();
         Assert.Equal(2, markers.Count);
