@@ -89,6 +89,11 @@ public static class PhysicalNamespaceSourceComposer
     {
         var replacements = new List<TextReplacement>();
 
+        foreach (var declaration in unit.Program.usingDeclaration())
+        {
+            AddRangeReplacement(replacements, declaration.Start, declaration.Stop, string.Empty);
+        }
+
         foreach (var declaration in unit.Program.classDeclaration())
         {
             AddDeclarationReplacement(replacements, unit, declaration.IDENTIFIER().Symbol);
@@ -353,6 +358,16 @@ public static class PhysicalNamespaceSourceComposer
         return segments.Length == 0 ? rootNamespace : rootNamespace + "." + string.Join(".", segments);
     }
 
+    private static IReadOnlyList<string> UsingNamespaces(ProgramContext program)
+    {
+        return program.usingDeclaration()
+            .Select(declaration => declaration.qualifiedIdentifier().IDENTIFIER()
+                .Select(identifier => NormalizePathSegment(identifier.GetText())))
+            .Select(segments => string.Join(".", segments))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private static string NormalizePathSegment(string segment)
     {
         var parts = segment
@@ -426,25 +441,27 @@ public static class PhysicalNamespaceSourceComposer
         public static SourceUnit FromPhysical(PhysicalNamespaceSourceFile file, string rootNamespace, string sourceRoot)
         {
             var path = System.IO.Path.GetFullPath(file.Path);
+            var program = Parse(file.Source, path);
             return new SourceUnit(
                 path,
                 file.Source,
                 NamespaceForFile(path, rootNamespace, sourceRoot),
-                Parse(file.Source, path),
+                program,
                 true,
-                []);
+                UsingNamespaces(program));
         }
 
         public static SourceUnit FromConsumer(PhysicalNamespaceSourceFile file, IReadOnlyList<string> openNamespaces)
         {
             var path = System.IO.Path.GetFullPath(file.Path);
+            var program = Parse(file.Source, path);
             return new SourceUnit(
                 path,
                 file.Source,
                 "__RetroSharpConsumer",
-                Parse(file.Source, path),
+                program,
                 false,
-                openNamespaces);
+                openNamespaces.Concat(UsingNamespaces(program)).Distinct(StringComparer.Ordinal).ToArray());
         }
 
         public string InternalName(string name)

@@ -210,7 +210,11 @@ Project and library manifests can also enable `namespaceMode: "physical"` with a
 `rootNamespace` and `sourceRoot`; this derives compile-time namespaces from
 source folders and rewrites path-qualified type names, top-level function calls,
 and static references to unique internal symbols before target lowering, without
-runtime metadata or dispatch. Each cartridge target exposes a
+runtime metadata or dispatch. Files can use C#-style `using Root.Player;`
+directives to open physical namespaces for unqualified type names, top-level
+function calls, and static references; code-file `using` is name resolution,
+while library loading belongs in manifests or the explicit source-level `import`
+transition path. Each cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead
 of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,

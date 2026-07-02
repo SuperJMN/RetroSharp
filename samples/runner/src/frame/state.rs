@@ -1,3 +1,7 @@
+using Runner.Camera;
+using Runner.Level;
+using Runner.Player;
+
 class FrameState {
     bool resetRequested;
 

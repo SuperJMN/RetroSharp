@@ -1,3 +1,8 @@
+using Runner.Camera;
+using Runner.Frame;
+using Runner.Level;
+using Runner.Player;
+
 void SetupVideo() {
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
@@ -23,9 +28,9 @@ void Main() {
     SetupAudio();
     LoadWorld();
     Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
-    Runner.Player.PlayerState player;
-    Runner.Camera.CameraState view;
-    Runner.Frame.FrameState frame;
+    PlayerState player;
+    CameraState view;
+    FrameState frame;
     u8 goombaTick = 0;
     view.ResetMotion();
     player.Reset(view);
@@ -34,7 +39,7 @@ void Main() {
     Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
 
     loop {
-        Runner.Frame.PresentFrame(player, view);
+        PresentFrame(player, view);
         Camera.Apply();
         goombas.Draw();
         Audio.Update();
