@@ -23,9 +23,9 @@ void Main() {
     SetupAudio();
     LoadWorld();
     Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
-    PlayerState player;
-    CameraState view;
-    FrameState frame;
+    Runner.Player.PlayerState player;
+    Runner.Camera.CameraState view;
+    Runner.Frame.FrameState frame;
     u8 goombaTick = 0;
     view.ResetMotion();
     player.Reset(view);
@@ -34,7 +34,7 @@ void Main() {
     Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
 
     loop {
-        PresentFrame(player, view);
+        Runner.Frame.PresentFrame(player, view);
         Camera.Apply();
         goombas.Draw();
         Audio.Update();

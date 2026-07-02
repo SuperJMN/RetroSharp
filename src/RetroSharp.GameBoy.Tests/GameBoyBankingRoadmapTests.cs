@@ -134,7 +134,7 @@ public sealed class GameBoyBankingRoadmapTests
     [Fact]
     public void Runner_sample_builds_as_banked_mbc1_rom()
     {
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
 
         Assert.Equal(CartridgeMbc1, rom[0x147]);
@@ -145,7 +145,7 @@ public sealed class GameBoyBankingRoadmapTests
     [Fact]
     public void Banked_runner_executes_across_a_bank_boundary_without_faulting()
     {
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
 
         var cpu = new GameBoyTestCpu(rom);

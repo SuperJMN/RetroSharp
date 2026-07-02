@@ -30,7 +30,9 @@ Library packages can opt into `namespaceMode: "physical"` with the same
 `rootNamespace` and `sourceRoot` fields used by project manifests. The import
 opens the package's rewritten source for the consuming program: root files are
 the practical place for public facade classes, while files under folders gain
-compile-time namespace segments and unique internal symbols.
+compile-time namespace segments. Path-qualified type names, top-level function
+calls, and static references rewrite to unique internal symbols before target
+lowering.
 
 ### Frame and input
 

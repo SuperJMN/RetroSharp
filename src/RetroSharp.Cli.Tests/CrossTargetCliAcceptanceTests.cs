@@ -479,6 +479,78 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void Cli_project_file_accepts_root_qualified_physical_namespace_types_and_static_calls()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(Path.Combine(sourceDirectory, "player"));
+        Directory.CreateDirectory(Path.Combine(sourceDirectory, "frame"));
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "player", "state.rs"),
+            """
+            class PlayerState
+            {
+                u8 x;
+
+                inline void Reset()
+                {
+                    x = 0;
+                }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "frame", "presenter.rs"),
+            """
+            inline void PresentFrame(Runner.Player.PlayerState player)
+            {
+                Video.WaitVBlank();
+            }
+
+            class FramePresenter
+            {
+                static inline void Present(Runner.Player.PlayerState player)
+                {
+                    PresentFrame(player);
+                }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "main.rs"),
+            """
+            void Main() {
+                Runner.Player.PlayerState player;
+                player.Reset();
+                Runner.Frame.PresentFrame(player);
+                Runner.Frame.FramePresenter.Present(player);
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        var outputPath = Path.Combine(workspace.Path, "bin", "runner.gb");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "output": "bin/runner.gb",
+              "rootNamespace": "Runner",
+              "sourceRoot": "src",
+              "namespaceMode": "physical",
+              "sources": [
+                "src/player/state.rs",
+                "src/frame/presenter.rs",
+                "src/main.rs"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.True(result.ExitCode == 0, result.CombinedOutput);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
     public void Cli_project_file_uses_declared_library_paths()
     {
         using var workspace = TemporaryWorkspace();

@@ -999,9 +999,10 @@ public class SomeParser
     private ExpressionSyntax ParseSdkDotCall(SdkDotCallContext sdkDotCall)
     {
         var identifiers = sdkDotCall.IDENTIFIER();
+        var module = string.Join(".", identifiers.Take(identifiers.Length - 1).Select(identifier => identifier.GetText()));
         return new SdkDotCallSyntax(
-            identifiers[0].GetText(),
-            identifiers[1].GetText(),
+            module,
+            identifiers[^1].GetText(),
             ParseArguments(sdkDotCall.arguments()));
     }
 

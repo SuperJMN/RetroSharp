@@ -37,7 +37,7 @@ fieldInitializer: IDENTIFIER (':' expression)?;
 type: 'void'
     | 'u8' | 'i8' | 'u16' | 'i16' | 'bool'
     | 'ptr' '<' type '>'
-    | IDENTIFIER
+    | qualifiedIdentifier
     ;
 
 // Attributes (zero-cost hints; currently ignored by semantics)
@@ -149,7 +149,7 @@ sizeofExpression: 'sizeof' '(' type ')';
 offsetofExpression: 'offsetof' '(' type ',' IDENTIFIER ')';
 countofExpression: 'countof' '(' IDENTIFIER ')';
 
-sdkDotCall: IDENTIFIER '.' IDENTIFIER '(' arguments? ')';
+sdkDotCall: IDENTIFIER ('.' IDENTIFIER)+ '(' arguments? ')';
 memberAccess: (IDENTIFIER | indexExpression) ('.' IDENTIFIER)+;
 indexExpression: IDENTIFIER '[' expression ']';
 

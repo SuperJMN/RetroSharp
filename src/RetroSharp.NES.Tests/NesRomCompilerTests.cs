@@ -788,7 +788,7 @@ public class NesRomCompilerTests
     [Fact]
     public void Runner_shaped_sprite_draw_is_byte_identical_nes()
     {
-        var source = RunnerSample.FlattenedSource();
+        var source = RunnerSample.CompiledSource();
 
         var libraryRom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
         var legacyRom = NesRomCompiler.CompileSource(
