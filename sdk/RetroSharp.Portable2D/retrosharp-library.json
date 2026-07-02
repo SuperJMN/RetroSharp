@@ -9,6 +9,8 @@
     "src/camera.rs",
     "src/sprite.rs",
     "src/world.rs",
-    "src/music.rs"
+    "src/music.rs",
+    "src/palette.rs",
+    "src/animation.rs"
   ]
 }

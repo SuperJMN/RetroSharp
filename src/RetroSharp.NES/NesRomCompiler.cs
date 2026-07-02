@@ -369,6 +369,11 @@ internal sealed class NesVideoProgram
 
     private void ApplyStaticVideoCall(FunctionCall call, HashSet<string> callStack)
     {
+        if (TryApplySdkResourceDeclaration(call))
+        {
+            return;
+        }
+
         switch (call.Name)
         {
             case "video_init":
@@ -439,6 +444,45 @@ internal sealed class NesVideoProgram
             default:
                 ApplyStaticUserFunction(call, callStack);
                 break;
+        }
+    }
+
+    private bool TryApplySdkResourceDeclaration(FunctionCall call)
+    {
+        if (!Functions.TryGetValue(call.Name, out var function) ||
+            !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor))
+        {
+            return false;
+        }
+
+        ApplySdkResourceDeclaration(call, descriptor);
+        return true;
+    }
+
+    private void ApplySdkResourceDeclaration(FunctionCall call, SdkResourceDeclarationDescriptor descriptor)
+    {
+        switch (descriptor.Kind)
+        {
+            case SdkResourceDeclarationKind.BackgroundPalette:
+                ApplyLogicalPalette(call, PaletteKind.Background);
+                break;
+            case SdkResourceDeclarationKind.SpritePalette:
+                ApplyLogicalPalette(call, PaletteKind.Sprite);
+                break;
+            case SdkResourceDeclarationKind.WorldLoad:
+                ApplyWorldLoad(call);
+                break;
+            case SdkResourceDeclarationKind.SpriteAsset:
+                ApplySpriteAsset(call);
+                break;
+            case SdkResourceDeclarationKind.MusicAsset:
+                ApplyMusicAsset(call);
+                break;
+            case SdkResourceDeclarationKind.AnimationClip:
+                ApplyAnimationClip(call);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK resource declaration '{descriptor.ResourceId}'.");
         }
     }
 

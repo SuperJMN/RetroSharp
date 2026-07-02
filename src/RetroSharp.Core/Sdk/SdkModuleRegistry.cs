@@ -54,6 +54,12 @@ public static class SdkModuleRegistry
         ("Audio", "Update"),
         ("Camera", "SetPosition"),
         ("Camera", "Apply"),
+        ("Sprite", "Asset"),
+        ("World", "Load"),
+        ("Music", "Asset"),
+        ("Palette", "Background"),
+        ("Palette", "Sprite"),
+        ("Animation", "Clip"),
     ];
 
     public static bool IsKnownModule(string module)

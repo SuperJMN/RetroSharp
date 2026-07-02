@@ -1819,6 +1819,11 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitCall(FunctionCall call)
     {
+        if (IsResourceDeclarationCall(call))
+        {
+            return;
+        }
+
         switch (call.Name)
         {
             case "video_init":
@@ -1903,6 +1908,12 @@ internal sealed class GameBoyRuntimeCompiler
 
                 throw new InvalidOperationException($"Unsupported Game Boy video API call '{call.Name}'.");
         }
+    }
+
+    private bool IsResourceDeclarationCall(FunctionCall call)
+    {
+        return program.Functions.TryGetValue(call.Name, out var function)
+               && SdkResourceDeclarationResolver.TryResolve(function, out _);
     }
 
     private void EmitSdkOperation(Sdk2DOperation operation)

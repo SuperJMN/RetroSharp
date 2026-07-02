@@ -152,6 +152,11 @@ public static class SdkAudioOperationCollector
 
         private void CollectCall(FunctionCall call)
         {
+            if (IsResourceDeclarationCall(call))
+            {
+                return;
+            }
+
             switch (call.Name)
             {
                 case "audio_init":
@@ -222,6 +227,12 @@ public static class SdkAudioOperationCollector
                 default:
                     return false;
             }
+        }
+
+        private bool IsResourceDeclarationCall(FunctionCall call)
+        {
+            return functions.TryGetValue(call.Name, out var function)
+                   && SdkResourceDeclarationResolver.TryResolve(function, out _);
         }
 
         private void CollectExpression(ExpressionSyntax expression)

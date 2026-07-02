@@ -717,6 +717,11 @@ public static class Sdk2DOperationCollector
 
         private void CollectCall(FunctionCall call)
         {
+            if (IsResourceDeclarationCall(call))
+            {
+                return;
+            }
+
             switch (call.Name)
             {
                 case "video_wait_vblank":
@@ -758,6 +763,12 @@ public static class Sdk2DOperationCollector
                     CollectUserFunction(call);
                     break;
             }
+        }
+
+        private bool IsResourceDeclarationCall(FunctionCall call)
+        {
+            return functions.TryGetValue(call.Name, out var function)
+                   && SdkResourceDeclarationResolver.TryResolve(function, out _);
         }
 
         private bool CollectTargetIntrinsic(FunctionCall call)
@@ -1338,6 +1349,11 @@ public static class Sdk2DOperationCollector
 
         private FrameBudgetState CollectCall(FrameBudgetState state, FunctionCall call)
         {
+            if (IsResourceDeclarationCall(call))
+            {
+                return state;
+            }
+
             switch (call.Name)
             {
                 case "video_wait_vblank":
@@ -1383,6 +1399,12 @@ public static class Sdk2DOperationCollector
                 _ => state,
             };
             return true;
+        }
+
+        private bool IsResourceDeclarationCall(FunctionCall call)
+        {
+            return functions.TryGetValue(call.Name, out var function)
+                   && SdkResourceDeclarationResolver.TryResolve(function, out _);
         }
 
         private FrameBudgetState CollectExpression(FrameBudgetState state, ExpressionSyntax expression)

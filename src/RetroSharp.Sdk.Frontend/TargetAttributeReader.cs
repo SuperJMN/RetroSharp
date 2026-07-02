@@ -14,7 +14,7 @@ public static class TargetAttributeReader
 
         if (attribute.Arguments is not [ConstantSyntax constant])
         {
-            throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
+            throw new InvalidOperationException($"Attribute '{name}' on function '{function.Name}' expects one string argument.");
         }
 
         var text = constant.Value.ToString() ?? "";
@@ -23,6 +23,6 @@ public static class TargetAttributeReader
             return text[1..^1];
         }
 
-        throw new InvalidOperationException($"Attribute '{name}' on extern function '{function.Name}' expects one string argument.");
+        throw new InvalidOperationException($"Attribute '{name}' on function '{function.Name}' expects one string argument.");
     }
 }

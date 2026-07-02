@@ -50,6 +50,18 @@ public sealed class SdkModuleRegistryTests
     }
 
     [Theory]
+    [InlineData("Sprite", "Asset")]
+    [InlineData("World", "Load")]
+    [InlineData("Music", "Asset")]
+    [InlineData("Palette", "Background")]
+    [InlineData("Palette", "Sprite")]
+    [InlineData("Animation", "Clip")]
+    public void Resource_facades_are_source_package_declarations_not_legacy_module_mappings(string module, string method)
+    {
+        Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
+    }
+
+    [Theory]
     [InlineData("video")]
     [InlineData("camera")]
     [InlineData("sprite")]
@@ -123,5 +135,19 @@ public sealed class SdkModuleRegistryTests
         Assert.Contains(TargetIntrinsicCapabilityRequirement.LogicalSprites, descriptor.RequiredCapabilities);
         Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
         Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.ConstPaletteSlot);
+    }
+
+    [Theory]
+    [InlineData("sprite_asset", SdkResourceDeclarationKind.SpriteAsset)]
+    [InlineData("world_load", SdkResourceDeclarationKind.WorldLoad)]
+    [InlineData("music_asset", SdkResourceDeclarationKind.MusicAsset)]
+    [InlineData("palette_background", SdkResourceDeclarationKind.BackgroundPalette)]
+    [InlineData("palette_sprite", SdkResourceDeclarationKind.SpritePalette)]
+    [InlineData("animation_clip", SdkResourceDeclarationKind.AnimationClip)]
+    public void Resource_declaration_descriptors_map_package_contract_ids(string resourceId, SdkResourceDeclarationKind kind)
+    {
+        Assert.True(SdkResourceDeclarationDescriptor.TryCreate(resourceId, out var descriptor));
+        Assert.Equal(resourceId, descriptor.ResourceId);
+        Assert.Equal(kind, descriptor.Kind);
     }
 }
