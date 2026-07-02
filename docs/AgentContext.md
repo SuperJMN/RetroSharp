@@ -193,8 +193,9 @@ Progress (2026-06-14):
   through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
   tile-offset landing probe ladder while keeping the downward-velocity gate and
   `player.Land(...)` policy in source.
-- Runner-shaped NES parity decision: `samples/runner/runner.rs` is the shared Game Boy/NES runner
-  source. It declares `music/runner.vgz`, which resolves to per-target VGM/VGZ variants and
+- Runner-shaped NES parity decision: `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES runner
+  project. It lists `src/main.rs` plus helper/state code from `samples/runner/src`. It declares
+  `assets/music/runner.vgz`, which resolves to per-target VGM/VGZ variants and
   gives both Game Boy and NES real frame-driven BGM lowering. `NesRunnerAcceptanceTests`
   enforces that the shared source builds for NES, while `CrossTargetScrollAcceptanceTests`
   verifies that runner-shaped camera-relative collision lowers on both targets.
@@ -248,7 +249,7 @@ Suggested next steps for the next agent, in order:
 
 ## Tiled Map Pipeline
 
-The runner's editable level lives at `samples/runner/maps/runner.tmj` and uses `samples/runner/maps/Super Mario Land 2.tsx`.
+The runner's editable level lives at `samples/runner/assets/maps/runner.tmj` and uses `samples/runner/assets/maps/Super Mario Land 2.tsx`.
 
 Pipeline shape (two phases, after #105 partial extraction):
 
@@ -295,7 +296,7 @@ Important current behavior:
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.
 
-When `runner.rs`, `runner.tmj`, the tileset, or GB/NES asset lowering changes, rebuild the tracked runner ROMs with `tools/gameboy/generate_sample_roms.py`.
+When `samples/runner/src/*.rs`, `runner.tmj`, the tileset, or GB/NES asset lowering changes, rebuild the tracked runner ROMs with `tools/gameboy/generate_sample_roms.py`.
 
 ## Known Traps
 
@@ -334,8 +335,8 @@ Build individual ROM samples:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/runner/runner.gb \
-  samples/runner/runner.rs
+  --out samples/runner/bin/runner.gb \
+  samples/runner/runner.retrosharp.json
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \

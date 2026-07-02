@@ -87,7 +87,34 @@ palettes, logical sprites, animation, music declarations, and fixed-pool actor
 framework sugar. Game Boy and NES still auto-import that SDK for older samples;
 unknown imports are rejected. Compiler hosts can switch to explicit-only SDK
 imports and provide an `SdkLibraryRegistry` for additional source-level SDK
-libraries.
+libraries. The CLI can also load local source-only libraries with `--lib-path`.
+A library package is a directory with `retrosharp-library.json` and one or more
+RetroSharp source files:
+
+```json
+{
+  "import": "Acme.Wait",
+  "rootNamespace": "Acme.Wait",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "sources": [
+    "src/api.rs",
+    "src/timing/rules.rs"
+  ],
+  "targets": [ "gb", "nes" ]
+}
+```
+
+`--lib-path` may point at one package directory or at a directory containing
+package subdirectories. This MVP deliberately does not include package
+versioning, remote feeds, transitive dependencies, binary libraries, or target
+backend plugins.
+
+When a library package opts into `namespaceMode: "physical"`, folder names under
+`sourceRoot` become compile-time namespaces just like project sources. Root
+source files commonly act as the package's public facade after `import`, while
+helper files under folders can reuse names without colliding with the game or
+with other packages.
 
 Portability is capability-based, not magic. A shared source file is portable
 only when each selected target can support the requested scrolling mode, sprite
@@ -136,9 +163,52 @@ Build the Game Boy runner sample from source:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/runner/runner.gb \
-  samples/runner/runner.rs
+  --out samples/runner/bin/runner.gb \
+  samples/runner/runner.retrosharp.json
 ```
+
+For games split across several source files, use a RetroSharp project manifest.
+It is a small JSON file owned by RetroSharp, not an MSBuild project:
+
+```json
+{
+  "targets": [ "gb", "nes" ],
+  "outputs": {
+    "gb": "bin/runner.gb",
+    "nes": "bin/runner.nes"
+  },
+  "rootNamespace": "Runner",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "sources": [
+    "src/Program.rs",
+    "src/player/State.rs",
+    "src/camera/State.rs"
+  ],
+  "libraryPaths": [
+    "lib"
+  ]
+}
+```
+
+Then build the project file directly:
+
+```bash
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- retrosharp.json
+```
+
+Project paths are resolved relative to the JSON file. `--target`, `--out`, and
+additional `--lib-path` options still work as command-line overrides. Use
+project `sources` for code that belongs to the game itself; use
+`retrosharp-library.json` packages when code should behave like an external,
+imported dependency.
+
+When `namespaceMode` is `physical`, RetroSharp derives zero-cost source
+namespaces from the path under `sourceRoot`: `src/player/State.rs` belongs to
+`Runner.Player`, while `src/camera/State.rs` belongs to `Runner.Camera`. The
+compiler lowers those names to unique internal symbols, so folders can contain
+same-named helper classes such as `Rules`; source can refer to static constants
+with path-qualified names like `Player.Rules.Start`.
 
 Export a GBS subsong into a Game Boy APU trace when you want faithful playback of the original register writes:
 

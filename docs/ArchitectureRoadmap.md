@@ -197,8 +197,21 @@ explicitly; Game Boy and NES keep the legacy implicit import during the
 transition by default, and unknown imports fail compilation instead of being
 ignored. Hosts can set `SdkLibraryImportMode.ExplicitOnly` to compile without
 the SDK unless it is imported, or supply a custom `SdkLibraryRegistry` so other
-import paths inject source-level SDK libraries. Each cartridge target exposes a
-declarative `TargetIntrinsicCatalog` instead of a one-off intrinsic switch; Game
+import paths inject source-level SDK libraries. `SdkLibraryRegistry.FromDirectories(...)`
+and the CLI `--lib-path <path>` option now provide the first local-package MVP:
+each package directory has a `retrosharp-library.json` manifest with `import`,
+`sources`, optional `targets`, and optional physical namespace fields, and the
+source files are injected through the same registry path as
+`RetroSharp.Portable2D`. A `--lib-path` can also point at a directory whose
+direct children are package directories. This MVP is deliberately source-only:
+no version solving, package feed, transitive dependency graph, binary library
+ABI, per-package asset root, or target-backend plugin model is promised yet.
+Project and library manifests can also enable `namespaceMode: "physical"` with a
+`rootNamespace` and `sourceRoot`; this derives compile-time namespaces from
+source folders and rewrites those names to unique internal symbols before target
+lowering, without runtime metadata or dispatch. Each cartridge target exposes a
+declarative `TargetIntrinsicCatalog` instead
+of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
 `audio_update`, `camera_set_position`, and `camera_apply` (Game Boy additionally
 catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` resolves imported
@@ -356,7 +369,7 @@ Every implementation task must include:
 - Layer decision: language, portable SDK, or target intrinsic.
 - Candidate files: expected code/docs/tests to inspect or edit.
 - Verification: exact build, unit test, ROM build, or sample check.
-- Compatibility check: whether `samples/runner/runner.rs` still builds.
+- Compatibility check: whether `samples/runner/runner.retrosharp.json` still builds with its declared source set.
 - Documentation check: update this roadmap or target docs if public API changes.
 
 General rules for agents:
@@ -737,7 +750,7 @@ Status: landed 2026-06-08.
   - Leave direct target calls untouched.
 - Verification:
   - Game Boy compiler tests still pass.
-  - `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/runner/runner.rs`
+  - `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/runner/runner.retrosharp.json`
 
 ### Iteration 3 Tasks: Unified World Map Resource
 
@@ -774,7 +787,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: portable SDK camera/resource integration.
-- Candidate files: Game Boy map-column generation, `samples/runner/runner.rs`, tests.
+- Candidate files: Game Boy map-column generation, `samples/runner/src/main.rs`, tests.
 - Steps:
   - Replace separate `map_column(...)` source data with generated map columns from the unified world map.
   - Keep source-map column ROM tables equivalent for the current runner.
@@ -831,7 +844,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
-- Candidate files: `samples/runner/runner.rs`, Game Boy runner tests.
+- Candidate files: `samples/runner/src/main.rs`, Game Boy runner tests.
 - Steps:
   - Add a source variable for camera/world X.
   - Update input handling to mutate camera/world X.
@@ -904,7 +917,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: portable SDK sprites.
-- Candidate files: `samples/runner/runner.rs`, Game Boy sprite draw lowering, tests.
+- Candidate files: `samples/runner/src/main.rs`, Game Boy sprite draw lowering, tests.
 - Steps:
   - Add named `flipX` and optionally `flipY` values or booleans.
   - Lower `flipX` to the Game Boy OAM X-flip bit internally.
@@ -960,7 +973,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
-- Candidate files: `samples/runner/runner.rs`, runner tests.
+- Candidate files: `samples/runner/src/main.rs`, runner tests.
 - Steps:
   - Replace manual frame cycle constants where the animation helper can express the same behavior.
   - Keep jump/idle/run state explicit in source.
@@ -1003,7 +1016,7 @@ Status: landed 2026-06-08.
 Status: landed 2026-06-08.
 
 - Layer: sample/API adoption.
-- Candidate files: `samples/runner/runner.rs`, Game Boy runner tests.
+- Candidate files: `samples/runner/src/main.rs`, Game Boy runner tests.
 - Steps:
   - Replace `camera_span_tile_at(...)` and `camera_span_has_tile(...)` in runner collision.
   - Use world coordinates plus sprite hitbox or logical width.
@@ -1457,7 +1470,7 @@ Tasks:
 #### AR-14.4: Build a scalable platformer acceptance slice
 
 - Layer: samples and validation.
-- Candidate files: `samples/runner/runner.rs`, sample maps/assets, target acceptance tests, MCP/diagnostics docs.
+- Candidate files: `samples/runner/src/main.rs`, sample maps/assets, target acceptance tests, MCP/diagnostics docs.
 - Steps:
   - [x] Extend the runner or add a focused platformer acceptance sample with several enemy kinds, activation, map collision, player contact, and animation.
   - [x] Keep the source free of a hand-written global enemy-kind switch in `Main`.

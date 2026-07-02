@@ -70,7 +70,19 @@ public sealed class CrossTargetCliAcceptanceTests
                 var output = Path.Combine(
                     workspace.Path,
                     Path.GetFileNameWithoutExtension(sample.Path).Replace('.', '-') + "-" + target + extension);
-                var result = RunCli("--target", target, "--out", output, RepositoryFile(sample.Path));
+                var args = new List<string>
+                {
+                    "--target",
+                    target,
+                };
+                foreach (var libraryPath in sample.LibraryPaths ?? [])
+                {
+                    args.Add("--lib-path");
+                    args.Add(RepositoryPath(libraryPath));
+                }
+
+                args.AddRange(["--out", output, RepositoryFile(sample.Path)]);
+                var result = RunCli(args.ToArray());
 
                 Assert.Equal(0, result.ExitCode);
                 Assert.True(File.Exists(output), result.CombinedOutput);
@@ -87,12 +99,66 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("samples/gameboy-drawing/drawing.rs", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("samples/gameboy-drawing/drawing.gb", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains("samples/runner/runner.rs", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains("samples/runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/runner/runner.retrosharp.json", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("--out samples/runner/bin/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("--target nes", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains("samples/runner/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("--out samples/runner/bin/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("--out samples/runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("--out samples/runner/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("--lib-path samples/runner/lib", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("samples/gameboy-hud/hud.rs", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("samples/runner/diagnostics/00-static-background.rs", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Runner_project_builds_game_sources_without_a_local_library_package()
+    {
+        using var workspace = TemporaryWorkspace();
+        var projectPath = RepositoryFile("samples/runner/runner.retrosharp.json");
+        using var projectJson = JsonDocument.Parse(File.ReadAllText(projectPath));
+        var root = projectJson.RootElement;
+        var sourcePaths = root.GetProperty("sources")
+            .EnumerateArray()
+            .Select(source => source.GetString())
+            .ToArray();
+        var targets = root.GetProperty("targets")
+            .EnumerateArray()
+            .Select(target => target.GetString())
+            .ToArray();
+        var outputs = root.GetProperty("outputs");
+
+        Assert.DoesNotContain(root.EnumerateObject(), property => property.NameEquals("target"));
+        Assert.DoesNotContain(root.EnumerateObject(), property => property.NameEquals("libraryPaths"));
+        Assert.Equal("Runner", root.GetProperty("rootNamespace").GetString());
+        Assert.Equal("src", root.GetProperty("sourceRoot").GetString());
+        Assert.Equal("physical", root.GetProperty("namespaceMode").GetString());
+        Assert.Equal(new[] { "gb", "nes" }, targets);
+        Assert.Equal("bin/runner.gb", outputs.GetProperty("gb").GetString());
+        Assert.Equal("bin/runner.nes", outputs.GetProperty("nes").GetString());
+        Assert.Contains("src/level/constants.rs", sourcePaths);
+        Assert.Contains("src/player/state.rs", sourcePaths);
+        Assert.Contains("src/camera/state.rs", sourcePaths);
+        Assert.Contains("src/frame/state.rs", sourcePaths);
+        Assert.Contains("src/main.rs", sourcePaths);
+        Assert.DoesNotContain("runner.rs", sourcePaths);
+        Assert.False(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/runner.rs")));
+        Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/music")));
+        Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/maps")));
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.gb.vgz")));
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.nes.vgz")));
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/runner.tmj")));
+        var mainSource = File.ReadAllText(RepositoryFile("samples/runner/src/main.rs"));
+        Assert.DoesNotContain("import Runner.Framework;", mainSource, StringComparison.Ordinal);
+        Assert.Contains("""Music.Asset(runner_theme, "assets/music/runner.vgz");""", mainSource, StringComparison.Ordinal);
+        Assert.Contains("""World.Load("assets/maps/runner.tmj");""", mainSource, StringComparison.Ordinal);
+        Assert.Contains("""Actors.SpawnLayer(goombas, "assets/maps/runner.tmj", "actors");""", mainSource, StringComparison.Ordinal);
+
+        var outputPath = Path.Combine(workspace.Path, "runner.gb");
+        var result = RunCli("--target", "gb", "--out", outputPath, projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(65536, new FileInfo(outputPath).Length);
     }
 
     [Fact]
@@ -116,6 +182,359 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.NotEqual(0, result.ExitCode);
         Assert.False(File.Exists(outputPath), result.CombinedOutput);
         Assert.Contains("Target 'nes' does not support Window HUD. Use disable HUD for this target.", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_builds_game_boy_rom_with_local_library_manifest_from_lib_path()
+    {
+        using var workspace = TemporaryWorkspace();
+        var libraryRoot = Path.Combine(workspace.Path, "lib");
+        WriteLibraryPackage(
+            libraryRoot,
+            "acme-wait",
+            "Acme.Wait",
+            "wait.rs",
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void acme_wait_frame();
+
+            [target("nes")]
+            [intrinsic("wait_frame")]
+            extern void acme_wait_frame();
+
+            class AcmeWait
+            {
+                static inline void Tick()
+                {
+                    acme_wait_frame();
+                }
+            }
+            """,
+            "gb",
+            "nes");
+        var sourcePath = Path.Combine(workspace.Path, "use-acme.rs");
+        File.WriteAllText(
+            sourcePath,
+            """
+            import Acme.Wait;
+
+            void Main() {
+                AcmeWait.Tick();
+            }
+            """);
+        var outputPath = Path.Combine(workspace.Path, "use-acme.gb");
+
+        var result = RunCli("--target", "gb", "--lib-path", libraryRoot, "--out", outputPath, sourcePath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_builds_game_boy_rom_with_physical_namespace_library_manifest_from_lib_path()
+    {
+        using var workspace = TemporaryWorkspace();
+        var packageDirectory = Path.Combine(workspace.Path, "lib", "acme-motion");
+        var sourceRoot = Path.Combine(packageDirectory, "src");
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "player"));
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "camera"));
+        File.WriteAllText(
+            Path.Combine(sourceRoot, "player", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 1;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceRoot, "camera", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 2;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceRoot, "api.rs"),
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void acme_motion_wait_frame();
+
+            class MotionApi
+            {
+                static inline void Tick()
+                {
+                    const playerStart = Player.Rules.Start;
+                    const cameraStart = Camera.Rules.Start;
+                    acme_motion_wait_frame();
+                }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(packageDirectory, "retrosharp-library.json"),
+            """
+            {
+              "import": "Acme.Motion",
+              "rootNamespace": "Acme.Motion",
+              "sourceRoot": "src",
+              "namespaceMode": "physical",
+              "sources": [
+                "src/player/rules.rs",
+                "src/camera/rules.rs",
+                "src/api.rs"
+              ],
+              "targets": [ "gb" ]
+            }
+            """);
+        var sourcePath = Path.Combine(workspace.Path, "use-acme-motion.rs");
+        File.WriteAllText(
+            sourcePath,
+            """
+            import Acme.Motion;
+
+            void Main() {
+                const playerStart = Player.Rules.Start;
+                const cameraStart = Camera.Rules.Start;
+                MotionApi.Tick();
+            }
+            """);
+        var outputPath = Path.Combine(workspace.Path, "use-acme-motion.gb");
+
+        var result = RunCli("--target", "gb", "--lib-path", Path.Combine(workspace.Path, "lib"), "--out", outputPath, sourcePath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_reports_missing_library_path_with_nonzero_exit_code()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourcePath = Path.Combine(workspace.Path, "main.rs");
+        var missingLibraryPath = Path.Combine(workspace.Path, "missing-lib");
+        var outputPath = Path.Combine(workspace.Path, "main.gb");
+        File.WriteAllText(
+            sourcePath,
+            """
+            void Main() {
+            }
+            """);
+
+        var result = RunCli("--target", "gb", "--lib-path", missingLibraryPath, "--out", outputPath, sourcePath);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.False(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Contains($"Library path '{missingLibraryPath}' does not exist.", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_builds_game_boy_rom_from_retrosharp_project_file()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "Program.rs"),
+            """
+            void Main() {
+                Startup.Wait();
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "Startup.rs"),
+            """
+            class Startup
+            {
+                static inline void Wait()
+                {
+                    Video.WaitVBlank();
+                }
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "retrosharp.json");
+        var outputPath = Path.Combine(workspace.Path, "bin", "runner.gb");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "output": "bin/runner.gb",
+              "sources": [
+                "src/Program.rs",
+                "src/Startup.rs"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+        Assert.Contains($"Wrote Game Boy ROM: {outputPath}", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_builds_all_declared_project_targets_to_declared_outputs()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "main.rs"),
+            """
+            void Main() {
+                Video.WaitVBlank();
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        var gameBoyOutput = Path.Combine(workspace.Path, "bin", "runner.gb");
+        var nesOutput = Path.Combine(workspace.Path, "bin", "runner.nes");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "targets": [ "gb", "nes" ],
+              "outputs": {
+                "gb": "bin/runner.gb",
+                "nes": "bin/runner.nes"
+              },
+              "sources": [
+                "src/main.rs"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(gameBoyOutput), result.CombinedOutput);
+        Assert.True(File.Exists(nesOutput), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(gameBoyOutput).Length);
+        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesOutput).Length);
+        Assert.Contains($"Wrote Game Boy ROM: {gameBoyOutput}", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains($"Wrote NES ROM: {nesOutput}", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_project_physical_namespaces_follow_source_folders()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(Path.Combine(sourceDirectory, "player"));
+        Directory.CreateDirectory(Path.Combine(sourceDirectory, "camera"));
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "player", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 1;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "camera", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 2;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "main.rs"),
+            """
+            void Main() {
+                const playerStart = Player.Rules.Start;
+                const cameraStart = Camera.Rules.Start;
+                Video.WaitVBlank();
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        var outputPath = Path.Combine(workspace.Path, "bin", "runner.gb");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "output": "bin/runner.gb",
+              "rootNamespace": "Game",
+              "sourceRoot": "src",
+              "namespaceMode": "physical",
+              "sources": [
+                "src/player/rules.rs",
+                "src/camera/rules.rs",
+                "src/main.rs"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_project_file_uses_declared_library_paths()
+    {
+        using var workspace = TemporaryWorkspace();
+        var libraryRoot = Path.Combine(workspace.Path, "lib");
+        WriteLibraryPackage(
+            libraryRoot,
+            "acme-wait",
+            "Acme.Wait",
+            "wait.rs",
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void acme_wait_frame();
+
+            class AcmeWait
+            {
+                static inline void Tick()
+                {
+                    acme_wait_frame();
+                }
+            }
+            """,
+            "gb");
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "Program.rs"),
+            """
+            import Acme.Wait;
+
+            void Main() {
+                AcmeWait.Tick();
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        var outputPath = Path.Combine(workspace.Path, "bin", "runner.gb");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "output": "bin/runner.gb",
+              "sources": [
+                "src/Program.rs"
+              ],
+              "libraryPaths": [
+                "lib"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
     }
 
     private static CliResult RunCli(params string[] args)
@@ -184,7 +603,7 @@ public sealed class CrossTargetCliAcceptanceTests
     {
         return target switch
         {
-            "gb" when samplePath == "samples/runner/runner.rs" => 65536,
+            "gb" when samplePath == "samples/runner/runner.retrosharp.json" => 65536,
             "gb" => 32768,
             "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
@@ -200,6 +619,40 @@ public sealed class CrossTargetCliAcceptanceTests
         }
 
         return path;
+    }
+
+    private static string RepositoryPath(string relativePath)
+    {
+        var path = Path.Combine(RepositoryRoot(), relativePath);
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            throw new InvalidOperationException($"Could not find repository path '{relativePath}'.");
+        }
+
+        return path;
+    }
+
+    private static void WriteLibraryPackage(
+        string libraryRoot,
+        string packageDirectoryName,
+        string importPath,
+        string sourceName,
+        string source,
+        params string[] targets)
+    {
+        var packageDirectory = Path.Combine(libraryRoot, packageDirectoryName);
+        Directory.CreateDirectory(packageDirectory);
+        var targetList = string.Join(", ", targets.Select(target => "\"" + target + "\""));
+        File.WriteAllText(
+            Path.Combine(packageDirectory, "retrosharp-library.json"),
+            $$"""
+              {
+                "import": "{{importPath}}",
+                "sources": [ "{{sourceName}}" ],
+                "targets": [ {{targetList}} ]
+              }
+              """);
+        File.WriteAllText(Path.Combine(packageDirectory, sourceName), source);
     }
 
     private static string CliAssembly()
@@ -240,7 +693,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
     private sealed record SampleManifest(SampleEntry[] Samples);
 
-    private sealed record SampleEntry(string Path, string[] Targets);
+    private sealed record SampleEntry(string Path, string[] Targets, string[]? LibraryPaths = null);
 
     private sealed class TemporaryDirectory(string path) : IDisposable
     {

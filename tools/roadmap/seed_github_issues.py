@@ -240,7 +240,7 @@ def issue_body(task: RoadmapTask) -> str:
 - [ ] Inspect the current code path before editing.
 - [ ] Confirm the layer decision still matches the task.
 - [ ] Keep the scope to this task id unless the integrator approves a contiguous group.
-- [ ] Preserve `samples/runner/runner.rs` compatibility when affected.
+- [ ] Preserve `samples/runner/runner.retrosharp.json` compatibility when affected.
 - [ ] Update docs if public API, target support, or roadmap status changes.
 - [ ] Fill the PR template with verification and handoff notes.
 """

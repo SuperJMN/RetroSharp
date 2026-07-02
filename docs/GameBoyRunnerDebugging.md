@@ -1,9 +1,9 @@
 # Game Boy Runner Debugging Workflow
 
 Status: operational debugging guide.
-Last updated: 2026-06-13.
+Last updated: 2026-07-02.
 
-Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.rs` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
+Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src` and enables physical project namespaces, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
 ## Goal
 
@@ -36,8 +36,8 @@ Build only the runner when you need a quick local ROM:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/runner/runner.gb \
-  samples/runner/runner.rs
+  --out samples/runner/bin/runner.gb \
+  samples/runner/runner.retrosharp.json
 ```
 
 ## Reproduce
@@ -59,7 +59,7 @@ Preview the full runner directly with PyBoy:
 mkdir -p artifacts
 PYTHONPATH=/tmp/retrosharp-pyboy-site python3 - <<'PY'
 from pyboy import PyBoy
-pyboy = PyBoy("samples/runner/runner.gb", window="null")
+pyboy = PyBoy("samples/runner/bin/runner.gb", window="null")
 for _ in range(180):
     pyboy.tick()
 pyboy.screen.image.save("artifacts/runner-pyboy.png")
@@ -75,7 +75,7 @@ flatpak run --command=retroarch org.libretro.RetroArch \
   -L ~/.var/app/org.libretro.RetroArch/config/retroarch/cores/gambatte_libretro.so \
   --max-frames=180 --max-frames-ss \
   --max-frames-ss-path=artifacts/runner-retroarch.png \
-  samples/runner/runner.gb
+  samples/runner/bin/runner.gb
 ```
 
 Use original DMG hardware reports as backend evidence, not as sample quirks. Input bugs that reproduce only on hardware can still be target-runtime bugs, especially around `JOYP` row settling.
@@ -91,7 +91,7 @@ The diagnostic samples under `samples/runner/diagnostics/` isolate the runner in
 | 02a | `02-flat-ground-camera.rs` | Player sprite, input, animation, jump, flat-ground collision, and cyclic camera movement. |
 | 02b | `02-player-camera.rs` | Player collision with wrapped foot probes, platforms, holes, hazards, jump, animation, and camera. |
 | 03 | `03-enemy-sprites.rs` | Enemy sprite drawing and animation in isolation. This is a wrap-loop diagnostic, not enemy AI. |
-| 04 | `../runner.rs` | Full runner scene. |
+| 04 | `../runner.retrosharp.json` | Full runner scene. |
 
 Use the first failing step to choose the investigation layer:
 
@@ -100,7 +100,7 @@ Use the first failing step to choose the investigation layer:
 - `02a` fails: inspect input polling, camera movement, sprite draw, animation tick, flat-ground collision, and frame order.
 - `02b` fails: inspect platform/hazard/fall resolution, wrapped collision probes, and reset/input ordering.
 - `03` fails: inspect logical sprite metadata, sprite tile emission, OAM attributes, palette slots, and animation frame selection.
-- Only `04` fails: inspect interaction between systems in `runner.rs`, Tiled map data, or full-scene resource budgets.
+- Only `04` fails: inspect interaction between systems in `src/main.rs`, Tiled map data, or full-scene resource budgets.
 
 ## Check The Debug Tool First
 
@@ -141,8 +141,8 @@ Use this table to avoid fixing the wrong layer:
 
 Prefer the smallest layer that explains the first failing diagnostic:
 
-- Source gameplay policy: `samples/runner/runner.rs`.
-- Editable map data: `samples/runner/maps/runner.tmj` and `samples/runner/maps/Super Mario Land 2.tsx`.
+- Source gameplay policy: `samples/runner/src/main.rs` plus the helper/state files in `samples/runner/src`.
+- Editable map data: `samples/runner/assets/maps/runner.tmj` and `samples/runner/assets/maps/Super Mario Land 2.tsx`.
 - Tiled import: `src/RetroSharp.GameBoy/GameBoyTiledMapImporter.cs`.
 - Game Boy ROM lowering/runtime: `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs` and nearby target code.
 - CLI/sample tooling: `src/RetroSharp.Cli/Program.cs` and `tools/gameboy/`.

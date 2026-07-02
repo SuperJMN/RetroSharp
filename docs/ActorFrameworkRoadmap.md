@@ -274,7 +274,7 @@ Candidate file names are guidance; inspect the real code paths first.
 
 #### AF-4.2: Scalable platformer acceptance slice (AR-14.4)
 - Layer: samples and validation.
-- Candidate files: `samples/runner/runner.rs` or a new platformer sample, maps,
+- Candidate files: `samples/runner/src/main.rs` or a new platformer sample, maps,
   assets, acceptance tests, tracked ROMs.
 - Steps:
   - [x] Add a focused actor-framework sample with ≥3 enemy kinds.

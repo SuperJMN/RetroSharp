@@ -261,8 +261,25 @@ public static class SdkLibrarySource
             libraries.Insert(0, portable2D!);
         }
 
-        var librarySource = string.Concat(libraries.Select(library => library.SourceForTarget(catalog)));
-        return imports + librarySource + body;
+        var librarySourceSets = libraries
+            .Select(library => library.SourceSetForTarget(catalog))
+            .ToList();
+        var plainLibrarySource = string.Concat(librarySourceSets
+            .Where(sourceSet => sourceSet.PhysicalNamespace is null)
+            .Select(sourceSet => sourceSet.Source));
+        var physicalLibrarySourceGroups = librarySourceSets
+            .Select(sourceSet => sourceSet.PhysicalNamespace)
+            .OfType<PhysicalNamespaceSourceGroup>()
+            .ToArray();
+        if (physicalLibrarySourceGroups.Length == 0)
+        {
+            return imports + plainLibrarySource + body;
+        }
+
+        var rewrittenPhysicalSource = PhysicalNamespaceSourceComposer.Compose(
+            physicalLibrarySourceGroups,
+            [new PhysicalNamespaceSourceFile("__retrosharp_importer.rs", body)]);
+        return imports + plainLibrarySource + rewrittenPhysicalSource;
     }
 
     private static (string Imports, IReadOnlyList<string> ImportPaths, string Body) SplitLeadingImports(string source)

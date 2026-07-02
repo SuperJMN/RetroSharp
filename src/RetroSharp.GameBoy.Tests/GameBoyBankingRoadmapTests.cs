@@ -40,7 +40,7 @@ public sealed class GameBoyBankingRoadmapTests
     {
         // Music banking already exists; this guards that the SDK-stream / banking
         // work does not regress it.
-        var directory = RepositoryDirectory("samples/runner/music");
+        var directory = RepositoryDirectory("samples/runner/assets/music");
         var source = $$"""
             void Main() {
                 Video.Init();
@@ -134,10 +134,8 @@ public sealed class GameBoyBankingRoadmapTests
     [Fact]
     public void Runner_sample_builds_as_banked_mbc1_rom()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
-
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var source = RunnerSample.FlattenedSource();
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
 
         Assert.Equal(CartridgeMbc1, rom[0x147]);
         Assert.True(rom.Length > 32768, "a banked ROM spans more than two banks");
@@ -147,9 +145,8 @@ public sealed class GameBoyBankingRoadmapTests
     [Fact]
     public void Banked_runner_executes_across_a_bank_boundary_without_faulting()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var source = RunnerSample.FlattenedSource();
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
 
         var cpu = new GameBoyTestCpu(rom);
         cpu.RunFrames(120);
