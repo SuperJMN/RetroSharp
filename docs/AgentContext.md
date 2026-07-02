@@ -179,7 +179,7 @@ Progress (2026-06-14):
   SAL-8.7 migrated Game Boy and NES `Music.Play(...)` / `Music.Stop()` to `Music`
   helpers in `RetroSharp.Portable2D` over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
   collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
-  `music_stop(...)` builtins remain aliases and `Music.Asset(...)` stays on the SDK-module path.
+  `music_stop(...)` builtins remain aliases.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.
@@ -188,6 +188,13 @@ Progress (2026-06-14):
   `SdkModuleRegistry` call-name lowering; those public names now come from SDK
   source packages, while the registry remains for transitional SDK module
   declarations and compatibility APIs.
+  SDKLIB-5 moved resource declarations behind source-package contracts:
+  `Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`,
+  `Palette.Sprite`, and `Animation.Clip` are declared in `RetroSharp.Portable2D`
+  with `[resource(...)]` metadata and resolved to generic resource declaration
+  descriptors before target-specific asset loading. Legacy flat declaration calls
+  such as `sprite_asset(...)`, `world_load(...)`, and `music_asset(...)` remain
+  compatibility aliases.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.

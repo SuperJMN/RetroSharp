@@ -250,6 +250,14 @@ SDKLIB-4 makes these simple runtime facades package-only at the public-name laye
 `Audio.Update`, `Camera.SetPosition`, or `Camera.Apply` to flat legacy calls. The
 flat calls remain accepted as compatibility aliases, but the PascalCase public
 facades must be supplied by source packages.
+SDKLIB-5 applies the same public-name rule to resource declarations:
+`Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`, `Palette.Sprite`,
+and `Animation.Clip` are source-package methods annotated with `[resource(...)]`.
+The frontend resolves that metadata to a generic resource declaration descriptor
+instead of making targets key off the public facade name. The flat declaration calls
+remain accepted as compatibility aliases while target-specific asset import, target
+variant resolution, palette validation, and clip validation stay in the existing
+GB/NES resource pipelines.
 
 The library can also carry **capability-gated, value-returning** members. Game Boy
 catalogs a `world_tile_flags_at` intrinsic and exposes `World.TileFlagsAt(x, y)` — a

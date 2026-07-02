@@ -111,6 +111,19 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Built_in_portable2d_sdk_declares_resource_facades_as_package_contracts()
+    {
+        var source = SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics);
+
+        Assert.Contains("[resource(\"sprite_asset\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[resource(\"world_load\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[resource(\"music_asset\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[resource(\"palette_background\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[resource(\"palette_sprite\")]", source, StringComparison.Ordinal);
+        Assert.Contains("[resource(\"animation_clip\")]", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Portable2d_public_facade_source_is_not_embedded_in_csharp()
     {
         var source = File.ReadAllText(RepositoryFile("src/RetroSharp.Sdk.Frontend/SdkLibrarySource.cs"));

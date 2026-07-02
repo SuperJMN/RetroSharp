@@ -5,6 +5,7 @@ using System.IO.Compression;
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
 using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 // Acceptance: a Tiled map imported through the shared target-neutral
@@ -765,9 +766,11 @@ public sealed class NesWorldLoadTests : IDisposable
 
     private NesVideoProgram BuildProgram(string source)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
-        return NesVideoProgram.FromProgram(parse.Value, directory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var lowered = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, directory);
+        return NesVideoProgram.FromProgram(lowered, directory);
     }
 
     private static void WriteTilesheetPng(string path, bool blackThenWhite)

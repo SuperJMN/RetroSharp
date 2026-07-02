@@ -1306,6 +1306,11 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitCall(FunctionCall call)
     {
+        if (IsResourceDeclarationCall(call))
+        {
+            return;
+        }
+
         switch (call.Name)
         {
             case "video_init":
@@ -1410,6 +1415,12 @@ internal sealed class NesRuntimeCompiler
 
                 throw new InvalidOperationException($"Unsupported NES video API call '{call.Name}'.");
         }
+    }
+
+    private bool IsResourceDeclarationCall(FunctionCall call)
+    {
+        return program.Functions.TryGetValue(call.Name, out var function)
+               && SdkResourceDeclarationResolver.TryResolve(function, out _);
     }
 
     private bool TryEmitUserFunction(FunctionCall call)

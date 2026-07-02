@@ -658,6 +658,11 @@ internal sealed class GameBoyVideoProgram
                 continue;
             }
 
+            if (TryApplySdkResourceDeclaration(call))
+            {
+                continue;
+            }
+
             switch (call.Name)
             {
                 case "palette_set":
@@ -718,6 +723,45 @@ internal sealed class GameBoyVideoProgram
                     ApplyStaticUserFunction(call, callStack);
                     break;
             }
+        }
+    }
+
+    private bool TryApplySdkResourceDeclaration(FunctionCall call)
+    {
+        if (!Functions.TryGetValue(call.Name, out var function) ||
+            !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor))
+        {
+            return false;
+        }
+
+        ApplySdkResourceDeclaration(call, descriptor);
+        return true;
+    }
+
+    private void ApplySdkResourceDeclaration(FunctionCall call, SdkResourceDeclarationDescriptor descriptor)
+    {
+        switch (descriptor.Kind)
+        {
+            case SdkResourceDeclarationKind.BackgroundPalette:
+                ApplyLogicalPalette(call, PaletteKind.Background);
+                break;
+            case SdkResourceDeclarationKind.SpritePalette:
+                ApplyLogicalPalette(call, PaletteKind.Sprite);
+                break;
+            case SdkResourceDeclarationKind.WorldLoad:
+                ApplyWorldLoad(call);
+                break;
+            case SdkResourceDeclarationKind.SpriteAsset:
+                ApplySpriteAsset(call);
+                break;
+            case SdkResourceDeclarationKind.MusicAsset:
+                ApplyMusicAsset(call);
+                break;
+            case SdkResourceDeclarationKind.AnimationClip:
+                ApplyAnimationClip(call);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK resource declaration '{descriptor.ResourceId}'.");
         }
     }
 
