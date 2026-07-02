@@ -596,7 +596,7 @@ internal sealed class NesVideoProgram
         var generatedCount = world.GeneratedTileData.Length / 16;
         if (nextSpriteTile + generatedCount > 256)
         {
-            throw new InvalidOperationException("NES World.Load background tiles exceed the available CHR pattern table.");
+            throw new InvalidOperationException("NES generated background tiles exceed the available CHR pattern table.");
         }
 
         if (generatedCount > 0)
@@ -672,7 +672,7 @@ internal sealed class NesVideoProgram
     {
         if (colors.Count != 16)
         {
-            throw new InvalidOperationException("NES World.Load background palette derivation must produce four background palettes.");
+            throw new InvalidOperationException("NES generated background palette derivation must produce four background palettes.");
         }
 
         for (var slot = 0; slot < 4; slot++)
