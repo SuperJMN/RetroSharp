@@ -97,10 +97,11 @@ Golden rule (do not violate):
 - `Sdk2DOperation` must not grow into a dumping ground; a genre-specific operation
   should be questioned as an intrinsic+library before a compiler-recognized operation.
 - End-state: the 2D SDK becomes a library over per-target intrinsics.
-- `import RetroSharp.Portable2D;` is the explicit built-in SDK import. Game Boy
-  and NES still auto-import it for legacy samples by default, but
+- Project manifests can load `RetroSharp.Portable2D` through `libraries`, while
+  `import RetroSharp.Portable2D;` remains the explicit source-level transition
+  form. Game Boy and NES still auto-import it for legacy samples by default, but
   `SdkLibraryImportMode.ExplicitOnly` disables that path. New SDK library work
-  should go through `SdkLibraryRegistry` and explicit import plumbing rather
+  should go through `SdkLibraryRegistry` and manifest/import plumbing rather
   than adding more global magic.
 
 Operation-driven lowering pattern (already proven, replicate it):

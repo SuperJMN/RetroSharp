@@ -239,7 +239,8 @@ public static class SdkLibrarySource
         TargetIntrinsicCatalog catalog,
         string source,
         SdkLibraryImportMode importMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? registry = null)
+        SdkLibraryRegistry? registry = null,
+        IReadOnlyList<string>? libraryImportPaths = null)
     {
         if (source.Contains(MarkerName(catalog.TargetId), StringComparison.Ordinal))
         {
@@ -249,8 +250,8 @@ public static class SdkLibrarySource
         registry ??= SdkLibraryRegistry.Default;
         var (imports, importPaths, body) = SplitLeadingImports(source);
         var libraries = importPaths
-            .Select(importPath => registry.TryResolve(importPath, out var library) ? library : null)
-            .OfType<SdkLibrary>()
+            .Concat(libraryImportPaths ?? [])
+            .Select(importPath => ResolveLibrary(registry, importPath))
             .DistinctBy(library => library.ImportPath)
             .ToList();
 
@@ -280,6 +281,16 @@ public static class SdkLibrarySource
             physicalLibrarySourceGroups,
             [new PhysicalNamespaceSourceFile("__retrosharp_importer.rs", body)]);
         return imports + plainLibrarySource + rewrittenPhysicalSource;
+    }
+
+    private static SdkLibrary ResolveLibrary(SdkLibraryRegistry registry, string importPath)
+    {
+        if (!registry.TryResolve(importPath, out var library))
+        {
+            throw new InvalidOperationException($"Unknown import '{importPath}'.");
+        }
+
+        return library!;
     }
 
     private static (string Imports, IReadOnlyList<string> ImportPaths, string Body) SplitLeadingImports(string source)

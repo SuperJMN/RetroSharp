@@ -197,6 +197,7 @@ static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? 
         options.Target ?? "z80",
         options.OutputPath,
         options.LibraryPaths,
+        [],
         inputPath);
 }
 
@@ -220,6 +221,7 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? In
         .Select(libraryPath => ResolveProjectItemPath(projectDirectory, projectPath, libraryPath, "library path"))
         .ToArray();
     var libraryPaths = projectLibraryPaths.Concat(options.LibraryPaths).ToArray();
+    var libraries = ResolveProjectLibraries(projectPath, manifest);
     var targets = ResolveProjectTargets(options, manifest);
     if (options.OutputPath is not null && targets.Length > 1)
     {
@@ -233,8 +235,24 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? In
             target,
             options.OutputPath ?? ResolveProjectOutputPath(projectDirectory, ResolveProjectOutput(manifest, target)),
             libraryPaths,
+            libraries,
             projectPath))
         .ToArray();
+}
+
+static string[] ResolveProjectLibraries(string projectPath, RetroSharpProjectManifest manifest)
+{
+    var libraries = manifest.Libraries ?? [];
+    for (var i = 0; i < libraries.Length; i++)
+    {
+        libraries[i] = libraries[i].Trim();
+        if (libraries[i].Length == 0)
+        {
+            throw new InvalidOperationException($"RetroSharp project '{projectPath}' declares an empty library import.");
+        }
+    }
+
+    return libraries;
 }
 
 static string[] ResolveProjectTargets(
@@ -587,7 +605,8 @@ int BuildInput(RetroSharpBuildInput buildInput)
             var rom = RetroSharp.NES.NesRomCompiler.CompileSource(
                 buildInput.Source,
                 buildInput.BaseDirectory,
-                sdkLibraryRegistry: sdkLibraryRegistry);
+                sdkLibraryRegistry: sdkLibraryRegistry,
+                sdkLibraryImports: buildInput.LibraryImports);
             var outputPath = buildInput.OutputPath ?? DefaultOutputPath(buildInput, ".nes");
             WriteOutputBytes(outputPath, rom);
             Console.Error.WriteLine($"Wrote NES ROM: {outputPath}");
@@ -608,7 +627,8 @@ int BuildInput(RetroSharpBuildInput buildInput)
             var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
                 buildInput.Source,
                 buildInput.BaseDirectory,
-                sdkLibraryRegistry: sdkLibraryRegistry);
+                sdkLibraryRegistry: sdkLibraryRegistry,
+                sdkLibraryImports: buildInput.LibraryImports);
             var outputPath = buildInput.OutputPath ?? DefaultOutputPath(buildInput, ".gb");
             WriteOutputBytes(outputPath, rom);
             Console.Error.WriteLine($"Wrote Game Boy ROM: {outputPath}");
@@ -687,6 +707,7 @@ file sealed record RetroSharpBuildInput(
     string Target,
     string? OutputPath,
     IReadOnlyList<string> LibraryPaths,
+    IReadOnlyList<string> LibraryImports,
     string PrimaryPath);
 
 file sealed record RetroSharpProjectManifest
@@ -698,6 +719,7 @@ file sealed record RetroSharpProjectManifest
     public Dictionary<string, string>? Outputs { get; init; }
     public string[]? Sources { get; init; }
     public string[]? LibraryPaths { get; init; }
+    public string[]? Libraries { get; init; }
     public string? RootNamespace { get; init; }
     public string? SourceRoot { get; init; }
     public string? NamespaceMode { get; init; }

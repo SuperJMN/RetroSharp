@@ -686,6 +686,99 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Equal(32768, new FileInfo(outputPath).Length);
     }
 
+    [Fact]
+    public void Cli_project_file_loads_manifest_libraries()
+    {
+        using var workspace = TemporaryWorkspace();
+        var libraryRoot = Path.Combine(workspace.Path, "lib");
+        WriteLibraryPackage(
+            libraryRoot,
+            "acme-wait",
+            "Acme.Wait",
+            "wait.rs",
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void acme_wait_frame();
+
+            class AcmeWait
+            {
+                static inline void Tick()
+                {
+                    acme_wait_frame();
+                }
+            }
+            """,
+            "gb");
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "Program.rs"),
+            """
+            void Main() {
+                AcmeWait.Tick();
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        var outputPath = Path.Combine(workspace.Path, "bin", "runner.gb");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "output": "bin/runner.gb",
+              "sources": [
+                "src/Program.rs"
+              ],
+              "libraryPaths": [
+                "lib"
+              ],
+              "libraries": [
+                "Acme.Wait"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_project_file_rejects_unknown_manifest_library()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(sourceDirectory);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "Program.rs"),
+            """
+            void Main() {
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "sources": [
+                "src/Program.rs"
+              ],
+              "libraries": [
+                "Acme.Missing"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains("Unknown import 'Acme.Missing'.", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
     private static CliResult RunCli(params string[] args)
     {
         var processArgs = new List<string>

@@ -20,9 +20,14 @@ public static class SdkImportResolver
         }
     }
 
-    public static void ValidateSdkUsage(ProgramSyntax program, SdkLibraryImportMode importMode)
+    public static void ValidateSdkUsage(
+        ProgramSyntax program,
+        SdkLibraryImportMode importMode,
+        IReadOnlyList<string>? libraryImportPaths = null)
     {
-        if (importMode == SdkLibraryImportMode.LegacyAutoImport || ImportsPortable2D(program))
+        if (importMode == SdkLibraryImportMode.LegacyAutoImport
+            || ImportsPortable2D(program)
+            || ImportsPortable2D(libraryImportPaths))
         {
             return;
         }
@@ -37,6 +42,11 @@ public static class SdkImportResolver
     public static bool ImportsPortable2D(ProgramSyntax program)
     {
         return program.Imports.Any(import => import.Path == Portable2D);
+    }
+
+    private static bool ImportsPortable2D(IReadOnlyList<string>? libraryImportPaths)
+    {
+        return libraryImportPaths?.Any(importPath => importPath == Portable2D) == true;
     }
 
     private static string? FindSdkModuleUse(ProgramSyntax program)

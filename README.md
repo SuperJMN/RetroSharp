@@ -80,14 +80,16 @@ i16 Main()
 ## Framework surface
 
 The portable 2D SDK gives game code a common vocabulary for tile-and-sprite
-machines while keeping each target's limits explicit. Current SDK-shaped code
-can start with `import RetroSharp.Portable2D;` and use frame/input calls, Tiled
-`World.Load(...)`, collision flags, camera-relative AABB queries, logical
-palettes, logical sprites, animation, music declarations, and fixed-pool actor
-framework sugar. Game Boy and NES still auto-import that SDK for older samples;
-unknown imports are rejected. Compiler hosts can switch to explicit-only SDK
-imports and provide an `SdkLibraryRegistry` for additional source-level SDK
-libraries. The CLI can also load local source-only libraries with `--lib-path`.
+machines while keeping each target's limits explicit. Projects can load
+`RetroSharp.Portable2D` from manifest `libraries` and then use frame/input
+calls, Tiled `World.Load(...)`, collision flags, camera-relative AABB queries,
+logical palettes, logical sprites, animation, music declarations, and
+fixed-pool actor framework sugar. Game Boy and NES still auto-import that SDK
+for older samples, and source-level `import RetroSharp.Portable2D;` remains
+accepted as the explicit transitional form; unknown imports are rejected.
+Compiler hosts can switch to explicit-only SDK imports and provide an
+`SdkLibraryRegistry` for additional source-level SDK libraries. The CLI can also
+discover local source-only libraries with `--lib-path`.
 A library package is a directory with `retrosharp-library.json` and one or more
 RetroSharp source files:
 
@@ -187,6 +189,9 @@ It is a small JSON file owned by RetroSharp, not an MSBuild project:
   ],
   "libraryPaths": [
     "lib"
+  ],
+  "libraries": [
+    "RetroSharp.Portable2D"
   ]
 }
 ```
@@ -201,7 +206,11 @@ Project paths are resolved relative to the JSON file. `--target`, `--out`, and
 additional `--lib-path` options still work as command-line overrides. Use
 project `sources` for code that belongs to the game itself; use
 `retrosharp-library.json` packages when code should behave like an external,
-imported dependency.
+imported dependency. `libraryPaths` tells the CLI where to discover local
+packages; `libraries` names the package import paths that this project loads.
+Source-level `import` still works as the explicit transitional form, but
+C#-style project code normally declares loaded libraries in the manifest and
+uses `using` only for namespace lookup inside source files.
 
 When `namespaceMode` is `physical`, RetroSharp derives zero-cost source
 namespaces from the path under `sourceRoot`: `src/player/State.rs` belongs to

@@ -8,11 +8,12 @@ live in `src/*.rs`, while assets, map loading, enemy declarations, and the main
 loop stay in `src/main.rs` so their paths remain relative to this sample
 directory. Game data lives under `assets/`: sprite sheets at the root, Tiled
 map data in `assets/maps/`, and BGM inputs in `assets/music/`. No local library
-package is required for the runner's own code. The manifest enables
+package is required for the runner's own code; the manifest loads the built-in
+`RetroSharp.Portable2D` SDK through `libraries`. The manifest enables
 `namespaceMode: "physical"` with `rootNamespace: "Runner"` and
-`sourceRoot: "src"`; helper files live under folders such as `src/player/`,
-`src/camera/`, `src/frame/`, and `src/level/`, and those folders become
-compile-time namespace segments with no runtime representation.
+`sourceRoot: "src"`; helper files live under folders such as `src/player/`, `src/camera/`,
+`src/frame/`, and `src/level/`, and those folders become compile-time namespace
+segments with no runtime representation.
 
 Build both runner ROMs into `bin/` from the shared project:
 

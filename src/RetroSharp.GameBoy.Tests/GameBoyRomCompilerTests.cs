@@ -141,6 +141,23 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Explicit_sdk_import_mode_uses_manifest_declared_portable2d_sdk()
+    {
+        const string source = """
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(
+            source,
+            sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
     public void Imported_sdk_library_can_come_from_a_custom_registry()
     {
         var registry = new SdkLibraryRegistry(

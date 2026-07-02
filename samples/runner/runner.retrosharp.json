@@ -10,6 +10,9 @@
   "rootNamespace": "Runner",
   "sourceRoot": "src",
   "namespaceMode": "physical",
+  "libraries": [
+    "RetroSharp.Portable2D"
+  ],
   "sources": [
     "src/level/constants.rs",
     "src/player/state.rs",

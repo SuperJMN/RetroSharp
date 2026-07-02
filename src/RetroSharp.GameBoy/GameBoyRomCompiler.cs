@@ -14,9 +14,10 @@ public static class GameBoyRomCompiler
         string source,
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? sdkLibraryRegistry = null)
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null)
     {
-        var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry);
+        var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports);
         ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.Build(videoProgram);
@@ -26,27 +27,30 @@ public static class GameBoyRomCompiler
         string source,
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? sdkLibraryRegistry = null)
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null)
     {
-        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry).SdkOperations;
+        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports).SdkOperations;
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
         string source,
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? sdkLibraryRegistry = null)
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null)
     {
-        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry).SdkAudioOperations;
+        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports).SdkAudioOperations;
     }
 
     private static GameBoyVideoProgram ParseVideoProgram(
         string source,
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,
-        SdkLibraryRegistry? sdkLibraryRegistry)
+        SdkLibraryRegistry? sdkLibraryRegistry,
+        IReadOnlyList<string>? sdkLibraryImports)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry));
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
@@ -54,7 +58,7 @@ public static class GameBoyRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode);
+        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
