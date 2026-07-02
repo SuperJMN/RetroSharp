@@ -32,7 +32,11 @@ opens the package's rewritten source for the consuming program: root files are
 the practical place for public facade classes, while files under folders gain
 compile-time namespace segments. Path-qualified type names, top-level function
 calls, and static references rewrite to unique internal symbols before target
-lowering.
+lowering. Project or package files can also use C#-style `using Root.Player;`
+directives to open physical namespaces for unqualified references inside that
+file. `using` is compile-time name resolution only; it does not inject library
+source, which should come from the manifest-level library selection or the
+explicit source-level `import` transition path.
 
 ### Frame and input
 

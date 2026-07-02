@@ -4887,7 +4887,7 @@ public class GameBoyRomCompilerTests
         Assert.True(animationCall > movementCall, "Runner should update movement before animation state.");
 
         Assert.Contains("type Pixel = i16;", source);
-        Assert.Contains("Runner.Camera.CameraState view;", source);
+        Assert.Contains("CameraState view;", source);
         Assert.DoesNotContain("Pixel cameraX = 0;", source);
 
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", movementBlock);
@@ -5272,7 +5272,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("class PlayerState", source);
         Assert.Contains("inline void Reset(CameraState view)", source);
         Assert.Contains("inline void ApplyGravity()", source);
-        Assert.Contains("Runner.Player.PlayerState player;", source);
+        Assert.Contains("PlayerState player;", source);
         Assert.Contains("player.Reset(view);", source);
         Assert.Contains("player.ApplyGravity();", source);
         Assert.Contains("""World.Load("assets/maps/runner.tmj");""", source);
@@ -5298,7 +5298,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline void ResolveFall(PlayerState player)", source);
         Assert.Contains("inline void ResolveReset(PlayerState player, CameraState view)", source);
         Assert.Contains("inline void UpdateRunAnimation(CameraState view)", source);
-        Assert.Contains("Runner.Frame.PresentFrame(player, view);", source);
+        Assert.Contains("PresentFrame(player, view);", source);
         Assert.Contains("frame.Begin();", source);
         Assert.DoesNotContain("view.CaptureScreen(player);", source);
         Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
@@ -5405,7 +5405,7 @@ public class GameBoyRomCompilerTests
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("Runner.Player.PlayerState player;", source);
+        Assert.Contains("PlayerState player;", source);
         Assert.Contains("player.Reset(view);", source);
 
         var vblankStart = source.IndexOf("Video.WaitVBlank();", StringComparison.Ordinal);

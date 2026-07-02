@@ -197,6 +197,9 @@ and `--out` remain command-line overrides for focused one-target builds. This is
 the low-friction path for splitting a game across files without turning each
 folder into an importable package. Local libraries remain the encapsulation
 boundary for reusable or third-party units that game code imports explicitly.
+Game code normally names already-loaded APIs with `using` directives rather than
+declaring library loading in each source file; source-level `import` remains the
+explicit/transitional library-injection form.
 
 Projects and source-only library packages can opt into physical source
 namespaces with `rootNamespace`, `sourceRoot`, and
@@ -206,7 +209,12 @@ become namespace segments at compile time: `src/player/rules.rs` belongs to
 language does not allocate namespace objects or runtime metadata; the compiler
 rewrites declarations plus path-qualified type names, top-level function calls,
 and static references to unique internal identifiers before normal target
-lowering. `Main` remains the entry point name.
+lowering. A file can open physical namespaces with C#-style directives such as
+`using Root.Player;` and then refer to `PlayerState`, `PresentFrame(...)`, or
+`FramePresenter.Present(...)` without repeating the root-qualified path. Usings
+must appear at the top of the file before declarations, have no alias or wildcard
+form, and are consumed by the namespace rewrite before target lowering. `Main`
+remains the entry point name.
 
 ---
 
@@ -215,8 +223,9 @@ lowering. `Main` remains the entry point name.
 Current parser support includes top-level plain enum and struct declarations, identifier-based member access as an expression and as an lvalue, member access through fixed-size array elements such as `actors[i].x`, and local fixed-size array declarations with constant or byte-backed runtime index reads/writes. Pointer/member forms remain planned.
 
 ```
-Program       = ImportDecl* TopLevelDecl* EOF ;
+Program       = (ImportDecl | UsingDecl)* TopLevelDecl* EOF ;
 ImportDecl    = "import" QualifiedIdent ";" ;
+UsingDecl     = "using" QualifiedIdent ";" ;
 QualifiedIdent = Ident ("." Ident)* ;
 Type          = "void" | "u8" | "i8" | "u16" | "i16" | "bool"
               | "ptr" "<" Type ">" | QualifiedIdent ;
@@ -345,7 +354,8 @@ Iteration 12 adds source ergonomics only when the lowering remains static and pr
 - `inline` marks a helper that must use source-level substitution in the current cartridge targets. Explicit inline value helpers fail clearly if the body is not a single return expression.
 - `pure` marks a helper whose body must stay in the supported side-effect-free subset. It is validated before Game Boy/NES lowering and emits no runtime code by itself.
 - `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
-- `import RetroSharp.Portable2D;` imports the built-in portable SDK library explicitly. Game Boy and NES still auto-import it for existing samples by default, but `SdkLibraryImportMode.ExplicitOnly` disables that compatibility path; future SDK library slices should prefer explicit imports and registered SDK libraries over new global magic.
+- `using Root.Player;` opens a physical source namespace for unqualified type names, top-level function calls, and static-class references in the current file. It is compile-time name resolution only and is the normal code-file spelling for namespaces.
+- `import RetroSharp.Portable2D;` is the explicit source-level library-injection form. Game Boy and NES still auto-import it for existing samples by default, and project/library manifests are the preferred place to declare loaded libraries for C#-style project code.
 - `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
 - `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
 - Lightweight object-oriented style can use restricted `class` declarations for real mutable state such as `PlayerState` or `EnemyState`. A class value lowers to the same fixed storage model as a plain `struct`; instance methods lower to receiver helpers. Plain `struct` plus receiver methods remains the explicit equivalent form.

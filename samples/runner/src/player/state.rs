@@ -1,3 +1,6 @@
+using Runner.Camera;
+using Runner.Level;
+
 class PlayerState {
     Pixel x;
     Pixel y;

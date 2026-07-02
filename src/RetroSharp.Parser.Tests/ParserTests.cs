@@ -84,6 +84,21 @@ public class ParserTests
     }
 
     [Fact]
+    public void Using_declaration()
+    {
+        var result = new SomeParser().Parse("using Runner.Player; void Main() { }");
+
+        result.IsSuccess.Should().BeTrue(result.IsFailure ? result.Error : "");
+    }
+
+    [Fact]
+    public void Using_declarations_must_precede_other_declarations()
+    {
+        new SomeParser().Parse("void Main() { } using Runner.Player;")
+            .Should().Fail();
+    }
+
+    [Fact]
     public void Function_with_arguments()
     {
         var source = @"i16 main(i16 a, i16 b) { }";
