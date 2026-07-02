@@ -6,7 +6,7 @@ This note answers the open SAL-8 question from issue #158: how a target intrinsi
 
 ## Decision
 
-Compile-time operands are modeled as typed roles on a single `TargetIntrinsicDescriptor` for the operation.
+Compile-time operands are modeled as typed roles on a single `TargetIntrinsicDescriptor` for the operation. The descriptor is now the complete target-intrinsic contract: it records the target-owned intrinsic id, runtime arity, return kind, compile-time operand roles, and the target capabilities the intrinsic requires. Public SDK helper names such as `Sprite.Draw` or `Music.Play` are not part of that contract.
 
 The source declaration still selects an intrinsic with the existing target-intrinsic attributes:
 
@@ -50,7 +50,7 @@ A new compile-time parameter type or marker in the language is rejected. RetroSh
 
 ## Resolution Flow
 
-`TargetIntrinsicResolver` continues reading `[target]` and `[intrinsic]` from the extern declaration, then resolves the named intrinsic through the active target's `TargetIntrinsicCatalog`. The resolved `TargetIntrinsicDescriptor` is the authoritative source for compile-time operand roles.
+`TargetIntrinsicResolver` continues reading `[target]` and `[intrinsic]` from the extern declaration, then resolves the named intrinsic through the active target's `TargetIntrinsicCatalog`. The resolved `TargetIntrinsicDescriptor` is the authoritative source for return kind, compile-time operand roles, and required capabilities. If a package declares the wrong extern return type, resolution fails before backend emission; if a compile-time operand uses runtime storage, the diagnostic names both the offending argument slot and the intrinsic id.
 
 The SDK/frontend collector reads call operands using the descriptor:
 

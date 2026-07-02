@@ -256,9 +256,12 @@ value-returning queries (parameterized `inline` helpers substitute their argumen
 into the operation operands without introducing temporaries, so the bytes match).
 
 SAL-8.2 adds the missing compile-time operand role mechanism to `TargetIntrinsicDescriptor`
-without changing parser, AST, ABI, or classic IR. Descriptors can now mark source call slots
+without changing parser, AST, ABI, or classic IR. SDKLIB-3 broadens that descriptor into the
+complete target-intrinsic contract: intrinsic id, runtime arity, return kind, compile-time
+operand roles, and required target capabilities. Descriptors can now mark source call slots
 as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or `WorldId`, and the SDK/frontend resolver
-separates those compile-time operands from runtime operands before operation collection. The
+separates those compile-time operands from runtime operands before operation collection while
+validating extern return types against the descriptor. The
 minimal proof is a Game Boy `world_tile_flags_for_world` intrinsic whose `WorldId` slot lowers
 byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting runtime locals
 in that slot.

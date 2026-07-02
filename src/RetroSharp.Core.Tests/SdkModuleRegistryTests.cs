@@ -70,8 +70,11 @@ public sealed class SdkModuleRegistryTests
             ]);
 
         Assert.True(catalog.TryResolve("wait_frame", out var waitFrame));
+        Assert.Equal("wait_frame", waitFrame.IntrinsicId);
         Assert.Equal(TargetIntrinsicOperation.WaitFrame, waitFrame.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, waitFrame.ReturnKind);
         Assert.Equal(0, waitFrame.Arity);
+        Assert.Empty(waitFrame.RequiredCapabilities);
 
         Assert.True(catalog.TryResolve("poll_input", out var pollInput));
         Assert.Equal(TargetIntrinsicOperation.PollInput, pollInput.Operation);
@@ -87,9 +90,12 @@ public sealed class SdkModuleRegistryTests
             compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.WorldId)]);
 
         Assert.Equal("world_tile_flags_for_world", descriptor.Name);
+        Assert.Equal("world_tile_flags_for_world", descriptor.IntrinsicId);
         Assert.Equal(TargetIntrinsicOperation.ReadWorldTileFlags, descriptor.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.I16, descriptor.ReturnKind);
         Assert.Equal(2, descriptor.RuntimeArity);
         Assert.Equal(3, descriptor.Arity);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.WorldTileFlags, descriptor.RequiredCapabilities);
         var operand = Assert.Single(descriptor.CompileTimeOperands);
         Assert.Equal(0, operand.Slot);
         Assert.Equal(TargetIntrinsicOperandRole.WorldId, operand.Role);
@@ -108,6 +114,8 @@ public sealed class SdkModuleRegistryTests
             ]);
 
         Assert.Equal(TargetIntrinsicOperation.DrawLogicalSprite, descriptor.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, descriptor.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.LogicalSprites, descriptor.RequiredCapabilities);
         Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
         Assert.Contains(descriptor.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.ConstPaletteSlot);
     }
