@@ -11,7 +11,7 @@ These samples isolate runner features so visual or gameplay bugs can be bisected
 | 02a | `02-flat-ground-camera.rs` | Player sprite, input, camera, animation, jump, flat ground collision, and cyclic left/right camera movement; no platforms, holes, hazards, or enemies. |
 | 02b | `02-player-camera.rs` | Full player collision layer: wrapped left/center/right foot probes, platforms, holes, hazards, jump, animation, and camera. |
 | 03 | `03-enemy-sprites.rs` | Enemy logical sprite drawing, enemy animation, one static enemy, and one looping right-to-left enemy in isolation. |
-| 04 | `../runner.rs` | Full runner scene with background, platforms, player, and enemies. |
+| 04 | `../runner.retrosharp.json` | Full runner scene with background, platforms, player, and enemies. |
 
 Run the full diagnostic matrix from the repository root:
 

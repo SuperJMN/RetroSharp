@@ -6057,7 +6057,7 @@
   "tilesets": [
     {
       "firstgid": 1,
-      "source": "../runner/maps/runner-tiles.tsj"
+      "source": "../runner/assets/maps/runner-tiles.tsj"
     }
   ]
 }

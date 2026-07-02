@@ -788,13 +788,12 @@ public class NesRomCompilerTests
     [Fact]
     public void Runner_shaped_sprite_draw_is_byte_identical_nes()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
-        var libraryRom = NesRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var libraryRom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
         var legacyRom = NesRomCompiler.CompileSource(
             SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
-            Path.GetDirectoryName(sourcePath));
+            RunnerSample.Directory);
 
         Assert.Equal(legacyRom, libraryRom);
     }

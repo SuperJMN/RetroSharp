@@ -67,13 +67,13 @@ Build representative samples:
 ```bash
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/runner/runner.gb \
-  samples/runner/runner.rs
+  --out samples/runner/bin/runner.gb \
+  samples/runner/runner.retrosharp.json
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target nes \
-  --out samples/runner/runner.nes \
-  samples/runner/runner.rs
+  --out samples/runner/bin/runner.nes \
+  samples/runner/runner.retrosharp.json
 ```
 
 The RetroSharp CLI itself does not implement `--help`; unknown options fail. Verify supported options from `README.md`, `WARP.md`, or `src/RetroSharp.Cli/Program.cs`.
@@ -82,11 +82,11 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 
 ## Runner Notes
 
-- `samples/runner/runner.rs` is the shared Game Boy/NES runner target-acceptance sample, not proof that every API it uses is portable.
-- NES and Game Boy both use per-target VGM/VGZ runner music variants via `music/runner.vgz`; do not treat NES audio calls as no-ops.
+- `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES runner target-acceptance project, not proof that every API it uses is portable. It lists `src/main.rs` plus helper/state files under `samples/runner/src`; direct runner builds should use the project manifest instead of treating game-owned code as a local library.
+- NES and Game Boy both use per-target VGM/VGZ runner music variants via `assets/music/runner.vgz`; do not treat NES audio calls as no-ops.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
-- The runner now uses `World.Load(...)` over `samples/runner/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
+- The runner now uses `World.Load(...)` over `samples/runner/assets/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
 - Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
 - Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
 - `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Prefer `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`) over the direct `button_pressed` read and the snake_case `button_*`/`sprite_width` builtins, which remain only as transitional aliases.

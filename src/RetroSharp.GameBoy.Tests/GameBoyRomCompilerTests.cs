@@ -174,6 +174,86 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Imported_sdk_library_can_come_from_a_local_manifest_directory()
+    {
+        var libraryRoot = WriteLibraryPackage(
+            "Acme.Wait",
+            "wait.rs",
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void acme_wait_frame();
+
+            class AcmeWait
+            {
+                static inline void Tick()
+                {
+                    acme_wait_frame();
+                }
+            }
+            """,
+            "gb");
+        var registry = SdkLibraryRegistry.FromDirectories([libraryRoot]);
+        const string imported = """
+                                import Acme.Wait;
+
+                                void Main() {
+                                    AcmeWait.Tick();
+                                }
+                                """;
+        const string direct = """
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        Assert.True(registry.TryResolve("RetroSharp.Portable2D", out _));
+        Assert.True(registry.TryResolve("Acme.Wait", out _));
+        Assert.Equal(
+            GameBoyRomCompiler.CompileSource(direct),
+            GameBoyRomCompiler.CompileSource(
+                imported,
+                sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
+                sdkLibraryRegistry: registry));
+    }
+
+    [Fact]
+    public void Imported_sdk_library_manifest_rejects_unsupported_targets()
+    {
+        var libraryRoot = WriteLibraryPackage(
+            "Acme.NesOnly",
+            "nes-only.rs",
+            """
+            class NesOnly
+            {
+                static inline void Touch()
+                {
+                }
+            }
+            """,
+            "nes");
+        var registry = SdkLibraryRegistry.FromDirectories([libraryRoot]);
+        const string source = """
+                              import Acme.NesOnly;
+
+                              void Main() {
+                                  NesOnly.Touch();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () =>
+            {
+                GameBoyRomCompiler.CompileSource(
+                    source,
+                    sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
+                    sdkLibraryRegistry: registry);
+            });
+
+        Assert.Equal("Library 'Acme.NesOnly' does not support target 'gb'.", exception.Message);
+    }
+
+    [Fact]
     public void Rejects_unknown_imports()
     {
         const string source = """
@@ -742,13 +822,12 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void Runner_shaped_sprite_draw_is_byte_identical_gb()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
-        var libraryRom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var libraryRom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         var legacyRom = GameBoyRomCompiler.CompileSource(
             SdkLibrarySource.ForTarget(GameBoyTarget.Intrinsics) + source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
-            Path.GetDirectoryName(sourcePath));
+            RunnerSample.Directory);
 
         Assert.Equal(legacyRom, libraryRom);
     }
@@ -4788,8 +4867,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_drives_scroll_and_run_animation_from_dpad()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         var movementStart = source.IndexOf("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", StringComparison.Ordinal);
         var movementEnd = source.IndexOf("class FrameState", movementStart, StringComparison.Ordinal);
@@ -4838,15 +4916,14 @@ public class GameBoyRomCompilerTests
         Assert.Equal(1, CountOccurrences(source, "Camera.SetPosition(x, y);"));
         Assert.Equal(1, CountOccurrences(source, "animTick += view.speed;"));
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_uses_dead_zone_screen_position_for_camera_collision_and_draw()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("static class DeadZone", source);
         Assert.Contains("Left = 64", source);
@@ -4897,12 +4974,12 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
         Assert.Contains("Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0", source);
 
-        var operations = GameBoyRomCompiler.CollectSdkOperations(source, Path.GetDirectoryName(sourcePath));
+        var operations = GameBoyRomCompiler.CollectSdkOperations(source, RunnerSample.Directory);
         Assert.Contains(
             operations.OfType<Sdk2DOperation.SetCameraPosition>(),
             operation => operation.Axes.HasFlag(ScrollAxes.Horizontal) && operation.Axes.HasFlag(ScrollAxes.Vertical));
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
@@ -5182,7 +5259,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_constant_groups_and_lightweight_player_state()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("static class Level", source);
         Assert.Contains("Width = 48", source);
@@ -5198,7 +5275,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("PlayerState player;", source);
         Assert.Contains("player.Reset(view);", source);
         Assert.Contains("player.ApplyGravity();", source);
-        Assert.Contains("""World.Load("maps/runner.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/runner.tmj");""", source);
         Assert.Contains("LoadWorld();", source);
         Assert.Contains("Sprite.Draw(mario_player, screenX, screenY", source);
         Assert.DoesNotContain("const WorldWidth", source);
@@ -5210,7 +5287,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_extracts_frame_loop_into_named_inline_helpers()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("class CameraState", source);
         Assert.Contains("class FrameState", source);
@@ -5239,8 +5316,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_player_spritesheet_for_playable_scene()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("""Sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);""", source);
         Assert.Contains("Animation.Clip(run, 1, 48, 48, 48);", source);
@@ -5258,17 +5334,16 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("enemy_slug", source);
         Assert.Equal(1, CountOccurrences(source, "Sprite.Draw("));
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_sprite_asset_preserves_portable_metadata()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
-        var program = CompileVideoProgram(source, Path.GetDirectoryName(sourcePath));
+        var program = CompileVideoProgram(source, RunnerSample.Directory);
         var asset = program.SpriteAssets["mario_player"];
 
         Assert.Equal("mario_player", asset.Metadata.Id);
@@ -5286,8 +5361,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_lighter_object_palette_for_player_sprite()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("Palette.Background(0, 0, 1, 2, 3);", source);
         Assert.Contains("Palette.Sprite(0, 0, 0, 1, 3);", source);
@@ -5298,7 +5372,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("ObjectPalette.Set(1, 2);", source);
         Assert.DoesNotContain("ObjectPalette.Set(2, 3);", source);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
 
         AssertRunnerMbc1Rom(rom);
         Assert.True(ContainsSequence(rom, [0x3E, 0xD0, 0xE0, 0x48]), "Runner should map sprite tones to OBP0 as 0, 0, 1, 3.");
@@ -5307,8 +5381,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_keeps_layout_readable_and_gives_hit_feedback()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.DoesNotContain("view.screenX", source);
         Assert.Contains("Player.FootOffset", source);
@@ -5317,7 +5390,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("EnemyState", source);
         Assert.DoesNotContain("hitFlashTicks", source);
 
-        var program = CompileVideoProgram(source, Path.GetDirectoryName(sourcePath));
+        var program = CompileVideoProgram(source, RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
         Assert.NotEqual(0, program.TileMap[0]);
         Assert.NotEqual(0, program.TileMap[24 * 32 + 16]);
@@ -5330,7 +5403,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_presents_sprites_immediately_after_vblank()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/runner/runner.rs"));
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("PlayerState player;", source);
         Assert.Contains("player.Reset(view);", source);
@@ -5353,11 +5426,10 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_declares_and_ticks_background_music()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var baseDirectory = Path.GetDirectoryName(sourcePath);
-        var source = File.ReadAllText(sourcePath);
+        var baseDirectory = RunnerSample.Directory;
+        var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("""Music.Asset(runner_theme, "music/runner.vgz");""", source);
+        Assert.Contains("""Music.Asset(runner_theme, "assets/music/runner.vgz");""", source);
         Assert.Contains("Audio.Init();", source);
         Assert.Contains("Music.Play(runner_theme);", source);
 
@@ -6326,8 +6398,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_bounces_player_down_when_head_hits_solid_ceiling()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("CeilingProbeTopOffset = 28", source);
         Assert.Contains("CeilingProbeHeight = 4", source);
@@ -6352,15 +6423,14 @@ public class GameBoyRomCompilerTests
         Assert.True(ceilingCall > landingCall, "Ceiling resolution should run after solid landing resolution.");
         Assert.True(jumpInputCall > ceilingCall, "Ceiling resolution should clear the jump before jump input is consumed.");
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_uses_dynamic_world_y_for_tiled_solid_landing()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("LandingSearchTopOffset = 4", source);
         Assert.Contains("LandingSearchHeight = 12", source);
@@ -6384,8 +6454,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_blocks_horizontal_camera_motion_against_tall_solids()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("LeftWallProbeOffset = 1", source);
         Assert.Contains("RightWallProbeOffset = 1", source);
@@ -6400,15 +6469,14 @@ public class GameBoyRomCompilerTests
         Assert.Contains("view.HandleHorizontalInput(player, movementFootWorldY);", source);
         Assert.DoesNotContain("view.HandleHorizontalInput(player);", source);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_uses_horizontal_speed_model_with_instant_turn()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("enum Direction", source);
         Assert.Contains("Walk = 8", source);
@@ -6444,15 +6512,14 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("ApplyRightIntent", cameraBlock);
         Assert.DoesNotContain("ApplyLeftIntent", cameraBlock);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_builds_run_speed_from_b_only_while_grounded()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("RunMax = 12", source);
         Assert.Contains("RunAcceleration = 1", source);
@@ -6499,15 +6566,14 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("view.ApplyFramePosition();", source);
         Assert.Equal(1, CountOccurrences(source, "view.ApplyPosition();"));
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_uses_lower_gravity_with_compensated_jump_height()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("Velocity = -3", source);
         Assert.Contains("BoostTicks = 12", source);
@@ -6537,21 +6603,20 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if ((jumpTicks & Jump.BoostTickMask) != 0)", jumpBlock);
         Assert.Contains("velocityY -= 1;", jumpBlock);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_uses_actor_feet_holes_failure_tiles_and_reset_state()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.DoesNotContain("Pixel footTile;", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
         Assert.Contains("bool resetRequested;", source);
 
-        Assert.Contains("""World.Load("maps/runner.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/runner.tmj");""", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
@@ -6583,25 +6648,24 @@ public class GameBoyRomCompilerTests
         Assert.Contains("velocityY = 0;", source);
         Assert.Contains("jumping = false;", source);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_keeps_visible_map_collision_and_streaming_cursors_in_sync()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.DoesNotContain("void draw_starting_scene()", source);
         Assert.DoesNotContain("tilemap_fill(", source);
         Assert.DoesNotContain("void DrawBackground()", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
         Assert.Contains("void LoadWorld()", source);
-        Assert.Contains("""World.Load("maps/runner.tmj");""", source);
-        Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner.tmj")));
-        Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner-tiles.tsj")));
-        Assert.True(File.Exists(RepositoryFile("samples/runner/maps/runner-tiles.png")));
+        Assert.Contains("""World.Load("assets/maps/runner.tmj");""", source);
+        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/runner.tmj")));
+        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/runner-tiles.tsj")));
+        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/runner-tiles.png")));
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
@@ -6660,7 +6724,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("rightSourceColumn = 4;", resetBlock);
         Assert.DoesNotContain("leftSourceColumn = 15;", resetBlock);
 
-        var program = CompileVideoProgram(source, Path.GetDirectoryName(sourcePath));
+        var program = CompileVideoProgram(source, RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
 
         Assert.Equal(48, worldMap.Width);
@@ -6674,16 +6738,15 @@ public class GameBoyRomCompilerTests
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 12));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 4));
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_uses_tall_full_band_tiled_map_for_free_scroll()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var mapPath = RepositoryFile("samples/runner/maps/runner.tmj");
-        var source = File.ReadAllText(sourcePath);
+        var mapPath = RepositoryFile("samples/runner/assets/maps/runner.tmj");
+        var source = RunnerSample.FlattenedSource();
         var map = LogicalTiledMapImporter.Load(mapPath);
 
         Assert.Equal(24, map.Geometry.SourceWidth);
@@ -6702,7 +6765,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("MaxY = 196", source);
         Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);", source);
 
-        var program = CompileVideoProgram(source, Path.GetDirectoryName(sourcePath));
+        var program = CompileVideoProgram(source, RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
         Assert.Equal(48, worldMap.Width);
         Assert.Equal(96, worldMap.Height);
@@ -6715,8 +6778,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_applies_reset_before_consuming_jump_input()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         var resetStart = source.IndexOf("frame.ResolveReset(player, view);", StringComparison.Ordinal);
         var jumpStart = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
@@ -6726,15 +6788,14 @@ public class GameBoyRomCompilerTests
         Assert.True(jumpStart > resetStart, "Reset should restore safe actor state before jump input is consumed.");
         Assert.True(movementStart > resetStart, "Reset should not discard horizontal movement input for the same frame.");
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
     [Fact]
     public void GameBoy_runner_keeps_ground_alignment_and_reset_animation_state()
     {
-        var sourcePath = RepositoryFile("samples/runner/runner.rs");
-        var source = File.ReadAllText(sourcePath);
+        var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("StartY = 193", source);
         Assert.Contains("FootOffset = 31", source);
@@ -6743,7 +6804,7 @@ public class GameBoyRomCompilerTests
         Assert.Equal(1, CountOccurrences(source, "y = view.y + Player.StartY;"));
         Assert.Equal(1, CountOccurrences(source, "player.Land(footTile - Player.FootOffset);"));
         Assert.DoesNotContain("player.y = 77;", source);
-        Assert.Contains("""World.Load("maps/runner.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/runner.tmj");""", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
@@ -6770,7 +6831,7 @@ public class GameBoyRomCompilerTests
         var jumpCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
         Assert.True(jumpCall > resetCall);
 
-        var rom = GameBoyRomCompiler.CompileSource(source, Path.GetDirectoryName(sourcePath));
+        var rom = GameBoyRomCompiler.CompileSource(source, RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
     }
 
@@ -6833,6 +6894,24 @@ public class GameBoyRomCompilerTests
         var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, fileName), json);
+        return directory;
+    }
+
+    private static string WriteLibraryPackage(string importPath, string sourceName, string source, params string[] targets)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var targetList = string.Join(", ", targets.Select(target => "\"" + target + "\""));
+        File.WriteAllText(
+            Path.Combine(directory, "retrosharp-library.json"),
+            $$"""
+              {
+                "import": "{{importPath}}",
+                "sources": [ "{{sourceName}}" ],
+                "targets": [ {{targetList}} ]
+              }
+              """);
+        File.WriteAllText(Path.Combine(directory, sourceName), source);
         return directory;
     }
 

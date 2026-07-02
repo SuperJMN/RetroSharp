@@ -161,7 +161,11 @@ implicitly for older samples by default, but compiler hosts can use
 In explicit-only mode, SDK module calls require an imported library; source that
 does not use the SDK can compile without loading it. Hosts can also provide a
 custom `SdkLibraryRegistry` so additional import paths inject source-level SDK
-libraries. The imported built-in library defines
+libraries, and the CLI can build the same registry from local source-only
+packages passed with `--lib-path`. A package is a directory with
+`retrosharp-library.json` declaring `import`, `sources`, and optional `targets`;
+sources are loaded relative to that directory and target mismatches fail during
+library injection. The imported built-in library defines
 `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
 `Camera.SetPosition(x, y)`, and `Camera.Apply()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
@@ -178,6 +182,17 @@ byte-identical to the direct SDK form. Injecting `class camera` exposes only
 `Camera.AabbTiles`, `Camera.AabbHitTop`) is unaffected.
 Higher-level sprite drawing and the streaming/collision SDK calls still lower through
 capability-checked SDK operations rather than direct intrinsics.
+
+Project-level source organization is deliberately separate from library import.
+The CLI accepts `retrosharp.json` or `*.retrosharp.json` manifests with
+`target`/`targets`, `output`/`outputs`, `sources`, and `libraryPaths` fields.
+The listed source files are read in order, relative to the project file, and
+compiled as one game program. A project can declare multiple cartridge targets
+and per-target outputs such as `bin/runner.gb` and `bin/runner.nes`; `--target`
+and `--out` remain command-line overrides for focused one-target builds. This is
+the low-friction path for splitting a game across files without turning each
+folder into an importable package. Local libraries remain the encapsulation
+boundary for reusable or third-party units that game code imports explicitly.
 
 ---
 

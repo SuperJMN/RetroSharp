@@ -123,6 +123,6 @@
     }
   ],
   "tilesets": [
-    { "firstgid": 1, "source": "../runner/maps/runner-tiles.tsj" }
+    { "firstgid": 1, "source": "../runner/assets/maps/runner-tiles.tsj" }
   ]
 }

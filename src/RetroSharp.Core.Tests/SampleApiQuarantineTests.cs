@@ -29,12 +29,14 @@ public sealed class SampleApiQuarantineTests
     public void Sample_manifest_classifies_every_source_sample()
     {
         var manifest = LoadManifest();
+        var librarySources = SampleLibrarySources(manifest).ToHashSet(StringComparer.Ordinal);
         var sampleSources = Directory.GetFiles(RepositoryDirectory("samples"), "*.rs", SearchOption.AllDirectories)
             .Select(path => RelativePath(path))
+            .Where(path => !librarySources.Contains(path))
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        var manifestSources = manifest.Samples.Select(sample => sample.Path)
+        var manifestSources = manifest.Samples.SelectMany(SampleSourcePaths)
             .Order(StringComparer.Ordinal)
             .ToArray();
 
@@ -48,17 +50,20 @@ public sealed class SampleApiQuarantineTests
 
         foreach (var sample in manifest.Samples.Where(sample => sample.Layer == "portable-sdk"))
         {
-            var source = File.ReadAllText(RepositoryFile(sample.Path));
-
-            foreach (var forbiddenCall in PortableForbiddenCalls)
+            foreach (var sourcePath in SampleSourcePaths(sample))
             {
-                Assert.DoesNotContain(forbiddenCall, source, StringComparison.Ordinal);
+                var source = File.ReadAllText(RepositoryFile(sourcePath));
+
+                foreach (var forbiddenCall in PortableForbiddenCalls)
+                {
+                    Assert.DoesNotContain(forbiddenCall, source, StringComparison.Ordinal);
+                }
             }
         }
     }
 
     [Fact]
-    public void Runner_sample_is_single_source_for_game_boy_and_nes()
+    public void Runner_sample_is_project_for_game_boy_and_nes()
     {
         var manifest = LoadManifest();
         var runnerSamples = manifest.Samples
@@ -66,7 +71,8 @@ public sealed class SampleApiQuarantineTests
             .ToArray();
 
         var runner = Assert.Single(runnerSamples);
-        Assert.Equal("samples/runner/runner.rs", runner.Path);
+        Assert.Equal("samples/runner/runner.retrosharp.json", runner.Path);
+        Assert.Null(runner.LibraryPaths);
         Assert.Equal(new[] { "gb", "nes" }, runner.Targets);
     }
 
@@ -86,12 +92,55 @@ public sealed class SampleApiQuarantineTests
     private static SampleManifest LoadManifest()
     {
         var json = File.ReadAllText(RepositoryFile("samples/manifest.json"));
-        var manifest = JsonSerializer.Deserialize<SampleManifest>(json, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-        });
+        var manifest = JsonSerializer.Deserialize<SampleManifest>(json, JsonOptions);
 
         return manifest ?? throw new InvalidOperationException("samples/manifest.json is empty.");
+    }
+
+    private static IEnumerable<string> SampleLibrarySources(SampleManifest manifest)
+    {
+        foreach (var libraryPath in manifest.Samples.SelectMany(sample => sample.LibraryPaths ?? []))
+        {
+            var libraryManifestPath = RepositoryFile($"{libraryPath}/retrosharp-library.json");
+            var json = File.ReadAllText(libraryManifestPath);
+            var library = JsonSerializer.Deserialize<SampleLibraryManifest>(json, JsonOptions)
+                ?? throw new InvalidOperationException($"{libraryPath}/retrosharp-library.json is empty.");
+            var directory = Path.GetDirectoryName(libraryManifestPath)
+                ?? throw new InvalidOperationException($"Could not resolve directory for '{libraryManifestPath}'.");
+
+            foreach (var source in library.Sources)
+            {
+                yield return RelativePath(Path.GetFullPath(Path.Combine(directory, source)));
+            }
+        }
+    }
+
+    private static IEnumerable<string> SampleSourcePaths(SampleManifestEntry sample)
+    {
+        if (!IsProjectFile(sample.Path))
+        {
+            yield return sample.Path;
+            yield break;
+        }
+
+        var projectPath = RepositoryFile(sample.Path);
+        var json = File.ReadAllText(projectPath);
+        var project = JsonSerializer.Deserialize<SampleProjectManifest>(json, JsonOptions)
+            ?? throw new InvalidOperationException($"{sample.Path} is empty.");
+        var directory = Path.GetDirectoryName(projectPath)
+            ?? throw new InvalidOperationException($"Could not resolve directory for '{projectPath}'.");
+
+        foreach (var source in project.Sources)
+        {
+            yield return RelativePath(Path.GetFullPath(Path.Combine(directory, source)));
+        }
+    }
+
+    private static bool IsProjectFile(string path)
+    {
+        var fileName = Path.GetFileName(path);
+        return string.Equals(fileName, "retrosharp.json", StringComparison.OrdinalIgnoreCase)
+            || fileName.EndsWith(".retrosharp.json", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string RepositoryFile(string relativePath)
@@ -151,7 +200,16 @@ public sealed class SampleApiQuarantineTests
         throw new InvalidOperationException("Could not find repository root.");
     }
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
+
     private sealed record SampleManifest(SampleManifestEntry[] Samples);
 
-    private sealed record SampleManifestEntry(string Path, string Readme, string Layer, string[] Targets);
+    private sealed record SampleManifestEntry(string Path, string Readme, string Layer, string[] Targets, string[]? LibraryPaths = null);
+
+    private sealed record SampleLibraryManifest(string[] Sources);
+
+    private sealed record SampleProjectManifest(string[] Sources);
 }

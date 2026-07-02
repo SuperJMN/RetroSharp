@@ -73,7 +73,7 @@
       "targets": ["gb", "nes"]
     },
     {
-      "path": "samples/runner/runner.rs",
+      "path": "samples/runner/runner.retrosharp.json",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]

@@ -1,0 +1,17 @@
+{
+  "targets": [
+    "gb",
+    "nes"
+  ],
+  "outputs": {
+    "gb": "bin/runner.gb",
+    "nes": "bin/runner.nes"
+  },
+  "sources": [
+    "src/constants.rs",
+    "src/player-state.rs",
+    "src/camera-state.rs",
+    "src/frame-state.rs",
+    "src/main.rs"
+  ]
+}

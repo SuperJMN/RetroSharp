@@ -14,6 +14,7 @@ class Variant:
     name: str
     source: Path
     scenarios: tuple[str, ...]
+    library_paths: tuple[Path, ...] = ()
 
 
 def repo_root() -> Path:
@@ -29,7 +30,7 @@ def variants(root: Path) -> list[Variant]:
         Variant("02-flat-ground-camera", diagnostics / "02-flat-ground-camera.rs", ("idle", "right", "left", "right-wrap")),
         Variant("02-player-camera", diagnostics / "02-player-camera.rs", ("idle", "right", "left", "right-wrap")),
         Variant("03-enemy-sprites", diagnostics / "03-enemy-sprites.rs", ("idle",)),
-        Variant("04-full-runner", sample / "runner.rs", ("idle", "right", "left")),
+        Variant("04-full-runner", sample / "runner.retrosharp.json", ("idle", "right", "left")),
     ]
 
 
@@ -42,22 +43,21 @@ def run(command: list[str], cwd: Path) -> None:
 
 def compile_variant(root: Path, variant: Variant, output_dir: Path) -> Path:
     rom = output_dir / f"{variant.name}.gb"
-    run(
-        [
-            "dotnet",
-            "run",
-            "--project",
-            str(root / "src" / "RetroSharp.Cli" / "RetroSharp.Cli.csproj"),
-            "--no-restore",
-            "--",
-            "--target",
-            "gb",
-            "--out",
-            str(rom),
-            str(variant.source),
-        ],
-        root,
-    )
+    command = [
+        "dotnet",
+        "run",
+        "--project",
+        str(root / "src" / "RetroSharp.Cli" / "RetroSharp.Cli.csproj"),
+        "--no-restore",
+        "--",
+        "--target",
+        "gb",
+    ]
+    for library_path in variant.library_paths:
+        command.extend(["--lib-path", str(library_path)])
+
+    command.extend(["--out", str(rom), str(variant.source)])
+    run(command, root)
     return rom
 
 

@@ -16,6 +16,7 @@ class SampleBuild:
     source: Path
     target: str
     output: Path
+    library_paths: tuple[Path, ...] = ()
 
 
 def main(argv: list[str]) -> int:
@@ -35,7 +36,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument(
         "samples",
         nargs="*",
-        help="optional sample .rs paths to build instead of the default tracked ROM outputs",
+        help="optional sample .rs or .retrosharp.json paths to build instead of the default tracked ROM outputs",
     )
     args = parser.parse_args(argv)
 
@@ -56,10 +57,17 @@ def main(argv: list[str]) -> int:
             "--",
             "--target",
             build.target,
-            "--out",
-            str(build.output.relative_to(repo_root)),
-            str(build.source.relative_to(repo_root)),
         ]
+        for library_path in build.library_paths:
+            command.extend(["--lib-path", str(library_path.relative_to(repo_root))])
+
+        command.extend(
+            [
+                "--out",
+                str(build.output.relative_to(repo_root)),
+                str(build.source.relative_to(repo_root)),
+            ]
+        )
         print(shell_join(command), flush=True)
         if not args.dry_run:
             subprocess.run(command, cwd=repo_root, check=True)
@@ -73,7 +81,8 @@ def select_builds(repo_root: Path, include_all: bool, requested_samples: list[st
         SampleBuild(
             source=repo_root / sample["path"],
             target=target,
-            output=(repo_root / sample["path"]).with_suffix(target_extension(target)),
+            output=sample_output_path(repo_root / sample["path"], target),
+            library_paths=tuple(repo_root / library_path for library_path in sample.get("libraryPaths", [])),
         )
         for sample in manifest["samples"]
         for target in sample.get("targets", [])
@@ -104,6 +113,7 @@ def select_builds(repo_root: Path, include_all: bool, requested_samples: list[st
                 build
                 for build in manifest_builds
                 if build.output.relative_to(repo_root).as_posix() in tracked_files
+                or project_declared_output(build.source, build.target) is not None
             ]
 
     return builds
@@ -116,6 +126,60 @@ def target_extension(target: str) -> str:
         return ".nes"
 
     raise SystemExit(f"Unsupported sample target '{target}'.")
+
+
+def sample_output_path(source: Path, target: str) -> Path:
+    project_output = project_declared_output(source, target)
+    if project_output is not None:
+        return project_output
+
+    extension = target_extension(target)
+    suffix = ".retrosharp.json"
+    if source.name.endswith(suffix):
+        return source.with_name(source.name[: -len(suffix)] + extension)
+
+    return source.with_suffix(extension)
+
+
+def project_declared_output(source: Path, target: str) -> Path | None:
+    suffix = ".retrosharp.json"
+    if not source.name.endswith(suffix):
+        return None
+
+    with source.open(encoding="utf-8") as stream:
+        project = json.load(stream)
+
+    outputs = project.get("outputs")
+    if isinstance(outputs, dict):
+        output = outputs.get(target)
+        if isinstance(output, str) and output:
+            return resolve_project_path(source, output)
+
+    output = project.get("output") or project.get("outputPath")
+    if isinstance(output, str) and output and project_declares_single_target(project, target):
+        return resolve_project_path(source, output)
+
+    return None
+
+
+def project_declares_single_target(project: dict, target: str) -> bool:
+    project_target = project.get("target")
+    if isinstance(project_target, str):
+        return project_target == target
+
+    targets = project.get("targets")
+    if isinstance(targets, list):
+        return len(targets) == 1 and targets[0] == target
+
+    return False
+
+
+def resolve_project_path(project_path: Path, value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+
+    return project_path.parent / path
 
 
 def load_manifest(repo_root: Path) -> dict:

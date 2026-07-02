@@ -3,7 +3,7 @@
 Status: **transparent MBC1 foundation with multi-bank code/data/audio overlays landed.**
 This document records what is known, what is done, and the remaining limits for
 transparent MBC1 banking. The current implementation lets large programs such as
-`samples/runner/runner.rs` build as an MBC1 ROM without source banking calls.
+`samples/runner/runner.retrosharp.json` build as an MBC1 ROM without source banking calls.
 Multi-bank subroutine bodies, read-only data, and banked music are handled by the
 generated runtime; linear main-flow fall-through across switchable program banks
 is handled by compiler-inserted continuations.
@@ -15,7 +15,7 @@ the known limits below.
 
 ## 1. Problem statement
 
-`samples/runner/runner.rs` no longer fits a 32 KiB ROM-only cartridge and could not
+`samples/runner/runner.retrosharp.json` no longer fits a 32 KiB ROM-only cartridge and could not
 be banked by the original music-only banking. Measured payload at roadmap creation
 (GB target, delight music):
 

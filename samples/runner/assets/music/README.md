@@ -7,7 +7,7 @@
 `CC-BY 2025` (Tronimal); the `.uge` is kept as the authoring source.
 
 `runner.gb.vgz` and `runner.nes.vgz` are the current runner BGM inputs. The shared source declares
-`music/runner.vgz`; the compiler resolves the `.gb.vgz` or `.nes.vgz` variant for the selected
+`assets/music/runner.vgz`; the compiler resolves the `.gb.vgz` or `.nes.vgz` variant for the selected
 target and repacks the VGM register writes into the target's compact on-ROM stream.
 
 `sml2_track1.gbapu` is the previous Game Boy-only runner trace. Confirm its provenance before
