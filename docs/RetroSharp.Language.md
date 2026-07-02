@@ -165,7 +165,11 @@ libraries, and the CLI can build the same registry from local source-only
 packages passed with `--lib-path`. A package is a directory with
 `retrosharp-library.json` declaring `import`, `sources`, and optional `targets`;
 sources are loaded relative to that directory and target mismatches fail during
-library injection. The imported built-in library defines
+library injection. Library manifests can also opt into physical namespaces with
+`rootNamespace`, `sourceRoot`, and `namespaceMode: "physical"`; their source
+folders are rewritten to unique internal symbols before the importing program is
+parsed, and the importing program's references to the package facade are
+rewritten at the same time. The imported built-in library defines
 `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
 `Camera.SetPosition(x, y)`, and `Camera.Apply()` as
 inline wrappers over target-selected extern intrinsics. Functions can carry
@@ -193,6 +197,15 @@ and `--out` remain command-line overrides for focused one-target builds. This is
 the low-friction path for splitting a game across files without turning each
 folder into an importable package. Local libraries remain the encapsulation
 boundary for reusable or third-party units that game code imports explicitly.
+
+Projects and source-only library packages can opt into physical source
+namespaces with `rootNamespace`, `sourceRoot`, and
+`namespaceMode: "physical"`. In that mode, folder names under `sourceRoot`
+become namespace segments at compile time: `src/player/rules.rs` belongs to
+`Root.Player`, and `src/camera/rules.rs` belongs to `Root.Camera`. The source
+language does not allocate namespace objects or runtime metadata; the compiler
+rewrites declarations and path-qualified static references to unique internal
+identifiers before normal target lowering. `Main` remains the entry point name.
 
 ---
 

@@ -3,7 +3,7 @@
 Status: operational debugging guide.
 Last updated: 2026-07-02.
 
-Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src`, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
+Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src` and enables physical project namespaces, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
 ## Goal
 

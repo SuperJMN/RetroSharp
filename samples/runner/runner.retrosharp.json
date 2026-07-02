@@ -7,11 +7,14 @@
     "gb": "bin/runner.gb",
     "nes": "bin/runner.nes"
   },
+  "rootNamespace": "Runner",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
   "sources": [
-    "src/constants.rs",
-    "src/player-state.rs",
-    "src/camera-state.rs",
-    "src/frame-state.rs",
+    "src/level/constants.rs",
+    "src/player/state.rs",
+    "src/camera/state.rs",
+    "src/frame/state.rs",
     "src/main.rs"
   ]
 }

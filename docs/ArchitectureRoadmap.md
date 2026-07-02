@@ -200,12 +200,17 @@ the SDK unless it is imported, or supply a custom `SdkLibraryRegistry` so other
 import paths inject source-level SDK libraries. `SdkLibraryRegistry.FromDirectories(...)`
 and the CLI `--lib-path <path>` option now provide the first local-package MVP:
 each package directory has a `retrosharp-library.json` manifest with `import`,
-`sources`, and optional `targets`, and the source files are injected through the
-same registry path as `RetroSharp.Portable2D`. A `--lib-path` can also point at a
-directory whose direct children are package directories. This MVP is deliberately
-source-only: no version solving, package feed, transitive dependency graph, binary
-library ABI, per-package asset root, or target-backend plugin model is promised
-yet. Each cartridge target exposes a declarative `TargetIntrinsicCatalog` instead
+`sources`, optional `targets`, and optional physical namespace fields, and the
+source files are injected through the same registry path as
+`RetroSharp.Portable2D`. A `--lib-path` can also point at a directory whose
+direct children are package directories. This MVP is deliberately source-only:
+no version solving, package feed, transitive dependency graph, binary library
+ABI, per-package asset root, or target-backend plugin model is promised yet.
+Project and library manifests can also enable `namespaceMode: "physical"` with a
+`rootNamespace` and `sourceRoot`; this derives compile-time namespaces from
+source folders and rewrites those names to unique internal symbols before target
+lowering, without runtime metadata or dispatch. Each cartridge target exposes a
+declarative `TargetIntrinsicCatalog` instead
 of a one-off intrinsic switch; Game
 Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
 `audio_update`, `camera_set_position`, and `camera_apply` (Game Boy additionally

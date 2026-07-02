@@ -94,7 +94,13 @@ RetroSharp source files:
 ```json
 {
   "import": "Acme.Wait",
-  "sources": [ "wait.rs" ],
+  "rootNamespace": "Acme.Wait",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "sources": [
+    "src/api.rs",
+    "src/timing/rules.rs"
+  ],
   "targets": [ "gb", "nes" ]
 }
 ```
@@ -103,6 +109,12 @@ RetroSharp source files:
 package subdirectories. This MVP deliberately does not include package
 versioning, remote feeds, transitive dependencies, binary libraries, or target
 backend plugins.
+
+When a library package opts into `namespaceMode: "physical"`, folder names under
+`sourceRoot` become compile-time namespaces just like project sources. Root
+source files commonly act as the package's public facade after `import`, while
+helper files under folders can reuse names without colliding with the game or
+with other packages.
 
 Portability is capability-based, not magic. A shared source file is portable
 only when each selected target can support the requested scrolling mode, sprite
@@ -165,10 +177,13 @@ It is a small JSON file owned by RetroSharp, not an MSBuild project:
     "gb": "bin/runner.gb",
     "nes": "bin/runner.nes"
   },
+  "rootNamespace": "Runner",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
   "sources": [
     "src/Program.rs",
-    "src/Player.rs",
-    "src/Camera.rs"
+    "src/player/State.rs",
+    "src/camera/State.rs"
   ],
   "libraryPaths": [
     "lib"
@@ -187,6 +202,13 @@ additional `--lib-path` options still work as command-line overrides. Use
 project `sources` for code that belongs to the game itself; use
 `retrosharp-library.json` packages when code should behave like an external,
 imported dependency.
+
+When `namespaceMode` is `physical`, RetroSharp derives zero-cost source
+namespaces from the path under `sourceRoot`: `src/player/State.rs` belongs to
+`Runner.Player`, while `src/camera/State.rs` belongs to `Runner.Camera`. The
+compiler lowers those names to unique internal symbols, so folders can contain
+same-named helper classes such as `Rules`; source can refer to static constants
+with path-qualified names like `Player.Rules.Start`.
 
 Export a GBS subsong into a Game Boy APU trace when you want faithful playback of the original register writes:
 

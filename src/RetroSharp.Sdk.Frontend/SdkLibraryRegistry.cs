@@ -109,22 +109,52 @@ public sealed class SdkLibraryRegistry
 
         var directory = Path.GetDirectoryName(Path.GetFullPath(manifestPath))
             ?? throw new InvalidOperationException($"Could not resolve directory for RetroSharp library manifest '{manifestPath}'.");
-        var source = string.Concat(sources.Select(sourcePath => ReadPackageSource(directory, manifestPath, sourcePath)));
         var targets = (manifest.Targets ?? [])
             .Where(target => !string.IsNullOrWhiteSpace(target))
             .ToHashSet(StringComparer.Ordinal);
 
+        if (!string.IsNullOrWhiteSpace(manifest.NamespaceMode))
+        {
+            if (!string.Equals(manifest.NamespaceMode, "physical", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"RetroSharp library manifest '{manifestPath}' declares unsupported namespaceMode '{manifest.NamespaceMode}'.");
+            }
+
+            var sourceRoot = ResolvePackageItemPath(directory, manifestPath, manifest.SourceRoot ?? "src", "sourceRoot");
+            var rootNamespace = string.IsNullOrWhiteSpace(manifest.RootNamespace)
+                ? importPath
+                : manifest.RootNamespace;
+            var sourceGroup = new PhysicalNamespaceSourceGroup(
+                sources.Select(sourcePath => ReadPackageSourceFile(directory, manifestPath, sourcePath)).ToArray(),
+                rootNamespace,
+                sourceRoot);
+
+            return new SdkLibrary(
+                importPath,
+                catalog =>
+                {
+                    ValidateTarget(importPath, targets, catalog.TargetId);
+                    return SdkLibrarySourceSet.FromPhysicalNamespace(sourceGroup);
+                });
+        }
+
+        var source = string.Concat(sources.Select(sourcePath => ReadPackageSource(directory, manifestPath, sourcePath)));
         return new SdkLibrary(
             importPath,
             catalog =>
             {
-                if (targets.Count != 0 && !targets.Contains(catalog.TargetId))
-                {
-                    throw new InvalidOperationException($"Library '{importPath}' does not support target '{catalog.TargetId}'.");
-                }
+                ValidateTarget(importPath, targets, catalog.TargetId);
 
                 return source;
             });
+    }
+
+    private static void ValidateTarget(string importPath, IReadOnlySet<string> targets, string targetId)
+    {
+        if (targets.Count != 0 && !targets.Contains(targetId))
+        {
+            throw new InvalidOperationException($"Library '{importPath}' does not support target '{targetId}'.");
+        }
     }
 
     private static string ReadPackageSource(string directory, string manifestPath, string sourcePath)
@@ -150,11 +180,43 @@ public sealed class SdkLibraryRegistry
         return source.EndsWith('\n') ? source : source + Environment.NewLine;
     }
 
+    private static PhysicalNamespaceSourceFile ReadPackageSourceFile(string directory, string manifestPath, string sourcePath)
+    {
+        var fullSourcePath = ResolvePackageItemPath(directory, manifestPath, sourcePath, "source path");
+        if (!File.Exists(fullSourcePath))
+        {
+            throw new InvalidOperationException($"RetroSharp library source '{sourcePath}' declared by '{manifestPath}' was not found.");
+        }
+
+        return new PhysicalNamespaceSourceFile(fullSourcePath, File.ReadAllText(fullSourcePath));
+    }
+
+    private static string ResolvePackageItemPath(string directory, string manifestPath, string path, string pathKind)
+    {
+        if (Path.IsPathRooted(path))
+        {
+            throw new InvalidOperationException($"RetroSharp library manifest '{manifestPath}' {pathKind} '{path}' must be relative.");
+        }
+
+        var fullPath = Path.GetFullPath(Path.Combine(directory, path));
+        var fullDirectory = Path.GetFullPath(directory);
+        if (fullPath != fullDirectory
+            && !fullPath.StartsWith(fullDirectory + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"RetroSharp library manifest '{manifestPath}' {pathKind} '{path}' must stay inside the package directory.");
+        }
+
+        return fullPath;
+    }
+
     private sealed record SdkLibraryManifest
     {
         public string? Import { get; init; }
         public string? ImportPath { get; init; }
         public string[]? Sources { get; init; }
         public string[]? Targets { get; init; }
+        public string? RootNamespace { get; init; }
+        public string? SourceRoot { get; init; }
+        public string? NamespaceMode { get; init; }
     }
 }

@@ -13,12 +13,24 @@ The current source spelling is `import RetroSharp.Portable2D;` followed by SDK d
 ```json
 {
   "import": "Acme.Wait",
-  "sources": [ "wait.rs" ],
+  "rootNamespace": "Acme.Wait",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "sources": [
+    "src/api.rs",
+    "src/timing/rules.rs"
+  ],
   "targets": [ "gb", "nes" ]
 }
 ```
 
 `sources` are source-only RetroSharp files loaded relative to the package directory. `targets` is optional; when present, importing the package for any other target fails before target lowering. This MVP does not yet model package versions, dependencies between packages, remote package feeds, binary libraries, per-library asset roots, or backend plugins. These calls lower to the same SDK operations as the older snake_case compatibility names such as `video_wait_vblank()` and `camera_set_position(...)`. `Video.WaitVBlank()` and `Input.Poll()` are now provided by an SDK source library over target intrinsics, while higher-level camera, sprite, world, audio, and collision calls remain capability-checked SDK operations or audio operations.
+
+Library packages can opt into `namespaceMode: "physical"` with the same
+`rootNamespace` and `sourceRoot` fields used by project manifests. The import
+opens the package's rewritten source for the consuming program: root files are
+the practical place for public facade classes, while files under folders gain
+compile-time namespace segments and unique internal symbols.
 
 ### Frame and input
 

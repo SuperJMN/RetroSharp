@@ -129,13 +129,16 @@ public sealed class CrossTargetCliAcceptanceTests
 
         Assert.DoesNotContain(root.EnumerateObject(), property => property.NameEquals("target"));
         Assert.DoesNotContain(root.EnumerateObject(), property => property.NameEquals("libraryPaths"));
+        Assert.Equal("Runner", root.GetProperty("rootNamespace").GetString());
+        Assert.Equal("src", root.GetProperty("sourceRoot").GetString());
+        Assert.Equal("physical", root.GetProperty("namespaceMode").GetString());
         Assert.Equal(new[] { "gb", "nes" }, targets);
         Assert.Equal("bin/runner.gb", outputs.GetProperty("gb").GetString());
         Assert.Equal("bin/runner.nes", outputs.GetProperty("nes").GetString());
-        Assert.Contains("src/constants.rs", sourcePaths);
-        Assert.Contains("src/player-state.rs", sourcePaths);
-        Assert.Contains("src/camera-state.rs", sourcePaths);
-        Assert.Contains("src/frame-state.rs", sourcePaths);
+        Assert.Contains("src/level/constants.rs", sourcePaths);
+        Assert.Contains("src/player/state.rs", sourcePaths);
+        Assert.Contains("src/camera/state.rs", sourcePaths);
+        Assert.Contains("src/frame/state.rs", sourcePaths);
         Assert.Contains("src/main.rs", sourcePaths);
         Assert.DoesNotContain("runner.rs", sourcePaths);
         Assert.False(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/runner.rs")));
@@ -223,6 +226,84 @@ public sealed class CrossTargetCliAcceptanceTests
         var outputPath = Path.Combine(workspace.Path, "use-acme.gb");
 
         var result = RunCli("--target", "gb", "--lib-path", libraryRoot, "--out", outputPath, sourcePath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_builds_game_boy_rom_with_physical_namespace_library_manifest_from_lib_path()
+    {
+        using var workspace = TemporaryWorkspace();
+        var packageDirectory = Path.Combine(workspace.Path, "lib", "acme-motion");
+        var sourceRoot = Path.Combine(packageDirectory, "src");
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "player"));
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "camera"));
+        File.WriteAllText(
+            Path.Combine(sourceRoot, "player", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 1;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceRoot, "camera", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 2;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceRoot, "api.rs"),
+            """
+            [target("gb")]
+            [intrinsic("wait_frame")]
+            extern void acme_motion_wait_frame();
+
+            class MotionApi
+            {
+                static inline void Tick()
+                {
+                    const playerStart = Player.Rules.Start;
+                    const cameraStart = Camera.Rules.Start;
+                    acme_motion_wait_frame();
+                }
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(packageDirectory, "retrosharp-library.json"),
+            """
+            {
+              "import": "Acme.Motion",
+              "rootNamespace": "Acme.Motion",
+              "sourceRoot": "src",
+              "namespaceMode": "physical",
+              "sources": [
+                "src/player/rules.rs",
+                "src/camera/rules.rs",
+                "src/api.rs"
+              ],
+              "targets": [ "gb" ]
+            }
+            """);
+        var sourcePath = Path.Combine(workspace.Path, "use-acme-motion.rs");
+        File.WriteAllText(
+            sourcePath,
+            """
+            import Acme.Motion;
+
+            void Main() {
+                const playerStart = Player.Rules.Start;
+                const cameraStart = Camera.Rules.Start;
+                MotionApi.Tick();
+            }
+            """);
+        var outputPath = Path.Combine(workspace.Path, "use-acme-motion.gb");
+
+        var result = RunCli("--target", "gb", "--lib-path", Path.Combine(workspace.Path, "lib"), "--out", outputPath, sourcePath);
 
         Assert.Equal(0, result.ExitCode);
         Assert.True(File.Exists(outputPath), result.CombinedOutput);
@@ -337,6 +418,64 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesOutput).Length);
         Assert.Contains($"Wrote Game Boy ROM: {gameBoyOutput}", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains($"Wrote NES ROM: {nesOutput}", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_project_physical_namespaces_follow_source_folders()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourceDirectory = Path.Combine(workspace.Path, "src");
+        Directory.CreateDirectory(Path.Combine(sourceDirectory, "player"));
+        Directory.CreateDirectory(Path.Combine(sourceDirectory, "camera"));
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "player", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 1;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "camera", "rules.rs"),
+            """
+            static class Rules
+            {
+                const Start = 2;
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, "main.rs"),
+            """
+            void Main() {
+                const playerStart = Player.Rules.Start;
+                const cameraStart = Camera.Rules.Start;
+                Video.WaitVBlank();
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "runner.retrosharp.json");
+        var outputPath = Path.Combine(workspace.Path, "bin", "runner.gb");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+              "target": "gb",
+              "output": "bin/runner.gb",
+              "rootNamespace": "Game",
+              "sourceRoot": "src",
+              "namespaceMode": "physical",
+              "sources": [
+                "src/player/rules.rs",
+                "src/camera/rules.rs",
+                "src/main.rs"
+              ]
+            }
+            """);
+
+        var result = RunCli(projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
     }
 
     [Fact]

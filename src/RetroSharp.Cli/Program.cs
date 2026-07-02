@@ -212,7 +212,10 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? In
         throw new InvalidOperationException($"RetroSharp project '{projectPath}' must list at least one source file.");
     }
 
-    var source = string.Concat(sourceItems.Select(sourcePath => ReadProjectSource(projectDirectory, projectPath, sourcePath)));
+    var sourceFiles = sourceItems
+        .Select(sourcePath => ReadProjectSourceFile(projectDirectory, projectPath, sourcePath))
+        .ToArray();
+    var source = ComposeProjectSource(projectDirectory, projectPath, manifest, sourceFiles);
     var projectLibraryPaths = (manifest.LibraryPaths ?? [])
         .Select(libraryPath => ResolveProjectItemPath(projectDirectory, projectPath, libraryPath, "library path"))
         .ToArray();
@@ -304,7 +307,30 @@ static RetroSharpProjectManifest ReadProjectManifest(string projectPath)
     }
 }
 
-static string ReadProjectSource(string projectDirectory, string projectPath, string sourcePath)
+static string ComposeProjectSource(
+    string projectDirectory,
+    string projectPath,
+    RetroSharpProjectManifest manifest,
+    IReadOnlyList<RetroSharp.Sdk.PhysicalNamespaceSourceFile> sourceFiles)
+{
+    if (string.IsNullOrWhiteSpace(manifest.NamespaceMode))
+    {
+        return string.Concat(sourceFiles.Select(sourceFile => EnsureTrailingNewLine(sourceFile.Source)));
+    }
+
+    if (!string.Equals(manifest.NamespaceMode, "physical", StringComparison.OrdinalIgnoreCase))
+    {
+        throw new InvalidOperationException($"RetroSharp project '{projectPath}' declares unsupported namespaceMode '{manifest.NamespaceMode}'.");
+    }
+
+    var rootNamespace = string.IsNullOrWhiteSpace(manifest.RootNamespace)
+        ? DefaultRootNamespace(projectPath)
+        : manifest.RootNamespace;
+    var sourceRoot = ResolveProjectItemPath(projectDirectory, projectPath, manifest.SourceRoot ?? "src", "sourceRoot");
+    return RetroSharp.Sdk.PhysicalNamespaceSourceComposer.Compose(sourceFiles, rootNamespace, sourceRoot);
+}
+
+static RetroSharp.Sdk.PhysicalNamespaceSourceFile ReadProjectSourceFile(string projectDirectory, string projectPath, string sourcePath)
 {
     var fullSourcePath = ResolveProjectItemPath(projectDirectory, projectPath, sourcePath, "source");
     if (!File.Exists(fullSourcePath))
@@ -313,7 +339,32 @@ static string ReadProjectSource(string projectDirectory, string projectPath, str
     }
 
     var source = File.ReadAllText(fullSourcePath);
+    return new RetroSharp.Sdk.PhysicalNamespaceSourceFile(fullSourcePath, source);
+}
+
+static string EnsureTrailingNewLine(string source)
+{
     return source.EndsWith('\n') ? source : source + System.Environment.NewLine;
+}
+
+static string DefaultRootNamespace(string projectPath)
+{
+    var fileName = Path.GetFileName(projectPath);
+    const string projectSuffix = ".retrosharp.json";
+    var baseName = fileName.EndsWith(projectSuffix, StringComparison.OrdinalIgnoreCase)
+        ? fileName[..^projectSuffix.Length]
+        : Path.GetFileNameWithoutExtension(fileName);
+    var segments = baseName
+        .Split(['-', '_', '.', ' '], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(segment => char.ToUpperInvariant(segment[0]) + segment[1..])
+        .ToArray();
+    var normalized = new string(string.Concat(segments).Where(char.IsLetterOrDigit).ToArray());
+    if (string.IsNullOrEmpty(normalized))
+    {
+        return "RetroSharpProject";
+    }
+
+    return char.IsDigit(normalized[0]) ? "_" + normalized : normalized;
 }
 
 static string ResolveProjectItemPath(string projectDirectory, string projectPath, string itemPath, string itemKind)
@@ -647,4 +698,7 @@ file sealed record RetroSharpProjectManifest
     public Dictionary<string, string>? Outputs { get; init; }
     public string[]? Sources { get; init; }
     public string[]? LibraryPaths { get; init; }
+    public string? RootNamespace { get; init; }
+    public string? SourceRoot { get; init; }
+    public string? NamespaceMode { get; init; }
 }
