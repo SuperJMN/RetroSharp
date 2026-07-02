@@ -99,6 +99,23 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Explicit_sdk_import_mode_uses_manifest_declared_portable2d_sdk()
+    {
+        const string source = """
+                              void Main() {
+                                  Video.WaitVBlank();
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(
+            source,
+            sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+
+        Assert.Equal(40976, rom.Length);
+    }
+
+    [Fact]
     public void Rejects_unknown_imports()
     {
         const string source = """

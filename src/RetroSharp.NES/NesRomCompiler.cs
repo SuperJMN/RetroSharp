@@ -14,9 +14,10 @@ public static class NesRomCompiler
         string source,
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? sdkLibraryRegistry = null)
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry));
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
@@ -24,7 +25,7 @@ public static class NesRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode);
+        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
@@ -42,9 +43,10 @@ public static class NesRomCompiler
         string source,
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? sdkLibraryRegistry = null)
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry));
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
@@ -52,7 +54,7 @@ public static class NesRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode);
+        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
@@ -68,9 +70,10 @@ public static class NesRomCompiler
         string source,
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
-        SdkLibraryRegistry? sdkLibraryRegistry = null)
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry));
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
@@ -78,7 +81,7 @@ public static class NesRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode);
+        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory);

@@ -191,17 +191,20 @@ The collector itself is target-neutral and lives in a dedicated SDK-frontend ass
 
 Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries runtime or constant screen X, runtime world Y, constant or `Sprite.Width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
-The first SDK-as-library slice is now in place. Source can now declare
-`import RetroSharp.Portable2D;` to name the built-in portable SDK library
-explicitly; Game Boy and NES keep the legacy implicit import during the
-transition by default, and unknown imports fail compilation instead of being
-ignored. Hosts can set `SdkLibraryImportMode.ExplicitOnly` to compile without
-the SDK unless it is imported, or supply a custom `SdkLibraryRegistry` so other
-import paths inject source-level SDK libraries. `SdkLibraryRegistry.FromDirectories(...)`
-and the CLI `--lib-path <path>` option now provide the first local-package MVP:
-each package directory has a `retrosharp-library.json` manifest with `import`,
-`sources`, optional `targets`, and optional physical namespace fields, and the
-source files are injected through the same registry path as
+The first SDK-as-library slice is now in place. Project manifests can now load
+`RetroSharp.Portable2D` through `libraries`, while source can still declare
+`import RetroSharp.Portable2D;` as the explicit transition form. Game Boy and
+NES keep the legacy implicit import during the transition by default, and
+unknown imports fail compilation instead of being ignored. Hosts can set
+`SdkLibraryImportMode.ExplicitOnly` to compile without
+the SDK unless it is imported or supplied as a host/project library, or provide
+a custom `SdkLibraryRegistry` so other import paths inject source-level SDK
+libraries. `SdkLibraryRegistry.FromDirectories(...)`, the CLI `--lib-path <path>`
+option, and project-manifest `libraryPaths`/`libraries` now provide the first
+local-package MVP: each package directory has a `retrosharp-library.json`
+manifest with `import`, `sources`, optional `targets`, and optional physical
+namespace fields; project `libraryPaths` discovers packages while project
+`libraries` names the import paths injected through the same registry path as
 `RetroSharp.Portable2D`. A `--lib-path` can also point at a directory whose
 direct children are package directories. This MVP is deliberately source-only:
 no version solving, package feed, transitive dependency graph, binary library

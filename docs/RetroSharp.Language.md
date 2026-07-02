@@ -154,16 +154,19 @@ thunk, or hidden storage. Extern intrinsic prototypes are not ordinary inline
 helpers: if a target does not recognize the declared intrinsic, compilation
 fails instead of emitting an empty function.
 
-Target compilation accepts `import RetroSharp.Portable2D;` as the explicit SDK
-library import. Game Boy and NES still load the same small SDK source library
-implicitly for older samples by default, but compiler hosts can use
-`SdkLibraryImportMode.ExplicitOnly` to disable that compatibility autoimport.
-In explicit-only mode, SDK module calls require an imported library; source that
-does not use the SDK can compile without loading it. Hosts can also provide a
-custom `SdkLibraryRegistry` so additional import paths inject source-level SDK
+Target compilation accepts `import RetroSharp.Portable2D;` as the explicit
+source-level SDK library transition form, and project manifests can load
+`RetroSharp.Portable2D` through `libraries`. Game Boy and NES still load the
+same small SDK source library implicitly for older samples by default, but
+compiler hosts can use `SdkLibraryImportMode.ExplicitOnly` to disable that
+compatibility autoimport. In explicit-only mode, SDK module calls require an
+imported library or a host/project-supplied library; source that does not use the
+SDK can compile without loading it. Hosts can also provide a custom
+`SdkLibraryRegistry` so additional import paths inject source-level SDK
 libraries, and the CLI can build the same registry from local source-only
-packages passed with `--lib-path`. A package is a directory with
-`retrosharp-library.json` declaring `import`, `sources`, and optional `targets`;
+packages passed with `--lib-path` or declared through project `libraryPaths`. A
+package is a directory with `retrosharp-library.json` declaring `import`,
+`sources`, and optional `targets`;
 sources are loaded relative to that directory and target mismatches fail during
 library injection. Library manifests can also opt into physical namespaces with
 `rootNamespace`, `sourceRoot`, and `namespaceMode: "physical"`; their source
@@ -189,16 +192,18 @@ capability-checked SDK operations rather than direct intrinsics.
 
 Project-level source organization is deliberately separate from library import.
 The CLI accepts `retrosharp.json` or `*.retrosharp.json` manifests with
-`target`/`targets`, `output`/`outputs`, `sources`, and `libraryPaths` fields.
+`target`/`targets`, `output`/`outputs`, `sources`, `libraryPaths`, and
+`libraries` fields.
 The listed source files are read in order, relative to the project file, and
 compiled as one game program. A project can declare multiple cartridge targets
 and per-target outputs such as `bin/runner.gb` and `bin/runner.nes`; `--target`
 and `--out` remain command-line overrides for focused one-target builds. This is
 the low-friction path for splitting a game across files without turning each
 folder into an importable package. Local libraries remain the encapsulation
-boundary for reusable or third-party units that game code imports explicitly.
-Game code normally names already-loaded APIs with `using` directives rather than
-declaring library loading in each source file; source-level `import` remains the
+boundary for reusable or third-party units: `libraryPaths` discovers local
+packages and `libraries` names the import paths loaded by the project. Game code
+normally names already-loaded APIs with `using` directives rather than declaring
+library loading in each source file; source-level `import` remains the
 explicit/transitional library-injection form.
 
 Projects and source-only library packages can opt into physical source
