@@ -22,9 +22,8 @@ public static class TargetIntrinsicResolver
     {
         var intrinsic = TargetAttributeReader.StringArgument(function, "intrinsic")
                         ?? throw new InvalidOperationException($"Extern function '{function.Name}' must declare an intrinsic attribute.");
-        var target = TargetAttributeReader.StringArgument(function, "target")
-                     ?? throw new InvalidOperationException($"Extern intrinsic '{function.Name}' must declare a target attribute.");
-        if (!string.Equals(target, catalog.TargetId, StringComparison.Ordinal))
+        var target = TargetAttributeReader.StringArgument(function, "target");
+        if (target is not null && !string.Equals(target, catalog.TargetId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException($"Extern intrinsic '{function.Name}' targets '{target}', not {catalog.TargetName}.");
         }

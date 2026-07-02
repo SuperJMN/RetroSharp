@@ -160,10 +160,10 @@ Progress (2026-06-14):
 - SAL-8 compile-time operand intrinsics landed after the initial prototype: target intrinsic
   descriptors can mark call slots as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or
   `WorldId` while leaving the language, parser AST, ABI, and classic IR target-neutral.
-  `Sprite.Draw(...)` now comes from the injected SDK library over role-bearing `sprite_draw`
+  `Sprite.Draw(...)` now comes from the `RetroSharp.Portable2D` source package over role-bearing `sprite_draw`
   intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`
   as the legacy `sprite_draw(...)` alias. Game Boy and NES `Camera.AabbTiles(...)` and
-  `Camera.AabbHitTop(...)` also come from injected helpers over target intrinsics with a hidden
+  `Camera.AabbHitTop(...)` also come from package helpers over target intrinsics with a hidden
   `"default"` world id and compile-time flag mask, still collecting to the same camera AABB
   SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract
   (NES migrated in SAL-8.6; the legacy `camera_aabb_tiles(...)`/`camera_aabb_hit_top(...)`
@@ -172,8 +172,8 @@ Progress (2026-06-14):
   `camera_screen_aabb_*` with hidden `WorldId`/`EnumFlags`), so all four camera-relative
   collision queries share the intrinsic path; the actor framework's generated `Camera.ScreenAabb*`
   calls stay byte-identical (`actors.gb`/`actors.nes` ROMs unchanged).
-  SAL-8.7 migrated Game Boy and NES `Music.Play(...)` / `Music.Stop()` to injected `class music`
-  helpers over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
+  SAL-8.7 migrated Game Boy and NES `Music.Play(...)` / `Music.Stop()` to `Music`
+  helpers in `RetroSharp.Portable2D` over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
   collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
   `music_stop(...)` builtins remain aliases and `Music.Asset(...)` stays on the SDK-module path.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
@@ -236,7 +236,7 @@ Suggested next steps for the next agent, in order:
 ## Game Boy Runner Lessons
 
 - Normal runner debugging should start with the full app, then use `tools/gameboy/runner_diagnostics.py` to find the first failing diagnostic step before editing code.
-- `Input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the injected SDK library source (`SdkLibrarySource`). The snake_case builtins (`button_down`, `button_just_pressed`, ..., `sprite_width`) and bare lowercase button identifiers (`a`, `right`, ...) remain accepted as transitional aliases and lower to the same masks. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
+- `Input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the `RetroSharp.Portable2D` source package under `sdk/RetroSharp.Portable2D`. The snake_case builtins (`button_down`, `button_just_pressed`, ..., `sprite_width`) and bare lowercase button identifiers (`a`, `right`, ...) remain accepted as transitional aliases and lower to the same masks. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
 - `button_hold_ticks` saturates at `255` and is the accepted seam for variable-height jump timing.
 - On original DMG hardware, `JOYP` row selection must settle. The backend should select a row, read it several times, use the final sample, and deselect both rows with `0x30`.
 - `Sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.

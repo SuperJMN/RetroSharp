@@ -9,4 +9,11 @@
     <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
     <ProjectReference Include="..\RetroSharp.Parser\RetroSharp.Parser.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\sdk\RetroSharp.Portable2D\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>sdk\RetroSharp.Portable2D\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
 </Project>

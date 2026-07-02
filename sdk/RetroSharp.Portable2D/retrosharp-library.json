@@ -1,0 +1,14 @@
+{
+  "import": "RetroSharp.Portable2D",
+  "rootNamespace": "RetroSharp.Portable2D",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "targets": [ "gb", "nes" ],
+  "sources": [
+    "src/runtime.rs",
+    "src/camera.rs",
+    "src/sprite.rs",
+    "src/world.rs",
+    "src/music.rs"
+  ]
+}

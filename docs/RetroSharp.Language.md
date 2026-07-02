@@ -171,24 +171,25 @@ sources are loaded relative to that directory and target mismatches fail during
 library injection. Library manifests can also opt into physical namespaces with
 `rootNamespace`, `sourceRoot`, and `namespaceMode: "physical"`; their source
 folders are rewritten to unique internal symbols before the importing program is
-parsed, and the importing program's references to the package facade are
-rewritten at the same time. The imported built-in library defines
+parsed, and the importing program's references to declared package static methods
+are rewritten at the same time. The built-in `RetroSharp.Portable2D` package lives
+under `sdk/RetroSharp.Portable2D` and defines helpers such as
 `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
-`Camera.SetPosition(x, y)`, and `Camera.Apply()` as
-inline wrappers over target-selected extern intrinsics. Functions can carry
+`Music.Play(...)`, `Camera.SetPosition(x, y)`, `Camera.Apply()`,
+camera AABB queries, and `Sprite.Draw(...)` as inline wrappers over target-selected
+extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
 non-matching variants before constant folding and function indexing, so portable
 helper code can share one helper name while selecting the correct target extern.
 Library helpers can be capability-gated and value-returning: Game Boy exposes
 `World.TileFlagsAt(x, y)` (a two-argument query returning the tile flags) over a
 `world_tile_flags_at` intrinsic, while NES — which lacks the world tile-flag
-collision query — does not inject the `world` class at all. Parameterized `inline`
-helpers substitute their arguments directly into the operation, so these calls stay
-byte-identical to the direct SDK form. Injecting `class camera` exposes only
-`SetPosition`/`Apply`; the rest of the camera module (`Camera.Init`,
-`Camera.AabbTiles`, `Camera.AabbHitTop`) is unaffected.
-Higher-level sprite drawing and the streaming/collision SDK calls still lower through
-capability-checked SDK operations rather than direct intrinsics.
+collision query — removes that `[target("gb")]` helper before function indexing.
+Parameterized `inline` helpers substitute their arguments directly into the operation,
+so these calls stay byte-identical to the direct SDK form. Physical package rewriting
+only captures dot-calls for static methods the package actually declares, so resource
+declarations such as `Camera.Init`, `World.Load`, `Sprite.Asset`, and
+`Animation.Clip` still lower through the existing SDK declaration path.
 
 Project-level source organization is deliberately separate from library import.
 The CLI accepts `retrosharp.json` or `*.retrosharp.json` manifests with

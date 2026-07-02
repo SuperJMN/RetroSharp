@@ -95,7 +95,7 @@ public sealed class NesMusicTests
 
         var sdkLibrary = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
-        Assert.Contains("class Music", sdkLibrary, StringComparison.Ordinal);
+        Assert.Contains("class RetroSharp_Portable2D_Music", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"music_play\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Contains("[intrinsic(\"music_stop\")]", sdkLibrary, StringComparison.Ordinal);
         Assert.Equal(

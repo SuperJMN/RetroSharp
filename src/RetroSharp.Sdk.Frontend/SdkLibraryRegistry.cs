@@ -10,7 +10,7 @@ public sealed class SdkLibraryRegistry
 
     private static IReadOnlyList<SdkLibrary> BuiltInLibraries { get; } =
     [
-        new SdkLibrary(SdkImportResolver.Portable2D, SdkLibrarySource.ForTarget),
+        LoadBuiltInPortable2D(),
     ];
 
     public static SdkLibraryRegistry Default { get; } = new(BuiltInLibraries);
@@ -147,6 +147,55 @@ public sealed class SdkLibraryRegistry
 
                 return source;
             });
+    }
+
+    private static SdkLibrary LoadBuiltInPortable2D()
+    {
+        return LoadManifest(FindBuiltInPortable2DManifest());
+    }
+
+    private static string FindBuiltInPortable2DManifest()
+    {
+        var relativePath = Path.Combine("sdk", "RetroSharp.Portable2D", ManifestFileName);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in CandidateSearchRoots())
+        {
+            if (!visited.Add(root))
+            {
+                continue;
+            }
+
+            var candidate = Path.Combine(root, relativePath);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException($"Could not find built-in SDK library manifest '{relativePath}'.");
+    }
+
+    private static IEnumerable<string> CandidateSearchRoots()
+    {
+        foreach (var root in DirectoryAndAncestors(AppContext.BaseDirectory))
+        {
+            yield return root;
+        }
+
+        foreach (var root in DirectoryAndAncestors(Directory.GetCurrentDirectory()))
+        {
+            yield return root;
+        }
+    }
+
+    private static IEnumerable<string> DirectoryAndAncestors(string path)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(path));
+        while (directory is not null)
+        {
+            yield return directory.FullName;
+            directory = directory.Parent;
+        }
     }
 
     private static void ValidateTarget(string importPath, IReadOnlySet<string> targets, string targetId)

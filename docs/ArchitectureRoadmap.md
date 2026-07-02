@@ -225,19 +225,23 @@ Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input
 catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` resolves imported
 SDK libraries through the registry and supplies target-selected library source
 for imported or legacy-autoimported target compilations. The built-in
-`RetroSharp.Portable2D` library defines
-`video`, `input`, `audio`, and `camera` classes whose `Video.WaitVBlank()`,
+`RetroSharp.Portable2D` library is the manifest-backed source package under
+`sdk/RetroSharp.Portable2D`; it defines
+`Video`, `Input`, `Audio`, `Camera`, `Sprite`, `World`, and `Music` helpers whose `Video.WaitVBlank()`,
 `Input.Poll()`, `Audio.Update()`, `Camera.SetPosition(x, y)`, `Camera.Apply()`, and
 catalog-gated helpers such as Game Boy `Camera.AabbTiles(...)` /
-`Camera.AabbHitTop(...)` call `[target(...)] [intrinsic(...)] extern` declarations, and those helpers
+`Camera.AabbHitTop(...)` call `[intrinsic(...)] extern` declarations, and those helpers
 emit the same bytes as the previous SDK operation path. The `audio_update` intrinsic
 is collected by the separate `SdkAudioOperationCollector` (Game Boy lowers it from the
 audio operation stream, NES emits it inline), so the shared `Sdk2DOperation` collectors
 consume but ignore it. The `camera_set_position`/`camera_apply` intrinsics route through
 the existing `SetCameraPosition`/`ApplyCamera` collection and emission, so their scroll-axis
-inference, capability checks, and frame-budget accounting are unchanged; injecting
-`class camera` does not shadow methods that are not class members (`Camera.Init` still lowers
-through the SDK module). `TargetProgramSelector` filters
+inference, capability checks, and frame-budget accounting are unchanged. Declaring the package
+`Camera` class does not shadow methods that are not class members (`Camera.Init` still lowers
+through the SDK module). Physical package rewriting only captures dot-calls for
+static methods the package actually declares, so methods that remain on the
+compatibility path, such as `Camera.Init`, still lower through the SDK module.
+`TargetProgramSelector` filters
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
@@ -245,10 +249,9 @@ and let the active target select the matching declaration.
 The library can also carry **capability-gated, value-returning** members. Game Boy
 catalogs a `world_tile_flags_at` intrinsic and exposes `World.TileFlagsAt(x, y)` — a
 two-argument query that returns the tile flags as a value, lowering byte-identically
-to the existing `Sdk2DOperation.ReadWorldTileFlags` path. NES does not declare the
-`WorldTileFlags` collision query, so `SdkLibrarySource` does not inject the `world`
-class for NES at all; the helper only appears on targets whose catalog declares the
-intrinsic. This proves the pattern extends from void leaf calls to argument-taking,
+to the existing `Sdk2DOperation.ReadWorldTileFlags` path. The package marks that
+helper `[target("gb")]`, so NES target selection removes it before function
+indexing and intrinsic resolution. This proves the pattern extends from void leaf calls to argument-taking,
 value-returning queries (parameterized `inline` helpers substitute their arguments
 into the operation operands without introducing temporaries, so the bytes match).
 
@@ -261,7 +264,7 @@ byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting 
 in that slot.
 
 SAL-8.3 applies that mechanism to Game Boy `Sprite.Draw`, and SAL-8.4 applies the same pattern
-to NES: the injected SDK library helper calls a target-specific `[intrinsic("sprite_draw")]`
+to NES: the `RetroSharp.Portable2D` helper calls a target intrinsic `[intrinsic("sprite_draw")]`
 extern, each target descriptor marks the asset id as `AssetRef` and the palette slot as
 `ConstPaletteSlot`, and the collector turns the resolved call back into
 `Sdk2DOperation.DrawLogicalSprite`. This keeps metasprite resolution, capability validation,
@@ -279,7 +282,7 @@ contract.
 SAL-8.6 applies the same descriptor-role form to NES `Camera.AabbTiles` and
 `Camera.AabbHitTop`, closing the last Game Boy/NES asymmetry for camera-relative AABB
 collision. `NesTarget.Intrinsics` catalogs `camera_aabb_tiles` and `camera_aabb_hit_top`
-with the same `WorldId`/`EnumFlags` slots, so `SdkLibrarySource` injects the same
+with the same `WorldId`/`EnumFlags` slots, so `RetroSharp.Portable2D` declares the same
 `Camera.AabbTiles` / `Camera.AabbHitTop` helpers for NES. The NES value-call path resolves the
 extern intrinsic and re-derives the same operation it already emitted from the legacy
 `camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility
@@ -287,7 +290,7 @@ alias, so `Golden_collision_aabb_emission_is_pinned_nes` stays byte-identical.
 
 SAL-8.9 extends the same descriptor-role form to screen-space camera collision on both targets:
 Game Boy and NES catalog `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the
-same hidden `WorldId` and `EnumFlags` slots, `SdkLibrarySource` injects `Camera.ScreenAabbTiles`
+same hidden `WorldId` and `EnumFlags` slots, `RetroSharp.Portable2D` declares `Camera.ScreenAabbTiles`
 / `Camera.ScreenAabbHitTop` helpers, and the collector/emitter re-derive the same
 `Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy
 `camera_screen_aabb_*(...)` builtins (kept as aliases). All four camera-relative collision
@@ -307,16 +310,16 @@ streaming/frame-budget state is preserved.
 The remaining friction is at the **extern-intrinsic boundary**, not the language:
 - `Camera.SetPosition()` / `Camera.Apply()` carry only `i16`/void operands, so they were a
   clean **GO** and are now migrated (SAL-7): both targets catalog `camera_set_position`
-  (arity 2) and `camera_apply` (arity 0), `SdkLibrarySource` injects `class camera` with
+  (arity 2) and `camera_apply` (arity 0), `RetroSharp.Portable2D` declares `Camera` with
   `SetPosition`/`Apply` inline helpers over `[target][intrinsic]` externs, and the
   collector/emitter route them to the existing `SetCameraPosition`/`ApplyCamera` emission
   (Game Boy consumes from the operation stream; NES re-derives from the call, preserving its
-  `ScrollAxes.Horizontal` apply). Byte-identical on both targets. Injecting `class camera`
-  does not shadow methods that are not class members; `Camera.Init` still lowers through the
+  `ScrollAxes.Horizontal` apply). Byte-identical on both targets. Declaring `Camera`
+  in the source package does not shadow methods that are not class members; `Camera.Init` still lowers through the
   SDK module.
 - `Sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
   with runtime ones (X/Y/frame/flipX). Game Boy and NES now use the compile-time-operand
-  descriptor form, so the public `Sprite.Draw(...)` helper can live in the injected SDK library
+  descriptor form, so the public `Sprite.Draw(...)` helper can live in the source package
   while still collecting to the same capability-checked `Sdk2DOperation`. The legacy
   `sprite_draw(...)` spelling remains a compatibility alias during the transition.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) stays compiler-emitted. Camera-relative
