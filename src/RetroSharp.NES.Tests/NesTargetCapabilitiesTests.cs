@@ -1,5 +1,6 @@
 namespace RetroSharp.NES.Tests;
 
+using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.NES;
 using Xunit;
@@ -51,6 +52,35 @@ public sealed class NesTargetCapabilitiesTests
         Assert.True(capabilities.SupportsCollisionQuery(CollisionQueryMode.CameraRelativeAabbHitTop));
     }
 
+    [Fact]
+    public void Descriptor_reports_nes_intrinsic_contracts()
+    {
+        var waitFrame = ResolveIntrinsic("wait_frame");
+        Assert.Equal(TargetIntrinsicOperation.WaitFrame, waitFrame.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, waitFrame.ReturnKind);
+        Assert.Empty(waitFrame.RequiredCapabilities);
+
+        var musicPlay = ResolveIntrinsic("music_play");
+        Assert.Equal(TargetIntrinsicOperation.PlayMusic, musicPlay.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, musicPlay.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.BackgroundMusic, musicPlay.RequiredCapabilities);
+        Assert.Contains(musicPlay.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
+
+        var spriteDraw = ResolveIntrinsic("sprite_draw");
+        Assert.Equal(TargetIntrinsicOperation.DrawLogicalSprite, spriteDraw.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, spriteDraw.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.LogicalSprites, spriteDraw.RequiredCapabilities);
+        Assert.Contains(spriteDraw.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
+
+        var cameraHitTop = ResolveIntrinsic("camera_aabb_hit_top");
+        Assert.Equal(TargetIntrinsicOperation.CameraAabbHitTop, cameraHitTop.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.I16, cameraHitTop.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.CameraRelativeAabbHitTop, cameraHitTop.RequiredCapabilities);
+        Assert.Contains(cameraHitTop.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.WorldId);
+
+        Assert.False(NesTarget.Intrinsics.TryResolve("world_tile_flags_at", out _));
+    }
+
     private static bool CanStreamVisibleColumn(Target2DCapabilities capabilities)
     {
         return capabilities.SupportsScrollAxis(ScrollAxes.Horizontal)
@@ -63,5 +93,11 @@ public sealed class NesTargetCapabilitiesTests
         return capabilities.SupportsScrollAxis(ScrollAxes.Vertical)
                && capabilities.SupportsRuntimeBackgroundStreamingAxis(ScrollAxes.Vertical)
                && capabilities.MaxBackgroundTileWritesPerFrame >= capabilities.ScreenTiles.Width;
+    }
+
+    private static TargetIntrinsicDescriptor ResolveIntrinsic(string intrinsicId)
+    {
+        Assert.True(NesTarget.Intrinsics.TryResolve(intrinsicId, out var descriptor));
+        return descriptor;
     }
 }

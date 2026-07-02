@@ -1120,6 +1120,24 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Intrinsic_extern_return_type_must_match_descriptor()
+    {
+        const string source = """
+                              [target("gb")]
+                              [intrinsic("wait_frame")]
+                              extern i16 wrong_wait_frame();
+
+                              void Main() {
+                                  i16 value = wrong_wait_frame();
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Extern intrinsic 'wrong_wait_frame' declares return type 'i16', but intrinsic 'wait_frame' returns 'void'.", exception.Message);
+    }
+
+    [Fact]
     public void Compile_time_operand_slot_rejects_runtime_value()
     {
         const string source = """
@@ -1138,7 +1156,9 @@ public class GameBoyRomCompilerTests
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
-        Assert.Equal("flags_for_world argument 1 is compile-time WorldId and cannot use runtime local 'selectedWorld'.", exception.Message);
+        Assert.Equal(
+            "Intrinsic 'world_tile_flags_for_world' argument 1 on extern 'flags_for_world' is compile-time WorldId and cannot use runtime local 'selectedWorld'.",
+            exception.Message);
     }
 
     [Fact]

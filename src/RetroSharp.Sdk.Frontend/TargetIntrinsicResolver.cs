@@ -28,7 +28,15 @@ public static class TargetIntrinsicResolver
             throw new InvalidOperationException($"Extern intrinsic '{function.Name}' targets '{target}', not {catalog.TargetName}.");
         }
 
-        return catalog.Resolve(intrinsic, function.Name);
+        var descriptor = catalog.Resolve(intrinsic, function.Name);
+        var expectedReturnType = SourceReturnType(descriptor.ReturnKind);
+        if (!string.Equals(function.Type, expectedReturnType, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Extern intrinsic '{function.Name}' declares return type '{function.Type}', but intrinsic '{descriptor.IntrinsicId}' returns '{expectedReturnType}'.");
+        }
+
+        return descriptor;
     }
 
     public static ResolvedTargetIntrinsicCall ResolveCall(
@@ -51,7 +59,12 @@ public static class TargetIntrinsicResolver
         {
             if (compileSlots.TryGetValue(slot, out var compileTimeOperand))
             {
-                compileTimeValues.Add(ReadCompileTimeOperand(call, args[slot], compileTimeOperand, runtimeIdentifiers ?? new HashSet<string>()));
+                compileTimeValues.Add(ReadCompileTimeOperand(
+                    call,
+                    descriptor,
+                    args[slot],
+                    compileTimeOperand,
+                    runtimeIdentifiers ?? new HashSet<string>()));
             }
             else
             {
@@ -70,11 +83,12 @@ public static class TargetIntrinsicResolver
 
     private static TargetIntrinsicCompileTimeValue ReadCompileTimeOperand(
         FunctionCall call,
+        TargetIntrinsicDescriptor descriptor,
         ExpressionSyntax expression,
         TargetIntrinsicCompileTimeOperand operand,
         IReadOnlySet<string> runtimeIdentifiers)
     {
-        var context = $"{call.Name} argument {operand.Slot + 1}";
+        var context = $"Intrinsic '{descriptor.IntrinsicId}' argument {operand.Slot + 1} on extern '{call.Name}'";
         switch (operand.Role)
         {
             case TargetIntrinsicOperandRole.AssetRef:
@@ -124,5 +138,15 @@ public static class TargetIntrinsicResolver
         }
 
         throw new InvalidOperationException($"{context} must be a compile-time world id.");
+    }
+
+    private static string SourceReturnType(TargetIntrinsicReturnKind returnKind)
+    {
+        return returnKind switch
+        {
+            TargetIntrinsicReturnKind.Void => "void",
+            TargetIntrinsicReturnKind.I16 => "i16",
+            _ => throw new InvalidOperationException($"Unsupported target intrinsic return kind '{returnKind}'."),
+        };
     }
 }

@@ -160,6 +160,10 @@ Progress (2026-06-14):
 - SAL-8 compile-time operand intrinsics landed after the initial prototype: target intrinsic
   descriptors can mark call slots as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or
   `WorldId` while leaving the language, parser AST, ABI, and classic IR target-neutral.
+  SDKLIB-3 makes those descriptors the full target contract by carrying the intrinsic id,
+  runtime arity, return kind, compile-time operand roles, and required capabilities; the
+  resolver validates extern return types and names the intrinsic id in compile-time operand
+  diagnostics.
   `Sprite.Draw(...)` now comes from the `RetroSharp.Portable2D` source package over role-bearing `sprite_draw`
   intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`
   as the legacy `sprite_draw(...)` alias. Game Boy and NES `Camera.AabbTiles(...)` and

@@ -181,6 +181,10 @@ extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters
 non-matching variants before constant folding and function indexing, so portable
 helper code can share one helper name while selecting the correct target extern.
+Target intrinsic descriptors own the target contract: intrinsic id, arity,
+return kind, compile-time operand roles, and required capabilities. The resolver
+rejects extern declarations whose source return type does not match the descriptor
+before backend emission.
 Library helpers can be capability-gated and value-returning: Game Boy exposes
 `World.TileFlagsAt(x, y)` (a two-argument query returning the tile flags) over a
 `world_tile_flags_at` intrinsic, while NES — which lacks the world tile-flag
