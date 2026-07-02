@@ -351,7 +351,7 @@ public class SemanticAnalysisTests
     [Fact]
     public void Sdk_namespaced_dot_calls_resolve_arguments()
     {
-        var input = "void Main(){ Video.Init(); Input.Poll(); Camera.SetPosition(4, 0); }";
+        var input = "void Main(){ Video.Init(); Camera.Init(4, 0, 1); }";
         Errors(input).Should().BeEmpty();
     }
 

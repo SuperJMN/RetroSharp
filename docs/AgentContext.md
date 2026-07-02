@@ -183,6 +183,11 @@ Progress (2026-06-14):
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.
+  SDKLIB-4 retired the simple runtime facades `Video.WaitVBlank`, `Input.Poll`,
+  `Audio.Init`, `Audio.Update`, `Camera.SetPosition`, and `Camera.Apply` from
+  `SdkModuleRegistry` call-name lowering; those public names now come from SDK
+  source packages, while the registry remains for transitional SDK module
+  declarations and compatibility APIs.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.

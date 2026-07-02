@@ -2,10 +2,10 @@ namespace RetroSharp.Core.Sdk;
 
 using System.Text;
 
-// Owns the portable SDK dot-call naming contract: which module names are SDK
-// modules and how `module.Method(...)` maps to a flat `prefix_method` call name.
-// This SDK knowledge lives in the SDK layer, not in the target-neutral language
-// front-end, which only consumes this contract to lower dot-call syntax.
+// Owns the transitional SDK dot-call naming contract: which legacy module names
+// are SDK modules and how remaining `module.Method(...)` calls map to flat
+// `prefix_method` call names. Source-package-only facades are deliberately not
+// lowered here; they must come from SDK source packages.
 public static class SdkModuleRegistry
 {
     private static readonly SdkModuleDescriptor[] ModuleDescriptors =
@@ -33,11 +33,6 @@ public static class SdkModuleRegistry
     private static readonly Dictionary<string, SdkModuleDescriptor> Modules = ModuleDescriptors
         .ToDictionary(module => module.Name, StringComparer.Ordinal);
 
-    private static readonly Dictionary<string, string> MethodNames = new(StringComparer.Ordinal)
-    {
-        ["WaitVBlank"] = "wait_vblank",
-    };
-
     // Per-(module, method) full call-name overrides. The Input predicate facade
     // methods lower to the existing flat button builtins, which use the `button`
     // call prefix rather than the facade's `input` prefix, so lowering stays
@@ -51,6 +46,16 @@ public static class SdkModuleRegistry
             [("Input", "HoldTicks")] = "button_hold_ticks",
         };
 
+    private static readonly HashSet<(string Module, string Method)> SourcePackageOnlyMethods =
+    [
+        ("Video", "WaitVBlank"),
+        ("Input", "Poll"),
+        ("Audio", "Init"),
+        ("Audio", "Update"),
+        ("Camera", "SetPosition"),
+        ("Camera", "Apply"),
+    ];
+
     public static bool IsKnownModule(string module)
     {
         return Modules.ContainsKey(module);
@@ -63,6 +68,12 @@ public static class SdkModuleRegistry
 
     public static bool TryResolveCallName(string module, string method, out string callName)
     {
+        if (SourcePackageOnlyMethods.Contains((module, method)))
+        {
+            callName = string.Empty;
+            return false;
+        }
+
         if (!Modules.TryGetValue(module, out var descriptor))
         {
             callName = string.Empty;
@@ -77,9 +88,7 @@ public static class SdkModuleRegistry
 
     internal static string MethodName(string method)
     {
-        return MethodNames.TryGetValue(method, out var name)
-            ? name
-            : ToSnakeCase(method);
+        return ToSnakeCase(method);
     }
 
     private static SdkModuleDescriptor LibraryModule(string name, string callPrefix)

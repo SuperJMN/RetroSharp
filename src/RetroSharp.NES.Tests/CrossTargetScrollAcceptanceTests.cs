@@ -5,6 +5,7 @@ using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.NES;
 using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 // Acceptance: one source program of horizontal scroll and logical sprite drawing produces the SAME shared
@@ -448,9 +449,11 @@ public sealed class CrossTargetScrollAcceptanceTests
 
     private static NesVideoProgram BuildNesProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
-        return NesVideoProgram.FromProgram(parse.Value, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var lowered = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        return NesVideoProgram.FromProgram(lowered, baseDirectory);
     }
 
     private static byte NameTableTileAt(NesVideoProgram program, int x, int y)

@@ -688,7 +688,11 @@ public class NesRomCompilerTests
                                   Audio.Update();
                               }
                               """;
-        var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
+        var explicitLibrarySource = SdkLibrarySource.Merge(
+            NesTarget.Intrinsics,
+            source,
+            SdkLibraryImportMode.ExplicitOnly,
+            libraryImportPaths: [SdkImportResolver.Portable2D]);
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 
         Assert.Contains("class RetroSharp_Portable2D_Audio", library, StringComparison.Ordinal);
@@ -809,7 +813,9 @@ public class NesRomCompilerTests
 
         var libraryRom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
         var legacyRom = NesRomCompiler.CompileSource(
-            SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal),
+            SdkLibrarySource.Merge(
+                NesTarget.Intrinsics,
+                source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal)),
             RunnerSample.Directory);
 
         Assert.Equal(legacyRom, libraryRom);
@@ -935,7 +941,11 @@ public class NesRomCompilerTests
                                   Input.Poll();
                               }
                               """;
-        var explicitLibrarySource = SdkLibrarySource.ForTarget(NesTarget.Intrinsics) + source;
+        var explicitLibrarySource = SdkLibrarySource.Merge(
+            NesTarget.Intrinsics,
+            source,
+            SdkLibraryImportMode.ExplicitOnly,
+            libraryImportPaths: [SdkImportResolver.Portable2D]);
 
         var library = SdkLibrarySource.ForTarget(NesTarget.Intrinsics);
 

@@ -245,6 +245,11 @@ compatibility path, such as `Camera.Init`, still lower through the SDK module.
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
+SDKLIB-4 makes these simple runtime facades package-only at the public-name layer:
+`SdkModuleRegistry` no longer maps `Video.WaitVBlank`, `Input.Poll`, `Audio.Init`,
+`Audio.Update`, `Camera.SetPosition`, or `Camera.Apply` to flat legacy calls. The
+flat calls remain accepted as compatibility aliases, but the PascalCase public
+facades must be supplied by source packages.
 
 The library can also carry **capability-gated, value-returning** members. Game Boy
 catalogs a `world_tile_flags_at` intrinsic and exposes `World.TileFlagsAt(x, y)` — a

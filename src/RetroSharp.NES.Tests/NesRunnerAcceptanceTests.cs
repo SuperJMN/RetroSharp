@@ -147,13 +147,14 @@ public sealed class NesRunnerAcceptanceTests
 
     private static NesVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var lowered = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var lowered = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         return NesVideoProgram.FromProgram(lowered, baseDirectory);
     }
 
