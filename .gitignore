@@ -70,6 +70,9 @@ artifacts/
 __pycache__/
 *.py[cod]
 
+# Local CodeGraph index
+/.codegraph/
+
 # Generated emulator screenshots
 samples/runner/*.png
 !samples/runner/tilesheets.png
