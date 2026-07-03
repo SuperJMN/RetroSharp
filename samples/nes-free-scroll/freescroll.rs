@@ -1,12 +1,14 @@
 import RetroSharp.Portable2D;
 
-static class Level {
+static class Level
+{
     const i16 Width = 64;
     const i16 Height = 60;
     const i16 ViewHeight = 18;
 }
 
-void Main() {
+void Main()
+{
     Video.Init();
 
     World.Column(0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5);
@@ -23,18 +25,25 @@ void Main() {
     u8 stepX = 1;
     u8 stepY = 1;
 
-    while (true) {
+    while (true)
+    {
         Video.WaitVBlank();
 
-        if (cameraX == 248) {
+        if (cameraX == 248)
+        {
             stepX = 255;
-        } else if (cameraX == 0) {
+        }
+        else if (cameraX == 0)
+        {
             stepX = 1;
         }
 
-        if (cameraY == 248) {
+        if (cameraY == 248)
+        {
             stepY = 255;
-        } else if (cameraY == 0) {
+        }
+        else if (cameraY == 0)
+        {
             stepY = 1;
         }
 

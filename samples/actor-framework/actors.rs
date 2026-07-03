@@ -1,12 +1,14 @@
 import RetroSharp.Portable2D;
 
-static class Level {
+static class Level
+{
     const i16 Width = 40;
     const i16 StreamY = 10;
     const i16 Height = 2;
 }
 
-void Main() {
+void Main()
+{
     Video.Init();
     World.Load("actors.tmj");
     Camera.Init(Level.Width, Level.StreamY, Level.Height);
@@ -20,10 +22,12 @@ void Main() {
 
     u8 cameraX = 0;
 
-    while (true) {
+    while (true)
+    {
         Video.WaitVBlank();
         Input.Poll();
-        if (Input.IsDown(Button.Right) && cameraX < 160) {
+        if (Input.IsDown(Button.Right) && cameraX < 160)
+        {
             cameraX += 1;
         }
 

@@ -1,7 +1,8 @@
 using Runner.Camera;
 using Runner.Level;
 
-class PlayerState {
+class PlayerState
+{
     Pixel x;
     Pixel y;
     i8 velocityY;
@@ -13,7 +14,8 @@ class PlayerState {
     Pixel jumpTicks;
     Pixel gravityTick;
 
-    inline void Reset(CameraState view) {
+    inline void Reset(CameraState view)
+    {
         x = view.x + Player.StartX;
         y = view.y + Player.StartY;
         velocityY = 0;
@@ -24,19 +26,23 @@ class PlayerState {
         gravityTick = 0;
     }
 
-    inline void ApplyGravity() {
+    inline void ApplyGravity()
+    {
         gravityTick++;
-        if (gravityTick >= Jump.GravityFrames) {
+        if (gravityTick >= Jump.GravityFrames)
+        {
             gravityTick = 0;
             velocityY += 1;
         }
-        if (velocityY != 0) {
+        if (velocityY != 0)
+        {
             grounded = false;
             y += velocityY;
         }
     }
 
-    inline void Land(Pixel targetY) {
+    inline void Land(Pixel targetY)
+    {
         y = targetY;
         velocityY = 0;
         grounded = true;
@@ -44,60 +50,78 @@ class PlayerState {
         gravityTick = 0;
     }
 
-    inline void BounceDown() {
+    inline void BounceDown()
+    {
         velocityY = Jump.BounceVelocity;
         grounded = false;
         jumping = false;
         gravityTick = 0;
     }
 
-    inline void StartJump() {
+    inline void StartJump()
+    {
         velocityY = Jump.Velocity;
         grounded = false;
         jumping = true;
         gravityTick = 0;
     }
 
-    inline void SelectDisplayFrame(bool moving) {
-        displayFrame = grounded switch {
+    inline void SelectDisplayFrame(bool moving)
+    {
+        displayFrame = grounded switch
+        {
             false => 4,
-            _ => moving switch {
+            _ => moving switch
+            {
                 false => 0,
                 _ => Animation.Frame(run, animTick)
             }
         };
     }
 
-    inline void HandleJumpInput() {
-        if (Input.WasPressed(Button.A)) {
-            if (grounded) {
+    inline void HandleJumpInput()
+    {
+        if (Input.WasPressed(Button.A))
+        {
+            if (grounded)
+            {
                 StartJump();
             }
         }
 
-        if (jumping) {
+        if (jumping)
+        {
             jumpTicks = Input.HoldTicks(Button.A);
-            if (Input.IsDown(Button.A)) {
-                if (jumpTicks < Jump.BoostTicks) {
-                    if ((jumpTicks & Jump.BoostTickMask) != 0) {
+            if (Input.IsDown(Button.A))
+            {
+                if (jumpTicks < Jump.BoostTicks)
+                {
+                    if ((jumpTicks & Jump.BoostTickMask) != 0)
+                    {
                         velocityY -= 1;
                     }
                 }
             }
 
-            if (Input.WasReleased(Button.A)) {
+            if (Input.WasReleased(Button.A))
+            {
                 jumping = false;
             }
         }
     }
 
-    inline void UpdateRunAnimation(CameraState view) {
-        if (view.moving) {
+    inline void UpdateRunAnimation(CameraState view)
+    {
+        if (view.moving)
+        {
             animTick += view.speed;
-            if (animTick >= RunAnimation.CycleTicks) {
+            if (animTick >= RunAnimation.CycleTicks)
+            {
                 animTick -= RunAnimation.CycleTicks;
             }
-        } else {
+        }
+        else
+        {
             animTick = 0;
         }
 

@@ -2,6 +2,7 @@ namespace RetroSharp.GameBoy.Tests;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
+using System.Text.RegularExpressions;
 using Xunit;
 
 public sealed class GameBoyVerticalScrollAcceptanceTests
@@ -320,9 +321,9 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
 
     private static string StationarySource(string source)
     {
-        return source
-            .Replace("Camera.SetPosition(0, cameraY);", "Camera.SetPosition(0, 0);", StringComparison.Ordinal)
-            .Replace("if (direction == 1) {", "if (false) {", StringComparison.Ordinal);
+        var stationary = source
+            .Replace("Camera.SetPosition(0, cameraY);", "Camera.SetPosition(0, 0);", StringComparison.Ordinal);
+        return ReplaceDirectionConditionWithFalse(stationary);
     }
 
     private static string StationaryFreeScrollSource(string source)
@@ -335,8 +336,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
 
     private static string StationaryTallTiledSource(string source)
     {
-        return source
-            .Replace("if (direction == 1) {", "if (false) {", StringComparison.Ordinal);
+        return ReplaceDirectionConditionWithFalse(source);
     }
 
     private static string StationaryDiagonalTiledSource(string source)
@@ -346,6 +346,11 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             .Replace("cameraY += 1;", "cameraY = 0;", StringComparison.Ordinal)
             .Replace("cameraX -= 1;", "cameraX = 0;", StringComparison.Ordinal)
             .Replace("cameraY -= 1;", "cameraY = 0;", StringComparison.Ordinal);
+    }
+
+    private static string ReplaceDirectionConditionWithFalse(string source)
+    {
+        return Regex.Replace(source, @"if\s*\(\s*direction\s*==\s*1\s*\)", "if (false)");
     }
 
     private static string RepositoryFile(string relativePath)

@@ -1,6 +1,7 @@
 import RetroSharp.Portable2D;
 
-void SetupVideo() {
+void SetupVideo()
+{
     Video.Init();
     Palette.Set(0, 0);
     Palette.Set(1, 1);
@@ -9,7 +10,8 @@ void SetupVideo() {
     return;
 }
 
-void DrawBackground() {
+void DrawBackground()
+{
     Tilemap.Set(2, 4, 1);
     Tilemap.Set(3, 4, 1);
     Tilemap.Set(4, 5, 1);
@@ -33,7 +35,8 @@ void DrawBackground() {
     return;
 }
 
-void DefineWorld() {
+void DefineWorld()
+{
     World.Column(0, 0, 0, 2, 0, 4, 5);
     World.Column(1, 0, 0, 2, 0, 4, 5);
     World.Column(2, 0, 0, 0, 0, 4, 5);
@@ -69,13 +72,15 @@ void DefineWorld() {
     return;
 }
 
-void Main() {
+void Main()
+{
     SetupVideo();
     DrawBackground();
     DefineWorld();
     World.Map(16, 9, 6);
 
-    while (true) {
+    while (true)
+    {
         Video.WaitVBlank();
     }
 }

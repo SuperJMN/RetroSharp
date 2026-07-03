@@ -6668,7 +6668,7 @@ public class GameBoyRomCompilerTests
         // grounded, so holding B in the air preserves momentum instead of building extra speed.
         Assert.Contains("HoldDirection(grounded);", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
-        Assert.Contains("if (grounded) {\n            if (Input.IsDown(Button.B)) {", cameraBlock);
+        Assert.Contains("if (grounded)\n        {\n            if (Input.IsDown(Button.B))\n            {", cameraBlock);
         Assert.DoesNotContain("ApplyGroundAcceleration", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);

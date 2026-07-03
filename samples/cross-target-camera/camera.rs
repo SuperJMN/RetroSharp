@@ -1,17 +1,20 @@
 import RetroSharp.Portable2D;
 
-static class Level {
+static class Level
+{
     const i16 Width = 8;
     const i16 StreamY = 10;
     const i16 Height = 4;
 }
 
-static class Marker {
+static class Marker
+{
     const i16 ScreenX = 72;
     const i16 ScreenY = 72;
 }
 
-void Main() {
+void Main()
+{
     Video.Init();
 
     World.Column(0, 1, 2, 3, 4);
@@ -34,7 +37,8 @@ void Main() {
     Camera.Init(Level.Width, Level.StreamY, Level.Height);
     Sprite.Asset(marker, "marker.json");
 
-    while (true) {
+    while (true)
+    {
         Video.WaitVBlank();
         Input.Poll();
         let cameraX = Input.HoldTicks(Button.Right);

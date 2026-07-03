@@ -1,8 +1,16 @@
 import RetroSharp.Portable2D;
 
-enum HudTile { Blank = 0, One = 1, Two = 2, Three = 3, Icon = 5 }
+enum HudTile
+{
+    Blank = 0,
+    One = 1,
+    Two = 2,
+    Three = 3,
+    Icon = 5,
+}
 
-void Main() {
+void Main()
+{
     Video.Init();
     Palette.Set(0, HudTile.Blank);
     Palette.Set(1, HudTile.One);
@@ -14,7 +22,8 @@ void Main() {
     Hud.SetTile(window, 2, 0, HudTile.Two);
     Hud.SetTile(window, 3, 0, HudTile.Three);
 
-    while (true) {
+    while (true)
+    {
         Video.WaitVBlank();
     }
 }

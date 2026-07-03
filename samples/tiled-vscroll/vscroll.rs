@@ -1,17 +1,20 @@
 import RetroSharp.Portable2D;
 
-static class Level {
+static class Level
+{
     const i16 Width = 40;
     const i16 StreamY = 0;
     const i16 Height = 60;
 }
 
-static class Scroll {
+static class Scroll
+{
     const i16 MaxY = 240;
     const i16 HoldFrames = 32;
 }
 
-void Main() {
+void Main()
+{
     Video.Init();
 
     World.Load("vscroll.tmj");
@@ -21,25 +24,37 @@ void Main() {
     u8 direction = 1;
     u8 holdTicks = 0;
 
-    while (true) {
+    while (true)
+    {
         Video.WaitVBlank();
         Camera.SetPosition(0, cameraY);
         Camera.Apply();
 
-        if (direction == 1) {
-            if (cameraY < Scroll.MaxY) {
+        if (direction == 1)
+        {
+            if (cameraY < Scroll.MaxY)
+            {
                 cameraY += 1;
-            } else if (holdTicks < Scroll.HoldFrames) {
+            }
+            else if (holdTicks < Scroll.HoldFrames)
+            {
                 holdTicks += 1;
-            } else {
+            }
+            else
+            {
                 holdTicks = 0;
                 direction = 0;
                 cameraY -= 1;
             }
-        } else {
-            if (cameraY > 0) {
+        }
+        else
+        {
+            if (cameraY > 0)
+            {
                 cameraY -= 1;
-            } else {
+            }
+            else
+            {
                 direction = 1;
                 cameraY += 1;
             }

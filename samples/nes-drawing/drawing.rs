@@ -3,9 +3,18 @@ import RetroSharp.Portable2D;
 const MapWidth = 32;
 const MapHeight = 30;
 
-enum Tile { Empty = 0, Face = 1, Eye = 2, Mouth = 3, Platform = 4, PlatformEdge = 5 }
+enum Tile
+{
+    Empty = 0,
+    Face = 1,
+    Eye = 2,
+    Mouth = 3,
+    Platform = 4,
+    PlatformEdge = 5,
+}
 
-void SetupVideo() {
+void SetupVideo()
+{
     Video.Init();
     Palette.Set(0, 15);
     Palette.Set(1, 39);
@@ -14,12 +23,14 @@ void SetupVideo() {
     return;
 }
 
-void ClearBackground() {
+void ClearBackground()
+{
     Tilemap.Fill(0, 0, MapWidth, MapHeight, Tile.Empty);
     return;
 }
 
-void DrawFace() {
+void DrawFace()
+{
     Tilemap.Set(13, 10, Tile.Face);
     Tilemap.Set(14, 10, Tile.Face);
     Tilemap.Set(15, 10, Tile.Face);
@@ -68,7 +79,8 @@ void DrawFace() {
     return;
 }
 
-void DrawPlatform() {
+void DrawPlatform()
+{
     Tilemap.Set(13, 18, Tile.PlatformEdge);
     Tilemap.Set(14, 18, Tile.Platform);
     Tilemap.Set(15, 18, Tile.Platform);
@@ -78,7 +90,8 @@ void DrawPlatform() {
     return;
 }
 
-void Main() {
+void Main()
+{
     SetupVideo();
     ClearBackground();
     DrawFace();
