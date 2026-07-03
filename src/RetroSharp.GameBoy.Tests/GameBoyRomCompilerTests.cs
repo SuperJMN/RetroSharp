@@ -5090,7 +5090,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
         Assert.Contains("frame.ResolveCeilingHit(player, screenX, footWorldY);", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("Pixel footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid)", source);
         Assert.Contains("let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
         Assert.Contains("let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
@@ -6560,7 +6560,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("NoTileHit = 255", source);
         Assert.Contains("inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("Pixel footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("if (footTile != CollisionProbe.NoTileHit)", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("CollisionProbe.TileSize2", source);
@@ -6750,7 +6750,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("if (velocityY < 0)", source);
         Assert.DoesNotContain("y = 0;", source);
         Assert.Contains("player.velocityY > 0", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("Pixel footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
@@ -6926,7 +6926,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("World.Map(", source);
         Assert.DoesNotContain("map_column(", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("Pixel footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.velocityY > 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("failTile", source);

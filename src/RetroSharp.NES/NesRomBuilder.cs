@@ -991,6 +991,11 @@ internal sealed class NesRuntimeCompiler
                 EmitRuntimeStorageFromZeroPageXToWordStorage(ArrayBaseAddress(indexExpression.BaseIdentifier), VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, 0)), address);
                 return;
             case FunctionCall call:
+                if (TryEmitWordValueCallToStorage(call, address))
+                {
+                    return;
+                }
+
                 EmitValueCallToA(call);
                 builder.StoreAZeroPage(address);
                 builder.LoadAImmediate(0);
@@ -1112,12 +1117,12 @@ internal sealed class NesRuntimeCompiler
             rightType = "u16";
         }
 
+        EmitHighByteToScratch(rightAddress, rightType);
         builder.LoadAZeroPage(address);
         builder.ClearCarry();
         builder.AddZeroPage(rightAddress);
         builder.StoreAZeroPage(address);
 
-        EmitHighByteToScratch(rightAddress, rightType);
         builder.LoadAZeroPage(HighAddress(address));
         builder.AddZeroPage(ExpressionScratchAddress);
         builder.StoreAZeroPage(HighAddress(address));
@@ -1144,12 +1149,12 @@ internal sealed class NesRuntimeCompiler
             rightType = "u16";
         }
 
+        EmitHighByteToScratch(rightAddress, rightType);
         builder.LoadAZeroPage(address);
         builder.SetCarry();
         builder.SubtractZeroPage(rightAddress);
         builder.StoreAZeroPage(address);
 
-        EmitHighByteToScratch(rightAddress, rightType);
         builder.LoadAZeroPage(HighAddress(address));
         builder.SubtractZeroPage(ExpressionScratchAddress);
         builder.StoreAZeroPage(HighAddress(address));
@@ -3084,6 +3089,73 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
+    private void EmitSdkByteExpressionHighByteToA(SdkByteExpression expression)
+    {
+        switch (expression)
+        {
+            case SdkByteExpression.Constant:
+                builder.LoadAImmediate(0);
+                break;
+            case SdkByteExpression.Variable variable:
+                EmitSdkStorageLocationHighByteToA(variable.Location);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkStorageLocationHighByteToA(SdkStorageLocation location)
+    {
+        switch (location)
+        {
+            case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
+                EmitRuntimeMemberIndexToX(runtimeIndexed.BaseName, runtimeIndexed.Index);
+                EmitStorageHighByteToA(
+                    RuntimeIndexedMemberBaseAddress(runtimeIndexed.BaseName, runtimeIndexed.FieldName),
+                    VariableStorageType(IndexedMemberName(runtimeIndexed.BaseName, 0, runtimeIndexed.FieldName)),
+                    indexed: true);
+                return;
+            default:
+                var key = StorageKey(location);
+                EmitStorageHighByteToA(VariableAddress(key), VariableStorageType(key), indexed: false);
+                return;
+        }
+    }
+
+    private void EmitStorageHighByteToA(byte address, string type, bool indexed)
+    {
+        if (IsWordBackedType(type))
+        {
+            if (indexed)
+            {
+                builder.LoadAZeroPageX(HighAddress(address));
+            }
+            else
+            {
+                builder.LoadAZeroPage(HighAddress(address));
+            }
+
+            return;
+        }
+
+        if (type == "i8")
+        {
+            if (indexed)
+            {
+                builder.LoadAZeroPageX(address);
+            }
+            else
+            {
+                builder.LoadAZeroPage(address);
+            }
+
+            EmitSignExtensionFromA();
+            return;
+        }
+
+        builder.LoadAImmediate(0);
+    }
+
     internal void EmitStreamMapColumn(Sdk2DOperation.StreamMapColumn operation)
     {
         var worldMap = program.WorldMap
@@ -4219,6 +4291,55 @@ internal sealed class NesRuntimeCompiler
         builder.Label(endLabel);
     }
 
+    private void EmitCameraAabbHitTopToWordStorage(Sdk2DOperation.CameraAabbHitTop operation, byte address)
+    {
+        if (operation.WorldId != "default")
+        {
+            throw new InvalidOperationException($"Unsupported NES world id '{operation.WorldId}'.");
+        }
+
+        var callName = "camera_aabb_hit_top";
+        var config = EnsureCameraConfigured(callName);
+        _ = WorldMapForFlagQuery(callName);
+        var width = CameraAabbWidth(operation.Width);
+        var flags = (int)operation.Flags;
+        if (width == 0 || operation.Height == 0 || flags == 0)
+        {
+            EmitNoTileHitToWordStorage(address);
+            return;
+        }
+
+        ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_hit_top");
+
+        var endLabel = builder.CreateLabel("camera_aabb_hit_top_word_end");
+        foreach (var yOffset in AabbSampleOffsets(operation.Height))
+        {
+            foreach (var xOffset in AabbSampleOffsets(width))
+            {
+                var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_word_next");
+                var hitTopOffset = operation.WorldYOffset + yOffset;
+                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
+                builder.AndImmediate(flags);
+                builder.CompareImmediate(0);
+                builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
+                EmitWorldPixelTileTopToStorage(operation.WorldY, hitTopOffset, address);
+                builder.JumpAbsolute(endLabel);
+                builder.Label(nextProbeLabel);
+            }
+        }
+
+        EmitNoTileHitToWordStorage(address);
+        builder.Label(endLabel);
+    }
+
+    private void EmitNoTileHitToWordStorage(byte address)
+    {
+        builder.LoadAImmediate(255);
+        builder.StoreAZeroPage(address);
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(HighAddress(address));
+    }
+
     internal void EmitCameraScreenAabbTiles(Sdk2DOperation.CameraScreenAabbTiles operation)
     {
         if (operation.WorldId != "default")
@@ -4501,11 +4622,50 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitWorldPixelToTileCoordinate(SdkByteExpression expression, int offset)
     {
-        EmitSdkByteExpressionToA(expression);
-        EmitAddSignedImmediate(offset);
+        if (TrySdkConst(expression, out var constant))
+        {
+            builder.LoadAImmediate((constant + offset) / 8);
+            return;
+        }
+
+        if (!IsSdkExpressionWordBacked(expression))
+        {
+            EmitSdkByteExpressionToA(expression);
+            EmitAddSignedImmediate(offset);
+            builder.ShiftRightA();
+            builder.ShiftRightA();
+            builder.ShiftRightA();
+            return;
+        }
+
+        EmitSdkWordExpressionWithSignedOffsetToStorage(expression, offset, RuntimeIndexScratchAddress);
+        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.ShiftRightA();
+        builder.StoreAZeroPage(CollisionRowScratchAddress);
+        builder.LoadAZeroPage(HighAddress(RuntimeIndexScratchAddress));
+        builder.AndImmediate(0x07);
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.OrZeroPage(CollisionRowScratchAddress);
+    }
+
+    private bool IsSdkExpressionWordBacked(SdkByteExpression expression)
+    {
+        return expression is SdkByteExpression.Variable variable && IsSdkStorageLocationWordBacked(variable.Location);
+    }
+
+    private bool IsSdkStorageLocationWordBacked(SdkStorageLocation location)
+    {
+        return location switch
+        {
+            SdkStorageLocation.RuntimeIndexedField runtimeIndexed => IsWordBackedType(VariableStorageType(IndexedMemberName(runtimeIndexed.BaseName, 0, runtimeIndexed.FieldName))),
+            _ => IsWordBackedType(VariableStorageType(StorageKey(location))),
+        };
     }
 
     private void EmitWorldPixelTileTop(SdkByteExpression expression, int offset)
@@ -4513,6 +4673,56 @@ internal sealed class NesRuntimeCompiler
         EmitSdkByteExpressionToA(expression);
         EmitAddSignedImmediate(offset);
         builder.AndImmediate(0xF8);
+    }
+
+    private void EmitWorldPixelTileTopToStorage(SdkByteExpression expression, int offset, byte address)
+    {
+        EmitSdkWordExpressionWithSignedOffsetToStorage(expression, offset, address);
+        builder.LoadAZeroPage(address);
+        builder.AndImmediate(0xF8);
+        builder.StoreAZeroPage(address);
+    }
+
+    private void EmitSdkWordExpressionWithSignedOffsetToStorage(SdkByteExpression expression, int offset, byte address)
+    {
+        if (offset is < -255 or > 255)
+        {
+            throw new InvalidOperationException("NES camera AABB hit-top offset must fit in one byte.");
+        }
+
+        if (expression is SdkByteExpression.Constant constant)
+        {
+            EmitStoreWordImmediate(address, constant.Value + offset);
+            return;
+        }
+
+        EmitSdkByteExpressionHighByteToA(expression);
+        builder.StoreAZeroPage(HighAddress(address));
+        EmitSdkByteExpressionToA(expression);
+
+        if (offset > 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(offset);
+            builder.StoreAZeroPage(address);
+            builder.LoadAZeroPage(HighAddress(address));
+            builder.AddImmediate(0);
+            builder.StoreAZeroPage(HighAddress(address));
+            return;
+        }
+
+        if (offset < 0)
+        {
+            builder.SetCarry();
+            builder.SubtractImmediate(-offset);
+            builder.StoreAZeroPage(address);
+            builder.LoadAZeroPage(HighAddress(address));
+            builder.SubtractImmediate(0);
+            builder.StoreAZeroPage(HighAddress(address));
+            return;
+        }
+
+        builder.StoreAZeroPage(address);
     }
 
     private void EmitCameraPixelToSourceRow(SdkByteExpression screenPixelY, int screenPixelYOffset, int mapHeight)
@@ -5223,6 +5433,64 @@ internal sealed class NesRuntimeCompiler
             CastSyntax cast => PreservesX(cast.Expression),
             ConditionalExpressionSyntax conditional => PreservesX(conditional.Condition) && PreservesX(conditional.WhenTrue) && PreservesX(conditional.WhenFalse),
             BinaryExpressionSyntax binary => PreservesX(binary.Left) && PreservesX(binary.Right),
+            _ => false,
+        };
+    }
+
+    private bool TryEmitWordValueCallToStorage(FunctionCall call, byte address)
+    {
+        if (call.Name == "camera_aabb_hit_top")
+        {
+            EmitCameraAabbHitTopToWordStorage(Sdk2DOperationCollector.ReadCameraAabbHitTop(call), address);
+            return true;
+        }
+
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (!function.IsExtern)
+        {
+            if (!userFunctionCallStack.Add(function.Name))
+            {
+                throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
+            }
+
+            try
+            {
+                return TryEmitWordExpressionToStorage(
+                    ParameterSubstitution.SubstituteReturnExpression(function, call, "NES"),
+                    address);
+            }
+            finally
+            {
+                userFunctionCallStack.Remove(function.Name);
+            }
+        }
+
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, NesTarget.Intrinsics);
+        if (intrinsic.Operation != TargetIntrinsicOperation.CameraAabbHitTop)
+        {
+            return false;
+        }
+
+        NesVideoProgram.RequireArity(call, intrinsic.Arity);
+        EmitCameraAabbHitTopToWordStorage(
+            Sdk2DOperationCollector.ReadCameraAabbHitTop(
+                TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                program.Functions,
+                NesTarget.Intrinsics),
+            address);
+        return true;
+    }
+
+    private bool TryEmitWordExpressionToStorage(ExpressionSyntax expression, byte address)
+    {
+        return expression switch
+        {
+            CastSyntax cast => TryEmitWordExpressionToStorage(cast.Expression, address),
+            FunctionCall call => TryEmitWordValueCallToStorage(call, address),
             _ => false,
         };
     }

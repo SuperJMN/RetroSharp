@@ -2096,6 +2096,61 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void I16_plus_equals_positive_i8_preserves_low_byte_carry_nes()
+    {
+        const string source = """
+                              void Main() {
+                                  i16 y = 142;
+                                  i8 velocityY = 1;
+                                  y += velocityY;
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(
+            ContainsSequence(prg, [0xA5, 0x00, 0x18, 0x65, 0x02, 0x85, 0x00, 0xA5, 0x01, 0x65, 0xE9, 0x85, 0x01]),
+            "i16 += i8 should preserve the low-byte carry into the high-byte ADC after sign-extension has been computed.");
+    }
+
+    [Fact]
+    public void Camera_aabb_hit_top_preserves_i16_world_y_page_nes()
+    {
+        var tiles = string.Join(", ", Enumerable.Repeat(0, 64));
+        var flags = string.Join(", ", Enumerable.Range(0, 64).Select(row => row == 32 ? 1 : 0));
+        var source = $$"""
+                       void Main() {
+                           World.Column(0, {{tiles}});
+                           World.Flags(0, {{flags}});
+                           World.Map(1, 0, 64);
+                           Camera.Init(1, 0, 60);
+                           Camera.SetPosition(0, 1);
+                           i16 footY = 264;
+                           i16 hitTop = Camera.AabbHitTop(0, footY - 8, 8, 16, 1);
+                           i16 landedY = hitTop - 31;
+                           return;
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(
+            ContainsSequence(
+                prg,
+                [0xA5, 0x01, 0x85, 0xE9, 0xA5, 0x00, 0x38, 0xE9, 0x08, 0x85, 0xE8, 0xA5, 0xE9, 0xE9, 0x00, 0x85, 0xE9, 0xA5, 0xE8, 0x4A, 0x4A, 0x4A, 0x85, 0xE6, 0xA5, 0xE9, 0x29, 0x07, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A, 0x05, 0xE6]),
+            "Camera.AabbHitTop should compute world tile rows from the full i16 world Y, not only the low byte.");
+
+        Assert.True(
+            ContainsSequence(
+                prg,
+                [0xA5, 0x01, 0x85, 0x03, 0xA5, 0x00, 0x38, 0xE9, 0x08, 0x85, 0x02, 0xA5, 0x03, 0xE9, 0x00, 0x85, 0x03, 0xA5, 0x02, 0x29, 0xF8, 0x85, 0x02]),
+            "Camera.AabbHitTop assigned to i16 should preserve the computed world-Y high byte instead of zero-extending the low byte.");
+    }
+
+    [Fact]
     public void Compiles_fixed_size_array_constant_indices_as_adjacent_zero_page_bytes()
     {
         const string source = """
