@@ -1,0 +1,12 @@
+{
+  "targets": [ "gb", "nes" ],
+  "sources": [
+    "src/main.rs"
+  ],
+  "libraryPaths": [
+    "lib"
+  ],
+  "libraries": [
+    "Acme.Timing"
+  ]
+}

@@ -5,6 +5,9 @@ Last updated: 2026-07-01.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
+For the current public package vs internal compiler model boundary, see
+`docs/SdkArchitecture.md`.
+
 The project is viable if portability means "shared contract with explicit target capabilities, compile-time limits, and predictable lowering." It is not viable if the SDK promises identical graphics behavior, cost, and limits across every 8-bit machine.
 
 ## Current Roadmap State

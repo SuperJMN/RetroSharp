@@ -89,6 +89,33 @@ public sealed class SampleApiQuarantineTests
         }
     }
 
+    [Fact]
+    public void Source_library_package_sample_declares_local_library_path_and_import()
+    {
+        var manifest = LoadManifest();
+        var sample = Assert.Single(
+            manifest.Samples,
+            sample => sample.Path == "samples/source-library-package/source-library.retrosharp.json");
+
+        Assert.Equal("portable-sdk", sample.Layer);
+        Assert.Equal(new[] { "gb", "nes" }, sample.Targets);
+        Assert.Equal(new[] { "samples/source-library-package/lib" }, sample.LibraryPaths);
+
+        using var projectJson = JsonDocument.Parse(File.ReadAllText(RepositoryFile(sample.Path)));
+        var project = projectJson.RootElement;
+        Assert.Equal(new[] { "src/main.rs" }, project.GetProperty("sources").EnumerateArray().Select(value => value.GetString()).ToArray());
+        Assert.Equal(new[] { "lib" }, project.GetProperty("libraryPaths").EnumerateArray().Select(value => value.GetString()).ToArray());
+        Assert.Equal(new[] { "Acme.Timing" }, project.GetProperty("libraries").EnumerateArray().Select(value => value.GetString()).ToArray());
+
+        using var libraryJson = JsonDocument.Parse(File.ReadAllText(RepositoryFile("samples/source-library-package/lib/acme-timing/retrosharp-library.json")));
+        var library = libraryJson.RootElement;
+        Assert.Equal("Acme.Timing", library.GetProperty("import").GetString());
+        Assert.Equal("physical", library.GetProperty("namespaceMode").GetString());
+        Assert.Equal("Acme.Timing", library.GetProperty("rootNamespace").GetString());
+        Assert.Equal("src", library.GetProperty("sourceRoot").GetString());
+        Assert.Equal(new[] { "gb", "nes" }, library.GetProperty("targets").EnumerateArray().Select(value => value.GetString()).ToArray());
+    }
+
     private static SampleManifest LoadManifest()
     {
         var json = File.ReadAllText(RepositoryFile("samples/manifest.json"));
@@ -101,16 +128,38 @@ public sealed class SampleApiQuarantineTests
     {
         foreach (var libraryPath in manifest.Samples.SelectMany(sample => sample.LibraryPaths ?? []))
         {
-            var libraryManifestPath = RepositoryFile($"{libraryPath}/retrosharp-library.json");
-            var json = File.ReadAllText(libraryManifestPath);
-            var library = JsonSerializer.Deserialize<SampleLibraryManifest>(json, JsonOptions)
-                ?? throw new InvalidOperationException($"{libraryPath}/retrosharp-library.json is empty.");
-            var directory = Path.GetDirectoryName(libraryManifestPath)
-                ?? throw new InvalidOperationException($"Could not resolve directory for '{libraryManifestPath}'.");
-
-            foreach (var source in library.Sources)
+            foreach (var libraryManifestPath in SampleLibraryManifestPaths(libraryPath))
             {
-                yield return RelativePath(Path.GetFullPath(Path.Combine(directory, source)));
+                var json = File.ReadAllText(libraryManifestPath);
+                var library = JsonSerializer.Deserialize<SampleLibraryManifest>(json, JsonOptions)
+                    ?? throw new InvalidOperationException($"{RelativePath(libraryManifestPath)} is empty.");
+                var directory = Path.GetDirectoryName(libraryManifestPath)
+                    ?? throw new InvalidOperationException($"Could not resolve directory for '{libraryManifestPath}'.");
+
+                foreach (var source in library.Sources)
+                {
+                    yield return RelativePath(Path.GetFullPath(Path.Combine(directory, source)));
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> SampleLibraryManifestPaths(string libraryPath)
+    {
+        var root = RepositoryPath(libraryPath);
+        var directManifest = Path.Combine(root, "retrosharp-library.json");
+        if (File.Exists(directManifest))
+        {
+            yield return directManifest;
+            yield break;
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(root).Order(StringComparer.Ordinal))
+        {
+            var childManifest = Path.Combine(directory, "retrosharp-library.json");
+            if (File.Exists(childManifest))
+            {
+                yield return childManifest;
             }
         }
     }
@@ -175,6 +224,17 @@ public sealed class SampleApiQuarantineTests
         }
 
         throw new InvalidOperationException($"Could not find repository directory '{relativePath}'.");
+    }
+
+    private static string RepositoryPath(string relativePath)
+    {
+        var path = Path.Combine(RepositoryRoot(), relativePath);
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            throw new InvalidOperationException($"Could not find repository path '{relativePath}'.");
+        }
+
+        return path;
     }
 
     private static string RelativePath(string absolutePath)
