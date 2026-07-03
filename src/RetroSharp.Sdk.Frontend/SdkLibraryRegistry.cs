@@ -40,7 +40,10 @@ public sealed class SdkLibraryRegistry
             ? BuiltInLibraries.ToList()
             : [];
 
-        foreach (var manifestPath in libraryPaths.SelectMany(DiscoverManifestFiles))
+        foreach (var manifestPath in libraryPaths
+            .SelectMany(DiscoverManifestFiles)
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.Ordinal))
         {
             resolvedLibraries.Add(LoadManifest(manifestPath));
         }

@@ -1,0 +1,11 @@
+{
+  "import": "Acme.Timing",
+  "rootNamespace": "Acme.Timing",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "sources": [
+    "src/frame/rules.rs",
+    "src/api.rs"
+  ],
+  "targets": [ "gb", "nes" ]
+}

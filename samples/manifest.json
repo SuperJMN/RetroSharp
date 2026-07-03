@@ -7,6 +7,13 @@
       "targets": ["gb", "nes"]
     },
     {
+      "path": "samples/source-library-package/source-library.retrosharp.json",
+      "readme": "samples/source-library-package/README.md",
+      "layer": "portable-sdk",
+      "targets": ["gb", "nes"],
+      "libraryPaths": ["samples/source-library-package/lib"]
+    },
+    {
       "path": "samples/actor-framework/actors.rs",
       "readme": "samples/actor-framework/README.md",
       "layer": "target-acceptance",

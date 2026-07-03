@@ -33,6 +33,35 @@ public sealed class SdkV1ReferenceTests
         Assert.Contains("Target 'nes' does not support Window HUD", reference, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Sdk_architecture_doc_names_public_package_and_internal_compiler_model()
+    {
+        var architecture = File.ReadAllText(RepositoryFile("docs/SdkArchitecture.md"));
+
+        Assert.Contains("# RetroSharp SDK Architecture", architecture, StringComparison.Ordinal);
+        Assert.Contains("`sdk/RetroSharp.Portable2D`", architecture, StringComparison.Ordinal);
+        Assert.Contains("source-only package", architecture, StringComparison.Ordinal);
+        Assert.Contains("`RetroSharp.Sdk.Frontend`", architecture, StringComparison.Ordinal);
+        Assert.Contains("`RetroSharp.Core.Sdk`", architecture, StringComparison.Ordinal);
+        Assert.Contains("internal compiler model", architecture, StringComparison.Ordinal);
+        Assert.Contains("not a compiler plugin ABI", architecture, StringComparison.Ordinal);
+        Assert.Contains("does not add new `Sdk2DOperation` records", architecture, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Portable2d_package_readme_documents_source_only_library_contract()
+    {
+        var readme = File.ReadAllText(RepositoryFile("sdk/RetroSharp.Portable2D/README.md"));
+
+        Assert.Contains("# RetroSharp.Portable2D", readme, StringComparison.Ordinal);
+        Assert.Contains("source-only", readme, StringComparison.Ordinal);
+        Assert.Contains("retrosharp-library.json", readme, StringComparison.Ordinal);
+        Assert.Contains("`libraries`", readme, StringComparison.Ordinal);
+        Assert.Contains("`--lib-path`", readme, StringComparison.Ordinal);
+        Assert.Contains("does not ship a binary ABI", readme, StringComparison.Ordinal);
+        Assert.Contains("docs/SdkArchitecture.md", readme, StringComparison.Ordinal);
+    }
+
     private static readonly string[] RequiredSignatures =
     [
         "Video.Init()",
