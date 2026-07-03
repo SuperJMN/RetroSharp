@@ -1784,7 +1784,7 @@ public class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal("A28DD8B270B2DFB77F210C7C04619F5775540300920EE8C4D474227D1623C303", Fingerprint(rom));
+        Assert.Equal("2506B2000708BC0E7479CA33ED5E35429998299D96EA60E0A79268EF1276D8F2", Fingerprint(rom));
     }
 
     [Fact]
@@ -2536,7 +2536,7 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0x02, 0x06]), "ROM should contain map row 1 data.");
         Assert.True(ContainsSequence(rom, [0x03, 0x07]), "ROM should contain map row 2 data.");
         Assert.True(ContainsSequence(rom, [0x04, 0x08]), "ROM should contain map row 3 data.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the source map column into DE and a row-table address into HL.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the source map column into DE and a row-table address into HL.");
         Assert.True(ContainsSequence(rom, [0x19, 0x7E, 0x47]), "ROM should read a tile from the map row table and preserve it in B.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x60, 0x6F, 0x26, 0x99, 0x78, 0x77]), "ROM should stream row 11 into the target background column.");
     }
@@ -2562,7 +2562,7 @@ public class GameBoyRomCompilerTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the runtime source map column and the selected row table address.");
         Assert.True(ContainsSequence(rom, [0x19, 0x7E, 0xFE, 0x00]), "ROM should read the tile id into A and compare it with zero.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x01, 0xC0]), "ROM should execute the branch body when the tile is non-zero.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "ROM should execute the branch body when the tile is non-zero.");
     }
 
     [Fact]
@@ -2571,8 +2571,8 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void Main() {
                                   video_init();
-                                  i16 y = 80;
-                                  i16 grounded = 0;
+                                  u8 y = 80;
+                                  u8 grounded = 0;
                                   if (y >= 78) {
                                       grounded = 1;
                                   }
@@ -2601,7 +2601,8 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should add the two byte-backed locals and store the result.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should add the low bytes of two word-backed locals and store the result.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x03, 0xC0, 0x47, 0xFA, 0x01, 0xC0, 0x88, 0xEA, 0x01, 0xC0]), "ROM should propagate carry through the high bytes of two word-backed locals.");
     }
 
     [Fact]
@@ -2625,9 +2626,10 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "ROM should store position.x at the first field address.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x01, 0xC0]), "ROM should store position.y at the next field address.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should use direct loads/stores for member arithmetic with no helper call.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0, 0x3E, 0x00, 0xEA, 0x01, 0xC0]), "ROM should store position.x as a two-byte field.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "ROM should store position.y at the next two-byte field address.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "ROM should use direct low-byte member arithmetic with no helper call.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x03, 0xC0, 0x47, 0xFA, 0x01, 0xC0, 0x88, 0xEA, 0x01, 0xC0]), "ROM should use direct high-byte member arithmetic with no helper call.");
     }
 
     [Fact]
@@ -2748,9 +2750,10 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0]), "Const StartX should compile as an immediate store to the first local.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x01, 0xC0]), "Const Velocity should compile as an immediate store to the second local, with no const storage slot.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x01, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "Const declarations should not shift runtime local addresses.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x28, 0xEA, 0x00, 0xC0, 0x3E, 0x00, 0xEA, 0x01, 0xC0]), "Const StartX should compile as an immediate store to the first two-byte local.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "Const Velocity should compile as an immediate store to the second two-byte local, with no const storage slot.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x47, 0xFA, 0x00, 0xC0, 0x80, 0xEA, 0x00, 0xC0]), "Const declarations should not shift runtime local addresses.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x03, 0xC0, 0x47, 0xFA, 0x01, 0xC0, 0x88, 0xEA, 0x01, 0xC0]), "Const declarations should preserve high-byte arithmetic.");
     }
 
     [Fact]
@@ -2770,9 +2773,9 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x29, 0xEA, 0x00, 0xC0]), "Local const Velocity should compile its derived value as an immediate store to the first local.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x01, 0xC0]), "Local const declarations should not reserve WRAM before the second local.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x01, 0xC0]), "Local const declarations should not shift runtime local addresses.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x29, 0xEA, 0x00, 0xC0, 0x3E, 0x00, 0xEA, 0x01, 0xC0]), "Local const Velocity should compile its derived value as an immediate store to the first two-byte local.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "Local const declarations should not reserve WRAM before the second local.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x02, 0xC0, 0xFA, 0x01, 0xC0, 0xEA, 0x03, 0xC0]), "Local const declarations should not shift runtime local addresses.");
     }
 
     [Fact]
@@ -3052,6 +3055,37 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_u16_i16_locals_and_struct_fields_as_adjacent_wram_words()
+    {
+        const string source = """
+                              struct Position {
+                                  u8 tag;
+                                  u16 x;
+                                  i16 y;
+                              }
+
+                              void Main() {
+                                  Position position = { tag: 1, x: 300u16, y: -2i16 };
+                                  u16 total = position.x + 20u16;
+                                  total -= 5u16;
+                                  if (total == 315u16) {
+                                      position.y += 3i16;
+                                  }
+                                  if (position.y > 0i16) {
+                                      position.x = total;
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(
+            ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x00, 0xC0, 0x3E, 0x2C, 0xEA, 0x01, 0xC0, 0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0xFE, 0xEA, 0x03, 0xC0, 0x3E, 0xFF, 0xEA, 0x04, 0xC0]),
+            "mixed-width struct fields should reserve adjacent WRAM bytes: tag, x low/high, then y low/high.");
+    }
+
+    [Fact]
     public void Compiles_nested_variable_subtraction_without_reusing_expression_scratch()
     {
         const string source = """
@@ -3261,7 +3295,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_struct_array_fields_that_are_not_byte_sized()
+    public void Compiles_struct_array_fields_with_mixed_width_stride()
     {
         const string source = """
                               struct Actor {
@@ -3271,12 +3305,19 @@ public class GameBoyRomCompilerTests
 
                               void Main() {
                                   Actor actors[2];
+                                  actors[1].worldX = 300u16;
+                                  actors[1].y = 7;
+                                  u8 i = 1;
+                                  actors[i].y += 1;
                               }
                               """;
 
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+        var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal("Game Boy target struct array field type 'u16' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.", exception.Message);
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x2C, 0xEA, 0x03, 0xC0, 0x3E, 0x01, 0xEA, 0x04, 0xC0]), "actors[1].worldX should store low/high at base + sizeof(Actor).");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x05, 0xC0]), "actors[1].y should be placed after the two-byte worldX field.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x06, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should use the mixed-width struct stride.");
     }
 
     [Fact]
@@ -4918,7 +4959,7 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xEA, 0xF1, 0xC0]), "input_poll should snapshot the previous button mask before reading the current tick.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0x47]), "input_poll should read the settled action-button group into the current tick mask.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0xB0, 0xEA, 0xF0, 0xC0]), "input_poll should read the settled direction-button group and store a combined button mask.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xF2, 0xC0, 0xEA, 0x03, 0xC0]), "button_hold_ticks(a) should read the A-button hold counter into a game variable.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF2, 0xC0, 0xEA, 0x06, 0xC0, 0x3E, 0x00, 0xEA, 0x07, 0xC0]), "button_hold_ticks(a) should read the A-button hold counter into a game variable.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xCA]), "button_down(a) and button_just_pressed(a) should test the current tick mask.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xF1, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xC2]), "button_just_pressed(a) should reject buttons that were already down in the previous tick.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xC2]), "button_just_released(a) should require the button to be up in the current tick.");
@@ -5163,8 +5204,8 @@ public class GameBoyRomCompilerTests
     {
         const string intSource = """
                                  type Pixel = i16;
-                                 struct S { Pixel grounded; Pixel moving; Pixel x; }
-                                 inline void step(this S s, Pixel grounded) {
+                                 struct S { u8 grounded; u8 moving; Pixel x; }
+                                 inline void step(this S s, u8 grounded) {
                                      if (grounded != 0) { s.x += 1; }
                                      if (s.grounded == 0) { s.x += 1; }
                                  }
@@ -5209,11 +5250,11 @@ public class GameBoyRomCompilerTests
 
                                   void Main() {
                                       video_init();
-                                      Pixel playerY = 0;
-                                      Pixel velocityY = 0;
-                                      Pixel grounded = 0;
-                                      Pixel jumping = 0;
-                                      Pixel displayFrame = 0;
+                                      Pixel playerY;
+                                      Pixel velocityY;
+                                      Pixel grounded;
+                                      Pixel jumping;
+                                      Pixel displayFrame;
                                       playerY = Player.StartY;
                                       velocityY = 0;
                                       grounded = 1;
@@ -5273,9 +5314,9 @@ public class GameBoyRomCompilerTests
                                       world_map(1, 10, 2);
                                       camera_init(1, 10, 2);
                                       input_poll();
-                                      Pixel cameraX = 0;
-                                      Pixel moving = 0;
-                                      bool displayFlipX = false;
+                                      Pixel cameraX;
+                                      Pixel moving;
+                                      bool displayFlipX;
                                       moving = 0;
                                       if (button_down(right) != 0) {
                                           moving = 1;
@@ -6706,8 +6747,8 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("inline pure Pixel WrapWorldX(Pixel x) => x;", source);
         Assert.DoesNotContain("playerWorldX", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("if (velocityY < 0)", source);
-        Assert.Contains("y = 0;", source);
+        Assert.DoesNotContain("if (velocityY < 0)", source);
+        Assert.DoesNotContain("y = 0;", source);
         Assert.Contains("player.velocityY > 0", source);
         Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
@@ -6761,15 +6802,8 @@ public class GameBoyRomCompilerTests
             source.IndexOf("LoadWorld();", StringComparison.Ordinal));
         Assert.Contains("Camera.Apply();", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        var topClampStart = source.IndexOf("if (velocityY < 0)", StringComparison.Ordinal);
-        Assert.True(topClampStart >= 0);
-        var footProbeStart = source.IndexOf("let footWorldY = player.y + Player.FootOffset;", StringComparison.Ordinal);
-        Assert.True(footProbeStart > topClampStart, "Runner should clamp upward Y wrap before collision probes and reset checks.");
-        var topClampBlock = source[topClampStart..footProbeStart];
-        Assert.Contains("if (y > Player.TopWrapY)", topClampBlock);
-        Assert.Contains("y = 0;", topClampBlock);
-        Assert.Contains("velocityY = 0;", topClampBlock);
-        Assert.Contains("jumping = false;", topClampBlock);
+        Assert.DoesNotContain("Player.TopWrapY", source);
+        Assert.DoesNotContain("if (velocityY < 0)", source);
         var solidLandingStart = source.IndexOf("inline void ResolveSolidLanding", StringComparison.Ordinal);
         var fallStart = source.IndexOf("inline void ResolveFall", StringComparison.Ordinal);
         Assert.True(solidLandingStart >= 0);
@@ -6881,7 +6915,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("StartY = 193", source);
         Assert.Contains("FootOffset = 31", source);
-        Assert.Contains("TopWrapY = 240", source);
+        Assert.DoesNotContain("TopWrapY", source);
         Assert.Contains("y = view.y + Player.StartY;", source);
         Assert.Equal(1, CountOccurrences(source, "y = view.y + Player.StartY;"));
         Assert.Equal(1, CountOccurrences(source, "player.Land(footTile - Player.FootOffset);"));

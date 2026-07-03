@@ -41,6 +41,8 @@ Separate design debts: #104 tracks type-system soundness and #105 tracks the rem
 
 ## Layer Model
 
+The layer model is enforced by `src/RetroSharp.Architecture.Tests`: language projects must not reference SDK-frontend or target assemblies, language source must stay free of portable-SDK/target domain terms, portable SDK projects must not reference concrete targets, and any non-target raw hardware terminology must be explicitly allowlisted.
+
 ### Language
 
 The language defines source syntax, types, data layout, and ABI. It must not know about cameras, sprites, tilemaps, or controller semantics.
@@ -49,7 +51,7 @@ Language work belongs here:
 
 - Fixed-width primitives: `u8`, `i8`, `u16`, `i16`, `bool`.
 - Pointers and addressable storage: `ptr<T>`, static data, ROM data, RAM data.
-- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local arrays of byte-backed values or byte-sized structs, byte-array initializer lists and initializer-inferred lengths, per-element struct-array initializer lists, constant or runtime byte indices, struct-array field access such as `actors[i].x`, explicit casts to byte-backed local types, arithmetic and bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, explicit infinite `loop`, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; mixed-width struct-array layout and the shared ABI/layout work remain broader.
+- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local arrays of scalar values or mixed-width structs, byte-array initializer lists and initializer-inferred lengths, per-element struct-array initializer lists, constant or runtime indices, struct-array field access such as `actors[i].x`, explicit casts to scalar local types, byte and direct 16-bit arithmetic/compare/assignment, bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, explicit infinite `loop`, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; the broader shared ABI/layout work remains outside this slice.
 - Functions, parameters, returns, calling convention, and attributes.
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
 - Target attributes such as `[target("gb")]` or `[intrinsic]`.
@@ -1194,7 +1196,7 @@ This iteration treats the implemented source forms as v1 when they satisfy two r
 - They compile through parser, semantic analysis, and the current cartridge targets.
 - They lower to constants, direct branches, direct local storage, direct bit operations, or source-level inline expansion without hidden heap allocation, dispatch tables, closures, iterators, exceptions, or runtime objects.
 
-V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local arrays of byte-backed values or byte-sized structs, initializer lists for byte-backed value arrays, byte-sized struct arrays, and plain local structs, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `loop`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
+V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local arrays of scalar values or mixed-width structs, initializer lists for scalar value arrays, mixed-width struct arrays, and plain local structs, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `loop`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
 
 Tasks:
 
@@ -1321,18 +1323,18 @@ Acceptance criteria:
 
 ### Iteration 13: Static Class Syntax Without Runtime Objects
 
-Status: implemented for restricted class declarations, instance/static methods, and static constants. Dedicated constructor-like initializer syntax remains planned.
+Status: implemented for restricted class declarations, instance/static methods, static constants, cost-naming rejections for managed-object forms, and the optional type-named initializer alias.
 
 Purpose: let authors group state and behavior with familiar class-like syntax while preserving the current 8-bit contract: accepted class code must lower to plain structs plus static or inline helper calls before target emission.
 
-This is source organization, not a managed object model. A class value has fixed layout like a struct. An instance method has a statically known receiver that lowers like a helper with the receiver as the first argument. A constructor-like initializer lowers to an explicit initialization helper. Static members lower to module/static helpers or compile-time constants.
+This is source organization, not a managed object model. A class value has fixed layout like a struct. An instance method has a statically known receiver that lowers like a helper with the receiver as the first argument. The optional `Actor { ... }` initializer spelling is a type-named alias for the existing struct initializer and lowers to zero-fill plus direct field stores. Static members lower to module/static helpers or compile-time constants.
 
 Design rules:
 
 - `class` fields use the same fixed-layout rules as plain structs. No hidden object header, vtable pointer, runtime type id, monitor, or allocator state is inserted.
 - Non-virtual instance methods lower to static receiver helpers such as `Move(this Actor actor, dx, dy)` or inline substitutions, using the receiver-method machinery from Iteration 12.
 - `static` methods and constants lower like module functions and constants. They do not require an instance or runtime module object.
-- Constructor syntax, if accepted, is only shorthand for an explicit `Init`-style helper or zero-fill plus field stores. It must not allocate memory.
+- Type-named initializer syntax such as `Actor { x: 10, y: 20 }` is only shorthand for zero-fill plus field stores. It must not allocate memory.
 - Class variables are value/storage declarations in locals, globals, or explicit pointed storage. There is no implicit `new`, heap allocation, reference identity, copy-on-write, or garbage collection.
 - Any feature that would require virtual dispatch, inheritance layout, interface tables, dynamic type tests, RTTI, destructors, exceptions, closures, or heap-backed lifetime is outside this iteration unless a later roadmap adds an explicit opt-in cost model.
 - Diagnostics must reject unsupported object-oriented forms by naming the hidden cost they would require, for example "virtual method dispatch requires a runtime method table and is not part of static classes."
@@ -1374,10 +1376,10 @@ Tasks:
 - Steps:
   - [x] Parse a restricted `class Name { ... }` declaration with fields, non-virtual instance methods, static methods, and compile-time constants.
   - [x] Represent accepted classes as fixed-layout value types in semantic analysis, not as heap references.
-  - [ ] Reject inheritance, `virtual`, `override`, `interface`, `new`, destructors, RTTI, and dynamic casts with explicit diagnostics.
+  - [x] Reject inheritance, `virtual`, `override`, `abstract`, `interface`, `new`, destructors, RTTI forms, and dynamic casts with explicit diagnostics.
   - [x] Keep class names in the type namespace so `class Actor` can be used anywhere an equivalent `struct Actor` would be valid.
 - Verification:
-  - [x] Parser and semantic tests cover accepted class declarations and the first rejected managed-object form.
+  - [x] Parser and semantic tests cover accepted class declarations and cost-naming diagnostics for rejected managed-object forms.
 
 #### AR-13.2: Lower fields and methods to struct plus helpers
 
@@ -1397,12 +1399,12 @@ Tasks:
 - Layer: language.
 - Candidate files: parser grammar/syntax, initializer lowering, target tests, docs.
 - Steps:
-  - [ ] Choose the initializer spelling, for example `Actor player = Actor { x: 10, y: 20 };` or a restricted constructor form.
-  - [ ] Lower initializer expressions to zero-fill plus direct field stores or an explicit inline `Init` helper.
-  - [ ] Reject allocation-shaped syntax such as `new Actor(...)` unless a later explicit allocation feature exists.
-  - [ ] Document copy semantics and storage placement clearly.
+  - [x] Choose the initializer spelling: `Actor player = Actor { x: 10, y: 20 };` as a thin alias over the existing target-typed `{ ... }` form.
+  - [x] Lower initializer expressions to zero-fill plus direct field stores through the existing struct initializer path.
+  - [x] Reject allocation-shaped syntax such as `new Actor(...)` unless a later explicit allocation feature exists.
+  - [x] Document copy semantics and storage placement clearly.
 - Verification:
-  - [ ] Parser, semantic, and target tests prove initializer syntax emits the same code as explicit struct initialization.
+  - [x] Parser tests prove initializer syntax normalizes to the same AST form as explicit struct initialization; the existing struct initializer target tests continue to cover emission.
 
 Acceptance criteria:
 
@@ -1413,7 +1415,7 @@ Acceptance criteria:
 
 ### Iteration 14: Scalable Platformer Actor Framework Ergonomics
 
-Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (byte-sized struct arrays with `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.6 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative, with the one-slot runner draw hiding inactive/off-window sprite slots and collision/contact/spawn activation culling or recycling by camera window; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite. Non-blocking follow-ups remain documented in `docs/ActorFrameworkRoadmap.md`: AF-5.7 hoists repeated camera-X projection, AF-5.8 hardens `TouchPlayer` against `screenX + width` byte overflow, AF-5.9 decides one-shot versus reactivation spawn policy, and AF-5.10 reduces the current O(spawns)/frame activation scan cost.
+Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (fixed struct arrays with mixed-width `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.6 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative, with the one-slot runner draw hiding inactive/off-window sprite slots and collision/contact/spawn activation culling or recycling by camera window; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite. Non-blocking follow-ups remain documented in `docs/ActorFrameworkRoadmap.md`: AF-5.7 hoists repeated camera-X projection, AF-5.8 hardens `TouchPlayer` against `screenX + width` byte overflow, AF-5.9 decides one-shot versus reactivation spawn policy, and AF-5.10 reduces the current O(spawns)/frame activation scan cost.
 
 Purpose: make complex platformer characters and enemy behaviors practical without asking game authors to hand-write one large `switch` over every enemy kind. This is a framework/SDK ergonomics goal, not a managed object model. The implementation should preserve the current 8-bit contract: fixed storage, predictable update cost, explicit caps, and no heap allocation or runtime polymorphism.
 
@@ -1444,7 +1446,7 @@ This is intentionally sugar over a data-oriented implementation, not a promise o
 Design rules:
 
 - Actor pools have compile-time maximum sizes and explicit storage. The generated representation is fixed arrays or equivalent fixed-layout storage.
-- The language prerequisite for hand-authored pools is fixed-size arrays of byte-sized structs with `pool[i].field` access. AR-14 should build on that storage model or an equivalent source/library-level structure-of-arrays lowering, not on genre-specific compiler operations. True `i16`/`u16` pooled fields require a future mixed-width layout pass.
+- The language prerequisite for hand-authored pools is fixed-size arrays of scalar structs with `pool[i].field` access. AR-14 should build on that storage model or an equivalent source/library-level structure-of-arrays lowering, not on genre-specific compiler operations. `i16`/`u16` pooled fields now use the same mixed-width local layout as direct structs.
 - Actor definitions are data: kind id, sprite/animation ids, hitbox, flags, behavior id, constants such as speed, hp, cooldown, and contact damage.
 - Behaviors are statically selected modules such as `Walker`, `Flyer`, `Patrol`, `Shooter`, `Chaser`, `Hazard`, and simple platformer controller variants. They lower to direct helpers or grouped loops, not to function pointers or vtables.
 - Runtime actor state is explicit and byte-sized where possible: kind, active flag, x/y, vx/vy, state, timer, facing, animation tick, and health.

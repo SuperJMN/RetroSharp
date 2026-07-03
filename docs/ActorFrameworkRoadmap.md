@@ -45,15 +45,14 @@ silently lowering to an expensive fallback.
 
 ## Landed on this branch
 
-- **AF-0 — byte-sized struct arrays with runtime-indexed field access**.
-  Fixed-size local arrays of plain structs whose fields are byte-sized (`u8`,
-  `i8`, `bool`, or enums), with `arr[i].field` reads/writes for constant and
-  runtime indices on Game Boy and NES. Storage is array-of-structs (AoS):
-  per-element field slots flattened as
-  `arr[0].x, arr[0].y, arr[1].x, ...`, stride = field count; runtime access
-  computes `base(arr[0].field) + i * stride`. No bounds check, no heap. Fields
-  must be byte-sized; true `i16`/`u16` fields are rejected until mixed-width
-  layout exists. Total storage is capped at 255 byte slots. This is the storage
+- **AF-0 — mixed-width struct arrays with runtime-indexed field access**.
+  Fixed-size local arrays of plain structs whose fields are scalar (`u8`, `i8`,
+  `u16`, `i16`, `bool`, or enums), with `arr[i].field` reads/writes for
+  constant and runtime indices on Game Boy and NES. Storage is array-of-structs
+  (AoS): per-element field slots are flattened as
+  `arr[0].x, arr[0].y, arr[1].x, ...`, stride = the struct byte size, and
+  runtime access computes `base(arr[0].field) + i * stride`. No bounds check,
+  no heap. Total storage is capped at 255 byte slots. This is the storage
   foundation the pool is built on.
 - **AF-1.1 — struct-array initializers and per-element field defaults**. Local
   arrays such as `Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];`

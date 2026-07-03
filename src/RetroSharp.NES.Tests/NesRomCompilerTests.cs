@@ -335,8 +335,8 @@ public class NesRomCompilerTests
     {
         const string intSource = """
                                  type Pixel = i16;
-                                 struct S { Pixel grounded; Pixel moving; Pixel x; }
-                                 inline void step(this S s, Pixel grounded) {
+                                 struct S { u8 grounded; u8 moving; Pixel x; }
+                                 inline void step(this S s, u8 grounded) {
                                      if (grounded != 0) { s.x += 1; }
                                      if (s.grounded == 0) { s.x += 1; }
                                  }
@@ -1794,8 +1794,8 @@ public class NesRomCompilerTests
         var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         Assert.Equal(40976, rom.Length);
-        Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00]), "ROM should store position.x at the first zero-page field address.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "ROM should copy position.x to adjacent position.y with direct zero-page access.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01]), "ROM should store position.x as a two-byte zero-page field.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x02, 0xA5, 0x01, 0x85, 0x03]), "ROM should copy position.x to the next two-byte position.y field with direct zero-page access.");
     }
 
     [Fact]
@@ -1924,9 +1924,9 @@ public class NesRomCompilerTests
         var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         Assert.Equal(40976, rom.Length);
-        Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00]), "Const StartX should compile as an immediate store to the first zero-page local.");
-        Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x01]), "Const Copy should compile as an immediate store to the second zero-page local, with no const storage slot.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "Const declarations should not shift runtime local addresses.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x28, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01]), "Const StartX should compile as an immediate store to the first two-byte zero-page local.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x02, 0xA9, 0x00, 0x85, 0x03]), "Const Copy should compile as an immediate store to the second two-byte zero-page local, with no const storage slot.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x02, 0xA5, 0x01, 0x85, 0x03]), "Const declarations should not shift runtime local addresses.");
     }
 
     [Fact]
@@ -1948,9 +1948,9 @@ public class NesRomCompilerTests
         var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
         Assert.Equal(40976, rom.Length);
-        Assert.True(ContainsSequence(prg, [0xA9, 0x29, 0x85, 0x00]), "Local const Copy should compile its derived value as an immediate store to the first zero-page local.");
-        Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x01]), "Local const declarations should not reserve zero-page storage before the second local.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "Local const declarations should not shift runtime local addresses.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x29, 0x85, 0x00, 0xA9, 0x00, 0x85, 0x01]), "Local const Copy should compile its derived value as an immediate store to the first two-byte zero-page local.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x02, 0xA9, 0x00, 0x85, 0x03]), "Local const declarations should not reserve zero-page storage before the second local.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x02, 0xA5, 0x01, 0x85, 0x03]), "Local const declarations should not shift runtime local addresses.");
     }
 
     [Fact]
@@ -2060,6 +2060,39 @@ public class NesRomCompilerTests
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x00]), "offsetof(Actor, y) should compile as the field byte offset immediate.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x03, 0x85, 0x01]), "offsetof(Actor, active) should compile as the field byte offset immediate.");
         Assert.True(ContainsSequence(prg, [0xA5, 0x00, 0x85, 0x01]), "offsetof expressions should not reserve storage or emit helper code.");
+    }
+
+    [Fact]
+    public void Compiles_u16_i16_locals_and_struct_fields_as_adjacent_zero_page_words()
+    {
+        const string source = """
+                              struct Position {
+                                  u8 tag;
+                                  u16 x;
+                                  i16 y;
+                              }
+
+                              void Main() {
+                                  Position position = { tag: 1, x: 300u16, y: -2i16 };
+                                  u16 total = position.x + 20u16;
+                                  total -= 5u16;
+                                  if (total == 315u16) {
+                                      position.y += 3i16;
+                                  }
+                                  if (position.y > 0i16) {
+                                      position.x = total;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(
+            ContainsSequence(prg, [0xA9, 0x01, 0x85, 0x00, 0xA9, 0x2C, 0x85, 0x01, 0xA9, 0x01, 0x85, 0x02, 0xA9, 0xFE, 0x85, 0x03, 0xA9, 0xFF, 0x85, 0x04]),
+            "mixed-width struct fields should reserve adjacent zero-page bytes: tag, x low/high, then y low/high.");
     }
 
     [Fact]
@@ -2475,7 +2508,7 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Rejects_struct_array_fields_that_are_not_byte_sized()
+    public void Compiles_struct_array_fields_with_mixed_width_stride()
     {
         const string source = """
                               struct Actor {
@@ -2485,13 +2518,21 @@ public class NesRomCompilerTests
 
                               void Main() {
                                   Actor actors[2];
+                                  actors[1].worldX = 300u16;
+                                  actors[1].y = 7;
+                                  u8 i = 1;
+                                  actors[i].y += 1;
                                   return;
                               }
                               """;
 
-        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
 
-        Assert.Equal("NES target struct array field type 'u16' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.", exception.Message);
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(prg, [0xA9, 0x2C, 0x85, 0x03, 0xA9, 0x01, 0x85, 0x04]), "actors[1].worldX should store low/high at base + sizeof(Actor).");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x07, 0x85, 0x05]), "actors[1].y should be placed after the two-byte worldX field.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x06, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x02, 0x18, 0x69, 0x01, 0x95, 0x02]), "actors[i].y should use the mixed-width struct stride.");
     }
 
     [Fact]
@@ -3243,6 +3284,32 @@ public class NesRomCompilerTests
 
         Assert.True(ContainsAbsoluteJumpTo(prg, 0x8000 + increment, continueCompare, breakCompare), "continue should jump to the for increment.");
         Assert.True(ContainsAbsoluteJumpAfter(prg, breakCompare, prg.Length, 0x8000 + increment + 7), "break should jump beyond the increment and final loop jump.");
+    }
+
+    [Fact]
+    public void Compiles_runtime_while_condition_as_direct_branching()
+    {
+        const string source = """
+                              void Main() {
+                                  u8 x = 0;
+                                  while (x < 3) {
+                                      x += 1;
+                                  }
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        var conditionCompare = IndexOfSequence(prg, [0xA5, 0x00, 0xC9, 0x03, 0xB0]);
+        var bodyIncrement = IndexOfSequence(prg, [0xA5, 0x00, 0x18, 0x69, 0x01, 0x85, 0x00]);
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(conditionCompare >= 0, "while condition should compare runtime x with 3.");
+        Assert.True(bodyIncrement > conditionCompare, "while body should emit after the runtime condition check.");
+        Assert.True(ContainsAbsoluteJumpTo(prg, 0x8000 + conditionCompare, bodyIncrement, prg.Length), "while should jump back to the condition after the body.");
+        Assert.True(ReadRelativeTarget(prg, conditionCompare + 4) > 0x8000 + bodyIncrement, "false condition should branch beyond the loop body.");
     }
 
     [Fact]

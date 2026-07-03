@@ -889,6 +889,8 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort CameraStreamColumnsRemainingAddress = 0xC12C;
     private const ushort CameraSetPositionTargetAddress = 0xC12D;
     private const ushort CameraSetPositionStepsRemainingAddress = 0xC12E;
+    private const ushort WordScratchLowAddress = 0xC12F;
+    private const ushort WordScratchHighAddress = 0xC130;
     // Camera movement walks the camera toward the requested position one pixel at a time. A single
     // move never crosses more than one tile boundary (8 px), which is the per-frame streaming budget
     // (one queued column/row drained by camera apply). Capping the walk here keeps that invariant while
@@ -930,6 +932,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly Sdk2DStreamReader sdkOperations;
     private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
+    private readonly Dictionary<string, string> variableTypes = [];
     private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> signedByteLocations = [];
@@ -1210,9 +1213,9 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        if (!IsByteBackedLocalType(declaration.Type))
+        if (!IsScalarLocalType(declaration.Type))
         {
-            throw new InvalidOperationException($"Game Boy target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
+            throw new InvalidOperationException($"Game Boy target only supports scalar fixed-size arrays; '{declaration.Type}' is not supported yet.");
         }
 
         var declarationName = DeclareScopedVariableName(declaration.Name);
@@ -1230,10 +1233,9 @@ internal sealed class GameBoyRuntimeCompiler
             var sourceName = IndexedElementName(declaration.Name, index);
             var scopedName = IndexedElementName(declarationName, index);
             MapScopedVariableName(sourceName, scopedName);
-            var address = DeclareVariable(scopedName);
+            var address = DeclareVariable(scopedName, declaration.Type);
             elementAddresses.Add(address);
-            builder.LoadAImmediate(0);
-            builder.StoreA(address);
+            EmitZeroToStorage(address, declaration.Type);
         }
 
         if (declaration.Initialization.HasValue)
@@ -1253,8 +1255,8 @@ internal sealed class GameBoyRuntimeCompiler
         TrackImmutable(declaration);
 
         var length = CheckedRange(GameBoyVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
-        var fieldOffsets = StructFieldOffsets(structSyntax, "Game Boy");
-        var stride = fieldOffsets.Count;
+        var fieldOffsets = StructFieldOffsets(structSyntax);
+        var stride = StructStride(structSyntax);
         if (length * stride > 255)
         {
             throw new InvalidOperationException($"Game Boy target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
@@ -1270,9 +1272,9 @@ internal sealed class GameBoyRuntimeCompiler
                 var sourceName = IndexedMemberName(declaration.Name, index, field.Name);
                 var scopedName = IndexedMemberName(declarationName, index, field.Name);
                 MapScopedVariableName(sourceName, scopedName);
-                var address = DeclareVariable(scopedName);
-                builder.LoadAImmediate(0);
-                builder.StoreA(address);
+                var address = DeclareVariable(scopedName, field.Type);
+                TrackSignedByteType(field.Type, scopedName);
+                EmitZeroToStorage(address, field.Type);
             }
         }
 
@@ -1327,8 +1329,9 @@ internal sealed class GameBoyRuntimeCompiler
                     continue;
                 }
 
-                EmitExpressionToA(expression);
-                builder.StoreA(VariableAddress(IndexedMemberName(declaration.Name, index, fieldName)));
+                var storageName = IndexedMemberName(declaration.Name, index, fieldName);
+                var address = VariableAddress(storageName);
+                EmitExpressionToStorage(expression, address, VariableStorageType(storageName));
             }
         }
     }
@@ -1347,28 +1350,24 @@ internal sealed class GameBoyRuntimeCompiler
 
         for (var index = 0; index < arrayInitializer.Elements.Count; index++)
         {
-            EmitExpressionToA(arrayInitializer.Elements[index]);
-            builder.StoreA(elementAddresses[index]);
+            EmitExpressionToStorage(arrayInitializer.Elements[index], elementAddresses[index], declaration.Type);
         }
     }
 
     private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
     {
         var scopedName = DeclareScopedVariableName(declaration.Name);
-        var address = DeclareVariable(scopedName);
+        var address = DeclareVariable(scopedName, declaration.Type);
         TrackImmutable(declaration);
         TrackSignedByteType(declaration.Type, scopedName);
 
         if (declaration.Initialization.HasValue)
         {
-            EmitExpressionToA(declaration.Initialization.Value);
-        }
-        else
-        {
-            builder.LoadAImmediate(0);
+            EmitExpressionToStorage(declaration.Initialization.Value, address, declaration.Type);
+            return;
         }
 
-        builder.StoreA(address);
+        EmitZeroToStorage(address, declaration.Type);
     }
 
     private void EmitStructDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
@@ -1385,7 +1384,7 @@ internal sealed class GameBoyRuntimeCompiler
         var fieldNames = new List<string>();
         foreach (var field in structSyntax.Fields)
         {
-            if (!IsByteBackedLocalType(field.Type))
+            if (!IsScalarLocalType(field.Type))
             {
                 throw new InvalidOperationException($"Game Boy target does not support struct field type '{field.Type}' yet.");
             }
@@ -1393,12 +1392,11 @@ internal sealed class GameBoyRuntimeCompiler
             var sourceName = $"{declaration.Name}.{field.Name}";
             var scopedName = $"{declarationName}.{field.Name}";
             MapScopedVariableName(sourceName, scopedName);
-            var address = DeclareVariable(scopedName);
+            var address = DeclareVariable(scopedName, field.Type);
             TrackSignedByteType(field.Type, scopedName);
             fieldAddresses.Add(field.Name, address);
             fieldNames.Add(field.Name);
-            builder.LoadAImmediate(0);
-            builder.StoreA(address);
+            EmitZeroToStorage(address, field.Type);
         }
 
         if (declaration.Initialization.HasValue)
@@ -1439,12 +1437,12 @@ internal sealed class GameBoyRuntimeCompiler
                 continue;
             }
 
-            EmitExpressionToA(expression);
-            builder.StoreA(fieldAddresses[fieldName]);
+            var storageName = $"{declaration.Name}.{fieldName}";
+            EmitExpressionToStorage(expression, fieldAddresses[fieldName], VariableStorageType(storageName));
         }
     }
 
-    private ushort DeclareVariable(string name)
+    private ushort DeclareVariable(string name, string type)
     {
         if (!declaredVariables.Add(name))
         {
@@ -1456,15 +1454,294 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException($"Variable '{name}' is already declared.");
         }
 
-        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        var size = StorageSize(type);
+        if (nextVariableAddress + size > RuntimeReservedStateAddress)
         {
             throw new InvalidOperationException("Game Boy target local variables exceed the current prototype WRAM allocation.");
         }
 
-        var address = nextVariableAddress++;
+        var address = nextVariableAddress;
+        nextVariableAddress += (ushort)size;
         variables.Add(name, address);
+        variableTypes.Add(name, type);
         return address;
     }
+
+    private void EmitZeroToStorage(ushort address, string type)
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreA(address);
+        if (IsWordBackedType(type))
+        {
+            builder.StoreA(HighAddress(address));
+        }
+    }
+
+    private void EmitExpressionToStorage(ExpressionSyntax expression, ushort address, string type)
+    {
+        if (IsWordBackedType(type))
+        {
+            EmitWordExpressionToStorage(expression, address, type);
+            return;
+        }
+
+        EmitExpressionToA(expression);
+        builder.StoreA(address);
+    }
+
+    private void EmitWordExpressionToStorage(ExpressionSyntax expression, ushort address, string targetType)
+    {
+        if (TryConst(expression, out var constant))
+        {
+            EmitStoreWordImmediate(address, constant);
+            return;
+        }
+
+        switch (expression)
+        {
+            case CastSyntax cast:
+                if (IsWordBackedType(cast.Type))
+                {
+                    EmitWordExpressionToStorage(cast.Expression, address, cast.Type);
+                    return;
+                }
+
+                EmitExpressionToA(cast.Expression);
+                builder.StoreA(address);
+                EmitHighByteFromLowAToStorage(HighAddress(address), cast.Type);
+                return;
+            case IdentifierSyntax { Identifier: "true" }:
+                EmitStoreWordImmediate(address, 1);
+                return;
+            case IdentifierSyntax { Identifier: "false" }:
+                EmitStoreWordImmediate(address, 0);
+                return;
+            case IdentifierSyntax or MemberAccessSyntax or IndexExpressionSyntax when TryDirectStorageExpression(expression, out var sourceAddress, out var sourceType):
+                EmitCopyToWordStorage(sourceAddress, sourceType, address);
+                return;
+            case MemberAccessSyntax memberAccess when TryRuntimeIndexedMemberAccess(memberAccess, out var indexedBase, out var fieldName):
+                EmitRuntimeIndexedMemberAddressToHl(indexedBase, fieldName);
+                EmitRuntimeStorageFromHlToWordStorage(address, VariableStorageType(IndexedMemberName(indexedBase.BaseIdentifier, 0, fieldName)));
+                return;
+            case IndexExpressionSyntax indexExpression:
+                EmitRuntimeIndexedAddressToHl(indexExpression.BaseIdentifier, indexExpression.Index);
+                EmitRuntimeStorageFromHlToWordStorage(address, VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, 0)));
+                return;
+            case FunctionCall call:
+                EmitValueCallToA(call);
+                builder.StoreA(address);
+                builder.LoadAImmediate(0);
+                builder.StoreA(HighAddress(address));
+                return;
+            case ConditionalExpressionSyntax conditional:
+                EmitWordConditionalExpressionToStorage(conditional, address, targetType);
+                return;
+            case UnaryExpressionSyntax unary when IsBooleanValueExpression(unary):
+                EmitBooleanExpressionToA(unary);
+                builder.StoreA(address);
+                builder.LoadAImmediate(0);
+                builder.StoreA(HighAddress(address));
+                return;
+            case BinaryExpressionSyntax binary when IsBooleanValueExpression(binary):
+                EmitBooleanExpressionToA(binary);
+                builder.StoreA(address);
+                builder.LoadAImmediate(0);
+                builder.StoreA(HighAddress(address));
+                return;
+            case BinaryExpressionSyntax { Operator.Symbol: "+" } binary:
+                EmitWordExpressionToStorage(binary.Left, address, targetType);
+                EmitAddWordIntoStorage(address, binary.Right);
+                return;
+            case BinaryExpressionSyntax { Operator.Symbol: "-" } binary:
+                EmitWordExpressionToStorage(binary.Left, address, targetType);
+                EmitSubtractWordFromStorage(address, binary.Right);
+                return;
+            default:
+                EmitExpressionToA(expression);
+                builder.StoreA(address);
+                builder.LoadAImmediate(0);
+                builder.StoreA(HighAddress(address));
+                return;
+        }
+    }
+
+    private void EmitRuntimeStorageFromHlToWordStorage(ushort address, string sourceType)
+    {
+        builder.LoadAFromHl();
+        builder.StoreA(address);
+        if (IsWordBackedType(sourceType))
+        {
+            builder.IncrementHl();
+            builder.LoadAFromHl();
+        }
+        else if (sourceType == "i8")
+        {
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreA(HighAddress(address));
+    }
+
+    private void EmitWordConditionalExpressionToStorage(ConditionalExpressionSyntax conditional, ushort address, string targetType)
+    {
+        var falseLabel = builder.CreateLabel("word_conditional_false");
+        var endLabel = builder.CreateLabel("word_conditional_end");
+
+        EmitConditionFalseJump(conditional.Condition, falseLabel);
+        EmitWordExpressionToStorage(conditional.WhenTrue, address, targetType);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        EmitWordExpressionToStorage(conditional.WhenFalse, address, targetType);
+        builder.Label(endLabel);
+    }
+
+    private void EmitStoreWordImmediate(ushort address, int value)
+    {
+        builder.LoadAImmediate(value & 0xFF);
+        builder.StoreA(address);
+        builder.LoadAImmediate((value >> 8) & 0xFF);
+        builder.StoreA(HighAddress(address));
+    }
+
+    private void EmitCopyToWordStorage(ushort sourceAddress, string sourceType, ushort targetAddress)
+    {
+        builder.LoadA(sourceAddress);
+        builder.StoreA(targetAddress);
+
+        if (IsWordBackedType(sourceType))
+        {
+            builder.LoadA(HighAddress(sourceAddress));
+        }
+        else if (sourceType == "i8")
+        {
+            builder.LoadA(sourceAddress);
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreA(HighAddress(targetAddress));
+    }
+
+    private void EmitAddWordIntoStorage(ushort address, ExpressionSyntax right)
+    {
+        if (TryConst(right, out var constant))
+        {
+            builder.LoadA(address);
+            builder.AddAImmediate(constant & 0xFF);
+            builder.StoreA(address);
+            builder.LoadA(HighAddress(address));
+            builder.AdcAImmediate((constant >> 8) & 0xFF);
+            builder.StoreA(HighAddress(address));
+            return;
+        }
+
+        if (!TryDirectStorageExpression(right, out var rightAddress, out var rightType))
+        {
+            EmitWordExpressionToStorage(right, WordScratchLowAddress, WordExpressionType(right));
+            rightAddress = WordScratchLowAddress;
+            rightType = "u16";
+        }
+
+        builder.LoadA(rightAddress);
+        builder.LoadBFromA();
+        builder.LoadA(address);
+        builder.AddAFromB();
+        builder.StoreA(address);
+
+        EmitLoadHighByteToB(rightAddress, rightType);
+        builder.LoadA(HighAddress(address));
+        builder.AdcAFromB();
+        builder.StoreA(HighAddress(address));
+    }
+
+    private void EmitSubtractWordFromStorage(ushort address, ExpressionSyntax right)
+    {
+        if (TryConst(right, out var constant))
+        {
+            builder.LoadA(address);
+            builder.SubtractAImmediate(constant & 0xFF);
+            builder.StoreA(address);
+            builder.LoadA(HighAddress(address));
+            builder.SbcAImmediate((constant >> 8) & 0xFF);
+            builder.StoreA(HighAddress(address));
+            return;
+        }
+
+        if (!TryDirectStorageExpression(right, out var rightAddress, out var rightType))
+        {
+            EmitWordExpressionToStorage(right, WordScratchLowAddress, WordExpressionType(right));
+            rightAddress = WordScratchLowAddress;
+            rightType = "u16";
+        }
+
+        builder.LoadA(rightAddress);
+        builder.LoadBFromA();
+        builder.LoadA(address);
+        builder.SubtractB();
+        builder.StoreA(address);
+
+        EmitLoadHighByteToB(rightAddress, rightType);
+        builder.LoadA(HighAddress(address));
+        builder.SbcB();
+        builder.StoreA(HighAddress(address));
+    }
+
+    private void EmitLoadHighByteToB(ushort address, string type)
+    {
+        if (IsWordBackedType(type))
+        {
+            builder.LoadA(HighAddress(address));
+        }
+        else if (type == "i8")
+        {
+            builder.LoadA(address);
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.LoadBFromA();
+    }
+
+    private void EmitHighByteFromLowAToStorage(ushort highAddress, string sourceType)
+    {
+        if (sourceType == "i8")
+        {
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreA(highAddress);
+    }
+
+    private void EmitSignExtensionFromA()
+    {
+        var negativeLabel = builder.CreateLabel("sign_extend_negative");
+        var endLabel = builder.CreateLabel("sign_extend_end");
+
+        builder.AndImmediate(0x80);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, negativeLabel); // JP NZ,negativeLabel
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(negativeLabel);
+        builder.LoadAImmediate(0xFF);
+        builder.Label(endLabel);
+    }
+
+    private static ushort HighAddress(ushort lowAddress) => (ushort)(lowAddress + 1);
 
     private void TrackImmutable(DeclarationSyntax declaration)
     {
@@ -1474,9 +1751,8 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
-    // i8 is the signed byte type: relational comparisons on i8 operands use signed ordering. Other
-    // byte-backed types (u8/u16/i16/bool/enum) keep unsigned comparison, matching how the samples use
-    // i16 for 0..255 positions.
+    // Signed scalar locations use sign-bit-flipped ordering in relational compares. Unsigned
+    // scalars, bools, and enums keep ordinary unsigned comparison.
     private void TrackSignedByteType(string type, string scopedName)
     {
         if (type == "i8")
@@ -1487,6 +1763,11 @@ internal sealed class GameBoyRuntimeCompiler
 
     private bool IsSignedRelationalOperand(ExpressionSyntax expression)
     {
+        if (TryExpressionStorageType(expression, out var type))
+        {
+            return type is "i8" or "i16";
+        }
+
         return expression switch
         {
             IdentifierSyntax identifier => signedByteLocations.Contains(ScopedVariableName(identifier.Identifier)),
@@ -1565,6 +1846,114 @@ internal sealed class GameBoyRuntimeCompiler
         return IsByteBackedType(type) || program.Enums.ContainsKey(type);
     }
 
+    private bool IsScalarLocalType(string type)
+    {
+        return IsByteBackedLocalType(type);
+    }
+
+    private static bool IsWordBackedType(string type)
+    {
+        return type is "i16" or "u16";
+    }
+
+    private int StorageSize(string type)
+    {
+        return IsWordBackedType(type) ? 2 : 1;
+    }
+
+    private string VariableStorageType(string name)
+    {
+        var scopedName = ScopedVariableName(name);
+        if (!variableTypes.TryGetValue(scopedName, out var type))
+        {
+            throw new InvalidOperationException($"Use of undeclared variable '{name}'.");
+        }
+
+        return type;
+    }
+
+    private bool TryDirectStorageExpression(ExpressionSyntax expression, out ushort address, out string type)
+    {
+        switch (expression)
+        {
+            case CastSyntax cast:
+                return TryDirectStorageExpression(cast.Expression, out address, out type);
+            case IdentifierSyntax identifier:
+                address = VariableAddress(identifier.Identifier);
+                type = VariableStorageType(identifier.Identifier);
+                return true;
+            case MemberAccessSyntax memberAccess:
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out _, out _))
+                {
+                    address = 0;
+                    type = string.Empty;
+                    return false;
+                }
+
+                var memberName = GameBoyVideoProgram.MemberAccessName(memberAccess);
+                address = VariableAddress(memberName);
+                type = VariableStorageType(memberName);
+                return true;
+            case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
+                var elementName = IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index");
+                address = VariableAddress(elementName);
+                type = VariableStorageType(elementName);
+                return true;
+            default:
+                address = 0;
+                type = string.Empty;
+                return false;
+        }
+    }
+
+    private string WordExpressionType(ExpressionSyntax expression)
+    {
+        if (TryExpressionStorageType(expression, out var type) && IsWordBackedType(type))
+        {
+            return type;
+        }
+
+        return "u16";
+    }
+
+    private bool TryExpressionStorageType(ExpressionSyntax expression, out string type)
+    {
+        switch (expression)
+        {
+            case CastSyntax cast:
+                type = cast.Type;
+                return true;
+            case IdentifierSyntax { Identifier: "true" or "false" }:
+                break;
+            case IdentifierSyntax identifier:
+                type = VariableStorageType(identifier.Identifier);
+                return true;
+            case MemberAccessSyntax memberAccess when !TryRuntimeIndexedMemberAccess(memberAccess, out _, out _):
+                type = VariableStorageType(GameBoyVideoProgram.MemberAccessName(memberAccess));
+                return true;
+            case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
+                type = VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index"));
+                return true;
+            case BinaryExpressionSyntax binary when binary.Operator.Symbol is "+" or "-":
+                if (TryExpressionStorageType(binary.Left, out var leftType) && IsWordBackedType(leftType))
+                {
+                    type = leftType;
+                    return true;
+                }
+
+                if (TryExpressionStorageType(binary.Right, out var rightType) && IsWordBackedType(rightType))
+                {
+                    type = rightType;
+                    return true;
+                }
+
+                break;
+        }
+
+        type = string.Empty;
+        return false;
+    }
+
     private void RequireSupportedCastTarget(CastSyntax cast)
     {
         if (!IsByteBackedLocalType(cast.Type))
@@ -1605,6 +1994,13 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         var address = LValueAddress(assignment.Left);
+        var targetType = LValueStorageType(assignment.Left);
+        if (IsWordBackedType(targetType))
+        {
+            EmitWordAssignment(assignment, address, targetType);
+            return;
+        }
+
         EmitAssignmentRightToA(assignment);
         builder.StoreA(address);
     }
@@ -1642,6 +2038,13 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitRuntimeIndexedAssignment(IndexLValue indexLValue, AssignmentSyntax assignment)
     {
         EmitRuntimeIndexedAddressToHl(indexLValue.BaseIdentifier, indexLValue.Index);
+        var elementType = VariableStorageType(IndexedElementName(indexLValue.BaseIdentifier, 0));
+        if (IsWordBackedType(elementType))
+        {
+            EmitRuntimeIndexedWordAssignment(assignment, elementType, "runtime indexed assignment");
+            return;
+        }
+
         switch (assignment.OperatorSymbol)
         {
             case "=":
@@ -1715,6 +2118,13 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitRuntimeIndexedMemberAssignment(IndexExpressionSyntax indexExpression, string fieldName, AssignmentSyntax assignment)
     {
         EmitRuntimeIndexedMemberAddressToHl(indexExpression, fieldName);
+        var fieldType = VariableStorageType(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+        if (IsWordBackedType(fieldType))
+        {
+            EmitRuntimeIndexedWordAssignment(assignment, fieldType, "runtime indexed struct field assignment");
+            return;
+        }
+
         switch (assignment.OperatorSymbol)
         {
             case "=":
@@ -1768,6 +2178,60 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
+    private void EmitRuntimeIndexedWordAssignment(AssignmentSyntax assignment, string targetType, string context)
+    {
+        if (assignment.OperatorSymbol != "=")
+        {
+            throw new InvalidOperationException($"Game Boy target only supports direct '=' for 16-bit {context}.");
+        }
+
+        RequireExpressionPreservesHl(assignment.Right, context);
+        EmitWordExpressionToHl(assignment.Right, targetType);
+    }
+
+    private void EmitWordExpressionToHl(ExpressionSyntax expression, string targetType)
+    {
+        if (TryConst(expression, out var constant))
+        {
+            builder.LoadAImmediate(constant & 0xFF);
+            builder.StoreHlA();
+            builder.IncrementHl();
+            builder.LoadAImmediate((constant >> 8) & 0xFF);
+            builder.StoreHlA();
+            return;
+        }
+
+        if (TryDirectStorageExpression(expression, out var sourceAddress, out var sourceType))
+        {
+            builder.LoadA(sourceAddress);
+            builder.StoreHlA();
+            builder.IncrementHl();
+            if (IsWordBackedType(sourceType))
+            {
+                builder.LoadA(HighAddress(sourceAddress));
+            }
+            else if (sourceType == "i8")
+            {
+                builder.LoadA(sourceAddress);
+                EmitSignExtensionFromA();
+            }
+            else
+            {
+                builder.LoadAImmediate(0);
+            }
+
+            builder.StoreHlA();
+            return;
+        }
+
+        EmitWordExpressionToStorage(expression, WordScratchLowAddress, targetType);
+        builder.LoadA(WordScratchLowAddress);
+        builder.StoreHlA();
+        builder.IncrementHl();
+        builder.LoadA(WordScratchHighAddress);
+        builder.StoreHlA();
+    }
+
     private void EmitAssignmentRightToA(AssignmentSyntax assignment)
     {
         switch (assignment.OperatorSymbol)
@@ -1795,6 +2259,24 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
+    private void EmitWordAssignment(AssignmentSyntax assignment, ushort address, string targetType)
+    {
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                EmitWordExpressionToStorage(assignment.Right, address, targetType);
+                return;
+            case "+=":
+                EmitAddWordIntoStorage(address, assignment.Right);
+                return;
+            case "-=":
+                EmitSubtractWordFromStorage(address, assignment.Right);
+                return;
+            default:
+                throw new InvalidOperationException($"Game Boy target does not support 16-bit assignment operator '{assignment.OperatorSymbol}'.");
+        }
+    }
+
     private ushort LValueAddress(LValue lValue)
     {
         return lValue switch
@@ -1802,6 +2284,17 @@ internal sealed class GameBoyRuntimeCompiler
             IdentifierLValue identifier => VariableAddress(identifier.Identifier),
             MemberAccessLValue memberAccess => VariableAddress(GameBoyVideoProgram.MemberAccessName(memberAccess.MemberAccess)),
             IndexLValue index => VariableAddress(IndexedElementName(index.BaseIdentifier, index.Index, $"{index.BaseIdentifier} array index")),
+            _ => throw new InvalidOperationException("Game Boy target only supports assignments to local variables, struct fields, or constant array indices."),
+        };
+    }
+
+    private string LValueStorageType(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => VariableStorageType(identifier.Identifier),
+            MemberAccessLValue memberAccess => VariableStorageType(GameBoyVideoProgram.MemberAccessName(memberAccess.MemberAccess)),
+            IndexLValue index => VariableStorageType(IndexedElementName(index.BaseIdentifier, index.Index, $"{index.BaseIdentifier} array index")),
             _ => throw new InvalidOperationException("Game Boy target only supports assignments to local variables, struct fields, or constant array indices."),
         };
     }
@@ -2616,8 +3109,7 @@ internal sealed class GameBoyRuntimeCompiler
             }
 
             var slot = EnsureSubroutineParameterSlot(function, parameter);
-            EmitExpressionToA(arguments[parameter.Name]);
-            builder.StoreA(slot);
+            EmitExpressionToStorage(arguments[parameter.Name], slot, parameter.Type);
         }
 
         sdkOperations.ConsumeSubroutineCall(function.Name);
@@ -2666,12 +3158,12 @@ internal sealed class GameBoyRuntimeCompiler
         var name = SubroutineParameterSlotName(function, parameter);
         return variables.TryGetValue(name, out var address)
             ? address
-            : DeclareVariable(name);
+            : DeclareVariable(name, parameter.Type);
     }
 
-    private IReadOnlyList<(string Name, bool HadPrevious, ushort PreviousAddress)> PushSubroutineParameterAliases(FunctionSyntax function)
+    private IReadOnlyList<(string Name, bool HadPrevious, ushort PreviousAddress, bool HadPreviousType, string PreviousType)> PushSubroutineParameterAliases(FunctionSyntax function)
     {
-        var aliases = new List<(string Name, bool HadPrevious, ushort PreviousAddress)>();
+        var aliases = new List<(string Name, bool HadPrevious, ushort PreviousAddress, bool HadPreviousType, string PreviousType)>();
         foreach (var parameter in function.Parameters)
         {
             if (parameter.IsReceiver)
@@ -2680,14 +3172,16 @@ internal sealed class GameBoyRuntimeCompiler
             }
 
             var hadPrevious = variables.TryGetValue(parameter.Name, out var previousAddress);
-            aliases.Add((parameter.Name, hadPrevious, previousAddress));
+            var hadPreviousType = variableTypes.TryGetValue(parameter.Name, out var previousType);
+            aliases.Add((parameter.Name, hadPrevious, previousAddress, hadPreviousType, previousType ?? string.Empty));
             variables[parameter.Name] = EnsureSubroutineParameterSlot(function, parameter);
+            variableTypes[parameter.Name] = parameter.Type;
         }
 
         return aliases;
     }
 
-    private void PopSubroutineParameterAliases(IReadOnlyList<(string Name, bool HadPrevious, ushort PreviousAddress)> aliases)
+    private void PopSubroutineParameterAliases(IReadOnlyList<(string Name, bool HadPrevious, ushort PreviousAddress, bool HadPreviousType, string PreviousType)> aliases)
     {
         for (var index = aliases.Count - 1; index >= 0; index--)
         {
@@ -2699,6 +3193,15 @@ internal sealed class GameBoyRuntimeCompiler
             else
             {
                 variables.Remove(alias.Name);
+            }
+
+            if (alias.HadPreviousType)
+            {
+                variableTypes[alias.Name] = alias.PreviousType;
+            }
+            else
+            {
+                variableTypes.Remove(alias.Name);
             }
         }
     }
@@ -4119,10 +4622,22 @@ internal sealed class GameBoyRuntimeCompiler
                     builder.Label(trueLabel);
                     return;
                 case "==":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordEqualityFalseJump(binary.Left, binary.Right, falseLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
                     return;
                 case "!=":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordInequalityFalseJump(binary.Left, binary.Right, falseLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
                     return;
@@ -4130,6 +4645,12 @@ internal sealed class GameBoyRuntimeCompiler
                 case "<=":
                 case ">":
                 case ">=":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordRelationalFalseJump(binary, falseLabel);
+                        return;
+                    }
+
                     EmitRelationalFalseJump(binary, falseLabel);
                     return;
             }
@@ -4173,10 +4694,22 @@ internal sealed class GameBoyRuntimeCompiler
                     EmitConditionTrueJump(binary.Right, trueLabel);
                     return;
                 case "==":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordEqualityTrueJump(binary.Left, binary.Right, trueLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xCA, trueLabel); // JP Z,trueLabel
                     return;
                 case "!=":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordInequalityTrueJump(binary.Left, binary.Right, trueLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
                     return;
@@ -4221,6 +4754,175 @@ internal sealed class GameBoyRuntimeCompiler
         EmitExpressionToA(right);
         builder.LoadBFromA();
         builder.PopAf();
+    }
+
+    private bool IsWordComparison(BinaryExpressionSyntax binary)
+    {
+        return IsWordExpression(binary.Left) || IsWordExpression(binary.Right);
+    }
+
+    private bool IsWordExpression(ExpressionSyntax expression)
+    {
+        return TryExpressionStorageType(expression, out var type) && IsWordBackedType(type);
+    }
+
+    private void EmitWordEqualityFalseJump(ExpressionSyntax left, ExpressionSyntax right, string falseLabel)
+    {
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
+    }
+
+    private void EmitWordInequalityFalseJump(ExpressionSyntax left, ExpressionSyntax right, string falseLabel)
+    {
+        var trueLabel = builder.CreateLabel("word_neq_true");
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
+        builder.JumpAbsolute(falseLabel);
+        builder.Label(trueLabel);
+    }
+
+    private void EmitWordEqualityTrueJump(ExpressionSyntax left, ExpressionSyntax right, string trueLabel)
+    {
+        var endLabel = builder.CreateLabel("word_eq_end");
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.JumpAbsolute(0xCA, trueLabel); // JP Z,trueLabel
+        builder.Label(endLabel);
+    }
+
+    private void EmitWordInequalityTrueJump(ExpressionSyntax left, ExpressionSyntax right, string trueLabel)
+    {
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.JumpAbsolute(0xC2, trueLabel); // JP NZ,trueLabel
+    }
+
+    private void EmitWordRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
+    {
+        var trueLabel = builder.CreateLabel("word_rel_true");
+        var localFalseLabel = builder.CreateLabel("word_rel_false");
+        EmitWordRelationalJump(binary, trueLabel, localFalseLabel);
+        builder.Label(localFalseLabel);
+        builder.JumpAbsolute(falseLabel);
+        builder.Label(trueLabel);
+    }
+
+    private void EmitWordRelationalJump(BinaryExpressionSyntax binary, string trueLabel, string falseLabel)
+    {
+        var signed = IsSignedRelationalOperand(binary.Left) || IsSignedRelationalOperand(binary.Right);
+        EmitCompareWordByte(binary.Left, binary.Right, highByte: true, signedHighByte: signed);
+
+        switch (binary.Operator.Symbol)
+        {
+            case "<":
+                builder.JumpAbsolute(0xDA, trueLabel);  // JP C,trueLabel
+                builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.JumpAbsolute(0xDA, trueLabel);  // JP C,trueLabel
+                builder.JumpAbsolute(falseLabel);
+                return;
+            case "<=":
+                builder.JumpAbsolute(0xDA, trueLabel);  // JP C,trueLabel
+                builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.JumpAbsolute(0xDA, trueLabel);  // JP C,trueLabel
+                builder.JumpAbsolute(0xCA, trueLabel);  // JP Z,trueLabel
+                builder.JumpAbsolute(falseLabel);
+                return;
+            case ">":
+                builder.JumpAbsolute(0xDA, falseLabel); // JP C,falseLabel
+                builder.JumpAbsolute(0xC2, trueLabel);  // JP NZ,trueLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.JumpAbsolute(0xDA, falseLabel); // JP C,falseLabel
+                builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
+                builder.JumpAbsolute(trueLabel);
+                return;
+            case ">=":
+                builder.JumpAbsolute(0xDA, falseLabel); // JP C,falseLabel
+                builder.JumpAbsolute(0xC2, trueLabel);  // JP NZ,trueLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.JumpAbsolute(0xDA, falseLabel); // JP C,falseLabel
+                builder.JumpAbsolute(trueLabel);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported Game Boy relational operator '{binary.Operator.Symbol}'.");
+        }
+    }
+
+    private void EmitCompareWordByte(ExpressionSyntax left, ExpressionSyntax right, bool highByte, bool signedHighByte)
+    {
+        EmitLoadWordByteToA(left, highByte, signedHighByte);
+        if (TryConst(right, out var rightConstant))
+        {
+            var value = WordByte(rightConstant, highByte);
+            builder.CompareImmediate(signedHighByte ? value ^ 0x80 : value);
+            return;
+        }
+
+        EmitLoadWordByteToB(right, highByte, signedHighByte);
+        builder.CompareB();
+    }
+
+    private void EmitLoadWordByteToB(ExpressionSyntax expression, bool highByte, bool signedHighByte)
+    {
+        EmitLoadWordByteToA(expression, highByte, signedHighByte);
+        builder.LoadBFromA();
+    }
+
+    private void EmitLoadWordByteToA(ExpressionSyntax expression, bool highByte, bool signedHighByte)
+    {
+        if (TryConst(expression, out var constant))
+        {
+            var value = WordByte(constant, highByte);
+            builder.LoadAImmediate(signedHighByte ? value ^ 0x80 : value);
+            return;
+        }
+
+        if (TryDirectStorageExpression(expression, out var address, out var type))
+        {
+            if (!highByte)
+            {
+                builder.LoadA(address);
+            }
+            else if (IsWordBackedType(type))
+            {
+                builder.LoadA(HighAddress(address));
+            }
+            else if (type == "i8")
+            {
+                builder.LoadA(address);
+                EmitSignExtensionFromA();
+            }
+            else
+            {
+                builder.LoadAImmediate(0);
+            }
+
+            if (signedHighByte)
+            {
+                builder.XorImmediate(0x80);
+            }
+
+            return;
+        }
+
+        EmitWordExpressionToStorage(expression, WordScratchLowAddress, WordExpressionType(expression));
+        builder.LoadA(highByte ? WordScratchHighAddress : WordScratchLowAddress);
+        if (signedHighByte)
+        {
+            builder.XorImmediate(0x80);
+        }
+    }
+
+    private static int WordByte(int value, bool highByte)
+    {
+        return highByte ? (value >> 8) & 0xFF : value & 0xFF;
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -5900,7 +6602,9 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitRuntimeIndexedAddressToHl(string baseIdentifier, ExpressionSyntax index)
     {
         var baseAddress = VariableAddress(IndexedElementName(baseIdentifier, 0));
+        var elementSize = StorageSize(VariableStorageType(IndexedElementName(baseIdentifier, 0)));
         EmitExpressionToA(index);
+        EmitMultiplyA(elementSize);
         builder.LoadHl(baseAddress);
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
@@ -6075,27 +6779,27 @@ internal sealed class GameBoyRuntimeCompiler
         return $"{IndexedElementName(baseIdentifier, index)}.{fieldName}";
     }
 
-    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax, string targetName)
+    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax)
     {
         var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
         var offset = 0;
         foreach (var field in structSyntax.Fields)
         {
-            if (!IsByteSizedStructArrayFieldType(field.Type))
+            if (!IsScalarLocalType(field.Type))
             {
-                throw new InvalidOperationException($"{targetName} target struct array field type '{field.Type}' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.");
+                throw new InvalidOperationException($"Game Boy target struct array field type '{field.Type}' is not scalar.");
             }
 
             offsets.Add(field.Name, offset);
-            offset++;
+            offset += StorageSize(field.Type);
         }
 
         return offsets;
     }
 
-    private bool IsByteSizedStructArrayFieldType(string type)
+    private int StructStride(StructSyntax structSyntax)
     {
-        return type is "i8" or "u8" or "bool" || program.Enums.ContainsKey(type);
+        return structSyntax.Fields.Sum(field => StorageSize(field.Type));
     }
 
     private static string StorageKey(SdkStorageLocation location)
@@ -6659,6 +7363,11 @@ internal sealed class GbBuilder
         Emit(0x80);
     }
 
+    public void AdcAFromB()
+    {
+        Emit(0x88);
+    }
+
     public void AddAFromC()
     {
         Emit(0x81);
@@ -6729,6 +7438,11 @@ internal sealed class GbBuilder
         Emit(0xC6, (byte)value);
     }
 
+    public void AdcAImmediate(int value)
+    {
+        Emit(0xCE, (byte)value);
+    }
+
     public void DecrementA()
     {
         Emit(0x3D);
@@ -6739,6 +7453,11 @@ internal sealed class GbBuilder
         Emit(0xD6, (byte)value);
     }
 
+    public void SbcAImmediate(int value)
+    {
+        Emit(0xDE, (byte)value);
+    }
+
     public void SubtractAFromC()
     {
         Emit(0x91);
@@ -6747,6 +7466,11 @@ internal sealed class GbBuilder
     public void SubtractB()
     {
         Emit(0x90);
+    }
+
+    public void SbcB()
+    {
+        Emit(0x98);
     }
 
     public void CompareImmediate(int value)
@@ -6762,6 +7486,11 @@ internal sealed class GbBuilder
     public void LoadHl(ushort value)
     {
         Emit(0x21, (byte)(value & 0xFF), (byte)(value >> 8));
+    }
+
+    public void IncrementHl()
+    {
+        Emit(0x23);
     }
 
     public void LoadHl(string label)

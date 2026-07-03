@@ -496,6 +496,7 @@ internal sealed class NesRuntimeCompiler
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly Dictionary<string, byte> variables = [];
+    private readonly Dictionary<string, string> variableTypes = [];
     private readonly Dictionary<string, StructArrayLayout> structArrays = [];
     private readonly HashSet<string> declaredVariables = [];
     private readonly HashSet<string> signedByteLocations = [];
@@ -678,9 +679,9 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        if (!IsByteBackedLocalType(declaration.Type))
+        if (!IsScalarLocalType(declaration.Type))
         {
-            throw new InvalidOperationException($"NES target only supports byte-backed fixed-size arrays; '{declaration.Type}' is not supported yet.");
+            throw new InvalidOperationException($"NES target only supports scalar fixed-size arrays; '{declaration.Type}' is not supported yet.");
         }
 
         var declarationName = DeclareScopedVariableName(declaration.Name);
@@ -698,10 +699,9 @@ internal sealed class NesRuntimeCompiler
             var sourceName = IndexedElementName(declaration.Name, index);
             var scopedName = IndexedElementName(declarationName, index);
             MapScopedVariableName(sourceName, scopedName);
-            var address = DeclareVariable(scopedName);
+            var address = DeclareVariable(scopedName, declaration.Type);
             elementAddresses.Add(address);
-            builder.LoadAImmediate(0);
-            builder.StoreAZeroPage(address);
+            EmitZeroToStorage(address, declaration.Type);
         }
 
         if (declaration.Initialization.HasValue)
@@ -721,8 +721,8 @@ internal sealed class NesRuntimeCompiler
         TrackImmutable(declaration);
 
         var length = CheckedRange(NesVideoProgram.ConstValue(declaration.ArrayLength.Value, $"{declaration.Name} array length"), 1, 255, $"{declaration.Name} array length");
-        var fieldOffsets = StructFieldOffsets(structSyntax, "NES");
-        var stride = fieldOffsets.Count;
+        var fieldOffsets = StructFieldOffsets(structSyntax);
+        var stride = StructStride(structSyntax);
         if (length * stride > 255)
         {
             throw new InvalidOperationException($"NES target struct array '{declaration.Name}' uses {length * stride} byte slot(s), but runtime indexed struct arrays are limited to 255 byte slots.");
@@ -738,9 +738,9 @@ internal sealed class NesRuntimeCompiler
                 var sourceName = IndexedMemberName(declaration.Name, index, field.Name);
                 var scopedName = IndexedMemberName(declarationName, index, field.Name);
                 MapScopedVariableName(sourceName, scopedName);
-                var address = DeclareVariable(scopedName);
-                builder.LoadAImmediate(0);
-                builder.StoreAZeroPage(address);
+                var address = DeclareVariable(scopedName, field.Type);
+                TrackSignedByteType(field.Type, scopedName);
+                EmitZeroToStorage(address, field.Type);
             }
         }
 
@@ -795,8 +795,9 @@ internal sealed class NesRuntimeCompiler
                     continue;
                 }
 
-                EmitExpressionToA(expression);
-                builder.StoreAZeroPage(VariableAddress(IndexedMemberName(declaration.Name, index, fieldName)));
+                var storageName = IndexedMemberName(declaration.Name, index, fieldName);
+                var address = VariableAddress(storageName);
+                EmitExpressionToStorage(expression, address, VariableStorageType(storageName));
             }
         }
     }
@@ -815,28 +816,24 @@ internal sealed class NesRuntimeCompiler
 
         for (var index = 0; index < arrayInitializer.Elements.Count; index++)
         {
-            EmitExpressionToA(arrayInitializer.Elements[index]);
-            builder.StoreAZeroPage(elementAddresses[index]);
+            EmitExpressionToStorage(arrayInitializer.Elements[index], elementAddresses[index], declaration.Type);
         }
     }
 
     private void EmitByteBackedDeclaration(DeclarationSyntax declaration)
     {
         var scopedName = DeclareScopedVariableName(declaration.Name);
-        var address = DeclareVariable(scopedName);
+        var address = DeclareVariable(scopedName, declaration.Type);
         TrackImmutable(declaration);
         TrackSignedByteType(declaration.Type, scopedName);
 
         if (declaration.Initialization.HasValue)
         {
-            EmitExpressionToA(declaration.Initialization.Value);
-        }
-        else
-        {
-            builder.LoadAImmediate(0);
+            EmitExpressionToStorage(declaration.Initialization.Value, address, declaration.Type);
+            return;
         }
 
-        builder.StoreAZeroPage(address);
+        EmitZeroToStorage(address, declaration.Type);
     }
 
     private void EmitStructDeclaration(DeclarationSyntax declaration, StructSyntax structSyntax)
@@ -853,7 +850,7 @@ internal sealed class NesRuntimeCompiler
         var fieldNames = new List<string>();
         foreach (var field in structSyntax.Fields)
         {
-            if (!IsByteBackedLocalType(field.Type))
+            if (!IsScalarLocalType(field.Type))
             {
                 throw new InvalidOperationException($"NES target does not support struct field type '{field.Type}' yet.");
             }
@@ -861,12 +858,11 @@ internal sealed class NesRuntimeCompiler
             var sourceName = $"{declaration.Name}.{field.Name}";
             var scopedName = $"{declarationName}.{field.Name}";
             MapScopedVariableName(sourceName, scopedName);
-            var address = DeclareVariable(scopedName);
+            var address = DeclareVariable(scopedName, field.Type);
             TrackSignedByteType(field.Type, scopedName);
             fieldAddresses.Add(field.Name, address);
             fieldNames.Add(field.Name);
-            builder.LoadAImmediate(0);
-            builder.StoreAZeroPage(address);
+            EmitZeroToStorage(address, field.Type);
         }
 
         if (declaration.Initialization.HasValue)
@@ -907,12 +903,12 @@ internal sealed class NesRuntimeCompiler
                 continue;
             }
 
-            EmitExpressionToA(expression);
-            builder.StoreAZeroPage(fieldAddresses[fieldName]);
+            var storageName = $"{declaration.Name}.{fieldName}";
+            EmitExpressionToStorage(expression, fieldAddresses[fieldName], VariableStorageType(storageName));
         }
     }
 
-    private byte DeclareVariable(string name)
+    private byte DeclareVariable(string name, string type)
     {
         if (!declaredVariables.Add(name))
         {
@@ -924,15 +920,293 @@ internal sealed class NesRuntimeCompiler
             throw new InvalidOperationException($"Variable '{name}' is already declared.");
         }
 
-        if (nextVariableAddress >= RuntimeReservedStateAddress)
+        var size = StorageSize(type);
+        if (nextVariableAddress + size > RuntimeReservedStateAddress)
         {
             throw new InvalidOperationException("NES target local variables exceed the current prototype zero-page allocation.");
         }
 
-        var address = nextVariableAddress++;
+        var address = nextVariableAddress;
+        nextVariableAddress = (byte)(nextVariableAddress + size);
         variables.Add(name, address);
+        variableTypes.Add(name, type);
         return address;
     }
+
+    private void EmitZeroToStorage(byte address, string type)
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(address);
+        if (IsWordBackedType(type))
+        {
+            builder.StoreAZeroPage(HighAddress(address));
+        }
+    }
+
+    private void EmitExpressionToStorage(ExpressionSyntax expression, byte address, string type)
+    {
+        if (IsWordBackedType(type))
+        {
+            EmitWordExpressionToStorage(expression, address, type);
+            return;
+        }
+
+        EmitExpressionToA(expression);
+        builder.StoreAZeroPage(address);
+    }
+
+    private void EmitWordExpressionToStorage(ExpressionSyntax expression, byte address, string targetType)
+    {
+        if (TryConst(expression, out var constant))
+        {
+            EmitStoreWordImmediate(address, constant);
+            return;
+        }
+
+        switch (expression)
+        {
+            case CastSyntax cast:
+                if (IsWordBackedType(cast.Type))
+                {
+                    EmitWordExpressionToStorage(cast.Expression, address, cast.Type);
+                    return;
+                }
+
+                EmitExpressionToA(cast.Expression);
+                builder.StoreAZeroPage(address);
+                EmitHighByteFromLowAToStorage(HighAddress(address), cast.Type);
+                return;
+            case IdentifierSyntax { Identifier: "true" }:
+                EmitStoreWordImmediate(address, 1);
+                return;
+            case IdentifierSyntax { Identifier: "false" }:
+                EmitStoreWordImmediate(address, 0);
+                return;
+            case IdentifierSyntax or MemberAccessSyntax or IndexExpressionSyntax when TryDirectStorageExpression(expression, out var sourceAddress, out var sourceType):
+                EmitCopyToWordStorage(sourceAddress, sourceType, address);
+                return;
+            case MemberAccessSyntax memberAccess when TryRuntimeIndexedMemberAccess(memberAccess, out var indexedBase, out var fieldName):
+                EmitRuntimeMemberIndexToX(indexedBase);
+                EmitRuntimeStorageFromZeroPageXToWordStorage(RuntimeIndexedMemberBaseAddress(indexedBase, fieldName), VariableStorageType(IndexedMemberName(indexedBase.BaseIdentifier, 0, fieldName)), address);
+                return;
+            case IndexExpressionSyntax indexExpression:
+                EmitRuntimeIndexToX(indexExpression.BaseIdentifier, indexExpression.Index);
+                EmitRuntimeStorageFromZeroPageXToWordStorage(ArrayBaseAddress(indexExpression.BaseIdentifier), VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, 0)), address);
+                return;
+            case FunctionCall call:
+                EmitValueCallToA(call);
+                builder.StoreAZeroPage(address);
+                builder.LoadAImmediate(0);
+                builder.StoreAZeroPage(HighAddress(address));
+                return;
+            case ConditionalExpressionSyntax conditional:
+                EmitWordConditionalExpressionToStorage(conditional, address, targetType);
+                return;
+            case UnaryExpressionSyntax unary when IsBooleanValueExpression(unary):
+                EmitBooleanExpressionToA(unary);
+                builder.StoreAZeroPage(address);
+                builder.LoadAImmediate(0);
+                builder.StoreAZeroPage(HighAddress(address));
+                return;
+            case BinaryExpressionSyntax binary when IsBooleanValueExpression(binary):
+                EmitBooleanExpressionToA(binary);
+                builder.StoreAZeroPage(address);
+                builder.LoadAImmediate(0);
+                builder.StoreAZeroPage(HighAddress(address));
+                return;
+            case BinaryExpressionSyntax { Operator.Symbol: "+" } binary:
+                EmitWordExpressionToStorage(binary.Left, address, targetType);
+                EmitAddWordIntoStorage(address, binary.Right);
+                return;
+            case BinaryExpressionSyntax { Operator.Symbol: "-" } binary:
+                EmitWordExpressionToStorage(binary.Left, address, targetType);
+                EmitSubtractWordFromStorage(address, binary.Right);
+                return;
+            default:
+                EmitExpressionToA(expression);
+                builder.StoreAZeroPage(address);
+                builder.LoadAImmediate(0);
+                builder.StoreAZeroPage(HighAddress(address));
+                return;
+        }
+    }
+
+    private void EmitRuntimeStorageFromZeroPageXToWordStorage(byte baseAddress, string sourceType, byte targetAddress)
+    {
+        builder.LoadAZeroPageX(baseAddress);
+        builder.StoreAZeroPage(targetAddress);
+        if (IsWordBackedType(sourceType))
+        {
+            builder.LoadAZeroPageX(HighAddress(baseAddress));
+        }
+        else if (sourceType == "i8")
+        {
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAZeroPage(HighAddress(targetAddress));
+    }
+
+    private void EmitWordConditionalExpressionToStorage(ConditionalExpressionSyntax conditional, byte address, string targetType)
+    {
+        var falseLabel = builder.CreateLabel("word_conditional_false");
+        var endLabel = builder.CreateLabel("word_conditional_end");
+
+        EmitConditionFalseJump(conditional.Condition, falseLabel);
+        EmitWordExpressionToStorage(conditional.WhenTrue, address, targetType);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(falseLabel);
+        EmitWordExpressionToStorage(conditional.WhenFalse, address, targetType);
+        builder.Label(endLabel);
+    }
+
+    private void EmitStoreWordImmediate(byte address, int value)
+    {
+        builder.LoadAImmediate(value & 0xFF);
+        builder.StoreAZeroPage(address);
+        builder.LoadAImmediate((value >> 8) & 0xFF);
+        builder.StoreAZeroPage(HighAddress(address));
+    }
+
+    private void EmitCopyToWordStorage(byte sourceAddress, string sourceType, byte targetAddress)
+    {
+        builder.LoadAZeroPage(sourceAddress);
+        builder.StoreAZeroPage(targetAddress);
+
+        if (IsWordBackedType(sourceType))
+        {
+            builder.LoadAZeroPage(HighAddress(sourceAddress));
+        }
+        else if (sourceType == "i8")
+        {
+            builder.LoadAZeroPage(sourceAddress);
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAZeroPage(HighAddress(targetAddress));
+    }
+
+    private void EmitAddWordIntoStorage(byte address, ExpressionSyntax right)
+    {
+        if (TryConst(right, out var constant))
+        {
+            builder.LoadAZeroPage(address);
+            builder.ClearCarry();
+            builder.AddImmediate(constant & 0xFF);
+            builder.StoreAZeroPage(address);
+            builder.LoadAZeroPage(HighAddress(address));
+            builder.AddImmediate((constant >> 8) & 0xFF);
+            builder.StoreAZeroPage(HighAddress(address));
+            return;
+        }
+
+        if (!TryDirectStorageExpression(right, out var rightAddress, out var rightType))
+        {
+            EmitWordExpressionToStorage(right, RuntimeIndexScratchAddress, WordExpressionType(right));
+            rightAddress = RuntimeIndexScratchAddress;
+            rightType = "u16";
+        }
+
+        builder.LoadAZeroPage(address);
+        builder.ClearCarry();
+        builder.AddZeroPage(rightAddress);
+        builder.StoreAZeroPage(address);
+
+        EmitHighByteToScratch(rightAddress, rightType);
+        builder.LoadAZeroPage(HighAddress(address));
+        builder.AddZeroPage(ExpressionScratchAddress);
+        builder.StoreAZeroPage(HighAddress(address));
+    }
+
+    private void EmitSubtractWordFromStorage(byte address, ExpressionSyntax right)
+    {
+        if (TryConst(right, out var constant))
+        {
+            builder.LoadAZeroPage(address);
+            builder.SetCarry();
+            builder.SubtractImmediate(constant & 0xFF);
+            builder.StoreAZeroPage(address);
+            builder.LoadAZeroPage(HighAddress(address));
+            builder.SubtractImmediate((constant >> 8) & 0xFF);
+            builder.StoreAZeroPage(HighAddress(address));
+            return;
+        }
+
+        if (!TryDirectStorageExpression(right, out var rightAddress, out var rightType))
+        {
+            EmitWordExpressionToStorage(right, RuntimeIndexScratchAddress, WordExpressionType(right));
+            rightAddress = RuntimeIndexScratchAddress;
+            rightType = "u16";
+        }
+
+        builder.LoadAZeroPage(address);
+        builder.SetCarry();
+        builder.SubtractZeroPage(rightAddress);
+        builder.StoreAZeroPage(address);
+
+        EmitHighByteToScratch(rightAddress, rightType);
+        builder.LoadAZeroPage(HighAddress(address));
+        builder.SubtractZeroPage(ExpressionScratchAddress);
+        builder.StoreAZeroPage(HighAddress(address));
+    }
+
+    private void EmitHighByteToScratch(byte address, string type)
+    {
+        if (IsWordBackedType(type))
+        {
+            builder.LoadAZeroPage(HighAddress(address));
+        }
+        else if (type == "i8")
+        {
+            builder.LoadAZeroPage(address);
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+    }
+
+    private void EmitHighByteFromLowAToStorage(byte highAddress, string sourceType)
+    {
+        if (sourceType == "i8")
+        {
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreAZeroPage(highAddress);
+    }
+
+    private void EmitSignExtensionFromA()
+    {
+        var negativeLabel = builder.CreateLabel("sign_extend_negative");
+        var endLabel = builder.CreateLabel("sign_extend_end");
+
+        builder.AndImmediate(0x80);
+        builder.CompareImmediate(0);
+        builder.BranchRelative(0xD0, negativeLabel); // BNE negativeLabel
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(endLabel);
+        builder.Label(negativeLabel);
+        builder.LoadAImmediate(0xFF);
+        builder.Label(endLabel);
+    }
+
+    private static byte HighAddress(byte lowAddress) => (byte)(lowAddress + 1);
 
     private void TrackImmutable(DeclarationSyntax declaration)
     {
@@ -942,9 +1216,8 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
-    // i8 is the signed byte type: relational comparisons on i8 operands use signed ordering. Other
-    // byte-backed types (u8/u16/i16/bool/enum) keep unsigned comparison, matching how the samples use
-    // i16 for 0..255 positions.
+    // Signed scalar locations use sign-bit-flipped ordering in relational compares. Unsigned
+    // scalars, bools, and enums keep ordinary unsigned comparison.
     private void TrackSignedByteType(string type, string scopedName)
     {
         if (type == "i8")
@@ -955,6 +1228,11 @@ internal sealed class NesRuntimeCompiler
 
     private bool IsSignedRelationalOperand(ExpressionSyntax expression)
     {
+        if (TryExpressionStorageType(expression, out var type))
+        {
+            return type is "i8" or "i16";
+        }
+
         return expression switch
         {
             IdentifierSyntax identifier => signedByteLocations.Contains(ScopedVariableName(identifier.Identifier)),
@@ -1033,6 +1311,114 @@ internal sealed class NesRuntimeCompiler
         return IsByteBackedType(type) || program.Enums.ContainsKey(type);
     }
 
+    private bool IsScalarLocalType(string type)
+    {
+        return IsByteBackedLocalType(type);
+    }
+
+    private static bool IsWordBackedType(string type)
+    {
+        return type is "i16" or "u16";
+    }
+
+    private int StorageSize(string type)
+    {
+        return IsWordBackedType(type) ? 2 : 1;
+    }
+
+    private string VariableStorageType(string name)
+    {
+        var scopedName = ScopedVariableName(name);
+        if (!variableTypes.TryGetValue(scopedName, out var type))
+        {
+            throw new InvalidOperationException($"Use of undeclared variable '{name}'.");
+        }
+
+        return type;
+    }
+
+    private bool TryDirectStorageExpression(ExpressionSyntax expression, out byte address, out string type)
+    {
+        switch (expression)
+        {
+            case CastSyntax cast:
+                return TryDirectStorageExpression(cast.Expression, out address, out type);
+            case IdentifierSyntax identifier:
+                address = VariableAddress(identifier.Identifier);
+                type = VariableStorageType(identifier.Identifier);
+                return true;
+            case MemberAccessSyntax memberAccess:
+                if (TryRuntimeIndexedMemberAccess(memberAccess, out _, out _))
+                {
+                    address = 0;
+                    type = string.Empty;
+                    return false;
+                }
+
+                var memberName = NesVideoProgram.MemberAccessName(memberAccess);
+                address = VariableAddress(memberName);
+                type = VariableStorageType(memberName);
+                return true;
+            case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
+                var elementName = IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index");
+                address = VariableAddress(elementName);
+                type = VariableStorageType(elementName);
+                return true;
+            default:
+                address = 0;
+                type = string.Empty;
+                return false;
+        }
+    }
+
+    private string WordExpressionType(ExpressionSyntax expression)
+    {
+        if (TryExpressionStorageType(expression, out var type) && IsWordBackedType(type))
+        {
+            return type;
+        }
+
+        return "u16";
+    }
+
+    private bool TryExpressionStorageType(ExpressionSyntax expression, out string type)
+    {
+        switch (expression)
+        {
+            case CastSyntax cast:
+                type = cast.Type;
+                return true;
+            case IdentifierSyntax { Identifier: "true" or "false" }:
+                break;
+            case IdentifierSyntax identifier:
+                type = VariableStorageType(identifier.Identifier);
+                return true;
+            case MemberAccessSyntax memberAccess when !TryRuntimeIndexedMemberAccess(memberAccess, out _, out _):
+                type = VariableStorageType(NesVideoProgram.MemberAccessName(memberAccess));
+                return true;
+            case IndexExpressionSyntax indexExpression when TryConst(indexExpression.Index, out _):
+                type = VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, indexExpression.Index, $"{indexExpression.BaseIdentifier} array index"));
+                return true;
+            case BinaryExpressionSyntax binary when binary.Operator.Symbol is "+" or "-":
+                if (TryExpressionStorageType(binary.Left, out var leftType) && IsWordBackedType(leftType))
+                {
+                    type = leftType;
+                    return true;
+                }
+
+                if (TryExpressionStorageType(binary.Right, out var rightType) && IsWordBackedType(rightType))
+                {
+                    type = rightType;
+                    return true;
+                }
+
+                break;
+        }
+
+        type = string.Empty;
+        return false;
+    }
+
     private void RequireSupportedCastTarget(CastSyntax cast)
     {
         if (!IsByteBackedLocalType(cast.Type))
@@ -1073,6 +1459,13 @@ internal sealed class NesRuntimeCompiler
         }
 
         var address = LValueAddress(assignment.Left);
+        var targetType = LValueStorageType(assignment.Left);
+        if (IsWordBackedType(targetType))
+        {
+            EmitWordAssignment(assignment, address, targetType);
+            return;
+        }
+
         EmitAssignmentRightToA(assignment);
         builder.StoreAZeroPage(address);
     }
@@ -1110,7 +1503,13 @@ internal sealed class NesRuntimeCompiler
     private void EmitRuntimeIndexedAssignment(IndexLValue indexLValue, AssignmentSyntax assignment)
     {
         var baseAddress = ArrayBaseAddress(indexLValue.BaseIdentifier);
-        EmitRuntimeIndexToX(indexLValue.Index);
+        EmitRuntimeIndexToX(indexLValue.BaseIdentifier, indexLValue.Index);
+        var elementType = VariableStorageType(IndexedElementName(indexLValue.BaseIdentifier, 0));
+        if (IsWordBackedType(elementType))
+        {
+            EmitRuntimeIndexedWordAssignment(baseAddress, assignment, elementType, "runtime indexed assignment");
+            return;
+        }
 
         switch (assignment.OperatorSymbol)
         {
@@ -1195,6 +1594,12 @@ internal sealed class NesRuntimeCompiler
     {
         var baseAddress = RuntimeIndexedMemberBaseAddress(indexExpression, fieldName);
         EmitRuntimeMemberIndexToX(indexExpression);
+        var fieldType = VariableStorageType(IndexedMemberName(indexExpression.BaseIdentifier, 0, fieldName));
+        if (IsWordBackedType(fieldType))
+        {
+            EmitRuntimeIndexedWordAssignment(baseAddress, assignment, fieldType, "runtime indexed struct field assignment");
+            return;
+        }
 
         switch (assignment.OperatorSymbol)
         {
@@ -1255,6 +1660,57 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
+    private void EmitRuntimeIndexedWordAssignment(byte baseAddress, AssignmentSyntax assignment, string targetType, string context)
+    {
+        if (assignment.OperatorSymbol != "=")
+        {
+            throw new InvalidOperationException($"NES target only supports direct '=' for 16-bit {context}.");
+        }
+
+        RequireExpressionPreservesX(assignment.Right, context);
+        EmitWordExpressionToZeroPageX(baseAddress, assignment.Right, targetType);
+    }
+
+    private void EmitWordExpressionToZeroPageX(byte baseAddress, ExpressionSyntax expression, string targetType)
+    {
+        if (TryConst(expression, out var constant))
+        {
+            builder.LoadAImmediate(constant & 0xFF);
+            builder.StoreAZeroPageX(baseAddress);
+            builder.LoadAImmediate((constant >> 8) & 0xFF);
+            builder.StoreAZeroPageX(HighAddress(baseAddress));
+            return;
+        }
+
+        if (TryDirectStorageExpression(expression, out var sourceAddress, out var sourceType))
+        {
+            builder.LoadAZeroPage(sourceAddress);
+            builder.StoreAZeroPageX(baseAddress);
+            if (IsWordBackedType(sourceType))
+            {
+                builder.LoadAZeroPage(HighAddress(sourceAddress));
+            }
+            else if (sourceType == "i8")
+            {
+                builder.LoadAZeroPage(sourceAddress);
+                EmitSignExtensionFromA();
+            }
+            else
+            {
+                builder.LoadAImmediate(0);
+            }
+
+            builder.StoreAZeroPageX(HighAddress(baseAddress));
+            return;
+        }
+
+        EmitWordExpressionToStorage(expression, RuntimeIndexScratchAddress, targetType);
+        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
+        builder.StoreAZeroPageX(baseAddress);
+        builder.LoadAZeroPage(ExpressionScratchAddress);
+        builder.StoreAZeroPageX(HighAddress(baseAddress));
+    }
+
     private void EmitAssignmentRightToA(AssignmentSyntax assignment)
     {
         switch (assignment.OperatorSymbol)
@@ -1282,6 +1738,24 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
+    private void EmitWordAssignment(AssignmentSyntax assignment, byte address, string targetType)
+    {
+        switch (assignment.OperatorSymbol)
+        {
+            case "=":
+                EmitWordExpressionToStorage(assignment.Right, address, targetType);
+                return;
+            case "+=":
+                EmitAddWordIntoStorage(address, assignment.Right);
+                return;
+            case "-=":
+                EmitSubtractWordFromStorage(address, assignment.Right);
+                return;
+            default:
+                throw new InvalidOperationException($"NES target does not support 16-bit assignment operator '{assignment.OperatorSymbol}'.");
+        }
+    }
+
     private byte LValueAddress(LValue lValue)
     {
         return lValue switch
@@ -1289,6 +1763,17 @@ internal sealed class NesRuntimeCompiler
             IdentifierLValue identifier => VariableAddress(identifier.Identifier),
             MemberAccessLValue memberAccess => VariableAddress(NesVideoProgram.MemberAccessName(memberAccess.MemberAccess)),
             IndexLValue index => VariableAddress(IndexedElementName(index.BaseIdentifier, index.Index, $"{index.BaseIdentifier} array index")),
+            _ => throw new InvalidOperationException("NES target only supports assignments to local variables, struct fields, or constant array indices."),
+        };
+    }
+
+    private string LValueStorageType(LValue lValue)
+    {
+        return lValue switch
+        {
+            IdentifierLValue identifier => VariableStorageType(identifier.Identifier),
+            MemberAccessLValue memberAccess => VariableStorageType(NesVideoProgram.MemberAccessName(memberAccess.MemberAccess)),
+            IndexLValue index => VariableStorageType(IndexedElementName(index.BaseIdentifier, index.Index, $"{index.BaseIdentifier} array index")),
             _ => throw new InvalidOperationException("NES target only supports assignments to local variables, struct fields, or constant array indices."),
         };
     }
@@ -1485,12 +1970,8 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitWhile(WhileSyntax whileSyntax)
     {
-        if (!TryConst(whileSyntax.Condition, out var condition))
-        {
-            throw new InvalidOperationException("NES target only supports constant while conditions in the current runtime spike.");
-        }
-
-        if (condition == 0)
+        var conditionIsConstant = TryConst(whileSyntax.Condition, out var condition);
+        if (conditionIsConstant && condition == 0)
         {
             return;
         }
@@ -1498,6 +1979,11 @@ internal sealed class NesRuntimeCompiler
         var loopLabel = builder.CreateLabel("while");
         var endLabel = builder.CreateLabel("while_end");
         builder.Label(loopLabel);
+        if (!conditionIsConstant)
+        {
+            EmitConditionFalseJump(whileSyntax.Condition, endLabel);
+        }
+
         loopTargets.Push(new LoopTarget(endLabel, loopLabel));
         try
         {
@@ -1673,10 +2159,22 @@ internal sealed class NesRuntimeCompiler
                     builder.Label(trueLabel);
                     return;
                 case "==":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordEqualityFalseJump(binary.Left, binary.Right, falseLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
                     return;
                 case "!=":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordInequalityFalseJump(binary.Left, binary.Right, falseLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xF0, falseLabel); // BEQ falseLabel
                     return;
@@ -1684,6 +2182,12 @@ internal sealed class NesRuntimeCompiler
                 case "<=":
                 case ">":
                 case ">=":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordRelationalFalseJump(binary, falseLabel);
+                        return;
+                    }
+
                     EmitRelationalFalseJump(binary, falseLabel);
                     return;
             }
@@ -1727,10 +2231,22 @@ internal sealed class NesRuntimeCompiler
                     EmitConditionTrueJump(binary.Right, trueLabel);
                     return;
                 case "==":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordEqualityTrueJump(binary.Left, binary.Right, trueLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xF0, trueLabel); // BEQ trueLabel
                     return;
                 case "!=":
+                    if (IsWordComparison(binary))
+                    {
+                        EmitWordInequalityTrueJump(binary.Left, binary.Right, trueLabel);
+                        return;
+                    }
+
                     EmitCompare(binary.Left, binary.Right);
                     builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
                     return;
@@ -1775,6 +2291,177 @@ internal sealed class NesRuntimeCompiler
         EmitExpressionToA(right);
         builder.StoreAZeroPage(ExpressionScratchAddress);
         builder.PullA();
+    }
+
+    private bool IsWordComparison(BinaryExpressionSyntax binary)
+    {
+        return IsWordExpression(binary.Left) || IsWordExpression(binary.Right);
+    }
+
+    private bool IsWordExpression(ExpressionSyntax expression)
+    {
+        return TryExpressionStorageType(expression, out var type) && IsWordBackedType(type);
+    }
+
+    private void EmitWordEqualityFalseJump(ExpressionSyntax left, ExpressionSyntax right, string falseLabel)
+    {
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
+    }
+
+    private void EmitWordInequalityFalseJump(ExpressionSyntax left, ExpressionSyntax right, string falseLabel)
+    {
+        var trueLabel = builder.CreateLabel("word_neq_true");
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
+        builder.JumpAbsolute(falseLabel);
+        builder.Label(trueLabel);
+    }
+
+    private void EmitWordEqualityTrueJump(ExpressionSyntax left, ExpressionSyntax right, string trueLabel)
+    {
+        var endLabel = builder.CreateLabel("word_eq_end");
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.BranchRelative(0xD0, endLabel); // BNE endLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.BranchRelative(0xF0, trueLabel); // BEQ trueLabel
+        builder.Label(endLabel);
+    }
+
+    private void EmitWordInequalityTrueJump(ExpressionSyntax left, ExpressionSyntax right, string trueLabel)
+    {
+        EmitCompareWordByte(left, right, highByte: true, signedHighByte: false);
+        builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
+        EmitCompareWordByte(left, right, highByte: false, signedHighByte: false);
+        builder.BranchRelative(0xD0, trueLabel); // BNE trueLabel
+    }
+
+    private void EmitWordRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
+    {
+        var trueLabel = builder.CreateLabel("word_rel_true");
+        var localFalseLabel = builder.CreateLabel("word_rel_false");
+        EmitWordRelationalJump(binary, trueLabel, localFalseLabel);
+        builder.Label(localFalseLabel);
+        builder.JumpAbsolute(falseLabel);
+        builder.Label(trueLabel);
+    }
+
+    private void EmitWordRelationalJump(BinaryExpressionSyntax binary, string trueLabel, string falseLabel)
+    {
+        var signed = IsSignedRelationalOperand(binary.Left) || IsSignedRelationalOperand(binary.Right);
+        EmitCompareWordByte(binary.Left, binary.Right, highByte: true, signedHighByte: signed);
+
+        switch (binary.Operator.Symbol)
+        {
+            case "<":
+                builder.BranchRelative(0x90, trueLabel);  // BCC trueLabel
+                builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.BranchRelative(0x90, trueLabel);  // BCC trueLabel
+                builder.JumpAbsolute(falseLabel);
+                return;
+            case "<=":
+                builder.BranchRelative(0x90, trueLabel);  // BCC trueLabel
+                builder.BranchRelative(0xD0, falseLabel); // BNE falseLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.BranchRelative(0x90, trueLabel);  // BCC trueLabel
+                builder.BranchRelative(0xF0, trueLabel);  // BEQ trueLabel
+                builder.JumpAbsolute(falseLabel);
+                return;
+            case ">":
+                builder.BranchRelative(0x90, falseLabel); // BCC falseLabel
+                builder.BranchRelative(0xD0, trueLabel);  // BNE trueLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.BranchRelative(0x90, falseLabel); // BCC falseLabel
+                builder.BranchRelative(0xF0, falseLabel); // BEQ falseLabel
+                builder.JumpAbsolute(trueLabel);
+                return;
+            case ">=":
+                builder.BranchRelative(0x90, falseLabel); // BCC falseLabel
+                builder.BranchRelative(0xD0, trueLabel);  // BNE trueLabel
+                EmitCompareWordByte(binary.Left, binary.Right, highByte: false, signedHighByte: false);
+                builder.BranchRelative(0x90, falseLabel); // BCC falseLabel
+                builder.JumpAbsolute(trueLabel);
+                return;
+            default:
+                throw new InvalidOperationException($"Unsupported NES relational operator '{binary.Operator.Symbol}'.");
+        }
+    }
+
+    private void EmitCompareWordByte(ExpressionSyntax left, ExpressionSyntax right, bool highByte, bool signedHighByte)
+    {
+        EmitLoadWordByteToA(left, highByte, signedHighByte);
+        if (TryConst(right, out var rightConstant))
+        {
+            var value = WordByte(rightConstant, highByte);
+            builder.CompareImmediate(signedHighByte ? value ^ 0x80 : value);
+            return;
+        }
+
+        builder.PushA();
+        EmitLoadWordByteToScratch(right, highByte, signedHighByte);
+        builder.PullA();
+        builder.CompareZeroPage(ExpressionScratchAddress);
+    }
+
+    private void EmitLoadWordByteToScratch(ExpressionSyntax expression, bool highByte, bool signedHighByte)
+    {
+        EmitLoadWordByteToA(expression, highByte, signedHighByte);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+    }
+
+    private void EmitLoadWordByteToA(ExpressionSyntax expression, bool highByte, bool signedHighByte)
+    {
+        if (TryConst(expression, out var constant))
+        {
+            var value = WordByte(constant, highByte);
+            builder.LoadAImmediate(signedHighByte ? value ^ 0x80 : value);
+            return;
+        }
+
+        if (TryDirectStorageExpression(expression, out var address, out var type))
+        {
+            if (!highByte)
+            {
+                builder.LoadAZeroPage(address);
+            }
+            else if (IsWordBackedType(type))
+            {
+                builder.LoadAZeroPage(HighAddress(address));
+            }
+            else if (type == "i8")
+            {
+                builder.LoadAZeroPage(address);
+                EmitSignExtensionFromA();
+            }
+            else
+            {
+                builder.LoadAImmediate(0);
+            }
+
+            if (signedHighByte)
+            {
+                builder.XorImmediate(0x80);
+            }
+
+            return;
+        }
+
+        EmitWordExpressionToStorage(expression, RuntimeIndexScratchAddress, WordExpressionType(expression));
+        builder.LoadAZeroPage(highByte ? ExpressionScratchAddress : RuntimeIndexScratchAddress);
+        if (signedHighByte)
+        {
+            builder.XorImmediate(0x80);
+        }
+    }
+
+    private static int WordByte(int value, bool highByte)
+    {
+        return highByte ? (value >> 8) & 0xFF : value & 0xFF;
     }
 
     private void EmitRelationalFalseJump(BinaryExpressionSyntax binary, string falseLabel)
@@ -4203,7 +4890,7 @@ internal sealed class NesRuntimeCompiler
                 }
                 else
                 {
-                    EmitRuntimeIndexToX(indexExpression.Index);
+                    EmitRuntimeIndexToX(indexExpression.BaseIdentifier, indexExpression.Index);
                     builder.LoadAZeroPageX(ArrayBaseAddress(indexExpression.BaseIdentifier));
                 }
                 break;
@@ -4435,9 +5122,11 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
-    private void EmitRuntimeIndexToX(ExpressionSyntax index)
+    private void EmitRuntimeIndexToX(string baseIdentifier, ExpressionSyntax index)
     {
+        var elementSize = StorageSize(VariableStorageType(IndexedElementName(baseIdentifier, 0)));
         EmitExpressionToA(index);
+        EmitMultiplyA(elementSize);
         builder.TransferAToX();
     }
 
@@ -4849,27 +5538,27 @@ internal sealed class NesRuntimeCompiler
         return $"{IndexedElementName(baseIdentifier, index)}.{fieldName}";
     }
 
-    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax, string targetName)
+    private Dictionary<string, int> StructFieldOffsets(StructSyntax structSyntax)
     {
         var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
         var offset = 0;
         foreach (var field in structSyntax.Fields)
         {
-            if (!IsByteSizedStructArrayFieldType(field.Type))
+            if (!IsScalarLocalType(field.Type))
             {
-                throw new InvalidOperationException($"{targetName} target struct array field type '{field.Type}' is not byte-sized; use u8, i8, bool, or enum fields until mixed-width pool layout is implemented.");
+                throw new InvalidOperationException($"NES target struct array field type '{field.Type}' is not scalar.");
             }
 
             offsets.Add(field.Name, offset);
-            offset++;
+            offset += StorageSize(field.Type);
         }
 
         return offsets;
     }
 
-    private bool IsByteSizedStructArrayFieldType(string type)
+    private int StructStride(StructSyntax structSyntax)
     {
-        return type is "i8" or "u8" or "bool" || program.Enums.ContainsKey(type);
+        return structSyntax.Fields.Sum(field => StorageSize(field.Type));
     }
 
     private static string StorageKey(SdkStorageLocation location)
