@@ -17,18 +17,14 @@ public sealed class SdkApiLeakGuardTests
 
     private static readonly string[] AllowedFacadeFiles =
     [
-        // Transitional homes for SDK facade definitions or generated SDK calls.
-        "src/RetroSharp.Core/Sdk/SdkModuleRegistry.cs",
-        "src/RetroSharp.Sdk.Frontend/ActorFrameworkLowerer.cs",
-        "src/RetroSharp.Sdk.Frontend/SdkLibrarySource.cs",
     ];
 
     private static readonly Regex DottedFacadePattern = new(
-        @"\b(?<module>Video|Input|Audio|Camera|Sprite|World|Music|Palette)\.(?<method>WaitVBlank|Poll|IsDown|WasPressed|WasReleased|HoldTicks|Init|Update|SetPosition|Apply|AabbTiles|AabbHitTop|ScreenAabbTiles|ScreenAabbHitTop|Draw|Width|Load|Asset|Play|Stop|Background|Sprite)\b",
+        @"\b(?<module>Video|Input|Audio|Camera|Sprite|World|Music|Palette|ObjectPalette|Tilemap|Hud)\.(?<method>WaitVBlank|Poll|IsDown|WasPressed|WasReleased|HoldTicks|Init|Update|SetPosition|Apply|AabbTiles|AabbHitTop|ScreenAabbTiles|ScreenAabbHitTop|Draw|Width|Load|Asset|Play|Stop|Background|Sprite|Set|Fill|SetTile)\b",
         RegexOptions.Compiled);
 
     private static readonly Regex FacadePairPattern = new(
-        "\"(?<module>Video|Input|Audio|Camera|Sprite|World|Music|Palette)\"\\s*,\\s*\"(?<method>WaitVBlank|Poll|IsDown|WasPressed|WasReleased|HoldTicks|Init|Update|SetPosition|Apply|AabbTiles|AabbHitTop|ScreenAabbTiles|ScreenAabbHitTop|Draw|Width|Load|Asset|Play|Stop|Background|Sprite)\"",
+        "\"(?<module>Video|Input|Audio|Camera|Sprite|World|Music|Palette|ObjectPalette|Tilemap|Hud)\"\\s*,\\s*\"(?<method>WaitVBlank|Poll|IsDown|WasPressed|WasReleased|HoldTicks|Init|Update|SetPosition|Apply|AabbTiles|AabbHitTop|ScreenAabbTiles|ScreenAabbHitTop|Draw|Width|Load|Asset|Play|Stop|Background|Sprite|Set|Fill|SetTile)\"",
         RegexOptions.Compiled);
 
     [Fact]

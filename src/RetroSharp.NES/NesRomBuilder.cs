@@ -1901,6 +1901,9 @@ internal sealed class NesRuntimeCompiler
         NesVideoProgram.RequireArity(call, intrinsic.Arity);
         switch (intrinsic.Operation)
         {
+            case TargetIntrinsicOperation.InitializeVideo:
+            case TargetIntrinsicOperation.PresentVideo:
+                return true;
             case TargetIntrinsicOperation.WaitFrame:
                 EmitWaitFrame(applyPendingCameraScroll: true);
                 return true;
@@ -4666,6 +4669,22 @@ internal sealed class NesRuntimeCompiler
                     TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
                     program.Functions,
                     NesTarget.Intrinsics));
+                return true;
+            case TargetIntrinsicOperation.ButtonDown:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonDown(call);
+                return true;
+            case TargetIntrinsicOperation.ButtonJustPressed:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonJustPressed(call);
+                return true;
+            case TargetIntrinsicOperation.ButtonJustReleased:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonJustReleased(call);
+                return true;
+            case TargetIntrinsicOperation.ButtonHoldTicks:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonHoldTicks(call);
                 return true;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);

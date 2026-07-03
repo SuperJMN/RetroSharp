@@ -81,6 +81,19 @@ public sealed class NesTargetCapabilitiesTests
         Assert.False(NesTarget.Intrinsics.TryResolve("world_tile_flags_at", out _));
     }
 
+    [Theory]
+    [InlineData("button_down", TargetIntrinsicReturnKind.Bool)]
+    [InlineData("button_just_pressed", TargetIntrinsicReturnKind.Bool)]
+    [InlineData("button_just_released", TargetIntrinsicReturnKind.Bool)]
+    [InlineData("button_hold_ticks", TargetIntrinsicReturnKind.I16)]
+    public void Nes_catalogs_button_predicate_intrinsics(string intrinsicId, TargetIntrinsicReturnKind returnKind)
+    {
+        Assert.True(NesTarget.Intrinsics.TryResolve(intrinsicId, out var descriptor));
+        Assert.Equal(returnKind, descriptor.ReturnKind);
+        Assert.Equal(1, descriptor.RuntimeArity);
+        Assert.Empty(descriptor.CompileTimeOperands);
+    }
+
     private static bool CanStreamVisibleColumn(Target2DCapabilities capabilities)
     {
         return capabilities.SupportsScrollAxis(ScrollAxes.Horizontal)

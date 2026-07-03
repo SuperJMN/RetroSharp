@@ -13,7 +13,7 @@ public static class GameBoyRomCompiler
     public static byte[] CompileSource(
         string source,
         string? baseDirectory = null,
-        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null)
     {
@@ -26,7 +26,7 @@ public static class GameBoyRomCompiler
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
         string source,
         string? baseDirectory = null,
-        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null)
     {
@@ -36,7 +36,7 @@ public static class GameBoyRomCompiler
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
         string source,
         string? baseDirectory = null,
-        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null)
     {
@@ -58,7 +58,6 @@ public static class GameBoyRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
@@ -743,11 +742,41 @@ internal sealed class GameBoyVideoProgram
     {
         switch (descriptor.Kind)
         {
+            case SdkResourceDeclarationKind.RawPalette:
+                RequireArity(call, 2);
+                SetPaletteColor(ConstArg(call, 0, 0, 3), ConstArg(call, 1, 0, 3));
+                break;
+            case SdkResourceDeclarationKind.RawObjectPalette:
+                RequireArity(call, 2);
+                SetObjectPaletteColor(ConstArg(call, 0, 0, 3), ConstArg(call, 1, 0, 3));
+                break;
             case SdkResourceDeclarationKind.BackgroundPalette:
                 ApplyLogicalPalette(call, PaletteKind.Background);
                 break;
             case SdkResourceDeclarationKind.SpritePalette:
                 ApplyLogicalPalette(call, PaletteKind.Sprite);
+                break;
+            case SdkResourceDeclarationKind.TilemapSet:
+                RequireArity(call, 3);
+                SetTile(ConstArg(call, 0, 0, 31), ConstArg(call, 1, 0, 31), ConstArg(call, 2, 0, 255));
+                break;
+            case SdkResourceDeclarationKind.TilemapFill:
+                RequireArity(call, 5);
+                FillTiles(
+                    ConstArg(call, 0, 0, 31),
+                    ConstArg(call, 1, 0, 31),
+                    ConstArg(call, 2, 1, 32),
+                    ConstArg(call, 3, 1, 32),
+                    ConstArg(call, 4, 0, 255));
+                break;
+            case SdkResourceDeclarationKind.WorldColumn:
+                ApplyWorldColumn(call);
+                break;
+            case SdkResourceDeclarationKind.WorldFlags:
+                ApplyWorldFlags(call);
+                break;
+            case SdkResourceDeclarationKind.WorldMap:
+                ApplyWorldMap(call);
                 break;
             case SdkResourceDeclarationKind.WorldLoad:
                 ApplyWorldLoad(call);
@@ -760,6 +789,9 @@ internal sealed class GameBoyVideoProgram
                 break;
             case SdkResourceDeclarationKind.AnimationClip:
                 ApplyAnimationClip(call);
+                break;
+            case SdkResourceDeclarationKind.HudSetTile:
+                ApplyHudSetTile(call);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK resource declaration '{descriptor.ResourceId}'.");

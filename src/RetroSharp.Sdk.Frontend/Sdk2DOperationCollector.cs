@@ -1057,6 +1057,10 @@ public static class Sdk2DOperationCollector
                     return true;
                 case TargetIntrinsicOperation.ReadSpriteWidth:
                 case TargetIntrinsicOperation.ReadAnimationFrame:
+                case TargetIntrinsicOperation.ButtonDown:
+                case TargetIntrinsicOperation.ButtonJustPressed:
+                case TargetIntrinsicOperation.ButtonJustReleased:
+                case TargetIntrinsicOperation.ButtonHoldTicks:
                     return true;
                 default:
                     return false;

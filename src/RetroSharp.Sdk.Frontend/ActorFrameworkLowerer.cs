@@ -20,6 +20,10 @@ public static class ActorFrameworkLowerer
     private const string ActorCameraXHighFunction = "__rs_actor_camera_x_hi";
     private const string ActorCameraYLowFunction = "__rs_actor_camera_y_lo";
     private const string ActorCameraYHighFunction = "__rs_actor_camera_y_hi";
+    private const string AnimationFrameIntrinsic = "animation_frame";
+    private const string CameraScreenAabbTilesIntrinsic = "camera_screen_aabb_tiles";
+    private const string CameraScreenAabbHitTopIntrinsic = "camera_screen_aabb_hit_top";
+    private const string SpriteDrawIntrinsic = "sprite_draw";
 
     private static readonly IReadOnlyDictionary<string, int> BehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -56,7 +60,12 @@ public static class ActorFrameworkLowerer
 
     public static ProgramSyntax Lower(ProgramSyntax program, Target2DCapabilities capabilities, bool supportsUpdate, bool supportsDraw, string? baseDirectory = null)
     {
-        var state = new ActorFrameworkState(capabilities, supportsUpdate, supportsDraw, baseDirectory);
+        var state = new ActorFrameworkState(
+            capabilities,
+            supportsUpdate,
+            supportsDraw,
+            baseDirectory,
+            IntrinsicFunctionIndex.Build(program));
         foreach (var function in program.Functions)
         {
             CollectDirectives(function.Block, state);
@@ -785,6 +794,14 @@ public static class ActorFrameworkLowerer
             value));
     }
 
+    private static FunctionCall IntrinsicCall(
+        ActorFrameworkState state,
+        string intrinsicId,
+        IEnumerable<ExpressionSyntax> parameters)
+    {
+        return new FunctionCall(state.IntrinsicFunction(intrinsicId), parameters);
+    }
+
     private static IReadOnlyList<StatementSyntax> PoolDrawStatements(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
     {
         RequireNoArguments(call);
@@ -806,8 +823,8 @@ public static class ActorFrameworkLowerer
             .Select(def => new KindBranch(
                 def.Name,
                 pool.Capacity == 1
-                    ? ActorDrawBlock(pool, indexName, def, projection, state.ScreenHeight)
-                    : VisibleActorDrawBlock(pool, indexName, def, projection)))
+                    ? ActorDrawBlock(pool, indexName, def, projection, state.ScreenHeight, state)
+                    : VisibleActorDrawBlock(pool, indexName, def, projection, state)))
             .ToList();
         var activeStatements = projection.Declarations
             .Append(KindDispatch(pool.Name, indexName, branches))
@@ -826,7 +843,8 @@ public static class ActorFrameworkLowerer
         string indexName,
         EnemyDef def,
         ActorScreenProjection projection,
-        int hiddenY)
+        int hiddenY,
+        ActorFrameworkState state)
     {
         var statements = new List<StatementSyntax>();
         var drawX = $"__{pool.Name}_draw_x_{def.Name}";
@@ -840,9 +858,9 @@ public static class ActorFrameworkLowerer
                 "u8",
                 frameVariable,
                 Maybe<ExpressionSyntax>.None,
-                Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                    "Animation",
-                    "Frame",
+                Maybe.From<ExpressionSyntax>(IntrinsicCall(
+                    state,
+                    AnimationFrameIntrinsic,
                     [
                         new IdentifierSyntax(def.Animation),
                         PoolField(pool.Name, indexName, "animTick"),
@@ -880,9 +898,9 @@ public static class ActorFrameworkLowerer
             ]),
             Maybe<BlockSyntax>.None));
 
-        statements.Add(new ExpressionStatementSyntax(new SdkDotCallSyntax(
-            "Sprite",
-            "Draw",
+        statements.Add(new ExpressionStatementSyntax(IntrinsicCall(
+            state,
+            SpriteDrawIntrinsic,
             [
                 new IdentifierSyntax(def.Sprite!),
                 new IdentifierSyntax(drawX),
@@ -895,7 +913,12 @@ public static class ActorFrameworkLowerer
         return new BlockSyntax(statements);
     }
 
-    private static BlockSyntax VisibleActorDrawBlock(ActorPool pool, string indexName, EnemyDef def, ActorScreenProjection projection)
+    private static BlockSyntax VisibleActorDrawBlock(
+        ActorPool pool,
+        string indexName,
+        EnemyDef def,
+        ActorScreenProjection projection,
+        ActorFrameworkState state)
     {
         var statements = new List<StatementSyntax>();
 
@@ -907,9 +930,9 @@ public static class ActorFrameworkLowerer
                 "u8",
                 frameVariable,
                 Maybe<ExpressionSyntax>.None,
-                Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                    "Animation",
-                    "Frame",
+                Maybe.From<ExpressionSyntax>(IntrinsicCall(
+                    state,
+                    AnimationFrameIntrinsic,
                     [
                         new IdentifierSyntax(def.Animation),
                         PoolField(pool.Name, indexName, "animTick"),
@@ -920,9 +943,9 @@ public static class ActorFrameworkLowerer
         statements.Add(new IfElseSyntax(
             projection.Visible,
             new BlockSyntax([
-                new ExpressionStatementSyntax(new SdkDotCallSyntax(
-                    "Sprite",
-                    "Draw",
+                new ExpressionStatementSyntax(IntrinsicCall(
+                    state,
+                    SpriteDrawIntrinsic,
                     [
                         new IdentifierSyntax(def.Sprite!),
                         projection.ScreenX,
@@ -946,7 +969,7 @@ public static class ActorFrameworkLowerer
         var indexName = $"__{pool.Name}_touch_i";
         var projection = BuildActorScreenProjection(pool, indexName, "touch", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, TouchTilesBlock(pool, indexName, def, yOffset, parameters[1], projection)))
+            .Select(def => new KindBranch(def.Name, TouchTilesBlock(pool, indexName, def, yOffset, parameters[1], projection, state)))
             .ToList();
         var activeStatements = projection.Declarations
             .Append(KindDispatch(pool.Name, indexName, branches))
@@ -964,14 +987,16 @@ public static class ActorFrameworkLowerer
         EnemyDef def,
         int yOffset,
         ExpressionSyntax flags,
-        ActorScreenProjection projection)
+        ActorScreenProjection projection,
+        ActorFrameworkState state)
     {
         var collision = new IfElseSyntax(
             new BinaryExpressionSyntax(
-                new SdkDotCallSyntax(
-                    "Camera",
-                    "ScreenAabbTiles",
+                IntrinsicCall(
+                    state,
+                    CameraScreenAabbTilesIntrinsic,
                     [
+                        new ConstantSyntax("\"default\""),
                         projection.ScreenX,
                         OffsetExpression(projection.ScreenY, yOffset, subtract: false),
                         new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
@@ -1000,7 +1025,7 @@ public static class ActorFrameworkLowerer
         var indexName = $"__{pool.Name}_land_i";
         var projection = BuildActorScreenProjection(pool, indexName, "land", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EnemyDefs
-            .Select(def => new KindBranch(def.Name, LandOnTilesBlock(pool, indexName, def, searchTopOffset, searchHeight, parameters[2], projection)))
+            .Select(def => new KindBranch(def.Name, LandOnTilesBlock(pool, indexName, def, searchTopOffset, searchHeight, parameters[2], projection, state)))
             .ToList();
         var activeStatements = projection.Declarations
             .Append(KindDispatch(pool.Name, indexName, branches))
@@ -1019,17 +1044,19 @@ public static class ActorFrameworkLowerer
         int searchTopOffset,
         int searchHeight,
         ExpressionSyntax flags,
-        ActorScreenProjection projection)
+        ActorScreenProjection projection,
+        ActorFrameworkState state)
     {
         var hitTop = $"__{pool.Name}_land_hit_{def.Name}";
         var hitTopDeclaration = new DeclarationSyntax(
             "u8",
             hitTop,
             Maybe<ExpressionSyntax>.None,
-            Maybe.From<ExpressionSyntax>(new SdkDotCallSyntax(
-                "Camera",
-                "ScreenAabbHitTop",
+            Maybe.From<ExpressionSyntax>(IntrinsicCall(
+                state,
+                CameraScreenAabbHitTopIntrinsic,
                 [
+                    new ConstantSyntax("\"default\""),
                     projection.ScreenX,
                     OffsetExpression(projection.ScreenY, searchTopOffset, subtract: true),
                     new ConstantSyntax(def.HitboxWidth.ToString(CultureInfo.InvariantCulture)),
@@ -1980,7 +2007,12 @@ public static class ActorFrameworkLowerer
         return maybe.HasValue ? Maybe.From(selector(maybe.Value)) : Maybe<TOut>.None;
     }
 
-    private sealed class ActorFrameworkState(Target2DCapabilities capabilities, bool supportsUpdate, bool supportsDraw, string? baseDirectory)
+    private sealed class ActorFrameworkState(
+        Target2DCapabilities capabilities,
+        bool supportsUpdate,
+        bool supportsDraw,
+        string? baseDirectory,
+        IReadOnlyDictionary<string, string>? intrinsicFunctionNames = null)
     {
         private readonly Dictionary<string, ActorPool> pools = new(StringComparer.Ordinal);
         private readonly List<ActorPool> poolsInOrder = [];
@@ -1990,6 +2022,7 @@ public static class ActorFrameworkLowerer
         private readonly List<ActorSpawnLayer> spawnLayersInOrder = [];
         private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
         private readonly HashSet<string> usedEnemyLookupMethods = new(StringComparer.Ordinal);
+        private readonly IReadOnlyDictionary<string, string> intrinsicFunctions = intrinsicFunctionNames ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
         public string TargetName { get; } = capabilities.Name;
         public string BaseDirectory { get; } = baseDirectory ?? Directory.GetCurrentDirectory();
@@ -2002,6 +2035,17 @@ public static class ActorFrameworkLowerer
         public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
         public IReadOnlySet<string> UsedEnemyLookupMethods => usedEnemyLookupMethods;
         public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0;
+
+        public string IntrinsicFunction(string intrinsicId)
+        {
+            if (intrinsicFunctions.TryGetValue(intrinsicId, out var functionName))
+            {
+                return functionName;
+            }
+
+            throw new InvalidOperationException(
+                $"Actor framework requires intrinsic '{intrinsicId}' to be declared by an imported source library.");
+        }
 
         public void AddPool(ActorPool pool)
         {

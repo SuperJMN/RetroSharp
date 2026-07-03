@@ -18,6 +18,7 @@ public static class ConstantFolder
     public static ProgramSyntax Fold(ProgramSyntax program)
     {
         program = TypeAliasResolver.Resolve(program);
+        program = StaticClassLowerer.LowerStaticCalls(program, DeclaredStaticMethodIndex.Build(program));
         var typeSizes = BuildTypeSizeTable(program.Enums, program.Structs);
         var fieldOffsets = BuildFieldOffsetTable(program.Structs, typeSizes);
         var constants = BuildConstantTable(program.Constants, program.Enums, typeSizes, fieldOffsets);
@@ -629,13 +630,12 @@ public static class ConstantFolder
 
     private static FunctionCall LowerDotCall(SdkDotCallSyntax call, IEnumerable<FunctionSyntax> functions)
     {
-        var hasReceiver = ReceiverMethodLowerer.TryLower(call, functions, out var receiverCall);
-        return SdkDotCallResolver.Resolve(SdkDotCallLowerer.IsKnownModule(call.Module), hasReceiver) switch
+        if (ReceiverMethodLowerer.TryLower(call, functions, out var receiverCall))
         {
-            SdkDotCallKind.SdkModule => SdkDotCallLowerer.Lower(call),
-            SdkDotCallKind.Receiver => receiverCall,
-            _ => throw new InvalidOperationException($"Unknown SDK module or receiver method '{call.Module}.{call.Method}'."),
-        };
+            return receiverCall;
+        }
+
+        throw new InvalidOperationException($"Unknown static or receiver method '{call.Module}.{call.Method}'.");
     }
 
     private static ExpressionSyntax FoldConstantExpression(

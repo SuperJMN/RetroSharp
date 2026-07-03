@@ -19,7 +19,7 @@ public static class SdkLibrarySource
     public static string Merge(
         TargetIntrinsicCatalog catalog,
         string source,
-        SdkLibraryImportMode importMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode importMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? registry = null,
         IReadOnlyList<string>? libraryImportPaths = null)
     {
@@ -35,13 +35,6 @@ public static class SdkLibrarySource
             .Select(importPath => ResolveLibrary(registry, importPath))
             .DistinctBy(library => library.ImportPath)
             .ToList();
-
-        if (importMode == SdkLibraryImportMode.LegacyAutoImport
-            && !libraries.Any(library => library.ImportPath == SdkImportResolver.Portable2D)
-            && registry.TryResolve(SdkImportResolver.Portable2D, out var portable2D))
-        {
-            libraries.Insert(0, portable2D!);
-        }
 
         var librarySourceSets = libraries
             .Select(library => library.SourceSetForTarget(catalog))

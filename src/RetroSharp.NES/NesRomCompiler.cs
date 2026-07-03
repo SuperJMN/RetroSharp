@@ -13,7 +13,7 @@ public static class NesRomCompiler
     public static byte[] CompileSource(
         string source,
         string? baseDirectory = null,
-        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null)
     {
@@ -25,7 +25,6 @@ public static class NesRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
@@ -43,7 +42,7 @@ public static class NesRomCompiler
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
         string source,
         string? baseDirectory = null,
-        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null)
     {
@@ -55,7 +54,6 @@ public static class NesRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
@@ -71,7 +69,7 @@ public static class NesRomCompiler
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
         string source,
         string? baseDirectory = null,
-        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.LegacyAutoImport,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null)
     {
@@ -83,7 +81,6 @@ public static class NesRomCompiler
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
-        SdkImportResolver.ValidateSdkUsage(targetProgram, sdkImportMode, sdkLibraryImports);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
@@ -466,11 +463,39 @@ internal sealed class NesVideoProgram
     {
         switch (descriptor.Kind)
         {
+            case SdkResourceDeclarationKind.RawPalette:
+                RequireArity(call, 2);
+                var index = ConstArg(call, 0, 0, 31);
+                Palette[index] = (byte)ConstArg(call, 1, 0, 63);
+                rawPaletteIndexes.Add(index);
+                break;
             case SdkResourceDeclarationKind.BackgroundPalette:
                 ApplyLogicalPalette(call, PaletteKind.Background);
                 break;
             case SdkResourceDeclarationKind.SpritePalette:
                 ApplyLogicalPalette(call, PaletteKind.Sprite);
+                break;
+            case SdkResourceDeclarationKind.TilemapSet:
+                RequireArity(call, 3);
+                SetTile(ConstArg(call, 0, 0, 31), ConstArg(call, 1, 0, 29), ConstArg(call, 2, 0, 255));
+                break;
+            case SdkResourceDeclarationKind.TilemapFill:
+                RequireArity(call, 5);
+                FillTiles(
+                    ConstArg(call, 0, 0, 31),
+                    ConstArg(call, 1, 0, 29),
+                    ConstArg(call, 2, 1, 32),
+                    ConstArg(call, 3, 1, 30),
+                    ConstArg(call, 4, 0, 255));
+                break;
+            case SdkResourceDeclarationKind.WorldColumn:
+                ApplyWorldColumn(call);
+                break;
+            case SdkResourceDeclarationKind.WorldFlags:
+                ApplyWorldFlags(call);
+                break;
+            case SdkResourceDeclarationKind.WorldMap:
+                ApplyWorldMap(call);
                 break;
             case SdkResourceDeclarationKind.WorldLoad:
                 ApplyWorldLoad(call);
@@ -483,6 +508,9 @@ internal sealed class NesVideoProgram
                 break;
             case SdkResourceDeclarationKind.AnimationClip:
                 ApplyAnimationClip(call);
+                break;
+            case SdkResourceDeclarationKind.HudSetTile:
+                ValidateHudSetTile(call);
                 break;
             default:
                 throw new InvalidOperationException($"Unsupported SDK resource declaration '{descriptor.ResourceId}'.");
@@ -528,7 +556,7 @@ internal sealed class NesVideoProgram
                 && !existingPalette.SequenceEqual(asset.SuggestedPalette))
             {
                 throw new InvalidOperationException(
-                    $"NES sprite palette slot {operation.PaletteSlot} is used by multiple PNG sprite assets with different derived palettes. Use Palette.Set(...) or draw them with different palette slots.");
+                    $"NES sprite palette slot {operation.PaletteSlot} is used by multiple PNG sprite assets with different derived palettes. Declare an explicit raw object palette resource or draw them with different palette slots.");
             }
 
             ApplySpritePalette(operation.PaletteSlot, asset.SuggestedPalette);

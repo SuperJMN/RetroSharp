@@ -145,7 +145,7 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
+        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
 
         Assert.Equal(32768, rom.Length);
     }
@@ -160,9 +160,9 @@ public class GameBoyRomCompilerTests
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly));
+            () => RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly));
 
-        Assert.Equal("SDK module 'Video' requires import 'RetroSharp.Portable2D'.", exception.Message);
+        Assert.Equal("Unknown static or receiver method 'Video.WaitVBlank'.", exception.Message);
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
+        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
 
         Assert.Equal(32768, rom.Length);
     }
@@ -190,7 +190,7 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = GameBoyRomCompiler.CompileSource(
+        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
             source,
             sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
@@ -223,7 +223,7 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var rom = GameBoyRomCompiler.CompileSource(
+        var rom = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
             source,
             sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
             sdkLibraryRegistry: registry);
@@ -3431,10 +3431,8 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var parse = new SomeParser().Parse(source);
-        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
-
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
         var visitor = new PrintNodeVisitor();
         loweredProgram.Accept(visitor);
         var lowered = visitor.ToString();
@@ -3468,10 +3466,8 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var parse = new SomeParser().Parse(source);
-        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
-
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
         var visitor = new PrintNodeVisitor();
         loweredProgram.Accept(visitor);
         var lowered = visitor.ToString();
@@ -3480,8 +3476,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("u8 __enemies_draw_y_Goomba=144;", lowered);
         Assert.Contains("__enemies_draw_x_Goomba=__enemies_draw_screen_x;", lowered);
         Assert.Contains("__enemies_draw_y_Goomba=__enemies_draw_screen_y;", lowered);
-        Assert.Contains("Sprite.Draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);", lowered);
-        Assert.Equal(1, CountOccurrences(lowered, "Sprite.Draw(goomba"));
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(goomba, __enemies_draw_x_Goomba, __enemies_draw_y_Goomba, 0, false, 0);", lowered);
+        Assert.Equal(1, CountOccurrences(lowered, "RetroSharp_Portable2D_portable2d_sprite_draw(goomba"));
     }
 
     [Fact]
@@ -3509,10 +3505,8 @@ public class GameBoyRomCompilerTests
                               }
                               """;
 
-        var parse = new SomeParser().Parse(source);
-        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
-
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var visitor = new PrintNodeVisitor();
         loweredProgram.Accept(visitor);
         var lowered = visitor.ToString();
@@ -3521,9 +3515,9 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline u8 __enemies_spawn_0_y(u8 index)=>5;", lowered);
         Assert.Contains("inline u8 __enemies_spawn_0_yHi(u8 index)=>1;", lowered);
         Assert.Contains("u8 __enemies_touch_screen_y=enemies[__enemies_touch_i].y-__enemies_touch_camera_y_lo;", lowered);
-        Assert.Contains("Camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
-        Assert.Contains("Camera.ScreenAabbHitTop(__enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
-        Assert.Contains("Sprite.Draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_camera_screen_aabb_tiles(\"default\", __enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_camera_screen_aabb_hit_top(\"default\", __enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
     }
 
     [Fact]
@@ -7412,9 +7406,28 @@ public class GameBoyRomCompilerTests
         return CompileVideoProgram(source, null);
     }
 
+    private static ProgramSyntax ParseGameBoySourceWithPortable2D(string source)
+    {
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                GameBoyTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error);
+        }
+
+        return TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+    }
+
     private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source));
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                GameBoyTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);

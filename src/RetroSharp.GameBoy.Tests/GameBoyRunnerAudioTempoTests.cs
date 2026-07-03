@@ -411,7 +411,11 @@ public sealed class GameBoyRunnerAudioTempoTests
 
     private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source));
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                GameBoyTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);

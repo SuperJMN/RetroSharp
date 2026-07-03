@@ -633,7 +633,7 @@ public sealed class NesWorldLoadTests : IDisposable
             """;
 
         // The same target-neutral Tiled source lowers to a valid ROM on both machines.
-        var gbRom = GameBoy.GameBoyRomCompiler.CompileSource(source, directory);
+        var gbRom = GameBoyRomCompiler.CompileSource(source, directory);
         var nesRom = NesRomCompiler.CompileSource(source, directory);
 
         Assert.NotEmpty(gbRom);
@@ -695,7 +695,7 @@ public sealed class NesWorldLoadTests : IDisposable
             }
             """;
 
-        var gbRom = GameBoy.GameBoyRomCompiler.CompileSource(source, directory);
+        var gbRom = GameBoyRomCompiler.CompileSource(source, directory);
         var nesRom = NesRomCompiler.CompileSource(source, directory);
 
         Assert.NotEmpty(gbRom);
@@ -766,7 +766,11 @@ public sealed class NesWorldLoadTests : IDisposable
 
     private NesVideoProgram BuildProgram(string source)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                NesTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, directory);

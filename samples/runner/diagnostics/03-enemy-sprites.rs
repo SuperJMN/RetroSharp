@@ -1,3 +1,5 @@
+import RetroSharp.Portable2D;
+
 void SetupVideo() {
     Video.Init();
     Palette.Set(0, 0);

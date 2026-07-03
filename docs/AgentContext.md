@@ -72,7 +72,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - Restricted `class` syntax is source organization over fixed-layout values and static/receiver lowering; it is not managed-object semantics.
 - Future receiver-method ergonomics should stay in the plain-struct world, for example `actor.Move(dx, dy)` lowering to a statically resolved helper.
 - SDK dot calls such as `Video.Init()`, `Input.Poll()`, and `Camera.SetPosition(x, y)` are static grouping syntax, not object instances.
-- Dot-call precedence is single-sourced in `RetroSharp.Parser.SdkDotCallResolver`: a receiver in scope shadows a same-named SDK module (lexical scoping), otherwise a known SDK module resolves as an SDK call. Constant folding and semantic analysis both consume it; the folder detects receivers by method signature because it has no variable scope.
+- Static dot-call lowering is driven by declared source-package/static methods. `DeclaredStaticMethodIndex` maps declared `Type_Method` functions to `Type.Method(...)`; remaining dot-calls are receiver methods. There is no compiler registry of public SDK facade names.
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
 - The actor framework is source-to-source sugar in `RetroSharp.Sdk.Frontend`.
   `Actors.Pool`, `Actors.SpawnLayer`, `Actors.SpawnWindow`, `Enemies.Def`, called
@@ -97,12 +97,10 @@ Golden rule (do not violate):
 - `Sdk2DOperation` must not grow into a dumping ground; a genre-specific operation
   should be questioned as an intrinsic+library before a compiler-recognized operation.
 - End-state: the 2D SDK becomes a library over per-target intrinsics.
-- Project manifests can load `RetroSharp.Portable2D` through `libraries`, while
-  `import RetroSharp.Portable2D;` remains the explicit source-level transition
-  form. Game Boy and NES still auto-import it for legacy samples by default, but
-  `SdkLibraryImportMode.ExplicitOnly` disables that path. New SDK library work
-  should go through `SdkLibraryRegistry` and manifest/import plumbing rather
-  than adding more global magic.
+- Project manifests load `RetroSharp.Portable2D` through `libraries`, while
+  `import RetroSharp.Portable2D;` remains the explicit source-level form for
+  standalone files. New SDK library work should go through `SdkLibraryRegistry`
+  and manifest/import plumbing rather than adding global compiler knowledge.
 
 Operation-driven lowering pattern (already proven, replicate it):
 - The shared collector `RetroSharp.Sdk.Sdk2DOperationCollector` turns source calls
@@ -130,12 +128,11 @@ Progress (2026-06-14):
   (`SdkByteExpression.Variable` now carries a typed storage descriptor instead of an opaque
   formatted string), PL-E1 #118 (parser preserves target/intrinsic extern metadata and GB/NES
   prove a `wait_frame` source helper can lower through target intrinsics with identical bytes).
-  Earlier groundwork and audit context came from #101-#105. #103 is now resolved and
-  closed (module knowledge moved out of the parser into `RetroSharp.Core.Sdk.SdkModuleRegistry`,
-  and `RetroSharp.Parser.SdkDotCallResolver` is the single canonical dot-call decision
-  consumed by both constant folding and semantic analysis); only the narrow pathological
-  folder-scope case is a documented residual. #104 and #105 remain separately tracked
-  design debt rather than open work inside #106.
+  Earlier groundwork and audit context came from #101-#105. #103 is resolved, and
+  #200 retires the registry-era public facade map: source-package static methods
+  now supply SDK dot-call declarations, and constant folding/semantic analysis use
+  the declared static method index plus receiver-method lowering. #104 and #105
+  remain separately tracked design debt rather than open work inside #106.
 - Sprite operation decision implemented 2026-06-14: X/Y/Frame are `SdkByteExpression`, FlipX
   is nullable `SdkByteExpression?`, PaletteSlot stays a constant int validated against target
   capabilities, and target lowerers resolve metasprite geometry from `SpriteId` and asset data
@@ -185,22 +182,20 @@ Progress (2026-06-14):
   `audio_init(...)` builtin kept as an alias.
   SDKLIB-4 retired the simple runtime facades `Video.WaitVBlank`, `Input.Poll`,
   `Audio.Init`, `Audio.Update`, `Camera.SetPosition`, and `Camera.Apply` from
-  `SdkModuleRegistry` call-name lowering; those public names now come from SDK
-  source packages, while the registry remains for transitional SDK module
-  declarations and compatibility APIs.
+  hard-coded public-name lowering; those public names now come from SDK source
+  packages.
   SDKLIB-5 moved resource declarations behind source-package contracts:
   `Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`,
   `Palette.Sprite`, and `Animation.Clip` are declared in `RetroSharp.Portable2D`
   with `[resource(...)]` metadata and resolved to generic resource declaration
   descriptors instead of target-specific public-name switches.
-  SDKLIB-6 moved remaining complex package-backed facades out of
-  `SdkModuleRegistry` call-name lowering: `Camera.Init`, all four `Camera.*Aabb*`
-  helpers, `Sprite.Width`, `Sprite.Draw`, `Animation.Frame`, and `Music.Play`/`Stop`
+  SDKLIB-6 moved remaining complex package-backed facades out of hard-coded
+  public-name lowering: `Camera.Init`, all four `Camera.*Aabb*` helpers,
+  `Sprite.Width`, `Sprite.Draw`, `Animation.Frame`, and `Music.Play`/`Stop`
   are now provided by `RetroSharp.Portable2D` source methods over target intrinsics.
-  Actor-framework generated `Sprite.Draw`, `Animation.Frame`, and `Camera.ScreenAabb*`
-  calls are resolved against those source-package static methods after actor lowering,
-  so generated actor code no longer relies on public SDK names being hard-coded in the
-  module registry. Legacy flat declaration calls
+  Actor-framework generated calls now use imported target-intrinsic extern
+  functions discovered from the source package, so generated actor code no longer
+  relies on public SDK names being hard-coded in the compiler. Legacy flat declaration calls
   such as `sprite_asset(...)`, `world_load(...)`, and `music_asset(...)` remain
   compatibility aliases.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
@@ -249,10 +244,10 @@ Progress (2026-06-14):
 
 Suggested next steps for the next agent, in order:
 1. The previously open issues are now resolved in `master`: #130 (NES streaming flicker)
-   is fixed by `dd58910`, and #103 (unify dot-call/receiver lowering) is satisfied by
-   `SdkModuleRegistry` + the single-sourced `SdkDotCallResolver`. Both issues are closed.
-2. If continuing beyond #106 toward SDK-as-library, open new focused issues for module packaging,
-   portable target selection, and the remaining intrinsic catalog before migrating more SDK calls.
+   is fixed by `dd58910`, and #103/#200 leave dot-call lowering registry-free through
+   declared static methods plus receiver-method lowering.
+2. If continuing beyond #106/#200, open new focused issues for package dependencies,
+   library asset roots, or backend plugin boundaries before migrating more SDK calls.
 3. Genuinely-open roadmap frontiers (tracked in docs, not issues): HUD/AR-10 (Game Boy window
    HUD is achievable now and capability-gated; NES HUD needs NF-10 mapper IRQ), NF-10
    (mapper-backed large NES levels), and Game Boy banking (`docs/GameBoyBankingRoadmap.md`).

@@ -155,13 +155,10 @@ helpers: if a target does not recognize the declared intrinsic, compilation
 fails instead of emitting an empty function.
 
 Target compilation accepts `import RetroSharp.Portable2D;` as the explicit
-source-level SDK library transition form, and project manifests can load
-`RetroSharp.Portable2D` through `libraries`. Game Boy and NES still load the
-same small SDK source library implicitly for older samples by default, but
-compiler hosts can use `SdkLibraryImportMode.ExplicitOnly` to disable that
-compatibility autoimport. In explicit-only mode, SDK module calls require an
-imported library or a host/project-supplied library; source that does not use the
-SDK can compile without loading it. Hosts can also provide a custom
+source-level SDK library form, and project manifests can load
+`RetroSharp.Portable2D` through `libraries`. SDK dot-calls require an imported
+library or a host/project-supplied library; source that does not use the SDK can
+compile without loading it. Hosts can also provide a custom
 `SdkLibraryRegistry` so additional import paths inject source-level SDK
 libraries, and the CLI can build the same registry from local source-only
 packages passed with `--lib-path` or declared through project `libraryPaths`. A
@@ -365,7 +362,7 @@ Iteration 12 adds source ergonomics only when the lowering remains static and pr
 - `pure` marks a helper whose body must stay in the supported side-effect-free subset. It is validated before Game Boy/NES lowering and emits no runtime code by itself.
 - `expr switch { Pattern => value, _ => fallback }` is an expression form of no-fallthrough switch lowering. The current lowering requires a default arm, compatible scalar/boolean branch shapes, and a simple subject so calls are not re-evaluated.
 - `using Root.Player;` opens a physical source namespace for unqualified type names, top-level function calls, and static-class references in the current file. It is compile-time name resolution only and is the normal code-file spelling for namespaces.
-- `import RetroSharp.Portable2D;` is the explicit source-level library-injection form. Game Boy and NES still auto-import it for existing samples by default, and project/library manifests are the preferred place to declare loaded libraries for C#-style project code.
+- `import RetroSharp.Portable2D;` is the explicit source-level library-injection form. Project/library manifests are the preferred place to declare loaded libraries for C#-style project code.
 - `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and similar SDK dot-calls are compile-time module calls that lower to existing SDK functions and keep target capability checks.
 - `actor.Move(dx, dy)` is a receiver method only when a static helper such as `void Move(this Actor actor, u8 dx)` exists. It lowers to a static helper call and does not add object identity, vtables, boxing, or dynamic dispatch.
 - Lightweight object-oriented style can use restricted `class` declarations for real mutable state such as `PlayerState` or `EnemyState`. A class value lowers to the same fixed storage model as a plain `struct`; instance methods lower to receiver helpers. Plain `struct` plus receiver methods remains the explicit equivalent form.

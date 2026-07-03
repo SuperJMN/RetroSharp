@@ -11,7 +11,13 @@ public static class NesTarget
         [
             TargetIntrinsicDescriptor.WaitFrame("wait_frame", arity: 0),
             TargetIntrinsicDescriptor.WaitFrame("wait_vblank", arity: 0),
+            TargetIntrinsicDescriptor.InitializeVideo("video_init", arity: 0),
+            TargetIntrinsicDescriptor.PresentVideo("video_present", arity: 0),
             TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
+            TargetIntrinsicDescriptor.ButtonDown("button_down", arity: 1),
+            TargetIntrinsicDescriptor.ButtonJustPressed("button_just_pressed", arity: 1),
+            TargetIntrinsicDescriptor.ButtonJustReleased("button_just_released", arity: 1),
+            TargetIntrinsicDescriptor.ButtonHoldTicks("button_hold_ticks", arity: 1),
             TargetIntrinsicDescriptor.InitializeAudio("audio_init", arity: 0),
             TargetIntrinsicDescriptor.UpdateAudio("audio_update", arity: 0),
             TargetIntrinsicDescriptor.PlayMusic(

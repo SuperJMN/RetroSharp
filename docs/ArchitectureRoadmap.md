@@ -9,7 +9,7 @@ The project is viable if portability means "shared contract with explicit target
 
 ## Current Roadmap State
 
-The #106 portability-lowering slice is complete: SDK operation collection lives outside the language assembly, Game Boy and NES validate the shared operation stream before lowering, logical sprite drawing lowers through per-target lowerers, Game Boy map-column streaming is operation-driven, typed SDK storage descriptors replace opaque operand strings, and the first target-intrinsic prototype proves the SDK-as-library direction for `wait_frame`.
+The #106 portability-lowering slice is complete: SDK operation collection lives outside the language assembly, Game Boy and NES validate the shared operation stream before lowering, logical sprite drawing lowers through per-target lowerers, Game Boy map-column streaming is operation-driven, typed SDK storage descriptors replace opaque operand strings, and the SDK-as-library path now loads `RetroSharp.Portable2D` explicitly from source packages over target intrinsics.
 
 The active SDK v1 stabilization backlog is now narrower than the original #106 epic:
 
@@ -17,7 +17,7 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 - #121 landed as logical `Palette.Background(...)` and `Palette.Sprite(...)` declarations so SDK-shaped samples do not depend on raw Game Boy palette writes.
 - #122 adds a runner-shaped cross-target validation sample, or a precise NES capability diagnostic when the runner-shaped slice is not portable yet.
 
-Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 (unify language/SDK dot-call and receiver-lowering boundaries) is now resolved and closed: SDK module knowledge moved out of the parser into `RetroSharp.Core.Sdk.SdkModuleRegistry` (the parser's `SdkDotCallLowerer` only delegates to it), and `RetroSharp.Parser.SdkDotCallResolver` is the single canonical dot-call decision (a receiver in scope shadows a same-named SDK module; otherwise a known SDK module resolves as an SDK call) consumed by both constant folding and semantic analysis. The only residual is narrow and documented in `SdkDotCallResolver`: constant folding has no variable scope, so it detects receivers by method signature; unifying the pathological collision case (a receiver method named like an SDK method on a bare module) would need full scope in the folder and should be tracked separately if it ever needs to be addressed. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
+Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
 
 ## Goals
 
@@ -191,14 +191,12 @@ The collector itself is target-neutral and lives in a dedicated SDK-frontend ass
 
 Each target has a lowerer that maps an `Sdk2DOperation` to its emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. A target's runtime compiler routes a source call through `EmitSdkOperation(op)` so the operation drives emission, instead of re-deriving the behavior from the AST. Operations migrated to this model on both targets today: `WaitFrame`, `PollInput`, `SetCameraPosition`, `ApplyCamera`, `DrawLogicalSprite`, horizontal `StreamMapColumn`, `CameraAabbTiles`, and `CameraAabbHitTop`. Operand values are carried by `SdkByteExpression` (`Constant | Variable`); `Variable` carries a typed `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`) that targets resolve to their runtime local variable maps only at the backend boundary. The IR remains at the "immediate value or storage location" level without gaining general source syntax trees. `DrawLogicalSprite` carries runtime X/Y/frame and optional runtime FlipX operands, while palette slot remains a constant validated against target capabilities and metasprite geometry is resolved by the target lowerer from `SpriteId`. `StreamMapColumn` carries runtime target/source column operands plus constant Y/height. `CameraAabbTiles` carries runtime or constant screen X, runtime world Y, constant or `Sprite.Width(...)` width, height, and collision flags. `CameraAabbHitTop` carries the same AABB shape and returns a byte fact: the top world-pixel Y of the first matching tile, or `255` for no hit. Game Boy and NES runtime lowering now consume `program.SdkOperations` with a cursor for migrated statement calls and value calls such as `CameraAabbTiles` and `CameraAabbHitTop`; Game Boy also consumes `ReadWorldTileFlags`. The builders fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
-The first SDK-as-library slice is now in place. Project manifests can now load
-`RetroSharp.Portable2D` through `libraries`, while source can still declare
-`import RetroSharp.Portable2D;` as the explicit transition form. Game Boy and
-NES keep the legacy implicit import during the transition by default, and
-unknown imports fail compilation instead of being ignored. Hosts can set
-`SdkLibraryImportMode.ExplicitOnly` to compile without
-the SDK unless it is imported or supplied as a host/project library, or provide
-a custom `SdkLibraryRegistry` so other import paths inject source-level SDK
+The SDK-as-library slice is now in place. Project manifests load
+`RetroSharp.Portable2D` through `libraries`, while standalone source can declare
+`import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports
+fail compilation instead of being ignored. Hosts compile without the SDK unless
+it is imported or supplied as a host/project library, and can provide a custom
+`SdkLibraryRegistry` so other import paths inject source-level SDK
 libraries. `SdkLibraryRegistry.FromDirectories(...)`, the CLI `--lib-path <path>`
 option, and project-manifest `libraryPaths`/`libraries` now provide the first
 local-package MVP: each package directory has a `retrosharp-library.json`
@@ -220,12 +218,13 @@ while library loading belongs in manifests or the explicit source-level `import`
 transition path. Each cartridge target exposes a
 declarative `TargetIntrinsicCatalog` instead
 of a one-off intrinsic switch; Game
-Boy and NES currently catalog `wait_frame`, the `wait_vblank` alias, `poll_input`,
+Boy and NES currently catalog `video_init`, `video_present`, `wait_frame`, the
+`wait_vblank` alias, `poll_input`, button predicates, `audio_init`,
 `audio_update`, `camera_init`, `camera_set_position`, `camera_apply`, `sprite_draw`,
 `sprite_width`, `animation_frame`, and the camera AABB intrinsics (Game Boy additionally
 catalogs `world_tile_flags_at`). `RetroSharp.Sdk.Frontend` resolves imported
 SDK libraries through the registry and supplies target-selected library source
-for imported or legacy-autoimported target compilations. The built-in
+for explicitly imported target compilations. The built-in
 `RetroSharp.Portable2D` library is the manifest-backed source package under
 `sdk/RetroSharp.Portable2D`; it defines
 `Video`, `Input`, `Audio`, `Camera`, `Sprite`, `World`, and `Music` helpers whose `Video.WaitVBlank()`,
@@ -239,19 +238,18 @@ audio operation stream, NES emits it inline), so the shared `Sdk2DOperation` col
 consume but ignore it. The `camera_set_position`/`camera_apply` intrinsics route through
 the existing `SetCameraPosition`/`ApplyCamera` collection and emission, so their scroll-axis
 inference, capability checks, and frame-budget accounting are unchanged. Actor-framework expansion
-still emits source-level SDK facades such as `Sprite.Draw(...)`, `Animation.Frame(...)`, and
-`Camera.ScreenAabb*`; the compiler now resolves those generated calls against source-package
-static methods after actor lowering, so generated actor code no longer depends on the transitional
-module-name fallback.
+now emits calls to imported target-intrinsic extern functions for sprite draw,
+animation frame, and screen-space camera AABB queries, so generated actor code no
+longer depends on public SDK names being hard-coded in the compiler.
 `TargetProgramSelector` filters
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
-SDKLIB-4 makes these simple runtime facades package-only at the public-name layer:
-`SdkModuleRegistry` no longer maps `Video.WaitVBlank`, `Input.Poll`, `Audio.Init`,
-`Audio.Update`, `Camera.SetPosition`, or `Camera.Apply` to flat legacy calls. The
-flat calls remain accepted as compatibility aliases, but the PascalCase public
-facades must be supplied by source packages.
+#200 makes public SDK facades package-only at the public-name layer. The flat
+calls remain accepted as compatibility aliases where documented, but PascalCase
+public facades such as `Video.WaitVBlank`, `Input.Poll`, `Audio.Init`,
+`Audio.Update`, `Camera.SetPosition`, `Camera.Apply`, `Sprite.Draw`, and
+`Camera.AabbTiles` must be supplied by source packages.
 SDKLIB-5 applies the same public-name rule to resource declarations:
 `Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`, `Palette.Sprite`,
 and `Animation.Clip` are source-package methods annotated with `[resource(...)]`.
@@ -1277,11 +1275,11 @@ Tasks:
 - Candidate files: parser grammar/syntax, call resolver, SDK operation collector, Game Boy/NES tests, docs.
 - Steps:
   - [x] Parse SDK namespaced dot-call syntax such as `Video.Init()`, `Video.WaitVBlank()`, `Input.Poll()`, `Camera.SetPosition(x, y)`, and `World.Map(...)`.
-  - [x] Treat the left side as a compile-time SDK namespace/module when it names a known SDK module, not as a runtime object instance.
-  - [x] Resolve calls statically to existing SDK functions such as `video_init()`, `video_wait_vblank()`, `input_poll()`, and `camera_set_position(...)`.
+  - [x] Treat the left side as a compile-time static type/group when a declared source-package or program method provides a matching static call, not as a runtime object instance.
+  - [x] Resolve calls statically to declared source methods such as `RetroSharp_Portable2D_Video_WaitVBlank` or user-defined `Type_Method` helpers before target lowering.
   - [x] Preserve target capability checks before lowering.
 - Verification:
-  - [x] Parser and semantic tests distinguish module dot-calls from member access.
+  - [x] Parser and semantic tests distinguish static dot-calls from receiver/member access.
   - [x] Game Boy/NES tests prove dot-calls reach the same capability checks and lowering as their existing function-call equivalents.
 
 #### AR-12.5: Add struct receiver methods
@@ -1294,7 +1292,7 @@ Tasks:
   - [x] Support an explicit receiver form in the declaration model, `this Actor actor`, without adding object identity or dynamic dispatch.
   - [x] Keep the feature available only where a matching static helper has a receiver parameter.
 - Verification:
-  - [x] Parser and semantic tests distinguish receiver calls from SDK module dot-calls.
+  - [x] Parser and semantic tests distinguish receiver calls from static dot-calls.
   - [x] Game Boy/NES tests prove receiver methods lower to static/inline equivalents with no dispatch table.
 
 #### AR-12.6: Add static pipeline syntax
