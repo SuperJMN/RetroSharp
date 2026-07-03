@@ -27,7 +27,7 @@ Current language work focuses on:
 
 - Fixed-width primitive types such as `u8`, `i8`, `u16`, `i16`, and `bool`.
 - Plain structs, enums, constants, type aliases, fixed arrays, and field access.
-- Structured control flow: `if`, `switch`, `while`, `do while`, `loop`, `for`,
+- Structured control flow: `if`, `switch`, `while`, `do while`, `for`,
   half-open ranges, `break`, and `continue`.
 - Zero-cost helpers: `inline`/`pure` source helpers, named/default arguments,
   expression-bodied helpers, receiver methods, restricted static classes, and

@@ -451,11 +451,6 @@ public class SomeParser
             return ParseDoWhileLoop(doWhileLoop);
         }
 
-        if (statementContext.loopStatement() is { } loopStatement)
-        {
-            return ParseLoop(loopStatement);
-        }
-
         if (statementContext.rangeForLoop() is { } rangeForLoop)
         {
             return ParseRangeForLoop(rangeForLoop);
@@ -629,11 +624,6 @@ public class SomeParser
     private StatementSyntax ParseDoWhileLoop(DoWhileLoopContext doWhileLoop)
     {
         return new DoWhileSyntax(ParseBlock(doWhileLoop.block()), ParseExpression(doWhileLoop.expression()));
-    }
-
-    private StatementSyntax ParseLoop(LoopStatementContext loopStatement)
-    {
-        return new LoopSyntax(ParseBlock(loopStatement.block()));
     }
 
     private StatementSyntax ParseRangeForLoop(RangeForLoopContext rangeForLoop)

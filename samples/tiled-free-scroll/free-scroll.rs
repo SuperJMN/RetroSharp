@@ -15,7 +15,7 @@ void Main() {
     u8 cameraX = 0;
     u8 cameraY = 0;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
 
         cameraX += 1;

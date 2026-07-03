@@ -776,9 +776,6 @@ public static class Sdk2DOperationCollector
                     CollectBlock(loop.Body);
                     CollectExpression(loop.Condition);
                     break;
-                case LoopSyntax loop:
-                    CollectBlock(loop.Body);
-                    break;
                 case RangeForSyntax loop:
                     CollectStatement(RangeForLowerer.Lower(loop));
                     break;
@@ -1324,8 +1321,6 @@ public static class Sdk2DOperationCollector
                 case DoWhileSyntax loop:
                     state = CollectLoop(state, loop.Body);
                     return CollectExpression(state, loop.Condition);
-                case LoopSyntax loop:
-                    return CollectLoop(state, loop.Body);
                 case RangeForSyntax loop:
                     return CollectStatement(state, RangeForLowerer.Lower(loop));
                 case ForSyntax loop:

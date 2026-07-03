@@ -346,7 +346,6 @@ internal sealed class GameBoyVideoProgram
             ExpressionStatementSyntax { Expression: FunctionCall call } => HasRuntimeCall(call, functions),
             WhileSyntax loop => HasRuntimeWork(loop.Body, functions),
             DoWhileSyntax loop => HasRuntimeWork(loop.Body, functions),
-            LoopSyntax loop => HasRuntimeWork(loop.Body, functions),
             RangeForSyntax loop => HasRuntimeWork(loop.Body, functions),
             ForSyntax loop => HasRuntimeWork(loop.Body, functions),
             IfElseSyntax branch => HasRuntimeWork(branch.ThenBlock, functions)
@@ -430,9 +429,6 @@ internal sealed class GameBoyVideoProgram
             case DoWhileSyntax loop:
                 CountCalls(loop.Body, callCounts);
                 CountCalls(loop.Condition, callCounts);
-                break;
-            case LoopSyntax loop:
-                CountCalls(loop.Body, callCounts);
                 break;
             case RangeForSyntax loop:
                 CountCalls(loop.Start, callCounts);

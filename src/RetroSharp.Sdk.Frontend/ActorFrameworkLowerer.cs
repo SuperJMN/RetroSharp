@@ -217,9 +217,6 @@ public static class ActorFrameworkLowerer
                 case DoWhileSyntax doWhileSyntax:
                     WalkStatements(doWhileSyntax.Body, visit);
                     break;
-                case LoopSyntax loopSyntax:
-                    WalkStatements(loopSyntax.Body, visit);
-                    break;
                 case RangeForSyntax rangeForSyntax:
                     WalkStatements(rangeForSyntax.Body, visit);
                     break;
@@ -321,9 +318,6 @@ public static class ActorFrameworkLowerer
                     break;
                 case DoWhileSyntax doWhileSyntax:
                     CollectDirectives(doWhileSyntax.Body, state);
-                    break;
-                case LoopSyntax loopSyntax:
-                    CollectDirectives(loopSyntax.Body, state);
                     break;
                 case RangeForSyntax rangeForSyntax:
                     CollectDirectives(rangeForSyntax.Body, state);
@@ -600,7 +594,6 @@ public static class ActorFrameworkLowerer
                 MapMaybe(ifElse.ElseBlock, block => RewriteBlock(block, state))),
             WhileSyntax whileSyntax => new WhileSyntax(RewriteExpression(whileSyntax.Condition, state), RewriteBlock(whileSyntax.Body, state)),
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(RewriteBlock(doWhileSyntax.Body, state), RewriteExpression(doWhileSyntax.Condition, state)),
-            LoopSyntax loopSyntax => new LoopSyntax(RewriteBlock(loopSyntax.Body, state)),
             RangeForSyntax rangeForSyntax => new RangeForSyntax(
                 rangeForSyntax.Type,
                 rangeForSyntax.Identifier,

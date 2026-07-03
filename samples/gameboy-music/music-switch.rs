@@ -8,7 +8,7 @@ void Main() {
     Music.Play(terminate);
 
     bool onBlueOcean = false;
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Input.Poll();
         Audio.Update();

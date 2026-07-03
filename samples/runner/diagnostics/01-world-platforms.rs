@@ -75,7 +75,7 @@ void Main() {
     DefineWorld();
     World.Map(16, 9, 6);
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
     }
 }

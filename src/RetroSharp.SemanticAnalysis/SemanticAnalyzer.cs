@@ -190,10 +190,10 @@ public class SemanticAnalyzer
                 return AnalyzeExpressionStatement(expressionStatement, scope, types, functions);
             case IfElseSyntax ifElseStatement:
                 return AnalyzeIfElse(ifElseStatement, scope, types, functions);
+            case WhileSyntax whileStatement:
+                return AnalyzeWhile(whileStatement, scope, types, functions);
             case DoWhileSyntax doWhileStatement:
                 return AnalyzeDoWhile(doWhileStatement, scope, types, functions);
-            case LoopSyntax loopStatement:
-                return AnalyzeLoop(loopStatement, scope, types, functions);
             case RangeForSyntax rangeForStatement:
                 return AnalyzeFor(RangeForLowerer.Lower(rangeForStatement), scope, types, functions);
             case ForSyntax forStatement:
@@ -1048,6 +1048,18 @@ public class SemanticAnalyzer
         return new AnalyzeResult<StatementNode>(new IfElseNode(cond, thenBlock, maybeElse), scope);
     }
 
+    private AnalyzeResult<StatementNode> AnalyzeWhile(WhileSyntax whileSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
+    {
+        return AnalyzeWhile(whileSyntax, scope, types, new Dictionary<string, FunctionSyntax>());
+    }
+
+    private AnalyzeResult<StatementNode> AnalyzeWhile(WhileSyntax whileSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    {
+        var condition = AnalyzeExpression(whileSyntax.Condition, scope, types, functions).Node;
+        var body = AnalyzeBlock(whileSyntax.Body, scope, types, functions).Node;
+        return new AnalyzeResult<StatementNode>(new WhileNode(condition, body), scope);
+    }
+
     private AnalyzeResult<StatementNode> AnalyzeDoWhile(DoWhileSyntax doWhileSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
         return AnalyzeDoWhile(doWhileSyntax, scope, types, new Dictionary<string, FunctionSyntax>());
@@ -1058,17 +1070,6 @@ public class SemanticAnalyzer
         var body = AnalyzeBlock(doWhileSyntax.Body, scope, types, functions).Node;
         var condition = AnalyzeExpression(doWhileSyntax.Condition, scope, types, functions).Node;
         return new AnalyzeResult<StatementNode>(new DoWhileNode(body, condition), scope);
-    }
-
-    private AnalyzeResult<StatementNode> AnalyzeLoop(LoopSyntax loopSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
-    {
-        return AnalyzeLoop(loopSyntax, scope, types, new Dictionary<string, FunctionSyntax>());
-    }
-
-    private AnalyzeResult<StatementNode> AnalyzeLoop(LoopSyntax loopSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
-    {
-        var body = AnalyzeBlock(loopSyntax.Body, scope, types, functions).Node;
-        return new AnalyzeResult<StatementNode>(new LoopNode(body), scope);
     }
 
     private AnalyzeResult<StatementNode> AnalyzeFor(ForSyntax forSyntax, Scope scope, IReadOnlyDictionary<string, SymbolType> types)

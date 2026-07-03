@@ -161,6 +161,15 @@ public class PrintNodeVisitor : INodeVisitor
         }
     }
 
+    public void VisitWhile(WhileNode whileNode)
+    {
+        resultBuilder.Append(new string('\t', indentationLevel));
+        resultBuilder.Append("while (");
+        whileNode.Condition.Accept(this);
+        resultBuilder.AppendLine(")");
+        whileNode.Body.Accept(this);
+    }
+
     public void VisitDoWhile(DoWhileNode doWhileNode)
     {
         resultBuilder.AppendLine(new string('\t', indentationLevel) + "do");
@@ -169,12 +178,6 @@ public class PrintNodeVisitor : INodeVisitor
         resultBuilder.Append("while (");
         doWhileNode.Condition.Accept(this);
         resultBuilder.AppendLine(");");
-    }
-
-    public void VisitLoop(LoopNode loopNode)
-    {
-        resultBuilder.AppendLine(new string('\t', indentationLevel) + "loop");
-        loopNode.Body.Accept(this);
     }
 
     public void VisitFor(ForNode forNode)

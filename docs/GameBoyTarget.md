@@ -86,7 +86,6 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - Explicit casts such as `(u8)expr` to supported scalar local types
 - `while`
 - `do while` with post-body conditions and `continue` targeting the final condition check
-- `loop` as explicit infinite-loop sugar over `while (true)`
 - `for` loops with local or assignment initializers, byte-backed conditions supported by the current relational lowering, and assignment increments
 - Half-open range `for` loops such as `for (u8 i in 0..countof(values))`
 - `break` and `continue` inside `while`, `do while`, and `for`
@@ -124,8 +123,6 @@ Current user helper calls are source-level inline expansion. Statement helpers e
 Half-open range `for` loops lower to the same counted-loop form. `for (u8 i in start..end)` becomes the equivalent of `for (u8 i = start; i < end; i++)`: `start` initializes the loop local once, `end` is the exclusive upper-bound condition, and no iterator object, hidden temporary, bounds check, or helper call is emitted.
 
 Half-open range membership expressions lower to ordinary short-circuit bounds checks. `value in start..end` emits the same compare-and-jump sequence as `value >= start && value < end`; there is no range object, helper call, hidden local, hidden bounds check, or implicit subject cache.
-
-`loop` lowers to the same direct-branch shape as `while (true)`. The body is emitted once, the tail jumps back to the body start, `continue` jumps directly to that start label, and `break` jumps to the loop end. There is no condition expression, hidden local, stack frame, or helper call.
 
 `do while` loops lower to direct branches with the body first and the condition at the bottom. `continue` jumps to that bottom condition check, matching source semantics without duplicating the body or adding helper state.
 
@@ -235,7 +232,7 @@ void Main() {
     Music.Play(overworld);
 
     u8 onBoss = 0;
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Input.Poll();
         Audio.Update();

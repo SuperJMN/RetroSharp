@@ -685,7 +685,7 @@ public sealed class NesWorldLoadTests : IDisposable
                 Video.Init();
                 World.Load("level.tmj");
                 Camera.Init(2, 0, 2);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Input.Poll();
                     let cx = button_hold_ticks(right);

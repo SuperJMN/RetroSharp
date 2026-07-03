@@ -14,7 +14,7 @@ void Main() {
     Hud.SetTile(window, 2, 0, HudTile.Two);
     Hud.SetTile(window, 3, 0, HudTile.Three);
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
     }
 }

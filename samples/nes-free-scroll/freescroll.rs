@@ -23,7 +23,7 @@ void Main() {
     u8 stepX = 1;
     u8 stepY = 1;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
 
         if (cameraX == 248) {

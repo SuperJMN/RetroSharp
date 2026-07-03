@@ -21,7 +21,7 @@ void Main() {
     u8 direction = 1;
     u8 holdTicks = 0;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Camera.SetPosition(0, cameraY);
         Camera.Apply();

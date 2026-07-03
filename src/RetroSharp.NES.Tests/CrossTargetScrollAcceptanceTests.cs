@@ -40,7 +40,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             Camera.Init(World.Width, World.StreamY, World.Height);
             Sprite.Asset(marker, "samples/cross-target-camera/marker.json");
 
-            loop {
+            while (true) {
                 Video.WaitVBlank();
                 Input.Poll();
                 let cameraX = button_hold_ticks(right);
@@ -234,7 +234,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 World.Column(0, 1, 2);
                 World.Map(1, 10, 2);
                 Camera.Init(1, 10, 2);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Camera.SetPosition(0, 1);
                     Camera.Apply();
@@ -258,7 +258,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 World.Flags(0, 0, 1);
                 World.Map(1, 10, 2);
                 Camera.Init(1, 10, 2);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     u8 footY = 8;
                     u8 hit = Camera.AabbTiles(72, footY, 16, 8, 1);
@@ -282,7 +282,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 World.Flags(0, 0, 1);
                 World.Map(1, 10, 2);
                 Camera.Init(1, 10, 2);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     u8 footY = 16;
                     u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
@@ -316,7 +316,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 enemies[0].xHi = 0;
                 enemies[0].y = 16;
 
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     enemies.Update();
                     enemies.TouchTiles(0, 1);
@@ -350,7 +350,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 enemies[0].xHi = 0;
                 enemies[0].y = 32;
 
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     enemies.Draw();
                 }
@@ -407,7 +407,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 World.Map(World.Width, World.StreamY, World.Height);
                 Camera.Init(World.Width, World.StreamY, World.Height);
 
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Input.Poll();
                     let cameraX = button_hold_ticks(right);
@@ -431,7 +431,7 @@ public sealed class CrossTargetScrollAcceptanceTests
 
                 u8 cameraX = 0;
                 u8 cameraY = 0;
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     cameraX += 1;
                     cameraY += 1;

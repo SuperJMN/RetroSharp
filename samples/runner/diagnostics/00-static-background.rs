@@ -37,7 +37,7 @@ void Main() {
     SetupVideo();
     DrawBackground();
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
     }
 }

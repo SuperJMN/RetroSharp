@@ -161,7 +161,7 @@ void Main() {
     Music.Asset(stage_theme, "music/stage.gbapu.json");
     Audio.Init();
     Music.Play(stage_theme);
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Audio.Update();
     }

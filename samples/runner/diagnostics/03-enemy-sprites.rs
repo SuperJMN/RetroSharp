@@ -31,7 +31,7 @@ void Main() {
     i16 enemyFrame = 0;
     i16 enemyTick = 0;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Sprite.Draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);
         Sprite.Draw(enemy_slug, 40, 57, enemyFrame, true, 0);

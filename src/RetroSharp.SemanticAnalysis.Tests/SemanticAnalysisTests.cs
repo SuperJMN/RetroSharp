@@ -150,6 +150,13 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Boolean_literals_resolve_as_constants()
+    {
+        var input = "void Main(){ bool yes = true; bool no = false; if (yes && !no){ } }";
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
     public void Width_suffix_widens_unannotated_let_and_const_inference()
     {
         // A u16 suffix makes the declaration u16, so a value above the u8 range is accepted.
@@ -495,9 +502,9 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
-    public void Bare_loop_resolves_break_and_continue()
+    public void While_true_resolves_break_and_continue()
     {
-        var input = "void Main(){ u8 x = 0; loop { x++; if (x == 1){ continue; } if (x == 3){ break; } } }";
+        var input = "void Main(){ u8 x = 0; while (true) { x++; if (x == 1){ continue; } if (x == 3){ break; } } }";
         Errors(input).Should().BeEmpty();
     }
 

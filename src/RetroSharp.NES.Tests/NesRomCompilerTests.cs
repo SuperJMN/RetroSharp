@@ -782,7 +782,7 @@ public class NesRomCompilerTests
                               void Main() {
                                   video_init();
                                   sprite_asset(hero, "hero.nes.json");
-                                  loop {
+                                  while (true) {
                                       video_wait_vblank();
                                       sprite_draw(hero, 24, 32, 0, false, 2);
                                   }
@@ -792,7 +792,7 @@ public class NesRomCompilerTests
                                void Main() {
                                    Video.Init();
                                    Sprite.Asset(hero, "hero.nes.json");
-                                   loop {
+                                   while (true) {
                                        Video.WaitVBlank();
                                        Sprite.Draw(hero, 24, 32, 0, false, 2);
                                    }
@@ -850,7 +850,7 @@ public class NesRomCompilerTests
         const string paletteSource = """
                                      void Main() {
                                          Sprite.Asset(hero, "hero.nes.json");
-                                         loop {
+                                         while (true) {
                                              Sprite.Draw(hero, 24, 32, 0, false, 4);
                                          }
                                      }
@@ -866,7 +866,7 @@ public class NesRomCompilerTests
                            void Main() {
                                Video.Init();
                                Sprite.Asset(hero, "hero.nes.json");
-                               loop {
+                               while (true) {
                                    Video.WaitVBlank();
 
                            """ + draws + """
@@ -910,7 +910,7 @@ public class NesRomCompilerTests
                               void Main() {
                                   video_init();
                                   sprite_asset(hero, "hero.nes.json");
-                                  loop {
+                                  while (true) {
                                       video_wait_vblank();
                                       sprite_draw(hero, 24, 32, 0);
                                   }
@@ -1157,7 +1157,7 @@ public class NesRomCompilerTests
         const string source = """
                        void Main() {
                            video_init();
-                           loop {
+                           while (true) {
                                video_wait_vblank();
                            }
                        }
@@ -1183,7 +1183,7 @@ public class NesRomCompilerTests
                            camera_init(1, 0, 1);
                            sprite_asset(marker, "samples/cross-target-camera/marker.json");
                            camera_set_position(0, 0);
-                           loop {
+                           while (true) {
                                video_wait_vblank();
                                sprite_draw(marker, 72, 72, 0, false, 0);
                                camera_apply();
@@ -3223,7 +3223,7 @@ public class NesRomCompilerTests
         const string source = """
                               void Main() {
                                   u8 x = 0;
-                                  loop {
+                                  while (true) {
                                       x++;
                                       if (x == 1) {
                                           continue;
@@ -3822,7 +3822,7 @@ public class NesRomCompilerTests
                               void Main() {
                                   Video.Init();
                                   Sprite.Asset(hero, "hero.nes.json");
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Sprite.Draw(hero, 24, 32, 0, false, 2);
                                   }
@@ -3843,7 +3843,7 @@ public class NesRomCompilerTests
                                   World.Flags(0, 0, 1);
                                   World.Map(1, 10, 2);
                                   Camera.Init(1, 10, 2);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       u8 footY = 16;
                                       u8 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);

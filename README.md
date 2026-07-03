@@ -36,7 +36,7 @@ RetroSharp's original compiler path uses a multi-stage pipeline:
 The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
 
 - `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, four-screen 2-axis camera movement, Tiled `World.Load(...)`, runtime animation helpers, camera-relative runner collision, and VGM/VGZ-sourced 2A03 BGM playback. HUD and generic world-space collision are still not implemented.
-- `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `loop`, `for`, half-open range `for`, `Video.WaitVBlank()`, tick-based input polling, `Scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `Sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `Music.Asset(...)`, `Music.Play(...)`, and `Audio.Update()`.
+- `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `for`, half-open range `for`, `Video.WaitVBlank()`, tick-based input polling, `Scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `Sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `Music.Asset(...)`, `Music.Play(...)`, and `Audio.Update()`.
 
 The actor framework acceptance slice lives in `samples/actor-framework`. It shows
 fixed actor pools, declarative `Enemies.Def(...)` metadata, Tiled object-layer
@@ -60,7 +60,7 @@ Right now, RetroSharp can compile simple programs with:
 - Restricted static classes with fixed-layout fields, instance methods lowered to receiver helpers, and static constants/methods lowered without heap allocation or dispatch
 - Fixed-size local byte arrays with initializer lists, initializer-inferred lengths, constant index access, and byte-backed runtime index access in the current cartridge targets
 - Function calls, including inline helper calls with parameters, named arguments, default parameter values, single-return expression helpers, and `=>` expression-bodied helpers in the current cartridge targets
-- Control flow (`if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, `while`, `do while`, `loop`, `for`, half-open range `for`, `break`, `continue`)
+- Control flow (`if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, `while`, `do while`, `for`, half-open range `for`, `break`, `continue`)
 - Half-open range membership expressions such as `tile in 1..4`, lowered like `tile >= 1 && tile < 4`
 - Short-circuit `&&`/`||` and unary `!` conditions, plus byte-backed 0/1 logical value expressions, in the current cartridge targets
 - Conditional value expressions (`condition ? whenTrue : whenFalse`) lowered to direct branches in the current cartridge targets
@@ -253,7 +253,7 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   samples/cross-target-camera/camera.rs
 ```
 
-The sample sources have been migrated to the current language surface: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `let` for immutable frame-local values, `inline`/`pure` helper contracts, SDK dot-calls, restricted static classes and receiver methods where they clarify ownership, `switch` expressions, pipelines, `loop` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
+The sample sources have been migrated to the current language surface: symbolic `const` values and enums for static data, aliases where they clarify byte-backed values, `let` for immutable frame-local values, `inline`/`pure` helper contracts, SDK dot-calls, restricted static classes and receiver methods where they clarify ownership, `switch` expressions, pipelines, `while (true)` for infinite runtime loops, and compound mutation syntax where it maps directly to the old explicit assignments.
 
 ## AI agent orientation
 

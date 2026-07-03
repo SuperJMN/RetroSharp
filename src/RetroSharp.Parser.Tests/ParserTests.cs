@@ -1045,7 +1045,7 @@ public class ParserTests
     }
 
     [Fact]
-    public void Bare_loop_statement()
+    public void Bare_loop_statement_is_rejected()
     {
         var source = """
                      void Main()
@@ -1065,7 +1065,8 @@ public class ParserTests
                         }
                      }
                      """;
-        AssertParse(source);
+        new SomeParser().Parse(source)
+            .Should().Fail();
     }
 
     [Fact]

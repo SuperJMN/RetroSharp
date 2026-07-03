@@ -41,7 +41,7 @@ void Main() {
     u8 stepX = 1;
     u8 stepY = 1;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
 
         let screenX = playerX - cameraX;

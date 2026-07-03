@@ -100,7 +100,7 @@ void Main() {
     i16 moving = 0;
     i16 resetRequested = 0;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Camera.Apply();
         Sprite.Draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);

@@ -114,9 +114,6 @@ public static class SdkAudioOperationCollector
                     CollectBlock(loop.Body);
                     CollectExpression(loop.Condition);
                     break;
-                case LoopSyntax loop:
-                    CollectBlock(loop.Body);
-                    break;
                 case RangeForSyntax loop:
                     CollectStatement(RangeForLowerer.Lower(loop));
                     break;

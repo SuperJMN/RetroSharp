@@ -38,7 +38,7 @@ void Main() {
     Actors.Pool(goombas, 1);
     Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
 
-    loop {
+    while (true) {
         PresentFrame(player, view);
         Camera.Apply();
         goombas.Draw();

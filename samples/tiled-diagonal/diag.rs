@@ -20,7 +20,7 @@ void Main() {
     u8 cameraY = 0;
     u8 direction = 1;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Camera.SetPosition(cameraX, cameraY);
         Camera.Apply();

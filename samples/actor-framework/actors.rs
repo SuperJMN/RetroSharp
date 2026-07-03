@@ -20,7 +20,7 @@ void Main() {
 
     u8 cameraX = 0;
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Input.Poll();
         if (Input.IsDown(Button.Right) && cameraX < 160) {

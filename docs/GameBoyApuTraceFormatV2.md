@@ -231,7 +231,7 @@ The language/SDK contract stays identical, so v2 is transparent to game code:
 ```csharp
 Music.Asset(stage_theme, "music/stage.gbapu");   // binary now; .json still accepted
 Music.Play(stage_theme);
-loop { Video.WaitVBlank(); Audio.Update(); }
+while (true) { Video.WaitVBlank(); Audio.Update(); }
 ```
 
 `Audio.Update()` keeps its per-tick `LDH (C),A` replay loop; v2 adds one indirection to fetch the
