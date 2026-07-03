@@ -53,7 +53,7 @@ public sealed class VgmImporterTests
     }
 
     [Fact]
-    public void Skips_nes_dpcm_data_blocks_and_dpcm_register_writes_for_v1_four_channel_bgm()
+    public void Imports_nes_dpcm_ram_blocks_and_register_writes()
     {
         var vgm = BuildVgm(
             chipClockOffset: 0x84,
@@ -62,16 +62,71 @@ public sealed class VgmImporterTests
             [0x10, 0x0F],
             waitSamples: 0,
             dataBlockType: 0xC2,
-            dataBlock: [0xAA, 0xBB],
+            dataBlock: [0x00, 0xE0, 0xAA, 0xBB],
             [0x00, 0x30]);
         var path = WriteGzip("dpcm.vgz", vgm);
 
         var stream = VgmImporter.Import(path, VgmChip.Nes2A03);
 
         var frame = Assert.Single(stream.Frames);
-        var write = Assert.Single(frame.Writes);
-        Assert.Equal(0x4000, write.Address);
-        Assert.Equal(0x30, write.Value);
+        Assert.Collection(
+            frame.Writes,
+            write =>
+            {
+                Assert.Equal(0x4010, write.Address);
+                Assert.Equal(0x0F, write.Value);
+            },
+            write =>
+            {
+                Assert.Equal(0x4000, write.Address);
+                Assert.Equal(0x30, write.Value);
+            });
+        var block = Assert.Single(stream.DpcmBlocks);
+        Assert.Equal(0xE000, block.Address);
+        Assert.Equal([0xAA, 0xBB], block.Data);
+    }
+
+    [Fact]
+    public void Imports_nes_dmc_register_writes_from_vgm()
+    {
+        var vgm = BuildVgm(
+            chipClockOffset: 0x84,
+            chipClockHz: 1_789_773,
+            0xB4,
+            [0x10, 0x0F],
+            waitSamples: 0,
+            dataBlockType: 0xC2,
+            dataBlock: [0x00, 0xE0, 0xAA, 0xBB],
+            [0x12, 0x80],
+            [0x13, 0x01],
+            [0x15, 0x1F]);
+        var path = WriteGzip("dmc.vgz", vgm);
+
+        var stream = VgmImporter.Import(path, VgmChip.Nes2A03);
+
+        var frame = Assert.Single(stream.Frames);
+        Assert.Collection(
+            frame.Writes,
+            write =>
+            {
+                Assert.Equal(0x4010, write.Address);
+                Assert.Equal(0x0F, write.Value);
+            },
+            write =>
+            {
+                Assert.Equal(0x4012, write.Address);
+                Assert.Equal(0x80, write.Value);
+            },
+            write =>
+            {
+                Assert.Equal(0x4013, write.Address);
+                Assert.Equal(0x01, write.Value);
+            },
+            write =>
+            {
+                Assert.Equal(0x4015, write.Address);
+                Assert.Equal(0x1F, write.Value);
+            });
     }
 
     [Fact]

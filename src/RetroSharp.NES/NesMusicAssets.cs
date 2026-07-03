@@ -8,14 +8,19 @@ internal sealed record NesCompiledMusicAsset(
     byte[] Data,
     int OrderStartOffset,
     int LoopOrderOffset,
-    IReadOnlyList<NesApuTraceOrderEntry> OrderEntries);
+    IReadOnlyList<NesApuTraceOrderEntry> OrderEntries,
+    IReadOnlyList<NesDpcmSampleBlock> DpcmBlocks);
 
 internal readonly record struct NesApuTraceOrderEntry(int BodyOffset, byte Wait);
+
+internal readonly record struct NesDpcmSampleBlock(ushort SourceAddress, byte[] Data);
 
 internal static class NesMusicAssetCompiler
 {
     private const byte ApuTraceMarker = 0x03;
     private const int ApuTraceHeaderLength = 5;
+    private const ushort DpcmSampleStartAddress = 0xC000;
+    private const ushort DpcmVectorStartAddress = 0xFFFA;
 
     public static NesCompiledMusicAsset CompileFromFile(string name, string path)
     {
@@ -29,14 +34,15 @@ internal static class NesMusicAssetCompiler
 
     private static NesCompiledMusicAsset CompileVgmTrace(string name, VgmFrameStream stream)
     {
-        if (stream.Frames.Count == 0)
+        var frames = OptimizeFrameWrites(stream.Frames, stream.LoopFrame);
+        if (frames.Count == 0)
         {
             throw new InvalidOperationException("NES VGM trace must contain at least one supported 2A03 register write.");
         }
 
         var loopGroupIndex = stream.LoopFrame <= 0
             ? 0
-            : stream.Frames.ToList().FindIndex(group => group.Index >= stream.LoopFrame);
+            : frames.FindIndex(group => group.Index >= stream.LoopFrame);
         if (loopGroupIndex < 0)
         {
             loopGroupIndex = 0;
@@ -44,10 +50,10 @@ internal static class NesMusicAssetCompiler
 
         var pool = new List<byte>();
         var bodyOffsets = new Dictionary<string, int>();
-        var orderEntries = new List<NesApuTraceOrderEntry>(stream.Frames.Count);
-        for (var i = 0; i < stream.Frames.Count; i++)
+        var orderEntries = new List<NesApuTraceOrderEntry>(frames.Count);
+        for (var i = 0; i < frames.Count; i++)
         {
-            var body = BuildApuTraceGroupBody(stream.Frames[i]);
+            var body = BuildApuTraceGroupBody(frames[i]);
             var key = Convert.ToHexString(body);
             if (!bodyOffsets.TryGetValue(key, out var bodyOffset))
             {
@@ -61,8 +67,8 @@ internal static class NesMusicAssetCompiler
                 pool.AddRange(body);
             }
 
-            var nextFrame = i + 1 < stream.Frames.Count ? stream.Frames[i + 1].Index : stream.DurationFrames;
-            orderEntries.Add(new NesApuTraceOrderEntry(bodyOffset, CheckedFrameDelta(stream.Frames[i].Index, nextFrame)));
+            var nextFrame = i + 1 < frames.Count ? frames[i + 1].Index : stream.DurationFrames;
+            orderEntries.Add(new NesApuTraceOrderEntry(bodyOffset, CheckedFrameDelta(frames[i].Index, nextFrame)));
         }
 
         var orderStartOffset = ApuTraceHeaderLength + pool.Count;
@@ -91,7 +97,181 @@ internal static class NesMusicAssetCompiler
         data.Add(0);
         data.Add(0);
         data.Add(0);
-        return new NesCompiledMusicAsset(name, data.ToArray(), orderStartOffset, loopOrderOffset, orderEntries);
+        return new NesCompiledMusicAsset(
+            name,
+            data.ToArray(),
+            orderStartOffset,
+            loopOrderOffset,
+            orderEntries,
+            CompileDpcmBlocks(stream.DpcmBlocks, frames));
+    }
+
+    private static List<VgmFrame> OptimizeFrameWrites(IReadOnlyList<VgmFrame> frames, int loopFrame)
+    {
+        var result = new List<VgmFrame>(frames.Count);
+        var lastValues = new Dictionary<ushort, byte>();
+        var loopCacheReset = loopFrame <= 0;
+        foreach (var frame in frames)
+        {
+            if (!loopCacheReset && frame.Index >= loopFrame)
+            {
+                lastValues.Clear();
+                loopCacheReset = true;
+            }
+
+            var writes = new List<VgmRegisterWrite>(frame.Writes.Count);
+            for (var i = 0; i < frame.Writes.Count; i++)
+            {
+                var write = frame.Writes[i];
+                if (IsNesApuTriggerRegister(write.Address) || IsLastWriteToRegisterInFrame(frame.Writes, i))
+                {
+                    writes.Add(write);
+                }
+            }
+
+            var optimizedWrites = new List<VgmRegisterWrite>(writes.Count);
+            foreach (var write in writes)
+            {
+                if (!IsNesApuTriggerRegister(write.Address) &&
+                    lastValues.TryGetValue(write.Address, out var previousValue) &&
+                    previousValue == write.Value)
+                {
+                    continue;
+                }
+
+                lastValues[write.Address] = write.Value;
+                optimizedWrites.Add(write);
+            }
+
+            if (optimizedWrites.Count > 0)
+            {
+                result.Add(new VgmFrame(frame.Index, optimizedWrites));
+            }
+        }
+
+        return result;
+    }
+
+    private static bool IsLastWriteToRegisterInFrame(IReadOnlyList<VgmRegisterWrite> writes, int index)
+    {
+        var address = writes[index].Address;
+        for (var i = index + 1; i < writes.Count; i++)
+        {
+            if (writes[i].Address == address)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsNesApuTriggerRegister(ushort address)
+    {
+        return address is 0x4003 or 0x4007 or 0x400B or 0x400F or 0x4015 or 0x4017;
+    }
+
+    private static IReadOnlyList<NesDpcmSampleBlock> CompileDpcmBlocks(IReadOnlyList<VgmDpcmMemoryBlock> blocks, IReadOnlyList<VgmFrame> frames)
+    {
+        var ranges = DpcmSampleRanges(frames);
+        if (ranges.Count == 0)
+        {
+            return [];
+        }
+
+        var dpcmBlocks = new List<NesDpcmSampleBlock>(ranges.Count);
+        foreach (var (startAddress, endAddress) in ranges)
+        {
+            if (startAddress < DpcmSampleStartAddress || endAddress > DpcmVectorStartAddress)
+            {
+                throw new InvalidOperationException(
+                    $"NES DPCM sample range ${startAddress:X4}-${endAddress - 1:X4} must fit in PRG ROM between $C000 and $FFF9.");
+            }
+
+            var data = ReadDpcmRange(blocks, startAddress, endAddress);
+            dpcmBlocks.Add(new NesDpcmSampleBlock((ushort)startAddress, data));
+        }
+
+        return dpcmBlocks;
+    }
+
+    private static List<(int StartAddress, int EndAddress)> DpcmSampleRanges(IReadOnlyList<VgmFrame> frames)
+    {
+        var ranges = new List<(int StartAddress, int EndAddress)>();
+        var addressRegister = 0;
+        var lengthRegister = 0;
+        foreach (var frame in frames)
+        {
+            foreach (var write in frame.Writes)
+            {
+                switch (write.Address)
+                {
+                    case 0x4012:
+                        addressRegister = write.Value;
+                        break;
+                    case 0x4013:
+                        lengthRegister = write.Value;
+                        break;
+                    case 0x4015 when (write.Value & 0x10) != 0:
+                    {
+                        var startAddress = DpcmSampleStartAddress + addressRegister * 64;
+                        var byteCount = lengthRegister * 16 + 1;
+                        ranges.Add((startAddress, startAddress + byteCount));
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (ranges.Count == 0)
+        {
+            return ranges;
+        }
+
+        ranges.Sort((left, right) => left.StartAddress.CompareTo(right.StartAddress));
+        var merged = new List<(int StartAddress, int EndAddress)>();
+        foreach (var range in ranges)
+        {
+            if (merged.Count == 0 || range.StartAddress > merged[^1].EndAddress)
+            {
+                merged.Add(range);
+            }
+            else
+            {
+                var previous = merged[^1];
+                merged[^1] = (previous.StartAddress, Math.Max(previous.EndAddress, range.EndAddress));
+            }
+        }
+
+        return merged;
+    }
+
+    private static byte[] ReadDpcmRange(IReadOnlyList<VgmDpcmMemoryBlock> blocks, int startAddress, int endAddress)
+    {
+        var data = new byte[endAddress - startAddress];
+        var written = new bool[data.Length];
+        foreach (var block in blocks)
+        {
+            var blockStart = block.Address;
+            var blockEnd = blockStart + block.Data.Length;
+            var copyStart = Math.Max(startAddress, blockStart);
+            var copyEnd = Math.Min(endAddress, blockEnd);
+            if (copyStart >= copyEnd)
+            {
+                continue;
+            }
+
+            Array.Copy(block.Data, copyStart - blockStart, data, copyStart - startAddress, copyEnd - copyStart);
+            Array.Fill(written, true, copyStart - startAddress, copyEnd - copyStart);
+        }
+
+        if (written.Any(isWritten => !isWritten))
+        {
+            throw new InvalidOperationException(
+                $"NES DPCM sample range ${startAddress:X4}-${endAddress - 1:X4} is not covered by VGM DPCM data blocks.");
+        }
+
+        return data;
     }
 
     private static byte[] BuildApuTraceGroupBody(VgmFrame frame)

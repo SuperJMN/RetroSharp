@@ -11,6 +11,8 @@ public enum VgmChip
 
 public sealed record VgmRegisterWrite(ushort Address, byte Value);
 
+public sealed record VgmDpcmMemoryBlock(ushort Address, byte[] Data);
+
 public sealed record VgmFrame(int Index, IReadOnlyList<VgmRegisterWrite> Writes);
 
 public sealed record VgmFrameStream(
@@ -19,7 +21,20 @@ public sealed record VgmFrameStream(
     int FrameRate,
     int DurationFrames,
     int LoopFrame,
-    IReadOnlyList<VgmFrame> Frames);
+    IReadOnlyList<VgmFrame> Frames,
+    IReadOnlyList<VgmDpcmMemoryBlock> DpcmBlocks)
+{
+    public VgmFrameStream(
+        VgmChip chip,
+        int chipClockHz,
+        int frameRate,
+        int durationFrames,
+        int loopFrame,
+        IReadOnlyList<VgmFrame> frames)
+        : this(chip, chipClockHz, frameRate, durationFrames, loopFrame, frames, [])
+    {
+    }
+}
 
 public static class VgmImporter
 {
@@ -42,6 +57,8 @@ public static class VgmImporter
             : SampleToFrame(totalSamples - loopSamples);
 
         var frames = new SortedDictionary<int, List<VgmRegisterWrite>>();
+        var dpcmBlocks = new List<VgmDpcmMemoryBlock>();
+        var nesDpcmDataBankOffset = 0;
         var position = commandOffset;
         var samples = 0L;
         while (position < bytes.Length)
@@ -51,7 +68,7 @@ public static class VgmImporter
             switch (command)
             {
                 case 0x66:
-                    return BuildStream(chip, chipClockHz, totalSamples, loopFrame, frames);
+                    return BuildStream(chip, chipClockHz, totalSamples, loopFrame, frames, dpcmBlocks);
                 case 0x61:
                     samples = checked(samples + ReadUInt16(bytes, ref position, commandOffsetForError, assetName));
                     break;
@@ -65,7 +82,7 @@ public static class VgmImporter
                     samples += (command & 0x0F) + 1;
                     break;
                 case 0x67:
-                    SkipDataBlock(bytes, ref position, commandOffsetForError, assetName);
+                    ReadDataBlock(bytes, ref position, commandOffsetForError, assetName, chip, dpcmBlocks, ref nesDpcmDataBankOffset);
                     break;
                 case 0xB3:
                     ReadTargetWrite(bytes, ref position, commandOffsetForError, assetName, chip, VgmChip.GameBoyDmg, samples, frames);
@@ -206,7 +223,7 @@ public static class VgmImporter
             VgmChip.Nes2A03 => register switch
             {
                 <= 0x0F => (ushort)(0x4000 + register),
-                >= 0x10 and <= 0x13 => null,
+                >= 0x10 and <= 0x13 => (ushort)(0x4000 + register),
                 0x15 or 0x17 => (ushort)(0x4000 + register),
                 _ => throw new InvalidOperationException($"VGM file '{assetName}' contains unsupported NES 2A03 register 0x{register:X2}."),
             },
@@ -214,7 +231,14 @@ public static class VgmImporter
         };
     }
 
-    private static void SkipDataBlock(byte[] bytes, ref int position, int commandOffset, string assetName)
+    private static void ReadDataBlock(
+        byte[] bytes,
+        ref int position,
+        int commandOffset,
+        string assetName,
+        VgmChip requestedChip,
+        List<VgmDpcmMemoryBlock> dpcmBlocks,
+        ref int nesDpcmDataBankOffset)
     {
         RequireBytes(bytes, position, 6, commandOffset, assetName);
         if (bytes[position++] != 0x66)
@@ -222,7 +246,7 @@ public static class VgmImporter
             throw new InvalidOperationException($"VGM file '{assetName}' has malformed data block at 0x{commandOffset:X}: missing 0x66 marker.");
         }
 
-        _ = bytes[position++];
+        var type = bytes[position++];
         var size = ReadUInt32(bytes, position);
         position += 4;
         if (size > int.MaxValue || position + (int)size > bytes.Length)
@@ -230,7 +254,65 @@ public static class VgmImporter
             throw new InvalidOperationException($"VGM file '{assetName}' has data block at 0x{commandOffset:X} that extends past the end of the file.");
         }
 
+        if (requestedChip == VgmChip.Nes2A03)
+        {
+            ReadNesDpcmDataBlock(bytes, position, type, (int)size, commandOffset, assetName, dpcmBlocks, ref nesDpcmDataBankOffset);
+        }
+
         position += (int)size;
+    }
+
+    private static void ReadNesDpcmDataBlock(
+        byte[] bytes,
+        int position,
+        byte type,
+        int size,
+        int commandOffset,
+        string assetName,
+        List<VgmDpcmMemoryBlock> dpcmBlocks,
+        ref int nesDpcmDataBankOffset)
+    {
+        switch (type)
+        {
+            case 0x07:
+            {
+                if (size == 0)
+                {
+                    return;
+                }
+
+                var address = checked(0xC000 + nesDpcmDataBankOffset);
+                if (address > ushort.MaxValue || address + size > 0x10000)
+                {
+                    throw new InvalidOperationException($"VGM file '{assetName}' has NES DPCM data at 0x{commandOffset:X} that exceeds the 64 KiB CPU address range.");
+                }
+
+                var data = new byte[size];
+                Array.Copy(bytes, position, data, 0, size);
+                dpcmBlocks.Add(new VgmDpcmMemoryBlock((ushort)address, data));
+                nesDpcmDataBankOffset = checked(nesDpcmDataBankOffset + size);
+                break;
+            }
+            case 0xC2:
+            {
+                if (size < 2)
+                {
+                    throw new InvalidOperationException($"VGM file '{assetName}' has malformed NES APU RAM data block at 0x{commandOffset:X}: missing start address.");
+                }
+
+                var dataSize = size - 2;
+                if (dataSize == 0)
+                {
+                    return;
+                }
+
+                var address = (ushort)(bytes[position] | (bytes[position + 1] << 8));
+                var data = new byte[dataSize];
+                Array.Copy(bytes, position + 2, data, 0, dataSize);
+                dpcmBlocks.Add(new VgmDpcmMemoryBlock(address, data));
+                break;
+            }
+        }
     }
 
     private static VgmFrameStream BuildStream(
@@ -238,13 +320,14 @@ public static class VgmImporter
         int chipClockHz,
         uint totalSamples,
         int loopFrame,
-        SortedDictionary<int, List<VgmRegisterWrite>> frames)
+        SortedDictionary<int, List<VgmRegisterWrite>> frames,
+        IReadOnlyList<VgmDpcmMemoryBlock> dpcmBlocks)
     {
         var frameList = frames
             .Select(pair => new VgmFrame(pair.Key, pair.Value))
             .ToArray();
         var durationFrames = Math.Max(SampleToFrame(totalSamples), frameList.Length == 0 ? 1 : frameList[^1].Index + 1);
-        return new VgmFrameStream(chip, chipClockHz, FrameRate, durationFrames, loopFrame, frameList);
+        return new VgmFrameStream(chip, chipClockHz, FrameRate, durationFrames, loopFrame, frameList, dpcmBlocks.ToArray());
     }
 
     private static int SampleToFrame(long samples)

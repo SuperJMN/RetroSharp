@@ -12,10 +12,11 @@ The v1 NES path supports frame-driven writes for:
 - Pulse 2 registers `$4004-$4007`
 - Triangle registers `$4008-$400B`
 - Noise registers `$400C-$400F`
+- DMC registers `$4010-$4013`
 - Channel enable/status `$4015`
 - Frame counter `$4017`
 
-DPCM registers `$4010-$4013`, DPCM sample data blocks, and expansion audio are out of scope for v1. The importer skips DPCM data needed by the provided runner VGM when the four-channel path does not consume it, and unsupported chip commands fail explicitly.
+NES DPCM data blocks are imported from VGM stream data (`0x07`) and NES APU RAM writes (`0xC2`). The ROM builder places those sample bytes in PRG ROM at the CPU addresses used by `$4012/$4013`; samples must fit in `$C000-$FFF9` so the interrupt vectors remain available. Expansion audio remains out of scope for v1, and unsupported chip commands fail explicitly.
 
 ## On-ROM Stream
 
@@ -37,8 +38,8 @@ commandCount
 { registerOffset, value } * commandCount
 ```
 
-`registerOffset` is the low byte relative to `$4000`, for example `0x00` for `$4000` and `0x15` for `$4015`. Identical frame bodies are stored once in the pool and referenced by multiple order entries. At ROM emission time, relative offsets are turned into absolute PRG pointers so the 6502 runtime can read them directly.
+`registerOffset` is the low byte relative to `$4000`, for example `0x00` for `$4000`, `0x10` for `$4010`, and `0x15` for `$4015`. Identical frame bodies are stored once in the pool and referenced by multiple order entries. At ROM emission time, relative offsets are turned into absolute PRG pointers so the 6502 runtime can read them directly. DPCM sample data is not part of the group-pool stream; it is emitted separately at its target PRG address.
 
 ## Runtime
 
-`Audio.Init()` enables pulse, triangle, and noise channels through `$4015`, initializes `$4017`, and resets music state. `Music.Play(theme)` points the runtime at the selected asset's order stream and loop point. `Audio.Update()` should be called once per frame; it waits the compiled frame delay, decodes the next group body, and writes the contained values to `$4000-$4017`. Zero-wait order entries continue in the same `Audio.Update()` call so dense bursts do not gain accidental blank frames.
+`Audio.Init()` enables pulse, triangle, and noise channels through `$4015`, initializes `$4017`, and resets music state. DMC playback starts when the imported stream writes `$4015` with bit 4 set after configuring `$4010/$4012/$4013`. `Music.Play(theme)` points the runtime at the selected asset's order stream and loop point. `Audio.Update()` should be called once per frame; it waits the compiled frame delay, decodes the next group body, and writes the contained values to `$4000-$4017`. Zero-wait order entries continue in the same `Audio.Update()` call so dense bursts do not gain accidental blank frames.
