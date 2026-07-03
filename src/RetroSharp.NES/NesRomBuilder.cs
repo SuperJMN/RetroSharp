@@ -300,18 +300,20 @@ internal static class NesRomBuilder
 
     private static void EmitMusicAssets(PrgBuilder builder, IReadOnlyList<NesCompiledMusicAsset> assets)
     {
+        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + assets.Sum(asset => asset.Data.Length), assets);
         foreach (var asset in assets)
         {
+            var data = PatchDpcmAddressRegisters(asset, dpcmLayout.AddressRegisterMap);
             var label = MusicDataLabel(asset.Name);
             builder.Label(label);
-            builder.Emit(asset.Data[0]);
+            builder.Emit(data[0]);
             builder.EmitLabelLowByte(label, asset.OrderStartOffset);
             builder.EmitLabelHighByte(label, asset.OrderStartOffset);
             builder.EmitLabelLowByte(label, asset.LoopOrderOffset);
             builder.EmitLabelHighByte(label, asset.LoopOrderOffset);
 
             var poolLength = asset.OrderStartOffset - 5;
-            builder.Emit(asset.Data.Skip(5).Take(poolLength).ToArray());
+            builder.Emit(data.Skip(5).Take(poolLength).ToArray());
             foreach (var entry in asset.OrderEntries)
             {
                 builder.EmitLabelLowByte(label, entry.BodyOffset);
@@ -321,9 +323,143 @@ internal static class NesRomBuilder
 
             builder.Emit(0, 0, 0);
         }
+
+        EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
+    }
+
+    private static DpcmSampleLayout BuildDpcmSampleLayout(int musicDataEndAddress, IReadOnlyList<NesCompiledMusicAsset> assets)
+    {
+        var uniqueBlocks = new List<NesDpcmSampleBlock>();
+        foreach (var block in assets.SelectMany(asset => asset.DpcmBlocks))
+        {
+            var existingIndex = uniqueBlocks.FindIndex(candidate => candidate.SourceAddress == block.SourceAddress);
+            if (existingIndex >= 0)
+            {
+                if (!uniqueBlocks[existingIndex].Data.SequenceEqual(block.Data))
+                {
+                    throw new InvalidOperationException($"NES DPCM sample blocks at ${block.SourceAddress:X4} contain conflicting data.");
+                }
+
+                continue;
+            }
+
+            uniqueBlocks.Add(block);
+        }
+
+        if (uniqueBlocks.Count == 0)
+        {
+            return new DpcmSampleLayout([], new Dictionary<byte, byte>());
+        }
+
+        var placements = new List<DpcmSamplePlacement>(uniqueBlocks.Count);
+        var addressRegisterMap = new Dictionary<byte, byte>();
+        var cursor = AlignToDmcAddress(Math.Max(musicDataEndAddress, 0xC000));
+        foreach (var block in uniqueBlocks.OrderByDescending(block => block.Data.Length))
+        {
+            cursor = AlignToDmcAddress(cursor);
+            var endAddress = cursor + block.Data.Length;
+            var vectorStartAddress = PrgBuilder.BaseAddress + PrgRomSize - 6;
+            if (cursor < 0xC000 || endAddress > vectorStartAddress)
+            {
+                throw new InvalidOperationException(
+                    $"NES DPCM sample block from ${block.SourceAddress:X4} with {block.Data.Length} bytes cannot fit in PRG ROM after music data ending at ${musicDataEndAddress:X4}.");
+            }
+
+            if ((cursor - 0xC000) % 64 != 0)
+            {
+                throw new InvalidOperationException($"NES DPCM sample placement ${cursor:X4} is not 64-byte aligned.");
+            }
+
+            var placementAddress = (ushort)cursor;
+            placements.Add(new DpcmSamplePlacement(block, placementAddress));
+            AddDpcmAddressRegisterTranslations(addressRegisterMap, block.SourceAddress, placementAddress, block.Data.Length);
+            cursor = endAddress;
+        }
+
+        return new DpcmSampleLayout(placements.OrderBy(placement => placement.Address).ToArray(), addressRegisterMap);
+    }
+
+    private static int AlignToDmcAddress(int address)
+    {
+        const int alignment = 64;
+        return (address + alignment - 1) / alignment * alignment;
+    }
+
+    private static void AddDpcmAddressRegisterTranslations(
+        Dictionary<byte, byte> addressRegisterMap,
+        ushort sourceAddress,
+        ushort placementAddress,
+        int byteCount)
+    {
+        for (var offset = 0; offset < byteCount; offset += 64)
+        {
+            var source = sourceAddress + offset;
+            var target = placementAddress + offset;
+            if (source > 0xFFC0 || target > 0xFFC0)
+            {
+                break;
+            }
+
+            var sourceRegister = (byte)((source - 0xC000) / 64);
+            var targetRegister = (byte)((target - 0xC000) / 64);
+            if (addressRegisterMap.TryGetValue(sourceRegister, out var existing) && existing != targetRegister)
+            {
+                throw new InvalidOperationException($"NES DPCM sample address register ${sourceRegister:X2} maps to conflicting relocated addresses.");
+            }
+
+            addressRegisterMap[sourceRegister] = targetRegister;
+        }
+    }
+
+    private static byte[] PatchDpcmAddressRegisters(NesCompiledMusicAsset asset, IReadOnlyDictionary<byte, byte> addressRegisterMap)
+    {
+        if (addressRegisterMap.Count == 0)
+        {
+            return asset.Data;
+        }
+
+        var data = asset.Data.ToArray();
+        foreach (var bodyOffset in asset.OrderEntries.Select(entry => entry.BodyOffset).Distinct())
+        {
+            var commandCount = data[bodyOffset];
+            var offset = bodyOffset + 1;
+            for (var i = 0; i < commandCount; i++)
+            {
+                var registerOffset = data[offset];
+                if (registerOffset == 0x12 && addressRegisterMap.TryGetValue(data[offset + 1], out var relocatedAddressRegister))
+                {
+                    data[offset + 1] = relocatedAddressRegister;
+                }
+
+                offset += 2;
+            }
+        }
+
+        return data;
+    }
+
+    private static void EmitDpcmSampleBlocks(PrgBuilder builder, IReadOnlyList<DpcmSamplePlacement> placements)
+    {
+        foreach (var placement in placements)
+        {
+            if (builder.CurrentAddress > placement.Address)
+            {
+                throw new InvalidOperationException(
+                    $"NES DPCM sample block at ${placement.Address:X4} overlaps earlier PRG ROM data ending at ${builder.CurrentAddress:X4}.");
+            }
+
+            builder.PadToAddress(placement.Address);
+            builder.Emit(placement.Block.Data);
+        }
     }
 
     internal static string MusicDataLabel(string name) => $"music_data_{name}";
+
+    private sealed record DpcmSampleLayout(
+        IReadOnlyList<DpcmSamplePlacement> Placements,
+        IReadOnlyDictionary<byte, byte> AddressRegisterMap);
+
+    private readonly record struct DpcmSamplePlacement(NesDpcmSampleBlock Block, ushort Address);
 
     private static byte[] BuildChrRom(NesVideoProgram program)
     {
@@ -454,6 +590,8 @@ internal sealed class NesRuntimeCompiler
     private const byte CameraWalkMaxStepsPerFrame = 8;
     private const ushort MusicLoopPointerLowAddress = 0x0310;
     private const ushort MusicLoopPointerHighAddress = 0x0311;
+    private const ushort MusicApuWriteValueAddress = 0x0312;
+    private const ushort MusicApuWriteCursorAddress = 0x0313;
     private const ushort OamDmaAddress = 0x4014;
     private const ushort ControllerPortAddress = 0x4016;
     private const byte PendingStreamNone = 0;
@@ -2755,7 +2893,7 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAIndirectY(MusicBodyPointerLowAddress);
         builder.StoreAZeroPage(RuntimeIndexScratchAddress);
         builder.IncrementY();
-        EmitNesApuRegisterWriteSwitch();
+        EmitNesApuRegisterWrite();
         builder.DecrementZeroPage(MusicCommandCountAddress);
         builder.BranchRelative(0xF0, afterBodyLabel); // BEQ afterBodyLabel
         builder.JumpAbsolute(commandLoopLabel);
@@ -2785,34 +2923,19 @@ internal sealed class NesRuntimeCompiler
         builder.Label(noCarryLabel);
     }
 
-    private void EmitNesApuRegisterWriteSwitch()
+    private void EmitNesApuRegisterWrite()
     {
-        var endLabel = builder.CreateLabel("nes_apu_write_end");
-        foreach (var register in SupportedNesApuRegisters())
-        {
-            var nextLabel = builder.CreateLabel("nes_apu_write_next");
-            builder.LoadAZeroPage(ExpressionScratchAddress);
-            builder.CompareImmediate(register);
-            builder.BranchRelative(0xD0, nextLabel); // BNE nextLabel
-            builder.LoadAZeroPage(RuntimeIndexScratchAddress);
-            builder.StoreAAbsolute((ushort)(0x4000 + register));
-            builder.JumpAbsolute(endLabel);
-            builder.Label(nextLabel);
-        }
-
-        builder.Label(endLabel);
-    }
-
-    private static IReadOnlyList<byte> SupportedNesApuRegisters()
-    {
-        return
-        [
-            0x00, 0x01, 0x02, 0x03,
-            0x04, 0x05, 0x06, 0x07,
-            0x08, 0x09, 0x0A, 0x0B,
-            0x0C, 0x0D, 0x0E, 0x0F,
-            0x15, 0x17,
-        ];
+        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
+        builder.StoreAAbsolute(MusicApuWriteValueAddress);
+        builder.StoreYAbsolute(MusicApuWriteCursorAddress);
+        builder.LoadAZeroPage(ExpressionScratchAddress);
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        builder.LoadAImmediate(0x40);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.LoadYImmediate(0);
+        builder.LoadAAbsolute(MusicApuWriteValueAddress);
+        builder.StoreAIndirectY(RuntimeIndexScratchAddress);
+        builder.LoadYAbsolute(MusicApuWriteCursorAddress);
     }
 
     internal void EmitPollInput()
@@ -5656,11 +5779,32 @@ internal sealed class PrgBuilder
     private readonly List<(int Offset, string Label)> relativeFixups = [];
     private int nextLabelId;
 
+    public int CurrentAddress => BaseAddress + bytes.Count;
+
     public void Label(string name) => labels[name] = bytes.Count;
 
     public string CreateLabel(string prefix) => $"{prefix}_{nextLabelId++}";
 
     public void Emit(params byte[] values) => bytes.AddRange(values);
+
+    public void PadToAddress(ushort address)
+    {
+        if (address < BaseAddress)
+        {
+            throw new InvalidOperationException($"NES PRG address ${address:X4} is below PRG ROM base ${BaseAddress:X4}.");
+        }
+
+        var targetOffset = address - BaseAddress;
+        if (targetOffset < bytes.Count)
+        {
+            throw new InvalidOperationException($"NES PRG address ${address:X4} has already been emitted.");
+        }
+
+        while (bytes.Count < targetOffset)
+        {
+            bytes.Add(0);
+        }
+    }
 
     public void EmitLabelLowByte(string label, int addend = 0)
     {
@@ -5709,6 +5853,12 @@ internal sealed class PrgBuilder
     public void StoreAAbsolute(ushort address) => Emit(0x8D, Low(address), High(address));
 
     public void StoreAAbsoluteX(ushort address) => Emit(0x9D, Low(address), High(address));
+
+    public void StoreAIndirectY(byte address) => Emit(0x91, address);
+
+    public void StoreYAbsolute(ushort address) => Emit(0x8C, Low(address), High(address));
+
+    public void LoadYAbsolute(ushort address) => Emit(0xAC, Low(address), High(address));
 
     public void AndImmediate(int value) => Emit(0x29, CheckedByte(value));
 

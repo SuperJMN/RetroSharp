@@ -57,8 +57,48 @@ public sealed class NesMusicTests
         Assert.False(NesTarget.AudioCapabilities.AllowsBgmNoOp);
         Assert.Contains("vgm", NesTarget.AudioCapabilities.SupportedMusicFormats);
         Assert.True(ContainsSequence(rom, [0xA9, 0x0F, 0x8D, 0x15, 0x40]), "Audio.Init should enable NES pulse/triangle/noise channels through $4015.");
-        Assert.True(ContainsSequence(rom, [0x8D, 0x00, 0x40]), "Audio.Update should be able to write pulse 1 register $4000.");
-        Assert.True(ContainsSequence(rom, [0x8D, 0x04, 0x40]), "Audio.Update should be able to write pulse 2 register $4004.");
+        Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Audio.Update should write the selected NES APU register through an indirect $40xx pointer.");
+    }
+
+    [Fact]
+    public void Compiles_dmc_sample_block_and_dmc_register_writes_to_nes_rom()
+    {
+        var directory = CreateTempDirectory();
+        var sample = Enumerable.Range(0, 17).Select(i => (byte)(0xA0 + i)).ToArray();
+        var dataBlock = new byte[2 + sample.Length];
+        dataBlock[1] = 0xE0;
+        sample.CopyTo(dataBlock, 2);
+        WriteVgmGzipWithDataBlock(
+            Path.Combine(directory, "dmc.nes.vgz"),
+            dataBlockType: 0xC2,
+            dataBlock: dataBlock,
+            command: 0xB4,
+            [0x10, 0x0F],
+            [0x12, 0x80],
+            [0x13, 0x01],
+            [0x15, 0x1F]);
+
+        const string source = """
+                              void Main() {
+                                  Music.Asset(dmc_theme, "dmc.vgz");
+                                  Audio.Init();
+                                  Music.Play(dmc_theme);
+                                  Audio.Update();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, directory);
+        var sampleOffset = IndexOfSequence(rom, sample);
+        Assert.True(sampleOffset >= 16, "Compiled NES ROM should contain relocated DPCM sample bytes.");
+        var sampleAddress = 0x8000 + sampleOffset - 16;
+        Assert.Equal(0, (sampleAddress - 0xC000) % 64);
+        var relocatedAddressRegister = (byte)((sampleAddress - 0xC000) / 64);
+
+        Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Audio.Update should write DMC registers through the indirect APU pointer.");
+        Assert.True(ContainsSequence(rom, [0x10, 0x0F]), "Compiled NES trace should keep DMC control writes.");
+        Assert.True(ContainsSequence(rom, [0x12, relocatedAddressRegister]), "Compiled NES trace should rewrite DMC sample address writes to the relocated PRG sample.");
+        Assert.True(ContainsSequence(rom, [0x13, 0x01]), "Compiled NES trace should keep DMC sample length writes.");
     }
 
     [Fact]
@@ -131,6 +171,46 @@ public sealed class NesMusicTests
         gzip.Write(bytes);
     }
 
+    private static void WriteVgmGzipWithDataBlock(
+        string path,
+        byte dataBlockType,
+        byte[] dataBlock,
+        byte command,
+        params byte[][] commandPayloads)
+    {
+        var commands = new List<byte>
+        {
+            0x67,
+            0x66,
+            dataBlockType,
+        };
+        commands.AddRange(BitConverter.GetBytes(dataBlock.Length));
+        commands.AddRange(dataBlock);
+        foreach (var payload in commandPayloads)
+        {
+            commands.Add(command);
+            commands.AddRange(payload);
+        }
+
+        commands.Add(0x66);
+
+        var bytes = new byte[0xC0 + commands.Count];
+        bytes[0] = (byte)'V';
+        bytes[1] = (byte)'g';
+        bytes[2] = (byte)'m';
+        bytes[3] = (byte)' ';
+        WriteUInt32(bytes, 0x08, 0x00000161);
+        WriteUInt32(bytes, 0x18, 735);
+        WriteUInt32(bytes, 0x34, 0x8C);
+        WriteUInt32(bytes, 0x84, 1_789_773);
+        commands.CopyTo(bytes, 0xC0);
+        WriteUInt32(bytes, 0x04, (uint)(bytes.Length - 4));
+
+        using var file = File.Create(path);
+        using var gzip = new GZipStream(file, CompressionLevel.SmallestSize);
+        gzip.Write(bytes);
+    }
+
     private static void WriteUInt32(byte[] bytes, int offset, uint value)
     {
         bytes[offset] = (byte)(value & 0xFF);
@@ -140,6 +220,11 @@ public sealed class NesMusicTests
     }
 
     private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
+    {
+        return IndexOfSequence(bytes, sequence) >= 0;
+    }
+
+    private static int IndexOfSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
     {
         for (var i = 0; i <= bytes.Count - sequence.Count; i++)
         {
@@ -155,11 +240,11 @@ public sealed class NesMusicTests
 
             if (found)
             {
-                return true;
+                return i;
             }
         }
 
-        return false;
+        return -1;
     }
 
     private static string CreateTempDirectory()
