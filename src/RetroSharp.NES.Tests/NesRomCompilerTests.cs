@@ -11,6 +11,34 @@ using Xunit;
 public class NesRomCompilerTests
 {
     [Fact]
+    public void Word_compound_add_and_subtract_with_i8_operand_do_not_clobber_the_carry()
+    {
+        // Regression for the NES fall-through bug: the sign-extension of an i8 operand clobbers the
+        // carry flag, so it must be computed into scratch before the low-byte ADC/SBC. The low-byte
+        // arithmetic and its STA must therefore be immediately followed by the high-byte ADC/SBC,
+        // with no sign-extension code in between.
+        const string source = """
+                              void Main() {
+                                  i16 a = 10;
+                                  i8 v = 5;
+                                  a += v;
+                                  a -= v;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        // a occupies $00/$01, v occupies $02, and the word scratch high byte is $E9.
+        Assert.True(
+            ContainsSequence(prg, [0x18, 0x65, 0x02, 0x85, 0x00, 0xA5, 0x01, 0x65, 0xE9, 0x85, 0x01]),
+            "word += i8 should CLC/ADC the low byte then immediately ADC the high byte with the sign-extended scratch.");
+        Assert.True(
+            ContainsSequence(prg, [0x38, 0xE5, 0x02, 0x85, 0x00, 0xA5, 0x01, 0xE5, 0xE9, 0x85, 0x01]),
+            "word -= i8 should SEC/SBC the low byte then immediately SBC the high byte with the sign-extended scratch.");
+    }
+
+    [Fact]
     public void Compiles_video_api_calls_to_an_ines_rom()
     {
         const string source = """

@@ -1112,12 +1112,25 @@ internal sealed class NesRuntimeCompiler
             rightType = "u16";
         }
 
+        // Sign-extending an i8 addend clobbers the carry flag, so its high byte must be materialized
+        // to scratch before the low-byte add. Wider operands load the high byte with carry-safe loads
+        // after the low-byte add, leaving their emission unchanged.
+        var hoistI8HighByte = rightType == "i8";
+        if (hoistI8HighByte)
+        {
+            EmitHighByteToScratch(rightAddress, rightType);
+        }
+
         builder.LoadAZeroPage(address);
         builder.ClearCarry();
         builder.AddZeroPage(rightAddress);
         builder.StoreAZeroPage(address);
 
-        EmitHighByteToScratch(rightAddress, rightType);
+        if (!hoistI8HighByte)
+        {
+            EmitHighByteToScratch(rightAddress, rightType);
+        }
+
         builder.LoadAZeroPage(HighAddress(address));
         builder.AddZeroPage(ExpressionScratchAddress);
         builder.StoreAZeroPage(HighAddress(address));
@@ -1144,12 +1157,25 @@ internal sealed class NesRuntimeCompiler
             rightType = "u16";
         }
 
+        // Sign-extending an i8 operand clobbers the carry/borrow flag, so its high byte must be
+        // materialized to scratch before the low-byte subtract. Wider operands load the high byte with
+        // carry-safe loads after the low-byte subtract, leaving their emission unchanged.
+        var hoistI8HighByte = rightType == "i8";
+        if (hoistI8HighByte)
+        {
+            EmitHighByteToScratch(rightAddress, rightType);
+        }
+
         builder.LoadAZeroPage(address);
         builder.SetCarry();
         builder.SubtractZeroPage(rightAddress);
         builder.StoreAZeroPage(address);
 
-        EmitHighByteToScratch(rightAddress, rightType);
+        if (!hoistI8HighByte)
+        {
+            EmitHighByteToScratch(rightAddress, rightType);
+        }
+
         builder.LoadAZeroPage(HighAddress(address));
         builder.SubtractZeroPage(ExpressionScratchAddress);
         builder.StoreAZeroPage(HighAddress(address));

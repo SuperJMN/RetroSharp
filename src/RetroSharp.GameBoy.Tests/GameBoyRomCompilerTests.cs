@@ -13,6 +13,37 @@ using Xunit;
 public class GameBoyRomCompilerTests
 {
     [Fact]
+    public void Word_compound_add_and_subtract_with_i8_operand_preserve_the_carry()
+    {
+        // Regression for the fall-through bug: adding/subtracting an i8 operand to a 16-bit local
+        // must sign-extend the operand without clobbering the carry between the low and high byte
+        // arithmetic. Covers a positive addend with no low-byte overflow (a += da), a positive
+        // addend that overflows the low byte (b += db), a negative addend (c += dc), and a
+        // subtraction that borrows into the high byte (e -= de).
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  i16 a = 10;   i8 da = 5;    a += da;
+                                  i16 b = 200;  i8 db = 100;  b += db;
+                                  i16 c = 300;  i8 dc = -50;  c += dc;
+                                  i16 e = 40;   i8 de = 100;  e -= de;
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        Assert.Equal(15, cpu.Wram(0xC000) | cpu.Wram(0xC001) << 8);
+        Assert.Equal(300, cpu.Wram(0xC003) | cpu.Wram(0xC004) << 8);
+        Assert.Equal(250, cpu.Wram(0xC006) | cpu.Wram(0xC007) << 8);
+        Assert.Equal(0xFFC4, cpu.Wram(0xC009) | cpu.Wram(0xC00A) << 8);
+    }
+
+    [Fact]
     public void Compiles_video_api_calls_to_a_game_boy_rom()
     {
         const string source = """

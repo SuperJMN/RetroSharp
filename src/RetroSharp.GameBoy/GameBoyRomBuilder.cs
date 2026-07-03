@@ -1646,13 +1646,31 @@ internal sealed class GameBoyRuntimeCompiler
             rightType = "u16";
         }
 
+        // Sign-extending an i8 addend clobbers the carry flag, so its high byte must be materialized
+        // to scratch before the low-byte add. Wider operands load the high byte with a carry-safe LD
+        // after the low-byte add, leaving their emission unchanged.
+        var hoistI8HighByte = rightType == "i8";
+        if (hoistI8HighByte)
+        {
+            EmitStoreHighByteToScratch(rightAddress, rightType, WordScratchHighAddress);
+        }
+
         builder.LoadA(rightAddress);
         builder.LoadBFromA();
         builder.LoadA(address);
         builder.AddAFromB();
         builder.StoreA(address);
 
-        EmitLoadHighByteToB(rightAddress, rightType);
+        if (hoistI8HighByte)
+        {
+            builder.LoadA(WordScratchHighAddress);
+            builder.LoadBFromA();
+        }
+        else
+        {
+            EmitLoadHighByteToB(rightAddress, rightType);
+        }
+
         builder.LoadA(HighAddress(address));
         builder.AdcAFromB();
         builder.StoreA(HighAddress(address));
@@ -1678,13 +1696,31 @@ internal sealed class GameBoyRuntimeCompiler
             rightType = "u16";
         }
 
+        // Sign-extending an i8 operand clobbers the carry/borrow flag, so its high byte must be
+        // materialized to scratch before the low-byte subtract. Wider operands load the high byte
+        // with a carry-safe LD after the low-byte subtract, leaving their emission unchanged.
+        var hoistI8HighByte = rightType == "i8";
+        if (hoistI8HighByte)
+        {
+            EmitStoreHighByteToScratch(rightAddress, rightType, WordScratchHighAddress);
+        }
+
         builder.LoadA(rightAddress);
         builder.LoadBFromA();
         builder.LoadA(address);
         builder.SubtractB();
         builder.StoreA(address);
 
-        EmitLoadHighByteToB(rightAddress, rightType);
+        if (hoistI8HighByte)
+        {
+            builder.LoadA(WordScratchHighAddress);
+            builder.LoadBFromA();
+        }
+        else
+        {
+            EmitLoadHighByteToB(rightAddress, rightType);
+        }
+
         builder.LoadA(HighAddress(address));
         builder.SbcB();
         builder.StoreA(HighAddress(address));
@@ -1707,6 +1743,25 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         builder.LoadBFromA();
+    }
+
+    private void EmitStoreHighByteToScratch(ushort address, string type, ushort scratchAddress)
+    {
+        if (IsWordBackedType(type))
+        {
+            builder.LoadA(HighAddress(address));
+        }
+        else if (type == "i8")
+        {
+            builder.LoadA(address);
+            EmitSignExtensionFromA();
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+        }
+
+        builder.StoreA(scratchAddress);
     }
 
     private void EmitHighByteFromLowAToStorage(ushort highAddress, string sourceType)
