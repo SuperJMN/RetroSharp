@@ -139,7 +139,7 @@ primary: '(' expression ')'
        | sizeofExpression
        | offsetofExpression
        | countofExpression
-       | sdkDotCall
+       | qualifiedCall
        | functionCall
        | memberAccess
        | indexExpression
@@ -150,7 +150,7 @@ sizeofExpression: 'sizeof' '(' type ')';
 offsetofExpression: 'offsetof' '(' type ',' IDENTIFIER ')';
 countofExpression: 'countof' '(' IDENTIFIER ')';
 
-sdkDotCall: IDENTIFIER ('.' IDENTIFIER)+ '(' arguments? ')';
+qualifiedCall: IDENTIFIER ('.' IDENTIFIER)+ '(' arguments? ')';
 memberAccess: (IDENTIFIER | indexExpression) ('.' IDENTIFIER)+;
 indexExpression: IDENTIFIER '[' expression ']';
 

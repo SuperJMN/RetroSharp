@@ -144,10 +144,10 @@ public static class TypeAliasResolver
             StructInitializerSyntax structInitializer => new StructInitializerSyntax(structInitializer.Fields.Select(field => new StructFieldInitializerSyntax(field.Name, ResolveExpression(field.Expression, aliases)))),
             UnaryExpressionSyntax unary => new UnaryExpressionSyntax(unary.OperatorSymbol, ResolveExpression(unary.Operand, aliases)),
             CastSyntax cast => new CastSyntax(ResolveType(cast.Type, aliases), ResolveExpression(cast.Expression, aliases)),
-            SdkDotCallSyntax sdkDotCall => new SdkDotCallSyntax(
-                sdkDotCall.Module,
-                sdkDotCall.Method,
-                sdkDotCall.Parameters.Select(parameter => ResolveExpression(parameter, aliases))),
+            QualifiedCallSyntax qualifiedCall => new QualifiedCallSyntax(
+                qualifiedCall.Qualifier,
+                qualifiedCall.Method,
+                qualifiedCall.Parameters.Select(parameter => ResolveExpression(parameter, aliases))),
             FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => ResolveExpression(parameter, aliases))),
             NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, ResolveExpression(namedArgument.Expression, aliases)),
             MemberAccessSyntax memberAccess => new MemberAccessSyntax(ResolveExpression(memberAccess.Target, aliases), memberAccess.Member),

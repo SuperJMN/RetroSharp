@@ -193,8 +193,8 @@ public static class StaticClassLowerer
             FunctionCall call => new FunctionCall(
                 call.Name,
                 call.Parameters.Select(parameter => RewriteInstanceExpression(parameter, receiverName, fieldNames, instanceMethodNames, visibleNames))),
-            SdkDotCallSyntax call => new SdkDotCallSyntax(
-                call.Module,
+            QualifiedCallSyntax call => new QualifiedCallSyntax(
+                call.Qualifier,
                 call.Method,
                 call.Parameters.Select(parameter => RewriteInstanceExpression(parameter, receiverName, fieldNames, instanceMethodNames, visibleNames))),
             MemberAccessSyntax memberAccess => new MemberAccessSyntax(
@@ -368,8 +368,8 @@ public static class StaticClassLowerer
     {
         return expression switch
         {
-            SdkDotCallSyntax call when !visibleNames.Contains(call.Module)
-                                      && staticMethods.TryGetValue($"{call.Module}.{call.Method}", out var functionName) =>
+            QualifiedCallSyntax call when !visibleNames.Contains(call.Qualifier)
+                                      && staticMethods.TryGetValue($"{call.Qualifier}.{call.Method}", out var functionName) =>
                 new FunctionCall(functionName, call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods, visibleNames))),
             BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
                 RewriteStaticExpression(binary.Left, staticMethods, visibleNames),
@@ -382,8 +382,8 @@ public static class StaticClassLowerer
                 RewriteStaticExpression(conditional.WhenFalse, staticMethods, visibleNames)),
             CastSyntax cast => new CastSyntax(cast.Type, RewriteStaticExpression(cast.Expression, staticMethods, visibleNames)),
             FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods, visibleNames))),
-            SdkDotCallSyntax call => new SdkDotCallSyntax(
-                call.Module,
+            QualifiedCallSyntax call => new QualifiedCallSyntax(
+                call.Qualifier,
                 call.Method,
                 call.Parameters.Select(parameter => RewriteStaticExpression(parameter, staticMethods, visibleNames))),
             MemberAccessSyntax memberAccess => new MemberAccessSyntax(RewriteStaticExpression(memberAccess.Target, staticMethods, visibleNames), memberAccess.Member),

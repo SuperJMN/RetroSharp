@@ -332,7 +332,7 @@ public class ParserTests
     }
 
     [Fact]
-    public void Sdk_namespaced_dot_calls()
+    public void Qualified_dot_calls()
     {
         var source = """
                      void Main()
@@ -346,15 +346,15 @@ public class ParserTests
     }
 
     [Fact]
-    public void Sdk_namespaced_dot_call_is_preserved_in_the_ast()
+    public void Qualified_dot_call_is_preserved_in_the_ast()
     {
         var result = new SomeParser().Parse("void Main(){ Video.Init(); }");
 
         result.Should().Succeed();
         var function = Assert.Single(result.Value.Functions);
         var statement = Assert.IsType<ExpressionStatementSyntax>(Assert.Single(function.Block.Statements));
-        var call = Assert.IsType<SdkDotCallSyntax>(statement.Expression);
-        call.Module.Should().Be("Video");
+        var call = Assert.IsType<QualifiedCallSyntax>(statement.Expression);
+        call.Qualifier.Should().Be("Video");
         call.Method.Should().Be("Init");
     }
 
