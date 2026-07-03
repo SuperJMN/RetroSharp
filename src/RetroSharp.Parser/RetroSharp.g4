@@ -28,8 +28,9 @@ letDeclaration: 'let' IDENTIFIER '=' expression ';';
 variableDeclaration: variableDeclarator ';';
 variableDeclarator: type IDENTIFIER arraySize? ('=' variableInitializer)?;
 arraySize: '[' expression? ']';
-variableInitializer: arrayInitializer | structInitializer | expression;
+variableInitializer: arrayInitializer | typedStructInitializer | structInitializer | expression;
 arrayInitializer: '[' (variableInitializer (',' variableInitializer)* ','?)? ']';
+typedStructInitializer: type structInitializer;
 structInitializer: '{' (fieldInitializer (',' fieldInitializer)* ','?)? '}';
 fieldInitializer: IDENTIFIER (':' expression)?;
 

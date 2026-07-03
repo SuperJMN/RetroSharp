@@ -156,7 +156,7 @@ internal sealed class GameBoyTestCpu
         0xF1 => 12,                                      // POP AF
         0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
         0x16 or 0x26 or 0x2E or 0x06 or 0x0E or 0x1E or 0x3E => 8, // LD r,n
-        0xC6 or 0xD6 or 0xE6 or 0xF6 or 0xEE or 0xFE => 8,        // ALU A,n
+        0xC6 or 0xCE or 0xD6 or 0xDE or 0xE6 or 0xF6 or 0xEE or 0xFE => 8, // ALU A,n
         0x0B or 0x03 or 0x13 or 0x1B or 0x23 or 0x2B => 8,        // INC/DEC rr
         0x09 or 0x19 or 0x29 => 8,                       // ADD HL,rr
         0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x7E => 8, // LD A,(rr)/(HL) loads/stores
@@ -389,9 +389,13 @@ internal sealed class GameBoyTestCpu
             case 0x81: a = Add(a, c); break;                    // ADD A,C
             case 0x87: a = Add(a, a); break;                    // ADD A,A
             case 0xC6: a = Add(a, NextByte()); break;           // ADD A,n
+            case 0x88: a = Add(a, b, CarryIn()); break;         // ADC A,B
+            case 0xCE: a = Add(a, NextByte(), CarryIn()); break; // ADC A,n
             case 0x90: a = Sub(a, b); break;                    // SUB B
             case 0x91: a = Sub(a, c); break;                    // SUB C
             case 0xD6: a = Sub(a, NextByte()); break;           // SUB n
+            case 0x98: a = Sub(a, b, CarryIn()); break;         // SBC A,B
+            case 0xDE: a = Sub(a, NextByte(), CarryIn()); break; // SBC A,n
             case 0x05: b = Dec(b); break;                       // DEC B
             case 0x0D: c = Dec(c); break;                       // DEC C
             case 0x15: d = Dec(d); break;                       // DEC D
@@ -479,23 +483,25 @@ internal sealed class GameBoyTestCpu
         return (ushort)((high << 8) | low);
     }
 
-    private byte Add(byte x, byte y)
+    private int CarryIn() => (f & FlagC) != 0 ? 1 : 0;
+
+    private byte Add(byte x, byte y, int carry = 0)
     {
-        var result = x + y;
+        var result = x + y + carry;
         f = 0;
         if ((byte)result == 0) f |= FlagZ;
-        if (((x & 0x0F) + (y & 0x0F)) > 0x0F) f |= FlagH;
+        if (((x & 0x0F) + (y & 0x0F) + carry) > 0x0F) f |= FlagH;
         if (result > 0xFF) f |= FlagC;
         return (byte)result;
     }
 
-    private byte Sub(byte x, byte y)
+    private byte Sub(byte x, byte y, int carry = 0)
     {
-        var result = x - y;
+        var result = x - y - carry;
         f = FlagN;
         if ((byte)result == 0) f |= FlagZ;
-        if ((x & 0x0F) < (y & 0x0F)) f |= FlagH;
-        if (x < y) f |= FlagC;
+        if ((x & 0x0F) < ((y & 0x0F) + carry)) f |= FlagH;
+        if (result < 0) f |= FlagC;
         return (byte)result;
     }
 

@@ -13,7 +13,6 @@ static class Player {
     const i16 StartY = 193;
     const i16 FootOffset = 31;
     const i16 FallResetY = 240;
-    const i16 TopWrapY = 240;
 }
 
 static class DeadZone {

@@ -17,8 +17,84 @@ public class SomeParser
     private sealed record StaticClassMethod(string SourceName, string FunctionName);
 
     public Result<ProgramSyntax> Parse(string input) => Tokenize(input)
+        .Bind(RejectUnsupportedManagedObjectForms)
         .Bind(Parse)
         .Map(ParseProgram);
+
+    private static Result<CommonTokenStream> RejectUnsupportedManagedObjectForms(CommonTokenStream tokenStream)
+    {
+        tokenStream.Fill();
+        var tokens = tokenStream.GetTokens().Where(token => token.Type != TokenConstants.EOF).ToList();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            var text = tokens[i].Text;
+            var diagnostic = text switch
+            {
+                "virtual" => "Unsupported managed-object form 'virtual': virtual dispatch requires a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.",
+                "override" => "Unsupported managed-object form 'override': overriding requires a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.",
+                "abstract" => "Unsupported managed-object form 'abstract': abstract dispatch requires a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.",
+                "interface" => "Unsupported managed-object form 'interface': interface dispatch requires runtime type tests and method tables; RetroSharp classes lower to fixed static data and receiver helpers.",
+                "new" when IsTypeConstruction(tokens, i) => "Unsupported managed-object form 'new': object construction requires heap allocation and object headers; use fixed locals or struct/class initializers instead.",
+                "~" when IsDestructor(tokens, i) => "Unsupported managed-object form 'destructor': destructors require runtime lifetime tracking and finalization; RetroSharp classes have no managed object lifetime.",
+                "class" when IsClassInheritance(tokens, i) => "Unsupported managed-object form 'class inheritance': inheritance requires object layout metadata and a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.",
+                "is" when IsRuntimeTypeTest(tokens, i) => "Unsupported managed-object form 'is': runtime type tests require RTTI and object headers; RetroSharp classes have no runtime type identity.",
+                "as" when IsRuntimeTypeTest(tokens, i) => "Unsupported managed-object form 'as': runtime type tests require RTTI and object headers; RetroSharp classes have no runtime type identity.",
+                "typeof" when TokenText(tokens, i + 1) == "(" => "Unsupported managed-object form 'typeof': runtime type identity requires RTTI and object headers; RetroSharp classes have no runtime type identity.",
+                "dynamic_cast" => "Unsupported managed-object form 'dynamic_cast': dynamic casts require RTTI and object headers; RetroSharp classes have no runtime type identity.",
+                _ => null,
+            };
+
+            if (diagnostic is not null)
+            {
+                return Result.Failure<CommonTokenStream>(diagnostic);
+            }
+        }
+
+        tokenStream.Seek(0);
+        return tokenStream;
+    }
+
+    private static bool IsTypeConstruction(IReadOnlyList<IToken> tokens, int index)
+    {
+        return IsIdentifier(tokens, index + 1) && TokenText(tokens, index + 2) == "(";
+    }
+
+    private static bool IsDestructor(IReadOnlyList<IToken> tokens, int index)
+    {
+        return IsIdentifier(tokens, index + 1) && TokenText(tokens, index + 2) == "(";
+    }
+
+    private static bool IsClassInheritance(IReadOnlyList<IToken> tokens, int index)
+    {
+        var nameIndex = index + 1;
+        return IsIdentifier(tokens, nameIndex) && TokenText(tokens, nameIndex + 1) == ":";
+    }
+
+    private static bool IsRuntimeTypeTest(IReadOnlyList<IToken> tokens, int index)
+    {
+        return IsIdentifier(tokens, index - 1) && IsIdentifier(tokens, index + 1);
+    }
+
+    private static string? TokenText(IReadOnlyList<IToken> tokens, int index)
+    {
+        return index >= 0 && index < tokens.Count ? tokens[index].Text : null;
+    }
+
+    private static bool IsIdentifier(IReadOnlyList<IToken> tokens, int index)
+    {
+        var text = TokenText(tokens, index);
+        return text is not null && IsIdentifierText(text);
+    }
+
+    private static bool IsIdentifierText(string text)
+    {
+        if (text.Length == 0 || !(char.IsLetter(text[0]) || text[0] == '_'))
+        {
+            return false;
+        }
+
+        return text.Skip(1).All(character => char.IsLetterOrDigit(character) || character == '_');
+    }
 
     private static Result<ProgramContext> Parse(CommonTokenStream tokenStream)
     {
@@ -499,12 +575,22 @@ public class SomeParser
             return new ArrayInitializerSyntax(arrayInitializer.variableInitializer().Select(ParseVariableInitializer));
         }
 
+        if (initializer.typedStructInitializer() is { } typedStructInitializer)
+        {
+            return ParseStructInitializer(typedStructInitializer.structInitializer());
+        }
+
         if (initializer.structInitializer() is { } structInitializer)
         {
-            return new StructInitializerSyntax(structInitializer.fieldInitializer().Select(ParseFieldInitializer));
+            return ParseStructInitializer(structInitializer);
         }
 
         return ParseExpression(initializer.expression());
+    }
+
+    private ExpressionSyntax ParseStructInitializer(StructInitializerContext structInitializer)
+    {
+        return new StructInitializerSyntax(structInitializer.fieldInitializer().Select(ParseFieldInitializer));
     }
 
     private StructFieldInitializerSyntax ParseFieldInitializer(FieldInitializerContext fieldInitializer)

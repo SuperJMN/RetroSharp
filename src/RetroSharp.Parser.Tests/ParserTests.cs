@@ -519,6 +519,48 @@ public class ParserTests
             .Should().Fail();
     }
 
+    [Theory]
+    [InlineData(
+        "class Actor { virtual void Update() { } }",
+        "Unsupported managed-object form 'virtual': virtual dispatch requires a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.")]
+    [InlineData(
+        "class Actor { override void Update() { } }",
+        "Unsupported managed-object form 'override': overriding requires a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.")]
+    [InlineData(
+        "abstract class Actor { }",
+        "Unsupported managed-object form 'abstract': abstract dispatch requires a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.")]
+    [InlineData(
+        "class Player : Actor { }",
+        "Unsupported managed-object form 'class inheritance': inheritance requires object layout metadata and a runtime method table; RetroSharp classes lower to fixed static data and receiver helpers.")]
+    [InlineData(
+        "interface IActor { void Update(); }",
+        "Unsupported managed-object form 'interface': interface dispatch requires runtime type tests and method tables; RetroSharp classes lower to fixed static data and receiver helpers.")]
+    [InlineData(
+        "void Main() { Actor actor = new Actor(); }",
+        "Unsupported managed-object form 'new': object construction requires heap allocation and object headers; use fixed locals or struct/class initializers instead.")]
+    [InlineData(
+        "class Actor { ~Actor() { } }",
+        "Unsupported managed-object form 'destructor': destructors require runtime lifetime tracking and finalization; RetroSharp classes have no managed object lifetime.")]
+    [InlineData(
+        "void Main() { Actor actor; if (actor is Enemy) { } }",
+        "Unsupported managed-object form 'is': runtime type tests require RTTI and object headers; RetroSharp classes have no runtime type identity.")]
+    [InlineData(
+        "void Main() { Actor actor; Enemy enemy = actor as Enemy; }",
+        "Unsupported managed-object form 'as': runtime type tests require RTTI and object headers; RetroSharp classes have no runtime type identity.")]
+    [InlineData(
+        "void Main() { u8 typeId = typeof(Actor); }",
+        "Unsupported managed-object form 'typeof': runtime type identity requires RTTI and object headers; RetroSharp classes have no runtime type identity.")]
+    [InlineData(
+        "void Main() { Actor actor; Enemy enemy = dynamic_cast<Enemy>(actor); }",
+        "Unsupported managed-object form 'dynamic_cast': dynamic casts require RTTI and object headers; RetroSharp classes have no runtime type identity.")]
+    public void Managed_object_forms_fail_with_cost_naming_diagnostics(string source, string expectedError)
+    {
+        var result = new SomeParser().Parse(source);
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Should().Be(expectedError);
+    }
+
     [Fact]
     public void Receiver_parameter_is_preserved_in_the_ast()
     {
@@ -592,6 +634,43 @@ public class ParserTests
                      }
                      """;
         AssertParse(source);
+    }
+
+    [Fact]
+    public void Type_named_struct_initializer_lowers_like_target_typed_initializer()
+    {
+        const string targetTyped = """
+                                   struct Vec2
+                                   {
+                                      u8 x;
+                                      u8 y;
+                                   }
+
+                                   void Main()
+                                   {
+                                      Vec2 position = { x: 12, y: 7 };
+                                   }
+                                   """;
+        const string typeNamed = """
+                                 struct Vec2
+                                 {
+                                    u8 x;
+                                    u8 y;
+                                 }
+
+                                 void Main()
+                                 {
+                                    Vec2 position = Vec2 { x: 12, y: 7 };
+                                 }
+                                 """;
+
+        var parser = new SomeParser();
+        var expected = parser.Parse(targetTyped);
+        var actual = parser.Parse(typeNamed);
+
+        expected.Should().Succeed();
+        actual.Should().Succeed();
+        actual.Value.ToSyntaxString().Should().BeEquivalentToIgnoringWhitespace(expected.Value.ToSyntaxString());
     }
 
     [Fact]

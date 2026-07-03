@@ -34,13 +34,6 @@ class PlayerState {
             grounded = false;
             y += velocityY;
         }
-        if (velocityY < 0) {
-            if (y > Player.TopWrapY) {
-                y = 0;
-                velocityY = 0;
-                jumping = false;
-            }
-        }
     }
 
     inline void Land(Pixel targetY) {
