@@ -110,7 +110,6 @@ public static class StaticClassLowerer
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
                 RewriteInstanceBlock(doWhileSyntax.Body, receiverName, fieldNames, instanceMethodNames, visibleNames),
                 RewriteInstanceExpression(doWhileSyntax.Condition, receiverName, fieldNames, instanceMethodNames, visibleNames)),
-            LoopSyntax loopSyntax => new LoopSyntax(RewriteInstanceBlock(loopSyntax.Body, receiverName, fieldNames, instanceMethodNames, visibleNames)),
             RangeForSyntax rangeForSyntax => RewriteRangeFor(rangeForSyntax, receiverName, fieldNames, instanceMethodNames, visibleNames),
             ForSyntax forSyntax => RewriteFor(forSyntax, receiverName, fieldNames, instanceMethodNames, visibleNames),
             SwitchSyntax switchSyntax => new SwitchSyntax(
@@ -313,7 +312,6 @@ public static class StaticClassLowerer
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
                 RewriteStaticBlock(doWhileSyntax.Body, staticMethods, visibleNames),
                 RewriteStaticExpression(doWhileSyntax.Condition, staticMethods, visibleNames)),
-            LoopSyntax loopSyntax => new LoopSyntax(RewriteStaticBlock(loopSyntax.Body, staticMethods, visibleNames)),
             RangeForSyntax rangeForSyntax => RewriteStaticRangeFor(rangeForSyntax, staticMethods, visibleNames),
             ForSyntax forSyntax => RewriteStaticFor(forSyntax, staticMethods, visibleNames),
             SwitchSyntax switchSyntax => new SwitchSyntax(

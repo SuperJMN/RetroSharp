@@ -51,7 +51,7 @@ Language work belongs here:
 
 - Fixed-width primitives: `u8`, `i8`, `u16`, `i16`, `bool`.
 - Pointers and addressable storage: `ptr<T>`, static data, ROM data, RAM data.
-- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local arrays of scalar values or mixed-width structs, byte-array initializer lists and initializer-inferred lengths, per-element struct-array initializer lists, constant or runtime indices, struct-array field access such as `actors[i].x`, explicit casts to scalar local types, byte and direct 16-bit arithmetic/compare/assignment, bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, explicit infinite `loop`, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; the broader shared ABI/layout work remains outside this slice.
+- `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local arrays of scalar values or mixed-width structs, byte-array initializer lists and initializer-inferred lengths, per-element struct-array initializer lists, constant or runtime indices, struct-array field access such as `actors[i].x`, explicit casts to scalar local types, byte and direct 16-bit arithmetic/compare/assignment, bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, `while (true)` infinite loops, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; the broader shared ABI/layout work remains outside this slice.
 - Functions, parameters, returns, calling convention, and attributes.
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
 - Target attributes such as `[target("gb")]` or `[intrinsic]`.
@@ -1196,14 +1196,14 @@ This iteration treats the implemented source forms as v1 when they satisfy two r
 - They compile through parser, semantic analysis, and the current cartridge targets.
 - They lower to constants, direct branches, direct local storage, direct bit operations, or source-level inline expansion without hidden heap allocation, dispatch tables, closures, iterators, exceptions, or runtime objects.
 
-V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local arrays of scalar values or mixed-width structs, initializer lists for scalar value arrays, mixed-width struct arrays, and plain local structs, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `loop`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
+V1 includes type aliases, top-level and block-local constants, enum constants, plain local structs, fixed-size local arrays of scalar values or mixed-width structs, initializer lists for scalar value arrays, mixed-width struct arrays, and plain local structs, `sizeof`, `offsetof`, `countof`, casts, compound assignments, statement-only `++`/`--`, `do while`, C-style `for`, half-open range `for`, `break`/`continue`, no-fallthrough `switch`, half-open range membership expressions, short-circuit logical value expressions, conditional value expressions, bitwise flag operations, named/default helper arguments, single-return value helpers, and expression-bodied helpers.
 
 Tasks:
 
 - [x] Keep the v1 language surface bounded to features implemented by the front-end and current Game Boy/NES cartridge targets.
 - [x] Document remaining gaps as pointer/member access, address-of fields, wider ABI/layout, backend calling conventions, and canonical-type diagnostics.
 - [x] Migrate runnable samples to use the v1 style where it improves clarity without changing target behavior.
-- [x] Keep diagnostic samples simple enough to isolate target regressions while still using the stable `loop` and mutation syntax.
+- [x] Keep diagnostic samples simple enough to isolate target regressions while still using the stable `while (true)` and mutation syntax.
 - [x] Move dot-call SDK namespaces, receiver methods, immutable `let`, switch expressions, pipeline syntax, and explicit `pure`/`inline` contracts out of v1 and into post-v1 candidates. Trait-like constraints remain outside v1 and outside Iteration 12.
 
 Verification:
@@ -1432,7 +1432,7 @@ Enemies.Def(Turret, sprite: turret, behavior: Shooter, cooldown: 60);
 
 World.Load("level1.tmj");
 
-loop {
+while (true) {
     Video.WaitVBlank();
     Input.Poll();
 

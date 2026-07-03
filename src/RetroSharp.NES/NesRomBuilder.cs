@@ -624,9 +624,6 @@ internal sealed class NesRuntimeCompiler
             case DoWhileSyntax doWhileSyntax:
                 EmitDoWhile(doWhileSyntax);
                 return false;
-            case LoopSyntax loopSyntax:
-                EmitWhile(LoopLowerer.Lower(loopSyntax));
-                return false;
             case RangeForSyntax rangeForSyntax:
                 EmitFor(RangeForLowerer.Lower(rangeForSyntax));
                 return false;

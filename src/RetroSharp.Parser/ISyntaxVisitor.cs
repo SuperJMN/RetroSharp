@@ -43,7 +43,6 @@ public interface ISyntaxVisitor
     void VisitIfElse(IfElseSyntax ifElseSyntax);
     void VisitWhile(WhileSyntax whileSyntax);
     void VisitDoWhile(DoWhileSyntax doWhileSyntax);
-    void VisitLoop(LoopSyntax loopSyntax);
     void VisitRangeFor(RangeForSyntax rangeForSyntax);
     void VisitFor(ForSyntax forSyntax);
     void VisitSwitch(SwitchSyntax switchSyntax);

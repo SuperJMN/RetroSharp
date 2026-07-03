@@ -1,6 +1,7 @@
 import RetroSharp.Portable2D;
 
-void SetupVideo() {
+void SetupVideo()
+{
     Video.Init();
     Palette.Set(0, 0);
     Palette.Set(1, 1);
@@ -15,7 +16,8 @@ void SetupVideo() {
     return;
 }
 
-void DrawBackground() {
+void DrawBackground()
+{
     Tilemap.Set(2, 4, 1);
     Tilemap.Set(3, 4, 1);
     Tilemap.Set(4, 5, 1);
@@ -24,19 +26,22 @@ void DrawBackground() {
     return;
 }
 
-void Main() {
+void Main()
+{
     SetupVideo();
     DrawBackground();
     i16 enemyX = 128;
     i16 enemyFrame = 0;
     i16 enemyTick = 0;
 
-    loop {
+    while (true)
+    {
         Video.WaitVBlank();
         Sprite.Draw(enemy_slug, enemyX, 89, enemyFrame, false, 0);
         Sprite.Draw(enemy_slug, 40, 57, enemyFrame, true, 0);
         enemyX--;
-        if (enemyX <= 96) {
+        if (enemyX <= 96)
+        {
             enemyX = 136;
         }
         enemyTick++;

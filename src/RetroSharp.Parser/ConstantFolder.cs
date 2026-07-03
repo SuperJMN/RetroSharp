@@ -409,7 +409,6 @@ public static class ConstantFolder
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
                 FoldBlock(doWhileSyntax.Body, constants, typeSizes, fieldOffsets, arrays, functions),
                 FoldExpression(doWhileSyntax.Condition, constants, typeSizes, fieldOffsets, arrays, functions)),
-            LoopSyntax loopSyntax => new LoopSyntax(FoldBlock(loopSyntax.Body, constants, typeSizes, fieldOffsets, arrays, functions)),
             RangeForSyntax rangeForSyntax => FoldFor(RangeForLowerer.Lower(rangeForSyntax), constants, typeSizes, fieldOffsets, arrays, functions),
             ForSyntax forSyntax => FoldFor(forSyntax, constants, typeSizes, fieldOffsets, arrays, functions),
             SwitchSyntax switchSyntax => FoldSwitch(switchSyntax, constants, typeSizes, fieldOffsets, arrays, functions),

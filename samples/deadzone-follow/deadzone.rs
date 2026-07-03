@@ -1,24 +1,28 @@
 import RetroSharp.Portable2D;
 
-static class Level {
+static class Level
+{
     const i16 Width = 64;
     const i16 StreamY = 0;
     const i16 Height = 60;
 }
 
-static class DeadZone {
+static class DeadZone
+{
     const i16 Left = 64;
     const i16 Right = 96;
     const i16 Top = 56;
     const i16 Bottom = 88;
 }
 
-static class CameraBounds {
+static class CameraBounds
+{
     const i16 MaxX = 248;
     const i16 MaxY = 240;
 }
 
-static class PlayerPath {
+static class PlayerPath
+{
     const i16 StartX = 80;
     const i16 StartY = 72;
     const i16 MinX = 80;
@@ -27,7 +31,8 @@ static class PlayerPath {
     const i16 MaxY = 224;
 }
 
-void Main() {
+void Main()
+{
     Video.Init();
 
     World.Load("deadzone.tmj");
@@ -41,28 +46,39 @@ void Main() {
     u8 stepX = 1;
     u8 stepY = 1;
 
-    loop {
+    while (true)
+    {
         Video.WaitVBlank();
 
         let screenX = playerX - cameraX;
         let screenY = playerY - cameraY;
 
-        if (screenX > DeadZone.Right) {
-            if (cameraX < CameraBounds.MaxX) {
+        if (screenX > DeadZone.Right)
+        {
+            if (cameraX < CameraBounds.MaxX)
+            {
                 cameraX += 1;
             }
-        } else if (screenX < DeadZone.Left) {
-            if (cameraX > 0) {
+        }
+        else if (screenX < DeadZone.Left)
+        {
+            if (cameraX > 0)
+            {
                 cameraX -= 1;
             }
         }
 
-        if (screenY > DeadZone.Bottom) {
-            if (cameraY < CameraBounds.MaxY) {
+        if (screenY > DeadZone.Bottom)
+        {
+            if (cameraY < CameraBounds.MaxY)
+            {
                 cameraY += 1;
             }
-        } else if (screenY < DeadZone.Top) {
-            if (cameraY > 0) {
+        }
+        else if (screenY < DeadZone.Top)
+        {
+            if (cameraY > 0)
+            {
                 cameraY -= 1;
             }
         }
@@ -74,30 +90,48 @@ void Main() {
         let drawY = playerY - cameraY;
         Sprite.Draw(marker, drawX, drawY, 0, false, 0);
 
-        if (stepX == 1) {
-            if (playerX < PlayerPath.MaxX) {
+        if (stepX == 1)
+        {
+            if (playerX < PlayerPath.MaxX)
+            {
                 playerX += 1;
-            } else {
+            }
+            else
+            {
                 stepX = 255;
             }
-        } else {
-            if (playerX > PlayerPath.MinX) {
+        }
+        else
+        {
+            if (playerX > PlayerPath.MinX)
+            {
                 playerX -= 1;
-            } else {
+            }
+            else
+            {
                 stepX = 1;
             }
         }
 
-        if (stepY == 1) {
-            if (playerY < PlayerPath.MaxY) {
+        if (stepY == 1)
+        {
+            if (playerY < PlayerPath.MaxY)
+            {
                 playerY += 1;
-            } else {
+            }
+            else
+            {
                 stepY = 255;
             }
-        } else {
-            if (playerY > PlayerPath.MinY) {
+        }
+        else
+        {
+            if (playerY > PlayerPath.MinY)
+            {
                 playerY -= 1;
-            } else {
+            }
+            else
+            {
                 stepY = 1;
             }
         }

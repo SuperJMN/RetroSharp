@@ -19,8 +19,8 @@ public interface INodeVisitor
     void VisitConditionalExpression(ConditionalExpressionNode conditionalExpressionNode);
     void VisitReturn(ReturnNode returnNode);
     void VisitIfElse(IfElseNode ifElseNode);
+    void VisitWhile(WhileNode whileNode);
     void VisitDoWhile(DoWhileNode doWhileNode);
-    void VisitLoop(LoopNode loopNode);
     void VisitFor(ForNode forNode);
     void VisitBreak(BreakNode breakNode);
     void VisitContinue(ContinueNode continueNode);

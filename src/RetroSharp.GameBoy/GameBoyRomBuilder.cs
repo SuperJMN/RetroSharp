@@ -1157,9 +1157,6 @@ internal sealed class GameBoyRuntimeCompiler
             case DoWhileSyntax doWhileSyntax:
                 EmitDoWhile(doWhileSyntax);
                 break;
-            case LoopSyntax loopSyntax:
-                EmitWhile(LoopLowerer.Lower(loopSyntax));
-                break;
             case RangeForSyntax rangeForSyntax:
                 EmitFor(RangeForLowerer.Lower(rangeForSyntax));
                 break;

@@ -3,7 +3,8 @@ using Runner.Frame;
 using Runner.Level;
 using Runner.Player;
 
-void SetupVideo() {
+void SetupVideo()
+{
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
     Palette.Sprite(0, 0, 0, 1, 3);
@@ -13,17 +14,20 @@ void SetupVideo() {
     Animation.Clip(goomba_walk, 0, 16, 16);
 }
 
-void SetupAudio() {
+void SetupAudio()
+{
     Music.Asset(runner_theme, "assets/music/runner.vgz");
     Audio.Init();
     Music.Play(runner_theme);
 }
 
-void LoadWorld() {
+void LoadWorld()
+{
     World.Load("assets/maps/runner.tmj");
 }
 
-void Main() {
+void Main()
+{
     SetupVideo();
     SetupAudio();
     LoadWorld();
@@ -38,7 +42,8 @@ void Main() {
     Actors.Pool(goombas, 1);
     Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
 
-    loop {
+    while (true)
+    {
         PresentFrame(player, view);
         Camera.Apply();
         goombas.Draw();
@@ -47,7 +52,8 @@ void Main() {
 
         Actors.SpawnLayer(goombas, "assets/maps/runner.tmj", "actors");
         goombaTick ^= 1;
-        if (goombaTick == 0) {
+        if (goombaTick == 0)
+        {
             goombas.Update();
         }
 

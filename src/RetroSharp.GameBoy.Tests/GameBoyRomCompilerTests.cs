@@ -921,7 +921,7 @@ public class GameBoyRomCompilerTests
                            void Main() {
                                Video.Init();
                                Sprite.Asset(player, "player.sprite.json");
-                               loop {
+                               while (true) {
                                    Video.WaitVBlank();
 
                            """ + draws + """
@@ -3605,7 +3605,7 @@ public class GameBoyRomCompilerTests
                                   } else {
                                       enemies[0].x = 16;
                                   }
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       enemies.Draw();
                                       Camera.Apply();
@@ -4412,7 +4412,7 @@ public class GameBoyRomCompilerTests
         const string source = """
                               void Main() {
                                   u8 x = 0;
-                                  loop {
+                                  while (true) {
                                       x++;
                                       if (x == 1) {
                                           continue;
@@ -5999,7 +5999,7 @@ public class GameBoyRomCompilerTests
                               void Main() {
                                   World.Load("level.tmj");
                                   Camera.Init(3, 2, 2);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Camera.Apply();
                                       Camera.SetPosition(1, 0);
@@ -6046,7 +6046,7 @@ public class GameBoyRomCompilerTests
                                   DefineWorld();
                                   world_map(2, 9, 14);
                                   Camera.Init(2, 9, 14);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Camera.Apply();
                                       Camera.SetPosition(8, 0);
@@ -6668,7 +6668,7 @@ public class GameBoyRomCompilerTests
         // grounded, so holding B in the air preserves momentum instead of building extra speed.
         Assert.Contains("HoldDirection(grounded);", cameraBlock);
         Assert.Contains("UpdateIntent(desiredDirection, player.grounded);", cameraBlock);
-        Assert.Contains("if (grounded) {\n            if (Input.IsDown(Button.B)) {", cameraBlock);
+        Assert.Contains("if (grounded)\n        {\n            if (Input.IsDown(Button.B))\n            {", cameraBlock);
         Assert.DoesNotContain("ApplyGroundAcceleration", cameraBlock);
 
         var motionStart = cameraBlock.IndexOf("inline void ApplyMotion(PlayerState player, Pixel wallProbeY)", StringComparison.Ordinal);

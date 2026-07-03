@@ -1,6 +1,7 @@
 import RetroSharp.Portable2D;
 
-void SetupVideo() {
+void SetupVideo()
+{
     Video.Init();
     Palette.Set(0, 0);
     Palette.Set(1, 1);
@@ -15,7 +16,8 @@ void SetupVideo() {
     return;
 }
 
-void DrawBackground() {
+void DrawBackground()
+{
     Tilemap.Set(2, 4, 1);
     Tilemap.Set(3, 4, 1);
     Tilemap.Set(4, 5, 1);
@@ -39,7 +41,8 @@ void DrawBackground() {
     return;
 }
 
-void DefineWorld() {
+void DefineWorld()
+{
     World.Column(0, 0, 0, 2, 0, 4, 5);
     World.Column(1, 0, 0, 2, 0, 4, 5);
     World.Column(2, 0, 0, 0, 0, 4, 5);
@@ -75,7 +78,8 @@ void DefineWorld() {
     return;
 }
 
-void Main() {
+void Main()
+{
     SetupVideo();
     DrawBackground();
     DefineWorld();
@@ -100,7 +104,8 @@ void Main() {
     i16 moving = 0;
     i16 resetRequested = 0;
 
-    loop {
+    while (true)
+    {
         Video.WaitVBlank();
         Camera.Apply();
         Sprite.Draw(mario_player, 72, playerY, displayFrame, displayFlipX, 0);
@@ -112,8 +117,10 @@ void Main() {
         grounded = 0;
         velocityY += 1;
         playerY += velocityY;
-        if (velocityY >= 128) {
-            if (playerY >= 128) {
+        if (velocityY >= 128)
+        {
+            if (playerY >= 128)
+            {
                 playerY = 0;
                 velocityY = 0;
                 jumping = 0;
@@ -123,33 +130,43 @@ void Main() {
         footTile = 0;
         failTile = 0;
         playerWorldX = cameraX + 72;
-        if (playerWorldX >= 128) {
+        if (playerWorldX >= 128)
+        {
             playerWorldX = playerWorldX - 128;
         }
 
         footLeftX = playerWorldX;
         footCenterX = playerWorldX + 8;
-        if (footCenterX >= 128) {
+        if (footCenterX >= 128)
+        {
             footCenterX = footCenterX - 128;
         }
 
         footRightX = playerWorldX + 17;
-        if (footRightX >= 128) {
+        if (footRightX >= 128)
+        {
             footRightX = footRightX - 128;
         }
 
-        if (playerY >= 42) {
-            if (playerY <= 58) {
-                if (velocityY < 128) {
-                    if (velocityY != 0) {
+        if (playerY >= 42)
+        {
+            if (playerY <= 58)
+            {
+                if (velocityY < 128)
+                {
+                    if (velocityY != 0)
+                    {
                         footTile = collision_aabb_tiles(footLeftX, 0, 1, 8, 1);
-                        if (footTile == 0) {
+                        if (footTile == 0)
+                        {
                             footTile = collision_aabb_tiles(footCenterX, 0, 1, 8, 1);
                         }
-                        if (footTile == 0) {
+                        if (footTile == 0)
+                        {
                             footTile = collision_aabb_tiles(footRightX, 0, 1, 8, 1);
                         }
-                        if (footTile != 0) {
+                        if (footTile != 0)
+                        {
                             playerY = 41;
                             velocityY = 0;
                             grounded = 1;
@@ -160,28 +177,35 @@ void Main() {
             }
         }
 
-        if (playerY >= 74) {
+        if (playerY >= 74)
+        {
             failTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 2);
-            if (failTile == 0) {
+            if (failTile == 0)
+            {
                 failTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 2);
             }
-            if (failTile == 0) {
+            if (failTile == 0)
+            {
                 failTile = collision_aabb_tiles(footRightX, 32, 1, 8, 2);
             }
-            if (failTile != 0) {
+            if (failTile != 0)
+            {
                 resetRequested = 1;
                 hazardHit = 1;
             }
 
             footTile = collision_aabb_tiles(footLeftX, 32, 1, 8, 1);
-            if (footTile == 0) {
+            if (footTile == 0)
+            {
                 footTile = collision_aabb_tiles(footCenterX, 32, 1, 8, 1);
             }
-            if (footTile == 0) {
+            if (footTile == 0)
+            {
                 footTile = collision_aabb_tiles(footRightX, 32, 1, 8, 1);
             }
 
-            if (footTile != 0) {
+            if (footTile != 0)
+            {
                 playerY = 73;
                 velocityY = 0;
                 grounded = 1;
@@ -189,13 +213,16 @@ void Main() {
             }
         }
 
-        if (grounded == 0) {
-            if (playerY >= 116) {
+        if (grounded == 0)
+        {
+            if (playerY >= 116)
+            {
                 resetRequested = 1;
             }
         }
 
-        if (resetRequested != 0) {
+        if (resetRequested != 0)
+        {
             footTile = 0;
             failTile = 0;
             playerY = 73;
@@ -204,63 +231,82 @@ void Main() {
             displayFrame = 0;
             jumping = 0;
             jumpTicks = 0;
-            if (hazardHit != 0) {
+            if (hazardHit != 0)
+            {
                 velocityY = 248;
                 grounded = 0;
                 displayFrame = 4;
             }
         }
 
-        if (Input.WasPressed(Button.A)) {
-            if (grounded != 0) {
+        if (Input.WasPressed(Button.A))
+        {
+            if (grounded != 0)
+            {
                 velocityY = 252;
                 grounded = 0;
                 jumping = 1;
             }
         }
 
-        if (jumping != 0) {
+        if (jumping != 0)
+        {
             jumpTicks = Input.HoldTicks(Button.A);
-            if (Input.IsDown(Button.A)) {
-                if (jumpTicks < 12) {
+            if (Input.IsDown(Button.A))
+            {
+                if (jumpTicks < 12)
+                {
                     velocityY -= 1;
                 }
             }
 
-            if (Input.WasReleased(Button.A)) {
+            if (Input.WasReleased(Button.A))
+            {
                 jumping = 0;
             }
         }
 
         moving = 0;
-        if (Input.IsDown(Button.Right)) {
+        if (Input.IsDown(Button.Right))
+        {
             moving = 1;
             displayFlipX = false;
             cameraX += 1;
         }
 
-        if (Input.IsDown(Button.Left)) {
+        if (Input.IsDown(Button.Left))
+        {
             moving = 1;
             displayFlipX = true;
             cameraX -= 1;
         }
 
-        if (moving != 0) {
+        if (moving != 0)
+        {
             Camera.SetPosition(cameraX, 0);
         }
 
-        if (moving != 0) {
+        if (moving != 0)
+        {
             animTick++;
-        } else {
+        }
+        else
+        {
             animTick = 0;
         }
 
-        if (grounded == 0) {
+        if (grounded == 0)
+        {
             displayFrame = 4;
-        } else {
-            if (moving != 0) {
+        }
+        else
+        {
+            if (moving != 0)
+            {
                 displayFrame = Animation.Frame(run, animTick);
-            } else {
+            }
+            else
+            {
                 displayFrame = 0;
             }
         }

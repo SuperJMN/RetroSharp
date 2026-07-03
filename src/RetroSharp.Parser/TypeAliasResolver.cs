@@ -84,7 +84,6 @@ public static class TypeAliasResolver
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
                 ResolveBlock(doWhileSyntax.Body, aliases),
                 ResolveExpression(doWhileSyntax.Condition, aliases)),
-            LoopSyntax loopSyntax => new LoopSyntax(ResolveBlock(loopSyntax.Body, aliases)),
             RangeForSyntax rangeForSyntax => new RangeForSyntax(
                 ResolveType(rangeForSyntax.Type, aliases),
                 rangeForSyntax.Identifier,

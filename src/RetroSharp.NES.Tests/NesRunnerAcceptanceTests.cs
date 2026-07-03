@@ -86,7 +86,7 @@ public sealed class NesRunnerAcceptanceTests
                 Animation.Clip(run, 1, 6, 6, 6);
                 Sprite.Asset(player, "samples/runner/assets/mario-player.png", 18, 32);
                 u8 tick = 0;
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     tick++;
                     let frame = Animation.Frame(run, tick);

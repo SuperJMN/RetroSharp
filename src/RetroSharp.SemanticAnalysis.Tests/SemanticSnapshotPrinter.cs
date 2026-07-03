@@ -191,6 +191,15 @@ internal class SemanticSnapshotPrinter : INodeVisitor
         }
     }
 
+    public void VisitWhile(WhileNode whileNode)
+    {
+        sb.Append(new string('\t', indent));
+        sb.Append("while (");
+        whileNode.Condition.Accept(this);
+        sb.AppendLine(")");
+        whileNode.Body.Accept(this);
+    }
+
     public void VisitFor(ForNode forNode)
     {
         sb.Append(new string('\t', indent));
@@ -212,12 +221,6 @@ internal class SemanticSnapshotPrinter : INodeVisitor
         sb.Append("while (");
         doWhileNode.Condition.Accept(this);
         sb.AppendLine(");");
-    }
-
-    public void VisitLoop(LoopNode loopNode)
-    {
-        WriteLine("loop");
-        loopNode.Body.Accept(this);
     }
 
     public void VisitBreak(BreakNode breakNode)

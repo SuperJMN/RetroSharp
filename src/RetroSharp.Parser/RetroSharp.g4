@@ -70,7 +70,6 @@ statement: letDeclaration
           | conditional
           | whileLoop
           | doWhileLoop
-          | loopStatement
           | rangeForLoop
           | forLoop
           | switchStatement
@@ -173,7 +172,6 @@ argument: IDENTIFIER ':' expression | expression;
 conditional: 'if' '(' expression ')' block ('else' (conditional | block))?;
 whileLoop: 'while' '(' expression ')' block;
 doWhileLoop: 'do' block 'while' '(' expression ')' ';';
-loopStatement: 'loop' block;
 rangeForLoop: 'for' '(' type IDENTIFIER 'in' expression '..' expression ')' block;
 forLoop: 'for' '(' forInitializer? ';' expression? ';' forIncrement? ')' block;
 forInitializer: variableDeclarator | assignment;
@@ -201,7 +199,6 @@ IF: 'if';
 ELSE: 'else';
 WHILE: 'while';
 DO: 'do';
-LOOP: 'loop';
 FOR: 'for';
 IN: 'in';
 RETURN: 'return';
@@ -223,7 +220,6 @@ UNDERSCORE: '_';
 THIS: 'this';
 USING: 'using';
 
-IDENTIFIER: [a-zA-Z_][a-zA-Z_0-9]*;
 LITERAL: LITERAL_INT | LITERAL_CHAR | LITERAL_STRING  | 'true' | 'false';
 LITERAL_INT: '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]* INTEGER_SUFFIX?
            | '0' [bB] [01] [01_]* INTEGER_SUFFIX?
@@ -232,6 +228,7 @@ LITERAL_INT: '0' [xX] [0-9a-fA-F] [0-9a-fA-F_]* INTEGER_SUFFIX?
 fragment INTEGER_SUFFIX: 'u8' | 'i8' | 'u16' | 'i16';
 LITERAL_CHAR: '\'' . '\'';
 LITERAL_STRING: '"' ('\\"' | .)*? '"';
+IDENTIFIER: [a-zA-Z_][a-zA-Z_0-9]*;
 
 // Spaces and line breaks (ignored)
 WS: [ \t\r\n]+ -> skip;

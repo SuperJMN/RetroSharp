@@ -467,7 +467,7 @@ void Main() {
     Camera.Init(4, 10, 4);
     Sprite.Asset(marker, "marker.json");
 
-    loop {
+    while (true) {
         Video.WaitVBlank();
         Input.Poll();
         let cameraX = Input.HoldTicks(Button.Right);

@@ -41,7 +41,7 @@ public sealed class GameBoyMusicTests
                                   Music.Asset(stage_theme, "stage.gbapu.json");
                                   Audio.Init();
                                   Music.Play(stage_theme);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -89,7 +89,7 @@ public sealed class GameBoyMusicTests
                                   audio_init();
                                   music_play(stage_theme);
                                   music_stop();
-                                  loop {
+                                  while (true) {
                                       video_wait_vblank();
                                       audio_update();
                                   }
@@ -102,7 +102,7 @@ public sealed class GameBoyMusicTests
                                    Audio.Init();
                                    Music.Play(stage_theme);
                                    Music.Stop();
-                                   loop {
+                                   while (true) {
                                        Video.WaitVBlank();
                                        Audio.Update();
                                    }
@@ -138,7 +138,7 @@ public sealed class GameBoyMusicTests
                                   Music.Asset(stage_theme, "stage.vgz");
                                   Audio.Init();
                                   Music.Play(stage_theme);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -165,7 +165,7 @@ public sealed class GameBoyMusicTests
                                   Music.Asset(stage_theme, "large.gbapu");
                                   Audio.Init();
                                   Music.Play(stage_theme);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -248,7 +248,7 @@ public sealed class GameBoyMusicTests
                                   Music.Play(theme_a);
                                   u8 ticks = 0;
                                   u8 switched = 0;
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                       ticks = ticks + 1;
@@ -297,7 +297,7 @@ public sealed class GameBoyMusicTests
                                   u8 lo = 0;
                                   u8 hi = 0;
                                   u8 switched = 0;
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                       lo = lo + 1;
@@ -497,7 +497,7 @@ public sealed class GameBoyMusicTests
                                   Music.Asset(stage_theme, "stage.music.json");
                                   Audio.Init();
                                   Music.Play(stage_theme);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -537,7 +537,7 @@ public sealed class GameBoyMusicTests
                                   Music.Asset(stage_theme, "stage.gbapu.json");
                                   Audio.Init();
                                   Music.Play(stage_theme);
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -577,7 +577,7 @@ public sealed class GameBoyMusicTests
                               void Main() {
                                   Audio.Init();
                                   start();
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -611,7 +611,7 @@ public sealed class GameBoyMusicTests
                                   Audio.Init();
                                   Music.Play(stage_theme);
 
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -659,7 +659,7 @@ public sealed class GameBoyMusicTests
                                   Audio.Init();
                                   Music.Play(stage_theme);
 
-                                  loop {
+                                  while (true) {
                                       Video.WaitVBlank();
                                       Audio.Update();
                                   }
@@ -791,7 +791,7 @@ public sealed class GameBoyMusicTests
               Music.Asset(stage_theme, "{{assetFileName}}");
               Audio.Init();
               Music.Play(stage_theme);
-              loop {
+              while (true) {
                   Video.WaitVBlank();
                   Audio.Update();
               }

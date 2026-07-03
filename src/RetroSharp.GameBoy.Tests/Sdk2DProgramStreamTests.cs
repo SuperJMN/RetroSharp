@@ -18,7 +18,7 @@ public sealed class Sdk2DProgramStreamTests
 
         void Main() {
             Video.Init();
-            loop {
+            while (true) {
                 tick();
                 tick();
             }
@@ -112,7 +112,7 @@ public sealed class Sdk2DProgramStreamTests
             void Main() {
                 Video.Init();
                 Audio.Init();
-                loop {
+                while (true) {
                     tick_audio();
                     tick_audio();
                 }

@@ -130,7 +130,6 @@ public static class ParameterSubstitution
             DoWhileSyntax doWhileSyntax => new DoWhileSyntax(
                 Substitute(doWhileSyntax.Body, substitutions),
                 Substitute(doWhileSyntax.Condition, substitutions)),
-            LoopSyntax loopSyntax => new LoopSyntax(Substitute(loopSyntax.Body, substitutions)),
             RangeForSyntax rangeForSyntax => new RangeForSyntax(
                 rangeForSyntax.Type,
                 rangeForSyntax.Identifier,

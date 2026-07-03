@@ -1,6 +1,7 @@
 import RetroSharp.Portable2D;
 
-void Main() {
+void Main()
+{
     Video.Init();
     Music.Asset(terminate, "music/terminate.gbapu");
     Music.Asset(blue_ocean, "music/blue_ocean_remix.uge");
@@ -8,15 +9,20 @@ void Main() {
     Music.Play(terminate);
 
     bool onBlueOcean = false;
-    loop {
+    while (true)
+    {
         Video.WaitVBlank();
         Input.Poll();
         Audio.Update();
-        if (Input.WasPressed(Button.Start)) {
-            if (!onBlueOcean) {
+        if (Input.WasPressed(Button.Start))
+        {
+            if (!onBlueOcean)
+            {
                 Music.Play(blue_ocean);
                 onBlueOcean = true;
-            } else {
+            }
+            else
+            {
                 Music.Play(terminate);
                 onBlueOcean = false;
             }

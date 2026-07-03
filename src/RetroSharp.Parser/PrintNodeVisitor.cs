@@ -591,12 +591,6 @@ public class PrintNodeVisitor : ISyntaxVisitor
         resultBuilder.AppendLine(");");
     }
 
-    public void VisitLoop(LoopSyntax loopSyntax)
-    {
-        resultBuilder.AppendLine(new string('\t', indentationLevel) + "loop");
-        loopSyntax.Body.Accept(this);
-    }
-
     public void VisitRangeFor(RangeForSyntax rangeForSyntax)
     {
         resultBuilder.Append(new string('\t', indentationLevel));

@@ -23,7 +23,7 @@ public sealed class GameBoyBankingRoadmapTests
         const string source = """
             void Main() {
                 Video.Init();
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                 }
             }
@@ -47,7 +47,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Music.Asset(theme, "delight.gbapu");
                 Audio.Init();
                 Music.Play(theme);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Audio.Update();
                 }
@@ -72,7 +72,7 @@ public sealed class GameBoyBankingRoadmapTests
 
             void Main() {
                 Video.Init();
-                loop {
+                while (true) {
                     bump();
                     bump();
                     bump();
@@ -113,7 +113,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Video.Init();
                 Sprite.Asset(player, "assets/mario-player.png", 18, 32);
                 Animation.Clip(walk, 1, 4, 4);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     store_frame(2);
                     store_frame(3);
@@ -303,7 +303,7 @@ public sealed class GameBoyBankingRoadmapTests
 
             void Main() {
                 Video.Init();
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     paint();
                     paint();
@@ -340,7 +340,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Audio.Update();
                     tick_input();
@@ -368,7 +368,7 @@ public sealed class GameBoyBankingRoadmapTests
 
         builder.AppendLine("void Main() {");
         builder.AppendLine("    Video.Init();");
-        builder.AppendLine("    loop {");
+        builder.AppendLine("    while (true) {");
         builder.AppendLine("        Video.WaitVBlank();");
         for (var function = 0; function < 12; function++)
         {
@@ -392,7 +392,7 @@ public sealed class GameBoyBankingRoadmapTests
             builder.AppendLine("    x += 1;");
         }
 
-        builder.AppendLine("    loop {");
+        builder.AppendLine("    while (true) {");
         builder.AppendLine("        Video.WaitVBlank();");
         builder.AppendLine("        sprite_set(0, 8, 16, 9, 0);");
         builder.AppendLine("    }");
@@ -411,7 +411,7 @@ public sealed class GameBoyBankingRoadmapTests
             builder.AppendLine("    x += 1;");
         }
 
-        builder.AppendLine("    loop {");
+        builder.AppendLine("    while (true) {");
         builder.AppendLine("        Video.WaitVBlank();");
         for (var i = 0; i < 3000; i++)
         {
@@ -438,7 +438,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Audio.Update();
                 }
@@ -462,7 +462,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     u8 tile = map_tile_at(2, 1);
                     sprite_set(0, 8, 16, tile, 0);
@@ -482,7 +482,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Music.Play(theme);
                 u8 x = 0;
             """ + filler + """
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Audio.Update();
                 }
@@ -501,7 +501,7 @@ public sealed class GameBoyBankingRoadmapTests
                 u8 x = 0;
             """ + filler + """
                 Music.Play(theme);
-                loop {
+                while (true) {
                     Video.WaitVBlank();
                     Audio.Update();
                 }

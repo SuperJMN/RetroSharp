@@ -1,3 +1,4 @@
-void Main() {
+void Main()
+{
     Timing.Tick();
 }
