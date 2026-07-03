@@ -994,6 +994,7 @@ public static class ActorFrameworkLowerer
                         new DeclarationSyntax("u8", $"__{pool.Name}_process_request_y", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "y"))),
                         new DeclarationSyntax("u8", $"__{pool.Name}_process_request_yHi", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "yHi"))),
                         new DeclarationSyntax("u8", $"__{pool.Name}_process_request_owner", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "owner"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_direction", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "direction"))),
                         ProjectileKindDispatch(pool.RequestArrayName, requestIndex, branches, "projectile request"),
                         FieldAssignment(pool.RequestArrayName, requestIndex, "active", "=", Constant(0)),
                     ]),
@@ -1029,6 +1030,7 @@ public static class ActorFrameworkLowerer
                         FieldAssignment(arrayName, indexName, "damage", "=", new IdentifierSyntax($"{def.Name}Damage")),
                         FieldAssignment(arrayName, indexName, "age", "=", Constant(0)),
                         FieldAssignment(arrayName, indexName, "owner", "=", new IdentifierSyntax($"__{pool.Name}_process_request_owner")),
+                        FieldAssignment(arrayName, indexName, "direction", "=", new IdentifierSyntax($"__{pool.Name}_process_request_direction")),
                         Assign(new IdentifierLValue(writtenName), Constant(1)),
                     ]),
                     Maybe<BlockSyntax>.None)),
@@ -1076,11 +1078,10 @@ public static class ActorFrameworkLowerer
     {
         var statements = new List<StatementSyntax>
         {
-            FieldAssignment(arrayName, indexName, "x", "+=", new IdentifierSyntax($"{def.Name}SpeedX")),
             new IfElseSyntax(
-                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax($"{def.Name}SpeedX"), Operator.LessThan),
-                new BlockSyntax([FieldAssignment(arrayName, indexName, "xHi", "+=", Constant(1))]),
-                Maybe<BlockSyntax>.None),
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "direction"), Constant(0), Operator.Equal),
+                new BlockSyntax(ProjectileAddWorldX(arrayName, indexName, new IdentifierSyntax($"{def.Name}SpeedX")).ToList()),
+                Maybe.From(new BlockSyntax(ProjectileSubtractWorldX(arrayName, indexName, new IdentifierSyntax($"{def.Name}SpeedX")).ToList()))),
             FieldAssignment(arrayName, indexName, "y", "+=", new IdentifierSyntax($"{def.Name}SpeedY")),
             new IfElseSyntax(
                 new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax($"{def.Name}SpeedY"), Operator.LessThan),
@@ -1100,6 +1101,34 @@ public static class ActorFrameworkLowerer
             Maybe<BlockSyntax>.None));
 
         return statements;
+    }
+
+    // Rightward step: advance the 16-bit world X (low byte + page) by the projectile speed, carrying
+    // into xHi on wrap. Mirrors the actor AddWorldX helper for the projectile pool arrays.
+    private static IReadOnlyList<StatementSyntax> ProjectileAddWorldX(string arrayName, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            FieldAssignment(arrayName, indexName, "x", "+=", amount),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(arrayName, indexName, "xHi", "+=", Constant(1))]),
+                Maybe<BlockSyntax>.None),
+        ];
+    }
+
+    // Leftward step: borrow from xHi before the low byte underflows, then subtract the projectile
+    // speed. Mirrors the actor SubtractWorldX helper for the projectile pool arrays.
+    private static IReadOnlyList<StatementSyntax> ProjectileSubtractWorldX(string arrayName, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(arrayName, indexName, "xHi", "-=", Constant(1))]),
+                Maybe<BlockSyntax>.None),
+            FieldAssignment(arrayName, indexName, "x", "-=", amount),
+        ];
     }
 
     private static IReadOnlyList<StatementSyntax> ProjectileDrawStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
@@ -2950,6 +2979,7 @@ public static class ActorFrameworkLowerer
                 new StructFieldSyntax("u8", "damage"),
                 new StructFieldSyntax("u8", "age"),
                 new StructFieldSyntax("u8", "owner"),
+                new StructFieldSyntax("u8", "direction"),
             ]);
     }
 

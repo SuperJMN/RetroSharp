@@ -4282,10 +4282,15 @@ public class GameBoyRomCompilerTests
         Assert.Contains("shotsEnemy[__shots_init_enemy_i].active=0;", lowered);
         Assert.Contains("shotsRequests[__shots_init_request_i].active=0;", lowered);
         Assert.Contains("shotsRequests[__shots_request_i].kind=HeroShot;", lowered);
+        Assert.Contains("shotsRequests[__shots_request_i].direction=0;", lowered);
         Assert.Contains("queued=1;", lowered);
         Assert.Contains("queued=0;", lowered);
         Assert.Contains("shotsHero[__shots_process_HeroShot_i].active=1;", lowered);
+        Assert.Contains("shotsHero[__shots_process_HeroShot_i].direction=__shots_process_request_direction;", lowered);
+        // direction == 0 travels right (+speedX); any non-zero direction travels left (-speedX).
+        Assert.Contains("shotsHero[__shots_update_hero_i].direction==0", lowered);
         Assert.Contains("shotsHero[__shots_update_hero_i].x+=HeroShotSpeedX;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].x-=HeroShotSpeedX;", lowered);
         Assert.Contains("shotsHero[__shots_update_hero_i].age+=1;", lowered);
         Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(hero_shot, __shots_draw_hero_screen_x, __shots_draw_hero_screen_y, 0, false, 0);", lowered);
     }
