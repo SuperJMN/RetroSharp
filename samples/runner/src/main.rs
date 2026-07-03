@@ -32,10 +32,12 @@ void Main()
     SetupAudio();
     LoadWorld();
     Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);
+
     PlayerState player;
     CameraState view;
     FrameState frame;
     u8 goombaTick = 0;
+
     view.ResetMotion();
     player.Reset(view);
 
@@ -44,12 +46,14 @@ void Main()
 
     while (true)
     {
+        // Present the frame simulated last tick, then service audio and latch input.
         PresentFrame(player, view);
         Camera.Apply();
         goombas.Draw();
         Audio.Update();
         Input.Poll();
 
+        // Enemies step at half the player's tick rate.
         Actors.SpawnLayer(goombas, "assets/maps/runner.tmj", "actors");
         goombaTick ^= 1;
         if (goombaTick == 0)
@@ -57,22 +61,29 @@ void Main()
             goombas.Update();
         }
 
-        frame.Begin();
-        player.ApplyGravity();
-
-        let footWorldY = player.y + Player.FootOffset;
-        let screenX = view.ScreenX(player);
-
-        frame.ResolveSolidLanding(player, screenX, footWorldY);
-        frame.ResolveCeilingHit(player, screenX, footWorldY);
-        frame.ResolveFall(player);
-        frame.ResolveReset(player, view);
-        view.FollowPlayer(player);
-        player.HandleJumpInput();
-        let movementFootWorldY = player.y + Player.FootOffset;
-        view.HandleHorizontalInput(player, movementFootWorldY);
-        view.ApplyPosition();
-        player.UpdateRunAnimation(view);
-
+        SimulatePlayer(player, view, frame);
     }
 }
+
+inline void SimulatePlayer(PlayerState player, CameraState view, FrameState frame)
+{
+    frame.Begin();
+    player.ApplyGravity();
+
+    let footWorldY = player.y + Player.FootOffset;
+    let screenX = view.ScreenX(player);
+
+    frame.ResolveSolidLanding(player, screenX, footWorldY);
+    frame.ResolveCeilingHit(player, screenX, footWorldY);
+    frame.ResolveFall(player);
+    frame.ResolveReset(player, view);
+
+    view.FollowPlayer(player);
+    player.HandleJumpInput();
+
+    let movementFootWorldY = player.y + Player.FootOffset;
+    view.HandleHorizontalInput(player, movementFootWorldY);
+    view.ApplyPosition();
+    player.UpdateRunAnimation(view);
+}
+
