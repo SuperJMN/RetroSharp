@@ -2,12 +2,12 @@
 
 public static class ReceiverMethodLowerer
 {
-    public static bool TryLower(SdkDotCallSyntax call, IEnumerable<FunctionSyntax> functions, out FunctionCall lowered)
+    public static bool TryLower(QualifiedCallSyntax call, IEnumerable<FunctionSyntax> functions, out FunctionCall lowered)
     {
         return TryLower(call, functions, out lowered, out _);
     }
 
-    public static bool TryLower(SdkDotCallSyntax call, IEnumerable<FunctionSyntax> functions, out FunctionCall lowered, out FunctionSyntax function)
+    public static bool TryLower(QualifiedCallSyntax call, IEnumerable<FunctionSyntax> functions, out FunctionCall lowered, out FunctionSyntax function)
     {
         var matchingFunction = functions.FirstOrDefault(candidate =>
             candidate.Name == call.Method &&
@@ -24,7 +24,7 @@ public static class ReceiverMethodLowerer
         function = matchingFunction;
         lowered = new FunctionCall(
             function.Name,
-            new ExpressionSyntax[] { new IdentifierSyntax(call.Module) }.Concat(call.Parameters));
+            new ExpressionSyntax[] { new IdentifierSyntax(call.Qualifier) }.Concat(call.Parameters));
         return true;
     }
 }

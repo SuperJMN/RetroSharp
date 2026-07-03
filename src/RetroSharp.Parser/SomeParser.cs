@@ -964,9 +964,9 @@ public class SomeParser
             return new CountOfSyntax(countofExpression.IDENTIFIER().GetText());
         }
 
-        if (primary.sdkDotCall() is { } sdkDotCall)
+        if (primary.qualifiedCall() is { } qualifiedCall)
         {
-            return ParseSdkDotCall(sdkDotCall);
+            return ParseQualifiedCall(qualifiedCall);
         }
 
         if (primary.functionCall() is { } functionCall)
@@ -996,14 +996,14 @@ public class SomeParser
         throw new NotImplementedException();
     }
 
-    private ExpressionSyntax ParseSdkDotCall(SdkDotCallContext sdkDotCall)
+    private ExpressionSyntax ParseQualifiedCall(QualifiedCallContext qualifiedCall)
     {
-        var identifiers = sdkDotCall.IDENTIFIER();
-        var module = string.Join(".", identifiers.Take(identifiers.Length - 1).Select(identifier => identifier.GetText()));
-        return new SdkDotCallSyntax(
-            module,
+        var identifiers = qualifiedCall.IDENTIFIER();
+        var qualifier = string.Join(".", identifiers.Take(identifiers.Length - 1).Select(identifier => identifier.GetText()));
+        return new QualifiedCallSyntax(
+            qualifier,
             identifiers[^1].GetText(),
-            ParseArguments(sdkDotCall.arguments()));
+            ParseArguments(qualifiedCall.arguments()));
     }
 
     private MemberAccessSyntax ParseMemberAccess(MemberAccessContext memberAccess)

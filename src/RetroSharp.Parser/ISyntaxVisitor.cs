@@ -13,7 +13,7 @@ public interface ISyntaxVisitor
     void VisitStructField(StructFieldSyntax structField);
     void VisitArrayInitializer(ArrayInitializerSyntax arrayInitializerSyntax);
     void VisitStructInitializer(StructInitializerSyntax structInitializerSyntax);
-    void VisitSdkDotCall(SdkDotCallSyntax sdkDotCallSyntax);
+    void VisitQualifiedCall(QualifiedCallSyntax qualifiedCallSyntax);
     void VisitFunctionCall(FunctionCall functionCall);
     void VisitNamedArgument(NamedArgumentSyntax namedArgumentSyntax);
     void VisitIdentifierLValue(IdentifierLValue identifierLValue);

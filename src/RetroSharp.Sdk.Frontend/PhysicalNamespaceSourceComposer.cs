@@ -157,9 +157,9 @@ public static class PhysicalNamespaceSourceComposer
             }
         }
 
-        foreach (var call in Descendants<SdkDotCallContext>(unit.Program))
+        foreach (var call in Descendants<QualifiedCallContext>(unit.Program))
         {
-            AddSdkDotCallReplacement(replacements, unit, resolver, call);
+            AddQualifiedCallReplacement(replacements, unit, resolver, call);
         }
 
         foreach (var memberAccess in Descendants<MemberAccessContext>(unit.Program))
@@ -198,11 +198,11 @@ public static class PhysicalNamespaceSourceComposer
         }
     }
 
-    private static void AddSdkDotCallReplacement(
+    private static void AddQualifiedCallReplacement(
         List<TextReplacement> replacements,
         SourceUnit unit,
         DefinitionResolver resolver,
-        SdkDotCallContext call)
+        QualifiedCallContext call)
     {
         var identifiers = call.IDENTIFIER()
             .Select(identifier => identifier.Symbol)

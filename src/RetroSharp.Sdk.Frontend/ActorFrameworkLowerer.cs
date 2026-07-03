@@ -175,10 +175,10 @@ public static class ActorFrameworkLowerer
         {
             switch (statement)
             {
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } poolCall }:
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } poolCall }:
                     state.AddPool(ReadPool(poolCall));
                     break;
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Enemies", Method: "Def" } defCall }:
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } defCall }:
                     state.AddEnemyDef(ReadEnemyDef(defCall));
                     break;
             }
@@ -189,9 +189,9 @@ public static class ActorFrameworkLowerer
     {
         WalkStatements(block, statement =>
         {
-            if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Method: "Draw" } drawCall })
+            if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Method: "Draw" } drawCall })
             {
-                drawnPools.Add(drawCall.Module);
+                drawnPools.Add(drawCall.Qualifier);
             }
         });
     }
@@ -300,13 +300,13 @@ public static class ActorFrameworkLowerer
         {
             switch (statement)
             {
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } poolCall }:
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } poolCall }:
                     state.AddPool(ReadPool(poolCall));
                     break;
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Enemies", Method: "Def" } defCall }:
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } defCall }:
                     state.AddEnemyDef(ReadEnemyDef(defCall));
                     break;
-                case ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall }:
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall }:
                     state.AddSpawnLayer(ReadSpawnDirective(spawnCall, state.BaseDirectory));
                     break;
                 case IfElseSyntax ifElse:
@@ -346,7 +346,7 @@ public static class ActorFrameworkLowerer
         }
     }
 
-    private static ActorPool ReadPool(SdkDotCallSyntax call)
+    private static ActorPool ReadPool(QualifiedCallSyntax call)
     {
         var parameters = call.Parameters.ToList();
         if (parameters.Count != 2 || parameters[0] is not IdentifierSyntax poolName)
@@ -363,7 +363,7 @@ public static class ActorFrameworkLowerer
         return new ActorPool(name, capacity);
     }
 
-    private static ActorSpawnLayer ReadSpawnDirective(SdkDotCallSyntax call, string baseDirectory)
+    private static ActorSpawnLayer ReadSpawnDirective(QualifiedCallSyntax call, string baseDirectory)
     {
         var parameters = call.Parameters.ToList();
         if (call.Method == "SpawnLayer" && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
@@ -397,7 +397,7 @@ public static class ActorFrameworkLowerer
         return new ActorSpawnLayer(call.Method, poolName.Identifier, mapPath, layerName, windowLeft, windowWidth, spawns, RuntimeName: string.Empty);
     }
 
-    private static EnemyDef ReadEnemyDef(SdkDotCallSyntax call)
+    private static EnemyDef ReadEnemyDef(QualifiedCallSyntax call)
     {
         var parameters = call.Parameters.ToList();
         if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax enemyName)
@@ -549,18 +549,18 @@ public static class ActorFrameworkLowerer
 
     private static IEnumerable<StatementSyntax> RewriteStatements(StatementSyntax statement, ActorFrameworkState state)
     {
-        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall })
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall })
         {
             var spawnLayer = state.SpawnLayer(spawnCall);
             return RuntimeSpawnActivationStatements(spawnLayer, state.NextActivationPrefix(spawnLayer), state.ScreenWidth);
         }
 
-        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } poolCall })
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } poolCall })
         {
             return PoolDeclarations(state.Pool(poolCall), state);
         }
 
-        if (statement is ExpressionStatementSyntax { Expression: SdkDotCallSyntax poolSdkCall } && state.TryPool(poolSdkCall.Module, out var pool))
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax poolSdkCall } && state.TryPool(poolSdkCall.Qualifier, out var pool))
         {
             return poolSdkCall.Method switch
             {
@@ -581,8 +581,8 @@ public static class ActorFrameworkLowerer
     {
         return statement switch
         {
-            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Actors", Method: "Pool" } } => null,
-            ExpressionStatementSyntax { Expression: SdkDotCallSyntax { Module: "Enemies", Method: "Def" } } => null,
+            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } } => null,
+            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } } => null,
             ConstDeclarationSyntax constant => new ConstDeclarationSyntax(
                 constant.TypeAnnotation,
                 constant.Name,
@@ -647,7 +647,7 @@ public static class ActorFrameworkLowerer
             Maybe<ExpressionSyntax>.None);
     }
 
-    private static ForSyntax PoolUpdateLoop(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    private static ForSyntax PoolUpdateLoop(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         RequireNoArguments(call);
         if (!state.SupportsUpdate)
@@ -802,7 +802,7 @@ public static class ActorFrameworkLowerer
         return new FunctionCall(state.IntrinsicFunction(intrinsicId), parameters);
     }
 
-    private static IReadOnlyList<StatementSyntax> PoolDrawStatements(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    private static IReadOnlyList<StatementSyntax> PoolDrawStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         RequireNoArguments(call);
         if (!state.SupportsDraw)
@@ -960,7 +960,7 @@ public static class ActorFrameworkLowerer
         return new BlockSyntax(statements);
     }
 
-    private static IReadOnlyList<StatementSyntax> PoolTouchTilesStatements(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    private static IReadOnlyList<StatementSyntax> PoolTouchTilesStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         var parameters = RequireArguments(call, 2);
         RequireEnemyDefs(state, $"{pool.Name}.TouchTiles");
@@ -1015,7 +1015,7 @@ public static class ActorFrameworkLowerer
         ]);
     }
 
-    private static IReadOnlyList<StatementSyntax> PoolLandOnTilesStatements(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    private static IReadOnlyList<StatementSyntax> PoolLandOnTilesStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         var parameters = RequireArguments(call, 3);
         RequireEnemyDefs(state, $"{pool.Name}.LandOnTiles");
@@ -1086,7 +1086,7 @@ public static class ActorFrameworkLowerer
         ]);
     }
 
-    private static IReadOnlyList<StatementSyntax> PoolTouchPlayerStatements(ActorPool pool, SdkDotCallSyntax call, ActorFrameworkState state)
+    private static IReadOnlyList<StatementSyntax> PoolTouchPlayerStatements(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         var parameters = RequireArguments(call, 4);
         RequireEnemyDefs(state, $"{pool.Name}.TouchPlayer");
@@ -1517,12 +1517,12 @@ public static class ActorFrameworkLowerer
         ];
     }
 
-    private static IReadOnlyList<ExpressionSyntax> RequireArguments(SdkDotCallSyntax call, int count)
+    private static IReadOnlyList<ExpressionSyntax> RequireArguments(QualifiedCallSyntax call, int count)
     {
         var parameters = call.Parameters.ToList();
         if (parameters.Count != count)
         {
-            throw new InvalidOperationException($"{call.Module}.{call.Method} expects {count} arguments, got {parameters.Count}.");
+            throw new InvalidOperationException($"{call.Qualifier}.{call.Method} expects {count} arguments, got {parameters.Count}.");
         }
 
         return parameters;
@@ -1589,11 +1589,11 @@ public static class ActorFrameworkLowerer
         return new BinaryExpressionSyntax(left, right, Operator.Get("||"));
     }
 
-    private static void RequireNoArguments(SdkDotCallSyntax call)
+    private static void RequireNoArguments(QualifiedCallSyntax call)
     {
         if (call.Parameters.Any())
         {
-            throw new InvalidOperationException($"{call.Module}.{call.Method} does not accept arguments.");
+            throw new InvalidOperationException($"{call.Qualifier}.{call.Method} does not accept arguments.");
         }
     }
 
@@ -1676,8 +1676,8 @@ public static class ActorFrameworkLowerer
     {
         return expression switch
         {
-            SdkDotCallSyntax { Module: "Enemies" } enemyCall => RewriteEnemyCall(enemyCall, state),
-            SdkDotCallSyntax { Module: "Actors" } actorCall => throw new InvalidOperationException($"Actors.{actorCall.Method} can only be used as a statement."),
+            QualifiedCallSyntax { Qualifier: "Enemies" } enemyCall => RewriteEnemyCall(enemyCall, state),
+            QualifiedCallSyntax { Qualifier: "Actors" } actorCall => throw new InvalidOperationException($"Actors.{actorCall.Method} can only be used as a statement."),
             AssignmentSyntax assignment => new AssignmentSyntax(RewriteLValue(assignment.Left, state), assignment.OperatorSymbol, RewriteExpression(assignment.Right, state)),
             BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
                 RewriteExpression(binary.Left, state),
@@ -1711,7 +1711,7 @@ public static class ActorFrameworkLowerer
         };
     }
 
-    private static ExpressionSyntax RewriteEnemyCall(SdkDotCallSyntax call, ActorFrameworkState state)
+    private static ExpressionSyntax RewriteEnemyCall(QualifiedCallSyntax call, ActorFrameworkState state)
     {
         if (call.Method == "Def")
         {
@@ -2057,7 +2057,7 @@ public static class ActorFrameworkLowerer
             poolsInOrder.Add(pool);
         }
 
-        public ActorPool Pool(SdkDotCallSyntax call)
+        public ActorPool Pool(QualifiedCallSyntax call)
         {
             var pool = ReadPool(call);
             return pools[pool.Name];
@@ -2097,7 +2097,7 @@ public static class ActorFrameworkLowerer
             spawnLayersInOrder.Add(runtimeLayer);
         }
 
-        public ActorSpawnLayer SpawnLayer(SdkDotCallSyntax call)
+        public ActorSpawnLayer SpawnLayer(QualifiedCallSyntax call)
         {
             var parameters = call.Parameters.ToList();
             if (call.Method == "SpawnLayer" && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))

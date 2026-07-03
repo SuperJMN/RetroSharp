@@ -25,7 +25,7 @@ public sealed class SdkAgnosticCompilerTests
                     "Main",
                     [],
                     new BlockSyntax([
-                        new ExpressionStatementSyntax(new SdkDotCallSyntax("Acme", "Tick", [])),
+                        new ExpressionStatementSyntax(new QualifiedCallSyntax("Acme", "Tick", [])),
                     ])),
             ]);
 

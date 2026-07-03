@@ -167,14 +167,14 @@ public class PrintNodeVisitor : ISyntaxVisitor
         resultBuilder.Append(" }");
     }
 
-    public void VisitSdkDotCall(SdkDotCallSyntax sdkDotCallSyntax)
+    public void VisitQualifiedCall(QualifiedCallSyntax qualifiedCallSyntax)
     {
-        resultBuilder.Append(sdkDotCallSyntax.Module);
+        resultBuilder.Append(qualifiedCallSyntax.Qualifier);
         resultBuilder.Append(".");
-        resultBuilder.Append(sdkDotCallSyntax.Method);
+        resultBuilder.Append(qualifiedCallSyntax.Method);
         resultBuilder.Append("(");
         var first = true;
-        foreach (var parameter in sdkDotCallSyntax.Parameters)
+        foreach (var parameter in qualifiedCallSyntax.Parameters)
         {
             if (!first)
             {

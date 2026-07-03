@@ -188,10 +188,10 @@ public static class ParameterSubstitution
                     .ToList()),
             UnaryExpressionSyntax unary => new UnaryExpressionSyntax(unary.OperatorSymbol, Substitute(unary.Operand, substitutions)),
             CastSyntax cast => new CastSyntax(cast.Type, Substitute(cast.Expression, substitutions)),
-            SdkDotCallSyntax sdkDotCall => new SdkDotCallSyntax(
-                sdkDotCall.Module,
-                sdkDotCall.Method,
-                sdkDotCall.Parameters.Select(parameter => Substitute(parameter, substitutions))),
+            QualifiedCallSyntax qualifiedCall => new QualifiedCallSyntax(
+                qualifiedCall.Qualifier,
+                qualifiedCall.Method,
+                qualifiedCall.Parameters.Select(parameter => Substitute(parameter, substitutions))),
             FunctionCall call => new FunctionCall(call.Name, call.Parameters.Select(parameter => Substitute(parameter, substitutions))),
             NamedArgumentSyntax namedArgument => new NamedArgumentSyntax(namedArgument.Name, Substitute(namedArgument.Expression, substitutions)),
             MemberAccessSyntax memberAccess => new MemberAccessSyntax(Substitute(memberAccess.Target, substitutions), memberAccess.Member),

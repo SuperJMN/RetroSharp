@@ -314,16 +314,16 @@ public class SemanticAnalyzer
             return AnalyzeSwitchExpression(switchExpression, scope, types, functions);
         }
 
-        if (expression is SdkDotCallSyntax sdkDotCall)
+        if (expression is QualifiedCallSyntax qualifiedCall)
         {
-            if (scope.Get(sdkDotCall.Module).HasValue)
+            if (scope.Get(qualifiedCall.Qualifier).HasValue)
             {
-                return AnalyzeReceiverDotCall(sdkDotCall, scope, types, functions);
+                return AnalyzeReceiverDotCall(qualifiedCall, scope, types, functions);
             }
 
-            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(qualifiedCall.Method, [])
             {
-                Errors = [$"Unknown static or receiver method '{sdkDotCall.Module}.{sdkDotCall.Method}'"]
+                Errors = [$"Unknown static or receiver method '{qualifiedCall.Qualifier}.{qualifiedCall.Method}'"]
             }, scope);
         }
 
@@ -347,26 +347,26 @@ public class SemanticAnalyzer
     }
 
     private AnalyzeResult<ExpressionNode> AnalyzeReceiverDotCall(
-        SdkDotCallSyntax sdkDotCall,
+        QualifiedCallSyntax qualifiedCall,
         Scope scope,
         IReadOnlyDictionary<string, SymbolType> types,
         IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
-        if (!ReceiverMethodLowerer.TryLower(sdkDotCall, functions.Values, out var receiverCall, out var receiverFunction))
+        if (!ReceiverMethodLowerer.TryLower(qualifiedCall, functions.Values, out var receiverCall, out var receiverFunction))
         {
-            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(qualifiedCall.Method, [])
             {
-                Errors = [$"Unknown receiver method '{sdkDotCall.Module}.{sdkDotCall.Method}'"]
+                Errors = [$"Unknown receiver method '{qualifiedCall.Qualifier}.{qualifiedCall.Method}'"]
             }, scope);
         }
 
-        var receiverSymbol = scope.Get(sdkDotCall.Module).Value;
+        var receiverSymbol = scope.Get(qualifiedCall.Qualifier).Value;
         var expectedType = ResolveType(receiverFunction.Parameters[0].Type, types);
         if (receiverSymbol.Type != expectedType)
         {
-            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(sdkDotCall.Method, [])
+            return new AnalyzeResult<ExpressionNode>(new FunctionCallExpressionNode(qualifiedCall.Method, [])
             {
-                Errors = [$"receiver method '{sdkDotCall.Method}' expects receiver type '{expectedType}', but '{sdkDotCall.Module}' has type '{receiverSymbol.Type}'"]
+                Errors = [$"receiver method '{qualifiedCall.Method}' expects receiver type '{expectedType}', but '{qualifiedCall.Qualifier}' has type '{receiverSymbol.Type}'"]
             }, scope);
         }
 

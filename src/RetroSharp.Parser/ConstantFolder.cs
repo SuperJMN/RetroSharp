@@ -570,11 +570,11 @@ public static class ConstantFolder
                 fieldOffsets,
                 arrays),
             CastSyntax cast => new CastSyntax(cast.Type, FoldExpression(cast.Expression, constants, typeSizes, fieldOffsets, arrays, functions)),
-            SdkDotCallSyntax sdkDotCall => FoldExpression(
-                LowerDotCall(new SdkDotCallSyntax(
-                    sdkDotCall.Module,
-                    sdkDotCall.Method,
-                    sdkDotCall.Parameters.Select(parameter => FoldExpression(parameter, constants, typeSizes, fieldOffsets, arrays, functions))),
+            QualifiedCallSyntax qualifiedCall => FoldExpression(
+                LowerDotCall(new QualifiedCallSyntax(
+                    qualifiedCall.Qualifier,
+                    qualifiedCall.Method,
+                    qualifiedCall.Parameters.Select(parameter => FoldExpression(parameter, constants, typeSizes, fieldOffsets, arrays, functions))),
                     functions),
                 constants,
                 typeSizes,
@@ -628,14 +628,14 @@ public static class ConstantFolder
         }
     }
 
-    private static FunctionCall LowerDotCall(SdkDotCallSyntax call, IEnumerable<FunctionSyntax> functions)
+    private static FunctionCall LowerDotCall(QualifiedCallSyntax call, IEnumerable<FunctionSyntax> functions)
     {
         if (ReceiverMethodLowerer.TryLower(call, functions, out var receiverCall))
         {
             return receiverCall;
         }
 
-        throw new InvalidOperationException($"Unknown static or receiver method '{call.Module}.{call.Method}'.");
+        throw new InvalidOperationException($"Unknown static or receiver method '{call.Qualifier}.{call.Method}'.");
     }
 
     private static ExpressionSyntax FoldConstantExpression(
