@@ -57,6 +57,41 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void Cli_builds_runner_projectile_sample_for_game_boy_and_nes_under_temp_directory()
+    {
+        using var workspace = TemporaryWorkspace();
+        const string projectRelativePath = "samples/runner-projectile/runner-projectile.retrosharp.json";
+        var sample = RepositoryFile(projectRelativePath);
+        var source = File.ReadAllText(RepositoryFile("samples/runner-projectile/src/main.rs"));
+        var manifest = LoadManifest();
+        var manifestEntry = Assert.Single(manifest.Samples, entry => entry.Path == projectRelativePath);
+
+        Assert.Equal(new[] { "gb", "nes" }, manifestEntry.Targets);
+        Assert.Contains("static class Mario", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("static class Hero", source, StringComparison.Ordinal);
+        Assert.Contains("const u8 ShotY = 116;", source, StringComparison.Ordinal);
+        Assert.Contains("""Sprite.Asset(mario_player, "../runner/assets/mario-player.png", 18, 32);""", source, StringComparison.Ordinal);
+        Assert.Contains("""Sprite.Asset(mario_shot, "assets/mario-shot.json");""", source, StringComparison.Ordinal);
+        Assert.Contains("""Projectiles.Def(MarioShot, team: Hero""", source, StringComparison.Ordinal);
+        Assert.Contains("""Input.WasPressed(Button.B)""", source, StringComparison.Ordinal);
+        Assert.Contains("""shots.Request(MarioShot""", source, StringComparison.Ordinal);
+
+        var gameBoyRom = Path.Combine(workspace.Path, "runner-projectile.gb");
+        var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);
+
+        Assert.Equal(0, gameBoy.ExitCode);
+        Assert.True(File.Exists(gameBoyRom), gameBoy.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(gameBoyRom).Length);
+
+        var nesRom = Path.Combine(workspace.Path, "runner-projectile.nes");
+        var nes = RunCli("--target", "nes", "--out", nesRom, sample);
+
+        Assert.Equal(0, nes.ExitCode);
+        Assert.True(File.Exists(nesRom), nes.CombinedOutput);
+        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesRom).Length);
+    }
+
+    [Fact]
     public void Cli_builds_every_manifest_sample_for_declared_targets()
     {
         using var workspace = TemporaryWorkspace();
@@ -103,6 +138,9 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains("--out samples/runner/bin/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("--target nes", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("--out samples/runner/bin/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/runner-projectile/runner-projectile.retrosharp.json", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("--out samples/runner-projectile/bin/runner-projectile.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("--out samples/runner-projectile/bin/runner-projectile.nes", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("--out samples/runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("--out samples/runner/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("--lib-path samples/runner/lib", result.CombinedOutput, StringComparison.Ordinal);

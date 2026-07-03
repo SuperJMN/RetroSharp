@@ -1,0 +1,14 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/runner-projectile.gb",
+    "nes": "bin/runner-projectile.nes"
+  },
+  "rootNamespace": "RunnerProjectile",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": [
+    "src/main.rs"
+  ]
+}
