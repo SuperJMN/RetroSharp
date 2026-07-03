@@ -16,6 +16,8 @@ public sealed record ActorMetaspriteGeometry(
 public static class ActorFrameworkLowerer
 {
     private const string ActorStructName = "Actor";
+    private const string ProjectileStructName = "Projectile";
+    private const string ProjectileSpawnRequestStructName = "ProjectileSpawnRequest";
     private const string ActorCameraXLowFunction = "__rs_actor_camera_x_lo";
     private const string ActorCameraXHighFunction = "__rs_actor_camera_x_hi";
     private const string ActorCameraYLowFunction = "__rs_actor_camera_y_lo";
@@ -33,6 +35,18 @@ public static class ActorFrameworkLowerer
         ["Shooter"] = 4,
         ["Chaser"] = 5,
         ["Hazard"] = 6,
+    };
+
+    private static readonly IReadOnlyDictionary<string, int> ProjectileTeamIds = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        ["Hero"] = 1,
+        ["Enemy"] = 2,
+    };
+
+    private static readonly IReadOnlyDictionary<string, int> ProjectileBehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        ["Linear"] = 1,
+        ["GravityArc"] = 2,
     };
 
     private static readonly IReadOnlyDictionary<string, string> EnemyLookupFunctions = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -89,6 +103,22 @@ public static class ActorFrameworkLowerer
             structs.Add(ActorStruct());
         }
 
+        if (state.ProjectilePools.Count != 0)
+        {
+            if (structs.Any(structSyntax => structSyntax.Name == ProjectileStructName))
+            {
+                throw new InvalidOperationException("Projectiles.Pool cannot generate framework struct 'Projectile' because a struct named 'Projectile' is already declared.");
+            }
+
+            if (structs.Any(structSyntax => structSyntax.Name == ProjectileSpawnRequestStructName))
+            {
+                throw new InvalidOperationException("Projectiles.Pool cannot generate framework struct 'ProjectileSpawnRequest' because a struct named 'ProjectileSpawnRequest' is already declared.");
+            }
+
+            structs.Add(ProjectileStruct());
+            structs.Add(ProjectileSpawnRequestStruct());
+        }
+
         var rewrittenFunctions = program.Functions
             .Select(function => new FunctionSyntax(
                 function.Type,
@@ -112,7 +142,10 @@ public static class ActorFrameworkLowerer
         return new ProgramSyntax(
             program.Imports,
             program.TypeAliases,
-            program.Constants.Concat(GeneratedConstants(state.EnemyDefs)).ToList(),
+            program.Constants
+                .Concat(GeneratedConstants(state.EnemyDefs))
+                .Concat(GeneratedProjectileConstants(state.ProjectileDefs))
+                .ToList(),
             program.Enums,
             structs,
             functions);
@@ -306,6 +339,20 @@ public static class ActorFrameworkLowerer
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall }:
                     state.AddSpawnLayer(ReadSpawnDirective(spawnCall, state.BaseDirectory));
                     break;
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } projectilePoolCall }:
+                    state.AddProjectilePool(ReadProjectilePool(projectilePoolCall));
+                    break;
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } projectileDefCall }:
+                    state.AddProjectileDef(ReadProjectileDef(projectileDefCall));
+                    break;
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Method: "Init" } cameraInitCall }
+                    when cameraInitCall.Qualifier.EndsWith("Camera", StringComparison.Ordinal):
+                    state.MarkCameraConfigured();
+                    break;
+                case ExpressionStatementSyntax { Expression: FunctionCall { Name: var cameraCallName } }
+                    when cameraCallName.EndsWith("Camera_Init", StringComparison.Ordinal):
+                    state.MarkCameraConfigured();
+                    break;
                 case IfElseSyntax ifElse:
                     CollectDirectives(ifElse.ThenBlock, state);
                     if (ifElse.ElseBlock.HasValue)
@@ -355,6 +402,78 @@ public static class ActorFrameworkLowerer
         }
 
         return new ActorPool(name, capacity);
+    }
+
+    private static ProjectilePool ReadProjectilePool(QualifiedCallSyntax call)
+    {
+        var parameters = call.Parameters.ToList();
+        if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax poolName)
+        {
+            throw new InvalidOperationException("Projectiles.Pool expects a pool identifier followed by named literal limits.");
+        }
+
+        var name = poolName.Identifier;
+        var namedArguments = NamedArguments(parameters.Skip(1), $"Projectiles.Pool for '{name}'");
+        var heroCapacity = OptionalProjectileLiteralByte(namedArguments, "hero", 3, name);
+        var enemyCapacity = OptionalProjectileLiteralByte(namedArguments, "enemy", 8, name);
+        var requestCapacity = OptionalProjectileLiteralByte(namedArguments, "requests", 8, name);
+        var offscreenMargin = OptionalProjectileLiteralByte(namedArguments, "offscreenMargin", 16, name);
+
+        foreach (var argumentName in namedArguments.Keys)
+        {
+            if (argumentName is not "hero" and not "enemy" and not "requests" and not "offscreenMargin")
+            {
+                throw new InvalidOperationException($"Projectiles.Pool for '{name}' has unsupported property '{argumentName}'.");
+            }
+        }
+
+        if (heroCapacity == 0 || enemyCapacity == 0 || requestCapacity == 0)
+        {
+            throw new InvalidOperationException($"Projectiles.Pool for '{name}' requires hero, enemy, and request capacities from 1 to 255.");
+        }
+
+        return new ProjectilePool(name, heroCapacity, enemyCapacity, requestCapacity, offscreenMargin);
+    }
+
+    private static ProjectileDef ReadProjectileDef(QualifiedCallSyntax call)
+    {
+        var parameters = call.Parameters.ToList();
+        if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax projectileName)
+        {
+            throw new InvalidOperationException("Projectiles.Def expects a projectile identifier as its first argument.");
+        }
+
+        var name = projectileName.Identifier;
+        var namedArguments = NamedArguments(parameters.Skip(1), $"Projectiles.Def for '{name}'");
+        var team = RequiredProjectileIdentifier(namedArguments, "team", name);
+        if (!ProjectileTeamIds.ContainsKey(team))
+        {
+            throw new InvalidOperationException($"Unknown projectile team '{team}'.");
+        }
+
+        var sprite = RequiredProjectileIdentifier(namedArguments, "sprite", name);
+        var behavior = OptionalProjectileIdentifier(namedArguments, "behavior", "Linear", name);
+        if (!ProjectileBehaviorIds.ContainsKey(behavior))
+        {
+            throw new InvalidOperationException($"Unknown projectile behavior '{behavior}'.");
+        }
+
+        var speedX = RequiredProjectileLiteralByte(namedArguments, "speedX", name);
+        var speedY = RequiredProjectileLiteralByte(namedArguments, "speedY", name);
+        var damage = RequiredProjectileLiteralByte(namedArguments, "damage", name);
+        var lifetime = RequiredProjectileLiteralByte(namedArguments, "lifetime", name);
+        var hitboxWidth = RequiredProjectileLiteralByte(namedArguments, "hitboxWidth", name);
+        var hitboxHeight = RequiredProjectileLiteralByte(namedArguments, "hitboxHeight", name);
+
+        foreach (var argumentName in namedArguments.Keys)
+        {
+            if (argumentName is not "team" and not "sprite" and not "behavior" and not "speedX" and not "speedY" and not "damage" and not "lifetime" and not "hitboxWidth" and not "hitboxHeight")
+            {
+                throw new InvalidOperationException($"Projectiles.Def for '{name}' has unsupported property '{argumentName}'.");
+            }
+        }
+
+        return new ProjectileDef(name, team, sprite, behavior, speedX, speedY, damage, lifetime, hitboxWidth, hitboxHeight);
     }
 
     private static ActorSpawnLayer ReadSpawnDirective(QualifiedCallSyntax call, string baseDirectory)
@@ -457,6 +576,99 @@ public static class ActorFrameworkLowerer
         throw new InvalidOperationException($"Enemies.Def for '{enemyName}' requires '{name}' to be an identifier.");
     }
 
+    private static IReadOnlyDictionary<string, ExpressionSyntax> NamedArguments(IEnumerable<ExpressionSyntax> parameters, string context)
+    {
+        var namedArguments = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
+        foreach (var parameter in parameters)
+        {
+            if (parameter is not NamedArgumentSyntax namedArgument)
+            {
+                throw new InvalidOperationException($"{context} expects named arguments.");
+            }
+
+            if (!namedArguments.TryAdd(namedArgument.Name, namedArgument.Expression))
+            {
+                throw new InvalidOperationException($"{context} supplies '{namedArgument.Name}' more than once.");
+            }
+        }
+
+        return namedArguments;
+    }
+
+    private static string RequiredProjectileIdentifier(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string projectileName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}'.");
+        }
+
+        if (expression is IdentifierSyntax identifier)
+        {
+            return identifier.Identifier;
+        }
+
+        throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be an identifier.");
+    }
+
+    private static string OptionalProjectileIdentifier(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string defaultValue,
+        string projectileName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            return defaultValue;
+        }
+
+        if (expression is IdentifierSyntax identifier)
+        {
+            return identifier.Identifier;
+        }
+
+        throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be an identifier.");
+    }
+
+    private static int RequiredProjectileLiteralByte(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string projectileName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}'.");
+        }
+
+        if (TryLiteralByte(expression, out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be a literal byte value.");
+    }
+
+    private static int OptionalProjectileLiteralByte(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        int defaultValue,
+        string poolName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            return defaultValue;
+        }
+
+        if (TryLiteralByte(expression, out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Projectiles.Pool for '{poolName}' requires literal byte limits for hero, enemy, requests, and offscreenMargin.");
+    }
+
     private static string RequiredIdentifier(
         IReadOnlyDictionary<string, ExpressionSyntax> arguments,
         string name,
@@ -554,6 +766,16 @@ public static class ActorFrameworkLowerer
             return PoolDeclarations(state.Pool(poolCall), state);
         }
 
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } projectilePoolCall })
+        {
+            return ProjectilePoolDeclarations(state.ProjectilePool(projectilePoolCall));
+        }
+
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } })
+        {
+            return [];
+        }
+
         if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax poolSdkCall } && state.TryPool(poolSdkCall.Qualifier, out var pool))
         {
             return poolSdkCall.Method switch
@@ -563,6 +785,20 @@ public static class ActorFrameworkLowerer
                 "TouchTiles" => PoolTouchTilesStatements(pool, poolSdkCall, state),
                 "LandOnTiles" => PoolLandOnTilesStatements(pool, poolSdkCall, state),
                 "TouchPlayer" => PoolTouchPlayerStatements(pool, poolSdkCall, state),
+                _ => [RewriteStatement(statement, state)!],
+            };
+        }
+
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax projectileSdkCall } && state.TryProjectilePool(projectileSdkCall.Qualifier, out var projectilePool))
+        {
+            return projectileSdkCall.Method switch
+            {
+                "Request" => ProjectileRequestStatements(projectilePool, projectileSdkCall, state),
+                "ProcessRequests" => ProjectileProcessRequestStatements(projectilePool, projectileSdkCall, state),
+                "Update" => ProjectileUpdateStatements(projectilePool, projectileSdkCall, state),
+                "Draw" => ProjectileDrawStatements(projectilePool, projectileSdkCall, state),
+                "TouchActors" => ProjectileTouchActorsStatements(projectilePool, projectileSdkCall, state),
+                "TouchHero" => ProjectileTouchHeroStatements(projectilePool, projectileSdkCall, state),
                 _ => [RewriteStatement(statement, state)!],
             };
         }
@@ -577,6 +813,8 @@ public static class ActorFrameworkLowerer
         {
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } } => null,
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } } => null,
+            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } } => null,
+            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } } => null,
             ConstDeclarationSyntax constant => new ConstDeclarationSyntax(
                 constant.TypeAnnotation,
                 constant.Name,
@@ -638,6 +876,448 @@ public static class ActorFrameworkLowerer
             pool.Name,
             Maybe.From<ExpressionSyntax>(new ConstantSyntax(pool.Capacity.ToString(CultureInfo.InvariantCulture))),
             Maybe<ExpressionSyntax>.None);
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectilePoolDeclarations(ProjectilePool pool)
+    {
+        return
+        [
+            new DeclarationSyntax(
+                ProjectileStructName,
+                pool.HeroArrayName,
+                Maybe.From<ExpressionSyntax>(Constant(pool.HeroCapacity)),
+                Maybe<ExpressionSyntax>.None),
+            new DeclarationSyntax(
+                ProjectileStructName,
+                pool.EnemyArrayName,
+                Maybe.From<ExpressionSyntax>(Constant(pool.EnemyCapacity)),
+                Maybe<ExpressionSyntax>.None),
+            new DeclarationSyntax(
+                ProjectileSpawnRequestStructName,
+                pool.RequestArrayName,
+                Maybe.From<ExpressionSyntax>(Constant(pool.RequestCapacity)),
+                Maybe<ExpressionSyntax>.None),
+            ArrayLoop(
+                pool.HeroArrayName,
+                $"__{pool.Name}_init_hero_i",
+                FieldAssignment(pool.HeroArrayName, $"__{pool.Name}_init_hero_i", "active", "=", Constant(0))),
+            ArrayLoop(
+                pool.EnemyArrayName,
+                $"__{pool.Name}_init_enemy_i",
+                FieldAssignment(pool.EnemyArrayName, $"__{pool.Name}_init_enemy_i", "active", "=", Constant(0))),
+            ArrayLoop(
+                pool.RequestArrayName,
+                $"__{pool.Name}_init_request_i",
+                FieldAssignment(pool.RequestArrayName, $"__{pool.Name}_init_request_i", "active", "=", Constant(0))),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileRequestStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = call.Parameters.Select(parameter => RewriteExpression(parameter, state)).ToList();
+        if (parameters.Count is < 4 or > 6)
+        {
+            throw new InvalidOperationException($"{pool.Name}.Request expects kind, x, y, direction, optional result, and optional owner.");
+        }
+
+        if (parameters[0] is not IdentifierSyntax kind)
+        {
+            throw new InvalidOperationException($"{pool.Name}.Request kind must be a projectile identifier.");
+        }
+
+        state.ProjectileDef(kind.Identifier);
+        var indexName = $"__{pool.Name}_request_i";
+        var writtenName = $"__{pool.Name}_request_written";
+        var result = parameters.Count >= 5 ? ExpressionToLValue(parameters[4], $"{pool.Name}.Request result") : null;
+        var owner = parameters.Count == 6 ? parameters[5] : Constant(0);
+        var requestWrites = new List<StatementSyntax>
+        {
+            FieldAssignment(pool.RequestArrayName, indexName, "active", "=", Constant(1)),
+            FieldAssignment(pool.RequestArrayName, indexName, "kind", "=", kind),
+            FieldAssignment(pool.RequestArrayName, indexName, "x", "=", parameters[1]),
+            FieldAssignment(pool.RequestArrayName, indexName, "xHi", "=", Constant(0)),
+            FieldAssignment(pool.RequestArrayName, indexName, "y", "=", parameters[2]),
+            FieldAssignment(pool.RequestArrayName, indexName, "yHi", "=", Constant(0)),
+            FieldAssignment(pool.RequestArrayName, indexName, "direction", "=", parameters[3]),
+            FieldAssignment(pool.RequestArrayName, indexName, "owner", "=", owner),
+            Assign(new IdentifierLValue(writtenName), Constant(1)),
+        };
+
+        if (result is not null)
+        {
+            requestWrites.Add(Assign(result, Constant(1)));
+        }
+
+        var statements = new List<StatementSyntax>
+        {
+            new DeclarationSyntax("u8", writtenName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+        };
+
+        if (result is not null)
+        {
+            statements.Add(Assign(result, Constant(0)));
+        }
+
+        statements.Add(ArrayLoop(
+            pool.RequestArrayName,
+            indexName,
+            new IfElseSyntax(
+                And(
+                    new BinaryExpressionSyntax(new IdentifierSyntax(writtenName), Constant(0), Operator.Equal),
+                    new BinaryExpressionSyntax(PoolField(pool.RequestArrayName, indexName, "active"), Constant(0), Operator.Equal)),
+                new BlockSyntax(requestWrites),
+                Maybe<BlockSyntax>.None)));
+
+        return statements;
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileProcessRequestStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        RequireNoArguments(call);
+        RequireProjectileDefs(state, $"{pool.Name}.ProcessRequests");
+
+        var requestIndex = $"__{pool.Name}_process_request_i";
+        var branches = state.ProjectileDefs
+            .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileSpawnFromRequestStatements(pool, requestIndex, def).ToList())))
+            .ToList();
+
+        return
+        [
+            ArrayLoop(
+                pool.RequestArrayName,
+                requestIndex,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.RequestArrayName, requestIndex, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax([
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_x", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "x"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_xHi", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "xHi"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_y", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "y"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_yHi", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "yHi"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_owner", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "owner"))),
+                        ProjectileKindDispatch(pool.RequestArrayName, requestIndex, branches, "projectile request"),
+                        FieldAssignment(pool.RequestArrayName, requestIndex, "active", "=", Constant(0)),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileSpawnFromRequestStatements(ProjectilePool pool, string requestIndex, ProjectileDef def)
+    {
+        var arrayName = pool.ArrayNameForTeam(def.Team);
+        var indexName = $"__{pool.Name}_process_{def.Name}_i";
+        var writtenName = $"__{pool.Name}_process_{def.Name}_written";
+
+        return
+        [
+            new DeclarationSyntax("u8", writtenName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+            ArrayLoop(
+                arrayName,
+                indexName,
+                new IfElseSyntax(
+                    And(
+                        new BinaryExpressionSyntax(new IdentifierSyntax(writtenName), Constant(0), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.Equal)),
+                    new BlockSyntax([
+                        FieldAssignment(arrayName, indexName, "active", "=", Constant(1)),
+                        FieldAssignment(arrayName, indexName, "kind", "=", new IdentifierSyntax(def.Name)),
+                        FieldAssignment(arrayName, indexName, "x", "=", new IdentifierSyntax($"__{pool.Name}_process_request_x")),
+                        FieldAssignment(arrayName, indexName, "xHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_xHi")),
+                        FieldAssignment(arrayName, indexName, "y", "=", new IdentifierSyntax($"__{pool.Name}_process_request_y")),
+                        FieldAssignment(arrayName, indexName, "yHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_yHi")),
+                        FieldAssignment(arrayName, indexName, "vx", "=", new IdentifierSyntax($"{def.Name}SpeedX")),
+                        FieldAssignment(arrayName, indexName, "vy", "=", new IdentifierSyntax($"{def.Name}SpeedY")),
+                        FieldAssignment(arrayName, indexName, "damage", "=", new IdentifierSyntax($"{def.Name}Damage")),
+                        FieldAssignment(arrayName, indexName, "age", "=", Constant(0)),
+                        FieldAssignment(arrayName, indexName, "owner", "=", new IdentifierSyntax($"__{pool.Name}_process_request_owner")),
+                        Assign(new IdentifierLValue(writtenName), Constant(1)),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileUpdateStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        RequireNoArguments(call);
+        RequireProjectileDefs(state, $"{pool.Name}.Update");
+
+        return ProjectileUpdateTeamStatements(pool, "Hero", state)
+            .Concat(ProjectileUpdateTeamStatements(pool, "Enemy", state))
+            .ToList();
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileUpdateTeamStatements(ProjectilePool pool, string team, ActorFrameworkState state)
+    {
+        var defs = state.ProjectileDefs.Where(def => def.Team == team).ToList();
+        if (defs.Count == 0)
+        {
+            return [];
+        }
+
+        var arrayName = pool.ArrayNameForTeam(team);
+        var phase = team == "Hero" ? "update_hero" : "update_enemy";
+        var indexName = $"__{pool.Name}_{phase}_i";
+        var branches = defs
+            .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileUpdateBlock(arrayName, indexName, def).ToList())))
+            .ToList();
+
+        return
+        [
+            ArrayLoop(
+                arrayName,
+                indexName,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax([ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Update")]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileUpdateBlock(string arrayName, string indexName, ProjectileDef def)
+    {
+        var statements = new List<StatementSyntax>
+        {
+            FieldAssignment(arrayName, indexName, "x", "+=", new IdentifierSyntax($"{def.Name}SpeedX")),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax($"{def.Name}SpeedX"), Operator.LessThan),
+                new BlockSyntax([FieldAssignment(arrayName, indexName, "xHi", "+=", Constant(1))]),
+                Maybe<BlockSyntax>.None),
+            FieldAssignment(arrayName, indexName, "y", "+=", new IdentifierSyntax($"{def.Name}SpeedY")),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax($"{def.Name}SpeedY"), Operator.LessThan),
+                new BlockSyntax([FieldAssignment(arrayName, indexName, "yHi", "+=", Constant(1))]),
+                Maybe<BlockSyntax>.None),
+        };
+
+        if (def.Behavior == "GravityArc")
+        {
+            statements.Add(FieldAssignment(arrayName, indexName, "vy", "+=", Constant(1)));
+        }
+
+        statements.Add(FieldAssignment(arrayName, indexName, "age", "+=", Constant(1)));
+        statements.Add(new IfElseSyntax(
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "age"), new IdentifierSyntax($"{def.Name}Lifetime"), Operator.Equal),
+            new BlockSyntax([FieldAssignment(arrayName, indexName, "active", "=", Constant(0))]),
+            Maybe<BlockSyntax>.None));
+
+        return statements;
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileDrawStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        RequireNoArguments(call);
+        if (!state.SupportsDraw)
+        {
+            throw new InvalidOperationException($"Target '{state.TargetName}' does not support projectile Draw yet.");
+        }
+
+        RequireProjectileDefs(state, $"{pool.Name}.Draw");
+        return ProjectileDrawTeamStatements(pool, "Hero", state)
+            .Concat(ProjectileDrawTeamStatements(pool, "Enemy", state))
+            .ToList();
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileDrawTeamStatements(ProjectilePool pool, string team, ActorFrameworkState state)
+    {
+        var defs = state.ProjectileDefs.Where(def => def.Team == team).ToList();
+        if (defs.Count == 0)
+        {
+            return [];
+        }
+
+        var arrayName = pool.ArrayNameForTeam(team);
+        var phase = team == "Hero" ? "draw_hero" : "draw_enemy";
+        var indexName = $"__{pool.Name}_{phase}_i";
+        var projection = BuildProjectileScreenProjection(arrayName, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight);
+        var branches = defs
+            .Select(def => new KindBranch(def.Name, ProjectileDrawBlock(arrayName, indexName, def, projection, state)))
+            .ToList();
+
+        return ProjectileCameraDeclarations(pool.Name, phase, state.ConfiguresCamera)
+            .Append(ArrayLoop(
+                arrayName,
+                indexName,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax(projection.Declarations
+                        .Append(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Draw"))
+                        .ToList()),
+                    Maybe<BlockSyntax>.None)))
+            .ToList();
+    }
+
+    private static BlockSyntax ProjectileDrawBlock(
+        string arrayName,
+        string indexName,
+        ProjectileDef def,
+        ActorScreenProjection projection,
+        ActorFrameworkState state)
+    {
+        return new BlockSyntax([
+            new IfElseSyntax(
+                projection.Visible,
+                new BlockSyntax([
+                    new ExpressionStatementSyntax(IntrinsicCall(
+                        state,
+                        SpriteDrawIntrinsic,
+                        [
+                            new IdentifierSyntax(def.Sprite),
+                            projection.ScreenX,
+                            projection.ScreenY,
+                            Constant(0),
+                            new IdentifierSyntax("false"),
+                            Constant(0),
+                        ])),
+                ]),
+            Maybe<BlockSyntax>.None),
+        ]);
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileTouchActorsStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = RequireArguments(call, 1);
+        if (parameters[0] is not IdentifierSyntax actorPoolName || !state.TryPool(actorPoolName.Identifier, out var actorPool))
+        {
+            throw new InvalidOperationException($"{pool.Name}.TouchActors expects an actor pool identifier.");
+        }
+
+        RequireProjectileDefs(state, $"{pool.Name}.TouchActors");
+        RequireEnemyDefs(state, $"{pool.Name}.TouchActors");
+
+        var heroDefs = state.ProjectileDefs.Where(def => def.Team == "Hero").ToList();
+        if (heroDefs.Count == 0)
+        {
+            return [];
+        }
+
+        var projectileIndex = $"__{pool.Name}_actor_hero_i";
+        var actorIndex = $"__{pool.Name}_actor_{actorPool.Name}_i";
+        var projectileBranches = heroDefs
+            .Select(def => new KindBranch(def.Name, ProjectileTouchActorsForProjectileBlock(pool, projectileIndex, actorPool, actorIndex, def, state)))
+            .ToList();
+
+        return
+        [
+            ArrayLoop(
+                pool.HeroArrayName,
+                projectileIndex,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.HeroArrayName, projectileIndex, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax([
+                        ProjectileKindDispatch(pool.HeroArrayName, projectileIndex, projectileBranches, $"{pool.Name}.TouchActors"),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static BlockSyntax ProjectileTouchActorsForProjectileBlock(
+        ProjectilePool pool,
+        string projectileIndex,
+        ActorPool actorPool,
+        string actorIndex,
+        ProjectileDef projectileDef,
+        ActorFrameworkState state)
+    {
+        var actorBranches = state.EnemyDefs
+            .Select(enemyDef => new KindBranch(enemyDef.Name, ProjectileTouchActorKindBlock(pool, projectileIndex, actorPool, actorIndex, projectileDef, enemyDef)))
+            .ToList();
+
+        return new BlockSyntax([
+            ArrayLoop(
+                actorPool.Name,
+                actorIndex,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(actorPool.Name, actorIndex, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax([
+                        KindDispatch(actorPool.Name, actorIndex, actorBranches),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ]);
+    }
+
+    private static BlockSyntax ProjectileTouchActorKindBlock(
+        ProjectilePool pool,
+        string projectileIndex,
+        ActorPool actorPool,
+        string actorIndex,
+        ProjectileDef projectileDef,
+        EnemyDef enemyDef)
+    {
+        var overlapsX = AabbOverlaps(
+            PoolField(pool.HeroArrayName, projectileIndex, "x"),
+            projectileDef.HitboxWidth,
+            PoolField(actorPool.Name, actorIndex, "x"),
+            enemyDef.HitboxWidth);
+        var overlapsY = AabbOverlaps(
+            PoolField(pool.HeroArrayName, projectileIndex, "y"),
+            projectileDef.HitboxHeight,
+            PoolField(actorPool.Name, actorIndex, "y"),
+            enemyDef.HitboxHeight);
+
+        return new BlockSyntax([
+            new IfElseSyntax(
+                And(overlapsX, overlapsY),
+                new BlockSyntax([
+                    FieldAssignment(actorPool.Name, actorIndex, "health", "-=", new IdentifierSyntax($"{projectileDef.Name}Damage")),
+                    FieldAssignment(actorPool.Name, actorIndex, "state", "=", new IdentifierSyntax($"{projectileDef.Name}Damage")),
+                    FieldAssignment(pool.HeroArrayName, projectileIndex, "active", "=", Constant(0)),
+                ]),
+                Maybe<BlockSyntax>.None),
+        ]);
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileTouchHeroStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = RequireArguments(call, 5)
+            .Select(parameter => RewriteExpression(parameter, state))
+            .ToList();
+        var damageTarget = ExpressionToLValue(parameters[4], $"{pool.Name}.TouchHero damage target");
+        RequireProjectileDefs(state, $"{pool.Name}.TouchHero");
+
+        var enemyDefs = state.ProjectileDefs.Where(def => def.Team == "Enemy").ToList();
+        if (enemyDefs.Count == 0)
+        {
+            return [];
+        }
+
+        var indexName = $"__{pool.Name}_hero_enemy_i";
+        var projection = BuildProjectileScreenProjection(pool.EnemyArrayName, indexName, pool.Name, "hero_enemy", state.ScreenWidth, state.ScreenHeight);
+        var branches = enemyDefs
+            .Select(def => new KindBranch(def.Name, ProjectileTouchHeroBlock(pool, indexName, def, projection, parameters, damageTarget)))
+            .ToList();
+
+        return ProjectileCameraDeclarations(pool.Name, "hero_enemy", state.ConfiguresCamera)
+            .Append(ArrayLoop(
+                pool.EnemyArrayName,
+                indexName,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.EnemyArrayName, indexName, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax(projection.Declarations
+                        .Append(ProjectileKindDispatch(pool.EnemyArrayName, indexName, branches, $"{pool.Name}.TouchHero"))
+                        .ToList()),
+                    Maybe<BlockSyntax>.None)))
+            .ToList();
+    }
+
+    private static BlockSyntax ProjectileTouchHeroBlock(
+        ProjectilePool pool,
+        string indexName,
+        ProjectileDef def,
+        ActorScreenProjection projection,
+        IReadOnlyList<ExpressionSyntax> parameters,
+        LValue damageTarget)
+    {
+        var overlapsX = AabbOverlaps(projection.ScreenX, def.HitboxWidth, parameters[0], RequiredLiteralByte(parameters[2], $"{pool.Name}.TouchHero argument 3"));
+        var overlapsY = AabbOverlaps(projection.ScreenY, def.HitboxHeight, parameters[1], RequiredLiteralByte(parameters[3], $"{pool.Name}.TouchHero argument 4"));
+
+        return new BlockSyntax([
+            new IfElseSyntax(
+                And(projection.Visible, And(overlapsX, overlapsY)),
+                new BlockSyntax([
+                    Assign(damageTarget, new IdentifierSyntax($"{def.Name}Damage")),
+                    FieldAssignment(pool.EnemyArrayName, indexName, "active", "=", Constant(0)),
+                ]),
+                Maybe<BlockSyntax>.None),
+        ]);
     }
 
     private static ForSyntax PoolUpdateLoop(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
@@ -1170,6 +1850,12 @@ public static class ActorFrameworkLowerer
         ];
     }
 
+    // When the program configures no camera the camera is fixed at the origin, so the projectile
+    // projection reads a literal 0 instead of the target camera runtime state. This keeps camera-less
+    // projectile draws deterministic across targets and emulators (see ConfiguresCamera).
+    private static ExpressionSyntax CameraComponent(bool configuresCamera, string cameraFunction)
+        => configuresCamera ? new FunctionCall(cameraFunction, []) : Constant(0);
+
     private static ActorScreenProjection BuildActorScreenProjection(ActorPool pool, string indexName, string phase, int screenWidth, int screenHeight)
     {
         var cameraXLow = $"__{pool.Name}_{phase}_camera_x_lo";
@@ -1598,6 +2284,28 @@ public static class ActorFrameworkLowerer
         }
     }
 
+    private static void RequireProjectileDefs(ActorFrameworkState state, string callName)
+    {
+        if (state.ProjectileDefs.Count == 0)
+        {
+            throw new InvalidOperationException($"{callName} requires at least one Projectiles.Def declaration.");
+        }
+    }
+
+    private static ForSyntax ArrayLoop(string arrayName, string indexName, StatementSyntax bodyStatement)
+    {
+        return ArrayLoop(arrayName, indexName, [bodyStatement]);
+    }
+
+    private static ForSyntax ArrayLoop(string arrayName, string indexName, IReadOnlyList<StatementSyntax> bodyStatements)
+    {
+        return new ForSyntax(
+            Maybe.From<StatementSyntax>(new DeclarationSyntax("u8", indexName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0)))),
+            Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(new IdentifierSyntax(indexName), new CountOfSyntax(arrayName), Operator.LessThan)),
+            Maybe.From<ExpressionSyntax>(new AssignmentSyntax(new IdentifierLValue(indexName), "+=", Constant(1))),
+            new BlockSyntax(bodyStatements.ToList()));
+    }
+
     private static ForSyntax PoolLoop(ActorPool pool, string indexName, StatementSyntax bodyStatement)
     {
         return PoolLoop(pool, indexName, [bodyStatement]);
@@ -1643,6 +2351,24 @@ public static class ActorFrameworkLowerer
             elseBlock);
     }
 
+    private static IfElseSyntax ProjectileKindDispatch(string poolName, string indexName, IReadOnlyList<KindBranch> branches, string context)
+    {
+        if (branches.Count == 0)
+        {
+            throw new InvalidOperationException($"{context} projectile dispatch requires at least one Projectiles.Def declaration.");
+        }
+
+        var first = branches[0];
+        var elseBlock = branches.Count == 1
+            ? Maybe<BlockSyntax>.None
+            : Maybe.From(new BlockSyntax([ProjectileKindDispatch(poolName, indexName, branches.Skip(1).ToList(), context)]));
+
+        return new IfElseSyntax(
+            new BinaryExpressionSyntax(PoolField(poolName, indexName, "kind"), new IdentifierSyntax(first.Kind), Operator.Equal),
+            first.Block,
+            elseBlock);
+    }
+
     private static MemberAccessSyntax PoolField(string poolName, string indexName, string fieldName)
     {
         return new MemberAccessSyntax(new IndexExpressionSyntax(poolName, new IdentifierSyntax(indexName)), fieldName);
@@ -1665,12 +2391,159 @@ public static class ActorFrameworkLowerer
 
     private static (int Low, int High) SplitWorldY(int value, string context) => SplitWorldX(value, context);
 
+    private static ExpressionStatementSyntax Assign(LValue target, ExpressionSyntax value)
+    {
+        return new ExpressionStatementSyntax(new AssignmentSyntax(target, value));
+    }
+
+    private static LValue ExpressionToLValue(ExpressionSyntax expression, string context)
+    {
+        return expression switch
+        {
+            IdentifierSyntax identifier => new IdentifierLValue(identifier.Identifier),
+            MemberAccessSyntax memberAccess => new MemberAccessLValue(memberAccess),
+            _ => throw new InvalidOperationException($"{context} must be an assignable identifier or field."),
+        };
+    }
+
+    private static BinaryExpressionSyntax AabbOverlaps(ExpressionSyntax left, int leftWidth, ExpressionSyntax right, int rightWidth)
+    {
+        return And(
+            new BinaryExpressionSyntax(left, OffsetExpression(right, rightWidth, subtract: false), Operator.LessThan),
+            new BinaryExpressionSyntax(OffsetExpression(left, leftWidth, subtract: false), right, Operator.Get(">")));
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileCameraDeclarations(string poolName, string phase, bool configuresCamera)
+    {
+        var cameraXLow = $"__{poolName}_{phase}_camera_x_lo";
+        var cameraXHigh = $"__{poolName}_{phase}_camera_x_hi";
+        var cameraYLow = $"__{poolName}_{phase}_camera_y_lo";
+        var cameraYHigh = $"__{poolName}_{phase}_camera_y_hi";
+
+        return
+        [
+            new DeclarationSyntax(
+                "u8",
+                cameraXLow,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From(CameraComponent(configuresCamera, ActorCameraXLowFunction))),
+            new DeclarationSyntax(
+                "u8",
+                cameraXHigh,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From(CameraComponent(configuresCamera, ActorCameraXHighFunction))),
+            new DeclarationSyntax(
+                "u8",
+                cameraYLow,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From(CameraComponent(configuresCamera, ActorCameraYLowFunction))),
+            new DeclarationSyntax(
+                "u8",
+                cameraYHigh,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From(CameraComponent(configuresCamera, ActorCameraYHighFunction))),
+        ];
+    }
+
+    private static ActorScreenProjection BuildProjectileScreenProjection(
+        string arrayName,
+        string indexName,
+        string poolName,
+        string phase,
+        int screenWidth,
+        int screenHeight)
+    {
+        var cameraXLow = $"__{poolName}_{phase}_camera_x_lo";
+        var cameraXHigh = $"__{poolName}_{phase}_camera_x_hi";
+        var cameraYLow = $"__{poolName}_{phase}_camera_y_lo";
+        var cameraYHigh = $"__{poolName}_{phase}_camera_y_hi";
+        var screenX = $"__{poolName}_{phase}_screen_x";
+        var screenY = $"__{poolName}_{phase}_screen_y";
+        var visibleXName = $"__{poolName}_{phase}_visible_x";
+        var visibleYName = $"__{poolName}_{phase}_visible_y";
+
+        var declarations = new List<StatementSyntax>
+        {
+            new DeclarationSyntax(
+                "u8",
+                screenX,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    PoolField(arrayName, indexName, "x"),
+                    new IdentifierSyntax(cameraXLow),
+                    Operator.Get("-")))),
+            new DeclarationSyntax(
+                "u8",
+                screenY,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    PoolField(arrayName, indexName, "y"),
+                    new IdentifierSyntax(cameraYLow),
+                    Operator.Get("-")))),
+            new DeclarationSyntax("u8", visibleXName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+            new DeclarationSyntax("u8", visibleYName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+        };
+
+        var sameCameraXPage = And(
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.Get(">=")));
+        var nextCameraXPage = And(
+            new BinaryExpressionSyntax(
+                PoolField(arrayName, indexName, "xHi"),
+                new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(1), Operator.Get("+")),
+                Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan));
+        ExpressionSyntax visibleXExpression = Or(sameCameraXPage, nextCameraXPage);
+        if (screenWidth < 256)
+        {
+            visibleXExpression = And(
+                visibleXExpression,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenX), Constant(screenWidth), Operator.LessThan));
+        }
+
+        declarations.Add(new IfElseSyntax(
+            visibleXExpression,
+            new BlockSyntax([Assign(new IdentifierLValue(visibleXName), Constant(1))]),
+            Maybe<BlockSyntax>.None));
+
+        var sameCameraYPage = And(
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.Get(">=")));
+        var nextCameraYPage = And(
+            new BinaryExpressionSyntax(
+                PoolField(arrayName, indexName, "yHi"),
+                new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(1), Operator.Get("+")),
+                Operator.Equal),
+            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan));
+        ExpressionSyntax visibleYExpression = Or(sameCameraYPage, nextCameraYPage);
+        if (screenHeight < 256)
+        {
+            visibleYExpression = And(
+                visibleYExpression,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenY), Constant(screenHeight), Operator.LessThan));
+        }
+
+        declarations.Add(new IfElseSyntax(
+            visibleYExpression,
+            new BlockSyntax([Assign(new IdentifierLValue(visibleYName), Constant(1))]),
+            Maybe<BlockSyntax>.None));
+
+        return new ActorScreenProjection(
+            declarations,
+            new IdentifierSyntax(screenX),
+            new IdentifierSyntax(screenY),
+            And(
+                new BinaryExpressionSyntax(new IdentifierSyntax(visibleXName), Constant(0), Operator.NotEqual),
+                new BinaryExpressionSyntax(new IdentifierSyntax(visibleYName), Constant(0), Operator.NotEqual)));
+    }
+
     private static ExpressionSyntax RewriteExpression(ExpressionSyntax expression, ActorFrameworkState state)
     {
         return expression switch
         {
             QualifiedCallSyntax { Qualifier: "Enemies" } enemyCall => RewriteEnemyCall(enemyCall, state),
             QualifiedCallSyntax { Qualifier: "Actors" } actorCall => throw new InvalidOperationException($"Actors.{actorCall.Method} can only be used as a statement."),
+            QualifiedCallSyntax { Qualifier: "Projectiles" } projectileCall => throw new InvalidOperationException($"Projectiles.{projectileCall.Method} can only be used as a statement."),
             AssignmentSyntax assignment => new AssignmentSyntax(RewriteLValue(assignment.Left, state), assignment.OperatorSymbol, RewriteExpression(assignment.Right, state)),
             BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
                 RewriteExpression(binary.Left, state),
@@ -1764,6 +2637,43 @@ public static class ActorFrameworkLowerer
             yield return Constant($"{def.Name}Hp", def.Hp);
             yield return Constant($"{def.Name}Cooldown", def.Cooldown);
             yield return Constant($"{def.Name}ContactDamage", def.ContactDamage);
+            yield return Constant($"{def.Name}HitboxWidth", def.HitboxWidth);
+            yield return Constant($"{def.Name}HitboxHeight", def.HitboxHeight);
+        }
+    }
+
+    private static IEnumerable<ConstDeclarationSyntax> GeneratedProjectileConstants(IReadOnlyList<ProjectileDef> projectileDefs)
+    {
+        foreach (var team in projectileDefs.Select(def => def.Team).Distinct(StringComparer.Ordinal))
+        {
+            if (!ProjectileTeamIds.TryGetValue(team, out var id))
+            {
+                throw new InvalidOperationException($"Unknown projectile team '{team}'.");
+            }
+
+            yield return Constant(team, id);
+        }
+
+        foreach (var behavior in projectileDefs.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
+        {
+            if (!ProjectileBehaviorIds.TryGetValue(behavior, out var id))
+            {
+                throw new InvalidOperationException($"Unknown projectile behavior '{behavior}'.");
+            }
+
+            yield return Constant(behavior, id);
+        }
+
+        for (var index = 0; index < projectileDefs.Count; index++)
+        {
+            var def = projectileDefs[index];
+            yield return Constant(def.Name, index + 1);
+            yield return Constant($"{def.Name}Team", new IdentifierSyntax(def.Team));
+            yield return Constant($"{def.Name}Behavior", new IdentifierSyntax(def.Behavior));
+            yield return Constant($"{def.Name}SpeedX", def.SpeedX);
+            yield return Constant($"{def.Name}SpeedY", def.SpeedY);
+            yield return Constant($"{def.Name}Damage", def.Damage);
+            yield return Constant($"{def.Name}Lifetime", def.Lifetime);
             yield return Constant($"{def.Name}HitboxWidth", def.HitboxWidth);
             yield return Constant($"{def.Name}HitboxHeight", def.HitboxHeight);
         }
@@ -1864,6 +2774,35 @@ public static class ActorFrameworkLowerer
             {
                 yield return new GeneratedName($"{layer.RuntimeName}_{fieldName}", $"Actors.{layer.MethodName} layer '{layer.LayerName}' {fieldName} lookup function");
             }
+        }
+
+        if (state.ProjectilePools.Count != 0)
+        {
+            yield return new GeneratedName(ProjectileStructName, "framework struct 'Projectile'");
+            yield return new GeneratedName(ProjectileSpawnRequestStructName, "framework struct 'ProjectileSpawnRequest'");
+        }
+
+        foreach (var team in state.ProjectileDefs.Select(def => def.Team).Distinct(StringComparer.Ordinal))
+        {
+            yield return new GeneratedName(team, $"projectile team '{team}' constant");
+        }
+
+        foreach (var behavior in state.ProjectileDefs.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
+        {
+            yield return new GeneratedName(behavior, $"projectile behavior '{behavior}' constant");
+        }
+
+        foreach (var def in state.ProjectileDefs)
+        {
+            yield return new GeneratedName(def.Name, $"Projectiles.Def '{def.Name}' kind constant");
+            yield return new GeneratedName($"{def.Name}Team", $"Projectiles.Def '{def.Name}' team constant");
+            yield return new GeneratedName($"{def.Name}Behavior", $"Projectiles.Def '{def.Name}' behavior constant");
+            yield return new GeneratedName($"{def.Name}SpeedX", $"Projectiles.Def '{def.Name}' speed-x constant");
+            yield return new GeneratedName($"{def.Name}SpeedY", $"Projectiles.Def '{def.Name}' speed-y constant");
+            yield return new GeneratedName($"{def.Name}Damage", $"Projectiles.Def '{def.Name}' damage constant");
+            yield return new GeneratedName($"{def.Name}Lifetime", $"Projectiles.Def '{def.Name}' lifetime constant");
+            yield return new GeneratedName($"{def.Name}HitboxWidth", $"Projectiles.Def '{def.Name}' hitbox width constant");
+            yield return new GeneratedName($"{def.Name}HitboxHeight", $"Projectiles.Def '{def.Name}' hitbox height constant");
         }
     }
 
@@ -1995,6 +2934,41 @@ public static class ActorFrameworkLowerer
             ]);
     }
 
+    private static StructSyntax ProjectileStruct()
+    {
+        return new StructSyntax(
+            ProjectileStructName,
+            [
+                new StructFieldSyntax("u8", "kind"),
+                new StructFieldSyntax("u8", "active"),
+                new StructFieldSyntax("u8", "x"),
+                new StructFieldSyntax("u8", "xHi"),
+                new StructFieldSyntax("u8", "y"),
+                new StructFieldSyntax("u8", "yHi"),
+                new StructFieldSyntax("i8", "vx"),
+                new StructFieldSyntax("i8", "vy"),
+                new StructFieldSyntax("u8", "damage"),
+                new StructFieldSyntax("u8", "age"),
+                new StructFieldSyntax("u8", "owner"),
+            ]);
+    }
+
+    private static StructSyntax ProjectileSpawnRequestStruct()
+    {
+        return new StructSyntax(
+            ProjectileSpawnRequestStructName,
+            [
+                new StructFieldSyntax("u8", "kind"),
+                new StructFieldSyntax("u8", "active"),
+                new StructFieldSyntax("u8", "x"),
+                new StructFieldSyntax("u8", "xHi"),
+                new StructFieldSyntax("u8", "y"),
+                new StructFieldSyntax("u8", "yHi"),
+                new StructFieldSyntax("u8", "direction"),
+                new StructFieldSyntax("u8", "owner"),
+            ]);
+    }
+
     private static Maybe<TOut> MapMaybe<TIn, TOut>(Maybe<TIn> maybe, Func<TIn, TOut> selector)
     {
         return maybe.HasValue ? Maybe.From(selector(maybe.Value)) : Maybe<TOut>.None;
@@ -2011,6 +2985,10 @@ public static class ActorFrameworkLowerer
         private readonly List<ActorPool> poolsInOrder = [];
         private readonly Dictionary<string, EnemyDef> enemyDefs = new(StringComparer.Ordinal);
         private readonly List<EnemyDef> enemyDefsInOrder = [];
+        private readonly Dictionary<string, ProjectilePool> projectilePools = new(StringComparer.Ordinal);
+        private readonly List<ProjectilePool> projectilePoolsInOrder = [];
+        private readonly Dictionary<string, ProjectileDef> projectileDefs = new(StringComparer.Ordinal);
+        private readonly List<ProjectileDef> projectileDefsInOrder = [];
         private readonly Dictionary<ActorSpawnLayerKey, ActorSpawnLayer> spawnLayers = [];
         private readonly List<ActorSpawnLayer> spawnLayersInOrder = [];
         private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
@@ -2025,9 +3003,22 @@ public static class ActorFrameworkLowerer
         public int ScreenHeight { get; } = capabilities.ScreenPixels.Height;
         public IReadOnlyList<ActorPool> Pools => poolsInOrder;
         public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
+        public IReadOnlyList<ProjectilePool> ProjectilePools => projectilePoolsInOrder;
+        public IReadOnlyList<ProjectileDef> ProjectileDefs => projectileDefsInOrder;
         public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
         public IReadOnlySet<string> UsedEnemyLookupMethods => usedEnemyLookupMethods;
-        public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0;
+        public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0 || projectilePools.Count != 0 || projectileDefs.Count != 0;
+
+        // True once the program is seen to call the camera-init facade (either the qualified
+        // `<Camera>.Init(...)` form or its resolved static `..._Camera_Init(...)` call). Without a
+        // configured camera it can never move from the origin, so projectile draws project against a
+        // literal-0 camera instead of reading the target's camera runtime state, which is otherwise
+        // uninitialized target memory whose power-on value differs per emulator and would shift
+        // camera-less projectile draws off their spawner. Matching the resolved static call (not the
+        // lowercase camera-init intrinsic) avoids a false positive from the library's own facade body.
+        public bool ConfiguresCamera { get; private set; }
+
+        public void MarkCameraConfigured() => ConfiguresCamera = true;
 
         public string IntrinsicFunction(string intrinsicId)
         {
@@ -2069,6 +3060,47 @@ public static class ActorFrameworkLowerer
             }
 
             enemyDefsInOrder.Add(def);
+        }
+
+        public void AddProjectilePool(ProjectilePool pool)
+        {
+            if (!projectilePools.TryAdd(pool.Name, pool))
+            {
+                throw new InvalidOperationException($"Projectiles.Pool for '{pool.Name}' is already declared.");
+            }
+
+            projectilePoolsInOrder.Add(pool);
+        }
+
+        public ProjectilePool ProjectilePool(QualifiedCallSyntax call)
+        {
+            var pool = ReadProjectilePool(call);
+            return projectilePools[pool.Name];
+        }
+
+        public bool TryProjectilePool(string name, out ProjectilePool pool)
+        {
+            return projectilePools.TryGetValue(name, out pool!);
+        }
+
+        public void AddProjectileDef(ProjectileDef def)
+        {
+            if (!projectileDefs.TryAdd(def.Name, def))
+            {
+                throw new InvalidOperationException($"Projectiles.Def for '{def.Name}' is already declared.");
+            }
+
+            projectileDefsInOrder.Add(def);
+        }
+
+        public ProjectileDef ProjectileDef(string name)
+        {
+            if (projectileDefs.TryGetValue(name, out var def))
+            {
+                return def;
+            }
+
+            throw new InvalidOperationException($"Unknown projectile kind '{name}'. Declare Projectiles.Def({name}, ...).");
         }
 
         public void RecordEnemyLookupMethod(string method)
@@ -2185,6 +3217,23 @@ public static class ActorFrameworkLowerer
 
     private sealed record ActorPool(string Name, int Capacity);
 
+    private sealed record ProjectilePool(string Name, int HeroCapacity, int EnemyCapacity, int RequestCapacity, int OffscreenMargin)
+    {
+        public string HeroArrayName => $"{Name}Hero";
+        public string EnemyArrayName => $"{Name}Enemy";
+        public string RequestArrayName => $"{Name}Requests";
+
+        public string ArrayNameForTeam(string team)
+        {
+            return team switch
+            {
+                "Hero" => HeroArrayName,
+                "Enemy" => EnemyArrayName,
+                _ => throw new InvalidOperationException($"Unknown projectile team '{team}'."),
+            };
+        }
+    }
+
     private sealed record GeneratedName(string Name, string Origin);
 
     private sealed record ActorSpawnLayer(
@@ -2218,6 +3267,18 @@ public static class ActorFrameworkLowerer
         int Hp,
         int Cooldown,
         int ContactDamage,
+        int HitboxWidth,
+        int HitboxHeight);
+
+    private sealed record ProjectileDef(
+        string Name,
+        string Team,
+        string Sprite,
+        string Behavior,
+        int SpeedX,
+        int SpeedY,
+        int Damage,
+        int Lifetime,
         int HitboxWidth,
         int HitboxHeight);
 }

@@ -4254,6 +4254,131 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Projectile_framework_lowers_requests_update_and_draw_as_fixed_pools()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Projectiles.Pool(shots, hero: 2, enemy: 3, requests: 4, offscreenMargin: 16);
+                                  Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4);
+                                  u8 queued = 0;
+                                  shots.Request(HeroShot, 40, 60, 0, queued);
+                                  shots.ProcessRequests();
+                                  shots.Update();
+                                  shots.Draw();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("Projectile shotsHero[2];", lowered);
+        Assert.Contains("Projectile shotsEnemy[3];", lowered);
+        Assert.Contains("ProjectileSpawnRequest shotsRequests[4];", lowered);
+        Assert.Contains("shotsHero[__shots_init_hero_i].active=0;", lowered);
+        Assert.Contains("shotsEnemy[__shots_init_enemy_i].active=0;", lowered);
+        Assert.Contains("shotsRequests[__shots_init_request_i].active=0;", lowered);
+        Assert.Contains("shotsRequests[__shots_request_i].kind=HeroShot;", lowered);
+        Assert.Contains("queued=1;", lowered);
+        Assert.Contains("queued=0;", lowered);
+        Assert.Contains("shotsHero[__shots_process_HeroShot_i].active=1;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].x+=HeroShotSpeedX;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].age+=1;", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(hero_shot, __shots_draw_hero_screen_x, __shots_draw_hero_screen_y, 0, false, 0);", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_lowers_actor_and_hero_collision_hooks()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Sprite.Asset(enemy_bullet, "enemy-bullet.sprite.json");
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 2, offscreenMargin: 16);
+                                  Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4);
+                                  Projectiles.Def(EnemyBullet, team: Enemy, sprite: enemy_bullet, speedX: 1, speedY: 0, damage: 2, lifetime: 64, hitboxWidth: 4, hitboxHeight: 4);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, hp: 2, hitboxWidth: 8, hitboxHeight: 8);
+                                  u8 heroDamage = 0;
+                                  shots.TouchActors(enemies);
+                                  shots.TouchHero(72, 40, 16, 16, heroDamage);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("for(u8 __shots_actor_hero_i=0;__shots_actor_hero_i<countof(shotsHero);__shots_actor_hero_i+=1)", lowered);
+        Assert.Contains("for(u8 __shots_actor_enemies_i=0;__shots_actor_enemies_i<countof(enemies);__shots_actor_enemies_i+=1)", lowered);
+        Assert.Contains("enemies[__shots_actor_enemies_i].health-=HeroShotDamage;", lowered);
+        Assert.Contains("shotsHero[__shots_actor_hero_i].active=0;", lowered);
+        Assert.Contains("for(u8 __shots_hero_enemy_i=0;__shots_hero_enemy_i<countof(shotsEnemy);__shots_hero_enemy_i+=1)", lowered);
+        Assert.Contains("heroDamage=EnemyBulletDamage;", lowered);
+        Assert.Contains("shotsEnemy[__shots_hero_enemy_i].active=0;", lowered);
+    }
+
+    [Fact]
+    public void Compiles_projectile_draw_through_game_boy_backend()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero-shot.sprite.json",
+            SpriteJson(Rows(8, 16, "11111111")));
+        const string source = """
+                              void Main() {
+                                  video_init();
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16);
+                                  Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4);
+                                  u8 queued = 0;
+                                  shots.Request(HeroShot, 40, 60, 0, queued);
+                                  shots.ProcessRequests();
+                                  Video.WaitVBlank();
+                                  shots.Draw();
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+    }
+
+    [Fact]
+    public void Rejects_projectile_pool_without_literal_limits()
+    {
+        const string source = """
+                              void Main() {
+                                  u8 heroLimit = 2;
+                                  Projectiles.Pool(shots, hero: heroLimit, enemy: 3, requests: 4, offscreenMargin: 16);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Projectiles.Pool for 'shots' requires literal byte limits for hero, enemy, requests, and offscreenMargin.", exception.Message);
+    }
+
+    [Fact]
+    public void Rejects_unknown_projectile_team()
+    {
+        const string source = """
+                              void Main() {
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16);
+                                  Projectiles.Def(Shot, team: Neutral, sprite: shot, speedX: 1, speedY: 0, damage: 1, lifetime: 16, hitboxWidth: 4, hitboxHeight: 4);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal("Unknown projectile team 'Neutral'.", exception.Message);
+    }
+
+    [Fact]
     public void Rejects_actor_spawn_window_that_exceeds_pool_capacity()
     {
         var baseDirectory = WriteActorSpawnMap(

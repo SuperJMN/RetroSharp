@@ -148,6 +148,30 @@ object identity, virtual dispatch, delegates, closures, or function pointers.
 | `pool.LandOnTiles(searchTopOffset, searchHeight, flags)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY`, branch by kind, cull slots outside the visible camera window, and call `Camera.ScreenAabbHitTop(...)` with the kind's literal hitbox width. On hit, add camera Y back to the returned screen top, assign actor `y`/`yHi`, clear `vy`, and set `state` to `1`. |
 | `pool.TouchPlayer(playerX, playerY, playerWidth, playerHeight)` | Read the current camera X/Y once for the helper's generated loop, loop active slots, compute each actor's camera-relative `screenX`/`screenY`, branch by kind, cull slots outside the visible camera window, and test each kind's literal hitbox against a literal player AABB in screen coordinates. On hit, set actor `state` to `contactDamage` or `1`. |
 
+### Projectile framework MVP
+
+The projectile frontend is source sugar over fixed local storage, like the actor
+framework. It does not add projectile-specific target intrinsics, heap
+allocation, replacement policies, virtual dispatch, or direct OAM writes.
+
+| Signature | Semantics |
+| --- | --- |
+| `Projectiles.Pool(name, hero: n, enemy: n, requests: n, offscreenMargin: n)` | Declare separate fixed hero/enemy projectile pools plus a fixed spawn-request queue, and initialize every pool/request slot inactive before gameplay code observes it. Literal defaults are `hero: 3`, `enemy: 8`, `requests: 8`, and `offscreenMargin: 16`; capacities must fit byte-sized fixed struct arrays. |
+| `Projectiles.Def(name, team: Hero|Enemy, sprite: asset, speedX: n, speedY: n, damage: n, lifetime: n, hitboxWidth: n, hitboxHeight: n[, behavior: Linear|GravityArc])` | Declare projectile metadata as constants. `Linear` is the default behavior. The first MVP supports positive byte speeds and byte-sized hitboxes. |
+| `pool.Request(kind, x, y, direction[, result[, owner]])` | Enqueue a spawn request in deterministic slot order without mutating projectile pools directly. If `result` is supplied, it is set to `1` when a queue slot was claimed and left/set to `0` when the request queue is full. |
+| `pool.ProcessRequests()` | Drain queued requests in order into the matching hero or enemy pool. Full pools do not replace active projectiles; the request is consumed deterministically. |
+| `pool.Update()` | Move active projectiles by their definition speed, increment age, and deactivate when age reaches `lifetime`. `GravityArc` currently increments the stored vertical velocity field for future behavior expansion. |
+| `pool.Draw()` | Project active projectiles through the current camera and submit visible projectiles through `Sprite.Draw(...)`; no backend-specific OAM allocation is exposed to gameplay source. When the program never configures a camera (no `Camera.Init`), the projection uses a literal `0` camera instead of reading the target's camera runtime state, so camera-less samples draw projectiles deterministically across targets and emulators rather than depending on uninitialized power-on memory. |
+| `pool.TouchActors(actorPool)` | Test hero projectiles against active actors in the supplied actor pool using literal projectile and enemy hitboxes. On hit, subtract projectile damage from actor `health`, copy damage to actor `state`, and deactivate the projectile. |
+| `pool.TouchHero(playerX, playerY, playerWidth, playerHeight, damageTarget)` | Test enemy projectiles against a screen-space hero AABB after camera projection. On hit, assign projectile damage to `damageTarget` and deactivate the projectile. |
+
+This is the first projectile lifecycle slice, not the complete issue #220 end
+state. Tile collision, camera-margin despawn using `offscreenMargin`, projectile
+impact/expiration effects, sound hooks, actor-emitter cooldown helpers, and a
+dedicated particle/effect request system remain follow-up work. The current repo
+does not yet contain a general particle/effect abstraction, so this slice keeps
+particles separate instead of folding visual effects into projectiles.
+
 `Actors.Pool(...)` and `Enemies.Def(...)` are accepted as statements inside the
 compiled source and disappear before target lowering. The generated actor state
 fields are `kind`, `active`, `x`, `xHi`, `y`, `yHi`, `vx`, `vy`, `state`,
@@ -411,6 +435,7 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | BGM | Supported for VGM/VGZ DMG logs, hUGETracker `.uge` v6 songs, and transitional `.gbapu` APU traces in the current runtime. GBS files must first be exported to `.gbapu` with the target-specific CLI helper. | Supported for VGM/VGZ 2A03 logs covering pulse, triangle, noise, DMC/DPCM, `$4015`, and `$4017`; expansion audio is deferred. |
 | Animation helpers | Supported on Game Boy runner path. | Supported for byte-sized clip frame indexes, frame durations, and total duration. |
 | Actor framework slice | `Actors.Pool`, `Actors.SpawnLayer`, `Actors.SpawnWindow`, `Enemies.Def`, called `Enemies.*` metadata helpers, and `pool.Update()`/`pool.Draw()`/`pool.TouchTiles()`/`pool.LandOnTiles()`/`pool.TouchPlayer()` lower before Game Boy target emission to fixed struct arrays, constants, inline helper branches, generated spawn-table helpers, `used[]`, runtime activation, camera-relative 2-axis draw/collision/player contact, and the basic behavior set: `Walker`, `Flyer`, `Patrol`, `Shooter`, `Hazard`, and direction-driven `Chaser`. | The same source-to-source actor framework slice lowers before NES target emission with NES sprite/scanline budgets and 2-axis camera-relative actor draw/collision support. |
+| Projectile framework MVP | `Projectiles.Pool`, `Projectiles.Def`, `pool.Request()`, `pool.ProcessRequests()`, `pool.Update()`, `pool.Draw()`, `pool.TouchActors()`, and `pool.TouchHero()` lower before Game Boy target emission to fixed inactive-initialized hero/enemy projectile arrays, a fixed inactive-initialized request queue, deterministic pool-full behavior, camera-relative sprite drawing, and actor/hero hitbox hooks. | The same source-to-source projectile MVP lowers before NES target emission, initializes pool/request slots inactive, and submits visible projectiles through `Sprite.Draw(...)`; platform-specific OAM allocation remains outside gameplay source. |
 | World collision queries | Supported on Game Boy runner path. | Generic `world_tile_flags_at(...)` and `collision_aabb_tiles(...)` are not implemented in the current NES spike. |
 | Camera-relative collision | Supported through `Camera.AabbTiles(...)`/`Camera.AabbHitTop(...)` for literal or byte-backed screen X plus world Y values, and `Camera.ScreenAabbTiles(...)`/`Camera.ScreenAabbHitTop(...)` for byte-backed screen X/Y values. | Supported through the same camera AABB and screen-AABB forms on horizontal and four-screen camera paths. |
 | HUD | `window` HUD supported for static startup tiles. `split_scroll` is rejected. | No portable HUD mode declared. `none` is accepted; `window` fails. |

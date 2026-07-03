@@ -86,6 +86,12 @@
       "targets": ["gb", "nes"]
     },
     {
+      "path": "samples/runner-projectile/runner-projectile.retrosharp.json",
+      "readme": "samples/runner-projectile/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "path": "samples/runner/diagnostics/00-static-background.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
