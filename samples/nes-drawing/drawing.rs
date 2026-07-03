@@ -1,3 +1,5 @@
+import RetroSharp.Portable2D;
+
 const MapWidth = 32;
 const MapHeight = 30;
 

@@ -170,6 +170,8 @@ public sealed class CrossTargetCliAcceptanceTests
         File.WriteAllText(
             sourcePath,
             """
+            import RetroSharp.Portable2D;
+
             void Main() {
                 Video.Init();
                 Hud.SetTile(window, 0, 0, 1);
@@ -363,6 +365,9 @@ public sealed class CrossTargetCliAcceptanceTests
             {
               "target": "gb",
               "output": "bin/runner.gb",
+              "libraries": [
+                "RetroSharp.Portable2D"
+              ],
               "sources": [
                 "src/Program.rs",
                 "src/Startup.rs"
@@ -403,6 +408,9 @@ public sealed class CrossTargetCliAcceptanceTests
                 "gb": "bin/runner.gb",
                 "nes": "bin/runner.nes"
               },
+              "libraries": [
+                "RetroSharp.Portable2D"
+              ],
               "sources": [
                 "src/main.rs"
               ]
@@ -463,6 +471,9 @@ public sealed class CrossTargetCliAcceptanceTests
               "rootNamespace": "Game",
               "sourceRoot": "src",
               "namespaceMode": "physical",
+              "libraries": [
+                "RetroSharp.Portable2D"
+              ],
               "sources": [
                 "src/player/rules.rs",
                 "src/camera/rules.rs",
@@ -535,6 +546,9 @@ public sealed class CrossTargetCliAcceptanceTests
               "rootNamespace": "Runner",
               "sourceRoot": "src",
               "namespaceMode": "physical",
+              "libraries": [
+                "RetroSharp.Portable2D"
+              ],
               "sources": [
                 "src/player/state.rs",
                 "src/frame/presenter.rs",
@@ -612,6 +626,9 @@ public sealed class CrossTargetCliAcceptanceTests
               "rootNamespace": "Runner",
               "sourceRoot": "src",
               "namespaceMode": "physical",
+              "libraries": [
+                "RetroSharp.Portable2D"
+              ],
               "sources": [
                 "src/player/state.rs",
                 "src/frame/presenter.rs",

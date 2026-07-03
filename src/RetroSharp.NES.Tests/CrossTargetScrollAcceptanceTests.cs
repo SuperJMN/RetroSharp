@@ -449,7 +449,11 @@ public sealed class CrossTargetScrollAcceptanceTests
 
     private static NesVideoProgram BuildNesProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                NesTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
         var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);

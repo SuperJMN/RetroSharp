@@ -2530,6 +2530,9 @@ internal sealed class GameBoyRuntimeCompiler
         GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
         switch (intrinsic.Operation)
         {
+            case TargetIntrinsicOperation.InitializeVideo:
+            case TargetIntrinsicOperation.PresentVideo:
+                return true;
             case TargetIntrinsicOperation.WaitFrame:
                 EmitNextSdkOperation<Sdk2DOperation.WaitFrame>(call.Name);
                 return true;
@@ -4537,6 +4540,22 @@ internal sealed class GameBoyRuntimeCompiler
             case TargetIntrinsicOperation.CameraScreenAabbHitTop:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraScreenAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbHitTop>(call.Name));
+                return true;
+            case TargetIntrinsicOperation.ButtonDown:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonDown(call);
+                return true;
+            case TargetIntrinsicOperation.ButtonJustPressed:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonJustPressed(call);
+                return true;
+            case TargetIntrinsicOperation.ButtonJustReleased:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonJustReleased(call);
+                return true;
+            case TargetIntrinsicOperation.ButtonHoldTicks:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitButtonHoldTicks(call);
                 return true;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);

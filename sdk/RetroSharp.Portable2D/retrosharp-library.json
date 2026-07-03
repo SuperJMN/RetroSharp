@@ -11,6 +11,8 @@
     "src/world.rs",
     "src/music.rs",
     "src/palette.rs",
-    "src/animation.rs"
+    "src/animation.rs",
+    "src/tilemap.rs",
+    "src/hud.rs"
   ]
 }

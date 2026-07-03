@@ -1,3 +1,5 @@
+import RetroSharp.Portable2D;
+
 static class Level {
     const i16 Width = 40;
     const i16 StreamY = 0;

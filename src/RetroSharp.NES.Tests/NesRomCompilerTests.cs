@@ -77,9 +77,9 @@ public class NesRomCompilerTests
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(
-            () => NesRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly));
+            () => RetroSharp.NES.NesRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly));
 
-        Assert.Equal("SDK module 'Video' requires import 'RetroSharp.Portable2D'.", exception.Message);
+        Assert.Equal("Unknown static or receiver method 'Video.WaitVBlank'.", exception.Message);
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public class NesRomCompilerTests
                               }
                               """;
 
-        var rom = NesRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSource(source, sdkImportMode: SdkLibraryImportMode.ExplicitOnly);
 
         Assert.Equal(40976, rom.Length);
     }
@@ -107,7 +107,7 @@ public class NesRomCompilerTests
                               }
                               """;
 
-        var rom = NesRomCompiler.CompileSource(
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSource(
             source,
             sdkImportMode: SdkLibraryImportMode.ExplicitOnly,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
@@ -2615,10 +2615,15 @@ public class NesRomCompilerTests
                               }
                               """;
 
-        var parse = new SomeParser().Parse(source);
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                NesTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
 
-        var loweredProgram = ActorFrameworkLowerer.Lower(parse.Value, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var loweredProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var visitor = new PrintNodeVisitor();
         loweredProgram.Accept(visitor);
         var lowered = visitor.ToString();
@@ -2627,9 +2632,9 @@ public class NesRomCompilerTests
         Assert.Contains("inline u8 __enemies_spawn_0_y(u8 index)=>5;", lowered);
         Assert.Contains("inline u8 __enemies_spawn_0_yHi(u8 index)=>1;", lowered);
         Assert.Contains("u8 __enemies_touch_screen_y=enemies[__enemies_touch_i].y-__enemies_touch_camera_y_lo;", lowered);
-        Assert.Contains("Camera.ScreenAabbTiles(__enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
-        Assert.Contains("Camera.ScreenAabbHitTop(__enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
-        Assert.Contains("Sprite.Draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_camera_screen_aabb_tiles(\"default\", __enemies_touch_screen_x, __enemies_touch_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_camera_screen_aabb_hit_top(\"default\", __enemies_land_screen_x, __enemies_land_screen_y-4", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(goomba, __enemies_draw_screen_x, __enemies_draw_screen_y, 0, false, 0);", lowered);
     }
 
     [Fact]

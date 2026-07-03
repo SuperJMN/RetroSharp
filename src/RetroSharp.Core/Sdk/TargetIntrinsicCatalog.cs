@@ -2,8 +2,14 @@ namespace RetroSharp.Core.Sdk;
 
 public enum TargetIntrinsicOperation
 {
+    InitializeVideo,
+    PresentVideo,
     WaitFrame,
     PollInput,
+    ButtonDown,
+    ButtonJustPressed,
+    ButtonJustReleased,
+    ButtonHoldTicks,
     InitializeAudio,
     UpdateAudio,
     PlayMusic,
@@ -24,6 +30,7 @@ public enum TargetIntrinsicOperation
 public enum TargetIntrinsicReturnKind
 {
     Void,
+    Bool,
     I16,
 }
 
@@ -92,9 +99,39 @@ public sealed record TargetIntrinsicDescriptor
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.WaitFrame, TargetIntrinsicReturnKind.Void, arity);
     }
 
+    public static TargetIntrinsicDescriptor InitializeVideo(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.InitializeVideo, TargetIntrinsicReturnKind.Void, arity);
+    }
+
+    public static TargetIntrinsicDescriptor PresentVideo(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.PresentVideo, TargetIntrinsicReturnKind.Void, arity);
+    }
+
     public static TargetIntrinsicDescriptor PollInput(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.PollInput, TargetIntrinsicReturnKind.Void, arity);
+    }
+
+    public static TargetIntrinsicDescriptor ButtonDown(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ButtonDown, TargetIntrinsicReturnKind.Bool, arity);
+    }
+
+    public static TargetIntrinsicDescriptor ButtonJustPressed(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ButtonJustPressed, TargetIntrinsicReturnKind.Bool, arity);
+    }
+
+    public static TargetIntrinsicDescriptor ButtonJustReleased(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ButtonJustReleased, TargetIntrinsicReturnKind.Bool, arity);
+    }
+
+    public static TargetIntrinsicDescriptor ButtonHoldTicks(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ButtonHoldTicks, TargetIntrinsicReturnKind.I16, arity);
     }
 
     public static TargetIntrinsicDescriptor InitializeAudio(string name, int arity)

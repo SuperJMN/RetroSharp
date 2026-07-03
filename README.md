@@ -80,16 +80,15 @@ i16 Main()
 ## Framework surface
 
 The portable 2D SDK gives game code a common vocabulary for tile-and-sprite
-machines while keeping each target's limits explicit. Projects can load
+machines while keeping each target's limits explicit. Projects load
 `RetroSharp.Portable2D` from manifest `libraries` and then use frame/input
 calls, Tiled `World.Load(...)`, collision flags, camera-relative AABB queries,
 logical palettes, logical sprites, animation, music declarations, and
-fixed-pool actor framework sugar. Game Boy and NES still auto-import that SDK
-for older samples, and source-level `import RetroSharp.Portable2D;` remains
-accepted as the explicit transitional form; unknown imports are rejected.
-Compiler hosts can switch to explicit-only SDK imports and provide an
-`SdkLibraryRegistry` for additional source-level SDK libraries. The CLI can also
-discover local source-only libraries with `--lib-path`.
+fixed-pool actor framework sugar. Standalone source files can still declare
+`import RetroSharp.Portable2D;`; unknown imports are rejected. Compiler hosts
+can supply explicit library imports and an `SdkLibraryRegistry` for additional
+source-level SDK libraries. The CLI can also discover local source-only
+libraries with `--lib-path`.
 A library package is a directory with `retrosharp-library.json` and one or more
 RetroSharp source files:
 

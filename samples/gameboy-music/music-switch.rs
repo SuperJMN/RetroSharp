@@ -1,3 +1,5 @@
+import RetroSharp.Portable2D;
+
 void Main() {
     Video.Init();
     Music.Asset(terminate, "music/terminate.gbapu");

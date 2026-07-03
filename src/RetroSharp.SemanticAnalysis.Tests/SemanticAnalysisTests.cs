@@ -349,9 +349,9 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
-    public void Sdk_namespaced_dot_calls_resolve_arguments()
+    public void Declared_static_dot_calls_resolve_arguments()
     {
-        var input = "void Main(){ Video.Init(); World.Column(0, 1, 2); }";
+        var input = "struct Video { u8 unused; } struct World { u8 unused; } inline void Video_Init(){ } inline void World_Column(u8 x, u8 y, u8 h){ } void Main(){ Video.Init(); World.Column(0, 1, 2); }";
         Errors(input).Should().BeEmpty();
     }
 

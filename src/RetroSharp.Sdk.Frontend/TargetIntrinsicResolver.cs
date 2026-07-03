@@ -145,6 +145,7 @@ public static class TargetIntrinsicResolver
         return returnKind switch
         {
             TargetIntrinsicReturnKind.Void => "void",
+            TargetIntrinsicReturnKind.Bool => "bool",
             TargetIntrinsicReturnKind.I16 => "i16",
             _ => throw new InvalidOperationException($"Unsupported target intrinsic return kind '{returnKind}'."),
         };

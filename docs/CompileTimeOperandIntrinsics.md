@@ -133,7 +133,7 @@ extern void __retrosharp_gb_music_play(i16 theme);
 extern void __retrosharp_gb_music_stop();
 ```
 
-`music_play` marks slot `0` as `AssetRef`, so the `Music.Play(theme)` package helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `RetroSharp.Portable2D` declares `Music.Play` and `Music.Stop` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `Music.Asset(...)` is not a class member and still lowers through the SDK module to `music_asset`.
+`music_play` marks slot `0` as `AssetRef`, so the `Music.Play(theme)` package helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `RetroSharp.Portable2D` declares `Music.Play` and `Music.Stop` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `Music.Asset(...)` is declared by the source package as `[resource("music_asset")]` and resolves through the generic resource declaration descriptor path.
 
 ## Operation-Specific Guidance
 

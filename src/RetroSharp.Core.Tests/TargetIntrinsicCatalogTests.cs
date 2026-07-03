@@ -3,86 +3,8 @@ namespace RetroSharp.Core.Tests;
 using RetroSharp.Core.Sdk;
 using Xunit;
 
-public sealed class SdkModuleRegistryTests
+public sealed class TargetIntrinsicCatalogTests
 {
-    [Fact]
-    public void Known_sdk_modules_are_declared_as_library_modules()
-    {
-        var video = SdkModuleRegistry.FindModule("Video");
-
-        Assert.NotNull(video);
-        Assert.Equal(SdkModuleKind.Library, video.Kind);
-        Assert.Equal("video", video.CallPrefix);
-        Assert.Equal("video_init", video.ResolveCallName("Init"));
-
-        Assert.Null(SdkModuleRegistry.FindModule("video"));
-    }
-
-    [Theory]
-    [InlineData("Input", "IsDown", "button_down")]
-    [InlineData("Input", "WasPressed", "button_just_pressed")]
-    [InlineData("Input", "WasReleased", "button_just_released")]
-    [InlineData("Input", "HoldTicks", "button_hold_ticks")]
-    public void Input_predicate_methods_resolve_to_button_builtins(string module, string method, string expected)
-    {
-        Assert.True(SdkModuleRegistry.TryResolveCallName(module, method, out var callName));
-        Assert.Equal(expected, callName);
-    }
-
-    [Theory]
-    [InlineData("Video", "WaitVBlank")]
-    [InlineData("Input", "Poll")]
-    [InlineData("Camera", "Init")]
-    [InlineData("Audio", "Init")]
-    [InlineData("Audio", "Update")]
-    [InlineData("Camera", "SetPosition")]
-    [InlineData("Camera", "Apply")]
-    public void Simple_runtime_facades_are_source_package_methods_not_legacy_module_mappings(string module, string method)
-    {
-        Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
-    }
-
-    [Theory]
-    [InlineData("Sprite", "Asset")]
-    [InlineData("World", "Load")]
-    [InlineData("Music", "Asset")]
-    [InlineData("Palette", "Background")]
-    [InlineData("Palette", "Sprite")]
-    [InlineData("Animation", "Clip")]
-    public void Resource_facades_are_source_package_declarations_not_legacy_module_mappings(string module, string method)
-    {
-        Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
-    }
-
-    [Theory]
-    [InlineData("Camera", "AabbTiles")]
-    [InlineData("Camera", "AabbHitTop")]
-    [InlineData("Camera", "ScreenAabbTiles")]
-    [InlineData("Camera", "ScreenAabbHitTop")]
-    [InlineData("Sprite", "Width")]
-    [InlineData("Sprite", "Draw")]
-    [InlineData("Animation", "Frame")]
-    [InlineData("Music", "Play")]
-    [InlineData("Music", "Stop")]
-    public void Complex_package_facades_are_source_package_methods_not_legacy_module_mappings(string module, string method)
-    {
-        Assert.False(SdkModuleRegistry.TryResolveCallName(module, method, out _));
-    }
-
-    [Theory]
-    [InlineData("video")]
-    [InlineData("camera")]
-    [InlineData("sprite")]
-    [InlineData("world")]
-    [InlineData("audio")]
-    [InlineData("music")]
-    [InlineData("objectPalette")]
-    public void Lowercase_facade_aliases_are_no_longer_recognized(string lowercase)
-    {
-        Assert.False(SdkModuleRegistry.IsKnownModule(lowercase));
-        Assert.Null(SdkModuleRegistry.FindModule(lowercase));
-    }
-
     [Fact]
     public void Target_intrinsic_catalog_exposes_declared_intrinsics()
     {
@@ -91,6 +13,7 @@ public sealed class SdkModuleRegistryTests
             "Game Boy",
             [
                 TargetIntrinsicDescriptor.WaitFrame("wait_frame", arity: 0),
+                TargetIntrinsicDescriptor.PresentVideo("video_present", arity: 0),
                 TargetIntrinsicDescriptor.PollInput("poll_input", arity: 0),
             ]);
 
@@ -104,6 +27,27 @@ public sealed class SdkModuleRegistryTests
         Assert.True(catalog.TryResolve("poll_input", out var pollInput));
         Assert.Equal(TargetIntrinsicOperation.PollInput, pollInput.Operation);
         Assert.Equal(0, pollInput.Arity);
+
+        Assert.True(catalog.TryResolve("video_present", out var present));
+        Assert.Equal(TargetIntrinsicOperation.PresentVideo, present.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, present.ReturnKind);
+        Assert.Equal(0, present.Arity);
+    }
+
+    [Fact]
+    public void Input_value_intrinsics_are_described_without_sdk_facade_names()
+    {
+        var buttonDown = TargetIntrinsicDescriptor.ButtonDown("button_down", arity: 1);
+        Assert.Equal(TargetIntrinsicOperation.ButtonDown, buttonDown.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Bool, buttonDown.ReturnKind);
+        Assert.Equal(1, buttonDown.RuntimeArity);
+        Assert.Empty(buttonDown.CompileTimeOperands);
+
+        var holdTicks = TargetIntrinsicDescriptor.ButtonHoldTicks("button_hold_ticks", arity: 1);
+        Assert.Equal(TargetIntrinsicOperation.ButtonHoldTicks, holdTicks.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.I16, holdTicks.ReturnKind);
+        Assert.Equal(1, holdTicks.RuntimeArity);
+        Assert.Empty(holdTicks.CompileTimeOperands);
     }
 
     [Fact]

@@ -32,7 +32,10 @@ public sealed class Sdk2DProgramStreamTests
 
     private static GameBoyVideoProgram Compile(string source)
     {
-        var merged = SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source);
+        var merged = SdkLibrarySource.Merge(
+            GameBoyTarget.Intrinsics,
+            source,
+            libraryImportPaths: [SdkImportResolver.Portable2D]);
         var parse = new SomeParser().Parse(merged);
         Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : string.Empty);
         var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);

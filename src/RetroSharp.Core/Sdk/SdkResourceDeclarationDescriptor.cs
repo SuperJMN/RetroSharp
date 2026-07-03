@@ -4,10 +4,18 @@ public enum SdkResourceDeclarationKind
 {
     BackgroundPalette,
     SpritePalette,
+    RawPalette,
+    RawObjectPalette,
     WorldLoad,
+    WorldColumn,
+    WorldFlags,
+    WorldMap,
     SpriteAsset,
     MusicAsset,
     AnimationClip,
+    TilemapSet,
+    TilemapFill,
+    HudSetTile,
 }
 
 public sealed record SdkResourceDeclarationDescriptor(string ResourceId, SdkResourceDeclarationKind Kind)
@@ -35,9 +43,17 @@ public sealed record SdkResourceDeclarationDescriptor(string ResourceId, SdkReso
         {
             ["palette_background"] = new SdkResourceDeclarationDescriptor("palette_background", SdkResourceDeclarationKind.BackgroundPalette),
             ["palette_sprite"] = new SdkResourceDeclarationDescriptor("palette_sprite", SdkResourceDeclarationKind.SpritePalette),
+            ["palette_set"] = new SdkResourceDeclarationDescriptor("palette_set", SdkResourceDeclarationKind.RawPalette),
+            ["object_palette_set"] = new SdkResourceDeclarationDescriptor("object_palette_set", SdkResourceDeclarationKind.RawObjectPalette),
             ["world_load"] = new SdkResourceDeclarationDescriptor("world_load", SdkResourceDeclarationKind.WorldLoad),
+            ["world_column"] = new SdkResourceDeclarationDescriptor("world_column", SdkResourceDeclarationKind.WorldColumn),
+            ["world_flags"] = new SdkResourceDeclarationDescriptor("world_flags", SdkResourceDeclarationKind.WorldFlags),
+            ["world_map"] = new SdkResourceDeclarationDescriptor("world_map", SdkResourceDeclarationKind.WorldMap),
             ["sprite_asset"] = new SdkResourceDeclarationDescriptor("sprite_asset", SdkResourceDeclarationKind.SpriteAsset),
             ["music_asset"] = new SdkResourceDeclarationDescriptor("music_asset", SdkResourceDeclarationKind.MusicAsset),
             ["animation_clip"] = new SdkResourceDeclarationDescriptor("animation_clip", SdkResourceDeclarationKind.AnimationClip),
+            ["tilemap_set"] = new SdkResourceDeclarationDescriptor("tilemap_set", SdkResourceDeclarationKind.TilemapSet),
+            ["tilemap_fill"] = new SdkResourceDeclarationDescriptor("tilemap_fill", SdkResourceDeclarationKind.TilemapFill),
+            ["hud_set_tile"] = new SdkResourceDeclarationDescriptor("hud_set_tile", SdkResourceDeclarationKind.HudSetTile),
         };
 }

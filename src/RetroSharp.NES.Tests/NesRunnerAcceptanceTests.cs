@@ -147,7 +147,11 @@ public sealed class NesRunnerAcceptanceTests
 
     private static NesVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(NesTarget.Intrinsics, source));
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                NesTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
