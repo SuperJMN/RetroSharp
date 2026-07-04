@@ -1388,30 +1388,43 @@ public static class ActorFrameworkLowerer
         }
 
         RequireEffectDefs(state, $"{pool.Name}.Draw");
-        var indexName = $"__{pool.Name}_draw_i";
-        var projection = BuildProjectileScreenProjection(pool.Name, indexName, pool.Name, "draw", state.ScreenWidth, state.ScreenHeight);
-        var branches = state.EffectDefs
-            .Select(def => new KindBranch(
-                def.Name,
-                StableSpriteDrawBlock(
-                    pool.Name,
-                    indexName,
-                    $"__{pool.Name}_draw",
-                    def.Name,
-                    def.Sprite,
-                    projection,
-                    state.ScreenHeight,
-                    state)))
-            .ToList();
-
-        return ProjectileCameraDeclarations(pool.Name, "draw", state.ConfiguresCamera)
-            .Append(ArrayLoop(
+        var statements = ProjectileCameraDeclarations(pool.Name, "draw", state.ConfiguresCamera).ToList();
+        for (var slot = 0; slot < pool.Capacity; slot++)
+        {
+            var phase = $"draw_{slot.ToString(CultureInfo.InvariantCulture)}";
+            var indexName = $"__{pool.Name}_{phase}_i";
+            var projection = BuildProjectileScreenProjection(
                 pool.Name,
                 indexName,
-                projection.Declarations
-                    .Append(ProjectileKindDispatch(pool.Name, indexName, branches, $"{pool.Name}.Draw"))
-                    .ToList()))
-            .ToList();
+                pool.Name,
+                phase,
+                state.ScreenWidth,
+                state.ScreenHeight,
+                cameraPhase: "draw");
+            var branches = state.EffectDefs
+                .Select(def => new KindBranch(
+                    def.Name,
+                    StableSpriteDrawBlock(
+                        pool.Name,
+                        indexName,
+                        $"__{pool.Name}_{phase}",
+                        def.Name,
+                        def.Sprite,
+                        projection,
+                        state.ScreenHeight,
+                        state)))
+                .ToList();
+
+            statements.Add(new DeclarationSyntax(
+                "u8",
+                indexName,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(Constant(slot))));
+            statements.AddRange(projection.Declarations);
+            statements.Add(ProjectileKindDispatch(pool.Name, indexName, branches, $"{pool.Name}.Draw"));
+        }
+
+        return statements;
     }
 
     private static IReadOnlyList<StatementSyntax> ProjectileProcessRequestStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
@@ -1676,21 +1689,35 @@ public static class ActorFrameworkLowerer
 
         var arrayName = pool.ArrayNameForTeam(team);
         var phase = team == "Hero" ? "draw_hero" : "draw_enemy";
-        var indexName = $"__{pool.Name}_{phase}_i";
-        var variablePrefix = $"__{pool.Name}_{phase}";
-        var projection = BuildProjectileScreenProjection(arrayName, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight);
-        var branches = defs
-            .Select(def => new KindBranch(def.Name, ProjectileDrawBlock(arrayName, indexName, variablePrefix, def, projection, state)))
-            .ToList();
-
-        return ProjectileCameraDeclarations(pool.Name, phase, state.ConfiguresCamera)
-            .Append(ArrayLoop(
+        var capacity = team == "Hero" ? pool.HeroCapacity : pool.EnemyCapacity;
+        var statements = ProjectileCameraDeclarations(pool.Name, phase, state.ConfiguresCamera).ToList();
+        for (var slot = 0; slot < capacity; slot++)
+        {
+            var slotPhase = $"{phase}_{slot.ToString(CultureInfo.InvariantCulture)}";
+            var indexName = $"__{pool.Name}_{slotPhase}_i";
+            var variablePrefix = $"__{pool.Name}_{slotPhase}";
+            var projection = BuildProjectileScreenProjection(
                 arrayName,
                 indexName,
-                projection.Declarations
-                    .Append(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Draw"))
-                    .ToList()))
-            .ToList();
+                pool.Name,
+                slotPhase,
+                state.ScreenWidth,
+                state.ScreenHeight,
+                cameraPhase: phase);
+            var branches = defs
+                .Select(def => new KindBranch(def.Name, ProjectileDrawBlock(arrayName, indexName, variablePrefix, def, projection, state)))
+                .ToList();
+
+            statements.Add(new DeclarationSyntax(
+                "u8",
+                indexName,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(Constant(slot))));
+            statements.AddRange(projection.Declarations);
+            statements.Add(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Draw"));
+        }
+
+        return statements;
     }
 
     private static BlockSyntax ProjectileDrawBlock(
@@ -3236,12 +3263,14 @@ public static class ActorFrameworkLowerer
         string phase,
         int screenWidth,
         int screenHeight,
-        int margin = 0)
+        int margin = 0,
+        string? cameraPhase = null)
     {
-        var cameraXLow = $"__{poolName}_{phase}_camera_x_lo";
-        var cameraXHigh = $"__{poolName}_{phase}_camera_x_hi";
-        var cameraYLow = $"__{poolName}_{phase}_camera_y_lo";
-        var cameraYHigh = $"__{poolName}_{phase}_camera_y_hi";
+        var cameraVariablePhase = cameraPhase ?? phase;
+        var cameraXLow = $"__{poolName}_{cameraVariablePhase}_camera_x_lo";
+        var cameraXHigh = $"__{poolName}_{cameraVariablePhase}_camera_x_hi";
+        var cameraYLow = $"__{poolName}_{cameraVariablePhase}_camera_y_lo";
+        var cameraYHigh = $"__{poolName}_{cameraVariablePhase}_camera_y_hi";
         var screenX = $"__{poolName}_{phase}_screen_x";
         var screenY = $"__{poolName}_{phase}_screen_y";
         var visibleXName = $"__{poolName}_{phase}_visible_x";
