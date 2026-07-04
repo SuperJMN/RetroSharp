@@ -1,5 +1,11 @@
 import RetroSharp.Portable2D;
 
+// Focused sample: same 2-shot hero pool cap as shots-simple, but with bouncing
+// projectiles. Each shot is a GravityArc that bounces off a solid floor while it
+// travels right. A fixed-cadence timer stands in for a player mashing the B
+// (fire) button, and the hero: 2 pool proves that only two bouncing shots are
+// ever live at once no matter how fast the button is pressed.
+
 static class Level
 {
     const i16 Width = 20;
@@ -7,33 +13,35 @@ static class Level
     const i16 Height = 18;
 }
 
-static class Mario
+static class Player
 {
-    const u8 X = 72;
-    const u8 Y = 96;
-    const u8 ShotRightX = 96;
-    const u8 ShotLeftX = 64;
-    const u8 ShotY = 116;
+    const u8 X = 16;
+    const u8 Y = 120;
+    const u8 ShotX = 32;
+    const u8 ShotY = 96;
 }
 
-// Projectile travel direction passed to shots.Request(...): 0 = rightward (+X),
-// any non-zero value = leftward (-X).
-static class Aim
+static class Fire
 {
+    // Simulated B press cadence, in frames. Well below a shot's time on screen,
+    // so without a cap the screen would fill up with shots.
+    const u8 Interval = 12;
+
+    // Travel direction passed to shots.Request(...): 0 = rightward (+X).
     const u8 Right = 0;
-    const u8 Left = 1;
 }
 
 void SetupVideo()
 {
     Video.Init();
     Palette.Background(0, 0, 1, 2, 3);
-    Palette.Sprite(0, 0, 0, 1, 3);
-    Sprite.Asset(mario_player, "../runner/assets/mario-player.png", 18, 32);
-    Sprite.Asset(mario_shot, "assets/mario-shot.json");
-    Sprite.Asset(muzzle_flash, "assets/muzzle-flash.json");
+    Palette.Sprite(0, 0, 1, 2, 3);
+    Sprite.Asset(player, "assets/player.json");
+    Sprite.Asset(shot, "assets/shot.json");
 }
 
+// A solid floor along the bottom two rows: the tile ids draw a visible floor and
+// the matching World.Flags mark those cells Solid (1) so shots can bounce off it.
 void DefineWorld()
 {
     World.Column(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5);
@@ -78,44 +86,38 @@ void DefineWorld()
     World.Flags(18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1);
     World.Flags(19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1);
     World.Map(Level.Width, Level.StreamY, Level.Height);
-    Camera.Init(Level.Width, Level.StreamY, Level.Height);
 }
 
 void Main()
 {
     SetupVideo();
     DefineWorld();
-    Effects.Pool(fx, capacity: 4, requests: 4);
-    Effects.Def(MuzzleFlash, sprite: muzzle_flash, lifetime: 4);
-    Projectiles.Pool(shots, hero: 2, enemy: 1, requests: 2, offscreenMargin: 16, effects: fx);
-    Projectiles.Def(MarioFireball, team: Hero, sprite: mario_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 96, hitboxWidth: 8, hitboxHeight: 8, behavior: GravityArc, tileCollision: Bounce, bounceSpeedY: 4, spawnEffect: MuzzleFlash);
+    Camera.Init(Level.Width, Level.StreamY, Level.Height);
 
-    u8 queuedRight = 0;
-    u8 queuedLeft = 0;
+    Projectiles.Pool(shots, hero: 2, enemy: 1, requests: 2, offscreenMargin: 16);
+    Projectiles.Def(Shot, team: Hero, sprite: shot, speedX: 2, speedY: 0, damage: 1, lifetime: 255, hitboxWidth: 8, hitboxHeight: 8, behavior: GravityArc, tileCollision: Bounce, bounceSpeedY: 6);
+
+    u8 fireTick = 0;
+    u8 queued = 0;
 
     while (true)
     {
+        // Present the frame simulated last tick.
         Video.WaitVBlank();
         Camera.Apply();
-        Sprite.Draw(mario_player, Mario.X, Mario.Y, 0, false, 0);
+        Sprite.Draw(player, Player.X, Player.Y, 0, false, 0);
         shots.Draw();
-        fx.Draw();
-        Input.Poll();
 
-        if (Input.WasPressed(Button.B))
+        // Simulate a player pressing B on a fixed cadence.
+        fireTick += 1;
+        if (fireTick == Fire.Interval)
         {
-            shots.Request(MarioFireball, Mario.ShotRightX, Mario.ShotY, Aim.Right, queuedRight);
-        }
-
-        if (Input.WasPressed(Button.A))
-        {
-            shots.Request(MarioFireball, Mario.ShotLeftX, Mario.ShotY, Aim.Left, queuedLeft);
+            fireTick = 0;
+            shots.Request(Shot, Player.ShotX, Player.ShotY, Fire.Right, queued);
         }
 
         shots.ProcessRequests();
         shots.Update();
         shots.TouchTiles(0, 1);
-        fx.ProcessRequests();
-        fx.Update();
     }
 }

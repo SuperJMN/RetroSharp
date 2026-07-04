@@ -1,0 +1,14 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/shots-bouncy.gb",
+    "nes": "bin/shots-bouncy.nes"
+  },
+  "rootNamespace": "ShotsBouncy",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": [
+    "src/main.rs"
+  ]
+}
