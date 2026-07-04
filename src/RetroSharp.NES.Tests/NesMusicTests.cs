@@ -130,16 +130,17 @@ public sealed class NesMusicTests
 
         Assert.Equal("jump_sfx", asset.Name);
 
-        // Flat per-frame trace: frame 0 body, frame 1 body (only changed pulse 1 registers), three
-        // empty tail-hold frames ([0x00]) and the 0xFF end-of-effect marker.
+        // Flat per-frame trace: frame 0 body, frame 1 body (only changed pulse 1 registers), then the
+        // 0xFF end-of-effect marker. The ring-out after the last frame is a runtime linger, not stored
+        // empty frames; with no $4015 note-off in the source the linger falls back to its default.
         Assert.Equal(
             [
                 0x04, 0x00, 0x82, 0x01, 0xA7, 0x02, 0x7C, 0x03, 0x09,
                 0x02, 0x01, 0xF6, 0x00, 0x5F,
-                0x00, 0x00, 0x00,
                 0xFF,
             ],
             asset.Data);
+        Assert.Equal(24, asset.LingerFrames);
         Assert.False(ContainsSequence(asset.Data, [0x15, 0x0F]), "SFX must not replay channel-enable writes captured from global APU state.");
         Assert.False(ContainsSequence(asset.Data, [0x17, 0xFF]), "SFX must not replay frame-counter writes captured from global APU state.");
         Assert.False(ContainsSequence(asset.Data, [0x10, 0x00]), "SFX must not replay DMC control writes captured from global APU state.");
@@ -160,16 +161,36 @@ public sealed class NesMusicTests
 
         var asset = NesSoundEffectAssetCompiler.CompileFromFile("blip", Path.Combine(directory, "blip.vgz"));
 
-        // Frame 0 body, two empty gap frames, frame 3 body, three tail-hold frames, then 0xFF.
+        // Frame 0 body, two empty gap frames, frame 3 body, then 0xFF (ring-out is a runtime linger).
         Assert.Equal(
             [
                 0x02, 0x00, 0x82, 0x03, 0x09,
                 0x00, 0x00,
                 0x01, 0x00, 0x40,
-                0x00, 0x00, 0x00,
                 0xFF,
             ],
             asset.Data);
+    }
+
+    [Fact]
+    public void Nes_sfx_linger_matches_source_note_off_frame()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "beep.nes.vgz"),
+            [
+                [[0x15, 0x0F], [0x00, 0x82], [0x03, 0x09]], // frame 0: note-on
+                [],                                          // frames 1-3: note rings
+                [],
+                [],
+                [[0x15, 0x00]],                              // frame 4: note-off (clears pulse 1 enable)
+            ]);
+
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile("beep", Path.Combine(directory, "beep.vgz"));
+
+        // Last register frame is 0; note-off is at frame 4, so the effect lingers frames 1..3 (= 3).
+        Assert.Equal([0x02, 0x00, 0x82, 0x03, 0x09, 0xFF], asset.Data);
+        Assert.Equal(3, asset.LingerFrames);
     }
 
     [Fact]

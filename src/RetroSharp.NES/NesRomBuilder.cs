@@ -624,6 +624,9 @@ internal sealed class NesRuntimeCompiler
     // Non-zero while a sound effect is playing. The music engine reads it to suppress its own pulse 1
     // writes so the effect owns the channel; the SFX cursor itself lives in zero page.
     private const ushort SfxActiveAddress = 0x0312;
+    // Frames left to keep pulse 1 owned by the effect after its last register frame, so the note rings
+    // out fully before the music reclaims the channel.
+    private const ushort SfxLingerAddress = 0x0317;
     // Shadow of the BGM's intended pulse 1 registers ($4000-$4003). The BGM updates it on every pulse 1
     // write (even while muted by an active SFX), so when the effect releases pulse 1 the channel can be
     // restored to the BGM's state instead of keeping the effect's residue (e.g. a stuck $4001 sweep).
@@ -2888,6 +2891,8 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(SfxPointerLowAddress);
         builder.LoadAImmediateLabelHighByte(label);
         builder.StoreAZeroPage(SfxPointerHighAddress);
+        builder.LoadAImmediate(asset.LingerFrames);
+        builder.StoreAAbsolute(SfxLingerAddress);
         builder.LoadAImmediate(1);
         builder.StoreAAbsolute(SfxActiveAddress);
     }
@@ -2968,6 +2973,7 @@ internal sealed class NesRuntimeCompiler
     private void EmitSoundEffectUpdate(string endLabel)
     {
         var stopLabel = builder.CreateLabel("nes_sfx_stop");
+        var playFrameLabel = builder.CreateLabel("nes_sfx_play");
         var noCarryLabel = builder.CreateLabel("nes_sfx_no_carry");
 
         builder.LoadAAbsolute(SfxActiveAddress);
@@ -2981,11 +2987,19 @@ internal sealed class NesRuntimeCompiler
         builder.LoadYImmediate(0);
         builder.LoadAIndirectY(MusicBodyPointerLowAddress);
         builder.CompareImmediate(0xFF);
-        builder.BranchRelative(0xF0, stopLabel); // BEQ stopLabel (end-of-effect marker)
+        builder.BranchRelative(0xD0, playFrameLabel); // BNE playFrameLabel (has a frame body)
+
+        // Register frames exhausted: keep pulse 1 owned by the effect (music still muted) for LingerFrames
+        // more ticks so the note rings out fully, then release the channel.
+        builder.LoadAAbsolute(SfxLingerAddress);
+        builder.BranchRelative(0xF0, stopLabel); // BEQ stopLabel (linger done; LDA sets Z)
+        builder.DecrementAbsolute(SfxLingerAddress);
+        builder.JumpAbsolute(endLabel);
 
         // Play this frame's body on pulse 1 (X = 2, the effect owns and writes the channel directly).
         // The shared body player returns Y = bytes consumed (1 + 2 * writeCount), which advances the
         // cursor to the next frame body.
+        builder.Label(playFrameLabel);
         EmitPlayApuBody(sfxPath: true);
         builder.TransferYToA();
         builder.ClearCarry();
@@ -3165,8 +3179,7 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAZeroPage(InputCurrentAddress);
         builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, resetLabel);   // BEQ resetLabel
+        builder.BranchRelative(0xF0, resetLabel);   // BEQ resetLabel (AND sets Z)
 
         builder.LoadAZeroPage(button.HoldTicksAddress);
         builder.CompareImmediate(0xFF);
@@ -6085,6 +6098,8 @@ internal sealed class PrgBuilder
     public void PullA() => Emit(0x68);
 
     public void DecrementZeroPage(byte address) => Emit(0xC6, address);
+
+    public void DecrementAbsolute(ushort address) => Emit(0xCE, Low(address), High(address));
 
     public void IncrementZeroPage(byte address) => Emit(0xE6, address);
 

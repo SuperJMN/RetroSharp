@@ -13,7 +13,8 @@ internal sealed record NesCompiledMusicAsset(
 
 internal sealed record NesCompiledSoundEffectAsset(
     string Name,
-    byte[] Data);
+    byte[] Data,
+    int LingerFrames);
 
 internal readonly record struct NesApuTraceOrderEntry(int BodyOffset, byte Wait);
 
@@ -370,13 +371,17 @@ internal static class NesMusicAssetCompiler
 // effect never touches global control ($4015 channel enable, $4017 frame counter), the DMC, or the
 // music's other channels. The runtime ticks one frame per audio update and (while active) suppresses
 // the music's own pulse 1 writes, so the sweep is sequenced cleanly without corrupting the music.
+// After the last register frame the runtime lingers (still owning the channel) for LingerFrames so the
+// pulse 1 note rings out fully before the music reclaims the channel, matching the source effect's
+// length without storing an empty body per ring frame.
 internal static class NesSoundEffectAssetCompiler
 {
     private const byte EndOfEffectMarker = 0xFF;
 
-    // Hold the effect a few extra frames after the last sweep write so the pulse 1 note keeps ringing
-    // (pulse 1 stays owned by the SFX) before releasing the channel back to the music.
-    private const int TailHoldFrames = 3;
+    // Fallback ring-out length (frames) when the source trace has no explicit note-off ($4015 write
+    // that clears the pulse 1 enable bit) to derive the effect length from.
+    private const int DefaultLingerFrames = 24;
+    private const int MaxLingerFrames = 255;
 
     public static NesCompiledSoundEffectAsset CompileFromFile(string name, string path)
     {
@@ -395,7 +400,7 @@ internal static class NesSoundEffectAssetCompiler
         }
 
         var data = new List<byte>();
-        for (var frame = 0; frame <= lastFrame + TailHoldFrames; frame++)
+        for (var frame = 0; frame <= lastFrame; frame++)
         {
             if (frameWrites.TryGetValue(frame, out var writes) && writes.Count > 0)
             {
@@ -413,7 +418,32 @@ internal static class NesSoundEffectAssetCompiler
         }
 
         data.Add(EndOfEffectMarker);
-        return new NesCompiledSoundEffectAsset(name, data.ToArray());
+        return new NesCompiledSoundEffectAsset(name, data.ToArray(), ComputeLingerFrames(stream.Frames, lastFrame));
+    }
+
+    // The effect's total length is the source note-off frame (the first $4015 write after the note
+    // starts that clears the pulse 1 enable bit); the linger covers the frames from the last register
+    // frame to that note-off so the note rings out for its authored length. Fall back to a fixed ring
+    // when the source has no such note-off.
+    private static int ComputeLingerFrames(IReadOnlyList<VgmFrame> frames, int lastFrame)
+    {
+        foreach (var frame in frames)
+        {
+            if (frame.Index <= lastFrame)
+            {
+                continue;
+            }
+
+            foreach (var write in frame.Writes)
+            {
+                if (write.Address == 0x4015 && (write.Value & 0x01) == 0)
+                {
+                    return Math.Clamp(frame.Index - lastFrame - 1, 0, MaxLingerFrames);
+                }
+            }
+        }
+
+        return DefaultLingerFrames;
     }
 
     // Builds per-frame pulse 1 write lists. Within a frame only the last write to each register is
