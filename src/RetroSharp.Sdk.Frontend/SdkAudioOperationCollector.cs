@@ -168,11 +168,16 @@ public static class SdkAudioOperationCollector
                     SdkCallReader.RequireArity(call, 1);
                     AddOp(new SdkAudioOperation.PlayMusic(SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "music_play argument 1")));
                     break;
+                case "sfx_play":
+                    SdkCallReader.RequireArity(call, 1);
+                    AddOp(new SdkAudioOperation.PlaySoundEffect(SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "sfx_play argument 1")));
+                    break;
                 case "music_stop":
                     SdkCallReader.RequireArity(call, 0);
                     AddOp(new SdkAudioOperation.StopMusic());
                     break;
                 case "music_asset":
+                case "sfx_asset":
                     SdkCallReader.RequireArity(call, 2);
                     CollectCallArguments(call);
                     break;
@@ -213,13 +218,22 @@ public static class SdkAudioOperationCollector
                     AddOp(new SdkAudioOperation.StopMusic());
                     return true;
                 case TargetIntrinsicOperation.PlayMusic:
-                    var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
-                    var themeId = resolved.CompileTimeOperands
+                    var resolvedMusicPlay = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
+                    var themeId = resolvedMusicPlay.CompileTimeOperands
                         .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.AssetRef)
                         ?.Identifier
                         ?? throw new InvalidOperationException(
                             $"Intrinsic '{intrinsic.Name}' requires a compile-time music asset operand.");
                     AddOp(new SdkAudioOperation.PlayMusic(themeId));
+                    return true;
+                case TargetIntrinsicOperation.PlaySoundEffect:
+                    var resolvedSfxPlay = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
+                    var soundId = resolvedSfxPlay.CompileTimeOperands
+                        .FirstOrDefault(operand => operand.Role == TargetIntrinsicOperandRole.AssetRef)
+                        ?.Identifier
+                        ?? throw new InvalidOperationException(
+                            $"Intrinsic '{intrinsic.Name}' requires a compile-time SFX asset operand.");
+                    AddOp(new SdkAudioOperation.PlaySoundEffect(soundId));
                     return true;
                 default:
                     return false;

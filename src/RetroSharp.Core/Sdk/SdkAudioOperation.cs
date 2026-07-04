@@ -4,9 +4,11 @@ public abstract record SdkAudioOperation
 {
     public sealed record InitializeAudio : SdkAudioOperation;
 
-    public sealed record PlayMusic(string ThemeId) : SdkAudioOperation;
+public sealed record PlayMusic(string ThemeId) : SdkAudioOperation;
 
-    public sealed record UpdateAudio : SdkAudioOperation;
+public sealed record PlaySoundEffect(string SoundId) : SdkAudioOperation;
 
-    public sealed record StopMusic : SdkAudioOperation;
+public sealed record UpdateAudio : SdkAudioOperation;
+
+public sealed record StopMusic : SdkAudioOperation;
 }

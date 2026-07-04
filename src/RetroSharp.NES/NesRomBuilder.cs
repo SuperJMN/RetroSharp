@@ -82,6 +82,8 @@ internal static class NesRomBuilder
         builder.Label("forever");
         builder.JumpAbsolute("forever");
 
+        runtimeCompiler.EmitAudioSubroutines();
+
         builder.Label("palette");
         builder.Emit(program.Palette);
         builder.Label("nametable");
@@ -91,7 +93,7 @@ internal static class NesRomBuilder
         EmitPpuRowAddressTables(builder, program.WorldMap);
         EmitWorldMapFlagRows(builder, program.WorldMap);
         EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
-        EmitMusicAssets(builder, program.MusicAssetsInLoadOrder);
+        EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder);
 
         var prg = new byte[PrgRomSize];
         var code = builder.Build();
@@ -298,10 +300,17 @@ internal static class NesRomBuilder
         }
     }
 
-    private static void EmitMusicAssets(PrgBuilder builder, IReadOnlyList<NesCompiledMusicAsset> assets)
+    private static void EmitAudioAssets(
+        PrgBuilder builder,
+        IReadOnlyList<NesCompiledMusicAsset> musicAssets,
+        IReadOnlyList<NesCompiledSoundEffectAsset> soundEffectAssets)
     {
-        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + assets.Sum(asset => asset.Data.Length), assets);
-        foreach (var asset in assets)
+        // DPCM samples must live in the $C000-$FFF9 window and are placed right after the music data.
+        // Sound-effect data is position-independent (walked from a start label at runtime), so it is
+        // emitted after the DPCM blocks and does not shrink the DPCM window.
+        var musicDataLength = musicAssets.Sum(asset => asset.Data.Length);
+        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + musicDataLength, musicAssets);
+        foreach (var asset in musicAssets)
         {
             var data = PatchDpcmAddressRegisters(asset, dpcmLayout.AddressRegisterMap);
             var label = MusicDataLabel(asset.Name);
@@ -325,12 +334,20 @@ internal static class NesRomBuilder
         }
 
         EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
+
+        foreach (var asset in soundEffectAssets)
+        {
+            builder.Label(SoundEffectDataLabel(asset.Name));
+            builder.Emit(asset.Data);
+        }
     }
 
-    private static DpcmSampleLayout BuildDpcmSampleLayout(int musicDataEndAddress, IReadOnlyList<NesCompiledMusicAsset> assets)
+    private static DpcmSampleLayout BuildDpcmSampleLayout(
+        int musicDataEndAddress,
+        IReadOnlyList<NesCompiledMusicAsset> musicAssets)
     {
         var uniqueBlocks = new List<NesDpcmSampleBlock>();
-        foreach (var block in assets.SelectMany(asset => asset.DpcmBlocks))
+        foreach (var block in musicAssets.SelectMany(asset => asset.DpcmBlocks))
         {
             var existingIndex = uniqueBlocks.FindIndex(candidate => candidate.SourceAddress == block.SourceAddress);
             if (existingIndex >= 0)
@@ -413,13 +430,21 @@ internal static class NesRomBuilder
 
     private static byte[] PatchDpcmAddressRegisters(NesCompiledMusicAsset asset, IReadOnlyDictionary<byte, byte> addressRegisterMap)
     {
+        return PatchDpcmAddressRegisters(asset.Data, asset.OrderEntries, addressRegisterMap);
+    }
+
+    private static byte[] PatchDpcmAddressRegisters(
+        byte[] sourceData,
+        IReadOnlyList<NesApuTraceOrderEntry> orderEntries,
+        IReadOnlyDictionary<byte, byte> addressRegisterMap)
+    {
         if (addressRegisterMap.Count == 0)
         {
-            return asset.Data;
+            return sourceData;
         }
 
-        var data = asset.Data.ToArray();
-        foreach (var bodyOffset in asset.OrderEntries.Select(entry => entry.BodyOffset).Distinct())
+        var data = sourceData.ToArray();
+        foreach (var bodyOffset in orderEntries.Select(entry => entry.BodyOffset).Distinct())
         {
             var commandCount = data[bodyOffset];
             var offset = bodyOffset + 1;
@@ -454,6 +479,8 @@ internal static class NesRomBuilder
     }
 
     internal static string MusicDataLabel(string name) => $"music_data_{name}";
+
+    internal static string SoundEffectDataLabel(string name) => $"sfx_data_{name}";
 
     private sealed record DpcmSampleLayout(
         IReadOnlyList<DpcmSamplePlacement> Placements,
@@ -544,7 +571,11 @@ internal sealed class NesRuntimeCompiler
     private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
 
     private const byte FirstVariableAddress = 0x00;
-    private const byte RuntimeReservedStateAddress = 0xE0;
+    private const byte RuntimeReservedStateAddress = 0xDE;
+    // Sound-effect playback cursor. Kept in zero page so the shared APU body player can read the
+    // current frame body through it; the effect walks one frame body per audio-update tick.
+    private const byte SfxPointerLowAddress = 0xDE;
+    private const byte SfxPointerHighAddress = 0xDF;
     private const byte CameraXAddress = 0xE0;
     private const byte CameraTileColumnAddress = 0xE1;
     private const byte CameraTargetColumnAddress = 0xE2;
@@ -590,8 +621,16 @@ internal sealed class NesRuntimeCompiler
     private const byte CameraWalkMaxStepsPerFrame = 8;
     private const ushort MusicLoopPointerLowAddress = 0x0310;
     private const ushort MusicLoopPointerHighAddress = 0x0311;
-    private const ushort MusicApuWriteValueAddress = 0x0312;
-    private const ushort MusicApuWriteCursorAddress = 0x0313;
+    // Non-zero while a sound effect is playing. The music engine reads it to suppress its own pulse 1
+    // writes so the effect owns the channel; the SFX cursor itself lives in zero page.
+    private const ushort SfxActiveAddress = 0x0312;
+    // Frames left to keep pulse 1 owned by the effect after its last register frame, so the note rings
+    // out fully before the music reclaims the channel.
+    private const ushort SfxLingerAddress = 0x0317;
+    // Shadow of the BGM's intended pulse 1 registers ($4000-$4003). The BGM updates it on every pulse 1
+    // write (even while muted by an active SFX), so when the effect releases pulse 1 the channel can be
+    // restored to the BGM's state instead of keeping the effect's residue (e.g. a stuck $4001 sweep).
+    private const ushort Pulse1ShadowBaseAddress = 0x0313;
     private const ushort OamDmaAddress = 0x4014;
     private const ushort ControllerPortAddress = 0x4016;
     private const byte PendingStreamNone = 0;
@@ -648,7 +687,10 @@ internal sealed class NesRuntimeCompiler
     private int nextForLoopId;
     private int nextHardwareSprite;
     private int nextInlineVariableScopeId;
+    private bool apuBodySubroutineReferenced;
     private NesCameraConfig? cameraConfig;
+
+    private const string ApuBodySubroutineLabel = "nes_apu_body";
 
     public NesRuntimeCompiler(
         PrgBuilder builder,
@@ -666,7 +708,7 @@ internal sealed class NesRuntimeCompiler
     {
         EmitCameraStateInitialization();
         EmitInputStateInitialization();
-        if (program.MusicAssetsInLoadOrder.Count > 0)
+        if (program.MusicAssetsInLoadOrder.Count > 0 || program.SoundEffectAssetsInLoadOrder.Count > 0)
         {
             EmitAudioStateInitialization();
         }
@@ -718,6 +760,13 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(MusicTickAddress);
         builder.StoreAAbsolute(MusicLoopPointerLowAddress);
         builder.StoreAAbsolute(MusicLoopPointerHighAddress);
+        if (program.SoundEffectAssetsInLoadOrder.Count > 0)
+        {
+            builder.StoreAAbsolute(SfxActiveAddress);
+            // Seed the pulse 1 sweep shadow with "no sweep" so an early effect restores a clean
+            // channel before the BGM has written $4001 (the BGM writes $4000/$4002 every note).
+            builder.StoreAAbsolute((ushort)(Pulse1ShadowBaseAddress + 1));
+        }
     }
 
     private void EmitOamShadowClear()
@@ -2006,6 +2055,7 @@ internal sealed class NesRuntimeCompiler
 
                 break;
             case "music_asset":
+            case "sfx_asset":
                 NesVideoProgram.RequireArity(call, 2);
                 break;
             case "audio_init":
@@ -2023,6 +2073,10 @@ internal sealed class NesRuntimeCompiler
             case "music_play":
                 NesVideoProgram.RequireArity(call, 1);
                 EmitMusicPlay(call);
+                break;
+            case "sfx_play":
+                NesVideoProgram.RequireArity(call, 1);
+                EmitSoundEffectPlay(call);
                 break;
             case "hud_set_tile":
                 NesVideoProgram.ValidateHudSetTile(call);
@@ -2767,6 +2821,9 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.PlayMusic:
                 EmitMusicPlay(call);
                 return true;
+            case TargetIntrinsicOperation.PlaySoundEffect:
+                EmitSoundEffectPlay(call);
+                return true;
             case TargetIntrinsicOperation.StopMusic:
                 EmitMusicStop();
                 return true;
@@ -2818,6 +2875,28 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(MusicTickAddress);
     }
 
+    private void EmitSoundEffectPlay(FunctionCall call)
+    {
+        var soundId = NesVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "sfx_play argument 1");
+        if (!program.SoundEffectAssets.TryGetValue(soundId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES SFX asset '{soundId}'. Declare it with sfx_asset(...).");
+        }
+
+        // Arm the SFX engine only: point the cursor at the effect's first frame body and mark it
+        // active. The next audio-update tick plays it. This must not touch the music order/body/tick
+        // state, otherwise the background music desyncs on every trigger.
+        var label = NesRomBuilder.SoundEffectDataLabel(asset.Name);
+        builder.LoadAImmediateLabelLowByte(label);
+        builder.StoreAZeroPage(SfxPointerLowAddress);
+        builder.LoadAImmediateLabelHighByte(label);
+        builder.StoreAZeroPage(SfxPointerHighAddress);
+        builder.LoadAImmediate(asset.LingerFrames);
+        builder.StoreAAbsolute(SfxLingerAddress);
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(SfxActiveAddress);
+    }
+
     private void EmitMusicStop()
     {
         builder.LoadAImmediate(0);
@@ -2828,29 +2907,24 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitAudioUpdate()
     {
+        var hasSfx = program.SoundEffectAssetsInLoadOrder.Count > 0;
         var doneLabel = builder.CreateLabel("nes_audio_done");
         var processOrderLabel = builder.CreateLabel("nes_audio_process_order");
         var hasActiveMusicLabel = builder.CreateLabel("nes_audio_active");
         var tickExpiredLabel = builder.CreateLabel("nes_audio_tick_expired");
         var hasBodyLabel = builder.CreateLabel("nes_audio_has_body");
-        var commandLoopLabel = builder.CreateLabel("nes_audio_command_loop");
-        var afterBodyLabel = builder.CreateLabel("nes_audio_after_body");
-        var hasCommandsLabel = builder.CreateLabel("nes_audio_has_commands");
         var tickNonZeroLabel = builder.CreateLabel("nes_audio_tick_nonzero");
 
         builder.LoadAZeroPage(MusicOrderPointerHighAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, hasActiveMusicLabel); // BNE hasActiveMusicLabel
+        builder.BranchRelative(0xD0, hasActiveMusicLabel); // BNE hasActiveMusicLabel (LDA sets Z)
         builder.JumpAbsolute(doneLabel);
         builder.Label(hasActiveMusicLabel);
 
         builder.LoadAZeroPage(MusicTickAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, processOrderLabel); // BEQ processOrderLabel
+        builder.BranchRelative(0xF0, processOrderLabel); // BEQ processOrderLabel (LDA sets Z)
         builder.DecrementZeroPage(MusicTickAddress);
         builder.LoadAZeroPage(MusicTickAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, tickExpiredLabel); // BEQ tickExpiredLabel
+        builder.BranchRelative(0xF0, tickExpiredLabel); // BEQ tickExpiredLabel (LDA sets Z)
         builder.JumpAbsolute(doneLabel);
         builder.Label(tickExpiredLabel);
 
@@ -2863,8 +2937,7 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(MusicBodyPointerHighAddress);
         builder.LoadAZeroPage(MusicBodyPointerLowAddress);
         builder.OrZeroPage(MusicBodyPointerHighAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, hasBodyLabel); // BNE hasBodyLabel
+        builder.BranchRelative(0xD0, hasBodyLabel); // BNE hasBodyLabel (ORA sets Z)
         builder.LoadAAbsolute(MusicLoopPointerLowAddress);
         builder.StoreAZeroPage(MusicOrderPointerLowAddress);
         builder.LoadAAbsolute(MusicLoopPointerHighAddress);
@@ -2876,36 +2949,133 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAIndirectY(MusicOrderPointerLowAddress);
         builder.StoreAZeroPage(MusicTickAddress);
         EmitAdvanceMusicOrderPointer();
+        EmitPlayApuBody(sfxPath: false);
+
+        builder.LoadAZeroPage(MusicTickAddress);
+        builder.BranchRelative(0xD0, tickNonZeroLabel); // BNE tickNonZeroLabel (LDA sets Z)
+        builder.JumpAbsolute(processOrderLabel);
+        builder.Label(tickNonZeroLabel);
+
+        builder.Label(doneLabel);
+
+        if (hasSfx)
+        {
+            var endLabel = builder.CreateLabel("nes_audio_end");
+            EmitSoundEffectUpdate(endLabel);
+            builder.Label(endLabel);
+        }
+    }
+
+    // Compact one-shot pulse 1 SFX engine, ticked right after the music engine each audio-update tick.
+    // It walks one frame body per tick from a zero-page cursor, keeping state fully independent from
+    // the music sequencer (it never touches the music order/body/tick pointers, which previously
+    // corrupted the background music). A 0xFF marker byte ends the effect.
+    private void EmitSoundEffectUpdate(string endLabel)
+    {
+        var stopLabel = builder.CreateLabel("nes_sfx_stop");
+        var playFrameLabel = builder.CreateLabel("nes_sfx_play");
+        var noCarryLabel = builder.CreateLabel("nes_sfx_no_carry");
+
+        builder.LoadAAbsolute(SfxActiveAddress);
+        builder.BranchRelative(0xF0, endLabel); // BEQ endLabel (no effect playing; LDA sets Z)
+
+        builder.LoadAZeroPage(SfxPointerLowAddress);
+        builder.StoreAZeroPage(MusicBodyPointerLowAddress);
+        builder.LoadAZeroPage(SfxPointerHighAddress);
+        builder.StoreAZeroPage(MusicBodyPointerHighAddress);
 
         builder.LoadYImmediate(0);
         builder.LoadAIndirectY(MusicBodyPointerLowAddress);
+        builder.CompareImmediate(0xFF);
+        builder.BranchRelative(0xD0, playFrameLabel); // BNE playFrameLabel (has a frame body)
+
+        // Register frames exhausted: keep pulse 1 owned by the effect (music still muted) for LingerFrames
+        // more ticks so the note rings out fully, then release the channel.
+        builder.LoadAAbsolute(SfxLingerAddress);
+        builder.BranchRelative(0xF0, stopLabel); // BEQ stopLabel (linger done; LDA sets Z)
+        builder.DecrementAbsolute(SfxLingerAddress);
+        builder.JumpAbsolute(endLabel);
+
+        // Play this frame's body on pulse 1 (X = 2, the effect owns and writes the channel directly).
+        // The shared body player returns Y = bytes consumed (1 + 2 * writeCount), which advances the
+        // cursor to the next frame body.
+        builder.Label(playFrameLabel);
+        EmitPlayApuBody(sfxPath: true);
+        builder.TransferYToA();
+        builder.ClearCarry();
+        builder.AddZeroPage(SfxPointerLowAddress);
+        builder.StoreAZeroPage(SfxPointerLowAddress);
+        builder.BranchRelative(0x90, noCarryLabel); // BCC noCarryLabel
+        builder.IncrementZeroPage(SfxPointerHighAddress);
+        builder.Label(noCarryLabel);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(stopLabel);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(SfxActiveAddress);
+        // Release pulse 1 back to the BGM: restore its shadowed $4001 (sweep) so the channel no longer
+        // carries the effect's residue. $4000/$4002/$4003 are re-written by the BGM on its next note.
+        builder.LoadAAbsolute((ushort)(Pulse1ShadowBaseAddress + 1));
+        builder.StoreAAbsolute(0x4001);
+    }
+
+    // Plays the APU trace body pointed to by MusicBodyPointer via the shared subroutine. X selects the
+    // pulse 1 arbitration mode read by the body writer: for the SFX path X = 2 (the effect owns pulse 1
+    // and writes it directly), for the music path X = SfxActive (0 = write pulse 1 and shadow it,
+    // non-zero = an effect owns pulse 1 so only shadow the BGM's intended writes).
+    private void EmitPlayApuBody(bool sfxPath)
+    {
+        if (sfxPath)
+        {
+            builder.LoadXImmediate(2);
+        }
+        else if (program.SoundEffectAssetsInLoadOrder.Count > 0)
+        {
+            builder.LoadXAbsolute(SfxActiveAddress);
+        }
+        else
+        {
+            builder.LoadXImmediate(0);
+        }
+
+        builder.CallSubroutine(ApuBodySubroutineLabel);
+        apuBodySubroutineReferenced = true;
+    }
+
+    // Shared APU trace body player. Reads [count, (registerOffset, value) * count] at MusicBodyPointer
+    // and writes each command to $40xx. Emitted once and called (JSR) by both the music and SFX
+    // engines so the sequencer body loop is not duplicated. Returns with Y = 1 + 2 * count.
+    public void EmitAudioSubroutines()
+    {
+        if (!apuBodySubroutineReferenced)
+        {
+            return;
+        }
+
+        var muteSfxChannel = program.SoundEffectAssetsInLoadOrder.Count > 0;
+        var commandLoopLabel = builder.CreateLabel("nes_apu_body_loop");
+        var afterBodyLabel = builder.CreateLabel("nes_apu_body_after");
+
+        builder.Label(ApuBodySubroutineLabel);
+        builder.LoadYImmediate(0);
+        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
         builder.StoreAZeroPage(MusicCommandCountAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, hasCommandsLabel); // BNE hasCommandsLabel
-        builder.JumpAbsolute(afterBodyLabel);
-        builder.Label(hasCommandsLabel);
         builder.IncrementY();
+        builder.LoadAZeroPage(MusicCommandCountAddress);
+        builder.BranchRelative(0xF0, afterBodyLabel); // BEQ afterBodyLabel (empty frame body)
 
         builder.Label(commandLoopLabel);
         builder.LoadAIndirectY(MusicBodyPointerLowAddress);
         builder.StoreAZeroPage(ExpressionScratchAddress);
         builder.IncrementY();
         builder.LoadAIndirectY(MusicBodyPointerLowAddress);
-        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
         builder.IncrementY();
-        EmitNesApuRegisterWrite();
+        EmitNesApuRegisterWrite(muteSfxChannel);
         builder.DecrementZeroPage(MusicCommandCountAddress);
-        builder.BranchRelative(0xF0, afterBodyLabel); // BEQ afterBodyLabel
-        builder.JumpAbsolute(commandLoopLabel);
+        builder.BranchRelative(0xD0, commandLoopLabel); // BNE commandLoopLabel
 
         builder.Label(afterBodyLabel);
-        builder.LoadAZeroPage(MusicTickAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, tickNonZeroLabel); // BNE tickNonZeroLabel
-        builder.JumpAbsolute(processOrderLabel);
-        builder.Label(tickNonZeroLabel);
-
-        builder.Label(doneLabel);
+        builder.Return();
     }
 
     private void EmitAdvanceMusicOrderPointer()
@@ -2923,19 +3093,48 @@ internal sealed class NesRuntimeCompiler
         builder.Label(noCarryLabel);
     }
 
-    private void EmitNesApuRegisterWrite()
+    private void EmitNesApuRegisterWrite(bool muteSfxChannel)
     {
-        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
-        builder.StoreAAbsolute(MusicApuWriteValueAddress);
-        builder.StoreYAbsolute(MusicApuWriteCursorAddress);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+        builder.StoreYZeroPage(SpriteFrameScratchAddress);
+
+        string? skipWriteLabel = null;
+        if (muteSfxChannel)
+        {
+            var writeHwLabel = builder.CreateLabel("nes_apu_write");
+            skipWriteLabel = builder.CreateLabel("nes_apu_skip_write");
+            // Pulse 1 arbitration keyed on X: 2 = the effect writing its own channel (write hardware,
+            // do not shadow), 0 = BGM with no active effect (write hardware and shadow), 1 = BGM while
+            // an effect owns pulse 1 (shadow only, hardware suppressed). Non-pulse-1 registers ($04+)
+            // always write hardware. Shadowing the BGM's intended pulse 1 values lets the channel be
+            // restored to the BGM when the effect ends, so no effect residue is left behind.
+            builder.LoadAZeroPage(ExpressionScratchAddress);
+            builder.CompareImmediate(0x04);
+            builder.BranchRelative(0xB0, writeHwLabel);   // BCS writeHwLabel (offset >= 4, other channel)
+            builder.CompareXImmediate(2);
+            builder.BranchRelative(0xF0, writeHwLabel);   // BEQ writeHwLabel (X == 2, effect writes pulse 1)
+            builder.LoadYZeroPage(ExpressionScratchAddress);
+            builder.LoadAZeroPage(CollisionColumnScratchAddress);
+            builder.StoreAAbsoluteY(Pulse1ShadowBaseAddress); // shadow[offset] = BGM's intended value
+            builder.CompareXImmediate(1);
+            builder.BranchRelative(0xF0, skipWriteLabel);  // BEQ skipWriteLabel (X == 1, effect owns pulse 1)
+            builder.Label(writeHwLabel);
+        }
+
         builder.LoadAZeroPage(ExpressionScratchAddress);
         builder.StoreAZeroPage(RuntimeIndexScratchAddress);
         builder.LoadAImmediate(0x40);
         builder.StoreAZeroPage(ExpressionScratchAddress);
         builder.LoadYImmediate(0);
-        builder.LoadAAbsolute(MusicApuWriteValueAddress);
+        builder.LoadAZeroPage(CollisionColumnScratchAddress);
         builder.StoreAIndirectY(RuntimeIndexScratchAddress);
-        builder.LoadYAbsolute(MusicApuWriteCursorAddress);
+
+        if (skipWriteLabel is not null)
+        {
+            builder.Label(skipWriteLabel);
+        }
+
+        builder.LoadYZeroPage(SpriteFrameScratchAddress);
     }
 
     internal void EmitPollInput()
@@ -2966,8 +3165,7 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAAbsolute(ControllerPortAddress);
         builder.AndImmediate(0x01);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, skipLabel);    // BEQ skipLabel
+        builder.BranchRelative(0xF0, skipLabel);    // BEQ skipLabel (AND sets Z)
         builder.LoadAZeroPage(InputCurrentAddress);
         builder.OrImmediate(button.SnapshotMask);
         builder.StoreAZeroPage(InputCurrentAddress);
@@ -2981,8 +3179,7 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAZeroPage(InputCurrentAddress);
         builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, resetLabel);   // BEQ resetLabel
+        builder.BranchRelative(0xF0, resetLabel);   // BEQ resetLabel (AND sets Z)
 
         builder.LoadAZeroPage(button.HoldTicksAddress);
         builder.CompareImmediate(0xFF);
@@ -5838,6 +6035,8 @@ internal sealed class PrgBuilder
 
     public void LoadXZeroPage(byte address) => Emit(0xA6, address);
 
+    public void LoadXAbsolute(ushort address) => Emit(0xAE, Low(address), High(address));
+
     public void LoadYZeroPage(byte address) => Emit(0xA4, address);
 
     public void LoadAZeroPage(byte address) => Emit(0xA5, address);
@@ -5848,11 +6047,15 @@ internal sealed class PrgBuilder
 
     public void StoreAZeroPageX(byte address) => Emit(0x95, address);
 
+    public void StoreYZeroPage(byte address) => Emit(0x84, address);
+
     public void LoadAAbsolute(ushort address) => Emit(0xAD, Low(address), High(address));
 
     public void StoreAAbsolute(ushort address) => Emit(0x8D, Low(address), High(address));
 
     public void StoreAAbsoluteX(ushort address) => Emit(0x9D, Low(address), High(address));
+
+    public void StoreAAbsoluteY(ushort address) => Emit(0x99, Low(address), High(address));
 
     public void StoreAIndirectY(byte address) => Emit(0x91, address);
 
@@ -5896,11 +6099,21 @@ internal sealed class PrgBuilder
 
     public void DecrementZeroPage(byte address) => Emit(0xC6, address);
 
+    public void DecrementAbsolute(ushort address) => Emit(0xCE, Low(address), High(address));
+
+    public void IncrementZeroPage(byte address) => Emit(0xE6, address);
+
     public void IncrementX() => Emit(0xE8);
 
     public void IncrementY() => Emit(0xC8);
 
     public void TransferAToX() => Emit(0xAA);
+
+    public void TransferYToA() => Emit(0x98);
+
+    public void CompareXImmediate(int value) => Emit(0xE0, CheckedByte(value));
+
+    public void Return() => Emit(0x60);
 
     public void ShiftLeftA() => Emit(0x0A);
 
@@ -5917,6 +6130,12 @@ internal sealed class PrgBuilder
     public void JumpAbsolute(string label)
     {
         Emit(0x4C, 0x00, 0x00);
+        absoluteFixups.Add((bytes.Count - 2, label, 0));
+    }
+
+    public void CallSubroutine(string label)
+    {
+        Emit(0x20, 0x00, 0x00);
         absoluteFixups.Add((bytes.Count - 2, label, 0));
     }
 

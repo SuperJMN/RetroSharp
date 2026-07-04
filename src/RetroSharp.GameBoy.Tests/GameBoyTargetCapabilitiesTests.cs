@@ -14,6 +14,8 @@ public sealed class GameBoyTargetCapabilitiesTests
 
         Assert.True(capabilities.SupportsBgm);
         Assert.Equal(["uge", "gbapu", "vgm"], capabilities.SupportedMusicFormats);
+        Assert.True(capabilities.SupportsSfx);
+        Assert.Equal(["vgm"], capabilities.SupportedSfxFormats);
     }
 
     [Fact]
@@ -64,6 +66,12 @@ public sealed class GameBoyTargetCapabilitiesTests
         Assert.Equal(TargetIntrinsicReturnKind.Void, musicPlay.ReturnKind);
         Assert.Contains(TargetIntrinsicCapabilityRequirement.BackgroundMusic, musicPlay.RequiredCapabilities);
         Assert.Contains(musicPlay.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
+
+        var sfxPlay = ResolveIntrinsic("sfx_play");
+        Assert.Equal(TargetIntrinsicOperation.PlaySoundEffect, sfxPlay.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, sfxPlay.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.SoundEffects, sfxPlay.RequiredCapabilities);
+        Assert.Contains(sfxPlay.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
 
         var worldTileFlags = ResolveIntrinsic("world_tile_flags_at");
         Assert.Equal(TargetIntrinsicOperation.ReadWorldTileFlags, worldTileFlags.Operation);

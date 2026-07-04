@@ -24,6 +24,10 @@ public static class GameBoyTarget
                 "music_play",
                 runtimeArity: 0,
                 compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            TargetIntrinsicDescriptor.PlaySoundEffect(
+                "sfx_play",
+                runtimeArity: 0,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
             TargetIntrinsicDescriptor.StopMusic("music_stop", arity: 0),
             TargetIntrinsicDescriptor.ReadWorldTileFlags("world_tile_flags_at", arity: 2),
             TargetIntrinsicDescriptor.ReadWorldTileFlags(
@@ -86,7 +90,9 @@ public static class GameBoyTarget
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(
         Name: "gb",
         SupportsBgm: true,
-        SupportedMusicFormats: ["uge", "gbapu", "vgm"]);
+        SupportedMusicFormats: ["uge", "gbapu", "vgm"],
+        SupportsSfx: true,
+        SupportedSfxFormats: ["vgm"]);
 
     public static Target2DCapabilities Capabilities { get; } = new(
         Name: "gb",

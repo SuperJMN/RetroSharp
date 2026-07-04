@@ -187,6 +187,8 @@ internal sealed class GameBoyVideoProgram
     private readonly Dictionary<string, GameBoyCompiledSpriteAsset> spriteAssets = [];
     private readonly List<GameBoyCompiledMusicAsset> musicAssetsInLoadOrder = [];
     private readonly Dictionary<string, GameBoyCompiledMusicAsset> musicAssets = [];
+    private readonly List<GameBoyCompiledSoundEffectAsset> soundEffectAssetsInLoadOrder = [];
+    private readonly Dictionary<string, GameBoyCompiledSoundEffectAsset> soundEffectAssets = [];
     private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
     private readonly List<byte> generatedBackgroundTileData = [];
     private int spriteTileCount;
@@ -236,6 +238,10 @@ internal sealed class GameBoyVideoProgram
     public IReadOnlyList<GameBoyCompiledMusicAsset> MusicAssetsInLoadOrder => musicAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, GameBoyCompiledMusicAsset> MusicAssets => musicAssets;
+
+    public IReadOnlyList<GameBoyCompiledSoundEffectAsset> SoundEffectAssetsInLoadOrder => soundEffectAssetsInLoadOrder;
+
+    public IReadOnlyDictionary<string, GameBoyCompiledSoundEffectAsset> SoundEffectAssets => soundEffectAssets;
 
     public IReadOnlyDictionary<string, SpriteAnimationClip> AnimationClips => animationClips;
 
@@ -376,6 +382,7 @@ internal sealed class GameBoyVideoProgram
             case "world_load":
             case "sprite_asset":
             case "music_asset":
+            case "sfx_asset":
             case "animation_clip":
             case "hud_set_tile":
                 return false;
@@ -709,6 +716,9 @@ internal sealed class GameBoyVideoProgram
                 case "music_asset":
                     ApplyMusicAsset(call);
                     break;
+                case "sfx_asset":
+                    ApplySoundEffectAsset(call);
+                    break;
                 case "animation_clip":
                     ApplyAnimationClip(call);
                     break;
@@ -782,6 +792,9 @@ internal sealed class GameBoyVideoProgram
                 break;
             case SdkResourceDeclarationKind.MusicAsset:
                 ApplyMusicAsset(call);
+                break;
+            case SdkResourceDeclarationKind.SoundEffectAsset:
+                ApplySoundEffectAsset(call);
                 break;
             case SdkResourceDeclarationKind.AnimationClip:
                 ApplyAnimationClip(call);
@@ -879,6 +892,21 @@ internal sealed class GameBoyVideoProgram
         var asset = GameBoyMusicAssetCompiler.CompileFromFile(name, path);
         musicAssets.Add(name, asset);
         musicAssetsInLoadOrder.Add(asset);
+    }
+
+    private void ApplySoundEffectAsset(FunctionCall call)
+    {
+        RequireArity(call, 2);
+        var name = IdentifierArg(call.Parameters.ElementAt(0), "sfx_asset argument 1");
+        if (soundEffectAssets.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"SFX asset '{name}' is already declared.");
+        }
+
+        var path = PlatformAssetPathResolver.ResolveVariant(ResolveAssetPath(StringArg(call, 1)), "gb");
+        var asset = GameBoySoundEffectAssetCompiler.CompileFromFile(name, path);
+        soundEffectAssets.Add(name, asset);
+        soundEffectAssetsInLoadOrder.Add(asset);
     }
 
     private void ApplyAnimationClip(FunctionCall call)

@@ -123,6 +123,7 @@ public sealed class TargetIntrinsicCatalogTests
     [InlineData("sprite_asset", SdkResourceDeclarationKind.SpriteAsset)]
     [InlineData("world_load", SdkResourceDeclarationKind.WorldLoad)]
     [InlineData("music_asset", SdkResourceDeclarationKind.MusicAsset)]
+    [InlineData("sfx_asset", SdkResourceDeclarationKind.SoundEffectAsset)]
     [InlineData("palette_background", SdkResourceDeclarationKind.BackgroundPalette)]
     [InlineData("palette_sprite", SdkResourceDeclarationKind.SpritePalette)]
     [InlineData("animation_clip", SdkResourceDeclarationKind.AnimationClip)]
@@ -131,5 +132,21 @@ public sealed class TargetIntrinsicCatalogTests
         Assert.True(SdkResourceDeclarationDescriptor.TryCreate(resourceId, out var descriptor));
         Assert.Equal(resourceId, descriptor.ResourceId);
         Assert.Equal(kind, descriptor.Kind);
+    }
+
+    [Fact]
+    public void Sfx_play_intrinsic_carries_compile_time_asset_operand()
+    {
+        var descriptor = TargetIntrinsicDescriptor.PlaySoundEffect(
+            "sfx_play",
+            runtimeArity: 0,
+            [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]);
+
+        Assert.Equal(TargetIntrinsicOperation.PlaySoundEffect, descriptor.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, descriptor.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.SoundEffects, descriptor.RequiredCapabilities);
+        var operand = Assert.Single(descriptor.CompileTimeOperands);
+        Assert.Equal(0, operand.Slot);
+        Assert.Equal(TargetIntrinsicOperandRole.AssetRef, operand.Role);
     }
 }

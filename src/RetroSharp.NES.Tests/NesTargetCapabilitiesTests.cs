@@ -66,6 +66,12 @@ public sealed class NesTargetCapabilitiesTests
         Assert.Contains(TargetIntrinsicCapabilityRequirement.BackgroundMusic, musicPlay.RequiredCapabilities);
         Assert.Contains(musicPlay.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
 
+        var sfxPlay = ResolveIntrinsic("sfx_play");
+        Assert.Equal(TargetIntrinsicOperation.PlaySoundEffect, sfxPlay.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.Void, sfxPlay.ReturnKind);
+        Assert.Contains(TargetIntrinsicCapabilityRequirement.SoundEffects, sfxPlay.RequiredCapabilities);
+        Assert.Contains(sfxPlay.CompileTimeOperands, operand => operand.Role == TargetIntrinsicOperandRole.AssetRef);
+
         var spriteDraw = ResolveIntrinsic("sprite_draw");
         Assert.Equal(TargetIntrinsicOperation.DrawLogicalSprite, spriteDraw.Operation);
         Assert.Equal(TargetIntrinsicReturnKind.Void, spriteDraw.ReturnKind);

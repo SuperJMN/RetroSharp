@@ -11,6 +11,11 @@ internal sealed record NesCompiledMusicAsset(
     IReadOnlyList<NesApuTraceOrderEntry> OrderEntries,
     IReadOnlyList<NesDpcmSampleBlock> DpcmBlocks);
 
+internal sealed record NesCompiledSoundEffectAsset(
+    string Name,
+    byte[] Data,
+    int LingerFrames);
+
 internal readonly record struct NesApuTraceOrderEntry(int BodyOffset, byte Wait);
 
 internal readonly record struct NesDpcmSampleBlock(ushort SourceAddress, byte[] Data);
@@ -168,7 +173,7 @@ internal static class NesMusicAssetCompiler
 
     private static bool IsNesApuTriggerRegister(ushort address)
     {
-        return address is 0x4003 or 0x4007 or 0x400B or 0x400F or 0x4015 or 0x4017;
+        return address is 0x4003 or 0x4007 or 0x400B or 0x400F or 0x4015;
     }
 
     private static IReadOnlyList<NesDpcmSampleBlock> CompileDpcmBlocks(IReadOnlyList<VgmDpcmMemoryBlock> blocks, IReadOnlyList<VgmFrame> frames)
@@ -357,4 +362,165 @@ internal static class NesMusicAssetCompiler
     }
 
     private sealed record ResolvedMusicAsset(string Format, string Path);
+}
+
+// NES action SFX plays on pulse 1 (the dedicated SFX channel) while the music engine keeps the
+// other channels. The effect is compiled as a compact per-frame APU trace: one body group per
+// frame ([count, (registerOffset, value)*count]), gap frames encoded as an empty [0] group, and a
+// single 0xFF sentinel byte to stop playback. Only pulse 1 registers ($4000-$4003) are kept, so the
+// effect never touches global control ($4015 channel enable, $4017 frame counter), the DMC, or the
+// music's other channels. The runtime ticks one frame per audio update and (while active) suppresses
+// the music's own pulse 1 writes, so the sweep is sequenced cleanly without corrupting the music.
+// After the last register frame the runtime lingers (still owning the channel) for LingerFrames so the
+// pulse 1 note rings out fully before the music reclaims the channel, matching the source effect's
+// length without storing an empty body per ring frame.
+internal static class NesSoundEffectAssetCompiler
+{
+    private const byte EndOfEffectMarker = 0xFF;
+
+    // Fallback ring-out length (frames) when the source trace has no explicit note-off ($4015 write
+    // that clears the pulse 1 enable bit) to derive the effect length from.
+    private const int DefaultLingerFrames = 24;
+    private const int MaxLingerFrames = 255;
+
+    public static NesCompiledSoundEffectAsset CompileFromFile(string name, string path)
+    {
+        var resolvedPath = PlatformAssetPathResolver.ResolveVariant(path, "nes");
+        if (!Path.GetExtension(resolvedPath).Equals(".vgm", StringComparison.OrdinalIgnoreCase) &&
+            !Path.GetExtension(resolvedPath).Equals(".vgz", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"NES SFX asset '{Path.GetFileName(path)}' must use VGM/VGZ input.");
+        }
+
+        var stream = VgmImporter.Import(resolvedPath, VgmChip.Nes2A03);
+        var frameWrites = CollectPulse1FrameWrites(stream.Frames, out var lastFrame);
+        if (lastFrame < 0)
+        {
+            throw new InvalidOperationException("NES SFX VGM trace must contain at least one pulse 1 ($4000-$4003) register write.");
+        }
+
+        var data = new List<byte>();
+        for (var frame = 0; frame <= lastFrame; frame++)
+        {
+            if (frameWrites.TryGetValue(frame, out var writes) && writes.Count > 0)
+            {
+                data.Add((byte)writes.Count);
+                foreach (var write in writes)
+                {
+                    data.Add((byte)(write.Address - 0x4000));
+                    data.Add(write.Value);
+                }
+            }
+            else
+            {
+                data.Add(0);
+            }
+        }
+
+        data.Add(EndOfEffectMarker);
+        return new NesCompiledSoundEffectAsset(name, data.ToArray(), ComputeLingerFrames(stream.Frames, lastFrame));
+    }
+
+    // The effect's total length is the source note-off frame (the first $4015 write after the note
+    // starts that clears the pulse 1 enable bit); the linger covers the frames from the last register
+    // frame to that note-off so the note rings out for its authored length. Fall back to a fixed ring
+    // when the source has no such note-off.
+    private static int ComputeLingerFrames(IReadOnlyList<VgmFrame> frames, int lastFrame)
+    {
+        foreach (var frame in frames)
+        {
+            if (frame.Index <= lastFrame)
+            {
+                continue;
+            }
+
+            foreach (var write in frame.Writes)
+            {
+                if (write.Address == 0x4015 && (write.Value & 0x01) == 0)
+                {
+                    return Math.Clamp(frame.Index - lastFrame - 1, 0, MaxLingerFrames);
+                }
+            }
+        }
+
+        return DefaultLingerFrames;
+    }
+
+    // Builds per-frame pulse 1 write lists. Within a frame only the last write to each register is
+    // kept (plus the $4003 trigger); values unchanged since the previous emitted frame are dropped so
+    // gap frames stay empty and the pulse 1 hardware holds the running note between sweep updates.
+    private static Dictionary<int, List<VgmRegisterWrite>> CollectPulse1FrameWrites(
+        IReadOnlyList<VgmFrame> frames,
+        out int lastFrame)
+    {
+        var result = new Dictionary<int, List<VgmRegisterWrite>>();
+        var lastValues = new Dictionary<ushort, byte>();
+        lastFrame = -1;
+        foreach (var frame in frames)
+        {
+            var kept = new List<VgmRegisterWrite>(frame.Writes.Count);
+            for (var i = 0; i < frame.Writes.Count; i++)
+            {
+                var write = frame.Writes[i];
+                if (!IsPulse1Register(write.Address))
+                {
+                    continue;
+                }
+
+                if (!IsPulse1TriggerRegister(write.Address) && !IsLastWriteToRegisterInFrame(frame.Writes, i))
+                {
+                    continue;
+                }
+
+                if (!IsPulse1TriggerRegister(write.Address) &&
+                    lastValues.TryGetValue(write.Address, out var previousValue) &&
+                    previousValue == write.Value)
+                {
+                    continue;
+                }
+
+                lastValues[write.Address] = write.Value;
+                kept.Add(write);
+            }
+
+            if (kept.Count > 0)
+            {
+                if (kept.Count > byte.MaxValue - 1)
+                {
+                    throw new InvalidOperationException("NES SFX VGM frame contains too many pulse 1 register writes.");
+                }
+
+                result[frame.Index] = kept;
+                lastFrame = Math.Max(lastFrame, frame.Index);
+            }
+        }
+
+        return result;
+    }
+
+    private static bool IsLastWriteToRegisterInFrame(IReadOnlyList<VgmRegisterWrite> writes, int index)
+    {
+        var address = writes[index].Address;
+        for (var i = index + 1; i < writes.Count; i++)
+        {
+            if (writes[i].Address == address)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    // Pulse 1 only: strip global control ($4015/$4017), the DMC and the other channels so the SFX
+    // never overwrites state the music owns.
+    private static bool IsPulse1Register(ushort address)
+    {
+        return address is >= 0x4000 and <= 0x4003;
+    }
+
+    private static bool IsPulse1TriggerRegister(ushort address)
+    {
+        return address == 0x4003;
+    }
 }

@@ -61,6 +61,139 @@ public sealed class NesMusicTests
     }
 
     [Fact]
+    public void Compacts_repeated_nes_frame_counter_writes_in_bgm()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "stage.nes.vgz"),
+            [
+                [[0x17, 0xFF], [0x00, 0x30]],
+                [[0x17, 0xFF]],
+                [[0x17, 0xFF], [0x03, 0x08]],
+            ]);
+
+        var asset = NesMusicAssetCompiler.CompileFromFile("stage_theme", Path.Combine(directory, "stage.vgz"));
+
+        Assert.Equal(1, CountSequence(asset.Data, [0x17, 0xFF]));
+        Assert.True(ContainsSequence(asset.Data, [0x00, 0x30]));
+        Assert.True(ContainsSequence(asset.Data, [0x03, 0x08]));
+    }
+
+
+    [Fact]
+    public void Compiles_vgz_sfx_calls_into_nes_rom_played_by_shared_apu_writer()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzip(
+            Path.Combine(directory, "jump.nes.vgz"),
+            command: 0xB4,
+            [0x03, 0x08],
+            waitSamples: 735,
+            [0x00, 0x30]);
+
+        const string source = """
+                              void Main() {
+                                  Sfx.Asset(jump_sfx, "jump.vgz");
+                                  Audio.Init();
+                                  Sfx.Play(jump_sfx);
+                                  Audio.Update();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, directory);
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x03, 0x08]), "Compiled NES SFX trace should keep pulse 1 trigger writes.");
+        Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Audio.Update should write SFX pulse 1 registers through the shared indirect $40xx writer.");
+        // Sfx.Play only arms the SFX engine (STA $0312 = SfxActive); it must not touch the music tick.
+        Assert.True(ContainsSequence(rom, [0x8D, 0x12, 0x03]), "Sfx.Play should set the SfxActive flag at $0312.");
+        // The BGM body writer shadows its intended pulse 1 values (STA $0313,Y) so the channel can be
+        // restored when the effect ends...
+        Assert.True(ContainsSequence(rom, [0x99, 0x13, 0x03]), "BGM should shadow pulse 1 writes to $0313,Y.");
+        // ...specifically the sweep register (STA $4001) is restored on SFX end so no residue is left.
+        Assert.True(ContainsSequence(rom, [0x8D, 0x01, 0x40]), "SFX end should restore the BGM's $4001 sweep.");
+    }
+
+    [Fact]
+    public void Compiles_vgm_sfx_asset_to_flat_pulse1_multi_frame_trace()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "jump.nes.vgz"),
+            [
+                [[0x15, 0x0F], [0x17, 0xFF], [0x00, 0x82], [0x01, 0xA7], [0x02, 0x7C], [0x03, 0x09], [0x10, 0x00]],
+                [[0x17, 0xFF], [0x01, 0xF6], [0x00, 0x5F], [0x10, 0x00]],
+            ]);
+
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile("jump_sfx", Path.Combine(directory, "jump.vgz"));
+
+        Assert.Equal("jump_sfx", asset.Name);
+
+        // Flat per-frame trace: frame 0 body, frame 1 body (only changed pulse 1 registers), then the
+        // 0xFF end-of-effect marker. The ring-out after the last frame is a runtime linger, not stored
+        // empty frames; with no $4015 note-off in the source the linger falls back to its default.
+        Assert.Equal(
+            [
+                0x04, 0x00, 0x82, 0x01, 0xA7, 0x02, 0x7C, 0x03, 0x09,
+                0x02, 0x01, 0xF6, 0x00, 0x5F,
+                0xFF,
+            ],
+            asset.Data);
+        Assert.Equal(24, asset.LingerFrames);
+        Assert.False(ContainsSequence(asset.Data, [0x15, 0x0F]), "SFX must not replay channel-enable writes captured from global APU state.");
+        Assert.False(ContainsSequence(asset.Data, [0x17, 0xFF]), "SFX must not replay frame-counter writes captured from global APU state.");
+        Assert.False(ContainsSequence(asset.Data, [0x10, 0x00]), "SFX must not replay DMC control writes captured from global APU state.");
+    }
+
+    [Fact]
+    public void Nes_sfx_trace_encodes_gap_frames_as_empty_bodies()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "blip.nes.vgz"),
+            [
+                [[0x00, 0x82], [0x03, 0x09]],
+                [],
+                [],
+                [[0x00, 0x40]],
+            ]);
+
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile("blip", Path.Combine(directory, "blip.vgz"));
+
+        // Frame 0 body, two empty gap frames, frame 3 body, then 0xFF (ring-out is a runtime linger).
+        Assert.Equal(
+            [
+                0x02, 0x00, 0x82, 0x03, 0x09,
+                0x00, 0x00,
+                0x01, 0x00, 0x40,
+                0xFF,
+            ],
+            asset.Data);
+    }
+
+    [Fact]
+    public void Nes_sfx_linger_matches_source_note_off_frame()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "beep.nes.vgz"),
+            [
+                [[0x15, 0x0F], [0x00, 0x82], [0x03, 0x09]], // frame 0: note-on
+                [],                                          // frames 1-3: note rings
+                [],
+                [],
+                [[0x15, 0x00]],                              // frame 4: note-off (clears pulse 1 enable)
+            ]);
+
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile("beep", Path.Combine(directory, "beep.vgz"));
+
+        // Last register frame is 0; note-off is at frame 4, so the effect lingers frames 1..3 (= 3).
+        Assert.Equal([0x02, 0x00, 0x82, 0x03, 0x09, 0xFF], asset.Data);
+        Assert.Equal(3, asset.LingerFrames);
+    }
+
+    [Fact]
     public void Compiles_dmc_sample_block_and_dmc_register_writes_to_nes_rom()
     {
         var directory = CreateTempDirectory();
@@ -171,6 +304,41 @@ public sealed class NesMusicTests
         gzip.Write(bytes);
     }
 
+    private static void WriteVgmGzipFrames(string path, IReadOnlyList<IReadOnlyList<byte[]>> frames)
+    {
+        var commands = new List<byte>();
+        foreach (var frame in frames)
+        {
+            foreach (var payload in frame)
+            {
+                commands.Add(0xB4);
+                commands.AddRange(payload);
+            }
+
+            commands.Add(0x61);
+            commands.Add(0xDF);
+            commands.Add(0x02);
+        }
+
+        commands.Add(0x66);
+
+        var bytes = new byte[0xC0 + commands.Count];
+        bytes[0] = (byte)'V';
+        bytes[1] = (byte)'g';
+        bytes[2] = (byte)'m';
+        bytes[3] = (byte)' ';
+        WriteUInt32(bytes, 0x08, 0x00000161);
+        WriteUInt32(bytes, 0x18, (uint)(735 * frames.Count));
+        WriteUInt32(bytes, 0x34, 0x8C);
+        WriteUInt32(bytes, 0x84, 1_789_773);
+        commands.CopyTo(bytes, 0xC0);
+        WriteUInt32(bytes, 0x04, (uint)(bytes.Length - 4));
+
+        using var file = File.Create(path);
+        using var gzip = new GZipStream(file, CompressionLevel.SmallestSize);
+        gzip.Write(bytes);
+    }
+
     private static void WriteVgmGzipWithDataBlock(
         string path,
         byte dataBlockType,
@@ -222,6 +390,30 @@ public sealed class NesMusicTests
     private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
     {
         return IndexOfSequence(bytes, sequence) >= 0;
+    }
+
+    private static int CountSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
+    {
+        var count = 0;
+        for (var i = 0; i <= bytes.Count - sequence.Count; i++)
+        {
+            var found = true;
+            for (var j = 0; j < sequence.Count; j++)
+            {
+                if (bytes[i + j] != sequence[j])
+                {
+                    found = false;
+                    break;
+                }
+            }
+
+            if (found)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static int IndexOfSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)

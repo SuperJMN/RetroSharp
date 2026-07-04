@@ -177,6 +177,20 @@ Progress (2026-06-14):
   helpers in `RetroSharp.Portable2D` over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
   collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
   `music_stop(...)` builtins remain aliases.
+  One-shot FX now follow the same pattern: `Sfx.Asset(...)` is a source-package
+  `[resource("sfx_asset")]` declaration, `Sfx.Play(...)` wraps the `sfx_play`
+  target intrinsic with a compile-time `AssetRef`, and both Game Boy and NES
+  lower it separately from BGM. Game Boy advances active SFX streams from
+  `Audio.Update()` after BGM writes; NES plays SFX on pulse 1 as a flat per-frame
+  one-shot trace ticked once per `Audio.Update()` after BGM, keeps only the pulse 1
+  registers (`$4000-$4003`) and drops captured global/other-channel writes, arms
+  the effect via a zero-page cursor, a ring-out linger counter, and an `SfxActive`
+  flag (never touching the BGM tick/order state), suppresses *and shadows* the BGM's
+  own pulse 1 writes while an effect is active, keeps owning the channel for the
+  linger frames so the note rings out fully, restores the shadowed `$4001` sweep
+  when the effect ends so the BGM reclaims a clean channel, and shares one APU body
+  writer with the BGM engine to fit NROM. The SFX data is emitted after the DPCM
+  samples so it does not shrink the DPCM window.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.
@@ -185,18 +199,18 @@ Progress (2026-06-14):
   hard-coded public-name lowering; those public names now come from SDK source
   packages.
   SDKLIB-5 moved resource declarations behind source-package contracts:
-  `Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`,
+  `Sprite.Asset`, `World.Load`, `Music.Asset`, `Sfx.Asset`, `Palette.Background`,
   `Palette.Sprite`, and `Animation.Clip` are declared in `RetroSharp.Portable2D`
   with `[resource(...)]` metadata and resolved to generic resource declaration
   descriptors instead of target-specific public-name switches.
   SDKLIB-6 moved remaining complex package-backed facades out of hard-coded
   public-name lowering: `Camera.Init`, all four `Camera.*Aabb*` helpers,
-  `Sprite.Width`, `Sprite.Draw`, `Animation.Frame`, and `Music.Play`/`Stop`
+  `Sprite.Width`, `Sprite.Draw`, `Animation.Frame`, `Music.Play`/`Stop`, and `Sfx.Play`
   are now provided by `RetroSharp.Portable2D` source methods over target intrinsics.
   Actor-framework generated calls now use imported target-intrinsic extern
   functions discovered from the source package, so generated actor code no longer
   relies on public SDK names being hard-coded in the compiler. Legacy flat declaration calls
-  such as `sprite_asset(...)`, `world_load(...)`, and `music_asset(...)` remain
+  such as `sprite_asset(...)`, `world_load(...)`, `music_asset(...)`, and `sfx_asset(...)` remain
   compatibility aliases.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.

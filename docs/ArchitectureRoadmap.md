@@ -232,7 +232,7 @@ SDK libraries through the registry and supplies target-selected library source
 for explicitly imported target compilations. The built-in
 `RetroSharp.Portable2D` library is the manifest-backed source package under
 `sdk/RetroSharp.Portable2D`; it defines
-`Video`, `Input`, `Audio`, `Camera`, `Sprite`, `World`, and `Music` helpers whose `Video.WaitVBlank()`,
+`Video`, `Input`, `Audio`, `Camera`, `Sprite`, `World`, `Music`, and `Sfx` helpers whose `Video.WaitVBlank()`,
 `Input.Poll()`, `Audio.Update()`, `Camera.Init(...)`, `Camera.SetPosition(x, y)`,
 `Camera.Apply()`, `Sprite.Width(...)`, `Sprite.Draw(...)`, `Animation.Frame(...)`, and
 catalog-gated helpers such as Game Boy `Camera.AabbTiles(...)` /
@@ -256,7 +256,7 @@ public facades such as `Video.WaitVBlank`, `Input.Poll`, `Audio.Init`,
 `Audio.Update`, `Camera.SetPosition`, `Camera.Apply`, `Sprite.Draw`, and
 `Camera.AabbTiles` must be supplied by source packages.
 SDKLIB-5 applies the same public-name rule to resource declarations:
-`Sprite.Asset`, `World.Load`, `Music.Asset`, `Palette.Background`, `Palette.Sprite`,
+`Sprite.Asset`, `World.Load`, `Music.Asset`, `Sfx.Asset`, `Palette.Background`, `Palette.Sprite`,
 and `Animation.Clip` are source-package methods annotated with `[resource(...)]`.
 The frontend resolves that metadata to a generic resource declaration descriptor
 instead of making targets key off the public facade name. The flat declaration calls
@@ -346,7 +346,7 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
 
 Net decision: the library pattern now covers frame/input/audio leaf calls, camera initialization,
 BGM control
-(`Music.Play` / `Music.Stop`), a capability-gated value query (`World.TileFlagsAt`), the
+(`Music.Play` / `Music.Stop`), one-shot SFX playback (`Sfx.Play`), a capability-gated value query (`World.TileFlagsAt`), the
 camera position/apply pair, `Sprite.Width`, `Sprite.Draw`, `Animation.Frame` on Game Boy and NES,
 plus all four Game Boy and NES camera-relative AABB collision queries (world-Y and screen-space forms).
 Streaming internals and non-migrated target-specific collision forms remain compiler-recognized

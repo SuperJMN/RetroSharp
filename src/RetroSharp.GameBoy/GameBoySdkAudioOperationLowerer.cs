@@ -14,6 +14,9 @@ internal static class GameBoySdkAudioOperationLowerer
             case SdkAudioOperation.PlayMusic play:
                 compiler.EmitPlayMusic(play);
                 break;
+            case SdkAudioOperation.PlaySoundEffect play:
+                compiler.EmitPlaySoundEffect(play);
+                break;
             case SdkAudioOperation.UpdateAudio:
                 compiler.EmitUpdateAudio();
                 break;

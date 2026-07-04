@@ -86,6 +86,7 @@ class PlayerState
             if (grounded)
             {
                 StartJump();
+                Sfx.Play(jump_sfx);
             }
         }
 

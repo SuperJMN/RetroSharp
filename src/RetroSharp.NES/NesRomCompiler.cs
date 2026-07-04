@@ -218,6 +218,8 @@ internal sealed class NesVideoProgram
     private readonly Dictionary<string, NesCompiledSpriteAsset> spriteAssets = [];
     private readonly List<NesCompiledMusicAsset> musicAssetsInLoadOrder = [];
     private readonly Dictionary<string, NesCompiledMusicAsset> musicAssets = [];
+    private readonly List<NesCompiledSoundEffectAsset> soundEffectAssetsInLoadOrder = [];
+    private readonly Dictionary<string, NesCompiledSoundEffectAsset> soundEffectAssets = [];
     private readonly List<(int FirstTile, byte[] Data)> generatedBackgroundTiles = [];
     private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
     private readonly SortedDictionary<int, byte[]> mapColumns = [];
@@ -261,6 +263,10 @@ internal sealed class NesVideoProgram
     public IReadOnlyList<NesCompiledMusicAsset> MusicAssetsInLoadOrder => musicAssetsInLoadOrder;
 
     public IReadOnlyDictionary<string, NesCompiledMusicAsset> MusicAssets => musicAssets;
+
+    public IReadOnlyList<NesCompiledSoundEffectAsset> SoundEffectAssetsInLoadOrder => soundEffectAssetsInLoadOrder;
+
+    public IReadOnlyDictionary<string, NesCompiledSoundEffectAsset> SoundEffectAssets => soundEffectAssets;
 
     public IReadOnlyList<(int FirstTile, byte[] Data)> GeneratedBackgroundTiles => generatedBackgroundTiles;
 
@@ -430,12 +436,18 @@ internal sealed class NesVideoProgram
             case "music_asset":
                 ApplyMusicAsset(call);
                 break;
+            case "sfx_asset":
+                ApplySoundEffectAsset(call);
+                break;
             case "audio_init":
             case "audio_update":
             case "music_stop":
                 RequireArity(call, 0);
                 break;
             case "music_play":
+                RequireArity(call, 1);
+                break;
+            case "sfx_play":
                 RequireArity(call, 1);
                 break;
             case "hud_set_tile":
@@ -505,6 +517,9 @@ internal sealed class NesVideoProgram
                 break;
             case SdkResourceDeclarationKind.MusicAsset:
                 ApplyMusicAsset(call);
+                break;
+            case SdkResourceDeclarationKind.SoundEffectAsset:
+                ApplySoundEffectAsset(call);
                 break;
             case SdkResourceDeclarationKind.AnimationClip:
                 ApplyAnimationClip(call);
@@ -1047,6 +1062,21 @@ internal sealed class NesVideoProgram
         var asset = NesMusicAssetCompiler.CompileFromFile(name, path);
         musicAssets.Add(name, asset);
         musicAssetsInLoadOrder.Add(asset);
+    }
+
+    private void ApplySoundEffectAsset(FunctionCall call)
+    {
+        RequireArity(call, 2);
+        var name = IdentifierArg(call.Parameters.ElementAt(0), "sfx_asset argument 1");
+        if (soundEffectAssets.ContainsKey(name))
+        {
+            throw new InvalidOperationException($"SFX asset '{name}' is already declared.");
+        }
+
+        var path = PlatformAssetPathResolver.ResolveVariant(ResolveAssetPath(StringArg(call, 1)), "nes");
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile(name, path);
+        soundEffectAssets.Add(name, asset);
+        soundEffectAssetsInLoadOrder.Add(asset);
     }
 
     private void ApplyAnimationClip(FunctionCall call)

@@ -10,6 +10,7 @@
     "src/sprite.rs",
     "src/world.rs",
     "src/music.rs",
+    "src/sfx.rs",
     "src/palette.rs",
     "src/animation.rs",
     "src/tilemap.rs",

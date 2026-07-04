@@ -24,6 +24,18 @@ public static class SdkAudioOperationValidator
                 }
 
                 return;
+            case SdkAudioOperation.PlaySoundEffect play:
+                if (string.IsNullOrWhiteSpace(play.SoundId))
+                {
+                    throw new InvalidOperationException("SFX playback sound id must not be empty.");
+                }
+
+                if (!capabilities.SupportsSfx)
+                {
+                    throw new InvalidOperationException($"Target '{capabilities.Name}' does not support SFX playback yet.");
+                }
+
+                return;
             default:
                 throw new InvalidOperationException($"Unsupported SDK audio operation '{operation.GetType().Name}'.");
         }

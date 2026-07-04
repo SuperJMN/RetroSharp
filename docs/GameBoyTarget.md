@@ -30,6 +30,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | HUD modes | Window and sprite HUD; split-scroll HUD is not declared portable support |
 | Collision queries | World tile flags, world AABB, camera-relative AABB, and camera-relative AABB hit-top |
 | BGM formats | VGM/VGZ DMG register logs; hUGETracker `.uge`; transitional `.gbapu` / `.gbapu.json` APU traces; `.gbs` can be exported to `.gbapu` with the CLI helper |
+| SFX formats | VGM/VGZ DMG register logs as one-shot APU traces |
 | Cartridge size | 32 KiB ROM-only when possible; transparent MBC1 banked code, read-only data, and music up to 512 KiB ROMs |
 
 ## SDK Operation Boundary
@@ -53,10 +54,11 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 
 - `Audio.Init()` as `SdkAudioOperation.InitializeAudio`
 - `Music.Play(name)` as `SdkAudioOperation.PlayMusic`
+- `Sfx.Play(name)` as `SdkAudioOperation.PlaySoundEffect`
 - `Audio.Update()` as `SdkAudioOperation.UpdateAudio`
 - `Music.Stop()` as `SdkAudioOperation.StopMusic`
 
-Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over Game Boy target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`). `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, and `Music.Stop()` are likewise provided by the SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop` target intrinsics (`music_play` carries the music asset as a compile-time `AssetRef` operand); the legacy `audio_init(...)`/`audio_update(...)`/`music_play(...)`/`music_stop(...)` builtins remain compatibility aliases, and `Music.Asset(...)` is a package `[resource("music_asset")]` declaration. The collector still records them as `Sdk2DOperation.WaitFrame`/`Sdk2DOperation.PollInput` and the matching `SdkAudioOperation` values, so byte emission and frame-budget boundaries remain identical to the older direct SDK operation path. Logical sprite draw, explicit map-column streaming, camera movement, HUD tiles, and camera-relative AABB collision still lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge. Game Boy compilation also runs the shared frame-budget pass, so multiple explicit map-column streams that exceed the 21-tile background write budget, more than 40 hardware sprites, or more than 10 constant-Y sprites on a scanline in one possible frame fail before lowering.
+Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over Game Boy target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`). `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, `Music.Stop()`, and `Sfx.Play(name)` are likewise provided by the SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop`/`sfx_play` target intrinsics (`music_play` and `sfx_play` carry the audio asset as a compile-time `AssetRef` operand); the legacy `audio_init(...)`/`audio_update(...)`/`music_play(...)`/`music_stop(...)`/`sfx_play(...)` builtins remain compatibility aliases, and `Music.Asset(...)` / `Sfx.Asset(...)` are package resource declarations. The collector still records them as `Sdk2DOperation.WaitFrame`/`Sdk2DOperation.PollInput` and the matching `SdkAudioOperation` values, so byte emission and frame-budget boundaries remain identical to the older direct SDK operation path. Logical sprite draw, explicit map-column streaming, camera movement, HUD tiles, and camera-relative AABB collision still lower through the SDK operation path while preserving the existing Game Boy byte emission. The runtime compiler consumes `program.SdkOperations` for migrated SDK calls instead of reconstructing those operations from the AST, and it fails if the collected operation stream and source call sites diverge. Game Boy compilation also runs the shared frame-budget pass, so multiple explicit map-column streams that exceed the 21-tile background write budget, more than 40 hardware sprites, or more than 10 constant-Y sprites on a scanline in one possible frame fail before lowering.
 
 Target intrinsics and transitional helpers such as `Sprite.Set(...)`, `Scroll.Set(...)`, raw tilemap writes, and direction-specific camera movement still lower through the direct Game Boy path. Future roadmap tasks should move them only after adding the appropriate portable operation and capability checks.
 
@@ -145,6 +147,7 @@ Static setup calls:
 
 - `Video.Init()`
 - `Music.Asset(name, path)`
+- `Sfx.Asset(name, path)`
 - `Palette.Set(index, color)`
 - `ObjectPalette.Set(index, color)`
 - `Palette.Background(slot, c0, c1, c2, c3)`
@@ -167,6 +170,7 @@ Runtime calls:
 - `Audio.Update()`
 - `Music.Play(name)`
 - `Music.Stop()`
+- `Sfx.Play(name)`
 - `Input.Poll()`
 - `Scroll.Set(x, y)`
 - `Camera.Init(mapWidth, streamY, streamHeight)`
@@ -218,7 +222,7 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 
 The helper requires `gbsplay` on `PATH` unless `--gbsplay <path>` is supplied. It captures `gbsplay -o iodumper` APU register writes, auto-detects the musical loop, records the GBS-derived `replayHz`, and preserves supported writes as a binary `.gbapu` trace. `--no-auto-loop`, `--loop-cycle <n>`, and `--emit-json` override the defaults; `gbapu-dump <file>` prints the register writes. RetroSharp does not load `.gbs` directly.
 
-`Audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM runtime state. `Music.Play(name)` points the runtime at the compiled song data and starts from row 0 or the first APU trace order entry. `Audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a UGE row is due. For `.gbapu`, `Audio.Update()` resolves the next order entry's pooled group body, replays all its APU register commands for the current frame, and then waits the compiled frame delay before the next entry. In a banked ROM, the generated audio runtime tracks the current music bank alongside the data pointer and switches MBC1 banks when sequential playback crosses a 16 KiB bank boundary. Call it once per frame after `Video.WaitVBlank()`; if a frame also writes direct Game Boy OAM through `Sprite.Draw(...)`, present sprites first so dense audio bursts cannot push OAM writes out of VBlank on real hardware. `Music.Stop()` disables BGM playback and silences the active audio channels.
+`Audio.Init()` enables the DMG APU through `NR52`, routes channels through `NR51`, sets master volume through `NR50`, and resets the BGM and one-shot SFX runtime state. `Music.Play(name)` points the runtime at the compiled song data and starts from row 0 or the first APU trace order entry. `Sfx.Play(name)` starts or restarts a declared VGM/VGZ one-shot trace. `Audio.Update()` advances BGM playback by one tick and writes compiled duty-channel rows to `NR11`..`NR14` and `NR21`..`NR24`, wave rows and wave RAM through `NR30`..`NR34`/`$FF30`..`$FF3F`, and noise rows through `NR42`..`NR44` when a UGE row is due. For `.gbapu` and SFX VGM traces, `Audio.Update()` resolves the next order entry's pooled group body, replays all its APU register commands for the current frame, and then waits the compiled frame delay before the next entry; SFX commands are applied after BGM commands so action feedback can override the same channel for that frame. In a banked ROM, the generated audio runtime tracks the current music/SFX bank alongside the data pointer and switches MBC1 banks when sequential playback crosses a 16 KiB bank boundary. Call it once per frame after `Video.WaitVBlank()`; if a frame also writes direct Game Boy OAM through `Sprite.Draw(...)`, present sprites first so dense audio bursts cannot push OAM writes out of VBlank on real hardware. `Music.Stop()` disables BGM playback and silences the active audio channels.
 
 ### Multiple music themes
 
