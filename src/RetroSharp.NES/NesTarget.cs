@@ -24,6 +24,10 @@ public static class NesTarget
                 "music_play",
                 runtimeArity: 0,
                 compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
+            TargetIntrinsicDescriptor.PlaySoundEffect(
+                "sfx_play",
+                runtimeArity: 0,
+                compileTimeOperands: [new TargetIntrinsicCompileTimeOperand(0, TargetIntrinsicOperandRole.AssetRef)]),
             TargetIntrinsicDescriptor.StopMusic("music_stop", arity: 0),
             TargetIntrinsicDescriptor.InitializeCamera("camera_init", arity: 3),
             TargetIntrinsicDescriptor.DrawLogicalSprite(
@@ -81,7 +85,9 @@ public static class NesTarget
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(
         Name: "nes",
         SupportsBgm: true,
-        SupportedMusicFormats: ["vgm"]);
+        SupportedMusicFormats: ["vgm"],
+        SupportsSfx: true,
+        SupportedSfxFormats: ["vgm"]);
 
     public static Target2DCapabilities Capabilities { get; } = new(
         Name: "nes",

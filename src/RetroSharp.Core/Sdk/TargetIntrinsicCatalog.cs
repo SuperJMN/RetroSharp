@@ -13,6 +13,7 @@ public enum TargetIntrinsicOperation
     InitializeAudio,
     UpdateAudio,
     PlayMusic,
+    PlaySoundEffect,
     StopMusic,
     ReadWorldTileFlags,
     InitializeCamera,
@@ -45,6 +46,7 @@ public enum TargetIntrinsicOperandRole
 public enum TargetIntrinsicCapabilityRequirement
 {
     BackgroundMusic,
+    SoundEffects,
     LogicalSprites,
     WorldTileFlags,
     CameraRelativeAabb,
@@ -166,6 +168,20 @@ public sealed record TargetIntrinsicDescriptor
             runtimeArity,
             compileTimeOperands,
             [TargetIntrinsicCapabilityRequirement.BackgroundMusic]);
+    }
+
+    public static TargetIntrinsicDescriptor PlaySoundEffect(
+        string name,
+        int runtimeArity,
+        IEnumerable<TargetIntrinsicCompileTimeOperand> compileTimeOperands)
+    {
+        return new TargetIntrinsicDescriptor(
+            name,
+            TargetIntrinsicOperation.PlaySoundEffect,
+            TargetIntrinsicReturnKind.Void,
+            runtimeArity,
+            compileTimeOperands,
+            [TargetIntrinsicCapabilityRequirement.SoundEffects]);
     }
 
     public static TargetIntrinsicDescriptor StopMusic(string name, int arity)

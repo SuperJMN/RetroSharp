@@ -17,6 +17,7 @@ void SetupVideo()
 void SetupAudio()
 {
     Music.Asset(runner_theme, "assets/music/runner.vgz");
+    Sfx.Asset(jump_sfx, "assets/sfx/smb-jump.vgm");
     Audio.Init();
     Music.Play(runner_theme);
 }
@@ -86,4 +87,3 @@ inline void SimulatePlayer(PlayerState player, CameraState view, FrameState fram
     view.ApplyPosition();
     player.UpdateRunAnimation(view);
 }
-

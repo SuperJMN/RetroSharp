@@ -11,6 +11,13 @@ internal sealed record NesCompiledMusicAsset(
     IReadOnlyList<NesApuTraceOrderEntry> OrderEntries,
     IReadOnlyList<NesDpcmSampleBlock> DpcmBlocks);
 
+internal sealed record NesCompiledSoundEffectAsset(
+    string Name,
+    byte[] Data,
+    int OrderStartOffset,
+    IReadOnlyList<NesApuTraceOrderEntry> OrderEntries,
+    IReadOnlyList<NesDpcmSampleBlock> DpcmBlocks);
+
 internal readonly record struct NesApuTraceOrderEntry(int BodyOffset, byte Wait);
 
 internal readonly record struct NesDpcmSampleBlock(ushort SourceAddress, byte[] Data);
@@ -168,7 +175,7 @@ internal static class NesMusicAssetCompiler
 
     private static bool IsNesApuTriggerRegister(ushort address)
     {
-        return address is 0x4003 or 0x4007 or 0x400B or 0x400F or 0x4015 or 0x4017;
+        return address is 0x4003 or 0x4007 or 0x400B or 0x400F or 0x4015;
     }
 
     private static IReadOnlyList<NesDpcmSampleBlock> CompileDpcmBlocks(IReadOnlyList<VgmDpcmMemoryBlock> blocks, IReadOnlyList<VgmFrame> frames)
@@ -357,4 +364,106 @@ internal static class NesMusicAssetCompiler
     }
 
     private sealed record ResolvedMusicAsset(string Format, string Path);
+}
+
+internal static class NesSoundEffectAssetCompiler
+{
+    public static NesCompiledSoundEffectAsset CompileFromFile(string name, string path)
+    {
+        var resolvedPath = PlatformAssetPathResolver.ResolveVariant(path, "nes");
+        if (!Path.GetExtension(resolvedPath).Equals(".vgm", StringComparison.OrdinalIgnoreCase) &&
+            !Path.GetExtension(resolvedPath).Equals(".vgz", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"NES SFX asset '{Path.GetFileName(path)}' must use VGM/VGZ input.");
+        }
+
+        var stream = VgmImporter.Import(resolvedPath, VgmChip.Nes2A03);
+        var frame = FirstSfxFrame(stream.Frames);
+        if (frame is null)
+        {
+            throw new InvalidOperationException("NES SFX VGM trace must contain at least one supported 2A03 channel register write.");
+        }
+
+        var body = BuildApuTraceGroupBody(frame);
+
+        return new NesCompiledSoundEffectAsset(
+            name,
+            body,
+            0,
+            [new NesApuTraceOrderEntry(0, 0)],
+            []);
+    }
+
+    private static VgmFrame? FirstSfxFrame(IReadOnlyList<VgmFrame> frames)
+    {
+        foreach (var frame in frames)
+        {
+            var writes = new List<VgmRegisterWrite>(frame.Writes.Count);
+            for (var i = 0; i < frame.Writes.Count; i++)
+            {
+                var write = frame.Writes[i];
+                if (!IsSfxChannelRegister(write.Address))
+                {
+                    continue;
+                }
+
+                if (IsNesApuChannelTriggerRegister(write.Address) || IsLastWriteToRegisterInFrame(frame.Writes, i))
+                {
+                    writes.Add(write);
+                }
+            }
+
+            if (writes.Count > 0)
+            {
+                return new VgmFrame(frame.Index, writes);
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsLastWriteToRegisterInFrame(IReadOnlyList<VgmRegisterWrite> writes, int index)
+    {
+        var address = writes[index].Address;
+        for (var i = index + 1; i < writes.Count; i++)
+        {
+            if (writes[i].Address == address)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsSfxChannelRegister(ushort address)
+    {
+        return address is >= 0x4000 and <= 0x400F;
+    }
+
+    private static bool IsNesApuChannelTriggerRegister(ushort address)
+    {
+        return address is 0x4003 or 0x4007 or 0x400B or 0x400F;
+    }
+
+    private static byte[] BuildApuTraceGroupBody(VgmFrame frame)
+    {
+        if (frame.Writes.Count > byte.MaxValue)
+        {
+            throw new InvalidOperationException("NES SFX VGM trace contains more than 255 register writes in one frame.");
+        }
+
+        var body = new List<byte>(1 + frame.Writes.Count * 2)
+        {
+            (byte)frame.Writes.Count,
+        };
+        foreach (var write in frame.Writes)
+        {
+            body.Add((byte)(write.Address - 0x4000));
+            body.Add(write.Value);
+        }
+
+        return body.ToArray();
+    }
+
 }

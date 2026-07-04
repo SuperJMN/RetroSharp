@@ -102,19 +102,29 @@ internal static class GameBoyRomBuilder
 
         foreach (var placement in bankedLayout.MusicPlacements.Values)
         {
-            var sourceOffset = 0;
-            var bank = placement.Bank;
-            while (sourceOffset < placement.Data.Length)
-            {
-                var chunkLength = Math.Min(BankSize, placement.Data.Length - sourceOffset);
-                placement.Data.AsSpan(sourceOffset, chunkLength).CopyTo(bankedRom.AsSpan(bank * BankSize, chunkLength));
-                sourceOffset += chunkLength;
-                bank++;
-            }
+            CopyBankedAudioData(bankedRom, placement);
+        }
+
+        foreach (var placement in bankedLayout.SoundEffectPlacements.Values)
+        {
+            CopyBankedAudioData(bankedRom, placement);
         }
 
         WriteHeaderChecksums(bankedRom);
         return bankedRom;
+    }
+
+    private static void CopyBankedAudioData(byte[] bankedRom, GameBoyBankedAudioPlacement placement)
+    {
+        var sourceOffset = 0;
+        var bank = placement.Bank;
+        while (sourceOffset < placement.Data.Length)
+        {
+            var chunkLength = Math.Min(BankSize, placement.Data.Length - sourceOffset);
+            placement.Data.AsSpan(sourceOffset, chunkLength).CopyTo(bankedRom.AsSpan(bank * BankSize, chunkLength));
+            sourceOffset += chunkLength;
+            bank++;
+        }
     }
 
     private static int CalculateProgramTailBanks(int programLength)
@@ -269,7 +279,7 @@ internal static class GameBoyRomBuilder
         EmitMapData(builder, program);
         if (!layout.UsesBankedMusic)
         {
-            EmitMusicData(builder, program);
+            EmitAudioData(builder, program);
         }
 
         return builder;
@@ -458,11 +468,19 @@ internal static class GameBoyRomBuilder
 
     internal static string MusicLabel(string name) => $"music_{name}";
 
-    private static void EmitMusicData(GbBuilder builder, GameBoyVideoProgram program)
+    internal static string SoundEffectLabel(string name) => $"sfx_{name}";
+
+    private static void EmitAudioData(GbBuilder builder, GameBoyVideoProgram program)
     {
         foreach (var asset in program.MusicAssetsInLoadOrder)
         {
             builder.Label(MusicLabel(asset.Name));
+            builder.Emit(asset.Data);
+        }
+
+        foreach (var asset in program.SoundEffectAssetsInLoadOrder)
+        {
+            builder.Label(SoundEffectLabel(asset.Name));
             builder.Emit(asset.Data);
         }
     }
@@ -692,7 +710,8 @@ internal sealed class GameBoyRomLayout
         int romSize,
         byte romSizeCode,
         IReadOnlyDictionary<string, GameBoyReadOnlyDataPlacement> readOnlyDataPlacements,
-        IReadOnlyDictionary<string, GameBoyBankedMusicPlacement> musicPlacements)
+        IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> musicPlacements,
+        IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> soundEffectPlacements)
     {
         UsesBankedMusic = usesBankedMusic;
         ProgramTailBankCount = programTailBankCount;
@@ -700,6 +719,7 @@ internal sealed class GameBoyRomLayout
         RomSizeCode = romSizeCode;
         ReadOnlyDataPlacements = readOnlyDataPlacements;
         MusicPlacements = musicPlacements;
+        SoundEffectPlacements = soundEffectPlacements;
     }
 
     public static GameBoyRomLayout RomOnly { get; } = new(
@@ -708,7 +728,8 @@ internal sealed class GameBoyRomLayout
         romSize: 32 * 1024,
         romSizeCode: 0x00,
         readOnlyDataPlacements: new Dictionary<string, GameBoyReadOnlyDataPlacement>(),
-        musicPlacements: new Dictionary<string, GameBoyBankedMusicPlacement>());
+        musicPlacements: new Dictionary<string, GameBoyBankedAudioPlacement>(),
+        soundEffectPlacements: new Dictionary<string, GameBoyBankedAudioPlacement>());
 
     public bool UsesBankedMusic { get; }
 
@@ -722,18 +743,27 @@ internal sealed class GameBoyRomLayout
 
     public IReadOnlyDictionary<string, GameBoyReadOnlyDataPlacement> ReadOnlyDataPlacements { get; }
 
-    public IReadOnlyDictionary<string, GameBoyBankedMusicPlacement> MusicPlacements { get; }
+    public IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> MusicPlacements { get; }
+
+    public IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> SoundEffectPlacements { get; }
 
     public bool TryReadOnlyDataPlacement(string label, out GameBoyReadOnlyDataPlacement placement)
     {
         return ReadOnlyDataPlacements.TryGetValue(label, out placement!);
     }
 
-    public GameBoyBankedMusicPlacement MusicPlacement(string name)
+    public GameBoyBankedAudioPlacement MusicPlacement(string name)
     {
         return MusicPlacements.TryGetValue(name, out var placement)
             ? placement
             : throw new InvalidOperationException($"Unknown banked Game Boy music asset '{name}'.");
+    }
+
+    public GameBoyBankedAudioPlacement SoundEffectPlacement(string name)
+    {
+        return SoundEffectPlacements.TryGetValue(name, out var placement)
+            ? placement
+            : throw new InvalidOperationException($"Unknown banked Game Boy SFX asset '{name}'.");
     }
 
     public static GameBoyRomLayout CreateBankedMusicLayout(
@@ -743,7 +773,8 @@ internal sealed class GameBoyRomLayout
         bool bankReadOnlyData = false)
     {
         var readOnlyPlacements = new Dictionary<string, GameBoyReadOnlyDataPlacement>();
-        var placements = new Dictionary<string, GameBoyBankedMusicPlacement>();
+        var placements = new Dictionary<string, GameBoyBankedAudioPlacement>();
+        var soundEffectPlacements = new Dictionary<string, GameBoyBankedAudioPlacement>();
         var nextBank = 1 + programTailBankCount;
         var nextAddress = BankedWindowStart;
         if (bankReadOnlyData)
@@ -778,7 +809,13 @@ internal sealed class GameBoyRomLayout
 
         foreach (var asset in program.MusicAssetsInLoadOrder)
         {
-            placements[asset.Name] = new GameBoyBankedMusicPlacement(asset.Name, (byte)nextBank, 0x4000, asset.Data);
+            placements[asset.Name] = new GameBoyBankedAudioPlacement(asset.Name, (byte)nextBank, 0x4000, asset.Data);
+            nextBank += Math.Max(1, (asset.Data.Length + BankSize - 1) / BankSize);
+        }
+
+        foreach (var asset in program.SoundEffectAssetsInLoadOrder)
+        {
+            soundEffectPlacements[asset.Name] = new GameBoyBankedAudioPlacement(asset.Name, (byte)nextBank, 0x4000, asset.Data);
             nextBank += Math.Max(1, (asset.Data.Length + BankSize - 1) / BankSize);
         }
 
@@ -790,12 +827,13 @@ internal sealed class GameBoyRomLayout
         }
 
         return new GameBoyRomLayout(
-            usesBankedMusic: placements.Count != 0,
+            usesBankedMusic: placements.Count != 0 || soundEffectPlacements.Count != 0,
             programTailBankCount: programTailBankCount,
             romSize: bankCount * BankSize,
             romSizeCode: ToRomSizeCode(bankCount),
             readOnlyDataPlacements: readOnlyPlacements,
-            musicPlacements: placements);
+            musicPlacements: placements,
+            soundEffectPlacements: soundEffectPlacements);
     }
 
     private static int RoundBankCount(int requiredBanks)
@@ -824,7 +862,7 @@ internal sealed record GameBoyReadOnlyDataBlob(string Label, byte[] Data);
 
 internal sealed record GameBoyReadOnlyDataPlacement(string Label, byte Bank, ushort Address, byte[] Data);
 
-internal sealed record GameBoyBankedMusicPlacement(string Name, byte Bank, ushort Address, byte[] Data);
+internal sealed record GameBoyBankedAudioPlacement(string Name, byte Bank, ushort Address, byte[] Data);
 
 internal sealed class GameBoyRuntimeCompiler
 {
@@ -891,6 +929,15 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort CameraSetPositionStepsRemainingAddress = 0xC12E;
     private const ushort WordScratchLowAddress = 0xC12F;
     private const ushort WordScratchHighAddress = 0xC130;
+    private const ushort SfxActiveAddress = 0xC131;
+    private const ushort SfxTickAddress = 0xC132;
+    private const ushort SfxDataPointerLowAddress = 0xC133;
+    private const ushort SfxDataPointerHighAddress = 0xC134;
+    private const ushort SfxCurrentPointerLowAddress = 0xC135;
+    private const ushort SfxCurrentPointerHighAddress = 0xC136;
+    private const ushort SfxDataBankAddress = 0xC137;
+    private const ushort SfxCurrentBankAddress = 0xC138;
+    private const ushort SfxDataCursorBankAddress = 0xC139;
     // Camera movement walks the camera toward the requested position one pixel at a time. A single
     // move never crosses more than one tile boundary (8 px), which is the per-frame streaming budget
     // (one queued column/row drained by camera apply). Capping the walk here keeps that invariant while
@@ -983,7 +1030,12 @@ internal sealed class GameBoyRuntimeCompiler
         && romLayout.UsesBankedMusic
         && program.SdkAudioOperations.Any(operation => operation is SdkAudioOperation.PlayMusic);
 
-    public bool UsesAudioHelpers => UsesAudioUpdateHelper || UsesMusicPlayHelpers;
+    public bool UsesSoundEffectPlayHelpers =>
+        romLayout.ProgramTailBankCount > 0
+        && romLayout.UsesBankedMusic
+        && program.SdkAudioOperations.Any(operation => operation is SdkAudioOperation.PlaySoundEffect);
+
+    public bool UsesAudioHelpers => UsesAudioUpdateHelper || UsesMusicPlayHelpers || UsesSoundEffectPlayHelpers;
 
     public void EmitProgramBankInitialization()
     {
@@ -1034,6 +1086,7 @@ internal sealed class GameBoyRuntimeCompiler
     public void EmitAudioHelpers()
     {
         EmitMusicPlayHelpers();
+        EmitSoundEffectPlayHelpers();
         EmitAudioUpdateHelper();
     }
 
@@ -1048,6 +1101,22 @@ internal sealed class GameBoyRuntimeCompiler
         {
             builder.Label(MusicPlayHelperLabel(themeId));
             EmitPlayMusic(new SdkAudioOperation.PlayMusic(themeId));
+            EmitRestoreProgramTailBank();
+            builder.Emit(0xC9); // RET
+        }
+    }
+
+    private void EmitSoundEffectPlayHelpers()
+    {
+        if (!UsesSoundEffectPlayHelpers)
+        {
+            return;
+        }
+
+        foreach (var soundId in program.SdkAudioOperations.OfType<SdkAudioOperation.PlaySoundEffect>().Select(play => play.SoundId).Distinct())
+        {
+            builder.Label(SoundEffectPlayHelperLabel(soundId));
+            EmitPlaySoundEffect(new SdkAudioOperation.PlaySoundEffect(soundId));
             EmitRestoreProgramTailBank();
             builder.Emit(0xC9); // RET
         }
@@ -2386,6 +2455,7 @@ internal sealed class GameBoyRuntimeCompiler
             case "world_load":
             case "sprite_asset":
             case "music_asset":
+            case "sfx_asset":
                 break;
             case "animation_clip":
                 break;
@@ -2403,6 +2473,9 @@ internal sealed class GameBoyRuntimeCompiler
                 break;
             case "music_play":
                 EmitNextSdkAudioOperation<SdkAudioOperation.PlayMusic>(call.Name);
+                break;
+            case "sfx_play":
+                EmitNextSdkAudioOperation<SdkAudioOperation.PlaySoundEffect>(call.Name);
                 break;
             case "music_stop":
                 EmitNextSdkAudioOperation<SdkAudioOperation.StopMusic>(call.Name);
@@ -2500,6 +2573,12 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        if (operation is SdkAudioOperation.PlaySoundEffect sfx && UsesSoundEffectPlayHelpers)
+        {
+            builder.JumpAbsolute(0xCD, SoundEffectPlayHelperLabel(sfx.SoundId)); // CALL nn
+            return;
+        }
+
         if (operation is SdkAudioOperation.UpdateAudio && UsesAudioUpdateHelper)
         {
             builder.JumpAbsolute(0xCD, AudioUpdateHelperLabel); // CALL nn
@@ -2573,9 +2652,18 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(MusicDataBankAddress);
         builder.StoreA(MusicCurrentBankAddress);
         builder.StoreA(MusicScratchBankAddress);
+        builder.StoreA(SfxActiveAddress);
+        builder.StoreA(SfxTickAddress);
+        builder.StoreA(SfxDataPointerLowAddress);
+        builder.StoreA(SfxDataPointerHighAddress);
+        builder.StoreA(SfxCurrentPointerLowAddress);
+        builder.StoreA(SfxCurrentPointerHighAddress);
+        builder.StoreA(SfxDataBankAddress);
+        builder.StoreA(SfxCurrentBankAddress);
         if (romLayout.UsesBankedMusic)
         {
             builder.StoreA(MusicDataCursorBankAddress);
+            builder.StoreA(SfxDataCursorBankAddress);
         }
 
         EmitClearMusicRowCache();
@@ -2626,6 +2714,42 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
+    internal void EmitPlaySoundEffect(SdkAudioOperation.PlaySoundEffect operation)
+    {
+        if (!program.SoundEffectAssets.TryGetValue(operation.SoundId, out _))
+        {
+            throw new InvalidOperationException($"Unknown Game Boy SFX asset '{operation.SoundId}'. Declare it before playback.");
+        }
+
+        if (romLayout.UsesBankedMusic)
+        {
+            var placement = romLayout.SoundEffectPlacement(operation.SoundId);
+            builder.LoadHl(placement.Address);
+            builder.Emit(0x7D);                         // LD A,L
+            builder.StoreA(SfxDataPointerLowAddress);
+            builder.Emit(0x7C);                         // LD A,H
+            builder.StoreA(SfxDataPointerHighAddress);
+            builder.LoadAImmediate(placement.Bank);
+            builder.StoreA(SfxDataBankAddress);
+            builder.StoreA(SfxCurrentBankAddress);
+            EmitSelectRomBankFromA();
+        }
+        else
+        {
+            builder.LoadHl(GameBoyRomBuilder.SoundEffectLabel(operation.SoundId));
+            builder.Emit(0x7D);                         // LD A,L
+            builder.StoreA(SfxDataPointerLowAddress);
+            builder.Emit(0x7C);                         // LD A,H
+            builder.StoreA(SfxDataPointerHighAddress);
+        }
+
+        builder.LoadAImmediate(1);
+        builder.StoreA(SfxActiveAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreA(SfxTickAddress);
+        EmitResetSfxApuTracePointerToStart();
+    }
+
     internal void EmitStopMusic()
     {
         builder.LoadAImmediate(0);
@@ -2639,6 +2763,7 @@ internal sealed class GameBoyRuntimeCompiler
     internal void EmitUpdateAudio()
     {
         var endLabel = builder.CreateLabel("audio_update_end");
+        var sfxLabel = builder.CreateLabel("audio_update_sfx");
         var apuTraceLabel = builder.CreateLabel("audio_update_apu_trace");
         var loadRowLabel = builder.CreateLabel("audio_update_load_row");
         var rowReadyLabel = builder.CreateLabel("audio_update_row_ready");
@@ -2648,7 +2773,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadA(MusicActiveAddress);
         builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, endLabel);       // JP Z,endLabel
+        builder.JumpAbsolute(0xCA, sfxLabel);       // JP Z,sfxLabel
         builder.CompareImmediate(MusicActiveApuTrace);
         builder.JumpAbsolute(0xCA, apuTraceLabel);  // JP Z,apuTraceLabel
 
@@ -2657,7 +2782,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.JumpAbsolute(0xCA, loadRowLabel);   // JP Z,loadRowLabel
         builder.SubtractAImmediate(1);
         builder.StoreA(MusicTickAddress);
-        builder.JumpAbsolute(endLabel);
+        builder.JumpAbsolute(sfxLabel);
 
         builder.Label(loadRowLabel);
         EmitLoadMusicPointerToHl(MusicDataCursorBankAddress);
@@ -2718,11 +2843,13 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadA(MusicTicksPerRowAddress);
         builder.SubtractAImmediate(1);
         builder.StoreA(MusicTickAddress);
-        builder.JumpAbsolute(endLabel);
+        builder.JumpAbsolute(sfxLabel);
 
         builder.Label(apuTraceLabel);
-        EmitUpdateApuTrace(endLabel);
+        EmitUpdateApuTrace(sfxLabel);
 
+        builder.Label(sfxLabel);
+        EmitUpdateSoundEffectApuTrace(endLabel);
         builder.Label(endLabel);
     }
 
@@ -2798,6 +2925,87 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.Label(loopLabel);
         EmitResetApuTracePointerToLoop();
+        builder.JumpAbsolute(endLabel);
+    }
+
+    private void EmitUpdateSoundEffectApuTrace(string endLabel)
+    {
+        var processLabel = builder.CreateLabel("sfx_update_apu_process");
+        var commandLoopLabel = builder.CreateLabel("sfx_update_apu_command_loop");
+        var waveBlockLabel = builder.CreateLabel("sfx_update_apu_wave_block");
+        var commandDoneLabel = builder.CreateLabel("sfx_update_apu_command_done");
+        var stopLabel = builder.CreateLabel("sfx_update_stop");
+
+        builder.LoadA(SfxActiveAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, endLabel);       // JP Z,endLabel
+
+        builder.LoadA(SfxTickAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, processLabel);   // JP Z,processLabel
+        builder.SubtractAImmediate(1);
+        builder.StoreA(SfxTickAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, endLabel);       // JP NZ,endLabel
+
+        builder.Label(processLabel);
+        EmitLoadSfxCurrentPointerToHl();            // HL -> order entry
+        builder.LoadAFromHl();                      // body offset low
+        builder.LoadEFromA();
+        EmitAdvanceSfxHl();
+        builder.LoadAFromHl();                      // body offset high
+        builder.LoadDFromA();
+        builder.Emit(0xB3);                         // OR E: body offset zero is the one-shot sentinel
+        builder.JumpAbsolute(0xCA, stopLabel);      // JP Z,stopLabel
+        EmitAdvanceSfxHl();                         // HL -> waitAfter
+        builder.LoadAFromHl();
+        builder.StoreA(SfxTickAddress);
+        EmitAdvanceSfxHl();                         // HL -> next order entry
+        EmitStoreHlToSfxCurrentPointer();
+
+        EmitLoadSfxDataOffsetToHl(SfxDataCursorBankAddress);
+        builder.LoadAFromHl();                      // command count
+        builder.LoadBFromA();
+        EmitAdvanceSfxHl(SfxDataCursorBankAddress); // HL -> first command
+
+        builder.Label(commandLoopLabel);
+        builder.LoadAFromHl();                      // register offset or wave RAM block command
+        builder.CompareImmediate(ApuTraceWaveRamBlockCommand);
+        builder.JumpAbsolute(0xCA, waveBlockLabel); // JP Z,waveBlockLabel
+        builder.LoadCFromA();
+        EmitAdvanceSfxHl(SfxDataCursorBankAddress);
+        builder.LoadAFromHl();                      // value
+        builder.StoreHighRamCFromA();               // LDH (C),A
+        EmitAdvanceSfxHl(SfxDataCursorBankAddress);
+        builder.JumpAbsolute(commandDoneLabel);
+
+        builder.Label(waveBlockLabel);
+        EmitAdvanceSfxHl(SfxDataCursorBankAddress);
+        for (var i = 0; i < 16; i++)
+        {
+            builder.LoadAFromHl();
+            builder.StoreHighRamA((byte)(0x30 + i));
+            EmitAdvanceSfxHl(SfxDataCursorBankAddress);
+        }
+
+        builder.Label(commandDoneLabel);
+        builder.Emit(0x05);                         // DEC B
+        builder.LoadAFromB();
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, commandLoopLabel); // JP NZ,commandLoopLabel
+
+        builder.LoadA(SfxTickAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, processLabel);   // JP Z,processLabel: drain zero-wait order entries
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(stopLabel);
+        builder.LoadAImmediate(0);
+        builder.StoreA(SfxActiveAddress);
+        builder.StoreA(SfxTickAddress);
+        builder.StoreA(SfxCurrentPointerLowAddress);
+        builder.StoreA(SfxCurrentPointerHighAddress);
+        builder.StoreA(SfxCurrentBankAddress);
         builder.JumpAbsolute(endLabel);
     }
 
@@ -2910,6 +3118,21 @@ internal sealed class GameBoyRuntimeCompiler
         EmitClearMusicRowCache();
     }
 
+    private void EmitResetSfxApuTracePointerToStart()
+    {
+        // Order stream pointer = dataPointer + orderStartOffset (header bytes 1..2).
+        EmitLoadSfxPointerToHl(SfxDataCursorBankAddress);
+        EmitAdvanceSfxHl(SfxDataCursorBankAddress); // HL -> orderStart low
+        builder.LoadAFromHl();
+        builder.LoadEFromA();
+        EmitAdvanceSfxHl(SfxDataCursorBankAddress); // HL -> orderStart high
+        builder.LoadAFromHl();
+        builder.LoadDFromA();
+
+        EmitLoadSfxDataOffsetToHl(SfxCurrentBankAddress);
+        EmitStoreHlToSfxCurrentPointer();
+    }
+
     private void EmitResetApuTracePointerToLoop()
     {
         // Order stream pointer = dataPointer + loopOrderOffset (header bytes 3..4).
@@ -2962,6 +3185,43 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Emit(0x67);                         // LD H,A
     }
 
+    private void EmitLoadSfxPointerToHl(ushort cursorBankAddress)
+    {
+        if (romLayout.UsesBankedMusic)
+        {
+            builder.LoadA(SfxDataBankAddress);
+            builder.StoreA(cursorBankAddress);
+            EmitSelectRomBankFromA();
+        }
+
+        builder.LoadA(SfxDataPointerLowAddress);
+        builder.LoadLFromA();
+        builder.LoadA(SfxDataPointerHighAddress);
+        builder.Emit(0x67);                         // LD H,A
+    }
+
+    private void EmitLoadSfxCurrentPointerToHl()
+    {
+        if (romLayout.UsesBankedMusic)
+        {
+            builder.LoadA(SfxCurrentBankAddress);
+            EmitSelectRomBankFromA();
+        }
+
+        builder.LoadA(SfxCurrentPointerLowAddress);
+        builder.LoadLFromA();
+        builder.LoadA(SfxCurrentPointerHighAddress);
+        builder.Emit(0x67);                         // LD H,A
+    }
+
+    private void EmitStoreHlToSfxCurrentPointer()
+    {
+        builder.Emit(0x7D);                         // LD A,L
+        builder.StoreA(SfxCurrentPointerLowAddress);
+        builder.Emit(0x7C);                         // LD A,H
+        builder.StoreA(SfxCurrentPointerHighAddress);
+    }
+
     private void EmitLoadMusicDataOffsetToHl(ushort targetBankAddress)
     {
         if (!romLayout.UsesBankedMusic)
@@ -2975,6 +3235,34 @@ internal sealed class GameBoyRuntimeCompiler
         // dataBank + (DE >> 14) and the in-window address is 0x4000 | (DE & 0x3FFF). The result bank
         // is written to targetBankAddress so the caller's own cursor bank is never disturbed.
         builder.LoadA(MusicDataBankAddress);
+        builder.LoadCFromA();
+        builder.LoadAFromD();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.AddAFromC();
+        builder.StoreA(targetBankAddress);
+        EmitSelectRomBankFromA();
+        builder.LoadAFromD();
+        builder.AndImmediate(0x3F);
+        builder.OrImmediate(0x40);
+        builder.Emit(0x67);                         // LD H,A
+        builder.LoadLFromE();
+    }
+
+    private void EmitLoadSfxDataOffsetToHl(ushort targetBankAddress)
+    {
+        if (!romLayout.UsesBankedMusic)
+        {
+            EmitLoadSfxPointerToHl(targetBankAddress);
+            builder.AddHlDe();
+            return;
+        }
+
+        builder.LoadA(SfxDataBankAddress);
         builder.LoadCFromA();
         builder.LoadAFromD();
         builder.ShiftRightLogicalA();
@@ -3007,6 +3295,28 @@ internal sealed class GameBoyRuntimeCompiler
         // Crossing 0x8000 means the cursor walked past its 16 KiB window: rewind HL to 0x4000 and
         // advance the cursor's own bank so sequential reads continue transparently.
         var endLabel = builder.CreateLabel("music_bank_advance_end");
+        builder.Emit(0x7C);                         // LD A,H
+        builder.CompareImmediate(0x80);
+        builder.JumpAbsolute(0xC2, endLabel);       // JP NZ,endLabel
+        builder.LoadHImmediate(0x40);
+        builder.LoadA(cursorBankAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(cursorBankAddress);
+        EmitSelectRomBankFromA();
+        builder.Label(endLabel);
+    }
+
+    private void EmitAdvanceSfxHl() => EmitAdvanceSfxHl(SfxCurrentBankAddress);
+
+    private void EmitAdvanceSfxHl(ushort cursorBankAddress)
+    {
+        builder.Emit(0x23);                         // INC HL
+        if (!romLayout.UsesBankedMusic)
+        {
+            return;
+        }
+
+        var endLabel = builder.CreateLabel("sfx_bank_advance_end");
         builder.Emit(0x7C);                         // LD A,H
         builder.CompareImmediate(0x80);
         builder.JumpAbsolute(0xC2, endLabel);       // JP NZ,endLabel
@@ -3092,6 +3402,9 @@ internal sealed class GameBoyRuntimeCompiler
                 return true;
             case TargetIntrinsicOperation.PlayMusic:
                 EmitNextSdkAudioOperation<SdkAudioOperation.PlayMusic>(call.Name);
+                return true;
+            case TargetIntrinsicOperation.PlaySoundEffect:
+                EmitNextSdkAudioOperation<SdkAudioOperation.PlaySoundEffect>(call.Name);
                 return true;
             case TargetIntrinsicOperation.StopMusic:
                 EmitNextSdkAudioOperation<SdkAudioOperation.StopMusic>(call.Name);
@@ -3189,6 +3502,8 @@ internal sealed class GameBoyRuntimeCompiler
     private static string ReadOnlyDataByteReaderLabel(string label) => $"read_data_{label}";
 
     private static string MusicPlayHelperLabel(string themeId) => $"music_play_fixed_{themeId}";
+
+    private static string SoundEffectPlayHelperLabel(string soundId) => $"sfx_play_fixed_{soundId}";
 
     private const string AudioUpdateHelperLabel = "audio_update_fixed_helper";
 

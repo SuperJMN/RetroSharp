@@ -153,6 +153,40 @@ public sealed class GameBoyMusicTests
     }
 
     [Fact]
+    public void Compiles_vgz_sfx_asset_to_game_boy_one_shot_runtime()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzip(
+            Path.Combine(directory, "jump.gb.vgz"),
+            chipClockOffset: 0x80,
+            chipClockHz: 4_194_304,
+            command: 0xB3,
+            [0x02, 0xF0],
+            waitSamples: 735,
+            [0x04, 0x87]);
+
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sfx.Asset(jump_sfx, "jump.vgz");
+                                  Audio.Init();
+                                  Sfx.Play(jump_sfx);
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      Audio.Update();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x12, 0xF0]), "SFX VGM writes should be compiled into the Game Boy APU stream.");
+        Assert.True(ContainsSequence(rom, [0x14, 0x87]), "SFX trigger writes should survive the one-shot repack.");
+        Assert.True(ContainsSequence(rom, [0xE2]), "SFX playback should write dynamic high-RAM APU register offsets through LDH (C),A.");
+    }
+
+    [Fact]
     public void Compiles_large_music_resource_to_banked_game_boy_rom_without_source_bank_calls()
     {
         var directory = CreateTempDirectory();
@@ -572,6 +606,7 @@ public sealed class GameBoyMusicTests
         const string source = """
                               void start() {
                                   Music.Play(stage_theme);
+                                  Sfx.Play(jump_sfx);
                               }
 
                               void Main() {
@@ -593,6 +628,11 @@ public sealed class GameBoyMusicTests
             {
                 var play = Assert.IsType<SdkAudioOperation.PlayMusic>(operation);
                 Assert.Equal("stage_theme", play.ThemeId);
+            },
+            operation =>
+            {
+                var play = Assert.IsType<SdkAudioOperation.PlaySoundEffect>(operation);
+                Assert.Equal("jump_sfx", play.SoundId);
             },
             operation => Assert.IsType<SdkAudioOperation.UpdateAudio>(operation));
     }

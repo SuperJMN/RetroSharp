@@ -91,7 +91,7 @@ internal static class NesRomBuilder
         EmitPpuRowAddressTables(builder, program.WorldMap);
         EmitWorldMapFlagRows(builder, program.WorldMap);
         EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
-        EmitMusicAssets(builder, program.MusicAssetsInLoadOrder);
+        EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder);
 
         var prg = new byte[PrgRomSize];
         var code = builder.Build();
@@ -298,10 +298,14 @@ internal static class NesRomBuilder
         }
     }
 
-    private static void EmitMusicAssets(PrgBuilder builder, IReadOnlyList<NesCompiledMusicAsset> assets)
+    private static void EmitAudioAssets(
+        PrgBuilder builder,
+        IReadOnlyList<NesCompiledMusicAsset> musicAssets,
+        IReadOnlyList<NesCompiledSoundEffectAsset> soundEffectAssets)
     {
-        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + assets.Sum(asset => asset.Data.Length), assets);
-        foreach (var asset in assets)
+        var audioDataLength = musicAssets.Sum(asset => asset.Data.Length) + soundEffectAssets.Sum(asset => asset.Data.Length);
+        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + audioDataLength, musicAssets, soundEffectAssets);
+        foreach (var asset in musicAssets)
         {
             var data = PatchDpcmAddressRegisters(asset, dpcmLayout.AddressRegisterMap);
             var label = MusicDataLabel(asset.Name);
@@ -324,13 +328,24 @@ internal static class NesRomBuilder
             builder.Emit(0, 0, 0);
         }
 
+        foreach (var asset in soundEffectAssets)
+        {
+            var data = PatchDpcmAddressRegisters(asset.Data, asset.OrderEntries, dpcmLayout.AddressRegisterMap);
+            var label = SoundEffectDataLabel(asset.Name);
+            builder.Label(label);
+            builder.Emit(data);
+        }
+
         EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
     }
 
-    private static DpcmSampleLayout BuildDpcmSampleLayout(int musicDataEndAddress, IReadOnlyList<NesCompiledMusicAsset> assets)
+    private static DpcmSampleLayout BuildDpcmSampleLayout(
+        int musicDataEndAddress,
+        IReadOnlyList<NesCompiledMusicAsset> musicAssets,
+        IReadOnlyList<NesCompiledSoundEffectAsset> soundEffectAssets)
     {
         var uniqueBlocks = new List<NesDpcmSampleBlock>();
-        foreach (var block in assets.SelectMany(asset => asset.DpcmBlocks))
+        foreach (var block in musicAssets.SelectMany(asset => asset.DpcmBlocks).Concat(soundEffectAssets.SelectMany(asset => asset.DpcmBlocks)))
         {
             var existingIndex = uniqueBlocks.FindIndex(candidate => candidate.SourceAddress == block.SourceAddress);
             if (existingIndex >= 0)
@@ -413,13 +428,21 @@ internal static class NesRomBuilder
 
     private static byte[] PatchDpcmAddressRegisters(NesCompiledMusicAsset asset, IReadOnlyDictionary<byte, byte> addressRegisterMap)
     {
+        return PatchDpcmAddressRegisters(asset.Data, asset.OrderEntries, addressRegisterMap);
+    }
+
+    private static byte[] PatchDpcmAddressRegisters(
+        byte[] sourceData,
+        IReadOnlyList<NesApuTraceOrderEntry> orderEntries,
+        IReadOnlyDictionary<byte, byte> addressRegisterMap)
+    {
         if (addressRegisterMap.Count == 0)
         {
-            return asset.Data;
+            return sourceData;
         }
 
-        var data = asset.Data.ToArray();
-        foreach (var bodyOffset in asset.OrderEntries.Select(entry => entry.BodyOffset).Distinct())
+        var data = sourceData.ToArray();
+        foreach (var bodyOffset in orderEntries.Select(entry => entry.BodyOffset).Distinct())
         {
             var commandCount = data[bodyOffset];
             var offset = bodyOffset + 1;
@@ -454,6 +477,8 @@ internal static class NesRomBuilder
     }
 
     internal static string MusicDataLabel(string name) => $"music_data_{name}";
+
+    internal static string SoundEffectDataLabel(string name) => $"sfx_data_{name}";
 
     private sealed record DpcmSampleLayout(
         IReadOnlyList<DpcmSamplePlacement> Placements,
@@ -590,8 +615,6 @@ internal sealed class NesRuntimeCompiler
     private const byte CameraWalkMaxStepsPerFrame = 8;
     private const ushort MusicLoopPointerLowAddress = 0x0310;
     private const ushort MusicLoopPointerHighAddress = 0x0311;
-    private const ushort MusicApuWriteValueAddress = 0x0312;
-    private const ushort MusicApuWriteCursorAddress = 0x0313;
     private const ushort OamDmaAddress = 0x4014;
     private const ushort ControllerPortAddress = 0x4016;
     private const byte PendingStreamNone = 0;
@@ -666,7 +689,7 @@ internal sealed class NesRuntimeCompiler
     {
         EmitCameraStateInitialization();
         EmitInputStateInitialization();
-        if (program.MusicAssetsInLoadOrder.Count > 0)
+        if (program.MusicAssetsInLoadOrder.Count > 0 || program.SoundEffectAssetsInLoadOrder.Count > 0)
         {
             EmitAudioStateInitialization();
         }
@@ -2006,6 +2029,7 @@ internal sealed class NesRuntimeCompiler
 
                 break;
             case "music_asset":
+            case "sfx_asset":
                 NesVideoProgram.RequireArity(call, 2);
                 break;
             case "audio_init":
@@ -2023,6 +2047,10 @@ internal sealed class NesRuntimeCompiler
             case "music_play":
                 NesVideoProgram.RequireArity(call, 1);
                 EmitMusicPlay(call);
+                break;
+            case "sfx_play":
+                NesVideoProgram.RequireArity(call, 1);
+                EmitSoundEffectPlay(call);
                 break;
             case "hud_set_tile":
                 NesVideoProgram.ValidateHudSetTile(call);
@@ -2767,6 +2795,9 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.PlayMusic:
                 EmitMusicPlay(call);
                 return true;
+            case TargetIntrinsicOperation.PlaySoundEffect:
+                EmitSoundEffectPlay(call);
+                return true;
             case TargetIntrinsicOperation.StopMusic:
                 EmitMusicStop();
                 return true;
@@ -2818,6 +2849,24 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(MusicTickAddress);
     }
 
+    private void EmitSoundEffectPlay(FunctionCall call)
+    {
+        var soundId = NesVideoProgram.IdentifierArg(call.Parameters.ElementAt(0), "sfx_play argument 1");
+        if (!program.SoundEffectAssets.TryGetValue(soundId, out var asset))
+        {
+            throw new InvalidOperationException($"Unknown NES SFX asset '{soundId}'. Declare it with sfx_asset(...).");
+        }
+
+        var label = NesRomBuilder.SoundEffectDataLabel(asset.Name);
+        builder.LoadAImmediateLabelLowByte(label, 0);
+        builder.StoreAZeroPage(MusicBodyPointerLowAddress);
+        builder.LoadAImmediateLabelHighByte(label, 0);
+        builder.StoreAZeroPage(MusicBodyPointerHighAddress);
+        EmitNesApuTraceBodyAtMusicBodyPointer();
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(MusicTickAddress);
+    }
+
     private void EmitMusicStop()
     {
         builder.LoadAImmediate(0);
@@ -2833,9 +2882,6 @@ internal sealed class NesRuntimeCompiler
         var hasActiveMusicLabel = builder.CreateLabel("nes_audio_active");
         var tickExpiredLabel = builder.CreateLabel("nes_audio_tick_expired");
         var hasBodyLabel = builder.CreateLabel("nes_audio_has_body");
-        var commandLoopLabel = builder.CreateLabel("nes_audio_command_loop");
-        var afterBodyLabel = builder.CreateLabel("nes_audio_after_body");
-        var hasCommandsLabel = builder.CreateLabel("nes_audio_has_commands");
         var tickNonZeroLabel = builder.CreateLabel("nes_audio_tick_nonzero");
 
         builder.LoadAZeroPage(MusicOrderPointerHighAddress);
@@ -2876,29 +2922,8 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAIndirectY(MusicOrderPointerLowAddress);
         builder.StoreAZeroPage(MusicTickAddress);
         EmitAdvanceMusicOrderPointer();
+        EmitNesApuTraceBodyAtMusicBodyPointer();
 
-        builder.LoadYImmediate(0);
-        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
-        builder.StoreAZeroPage(MusicCommandCountAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, hasCommandsLabel); // BNE hasCommandsLabel
-        builder.JumpAbsolute(afterBodyLabel);
-        builder.Label(hasCommandsLabel);
-        builder.IncrementY();
-
-        builder.Label(commandLoopLabel);
-        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
-        builder.StoreAZeroPage(ExpressionScratchAddress);
-        builder.IncrementY();
-        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
-        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
-        builder.IncrementY();
-        EmitNesApuRegisterWrite();
-        builder.DecrementZeroPage(MusicCommandCountAddress);
-        builder.BranchRelative(0xF0, afterBodyLabel); // BEQ afterBodyLabel
-        builder.JumpAbsolute(commandLoopLabel);
-
-        builder.Label(afterBodyLabel);
         builder.LoadAZeroPage(MusicTickAddress);
         builder.CompareImmediate(0);
         builder.BranchRelative(0xD0, tickNonZeroLabel); // BNE tickNonZeroLabel
@@ -2906,6 +2931,31 @@ internal sealed class NesRuntimeCompiler
         builder.Label(tickNonZeroLabel);
 
         builder.Label(doneLabel);
+    }
+
+    private void EmitNesApuTraceBodyAtMusicBodyPointer()
+    {
+        var commandLoopLabel = builder.CreateLabel("nes_audio_command_loop");
+        var afterBodyLabel = builder.CreateLabel("nes_audio_after_body");
+
+        builder.LoadYImmediate(0);
+        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
+        builder.StoreAZeroPage(MusicCommandCountAddress);
+        builder.BranchRelative(0xF0, afterBodyLabel); // BEQ afterBodyLabel
+        builder.IncrementY();
+
+        builder.Label(commandLoopLabel);
+        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.IncrementY();
+        builder.LoadAIndirectY(MusicBodyPointerLowAddress);
+        builder.IncrementY();
+        EmitNesApuRegisterWrite();
+        builder.DecrementZeroPage(MusicCommandCountAddress);
+        builder.BranchRelative(0xF0, afterBodyLabel); // BEQ afterBodyLabel
+        builder.JumpAbsolute(commandLoopLabel);
+
+        builder.Label(afterBodyLabel);
     }
 
     private void EmitAdvanceMusicOrderPointer()
@@ -2925,17 +2975,16 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitNesApuRegisterWrite()
     {
-        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
-        builder.StoreAAbsolute(MusicApuWriteValueAddress);
-        builder.StoreYAbsolute(MusicApuWriteCursorAddress);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+        builder.StoreYZeroPage(SpriteFrameScratchAddress);
         builder.LoadAZeroPage(ExpressionScratchAddress);
         builder.StoreAZeroPage(RuntimeIndexScratchAddress);
         builder.LoadAImmediate(0x40);
         builder.StoreAZeroPage(ExpressionScratchAddress);
         builder.LoadYImmediate(0);
-        builder.LoadAAbsolute(MusicApuWriteValueAddress);
+        builder.LoadAZeroPage(CollisionColumnScratchAddress);
         builder.StoreAIndirectY(RuntimeIndexScratchAddress);
-        builder.LoadYAbsolute(MusicApuWriteCursorAddress);
+        builder.LoadYZeroPage(SpriteFrameScratchAddress);
     }
 
     internal void EmitPollInput()
@@ -5847,6 +5896,8 @@ internal sealed class PrgBuilder
     public void StoreAZeroPage(byte address) => Emit(0x85, address);
 
     public void StoreAZeroPageX(byte address) => Emit(0x95, address);
+
+    public void StoreYZeroPage(byte address) => Emit(0x84, address);
 
     public void LoadAAbsolute(ushort address) => Emit(0xAD, Low(address), High(address));
 

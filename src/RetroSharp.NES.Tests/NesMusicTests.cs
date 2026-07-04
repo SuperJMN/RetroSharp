@@ -61,6 +61,75 @@ public sealed class NesMusicTests
     }
 
     [Fact]
+    public void Compacts_repeated_nes_frame_counter_writes_in_bgm()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "stage.nes.vgz"),
+            [
+                [[0x17, 0xFF], [0x00, 0x30]],
+                [[0x17, 0xFF]],
+                [[0x17, 0xFF], [0x03, 0x08]],
+            ]);
+
+        var asset = NesMusicAssetCompiler.CompileFromFile("stage_theme", Path.Combine(directory, "stage.vgz"));
+
+        Assert.Equal(1, CountSequence(asset.Data, [0x17, 0xFF]));
+        Assert.True(ContainsSequence(asset.Data, [0x00, 0x30]));
+        Assert.True(ContainsSequence(asset.Data, [0x03, 0x08]));
+    }
+
+
+    [Fact]
+    public void Compiles_vgz_sfx_calls_to_nes_one_shot_runtime()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzip(
+            Path.Combine(directory, "jump.nes.vgz"),
+            command: 0xB4,
+            [0x03, 0x08],
+            waitSamples: 735,
+            [0x00, 0x30]);
+
+        const string source = """
+                              void Main() {
+                                  Sfx.Asset(jump_sfx, "jump.vgz");
+                                  Audio.Init();
+                                  Sfx.Play(jump_sfx);
+                                  Audio.Update();
+                                  return;
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, directory);
+
+        Assert.Equal(40976, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x03, 0x08]), "Compiled NES SFX trace should keep first-frame pulse trigger writes.");
+        Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Sfx.Play should write SFX APU registers through an indirect $40xx pointer.");
+    }
+
+    [Fact]
+    public void Compiles_vgm_sfx_asset_to_filtered_immediate_trigger_body()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "jump.nes.vgz"),
+            [
+                [[0x15, 0x0F], [0x17, 0xFF], [0x00, 0x82], [0x01, 0xA7], [0x02, 0x7C], [0x03, 0x09], [0x10, 0x00]],
+                [[0x17, 0xFF], [0x01, 0xF6], [0x00, 0x5F], [0x10, 0x00]],
+            ]);
+
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile("jump_sfx", Path.Combine(directory, "jump.vgz"));
+
+        Assert.Equal("jump_sfx", asset.Name);
+        Assert.Equal(0, asset.OrderStartOffset);
+        Assert.Equal([0x04, 0x00, 0x82, 0x01, 0xA7, 0x02, 0x7C, 0x03, 0x09], asset.Data);
+        Assert.False(ContainsSequence(asset.Data, [0x15, 0x0F]), "SFX must not replay channel-enable writes captured from global APU state.");
+        Assert.False(ContainsSequence(asset.Data, [0x17, 0xFF]), "SFX must not replay frame-counter writes captured from global APU state.");
+        Assert.False(ContainsSequence(asset.Data, [0x10, 0x00]), "SFX must not replay DMC control writes captured from global APU state.");
+    }
+
+    [Fact]
     public void Compiles_dmc_sample_block_and_dmc_register_writes_to_nes_rom()
     {
         var directory = CreateTempDirectory();
@@ -171,6 +240,41 @@ public sealed class NesMusicTests
         gzip.Write(bytes);
     }
 
+    private static void WriteVgmGzipFrames(string path, IReadOnlyList<IReadOnlyList<byte[]>> frames)
+    {
+        var commands = new List<byte>();
+        foreach (var frame in frames)
+        {
+            foreach (var payload in frame)
+            {
+                commands.Add(0xB4);
+                commands.AddRange(payload);
+            }
+
+            commands.Add(0x61);
+            commands.Add(0xDF);
+            commands.Add(0x02);
+        }
+
+        commands.Add(0x66);
+
+        var bytes = new byte[0xC0 + commands.Count];
+        bytes[0] = (byte)'V';
+        bytes[1] = (byte)'g';
+        bytes[2] = (byte)'m';
+        bytes[3] = (byte)' ';
+        WriteUInt32(bytes, 0x08, 0x00000161);
+        WriteUInt32(bytes, 0x18, (uint)(735 * frames.Count));
+        WriteUInt32(bytes, 0x34, 0x8C);
+        WriteUInt32(bytes, 0x84, 1_789_773);
+        commands.CopyTo(bytes, 0xC0);
+        WriteUInt32(bytes, 0x04, (uint)(bytes.Length - 4));
+
+        using var file = File.Create(path);
+        using var gzip = new GZipStream(file, CompressionLevel.SmallestSize);
+        gzip.Write(bytes);
+    }
+
     private static void WriteVgmGzipWithDataBlock(
         string path,
         byte dataBlockType,
@@ -222,6 +326,30 @@ public sealed class NesMusicTests
     private static bool ContainsSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
     {
         return IndexOfSequence(bytes, sequence) >= 0;
+    }
+
+    private static int CountSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)
+    {
+        var count = 0;
+        for (var i = 0; i <= bytes.Count - sequence.Count; i++)
+        {
+            var found = true;
+            for (var j = 0; j < sequence.Count; j++)
+            {
+                if (bytes[i + j] != sequence[j])
+                {
+                    found = false;
+                    break;
+                }
+            }
+
+            if (found)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static int IndexOfSequence(IReadOnlyList<byte> bytes, IReadOnlyList<byte> sequence)

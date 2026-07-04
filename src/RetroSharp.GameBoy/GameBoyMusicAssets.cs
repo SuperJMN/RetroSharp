@@ -16,6 +16,8 @@ internal sealed record GameBoyCompiledMusicAsset(string Name, GameBoyMusicAssetK
     public int RowCount => Kind != GameBoyMusicAssetKind.UgeRows || Data.Length < 3 ? 0 : Data[1] | (Data[2] << 8);
 }
 
+internal sealed record GameBoyCompiledSoundEffectAsset(string Name, byte[] Data);
+
 internal static class GameBoyMusicAssetCompiler
 {
     private const int RowsPerPattern = 64;
@@ -51,7 +53,7 @@ internal static class GameBoyMusicAssetCompiler
             : GameBoyApuTraceFile.Read(path);
     }
 
-    private static GameBoyApuTrace ReadVgmDmgTrace(string path)
+    internal static GameBoyApuTrace ReadVgmDmgTrace(string path)
     {
         var stream = VgmImporter.Import(path, VgmChip.GameBoyDmg);
         var events = new List<GameBoyApuTraceEvent>();
@@ -176,7 +178,7 @@ internal static class GameBoyMusicAssetCompiler
         return new GameBoyCompiledMusicAsset(name, GameBoyMusicAssetKind.UgeRows, data.ToArray());
     }
 
-    private static GameBoyCompiledMusicAsset CompileApuTrace(string name, GameBoyApuTrace trace)
+    internal static GameBoyCompiledMusicAsset CompileApuTrace(string name, GameBoyApuTrace trace)
     {
         if (trace.Events.Count == 0)
         {
@@ -856,5 +858,22 @@ internal static class GameBoyMusicAssetCompiler
         public byte[] Bytes() => [Envelope, Polynomial, Control];
 
         public byte[] WithoutTrigger() => [Envelope, Polynomial, (byte)(Control & 0x7F)];
+    }
+}
+
+internal static class GameBoySoundEffectAssetCompiler
+{
+    public static GameBoyCompiledSoundEffectAsset CompileFromFile(string name, string path)
+    {
+        var resolvedPath = PlatformAssetPathResolver.ResolveVariant(path, "gb");
+        if (!Path.GetExtension(resolvedPath).Equals(".vgm", StringComparison.OrdinalIgnoreCase) &&
+            !Path.GetExtension(resolvedPath).Equals(".vgz", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Game Boy SFX asset '{Path.GetFileName(path)}' must use VGM/VGZ input.");
+        }
+
+        var trace = GameBoyMusicAssetCompiler.ReadVgmDmgTrace(resolvedPath);
+        var asset = GameBoyMusicAssetCompiler.CompileApuTrace(name, trace);
+        return new GameBoyCompiledSoundEffectAsset(name, asset.Data);
     }
 }

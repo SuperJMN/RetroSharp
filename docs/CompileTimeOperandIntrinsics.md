@@ -135,6 +135,8 @@ extern void __retrosharp_gb_music_stop();
 
 `music_play` marks slot `0` as `AssetRef`, so the `Music.Play(theme)` package helper forwards the music asset identifier as a compile-time operand; `music_stop` is a void leaf intrinsic. Both targets catalog the two intrinsics, so `RetroSharp.Portable2D` declares `Music.Play` and `Music.Stop` for both. The separate `SdkAudioOperationCollector` resolves the extern calls back into `SdkAudioOperation.PlayMusic` / `SdkAudioOperation.StopMusic`, so BGM asset lookup, banking, and emission stay byte-identical to the legacy `music_play(...)` / `music_stop(...)` builtins, which remain compatibility aliases. `Music.Asset(...)` is declared by the source package as `[resource("music_asset")]` and resolves through the generic resource declaration descriptor path.
 
+The same descriptor-role shape now covers one-shot action audio: `sfx_play` marks slot `0` as `AssetRef`, `Sfx.Play(sound)` resolves to `SdkAudioOperation.PlaySoundEffect`, and `Sfx.Asset(...)` is declared as `[resource("sfx_asset")]`. Game Boy and NES lower the operation through their audio runtimes while keeping SFX assets separate from BGM assets; Game Boy schedules active SFX from `Audio.Update()`, while NES writes the current filtered one-shot burst immediately from `Sfx.Play(...)` and lets the next BGM tick refresh music state.
+
 ## Operation-Specific Guidance
 
 `Sprite.Draw` is the central SAL-8 prototype. The descriptor-role form uses one operation descriptor for all assets and palette slots. The legacy `sprite_draw` builtin remains a transitional alias until a later roadmap item removes it.

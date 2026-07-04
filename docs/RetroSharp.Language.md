@@ -171,7 +171,7 @@ parsed, and the importing program's references to declared package static method
 are rewritten at the same time. The built-in `RetroSharp.Portable2D` package lives
 under `sdk/RetroSharp.Portable2D` and defines helpers such as
 `Video.WaitVBlank()`, `Input.Poll()`, `Audio.Update()`,
-`Music.Play(...)`, `Camera.SetPosition(x, y)`, `Camera.Apply()`,
+`Music.Play(...)`, `Sfx.Play(...)`, `Camera.SetPosition(x, y)`, `Camera.Apply()`,
 camera AABB queries, and `Sprite.Draw(...)` as inline wrappers over target-selected
 extern intrinsics. Functions can carry
 `[target("gb")]` or `[target("nes")]`; the active cartridge compiler filters

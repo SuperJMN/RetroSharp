@@ -13,6 +13,7 @@ public sealed class SdkAudioOperationTests
         [
             new SdkAudioOperation.InitializeAudio(),
             new SdkAudioOperation.PlayMusic("stage_theme"),
+            new SdkAudioOperation.PlaySoundEffect("jump_sfx"),
             new SdkAudioOperation.UpdateAudio(),
             new SdkAudioOperation.StopMusic(),
         ];
@@ -20,8 +21,10 @@ public sealed class SdkAudioOperationTests
         Assert.IsType<SdkAudioOperation.InitializeAudio>(operations[0]);
         var play = Assert.IsType<SdkAudioOperation.PlayMusic>(operations[1]);
         Assert.Equal("stage_theme", play.ThemeId);
-        Assert.IsType<SdkAudioOperation.UpdateAudio>(operations[2]);
-        Assert.IsType<SdkAudioOperation.StopMusic>(operations[3]);
+        var sfx = Assert.IsType<SdkAudioOperation.PlaySoundEffect>(operations[2]);
+        Assert.Equal("jump_sfx", sfx.SoundId);
+        Assert.IsType<SdkAudioOperation.UpdateAudio>(operations[3]);
+        Assert.IsType<SdkAudioOperation.StopMusic>(operations[4]);
     }
 
     [Fact]
@@ -30,10 +33,13 @@ public sealed class SdkAudioOperationTests
         var capabilities = new TargetAudioCapabilities(
             Name: "gb",
             SupportsBgm: true,
-            SupportedMusicFormats: ["uge"]);
+            SupportedMusicFormats: ["uge"],
+            SupportsSfx: true,
+            SupportedSfxFormats: ["vgm"]);
 
         SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.InitializeAudio());
         SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.PlayMusic("stage_theme"));
+        SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.PlaySoundEffect("jump_sfx"));
         SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.UpdateAudio());
         SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.StopMusic());
     }
@@ -50,5 +56,21 @@ public sealed class SdkAudioOperationTests
             SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.PlayMusic("stage_theme")));
 
         Assert.Equal("Target 'nes' does not support BGM playback yet.", exception.Message);
+    }
+
+    [Fact]
+    public void Validator_rejects_sfx_on_targets_without_sfx_lowering()
+    {
+        var capabilities = new TargetAudioCapabilities(
+            Name: "gb",
+            SupportsBgm: true,
+            SupportedMusicFormats: ["vgm"],
+            SupportsSfx: false,
+            SupportedSfxFormats: []);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            SdkAudioOperationValidator.Validate(capabilities, new SdkAudioOperation.PlaySoundEffect("jump_sfx")));
+
+        Assert.Equal("Target 'gb' does not support SFX playback yet.", exception.Message);
     }
 }
