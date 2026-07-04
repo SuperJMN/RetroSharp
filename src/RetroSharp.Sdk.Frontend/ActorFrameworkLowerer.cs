@@ -1391,36 +1391,26 @@ public static class ActorFrameworkLowerer
         var indexName = $"__{pool.Name}_draw_i";
         var projection = BuildProjectileScreenProjection(pool.Name, indexName, pool.Name, "draw", state.ScreenWidth, state.ScreenHeight);
         var branches = state.EffectDefs
-            .Select(def => new KindBranch(def.Name, new BlockSyntax([
-                new IfElseSyntax(
-                    projection.Visible,
-                    new BlockSyntax([
-                        new ExpressionStatementSyntax(IntrinsicCall(
-                            state,
-                            SpriteDrawIntrinsic,
-                            [
-                                new IdentifierSyntax(def.Sprite),
-                                projection.ScreenX,
-                                projection.ScreenY,
-                                Constant(0),
-                                new IdentifierSyntax("false"),
-                                Constant(0),
-                            ])),
-                    ]),
-                    Maybe<BlockSyntax>.None),
-            ])))
+            .Select(def => new KindBranch(
+                def.Name,
+                StableSpriteDrawBlock(
+                    pool.Name,
+                    indexName,
+                    $"__{pool.Name}_draw",
+                    def.Name,
+                    def.Sprite,
+                    projection,
+                    state.ScreenHeight,
+                    state)))
             .ToList();
 
         return ProjectileCameraDeclarations(pool.Name, "draw", state.ConfiguresCamera)
             .Append(ArrayLoop(
                 pool.Name,
                 indexName,
-                new IfElseSyntax(
-                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "active"), Constant(0), Operator.NotEqual),
-                    new BlockSyntax(projection.Declarations
-                        .Append(ProjectileKindDispatch(pool.Name, indexName, branches, $"{pool.Name}.Draw"))
-                        .ToList()),
-                    Maybe<BlockSyntax>.None)))
+                projection.Declarations
+                    .Append(ProjectileKindDispatch(pool.Name, indexName, branches, $"{pool.Name}.Draw"))
+                    .ToList()))
             .ToList();
     }
 
@@ -1687,48 +1677,91 @@ public static class ActorFrameworkLowerer
         var arrayName = pool.ArrayNameForTeam(team);
         var phase = team == "Hero" ? "draw_hero" : "draw_enemy";
         var indexName = $"__{pool.Name}_{phase}_i";
+        var variablePrefix = $"__{pool.Name}_{phase}";
         var projection = BuildProjectileScreenProjection(arrayName, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight);
         var branches = defs
-            .Select(def => new KindBranch(def.Name, ProjectileDrawBlock(arrayName, indexName, def, projection, state)))
+            .Select(def => new KindBranch(def.Name, ProjectileDrawBlock(arrayName, indexName, variablePrefix, def, projection, state)))
             .ToList();
 
         return ProjectileCameraDeclarations(pool.Name, phase, state.ConfiguresCamera)
             .Append(ArrayLoop(
                 arrayName,
                 indexName,
-                new IfElseSyntax(
-                    new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.NotEqual),
-                    new BlockSyntax(projection.Declarations
-                        .Append(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Draw"))
-                        .ToList()),
-                    Maybe<BlockSyntax>.None)))
+                projection.Declarations
+                    .Append(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Draw"))
+                    .ToList()))
             .ToList();
     }
 
     private static BlockSyntax ProjectileDrawBlock(
         string arrayName,
         string indexName,
+        string variablePrefix,
         ProjectileDef def,
         ActorScreenProjection projection,
         ActorFrameworkState state)
     {
+        return StableSpriteDrawBlock(
+            arrayName,
+            indexName,
+            variablePrefix,
+            def.Name,
+            def.Sprite,
+            projection,
+            state.ScreenHeight,
+            state);
+    }
+
+    private static BlockSyntax StableSpriteDrawBlock(
+        string arrayName,
+        string indexName,
+        string variablePrefix,
+        string kindName,
+        string sprite,
+        ActorScreenProjection projection,
+        int hiddenY,
+        ActorFrameworkState state)
+    {
+        var drawX = $"{variablePrefix}_x_{kindName}";
+        var drawY = $"{variablePrefix}_y_{kindName}";
+
         return new BlockSyntax([
+            new DeclarationSyntax(
+                "u8",
+                drawX,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(Constant(0))),
+            new DeclarationSyntax(
+                "u8",
+                drawY,
+                Maybe<ExpressionSyntax>.None,
+                Maybe.From<ExpressionSyntax>(Constant(hiddenY))),
             new IfElseSyntax(
-                projection.Visible,
+                And(
+                    new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.NotEqual),
+                    projection.Visible),
                 new BlockSyntax([
-                    new ExpressionStatementSyntax(IntrinsicCall(
-                        state,
-                        SpriteDrawIntrinsic,
-                        [
-                            new IdentifierSyntax(def.Sprite),
-                            projection.ScreenX,
-                            projection.ScreenY,
-                            Constant(0),
-                            new IdentifierSyntax("false"),
-                            Constant(0),
-                        ])),
+                    new ExpressionStatementSyntax(new AssignmentSyntax(
+                        new IdentifierLValue(drawX),
+                        "=",
+                        projection.ScreenX)),
+                    new ExpressionStatementSyntax(new AssignmentSyntax(
+                        new IdentifierLValue(drawY),
+                        "=",
+                        projection.ScreenY)),
                 ]),
-            Maybe<BlockSyntax>.None),
+                Maybe<BlockSyntax>.None),
+            new ExpressionStatementSyntax(IntrinsicCall(
+                state,
+                SpriteDrawIntrinsic,
+                [
+                    new IdentifierSyntax(sprite),
+                    new IdentifierSyntax(drawX),
+                    new IdentifierSyntax(drawY),
+                    Constant(0),
+                    new IdentifierSyntax("false"),
+                    Constant(0),
+                ])),
         ]);
     }
 
