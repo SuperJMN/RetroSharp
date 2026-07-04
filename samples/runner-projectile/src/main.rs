@@ -31,6 +31,7 @@ void SetupVideo()
     Palette.Sprite(0, 0, 0, 1, 3);
     Sprite.Asset(mario_player, "../runner/assets/mario-player.png", 18, 32);
     Sprite.Asset(mario_shot, "assets/mario-shot.json");
+    Sprite.Asset(muzzle_flash, "assets/muzzle-flash.json");
 }
 
 void DefineWorld()
@@ -85,7 +86,7 @@ void Main()
     SetupVideo();
     DefineWorld();
     Effects.Pool(fx, capacity: 4, requests: 4);
-    Effects.Def(MuzzleFlash, sprite: mario_shot, lifetime: 4);
+    Effects.Def(MuzzleFlash, sprite: muzzle_flash, lifetime: 4);
     Projectiles.Pool(shots, hero: 2, enemy: 1, requests: 2, offscreenMargin: 16, effects: fx);
     Projectiles.Def(MarioFireball, team: Hero, sprite: mario_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 96, hitboxWidth: 8, hitboxHeight: 8, behavior: GravityArc, tileCollision: Bounce, bounceSpeedY: 4, spawnEffect: MuzzleFlash);
 
