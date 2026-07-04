@@ -4281,18 +4281,166 @@ public class GameBoyRomCompilerTests
         Assert.Contains("shotsHero[__shots_init_hero_i].active=0;", lowered);
         Assert.Contains("shotsEnemy[__shots_init_enemy_i].active=0;", lowered);
         Assert.Contains("shotsRequests[__shots_init_request_i].active=0;", lowered);
-        Assert.Contains("shotsRequests[__shots_request_i].kind=HeroShot;", lowered);
-        Assert.Contains("shotsRequests[__shots_request_i].direction=0;", lowered);
+        Assert.Contains("shotsRequests[__shots_request_call0_i].kind=HeroShot;", lowered);
+        Assert.Contains("shotsRequests[__shots_request_call0_i].direction=0;", lowered);
         Assert.Contains("queued=1;", lowered);
         Assert.Contains("queued=0;", lowered);
         Assert.Contains("shotsHero[__shots_process_HeroShot_i].active=1;", lowered);
         Assert.Contains("shotsHero[__shots_process_HeroShot_i].direction=__shots_process_request_direction;", lowered);
         // direction == 0 travels right (+speedX); any non-zero direction travels left (-speedX).
         Assert.Contains("shotsHero[__shots_update_hero_i].direction==0", lowered);
-        Assert.Contains("shotsHero[__shots_update_hero_i].x+=HeroShotSpeedX;", lowered);
-        Assert.Contains("shotsHero[__shots_update_hero_i].x-=HeroShotSpeedX;", lowered);
+        Assert.Contains("u8 __shots_update_hero_i_vx=(u8)shotsHero[__shots_update_hero_i].vx;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].x+=__shots_update_hero_i_vx;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].x-=__shots_update_hero_i_vx;", lowered);
         Assert.Contains("shotsHero[__shots_update_hero_i].age+=1;", lowered);
         Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(hero_shot, __shots_draw_hero_screen_x, __shots_draw_hero_screen_y, 0, false, 0);", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_lowers_gravity_arc_through_instance_velocity()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16);
+                                  Projectiles.Def(ArcShot, team: Hero, sprite: hero_shot, speedX: 2, speedY: 1, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4, behavior: GravityArc);
+                                  shots.Update();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("u8 __shots_update_hero_i_vx=(u8)shotsHero[__shots_update_hero_i].vx;", lowered);
+        Assert.Contains("u8 __shots_update_hero_i_vy=(u8)shotsHero[__shots_update_hero_i].vy;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].x+=__shots_update_hero_i_vx;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].y+=__shots_update_hero_i_vy;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].vy+=1;", lowered);
+        Assert.DoesNotContain("shotsHero[__shots_update_hero_i].y+=ArcShotSpeedY;", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_culls_update_against_camera_bounds_plus_offscreen_margin()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Camera.Init(40, 18, 1);
+                                  Camera.SetPosition(32, 8);
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16);
+                                  Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4);
+                                  shots.Update();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("u8 __shots_update_hero_visible_x=0;", lowered);
+        Assert.Contains("__shots_update_hero_screen_x<176", lowered);
+        Assert.Contains("__shots_update_hero_screen_x>=240", lowered);
+        Assert.Contains("!(__shots_update_hero_visible_x!=0&&__shots_update_hero_visible_y!=0)", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].active=0;", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_uniquifies_request_temporaries_per_call_site()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Projectiles.Pool(shots, hero: 2, enemy: 1, requests: 2, offscreenMargin: 16);
+                                  Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4);
+                                  u8 queuedRight = 0;
+                                  u8 queuedLeft = 0;
+                                  shots.Request(HeroShot, 40, 60, 0, queuedRight);
+                                  shots.Request(HeroShot, 20, 60, 1, queuedLeft);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("u8 __shots_request_call0_written=0;", lowered);
+        Assert.Contains("u8 __shots_request_call1_written=0;", lowered);
+        Assert.Contains("for(u8 __shots_request_call0_i=0;__shots_request_call0_i<countof(shotsRequests);__shots_request_call0_i+=1)", lowered);
+        Assert.Contains("for(u8 __shots_request_call1_i=0;__shots_request_call1_i<countof(shotsRequests);__shots_request_call1_i+=1)", lowered);
+    }
+
+    [Fact]
+    public void Effect_framework_lowers_requests_update_and_draw_as_separate_fixed_pool()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(spark_sprite, "spark.sprite.json");
+                                  Effects.Pool(fx, capacity: 2, requests: 2);
+                                  Effects.Def(Spark, sprite: spark_sprite, lifetime: 8);
+                                  fx.Request(Spark, 40, 60);
+                                  fx.ProcessRequests();
+                                  fx.Update();
+                                  fx.Draw();
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("struct Effect", lowered);
+        Assert.Contains("Effect fx[2];", lowered);
+        Assert.Contains("EffectSpawnRequest fxRequests[2];", lowered);
+        Assert.Contains("fxRequests[__fx_request_call0_i].kind=Spark;", lowered);
+        Assert.Contains("fx[__fx_process_Spark_i].active=1;", lowered);
+        Assert.Contains("fx[__fx_update_i].age+=1;", lowered);
+        Assert.Contains("RetroSharp_Portable2D_portable2d_sprite_draw(spark_sprite, __fx_draw_screen_x, __fx_draw_screen_y, 0, false, 0);", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_emits_effect_requests_for_spawn_impact_and_expiration()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero_shot, "hero-shot.sprite.json");
+                                  Sprite.Asset(spark_sprite, "spark.sprite.json");
+                                  Effects.Pool(fx, capacity: 4, requests: 4);
+                                  Effects.Def(Muzzle, sprite: spark_sprite, lifetime: 4);
+                                  Effects.Def(Spark, sprite: spark_sprite, lifetime: 8);
+                                  Effects.Def(Puff, sprite: spark_sprite, lifetime: 6);
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16, effects: fx);
+                                  Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4, spawnEffect: Muzzle, impactEffect: Spark, expireEffect: Puff);
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, hp: 2, hitboxWidth: 8, hitboxHeight: 8);
+                                  u8 queued = 0;
+                                  shots.Request(HeroShot, 40, 60, 0, queued);
+                                  shots.ProcessRequests();
+                                  shots.Update();
+                                  shots.TouchActors(enemies);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("fxRequests", lowered);
+        Assert.Contains(".kind=Muzzle;", lowered);
+        Assert.Contains(".kind=Spark;", lowered);
+        Assert.Contains(".kind=Puff;", lowered);
+        Assert.Contains("fxRequests[", lowered);
+        Assert.Contains("shotsHero[__shots_actor_hero_i].active=0;", lowered);
     }
 
     [Fact]
@@ -4321,10 +4469,15 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("for(u8 __shots_actor_hero_i=0;__shots_actor_hero_i<countof(shotsHero);__shots_actor_hero_i+=1)", lowered);
         Assert.Contains("for(u8 __shots_actor_enemies_i=0;__shots_actor_enemies_i<countof(enemies);__shots_actor_enemies_i+=1)", lowered);
+        Assert.Contains("shotsHero[__shots_actor_hero_i].xHi", lowered);
+        Assert.Contains("enemies[__shots_actor_enemies_i].xHi", lowered);
+        Assert.Contains("shotsHero[__shots_actor_hero_i].yHi", lowered);
+        Assert.Contains("enemies[__shots_actor_enemies_i].yHi", lowered);
+        Assert.Contains("shotsHero[__shots_actor_hero_i].active!=0&&", lowered);
         Assert.Contains("enemies[__shots_actor_enemies_i].health-=HeroShotDamage;", lowered);
         Assert.Contains("shotsHero[__shots_actor_hero_i].active=0;", lowered);
         Assert.Contains("for(u8 __shots_hero_enemy_i=0;__shots_hero_enemy_i<countof(shotsEnemy);__shots_hero_enemy_i+=1)", lowered);
-        Assert.Contains("heroDamage=EnemyBulletDamage;", lowered);
+        Assert.Contains("heroDamage+=EnemyBulletDamage;", lowered);
         Assert.Contains("shotsEnemy[__shots_hero_enemy_i].active=0;", lowered);
     }
 
