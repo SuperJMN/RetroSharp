@@ -81,7 +81,7 @@ public sealed class NesMusicTests
 
 
     [Fact]
-    public void Compiles_vgz_sfx_calls_to_nes_one_shot_runtime()
+    public void Compiles_vgz_sfx_calls_into_nes_rom_played_by_shared_apu_writer()
     {
         var directory = CreateTempDirectory();
         WriteVgmGzip(
@@ -104,12 +104,14 @@ public sealed class NesMusicTests
         var rom = NesRomCompiler.CompileSource(source, directory);
 
         Assert.Equal(40976, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x03, 0x08]), "Compiled NES SFX trace should keep first-frame pulse trigger writes.");
-        Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Sfx.Play should write SFX APU registers through an indirect $40xx pointer.");
+        Assert.True(ContainsSequence(rom, [0x03, 0x08]), "Compiled NES SFX trace should keep pulse 1 trigger writes.");
+        Assert.True(ContainsSequence(rom, [0x91, 0xE8]), "Audio.Update should write SFX pulse 1 registers through the shared indirect $40xx writer.");
+        // Sfx.Play only arms the SFX engine (STA $0312 = SfxActive); it must not touch the music tick.
+        Assert.True(ContainsSequence(rom, [0x8D, 0x12, 0x03]), "Sfx.Play should set the SfxActive flag at $0312.");
     }
 
     [Fact]
-    public void Compiles_vgm_sfx_asset_to_filtered_immediate_trigger_body()
+    public void Compiles_vgm_sfx_asset_to_flat_pulse1_multi_frame_trace()
     {
         var directory = CreateTempDirectory();
         WriteVgmGzipFrames(
@@ -122,11 +124,47 @@ public sealed class NesMusicTests
         var asset = NesSoundEffectAssetCompiler.CompileFromFile("jump_sfx", Path.Combine(directory, "jump.vgz"));
 
         Assert.Equal("jump_sfx", asset.Name);
-        Assert.Equal(0, asset.OrderStartOffset);
-        Assert.Equal([0x04, 0x00, 0x82, 0x01, 0xA7, 0x02, 0x7C, 0x03, 0x09], asset.Data);
+
+        // Flat per-frame trace: frame 0 body, frame 1 body (only changed pulse 1 registers), three
+        // empty tail-hold frames ([0x00]) and the 0xFF end-of-effect marker.
+        Assert.Equal(
+            [
+                0x04, 0x00, 0x82, 0x01, 0xA7, 0x02, 0x7C, 0x03, 0x09,
+                0x02, 0x01, 0xF6, 0x00, 0x5F,
+                0x00, 0x00, 0x00,
+                0xFF,
+            ],
+            asset.Data);
         Assert.False(ContainsSequence(asset.Data, [0x15, 0x0F]), "SFX must not replay channel-enable writes captured from global APU state.");
         Assert.False(ContainsSequence(asset.Data, [0x17, 0xFF]), "SFX must not replay frame-counter writes captured from global APU state.");
         Assert.False(ContainsSequence(asset.Data, [0x10, 0x00]), "SFX must not replay DMC control writes captured from global APU state.");
+    }
+
+    [Fact]
+    public void Nes_sfx_trace_encodes_gap_frames_as_empty_bodies()
+    {
+        var directory = CreateTempDirectory();
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "blip.nes.vgz"),
+            [
+                [[0x00, 0x82], [0x03, 0x09]],
+                [],
+                [],
+                [[0x00, 0x40]],
+            ]);
+
+        var asset = NesSoundEffectAssetCompiler.CompileFromFile("blip", Path.Combine(directory, "blip.vgz"));
+
+        // Frame 0 body, two empty gap frames, frame 3 body, three tail-hold frames, then 0xFF.
+        Assert.Equal(
+            [
+                0x02, 0x00, 0x82, 0x03, 0x09,
+                0x00, 0x00,
+                0x01, 0x00, 0x40,
+                0x00, 0x00, 0x00,
+                0xFF,
+            ],
+            asset.Data);
     }
 
     [Fact]

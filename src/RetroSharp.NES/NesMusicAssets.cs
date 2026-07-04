@@ -13,10 +13,7 @@ internal sealed record NesCompiledMusicAsset(
 
 internal sealed record NesCompiledSoundEffectAsset(
     string Name,
-    byte[] Data,
-    int OrderStartOffset,
-    IReadOnlyList<NesApuTraceOrderEntry> OrderEntries,
-    IReadOnlyList<NesDpcmSampleBlock> DpcmBlocks);
+    byte[] Data);
 
 internal readonly record struct NesApuTraceOrderEntry(int BodyOffset, byte Wait);
 
@@ -366,8 +363,21 @@ internal static class NesMusicAssetCompiler
     private sealed record ResolvedMusicAsset(string Format, string Path);
 }
 
+// NES action SFX plays on pulse 1 (the dedicated SFX channel) while the music engine keeps the
+// other channels. The effect is compiled as a compact per-frame APU trace: one body group per
+// frame ([count, (registerOffset, value)*count]), gap frames encoded as an empty [0] group, and a
+// single 0xFF sentinel byte to stop playback. Only pulse 1 registers ($4000-$4003) are kept, so the
+// effect never touches global control ($4015 channel enable, $4017 frame counter), the DMC, or the
+// music's other channels. The runtime ticks one frame per audio update and (while active) suppresses
+// the music's own pulse 1 writes, so the sweep is sequenced cleanly without corrupting the music.
 internal static class NesSoundEffectAssetCompiler
 {
+    private const byte EndOfEffectMarker = 0xFF;
+
+    // Hold the effect a few extra frames after the last sweep write so the pulse 1 note keeps ringing
+    // (pulse 1 stays owned by the SFX) before releasing the channel back to the music.
+    private const int TailHoldFrames = 3;
+
     public static NesCompiledSoundEffectAsset CompileFromFile(string name, string path)
     {
         var resolvedPath = PlatformAssetPathResolver.ResolveVariant(path, "nes");
@@ -378,48 +388,84 @@ internal static class NesSoundEffectAssetCompiler
         }
 
         var stream = VgmImporter.Import(resolvedPath, VgmChip.Nes2A03);
-        var frame = FirstSfxFrame(stream.Frames);
-        if (frame is null)
+        var frameWrites = CollectPulse1FrameWrites(stream.Frames, out var lastFrame);
+        if (lastFrame < 0)
         {
-            throw new InvalidOperationException("NES SFX VGM trace must contain at least one supported 2A03 channel register write.");
+            throw new InvalidOperationException("NES SFX VGM trace must contain at least one pulse 1 ($4000-$4003) register write.");
         }
 
-        var body = BuildApuTraceGroupBody(frame);
+        var data = new List<byte>();
+        for (var frame = 0; frame <= lastFrame + TailHoldFrames; frame++)
+        {
+            if (frameWrites.TryGetValue(frame, out var writes) && writes.Count > 0)
+            {
+                data.Add((byte)writes.Count);
+                foreach (var write in writes)
+                {
+                    data.Add((byte)(write.Address - 0x4000));
+                    data.Add(write.Value);
+                }
+            }
+            else
+            {
+                data.Add(0);
+            }
+        }
 
-        return new NesCompiledSoundEffectAsset(
-            name,
-            body,
-            0,
-            [new NesApuTraceOrderEntry(0, 0)],
-            []);
+        data.Add(EndOfEffectMarker);
+        return new NesCompiledSoundEffectAsset(name, data.ToArray());
     }
 
-    private static VgmFrame? FirstSfxFrame(IReadOnlyList<VgmFrame> frames)
+    // Builds per-frame pulse 1 write lists. Within a frame only the last write to each register is
+    // kept (plus the $4003 trigger); values unchanged since the previous emitted frame are dropped so
+    // gap frames stay empty and the pulse 1 hardware holds the running note between sweep updates.
+    private static Dictionary<int, List<VgmRegisterWrite>> CollectPulse1FrameWrites(
+        IReadOnlyList<VgmFrame> frames,
+        out int lastFrame)
     {
+        var result = new Dictionary<int, List<VgmRegisterWrite>>();
+        var lastValues = new Dictionary<ushort, byte>();
+        lastFrame = -1;
         foreach (var frame in frames)
         {
-            var writes = new List<VgmRegisterWrite>(frame.Writes.Count);
+            var kept = new List<VgmRegisterWrite>(frame.Writes.Count);
             for (var i = 0; i < frame.Writes.Count; i++)
             {
                 var write = frame.Writes[i];
-                if (!IsSfxChannelRegister(write.Address))
+                if (!IsPulse1Register(write.Address))
                 {
                     continue;
                 }
 
-                if (IsNesApuChannelTriggerRegister(write.Address) || IsLastWriteToRegisterInFrame(frame.Writes, i))
+                if (!IsPulse1TriggerRegister(write.Address) && !IsLastWriteToRegisterInFrame(frame.Writes, i))
                 {
-                    writes.Add(write);
+                    continue;
                 }
+
+                if (!IsPulse1TriggerRegister(write.Address) &&
+                    lastValues.TryGetValue(write.Address, out var previousValue) &&
+                    previousValue == write.Value)
+                {
+                    continue;
+                }
+
+                lastValues[write.Address] = write.Value;
+                kept.Add(write);
             }
 
-            if (writes.Count > 0)
+            if (kept.Count > 0)
             {
-                return new VgmFrame(frame.Index, writes);
+                if (kept.Count > byte.MaxValue - 1)
+                {
+                    throw new InvalidOperationException("NES SFX VGM frame contains too many pulse 1 register writes.");
+                }
+
+                result[frame.Index] = kept;
+                lastFrame = Math.Max(lastFrame, frame.Index);
             }
         }
 
-        return null;
+        return result;
     }
 
     private static bool IsLastWriteToRegisterInFrame(IReadOnlyList<VgmRegisterWrite> writes, int index)
@@ -436,34 +482,15 @@ internal static class NesSoundEffectAssetCompiler
         return true;
     }
 
-    private static bool IsSfxChannelRegister(ushort address)
+    // Pulse 1 only: strip global control ($4015/$4017), the DMC and the other channels so the SFX
+    // never overwrites state the music owns.
+    private static bool IsPulse1Register(ushort address)
     {
-        return address is >= 0x4000 and <= 0x400F;
+        return address is >= 0x4000 and <= 0x4003;
     }
 
-    private static bool IsNesApuChannelTriggerRegister(ushort address)
+    private static bool IsPulse1TriggerRegister(ushort address)
     {
-        return address is 0x4003 or 0x4007 or 0x400B or 0x400F;
+        return address == 0x4003;
     }
-
-    private static byte[] BuildApuTraceGroupBody(VgmFrame frame)
-    {
-        if (frame.Writes.Count > byte.MaxValue)
-        {
-            throw new InvalidOperationException("NES SFX VGM trace contains more than 255 register writes in one frame.");
-        }
-
-        var body = new List<byte>(1 + frame.Writes.Count * 2)
-        {
-            (byte)frame.Writes.Count,
-        };
-        foreach (var write in frame.Writes)
-        {
-            body.Add((byte)(write.Address - 0x4000));
-            body.Add(write.Value);
-        }
-
-        return body.ToArray();
-    }
-
 }

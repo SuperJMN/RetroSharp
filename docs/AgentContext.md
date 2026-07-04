@@ -181,10 +181,13 @@ Progress (2026-06-14):
   `[resource("sfx_asset")]` declaration, `Sfx.Play(...)` wraps the `sfx_play`
   target intrinsic with a compile-time `AssetRef`, and both Game Boy and NES
   lower it separately from BGM. Game Boy advances active SFX streams from
-  `Audio.Update()` after BGM writes; NES currently writes the first supported
-  channel-register action burst immediately from `Sfx.Play(...)`, filters
-  captured global/DMC writes out of SFX assets, and forces the next BGM tick to
-  refresh music state.
+  `Audio.Update()` after BGM writes; NES plays SFX on pulse 1 as a flat per-frame
+  one-shot trace ticked once per `Audio.Update()` after BGM, keeps only the pulse 1
+  registers (`$4000-$4003`) and drops captured global/other-channel writes, arms
+  the effect via a zero-page cursor plus `SfxActive` flag (never touching the BGM
+  tick/order state), suppresses the BGM's own pulse 1 writes while an effect is
+  active, and shares one APU body writer with the BGM engine to fit NROM. The SFX
+  data is emitted after the DPCM samples so it does not shrink the DPCM window.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.

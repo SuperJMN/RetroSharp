@@ -43,3 +43,20 @@ commandCount
 ## Runtime
 
 `Audio.Init()` enables pulse, triangle, and noise channels through `$4015`, initializes `$4017`, and resets music state. DMC playback starts when the imported stream writes `$4015` with bit 4 set after configuring `$4010/$4012/$4013`. `Music.Play(theme)` points the runtime at the selected asset's order stream and loop point. `Audio.Update()` should be called once per frame; it waits the compiled frame delay, decodes the next group body, and writes the contained values to `$4000-$4017`. Zero-wait order entries continue in the same `Audio.Update()` call so dense bursts do not gain accidental blank frames.
+
+## Sound effects (SFX)
+
+Sound effects use a separate, simpler flat per-frame format. Pulse 1 (`$4000-$4003`) is the dedicated NES SFX channel, so the compiler keeps only those registers and drops captured global/other-channel writes (`$4010`, `$4015`, `$4017`, and every non-pulse-1 channel). There is no header, pool, or order stream:
+
+```text
+frame body * N        // one body per source frame, in order
+0xFF                  // end-of-effect marker
+```
+
+Each frame body is `commandCount` followed by `{ registerOffset, value } * commandCount`, exactly like a BGM group body. A gap frame (no pulse 1 change) is encoded as an empty body (`commandCount = 0`). A few empty tail-hold frames are appended so the note keeps ringing before the effect ends. The `0xFF` byte sits where a body's `commandCount` would be (a real pulse 1 frame never has more than four writes), so it is an unambiguous stop marker.
+
+This data is position-independent — the runtime walks it from a start label — so it is emitted after the DPCM samples and does not consume the DPCM window.
+
+### SFX runtime
+
+`Sfx.Play(name)` only arms the engine: it sets a zero-page cursor to the effect's first frame body and sets the `SfxActive` flag. It never touches the BGM order/body/tick state. After the BGM update, `Audio.Update()` ticks the SFX: it plays the current frame body on pulse 1 through the shared APU body writer, advances the cursor to the next frame body, and stops when it reads the `0xFF` marker. While `SfxActive` is set, the BGM engine suppresses its own pulse 1 writes (register offsets `$00-$03`), so the effect owns pulse 1 cleanly and the BGM reclaims it when the effect ends. The other APU channels keep playing the BGM throughout.
