@@ -18,6 +18,8 @@ public static class ActorFrameworkLowerer
     private const string ActorStructName = "Actor";
     private const string ProjectileStructName = "Projectile";
     private const string ProjectileSpawnRequestStructName = "ProjectileSpawnRequest";
+    private const string EffectStructName = "Effect";
+    private const string EffectSpawnRequestStructName = "EffectSpawnRequest";
     private const string ActorCameraXLowFunction = "__rs_actor_camera_x_lo";
     private const string ActorCameraXHighFunction = "__rs_actor_camera_x_hi";
     private const string ActorCameraYLowFunction = "__rs_actor_camera_y_lo";
@@ -91,6 +93,7 @@ public static class ActorFrameworkLowerer
         }
 
         state.ValidateSpawnLayers();
+        state.ValidateProjectileEffects();
 
         var structs = program.Structs.ToList();
         if (state.Pools.Count != 0)
@@ -119,6 +122,22 @@ public static class ActorFrameworkLowerer
             structs.Add(ProjectileSpawnRequestStruct());
         }
 
+        if (state.EffectPools.Count != 0)
+        {
+            if (structs.Any(structSyntax => structSyntax.Name == EffectStructName))
+            {
+                throw new InvalidOperationException("Effects.Pool cannot generate framework struct 'Effect' because a struct named 'Effect' is already declared.");
+            }
+
+            if (structs.Any(structSyntax => structSyntax.Name == EffectSpawnRequestStructName))
+            {
+                throw new InvalidOperationException("Effects.Pool cannot generate framework struct 'EffectSpawnRequest' because a struct named 'EffectSpawnRequest' is already declared.");
+            }
+
+            structs.Add(EffectStruct());
+            structs.Add(EffectSpawnRequestStruct());
+        }
+
         var rewrittenFunctions = program.Functions
             .Select(function => new FunctionSyntax(
                 function.Type,
@@ -145,6 +164,7 @@ public static class ActorFrameworkLowerer
             program.Constants
                 .Concat(GeneratedConstants(state.EnemyDefs))
                 .Concat(GeneratedProjectileConstants(state.ProjectileDefs))
+                .Concat(GeneratedEffectConstants(state.EffectDefs))
                 .ToList(),
             program.Enums,
             structs,
@@ -345,6 +365,12 @@ public static class ActorFrameworkLowerer
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } projectileDefCall }:
                     state.AddProjectileDef(ReadProjectileDef(projectileDefCall));
                     break;
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Pool" } effectPoolCall }:
+                    state.AddEffectPool(ReadEffectPool(effectPoolCall));
+                    break;
+                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Def" } effectDefCall }:
+                    state.AddEffectDef(ReadEffectDef(effectDefCall));
+                    break;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Method: "Init" } cameraInitCall }
                     when cameraInitCall.Qualifier.EndsWith("Camera", StringComparison.Ordinal):
                     state.MarkCameraConfigured();
@@ -418,10 +444,11 @@ public static class ActorFrameworkLowerer
         var enemyCapacity = OptionalProjectileLiteralByte(namedArguments, "enemy", 8, name);
         var requestCapacity = OptionalProjectileLiteralByte(namedArguments, "requests", 8, name);
         var offscreenMargin = OptionalProjectileLiteralByte(namedArguments, "offscreenMargin", 16, name);
+        var effectPoolName = OptionalIdentifier(namedArguments, "effects", name, "Projectiles.Pool");
 
         foreach (var argumentName in namedArguments.Keys)
         {
-            if (argumentName is not "hero" and not "enemy" and not "requests" and not "offscreenMargin")
+            if (argumentName is not "hero" and not "enemy" and not "requests" and not "offscreenMargin" and not "effects")
             {
                 throw new InvalidOperationException($"Projectiles.Pool for '{name}' has unsupported property '{argumentName}'.");
             }
@@ -432,7 +459,36 @@ public static class ActorFrameworkLowerer
             throw new InvalidOperationException($"Projectiles.Pool for '{name}' requires hero, enemy, and request capacities from 1 to 255.");
         }
 
-        return new ProjectilePool(name, heroCapacity, enemyCapacity, requestCapacity, offscreenMargin);
+        return new ProjectilePool(name, heroCapacity, enemyCapacity, requestCapacity, offscreenMargin, effectPoolName);
+    }
+
+    private static EffectPool ReadEffectPool(QualifiedCallSyntax call)
+    {
+        var parameters = call.Parameters.ToList();
+        if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax poolName)
+        {
+            throw new InvalidOperationException("Effects.Pool expects a pool identifier followed by named literal limits.");
+        }
+
+        var name = poolName.Identifier;
+        var namedArguments = NamedArguments(parameters.Skip(1), $"Effects.Pool for '{name}'");
+        var capacity = OptionalEffectLiteralByte(namedArguments, "capacity", 8, name);
+        var requestCapacity = OptionalEffectLiteralByte(namedArguments, "requests", 8, name);
+
+        foreach (var argumentName in namedArguments.Keys)
+        {
+            if (argumentName is not "capacity" and not "requests")
+            {
+                throw new InvalidOperationException($"Effects.Pool for '{name}' has unsupported property '{argumentName}'.");
+            }
+        }
+
+        if (capacity == 0 || requestCapacity == 0)
+        {
+            throw new InvalidOperationException($"Effects.Pool for '{name}' requires capacity and request limits from 1 to 255.");
+        }
+
+        return new EffectPool(name, capacity, requestCapacity);
     }
 
     private static ProjectileDef ReadProjectileDef(QualifiedCallSyntax call)
@@ -464,16 +520,43 @@ public static class ActorFrameworkLowerer
         var lifetime = RequiredProjectileLiteralByte(namedArguments, "lifetime", name);
         var hitboxWidth = RequiredProjectileLiteralByte(namedArguments, "hitboxWidth", name);
         var hitboxHeight = RequiredProjectileLiteralByte(namedArguments, "hitboxHeight", name);
+        var spawnEffect = OptionalProjectileIdentifier(namedArguments, "spawnEffect", name);
+        var impactEffect = OptionalProjectileIdentifier(namedArguments, "impactEffect", name);
+        var expireEffect = OptionalProjectileIdentifier(namedArguments, "expireEffect", name);
 
         foreach (var argumentName in namedArguments.Keys)
         {
-            if (argumentName is not "team" and not "sprite" and not "behavior" and not "speedX" and not "speedY" and not "damage" and not "lifetime" and not "hitboxWidth" and not "hitboxHeight")
+            if (argumentName is not "team" and not "sprite" and not "behavior" and not "speedX" and not "speedY" and not "damage" and not "lifetime" and not "hitboxWidth" and not "hitboxHeight" and not "spawnEffect" and not "impactEffect" and not "expireEffect")
             {
                 throw new InvalidOperationException($"Projectiles.Def for '{name}' has unsupported property '{argumentName}'.");
             }
         }
 
-        return new ProjectileDef(name, team, sprite, behavior, speedX, speedY, damage, lifetime, hitboxWidth, hitboxHeight);
+        return new ProjectileDef(name, team, sprite, behavior, speedX, speedY, damage, lifetime, hitboxWidth, hitboxHeight, spawnEffect, impactEffect, expireEffect);
+    }
+
+    private static EffectDef ReadEffectDef(QualifiedCallSyntax call)
+    {
+        var parameters = call.Parameters.ToList();
+        if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax effectName)
+        {
+            throw new InvalidOperationException("Effects.Def expects an effect identifier as its first argument.");
+        }
+
+        var name = effectName.Identifier;
+        var namedArguments = NamedArguments(parameters.Skip(1), $"Effects.Def for '{name}'");
+        var sprite = RequiredEffectIdentifier(namedArguments, "sprite", name);
+        var lifetime = RequiredEffectLiteralByte(namedArguments, "lifetime", name);
+
+        foreach (var argumentName in namedArguments.Keys)
+        {
+            if (argumentName is not "sprite" and not "lifetime")
+            {
+                throw new InvalidOperationException($"Effects.Def for '{name}' has unsupported property '{argumentName}'.");
+            }
+        }
+
+        return new EffectDef(name, sprite, lifetime);
     }
 
     private static ActorSpawnLayer ReadSpawnDirective(QualifiedCallSyntax call, string baseDirectory)
@@ -576,6 +659,25 @@ public static class ActorFrameworkLowerer
         throw new InvalidOperationException($"Enemies.Def for '{enemyName}' requires '{name}' to be an identifier.");
     }
 
+    private static string? OptionalIdentifier(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string ownerName,
+        string context)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            return null;
+        }
+
+        if (expression is IdentifierSyntax identifier)
+        {
+            return identifier.Identifier;
+        }
+
+        throw new InvalidOperationException($"{context} for '{ownerName}' requires '{name}' to be an identifier.");
+    }
+
     private static IReadOnlyDictionary<string, ExpressionSyntax> NamedArguments(IEnumerable<ExpressionSyntax> parameters, string context)
     {
         var namedArguments = new Dictionary<string, ExpressionSyntax>(StringComparer.Ordinal);
@@ -632,6 +734,24 @@ public static class ActorFrameworkLowerer
         throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be an identifier.");
     }
 
+    private static string? OptionalProjectileIdentifier(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string projectileName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            return null;
+        }
+
+        if (expression is IdentifierSyntax identifier)
+        {
+            return identifier.Identifier;
+        }
+
+        throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be an identifier.");
+    }
+
     private static int RequiredProjectileLiteralByte(
         IReadOnlyDictionary<string, ExpressionSyntax> arguments,
         string name,
@@ -667,6 +787,61 @@ public static class ActorFrameworkLowerer
         }
 
         throw new InvalidOperationException($"Projectiles.Pool for '{poolName}' requires literal byte limits for hero, enemy, requests, and offscreenMargin.");
+    }
+
+    private static string RequiredEffectIdentifier(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string effectName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            throw new InvalidOperationException($"Effects.Def for '{effectName}' requires '{name}'.");
+        }
+
+        if (expression is IdentifierSyntax identifier)
+        {
+            return identifier.Identifier;
+        }
+
+        throw new InvalidOperationException($"Effects.Def for '{effectName}' requires '{name}' to be an identifier.");
+    }
+
+    private static int RequiredEffectLiteralByte(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        string effectName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            throw new InvalidOperationException($"Effects.Def for '{effectName}' requires '{name}'.");
+        }
+
+        if (TryLiteralByte(expression, out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Effects.Def for '{effectName}' requires '{name}' to be a literal byte value.");
+    }
+
+    private static int OptionalEffectLiteralByte(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        int defaultValue,
+        string poolName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            return defaultValue;
+        }
+
+        if (TryLiteralByte(expression, out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Effects.Pool for '{poolName}' requires literal byte limits for capacity and requests.");
     }
 
     private static string RequiredIdentifier(
@@ -776,6 +951,16 @@ public static class ActorFrameworkLowerer
             return [];
         }
 
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Pool" } effectPoolCall })
+        {
+            return EffectPoolDeclarations(state.EffectPool(effectPoolCall));
+        }
+
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Def" } })
+        {
+            return [];
+        }
+
         if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax poolSdkCall } && state.TryPool(poolSdkCall.Qualifier, out var pool))
         {
             return poolSdkCall.Method switch
@@ -803,6 +988,18 @@ public static class ActorFrameworkLowerer
             };
         }
 
+        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax effectSdkCall } && state.TryEffectPool(effectSdkCall.Qualifier, out var effectPool))
+        {
+            return effectSdkCall.Method switch
+            {
+                "Request" => EffectRequestStatements(effectPool, effectSdkCall, state),
+                "ProcessRequests" => EffectProcessRequestStatements(effectPool, effectSdkCall, state),
+                "Update" => EffectUpdateStatements(effectPool, effectSdkCall, state),
+                "Draw" => EffectDrawStatements(effectPool, effectSdkCall, state),
+                _ => [RewriteStatement(statement, state)!],
+            };
+        }
+
         var rewritten = RewriteStatement(statement, state);
         return rewritten is null ? [] : [rewritten];
     }
@@ -815,6 +1012,8 @@ public static class ActorFrameworkLowerer
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } } => null,
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } } => null,
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } } => null,
+            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Pool" } } => null,
+            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Def" } } => null,
             ConstDeclarationSyntax constant => new ConstDeclarationSyntax(
                 constant.TypeAnnotation,
                 constant.Name,
@@ -912,6 +1111,31 @@ public static class ActorFrameworkLowerer
         ];
     }
 
+    private static IReadOnlyList<StatementSyntax> EffectPoolDeclarations(EffectPool pool)
+    {
+        return
+        [
+            new DeclarationSyntax(
+                EffectStructName,
+                pool.Name,
+                Maybe.From<ExpressionSyntax>(Constant(pool.Capacity)),
+                Maybe<ExpressionSyntax>.None),
+            new DeclarationSyntax(
+                EffectSpawnRequestStructName,
+                pool.RequestArrayName,
+                Maybe.From<ExpressionSyntax>(Constant(pool.RequestCapacity)),
+                Maybe<ExpressionSyntax>.None),
+            ArrayLoop(
+                pool.Name,
+                $"__{pool.Name}_init_i",
+                FieldAssignment(pool.Name, $"__{pool.Name}_init_i", "active", "=", Constant(0))),
+            ArrayLoop(
+                pool.RequestArrayName,
+                $"__{pool.Name}_init_request_i",
+                FieldAssignment(pool.RequestArrayName, $"__{pool.Name}_init_request_i", "active", "=", Constant(0))),
+        ];
+    }
+
     private static IReadOnlyList<StatementSyntax> ProjectileRequestStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         var parameters = call.Parameters.Select(parameter => RewriteExpression(parameter, state)).ToList();
@@ -926,8 +1150,9 @@ public static class ActorFrameworkLowerer
         }
 
         state.ProjectileDef(kind.Identifier);
-        var indexName = $"__{pool.Name}_request_i";
-        var writtenName = $"__{pool.Name}_request_written";
+        var prefix = state.NextProjectileRequestPrefix(pool);
+        var indexName = $"{prefix}_i";
+        var writtenName = $"{prefix}_written";
         var result = parameters.Count >= 5 ? ExpressionToLValue(parameters[4], $"{pool.Name}.Request result") : null;
         var owner = parameters.Count == 6 ? parameters[5] : Constant(0);
         var requestWrites = new List<StatementSyntax>
@@ -971,6 +1196,195 @@ public static class ActorFrameworkLowerer
         return statements;
     }
 
+    private static IReadOnlyList<StatementSyntax> EffectRequestStatements(EffectPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = call.Parameters.Select(parameter => RewriteExpression(parameter, state)).ToList();
+        if (parameters.Count != 3)
+        {
+            throw new InvalidOperationException($"{pool.Name}.Request expects kind, x, and y.");
+        }
+
+        if (parameters[0] is not IdentifierSyntax kind)
+        {
+            throw new InvalidOperationException($"{pool.Name}.Request kind must be an effect identifier.");
+        }
+
+        state.EffectDef(kind.Identifier);
+        return EffectEnqueueStatements(
+            pool,
+            kind,
+            parameters[1],
+            Constant(0),
+            parameters[2],
+            Constant(0),
+            state.NextEffectRequestPrefix(pool, "request"));
+    }
+
+    private static IReadOnlyList<StatementSyntax> EffectEnqueueStatements(
+        EffectPool pool,
+        IdentifierSyntax kind,
+        ExpressionSyntax x,
+        ExpressionSyntax xHi,
+        ExpressionSyntax y,
+        ExpressionSyntax yHi,
+        string prefix)
+    {
+        var indexName = $"{prefix}_i";
+        var writtenName = $"{prefix}_written";
+        return
+        [
+            new DeclarationSyntax("u8", writtenName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+            ArrayLoop(
+                pool.RequestArrayName,
+                indexName,
+                new IfElseSyntax(
+                    And(
+                        new BinaryExpressionSyntax(new IdentifierSyntax(writtenName), Constant(0), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(pool.RequestArrayName, indexName, "active"), Constant(0), Operator.Equal)),
+                    new BlockSyntax([
+                        FieldAssignment(pool.RequestArrayName, indexName, "active", "=", Constant(1)),
+                        FieldAssignment(pool.RequestArrayName, indexName, "kind", "=", kind),
+                        FieldAssignment(pool.RequestArrayName, indexName, "x", "=", x),
+                        FieldAssignment(pool.RequestArrayName, indexName, "xHi", "=", xHi),
+                        FieldAssignment(pool.RequestArrayName, indexName, "y", "=", y),
+                        FieldAssignment(pool.RequestArrayName, indexName, "yHi", "=", yHi),
+                        Assign(new IdentifierLValue(writtenName), Constant(1)),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> EffectProcessRequestStatements(EffectPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        RequireNoArguments(call);
+        RequireEffectDefs(state, $"{pool.Name}.ProcessRequests");
+
+        var requestIndex = $"__{pool.Name}_process_request_i";
+        var branches = state.EffectDefs
+            .Select(def => new KindBranch(def.Name, new BlockSyntax(EffectSpawnFromRequestStatements(pool, requestIndex, def).ToList())))
+            .ToList();
+
+        return
+        [
+            ArrayLoop(
+                pool.RequestArrayName,
+                requestIndex,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.RequestArrayName, requestIndex, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax([
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_x", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "x"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_xHi", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "xHi"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_y", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "y"))),
+                        new DeclarationSyntax("u8", $"__{pool.Name}_process_request_yHi", Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(pool.RequestArrayName, requestIndex, "yHi"))),
+                        ProjectileKindDispatch(pool.RequestArrayName, requestIndex, branches, "effect request"),
+                        FieldAssignment(pool.RequestArrayName, requestIndex, "active", "=", Constant(0)),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> EffectSpawnFromRequestStatements(EffectPool pool, string requestIndex, EffectDef def)
+    {
+        var indexName = $"__{pool.Name}_process_{def.Name}_i";
+        var writtenName = $"__{pool.Name}_process_{def.Name}_written";
+
+        return
+        [
+            new DeclarationSyntax("u8", writtenName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+            ArrayLoop(
+                pool.Name,
+                indexName,
+                new IfElseSyntax(
+                    And(
+                        new BinaryExpressionSyntax(new IdentifierSyntax(writtenName), Constant(0), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "active"), Constant(0), Operator.Equal)),
+                    new BlockSyntax([
+                        FieldAssignment(pool.Name, indexName, "active", "=", Constant(1)),
+                        FieldAssignment(pool.Name, indexName, "kind", "=", new IdentifierSyntax(def.Name)),
+                        FieldAssignment(pool.Name, indexName, "x", "=", new IdentifierSyntax($"__{pool.Name}_process_request_x")),
+                        FieldAssignment(pool.Name, indexName, "xHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_xHi")),
+                        FieldAssignment(pool.Name, indexName, "y", "=", new IdentifierSyntax($"__{pool.Name}_process_request_y")),
+                        FieldAssignment(pool.Name, indexName, "yHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_yHi")),
+                        FieldAssignment(pool.Name, indexName, "age", "=", Constant(0)),
+                        Assign(new IdentifierLValue(writtenName), Constant(1)),
+                    ]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> EffectUpdateStatements(EffectPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        RequireNoArguments(call);
+        RequireEffectDefs(state, $"{pool.Name}.Update");
+
+        var indexName = $"__{pool.Name}_update_i";
+        var branches = state.EffectDefs
+            .Select(def => new KindBranch(def.Name, new BlockSyntax([
+                FieldAssignment(pool.Name, indexName, "age", "+=", Constant(1)),
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "age"), new IdentifierSyntax($"{def.Name}Lifetime"), Operator.Equal),
+                    new BlockSyntax([FieldAssignment(pool.Name, indexName, "active", "=", Constant(0))]),
+                    Maybe<BlockSyntax>.None),
+            ])))
+            .ToList();
+
+        return
+        [
+            ArrayLoop(
+                pool.Name,
+                indexName,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax([ProjectileKindDispatch(pool.Name, indexName, branches, $"{pool.Name}.Update")]),
+                    Maybe<BlockSyntax>.None)),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> EffectDrawStatements(EffectPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        RequireNoArguments(call);
+        if (!state.SupportsDraw)
+        {
+            throw new InvalidOperationException($"Target '{state.TargetName}' does not support effect Draw yet.");
+        }
+
+        RequireEffectDefs(state, $"{pool.Name}.Draw");
+        var indexName = $"__{pool.Name}_draw_i";
+        var projection = BuildProjectileScreenProjection(pool.Name, indexName, pool.Name, "draw", state.ScreenWidth, state.ScreenHeight);
+        var branches = state.EffectDefs
+            .Select(def => new KindBranch(def.Name, new BlockSyntax([
+                new IfElseSyntax(
+                    projection.Visible,
+                    new BlockSyntax([
+                        new ExpressionStatementSyntax(IntrinsicCall(
+                            state,
+                            SpriteDrawIntrinsic,
+                            [
+                                new IdentifierSyntax(def.Sprite),
+                                projection.ScreenX,
+                                projection.ScreenY,
+                                Constant(0),
+                                new IdentifierSyntax("false"),
+                                Constant(0),
+                            ])),
+                    ]),
+                    Maybe<BlockSyntax>.None),
+            ])))
+            .ToList();
+
+        return ProjectileCameraDeclarations(pool.Name, "draw", state.ConfiguresCamera)
+            .Append(ArrayLoop(
+                pool.Name,
+                indexName,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(pool.Name, indexName, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax(projection.Declarations
+                        .Append(ProjectileKindDispatch(pool.Name, indexName, branches, $"{pool.Name}.Draw"))
+                        .ToList()),
+                    Maybe<BlockSyntax>.None)))
+            .ToList();
+    }
+
     private static IReadOnlyList<StatementSyntax> ProjectileProcessRequestStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
     {
         RequireNoArguments(call);
@@ -978,7 +1392,7 @@ public static class ActorFrameworkLowerer
 
         var requestIndex = $"__{pool.Name}_process_request_i";
         var branches = state.ProjectileDefs
-            .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileSpawnFromRequestStatements(pool, requestIndex, def).ToList())))
+            .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileSpawnFromRequestStatements(pool, requestIndex, def, state).ToList())))
             .ToList();
 
         return
@@ -1002,11 +1416,37 @@ public static class ActorFrameworkLowerer
         ];
     }
 
-    private static IReadOnlyList<StatementSyntax> ProjectileSpawnFromRequestStatements(ProjectilePool pool, string requestIndex, ProjectileDef def)
+    private static IReadOnlyList<StatementSyntax> ProjectileSpawnFromRequestStatements(ProjectilePool pool, string requestIndex, ProjectileDef def, ActorFrameworkState state)
     {
         var arrayName = pool.ArrayNameForTeam(def.Team);
         var indexName = $"__{pool.Name}_process_{def.Name}_i";
         var writtenName = $"__{pool.Name}_process_{def.Name}_written";
+        var spawnStatements = new List<StatementSyntax>
+        {
+            FieldAssignment(arrayName, indexName, "active", "=", Constant(1)),
+            FieldAssignment(arrayName, indexName, "kind", "=", new IdentifierSyntax(def.Name)),
+            FieldAssignment(arrayName, indexName, "x", "=", new IdentifierSyntax($"__{pool.Name}_process_request_x")),
+            FieldAssignment(arrayName, indexName, "xHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_xHi")),
+            FieldAssignment(arrayName, indexName, "y", "=", new IdentifierSyntax($"__{pool.Name}_process_request_y")),
+            FieldAssignment(arrayName, indexName, "yHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_yHi")),
+            FieldAssignment(arrayName, indexName, "vx", "=", new IdentifierSyntax($"{def.Name}SpeedX")),
+            FieldAssignment(arrayName, indexName, "vy", "=", new IdentifierSyntax($"{def.Name}SpeedY")),
+            FieldAssignment(arrayName, indexName, "damage", "=", new IdentifierSyntax($"{def.Name}Damage")),
+            FieldAssignment(arrayName, indexName, "age", "=", Constant(0)),
+            FieldAssignment(arrayName, indexName, "owner", "=", new IdentifierSyntax($"__{pool.Name}_process_request_owner")),
+            FieldAssignment(arrayName, indexName, "direction", "=", new IdentifierSyntax($"__{pool.Name}_process_request_direction")),
+        };
+        spawnStatements.AddRange(ProjectileEffectRequestStatements(
+            pool,
+            def,
+            def.SpawnEffect,
+            "projectile_spawn",
+            new IdentifierSyntax($"__{pool.Name}_process_request_x"),
+            new IdentifierSyntax($"__{pool.Name}_process_request_xHi"),
+            new IdentifierSyntax($"__{pool.Name}_process_request_y"),
+            new IdentifierSyntax($"__{pool.Name}_process_request_yHi"),
+            state));
+        spawnStatements.Add(Assign(new IdentifierLValue(writtenName), Constant(1)));
 
         return
         [
@@ -1018,21 +1458,7 @@ public static class ActorFrameworkLowerer
                     And(
                         new BinaryExpressionSyntax(new IdentifierSyntax(writtenName), Constant(0), Operator.Equal),
                         new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.Equal)),
-                    new BlockSyntax([
-                        FieldAssignment(arrayName, indexName, "active", "=", Constant(1)),
-                        FieldAssignment(arrayName, indexName, "kind", "=", new IdentifierSyntax(def.Name)),
-                        FieldAssignment(arrayName, indexName, "x", "=", new IdentifierSyntax($"__{pool.Name}_process_request_x")),
-                        FieldAssignment(arrayName, indexName, "xHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_xHi")),
-                        FieldAssignment(arrayName, indexName, "y", "=", new IdentifierSyntax($"__{pool.Name}_process_request_y")),
-                        FieldAssignment(arrayName, indexName, "yHi", "=", new IdentifierSyntax($"__{pool.Name}_process_request_yHi")),
-                        FieldAssignment(arrayName, indexName, "vx", "=", new IdentifierSyntax($"{def.Name}SpeedX")),
-                        FieldAssignment(arrayName, indexName, "vy", "=", new IdentifierSyntax($"{def.Name}SpeedY")),
-                        FieldAssignment(arrayName, indexName, "damage", "=", new IdentifierSyntax($"{def.Name}Damage")),
-                        FieldAssignment(arrayName, indexName, "age", "=", Constant(0)),
-                        FieldAssignment(arrayName, indexName, "owner", "=", new IdentifierSyntax($"__{pool.Name}_process_request_owner")),
-                        FieldAssignment(arrayName, indexName, "direction", "=", new IdentifierSyntax($"__{pool.Name}_process_request_direction")),
-                        Assign(new IdentifierLValue(writtenName), Constant(1)),
-                    ]),
+                    new BlockSyntax(spawnStatements),
                     Maybe<BlockSyntax>.None)),
         ];
     }
@@ -1058,36 +1484,46 @@ public static class ActorFrameworkLowerer
         var arrayName = pool.ArrayNameForTeam(team);
         var phase = team == "Hero" ? "update_hero" : "update_enemy";
         var indexName = $"__{pool.Name}_{phase}_i";
+        var projection = BuildProjectileScreenProjection(arrayName, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight, pool.OffscreenMargin);
         var branches = defs
-            .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileUpdateBlock(arrayName, indexName, def).ToList())))
+            .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileUpdateBlock(pool, arrayName, indexName, def, projection, state).ToList())))
             .ToList();
 
-        return
-        [
-            ArrayLoop(
+        return ProjectileCameraDeclarations(pool.Name, phase, state.ConfiguresCamera)
+            .Append(ArrayLoop(
                 arrayName,
                 indexName,
                 new IfElseSyntax(
                     new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.NotEqual),
-                    new BlockSyntax([ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Update")]),
-                    Maybe<BlockSyntax>.None)),
-        ];
+                    new BlockSyntax(projection.Declarations
+                        .Append(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.Update"))
+                        .ToList()),
+                    Maybe<BlockSyntax>.None)))
+            .ToList();
     }
 
-    private static IReadOnlyList<StatementSyntax> ProjectileUpdateBlock(string arrayName, string indexName, ProjectileDef def)
+    private static IReadOnlyList<StatementSyntax> ProjectileUpdateBlock(
+        ProjectilePool pool,
+        string arrayName,
+        string indexName,
+        ProjectileDef def,
+        ActorScreenProjection projection,
+        ActorFrameworkState state)
     {
+        var horizontalVelocityName = $"{indexName}_vx";
+        var verticalVelocityName = $"{indexName}_vy";
+        var horizontalVelocity = new IdentifierSyntax(horizontalVelocityName);
+        var verticalVelocity = new IdentifierSyntax(verticalVelocityName);
         var statements = new List<StatementSyntax>
         {
+            new DeclarationSyntax("u8", horizontalVelocityName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new CastSyntax("u8", PoolField(arrayName, indexName, "vx")))),
+            new DeclarationSyntax("u8", verticalVelocityName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new CastSyntax("u8", PoolField(arrayName, indexName, "vy")))),
             new IfElseSyntax(
                 new BinaryExpressionSyntax(PoolField(arrayName, indexName, "direction"), Constant(0), Operator.Equal),
-                new BlockSyntax(ProjectileAddWorldX(arrayName, indexName, new IdentifierSyntax($"{def.Name}SpeedX")).ToList()),
-                Maybe.From(new BlockSyntax(ProjectileSubtractWorldX(arrayName, indexName, new IdentifierSyntax($"{def.Name}SpeedX")).ToList()))),
-            FieldAssignment(arrayName, indexName, "y", "+=", new IdentifierSyntax($"{def.Name}SpeedY")),
-            new IfElseSyntax(
-                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax($"{def.Name}SpeedY"), Operator.LessThan),
-                new BlockSyntax([FieldAssignment(arrayName, indexName, "yHi", "+=", Constant(1))]),
-                Maybe<BlockSyntax>.None),
+                new BlockSyntax(ProjectileAddWorldX(arrayName, indexName, horizontalVelocity).ToList()),
+                Maybe.From(new BlockSyntax(ProjectileSubtractWorldX(arrayName, indexName, horizontalVelocity).ToList()))),
         };
+        statements.AddRange(ProjectileAddWorldY(arrayName, indexName, verticalVelocity));
 
         if (def.Behavior == "GravityArc")
         {
@@ -1097,6 +1533,21 @@ public static class ActorFrameworkLowerer
         statements.Add(FieldAssignment(arrayName, indexName, "age", "+=", Constant(1)));
         statements.Add(new IfElseSyntax(
             new BinaryExpressionSyntax(PoolField(arrayName, indexName, "age"), new IdentifierSyntax($"{def.Name}Lifetime"), Operator.Equal),
+            new BlockSyntax(ProjectileEffectRequestStatements(
+                    pool,
+                    def,
+                    def.ExpireEffect,
+                    "projectile_expire",
+                    PoolField(arrayName, indexName, "x"),
+                    PoolField(arrayName, indexName, "xHi"),
+                    PoolField(arrayName, indexName, "y"),
+                    PoolField(arrayName, indexName, "yHi"),
+                    state)
+                .Append(FieldAssignment(arrayName, indexName, "active", "=", Constant(0)))
+                .ToList()),
+            Maybe<BlockSyntax>.None));
+        statements.Add(new IfElseSyntax(
+            new UnaryExpressionSyntax("!", projection.Visible),
             new BlockSyntax([FieldAssignment(arrayName, indexName, "active", "=", Constant(0))]),
             Maybe<BlockSyntax>.None));
 
@@ -1128,6 +1579,18 @@ public static class ActorFrameworkLowerer
                 new BlockSyntax([FieldAssignment(arrayName, indexName, "xHi", "-=", Constant(1))]),
                 Maybe<BlockSyntax>.None),
             FieldAssignment(arrayName, indexName, "x", "-=", amount),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileAddWorldY(string arrayName, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            FieldAssignment(arrayName, indexName, "y", "+=", amount),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(arrayName, indexName, "yHi", "+=", Constant(1))]),
+                Maybe<BlockSyntax>.None),
         ];
     }
 
@@ -1220,22 +1683,24 @@ public static class ActorFrameworkLowerer
 
         var projectileIndex = $"__{pool.Name}_actor_hero_i";
         var actorIndex = $"__{pool.Name}_actor_{actorPool.Name}_i";
+        var projectileProjection = BuildProjectileScreenProjection(pool.HeroArrayName, projectileIndex, pool.Name, "actor_hero", state.ScreenWidth, state.ScreenHeight);
+        var actorProjection = BuildProjectileScreenProjection(actorPool.Name, actorIndex, pool.Name, "actor_target", state.ScreenWidth, state.ScreenHeight);
         var projectileBranches = heroDefs
-            .Select(def => new KindBranch(def.Name, ProjectileTouchActorsForProjectileBlock(pool, projectileIndex, actorPool, actorIndex, def, state)))
+            .Select(def => new KindBranch(def.Name, ProjectileTouchActorsForProjectileBlock(pool, projectileIndex, actorPool, actorIndex, def, projectileProjection, actorProjection, state)))
             .ToList();
 
-        return
-        [
-            ArrayLoop(
+        return ProjectileCameraDeclarations(pool.Name, "actor_hero", state.ConfiguresCamera)
+            .Concat(ProjectileCameraDeclarations(pool.Name, "actor_target", state.ConfiguresCamera))
+            .Append(ArrayLoop(
                 pool.HeroArrayName,
                 projectileIndex,
                 new IfElseSyntax(
                     new BinaryExpressionSyntax(PoolField(pool.HeroArrayName, projectileIndex, "active"), Constant(0), Operator.NotEqual),
-                    new BlockSyntax([
-                        ProjectileKindDispatch(pool.HeroArrayName, projectileIndex, projectileBranches, $"{pool.Name}.TouchActors"),
-                    ]),
-                    Maybe<BlockSyntax>.None)),
-        ];
+                    new BlockSyntax(projectileProjection.Declarations
+                        .Append(ProjectileKindDispatch(pool.HeroArrayName, projectileIndex, projectileBranches, $"{pool.Name}.TouchActors"))
+                        .ToList()),
+                    Maybe<BlockSyntax>.None)))
+            .ToList();
     }
 
     private static BlockSyntax ProjectileTouchActorsForProjectileBlock(
@@ -1244,10 +1709,12 @@ public static class ActorFrameworkLowerer
         ActorPool actorPool,
         string actorIndex,
         ProjectileDef projectileDef,
+        ActorScreenProjection projectileProjection,
+        ActorScreenProjection actorProjection,
         ActorFrameworkState state)
     {
         var actorBranches = state.EnemyDefs
-            .Select(enemyDef => new KindBranch(enemyDef.Name, ProjectileTouchActorKindBlock(pool, projectileIndex, actorPool, actorIndex, projectileDef, enemyDef)))
+            .Select(enemyDef => new KindBranch(enemyDef.Name, ProjectileTouchActorKindBlock(pool, projectileIndex, actorPool, actorIndex, projectileDef, enemyDef, projectileProjection, actorProjection, state)))
             .ToList();
 
         return new BlockSyntax([
@@ -1256,9 +1723,9 @@ public static class ActorFrameworkLowerer
                 actorIndex,
                 new IfElseSyntax(
                     new BinaryExpressionSyntax(PoolField(actorPool.Name, actorIndex, "active"), Constant(0), Operator.NotEqual),
-                    new BlockSyntax([
-                        KindDispatch(actorPool.Name, actorIndex, actorBranches),
-                    ]),
+                    new BlockSyntax(actorProjection.Declarations
+                        .Append(KindDispatch(actorPool.Name, actorIndex, actorBranches))
+                        .ToList()),
                     Maybe<BlockSyntax>.None)),
         ]);
     }
@@ -1269,27 +1736,44 @@ public static class ActorFrameworkLowerer
         ActorPool actorPool,
         string actorIndex,
         ProjectileDef projectileDef,
-        EnemyDef enemyDef)
+        EnemyDef enemyDef,
+        ActorScreenProjection projectileProjection,
+        ActorScreenProjection actorProjection,
+        ActorFrameworkState state)
     {
         var overlapsX = AabbOverlaps(
-            PoolField(pool.HeroArrayName, projectileIndex, "x"),
+            projectileProjection.ScreenX,
             projectileDef.HitboxWidth,
-            PoolField(actorPool.Name, actorIndex, "x"),
+            actorProjection.ScreenX,
             enemyDef.HitboxWidth);
         var overlapsY = AabbOverlaps(
-            PoolField(pool.HeroArrayName, projectileIndex, "y"),
+            projectileProjection.ScreenY,
             projectileDef.HitboxHeight,
-            PoolField(actorPool.Name, actorIndex, "y"),
+            actorProjection.ScreenY,
             enemyDef.HitboxHeight);
 
         return new BlockSyntax([
             new IfElseSyntax(
-                And(overlapsX, overlapsY),
-                new BlockSyntax([
-                    FieldAssignment(actorPool.Name, actorIndex, "health", "-=", new IdentifierSyntax($"{projectileDef.Name}Damage")),
-                    FieldAssignment(actorPool.Name, actorIndex, "state", "=", new IdentifierSyntax($"{projectileDef.Name}Damage")),
-                    FieldAssignment(pool.HeroArrayName, projectileIndex, "active", "=", Constant(0)),
-                ]),
+                And(
+                    new BinaryExpressionSyntax(PoolField(pool.HeroArrayName, projectileIndex, "active"), Constant(0), Operator.NotEqual),
+                    And(projectileProjection.Visible, And(actorProjection.Visible, And(overlapsX, overlapsY)))),
+                new BlockSyntax(new StatementSyntax[]
+                    {
+                        FieldAssignment(actorPool.Name, actorIndex, "health", "-=", new IdentifierSyntax($"{projectileDef.Name}Damage")),
+                        FieldAssignment(actorPool.Name, actorIndex, "state", "=", new IdentifierSyntax($"{projectileDef.Name}Damage")),
+                    }
+                    .Concat(ProjectileEffectRequestStatements(
+                        pool,
+                        projectileDef,
+                        projectileDef.ImpactEffect,
+                        "projectile_impact",
+                        PoolField(pool.HeroArrayName, projectileIndex, "x"),
+                        PoolField(pool.HeroArrayName, projectileIndex, "xHi"),
+                        PoolField(pool.HeroArrayName, projectileIndex, "y"),
+                        PoolField(pool.HeroArrayName, projectileIndex, "yHi"),
+                        state))
+                    .Append(FieldAssignment(pool.HeroArrayName, projectileIndex, "active", "=", Constant(0)))
+                    .ToList()),
                 Maybe<BlockSyntax>.None),
         ]);
     }
@@ -1311,7 +1795,7 @@ public static class ActorFrameworkLowerer
         var indexName = $"__{pool.Name}_hero_enemy_i";
         var projection = BuildProjectileScreenProjection(pool.EnemyArrayName, indexName, pool.Name, "hero_enemy", state.ScreenWidth, state.ScreenHeight);
         var branches = enemyDefs
-            .Select(def => new KindBranch(def.Name, ProjectileTouchHeroBlock(pool, indexName, def, projection, parameters, damageTarget)))
+            .Select(def => new KindBranch(def.Name, ProjectileTouchHeroBlock(pool, indexName, def, projection, parameters, damageTarget, state)))
             .ToList();
 
         return ProjectileCameraDeclarations(pool.Name, "hero_enemy", state.ConfiguresCamera)
@@ -1333,7 +1817,8 @@ public static class ActorFrameworkLowerer
         ProjectileDef def,
         ActorScreenProjection projection,
         IReadOnlyList<ExpressionSyntax> parameters,
-        LValue damageTarget)
+        LValue damageTarget,
+        ActorFrameworkState state)
     {
         var overlapsX = AabbOverlaps(projection.ScreenX, def.HitboxWidth, parameters[0], RequiredLiteralByte(parameters[2], $"{pool.Name}.TouchHero argument 3"));
         var overlapsY = AabbOverlaps(projection.ScreenY, def.HitboxHeight, parameters[1], RequiredLiteralByte(parameters[3], $"{pool.Name}.TouchHero argument 4"));
@@ -1341,12 +1826,57 @@ public static class ActorFrameworkLowerer
         return new BlockSyntax([
             new IfElseSyntax(
                 And(projection.Visible, And(overlapsX, overlapsY)),
-                new BlockSyntax([
-                    Assign(damageTarget, new IdentifierSyntax($"{def.Name}Damage")),
-                    FieldAssignment(pool.EnemyArrayName, indexName, "active", "=", Constant(0)),
-                ]),
+                new BlockSyntax(new StatementSyntax[]
+                    {
+                        new ExpressionStatementSyntax(new AssignmentSyntax(damageTarget, "+=", new IdentifierSyntax($"{def.Name}Damage"))),
+                    }
+                    .Concat(ProjectileEffectRequestStatements(
+                        pool,
+                        def,
+                        def.ImpactEffect,
+                        "projectile_impact",
+                        PoolField(pool.EnemyArrayName, indexName, "x"),
+                        PoolField(pool.EnemyArrayName, indexName, "xHi"),
+                        PoolField(pool.EnemyArrayName, indexName, "y"),
+                        PoolField(pool.EnemyArrayName, indexName, "yHi"),
+                        state))
+                    .Append(FieldAssignment(pool.EnemyArrayName, indexName, "active", "=", Constant(0)))
+                    .ToList()),
                 Maybe<BlockSyntax>.None),
         ]);
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileEffectRequestStatements(
+        ProjectilePool projectilePool,
+        ProjectileDef projectileDef,
+        string? effectName,
+        string purpose,
+        ExpressionSyntax x,
+        ExpressionSyntax xHi,
+        ExpressionSyntax y,
+        ExpressionSyntax yHi,
+        ActorFrameworkState state)
+    {
+        if (effectName is null)
+        {
+            return [];
+        }
+
+        if (projectilePool.EffectPoolName is null)
+        {
+            throw new InvalidOperationException($"Projectiles.Pool for '{projectilePool.Name}' must declare an effects pool before Projectiles.Def '{projectileDef.Name}' can emit effect '{effectName}'.");
+        }
+
+        state.EffectDef(effectName);
+        var effectPool = state.EffectPool(projectilePool.EffectPoolName);
+        return EffectEnqueueStatements(
+            effectPool,
+            new IdentifierSyntax(effectName),
+            x,
+            xHi,
+            y,
+            yHi,
+            state.NextEffectRequestPrefix(effectPool, $"{purpose}_{projectileDef.Name}"));
     }
 
     private static ForSyntax PoolUpdateLoop(ActorPool pool, QualifiedCallSyntax call, ActorFrameworkState state)
@@ -2321,6 +2851,14 @@ public static class ActorFrameworkLowerer
         }
     }
 
+    private static void RequireEffectDefs(ActorFrameworkState state, string callName)
+    {
+        if (state.EffectDefs.Count == 0)
+        {
+            throw new InvalidOperationException($"{callName} requires at least one Effects.Def declaration.");
+        }
+    }
+
     private static ForSyntax ArrayLoop(string arrayName, string indexName, StatementSyntax bodyStatement)
     {
         return ArrayLoop(arrayName, indexName, [bodyStatement]);
@@ -2435,6 +2973,14 @@ public static class ActorFrameworkLowerer
         };
     }
 
+    private static IfElseSyntax SetFlagIf(string flagName, ExpressionSyntax condition)
+    {
+        return new IfElseSyntax(
+            condition,
+            new BlockSyntax([Assign(new IdentifierLValue(flagName), Constant(1))]),
+            Maybe<BlockSyntax>.None);
+    }
+
     private static BinaryExpressionSyntax AabbOverlaps(ExpressionSyntax left, int leftWidth, ExpressionSyntax right, int rightWidth)
     {
         return And(
@@ -2480,7 +3026,8 @@ public static class ActorFrameworkLowerer
         string poolName,
         string phase,
         int screenWidth,
-        int screenHeight)
+        int screenHeight,
+        int margin = 0)
     {
         var cameraXLow = $"__{poolName}_{phase}_camera_x_lo";
         var cameraXHigh = $"__{poolName}_{phase}_camera_x_hi";
@@ -2522,18 +3069,54 @@ public static class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(1), Operator.Get("+")),
                 Operator.Equal),
             new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan));
-        ExpressionSyntax visibleXExpression = Or(sameCameraXPage, nextCameraXPage);
-        if (screenWidth < 256)
+        var xMargin = screenWidth + margin < 256 ? margin : 0;
+        ExpressionSyntax forwardXExpression = Or(sameCameraXPage, nextCameraXPage);
+        var rightLimit = screenWidth + xMargin;
+        if (rightLimit < 256)
         {
-            visibleXExpression = And(
-                visibleXExpression,
-                new BinaryExpressionSyntax(new IdentifierSyntax(screenX), Constant(screenWidth), Operator.LessThan));
+            forwardXExpression = And(
+                forwardXExpression,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenX), Constant(rightLimit), Operator.LessThan));
         }
 
-        declarations.Add(new IfElseSyntax(
-            visibleXExpression,
-            new BlockSyntax([Assign(new IdentifierLValue(visibleXName), Constant(1))]),
-            Maybe<BlockSyntax>.None));
+        declarations.Add(SetFlagIf(visibleXName, forwardXExpression));
+
+        if (xMargin > 0)
+        {
+            var leftOfCameraX = And(
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenX), Constant(256 - xMargin), Operator.GreaterThanOrEqual),
+                Or(
+                    And(
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "xHi"), new IdentifierSyntax(cameraXHigh), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan)),
+                    And(
+                        new BinaryExpressionSyntax(
+                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "xHi"), Constant(1), Operator.Get("+")),
+                            new IdentifierSyntax(cameraXHigh),
+                            Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual))));
+            declarations.Add(SetFlagIf(visibleXName, leftOfCameraX));
+
+            if (rightLimit >= 256)
+            {
+                var rightOfCameraX = And(
+                    new BinaryExpressionSyntax(new IdentifierSyntax(screenX), Constant(xMargin), Operator.LessThan),
+                    Or(
+                        And(
+                            new BinaryExpressionSyntax(
+                                PoolField(arrayName, indexName, "xHi"),
+                                new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(1), Operator.Get("+")),
+                                Operator.Equal),
+                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.GreaterThanOrEqual)),
+                        And(
+                            new BinaryExpressionSyntax(
+                                PoolField(arrayName, indexName, "xHi"),
+                                new BinaryExpressionSyntax(new IdentifierSyntax(cameraXHigh), Constant(2), Operator.Get("+")),
+                                Operator.Equal),
+                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "x"), new IdentifierSyntax(cameraXLow), Operator.LessThan))));
+                declarations.Add(SetFlagIf(visibleXName, rightOfCameraX));
+            }
+        }
 
         var sameCameraYPage = And(
             new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
@@ -2544,18 +3127,54 @@ public static class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(1), Operator.Get("+")),
                 Operator.Equal),
             new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan));
-        ExpressionSyntax visibleYExpression = Or(sameCameraYPage, nextCameraYPage);
-        if (screenHeight < 256)
+        var yMargin = screenHeight + margin < 256 ? margin : 0;
+        ExpressionSyntax forwardYExpression = Or(sameCameraYPage, nextCameraYPage);
+        var bottomLimit = screenHeight + yMargin;
+        if (bottomLimit < 256)
         {
-            visibleYExpression = And(
-                visibleYExpression,
-                new BinaryExpressionSyntax(new IdentifierSyntax(screenY), Constant(screenHeight), Operator.LessThan));
+            forwardYExpression = And(
+                forwardYExpression,
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenY), Constant(bottomLimit), Operator.LessThan));
         }
 
-        declarations.Add(new IfElseSyntax(
-            visibleYExpression,
-            new BlockSyntax([Assign(new IdentifierLValue(visibleYName), Constant(1))]),
-            Maybe<BlockSyntax>.None));
+        declarations.Add(SetFlagIf(visibleYName, forwardYExpression));
+
+        if (yMargin > 0)
+        {
+            var aboveCameraY = And(
+                new BinaryExpressionSyntax(new IdentifierSyntax(screenY), Constant(256 - yMargin), Operator.GreaterThanOrEqual),
+                Or(
+                    And(
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), new IdentifierSyntax(cameraYHigh), Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan)),
+                    And(
+                        new BinaryExpressionSyntax(
+                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "yHi"), Constant(1), Operator.Get("+")),
+                            new IdentifierSyntax(cameraYHigh),
+                            Operator.Equal),
+                        new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual))));
+            declarations.Add(SetFlagIf(visibleYName, aboveCameraY));
+
+            if (bottomLimit >= 256)
+            {
+                var belowCameraY = And(
+                    new BinaryExpressionSyntax(new IdentifierSyntax(screenY), Constant(yMargin), Operator.LessThan),
+                    Or(
+                        And(
+                            new BinaryExpressionSyntax(
+                                PoolField(arrayName, indexName, "yHi"),
+                                new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(1), Operator.Get("+")),
+                                Operator.Equal),
+                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.GreaterThanOrEqual)),
+                        And(
+                            new BinaryExpressionSyntax(
+                                PoolField(arrayName, indexName, "yHi"),
+                                new BinaryExpressionSyntax(new IdentifierSyntax(cameraYHigh), Constant(2), Operator.Get("+")),
+                                Operator.Equal),
+                            new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), new IdentifierSyntax(cameraYLow), Operator.LessThan))));
+                declarations.Add(SetFlagIf(visibleYName, belowCameraY));
+            }
+        }
 
         return new ActorScreenProjection(
             declarations,
@@ -2573,6 +3192,7 @@ public static class ActorFrameworkLowerer
             QualifiedCallSyntax { Qualifier: "Enemies" } enemyCall => RewriteEnemyCall(enemyCall, state),
             QualifiedCallSyntax { Qualifier: "Actors" } actorCall => throw new InvalidOperationException($"Actors.{actorCall.Method} can only be used as a statement."),
             QualifiedCallSyntax { Qualifier: "Projectiles" } projectileCall => throw new InvalidOperationException($"Projectiles.{projectileCall.Method} can only be used as a statement."),
+            QualifiedCallSyntax { Qualifier: "Effects" } effectCall => throw new InvalidOperationException($"Effects.{effectCall.Method} can only be used as a statement."),
             AssignmentSyntax assignment => new AssignmentSyntax(RewriteLValue(assignment.Left, state), assignment.OperatorSymbol, RewriteExpression(assignment.Right, state)),
             BinaryExpressionSyntax binary => new BinaryExpressionSyntax(
                 RewriteExpression(binary.Left, state),
@@ -2708,6 +3328,16 @@ public static class ActorFrameworkLowerer
         }
     }
 
+    private static IEnumerable<ConstDeclarationSyntax> GeneratedEffectConstants(IReadOnlyList<EffectDef> effectDefs)
+    {
+        for (var index = 0; index < effectDefs.Count; index++)
+        {
+            var def = effectDefs[index];
+            yield return Constant(def.Name, index + 1);
+            yield return Constant($"{def.Name}Lifetime", def.Lifetime);
+        }
+    }
+
     private static ConstDeclarationSyntax Constant(string name, int value)
     {
         return Constant(name, new ConstantSyntax(value.ToString(CultureInfo.InvariantCulture)));
@@ -2832,6 +3462,18 @@ public static class ActorFrameworkLowerer
             yield return new GeneratedName($"{def.Name}Lifetime", $"Projectiles.Def '{def.Name}' lifetime constant");
             yield return new GeneratedName($"{def.Name}HitboxWidth", $"Projectiles.Def '{def.Name}' hitbox width constant");
             yield return new GeneratedName($"{def.Name}HitboxHeight", $"Projectiles.Def '{def.Name}' hitbox height constant");
+        }
+
+        if (state.EffectPools.Count != 0)
+        {
+            yield return new GeneratedName(EffectStructName, "framework struct 'Effect'");
+            yield return new GeneratedName(EffectSpawnRequestStructName, "framework struct 'EffectSpawnRequest'");
+        }
+
+        foreach (var def in state.EffectDefs)
+        {
+            yield return new GeneratedName(def.Name, $"Effects.Def '{def.Name}' kind constant");
+            yield return new GeneratedName($"{def.Name}Lifetime", $"Effects.Def '{def.Name}' lifetime constant");
         }
     }
 
@@ -2999,6 +3641,35 @@ public static class ActorFrameworkLowerer
             ]);
     }
 
+    private static StructSyntax EffectStruct()
+    {
+        return new StructSyntax(
+            EffectStructName,
+            [
+                new StructFieldSyntax("u8", "kind"),
+                new StructFieldSyntax("u8", "active"),
+                new StructFieldSyntax("u8", "x"),
+                new StructFieldSyntax("u8", "xHi"),
+                new StructFieldSyntax("u8", "y"),
+                new StructFieldSyntax("u8", "yHi"),
+                new StructFieldSyntax("u8", "age"),
+            ]);
+    }
+
+    private static StructSyntax EffectSpawnRequestStruct()
+    {
+        return new StructSyntax(
+            EffectSpawnRequestStructName,
+            [
+                new StructFieldSyntax("u8", "kind"),
+                new StructFieldSyntax("u8", "active"),
+                new StructFieldSyntax("u8", "x"),
+                new StructFieldSyntax("u8", "xHi"),
+                new StructFieldSyntax("u8", "y"),
+                new StructFieldSyntax("u8", "yHi"),
+            ]);
+    }
+
     private static Maybe<TOut> MapMaybe<TIn, TOut>(Maybe<TIn> maybe, Func<TIn, TOut> selector)
     {
         return maybe.HasValue ? Maybe.From(selector(maybe.Value)) : Maybe<TOut>.None;
@@ -3019,9 +3690,15 @@ public static class ActorFrameworkLowerer
         private readonly List<ProjectilePool> projectilePoolsInOrder = [];
         private readonly Dictionary<string, ProjectileDef> projectileDefs = new(StringComparer.Ordinal);
         private readonly List<ProjectileDef> projectileDefsInOrder = [];
+        private readonly Dictionary<string, EffectPool> effectPools = new(StringComparer.Ordinal);
+        private readonly List<EffectPool> effectPoolsInOrder = [];
+        private readonly Dictionary<string, EffectDef> effectDefs = new(StringComparer.Ordinal);
+        private readonly List<EffectDef> effectDefsInOrder = [];
         private readonly Dictionary<ActorSpawnLayerKey, ActorSpawnLayer> spawnLayers = [];
         private readonly List<ActorSpawnLayer> spawnLayersInOrder = [];
         private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> projectileRequestCallCounts = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, int> effectRequestCallCounts = new(StringComparer.Ordinal);
         private readonly HashSet<string> usedEnemyLookupMethods = new(StringComparer.Ordinal);
         private readonly IReadOnlyDictionary<string, string> intrinsicFunctions = intrinsicFunctionNames ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
@@ -3035,9 +3712,11 @@ public static class ActorFrameworkLowerer
         public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
         public IReadOnlyList<ProjectilePool> ProjectilePools => projectilePoolsInOrder;
         public IReadOnlyList<ProjectileDef> ProjectileDefs => projectileDefsInOrder;
+        public IReadOnlyList<EffectPool> EffectPools => effectPoolsInOrder;
+        public IReadOnlyList<EffectDef> EffectDefs => effectDefsInOrder;
         public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
         public IReadOnlySet<string> UsedEnemyLookupMethods => usedEnemyLookupMethods;
-        public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0 || projectilePools.Count != 0 || projectileDefs.Count != 0;
+        public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0 || projectilePools.Count != 0 || projectileDefs.Count != 0 || effectPools.Count != 0 || effectDefs.Count != 0;
 
         // True once the program is seen to call the camera-init facade (either the qualified
         // `<Camera>.Init(...)` form or its resolved static `..._Camera_Init(...)` call). Without a
@@ -3123,6 +3802,57 @@ public static class ActorFrameworkLowerer
             projectileDefsInOrder.Add(def);
         }
 
+        public void AddEffectPool(EffectPool pool)
+        {
+            if (!effectPools.TryAdd(pool.Name, pool))
+            {
+                throw new InvalidOperationException($"Effects.Pool for '{pool.Name}' is already declared.");
+            }
+
+            effectPoolsInOrder.Add(pool);
+        }
+
+        public EffectPool EffectPool(QualifiedCallSyntax call)
+        {
+            var pool = ReadEffectPool(call);
+            return effectPools[pool.Name];
+        }
+
+        public EffectPool EffectPool(string name)
+        {
+            if (effectPools.TryGetValue(name, out var pool))
+            {
+                return pool;
+            }
+
+            throw new InvalidOperationException($"Unknown effect pool '{name}'. Declare Effects.Pool({name}, ...).");
+        }
+
+        public bool TryEffectPool(string name, out EffectPool pool)
+        {
+            return effectPools.TryGetValue(name, out pool!);
+        }
+
+        public void AddEffectDef(EffectDef def)
+        {
+            if (!effectDefs.TryAdd(def.Name, def))
+            {
+                throw new InvalidOperationException($"Effects.Def for '{def.Name}' is already declared.");
+            }
+
+            effectDefsInOrder.Add(def);
+        }
+
+        public EffectDef EffectDef(string name)
+        {
+            if (effectDefs.TryGetValue(name, out var def))
+            {
+                return def;
+            }
+
+            throw new InvalidOperationException($"Unknown effect kind '{name}'. Declare Effects.Def({name}, ...).");
+        }
+
         public ProjectileDef ProjectileDef(string name)
         {
             if (projectileDefs.TryGetValue(name, out var def))
@@ -3190,6 +3920,43 @@ public static class ActorFrameworkLowerer
             return $"{spawnLayer.RuntimeName}_call{count}";
         }
 
+        public string NextProjectileRequestPrefix(ProjectilePool pool)
+        {
+            projectileRequestCallCounts.TryGetValue(pool.Name, out var count);
+            projectileRequestCallCounts[pool.Name] = count + 1;
+            return $"__{pool.Name}_request_call{count}";
+        }
+
+        public string NextEffectRequestPrefix(EffectPool pool, string purpose)
+        {
+            var key = $"{pool.Name}:{purpose}";
+            effectRequestCallCounts.TryGetValue(key, out var count);
+            effectRequestCallCounts[key] = count + 1;
+            return $"__{pool.Name}_{purpose}_call{count}";
+        }
+
+        public void ValidateProjectileEffects()
+        {
+            foreach (var pool in projectilePools.Values)
+            {
+                if (pool.EffectPoolName is not null && !effectPools.ContainsKey(pool.EffectPoolName))
+                {
+                    throw new InvalidOperationException($"Projectiles.Pool for '{pool.Name}' references unknown effect pool '{pool.EffectPoolName}'. Declare Effects.Pool({pool.EffectPoolName}, ...).");
+                }
+            }
+
+            foreach (var def in projectileDefs.Values)
+            {
+                foreach (var effectName in def.EffectNames())
+                {
+                    if (!effectDefs.ContainsKey(effectName))
+                    {
+                        throw new InvalidOperationException($"Projectiles.Def for '{def.Name}' references unknown effect kind '{effectName}'. Declare Effects.Def({effectName}, ...).");
+                    }
+                }
+            }
+        }
+
         public void ValidateSpawnLayers()
         {
             foreach (var spawnLayer in spawnLayers.Values)
@@ -3247,7 +4014,7 @@ public static class ActorFrameworkLowerer
 
     private sealed record ActorPool(string Name, int Capacity);
 
-    private sealed record ProjectilePool(string Name, int HeroCapacity, int EnemyCapacity, int RequestCapacity, int OffscreenMargin)
+    private sealed record ProjectilePool(string Name, int HeroCapacity, int EnemyCapacity, int RequestCapacity, int OffscreenMargin, string? EffectPoolName)
     {
         public string HeroArrayName => $"{Name}Hero";
         public string EnemyArrayName => $"{Name}Enemy";
@@ -3262,6 +4029,11 @@ public static class ActorFrameworkLowerer
                 _ => throw new InvalidOperationException($"Unknown projectile team '{team}'."),
             };
         }
+    }
+
+    private sealed record EffectPool(string Name, int Capacity, int RequestCapacity)
+    {
+        public string RequestArrayName => $"{Name}Requests";
     }
 
     private sealed record GeneratedName(string Name, string Origin);
@@ -3310,5 +4082,32 @@ public static class ActorFrameworkLowerer
         int Damage,
         int Lifetime,
         int HitboxWidth,
-        int HitboxHeight);
+        int HitboxHeight,
+        string? SpawnEffect,
+        string? ImpactEffect,
+        string? ExpireEffect)
+    {
+        public IEnumerable<string> EffectNames()
+        {
+            if (SpawnEffect is not null)
+            {
+                yield return SpawnEffect;
+            }
+
+            if (ImpactEffect is not null)
+            {
+                yield return ImpactEffect;
+            }
+
+            if (ExpireEffect is not null)
+            {
+                yield return ExpireEffect;
+            }
+        }
+    }
+
+    private sealed record EffectDef(
+        string Name,
+        string Sprite,
+        int Lifetime);
 }

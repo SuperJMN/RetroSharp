@@ -29,40 +29,35 @@ void SetupVideo()
 void Main()
 {
     SetupVideo();
-    Projectiles.Pool(shots, hero: 2, enemy: 1, requests: 1, offscreenMargin: 16);
-    Projectiles.Def(MarioShot, team: Hero, sprite: mario_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 48, hitboxWidth: 8, hitboxHeight: 8);
+    Effects.Pool(fx, capacity: 4, requests: 4);
+    Effects.Def(MuzzleFlash, sprite: mario_shot, lifetime: 4);
+    Projectiles.Pool(shots, hero: 2, enemy: 1, requests: 2, offscreenMargin: 16, effects: fx);
+    Projectiles.Def(MarioShot, team: Hero, sprite: mario_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 48, hitboxWidth: 8, hitboxHeight: 8, spawnEffect: MuzzleFlash);
 
-    u8 queued = 0;
+    u8 queuedRight = 0;
+    u8 queuedLeft = 0;
 
     while (true)
     {
         Video.WaitVBlank();
         Sprite.Draw(mario_player, Mario.X, Mario.Y, 0, false, 0);
         shots.Draw();
+        fx.Draw();
         Input.Poll();
-
-        u8 fire = 0;
-        u8 shotX = Mario.ShotRightX;
-        u8 dir = Aim.Right;
 
         if (Input.WasPressed(Button.B))
         {
-            fire = 1;
+            shots.Request(MarioShot, Mario.ShotRightX, Mario.ShotY, Aim.Right, queuedRight);
         }
 
         if (Input.WasPressed(Button.A))
         {
-            fire = 1;
-            shotX = Mario.ShotLeftX;
-            dir = Aim.Left;
-        }
-
-        if (fire == 1)
-        {
-            shots.Request(MarioShot, shotX, Mario.ShotY, dir, queued);
+            shots.Request(MarioShot, Mario.ShotLeftX, Mario.ShotY, Aim.Left, queuedLeft);
         }
 
         shots.ProcessRequests();
+        fx.ProcessRequests();
         shots.Update();
+        fx.Update();
     }
 }
