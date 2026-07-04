@@ -624,6 +624,10 @@ internal sealed class NesRuntimeCompiler
     // Non-zero while a sound effect is playing. The music engine reads it to suppress its own pulse 1
     // writes so the effect owns the channel; the SFX cursor itself lives in zero page.
     private const ushort SfxActiveAddress = 0x0312;
+    // Shadow of the BGM's intended pulse 1 registers ($4000-$4003). The BGM updates it on every pulse 1
+    // write (even while muted by an active SFX), so when the effect releases pulse 1 the channel can be
+    // restored to the BGM's state instead of keeping the effect's residue (e.g. a stuck $4001 sweep).
+    private const ushort Pulse1ShadowBaseAddress = 0x0313;
     private const ushort OamDmaAddress = 0x4014;
     private const ushort ControllerPortAddress = 0x4016;
     private const byte PendingStreamNone = 0;
@@ -756,6 +760,9 @@ internal sealed class NesRuntimeCompiler
         if (program.SoundEffectAssetsInLoadOrder.Count > 0)
         {
             builder.StoreAAbsolute(SfxActiveAddress);
+            // Seed the pulse 1 sweep shadow with "no sweep" so an early effect restores a clean
+            // channel before the BGM has written $4001 (the BGM writes $4000/$4002 every note).
+            builder.StoreAAbsolute((ushort)(Pulse1ShadowBaseAddress + 1));
         }
     }
 
@@ -2904,18 +2911,15 @@ internal sealed class NesRuntimeCompiler
         var tickNonZeroLabel = builder.CreateLabel("nes_audio_tick_nonzero");
 
         builder.LoadAZeroPage(MusicOrderPointerHighAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, hasActiveMusicLabel); // BNE hasActiveMusicLabel
+        builder.BranchRelative(0xD0, hasActiveMusicLabel); // BNE hasActiveMusicLabel (LDA sets Z)
         builder.JumpAbsolute(doneLabel);
         builder.Label(hasActiveMusicLabel);
 
         builder.LoadAZeroPage(MusicTickAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, processOrderLabel); // BEQ processOrderLabel
+        builder.BranchRelative(0xF0, processOrderLabel); // BEQ processOrderLabel (LDA sets Z)
         builder.DecrementZeroPage(MusicTickAddress);
         builder.LoadAZeroPage(MusicTickAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, tickExpiredLabel); // BEQ tickExpiredLabel
+        builder.BranchRelative(0xF0, tickExpiredLabel); // BEQ tickExpiredLabel (LDA sets Z)
         builder.JumpAbsolute(doneLabel);
         builder.Label(tickExpiredLabel);
 
@@ -2928,8 +2932,7 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(MusicBodyPointerHighAddress);
         builder.LoadAZeroPage(MusicBodyPointerLowAddress);
         builder.OrZeroPage(MusicBodyPointerHighAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, hasBodyLabel); // BNE hasBodyLabel
+        builder.BranchRelative(0xD0, hasBodyLabel); // BNE hasBodyLabel (ORA sets Z)
         builder.LoadAAbsolute(MusicLoopPointerLowAddress);
         builder.StoreAZeroPage(MusicOrderPointerLowAddress);
         builder.LoadAAbsolute(MusicLoopPointerHighAddress);
@@ -2941,11 +2944,10 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAIndirectY(MusicOrderPointerLowAddress);
         builder.StoreAZeroPage(MusicTickAddress);
         EmitAdvanceMusicOrderPointer();
-        EmitPlayApuBody(muteSfxChannel: hasSfx);
+        EmitPlayApuBody(sfxPath: false);
 
         builder.LoadAZeroPage(MusicTickAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, tickNonZeroLabel); // BNE tickNonZeroLabel
+        builder.BranchRelative(0xD0, tickNonZeroLabel); // BNE tickNonZeroLabel (LDA sets Z)
         builder.JumpAbsolute(processOrderLabel);
         builder.Label(tickNonZeroLabel);
 
@@ -2981,9 +2983,10 @@ internal sealed class NesRuntimeCompiler
         builder.CompareImmediate(0xFF);
         builder.BranchRelative(0xF0, stopLabel); // BEQ stopLabel (end-of-effect marker)
 
-        // Play this frame's body on pulse 1 (X = 0, never suppressed). The shared body player returns
-        // Y = bytes consumed (1 + 2 * writeCount), which advances the cursor to the next frame body.
-        EmitPlayApuBody(muteSfxChannel: false);
+        // Play this frame's body on pulse 1 (X = 2, the effect owns and writes the channel directly).
+        // The shared body player returns Y = bytes consumed (1 + 2 * writeCount), which advances the
+        // cursor to the next frame body.
+        EmitPlayApuBody(sfxPath: true);
         builder.TransferYToA();
         builder.ClearCarry();
         builder.AddZeroPage(SfxPointerLowAddress);
@@ -2996,14 +2999,23 @@ internal sealed class NesRuntimeCompiler
         builder.Label(stopLabel);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(SfxActiveAddress);
+        // Release pulse 1 back to the BGM: restore its shadowed $4001 (sweep) so the channel no longer
+        // carries the effect's residue. $4000/$4002/$4003 are re-written by the BGM on its next note.
+        builder.LoadAAbsolute((ushort)(Pulse1ShadowBaseAddress + 1));
+        builder.StoreAAbsolute(0x4001);
     }
 
-    // Plays the APU trace body pointed to by MusicBodyPointer via the shared subroutine. X selects
-    // whether the music's own pulse 1 writes are suppressed while an SFX owns the channel: for the
-    // music path X = SfxActive (non-zero suppresses pulse 1), for the SFX path X = 0 (writes freely).
-    private void EmitPlayApuBody(bool muteSfxChannel)
+    // Plays the APU trace body pointed to by MusicBodyPointer via the shared subroutine. X selects the
+    // pulse 1 arbitration mode read by the body writer: for the SFX path X = 2 (the effect owns pulse 1
+    // and writes it directly), for the music path X = SfxActive (0 = write pulse 1 and shadow it,
+    // non-zero = an effect owns pulse 1 so only shadow the BGM's intended writes).
+    private void EmitPlayApuBody(bool sfxPath)
     {
-        if (muteSfxChannel)
+        if (sfxPath)
+        {
+            builder.LoadXImmediate(2);
+        }
+        else if (program.SoundEffectAssetsInLoadOrder.Count > 0)
         {
             builder.LoadXAbsolute(SfxActiveAddress);
         }
@@ -3075,16 +3087,24 @@ internal sealed class NesRuntimeCompiler
         string? skipWriteLabel = null;
         if (muteSfxChannel)
         {
-            var doWriteLabel = builder.CreateLabel("nes_apu_write");
+            var writeHwLabel = builder.CreateLabel("nes_apu_write");
             skipWriteLabel = builder.CreateLabel("nes_apu_skip_write");
-            // X != 0 means an SFX owns pulse 1: drop the music's own pulse 1 writes (register offset
-            // $00-$03) so the effect note is not overwritten. Every other channel plays normally.
-            builder.CompareXImmediate(0);
-            builder.BranchRelative(0xF0, doWriteLabel); // BEQ doWriteLabel (X == 0, no SFX active)
+            // Pulse 1 arbitration keyed on X: 2 = the effect writing its own channel (write hardware,
+            // do not shadow), 0 = BGM with no active effect (write hardware and shadow), 1 = BGM while
+            // an effect owns pulse 1 (shadow only, hardware suppressed). Non-pulse-1 registers ($04+)
+            // always write hardware. Shadowing the BGM's intended pulse 1 values lets the channel be
+            // restored to the BGM when the effect ends, so no effect residue is left behind.
             builder.LoadAZeroPage(ExpressionScratchAddress);
             builder.CompareImmediate(0x04);
-            builder.BranchRelative(0x90, skipWriteLabel); // BCC skipWriteLabel (offset < 4, pulse 1)
-            builder.Label(doWriteLabel);
+            builder.BranchRelative(0xB0, writeHwLabel);   // BCS writeHwLabel (offset >= 4, other channel)
+            builder.CompareXImmediate(2);
+            builder.BranchRelative(0xF0, writeHwLabel);   // BEQ writeHwLabel (X == 2, effect writes pulse 1)
+            builder.LoadYZeroPage(ExpressionScratchAddress);
+            builder.LoadAZeroPage(CollisionColumnScratchAddress);
+            builder.StoreAAbsoluteY(Pulse1ShadowBaseAddress); // shadow[offset] = BGM's intended value
+            builder.CompareXImmediate(1);
+            builder.BranchRelative(0xF0, skipWriteLabel);  // BEQ skipWriteLabel (X == 1, effect owns pulse 1)
+            builder.Label(writeHwLabel);
         }
 
         builder.LoadAZeroPage(ExpressionScratchAddress);
@@ -3131,8 +3151,7 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAAbsolute(ControllerPortAddress);
         builder.AndImmediate(0x01);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xF0, skipLabel);    // BEQ skipLabel
+        builder.BranchRelative(0xF0, skipLabel);    // BEQ skipLabel (AND sets Z)
         builder.LoadAZeroPage(InputCurrentAddress);
         builder.OrImmediate(button.SnapshotMask);
         builder.StoreAZeroPage(InputCurrentAddress);
@@ -6022,6 +6041,8 @@ internal sealed class PrgBuilder
     public void StoreAAbsolute(ushort address) => Emit(0x8D, Low(address), High(address));
 
     public void StoreAAbsoluteX(ushort address) => Emit(0x9D, Low(address), High(address));
+
+    public void StoreAAbsoluteY(ushort address) => Emit(0x99, Low(address), High(address));
 
     public void StoreAIndirectY(byte address) => Emit(0x91, address);
 

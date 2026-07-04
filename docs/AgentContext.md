@@ -185,9 +185,11 @@ Progress (2026-06-14):
   one-shot trace ticked once per `Audio.Update()` after BGM, keeps only the pulse 1
   registers (`$4000-$4003`) and drops captured global/other-channel writes, arms
   the effect via a zero-page cursor plus `SfxActive` flag (never touching the BGM
-  tick/order state), suppresses the BGM's own pulse 1 writes while an effect is
-  active, and shares one APU body writer with the BGM engine to fit NROM. The SFX
-  data is emitted after the DPCM samples so it does not shrink the DPCM window.
+  tick/order state), suppresses *and shadows* the BGM's own pulse 1 writes while an
+  effect is active, restores the shadowed `$4001` sweep when the effect ends so the
+  BGM reclaims a clean channel, and shares one APU body writer with the BGM engine
+  to fit NROM. The SFX data is emitted after the DPCM samples so it does not shrink
+  the DPCM window.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.
