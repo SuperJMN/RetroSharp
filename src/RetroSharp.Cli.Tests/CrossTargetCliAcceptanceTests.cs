@@ -72,9 +72,11 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains("const u8 ShotY = 116;", source, StringComparison.Ordinal);
         Assert.Contains("""Sprite.Asset(mario_player, "../runner/assets/mario-player.png", 18, 32);""", source, StringComparison.Ordinal);
         Assert.Contains("""Sprite.Asset(mario_shot, "assets/mario-shot.json");""", source, StringComparison.Ordinal);
-        Assert.Contains("""Projectiles.Def(MarioShot, team: Hero""", source, StringComparison.Ordinal);
+        Assert.Contains("""Projectiles.Def(MarioFireball, team: Hero""", source, StringComparison.Ordinal);
+        Assert.Contains("""tileCollision: Bounce""", source, StringComparison.Ordinal);
+        Assert.Contains("""shots.TouchTiles(0, 1);""", source, StringComparison.Ordinal);
         Assert.Contains("""Input.WasPressed(Button.B)""", source, StringComparison.Ordinal);
-        Assert.Contains("""shots.Request(MarioShot""", source, StringComparison.Ordinal);
+        Assert.Contains("""shots.Request(MarioFireball""", source, StringComparison.Ordinal);
 
         var gameBoyRom = Path.Combine(workspace.Path, "runner-projectile.gb");
         var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);

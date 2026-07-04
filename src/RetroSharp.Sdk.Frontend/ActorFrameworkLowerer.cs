@@ -51,6 +51,13 @@ public static class ActorFrameworkLowerer
         ["GravityArc"] = 2,
     };
 
+    private static readonly IReadOnlyDictionary<string, int> ProjectileTileCollisionIds = new Dictionary<string, int>(StringComparer.Ordinal)
+    {
+        ["None"] = 0,
+        ["Expire"] = 1,
+        ["Bounce"] = 2,
+    };
+
     private static readonly IReadOnlyDictionary<string, string> EnemyLookupFunctions = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["Behavior"] = "enemy_behavior",
@@ -514,25 +521,37 @@ public static class ActorFrameworkLowerer
             throw new InvalidOperationException($"Unknown projectile behavior '{behavior}'.");
         }
 
+        var tileCollision = OptionalProjectileIdentifier(namedArguments, "tileCollision", "None", name);
+        if (!ProjectileTileCollisionIds.ContainsKey(tileCollision))
+        {
+            throw new InvalidOperationException($"Unknown projectile tile collision '{tileCollision}'.");
+        }
+
         var speedX = RequiredProjectileLiteralByte(namedArguments, "speedX", name);
         var speedY = RequiredProjectileLiteralByte(namedArguments, "speedY", name);
         var damage = RequiredProjectileLiteralByte(namedArguments, "damage", name);
         var lifetime = RequiredProjectileLiteralByte(namedArguments, "lifetime", name);
         var hitboxWidth = RequiredProjectileLiteralByte(namedArguments, "hitboxWidth", name);
         var hitboxHeight = RequiredProjectileLiteralByte(namedArguments, "hitboxHeight", name);
+        var bounceSpeedY = OptionalProjectileDefLiteralByte(namedArguments, "bounceSpeedY", 0, name);
+        if (tileCollision == "Bounce" && bounceSpeedY == 0)
+        {
+            throw new InvalidOperationException($"Projectiles.Def for '{name}' with tileCollision: Bounce requires 'bounceSpeedY' to be a non-zero literal byte value.");
+        }
+
         var spawnEffect = OptionalProjectileIdentifier(namedArguments, "spawnEffect", name);
         var impactEffect = OptionalProjectileIdentifier(namedArguments, "impactEffect", name);
         var expireEffect = OptionalProjectileIdentifier(namedArguments, "expireEffect", name);
 
         foreach (var argumentName in namedArguments.Keys)
         {
-            if (argumentName is not "team" and not "sprite" and not "behavior" and not "speedX" and not "speedY" and not "damage" and not "lifetime" and not "hitboxWidth" and not "hitboxHeight" and not "spawnEffect" and not "impactEffect" and not "expireEffect")
+            if (argumentName is not "team" and not "sprite" and not "behavior" and not "tileCollision" and not "speedX" and not "speedY" and not "damage" and not "lifetime" and not "hitboxWidth" and not "hitboxHeight" and not "bounceSpeedY" and not "spawnEffect" and not "impactEffect" and not "expireEffect")
             {
                 throw new InvalidOperationException($"Projectiles.Def for '{name}' has unsupported property '{argumentName}'.");
             }
         }
 
-        return new ProjectileDef(name, team, sprite, behavior, speedX, speedY, damage, lifetime, hitboxWidth, hitboxHeight, spawnEffect, impactEffect, expireEffect);
+        return new ProjectileDef(name, team, sprite, behavior, tileCollision, speedX, speedY, damage, lifetime, hitboxWidth, hitboxHeight, bounceSpeedY, spawnEffect, impactEffect, expireEffect);
     }
 
     private static EffectDef ReadEffectDef(QualifiedCallSyntax call)
@@ -770,6 +789,25 @@ public static class ActorFrameworkLowerer
         throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be a literal byte value.");
     }
 
+    private static int OptionalProjectileDefLiteralByte(
+        IReadOnlyDictionary<string, ExpressionSyntax> arguments,
+        string name,
+        int defaultValue,
+        string projectileName)
+    {
+        if (!arguments.TryGetValue(name, out var expression))
+        {
+            return defaultValue;
+        }
+
+        if (TryLiteralByte(expression, out var value))
+        {
+            return value;
+        }
+
+        throw new InvalidOperationException($"Projectiles.Def for '{projectileName}' requires '{name}' to be a literal byte value.");
+    }
+
     private static int OptionalProjectileLiteralByte(
         IReadOnlyDictionary<string, ExpressionSyntax> arguments,
         string name,
@@ -982,6 +1020,7 @@ public static class ActorFrameworkLowerer
                 "ProcessRequests" => ProjectileProcessRequestStatements(projectilePool, projectileSdkCall, state),
                 "Update" => ProjectileUpdateStatements(projectilePool, projectileSdkCall, state),
                 "Draw" => ProjectileDrawStatements(projectilePool, projectileSdkCall, state),
+                "TouchTiles" => ProjectileTouchTilesStatements(projectilePool, projectileSdkCall, state),
                 "TouchActors" => ProjectileTouchActorsStatements(projectilePool, projectileSdkCall, state),
                 "TouchHero" => ProjectileTouchHeroStatements(projectilePool, projectileSdkCall, state),
                 _ => [RewriteStatement(statement, state)!],
@@ -1512,18 +1551,35 @@ public static class ActorFrameworkLowerer
     {
         var horizontalVelocityName = $"{indexName}_vx";
         var verticalVelocityName = $"{indexName}_vy";
+        var upwardSpeedName = $"{indexName}_vy_up";
+        var downwardSpeedName = $"{indexName}_vy_down";
         var horizontalVelocity = new IdentifierSyntax(horizontalVelocityName);
         var verticalVelocity = new IdentifierSyntax(verticalVelocityName);
+        var upwardSpeed = new IdentifierSyntax(upwardSpeedName);
+        var downwardSpeed = new IdentifierSyntax(downwardSpeedName);
         var statements = new List<StatementSyntax>
         {
             new DeclarationSyntax("u8", horizontalVelocityName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new CastSyntax("u8", PoolField(arrayName, indexName, "vx")))),
-            new DeclarationSyntax("u8", verticalVelocityName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new CastSyntax("u8", PoolField(arrayName, indexName, "vy")))),
+            new DeclarationSyntax("i8", verticalVelocityName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(PoolField(arrayName, indexName, "vy"))),
             new IfElseSyntax(
                 new BinaryExpressionSyntax(PoolField(arrayName, indexName, "direction"), Constant(0), Operator.Equal),
                 new BlockSyntax(ProjectileAddWorldX(arrayName, indexName, horizontalVelocity).ToList()),
                 Maybe.From(new BlockSyntax(ProjectileSubtractWorldX(arrayName, indexName, horizontalVelocity).ToList()))),
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(verticalVelocity, Constant(0), Operator.LessThan),
+                new BlockSyntax(new StatementSyntax[]
+                    {
+                        new DeclarationSyntax("u8", upwardSpeedName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new CastSyntax("u8", new BinaryExpressionSyntax(Constant(0), verticalVelocity, Operator.Subtraction)))),
+                    }
+                    .Concat(ProjectileSubtractWorldY(arrayName, indexName, upwardSpeed))
+                    .ToList()),
+                Maybe.From(new BlockSyntax(new StatementSyntax[]
+                    {
+                        new DeclarationSyntax("u8", downwardSpeedName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(new CastSyntax("u8", verticalVelocity))),
+                    }
+                    .Concat(ProjectileAddWorldY(arrayName, indexName, downwardSpeed))
+                    .ToList()))),
         };
-        statements.AddRange(ProjectileAddWorldY(arrayName, indexName, verticalVelocity));
 
         if (def.Behavior == "GravityArc")
         {
@@ -1591,6 +1647,18 @@ public static class ActorFrameworkLowerer
                 new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), amount, Operator.LessThan),
                 new BlockSyntax([FieldAssignment(arrayName, indexName, "yHi", "+=", Constant(1))]),
                 Maybe<BlockSyntax>.None),
+        ];
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileSubtractWorldY(string arrayName, string indexName, ExpressionSyntax amount)
+    {
+        return
+        [
+            new IfElseSyntax(
+                new BinaryExpressionSyntax(PoolField(arrayName, indexName, "y"), amount, Operator.LessThan),
+                new BlockSyntax([FieldAssignment(arrayName, indexName, "yHi", "-=", Constant(1))]),
+                Maybe<BlockSyntax>.None),
+            FieldAssignment(arrayName, indexName, "y", "-=", amount),
         ];
     }
 
@@ -1662,6 +1730,114 @@ public static class ActorFrameworkLowerer
                 ]),
             Maybe<BlockSyntax>.None),
         ]);
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileTouchTilesStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
+    {
+        var parameters = RequireArguments(call, 2);
+        RequireProjectileDefs(state, $"{pool.Name}.TouchTiles");
+
+        var yOffset = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchTiles argument 1");
+        var flags = RewriteExpression(parameters[1], state);
+
+        return ProjectileTouchTilesTeamStatements(pool, "Hero", yOffset, flags, state)
+            .Concat(ProjectileTouchTilesTeamStatements(pool, "Enemy", yOffset, flags, state))
+            .ToList();
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileTouchTilesTeamStatements(
+        ProjectilePool pool,
+        string team,
+        int yOffset,
+        ExpressionSyntax flags,
+        ActorFrameworkState state)
+    {
+        var defs = state.ProjectileDefs.Where(def => def.Team == team && def.TileCollision != "None").ToList();
+        if (defs.Count == 0)
+        {
+            return [];
+        }
+
+        var arrayName = pool.ArrayNameForTeam(team);
+        var phase = team == "Hero" ? "tiles_hero" : "tiles_enemy";
+        var indexName = $"__{pool.Name}_{phase}_i";
+        var projection = BuildProjectileScreenProjection(arrayName, indexName, pool.Name, phase, state.ScreenWidth, state.ScreenHeight);
+        var branches = defs
+            .Select(def => new KindBranch(def.Name, ProjectileTouchTilesBlock(pool, arrayName, indexName, def, yOffset, flags, projection, state)))
+            .ToList();
+
+        return ProjectileCameraDeclarations(pool.Name, phase, state.ConfiguresCamera)
+            .Append(ArrayLoop(
+                arrayName,
+                indexName,
+                new IfElseSyntax(
+                    new BinaryExpressionSyntax(PoolField(arrayName, indexName, "active"), Constant(0), Operator.NotEqual),
+                    new BlockSyntax(projection.Declarations
+                        .Append(ProjectileKindDispatch(arrayName, indexName, branches, $"{pool.Name}.TouchTiles"))
+                        .ToList()),
+                    Maybe<BlockSyntax>.None)))
+            .ToList();
+    }
+
+    private static BlockSyntax ProjectileTouchTilesBlock(
+        ProjectilePool pool,
+        string arrayName,
+        string indexName,
+        ProjectileDef def,
+        int yOffset,
+        ExpressionSyntax flags,
+        ActorScreenProjection projection,
+        ActorFrameworkState state)
+    {
+        var collision = new IfElseSyntax(
+            new BinaryExpressionSyntax(
+                IntrinsicCall(
+                    state,
+                    CameraScreenAabbTilesIntrinsic,
+                    [
+                        new ConstantSyntax("\"default\""),
+                        projection.ScreenX,
+                        OffsetExpression(projection.ScreenY, yOffset, subtract: false),
+                        Constant(def.HitboxWidth),
+                        Constant(def.HitboxHeight),
+                        flags,
+                    ]),
+                Constant(0),
+                Operator.NotEqual),
+            new BlockSyntax(ProjectileTileCollisionStatements(pool, arrayName, indexName, def, state).ToList()),
+            Maybe<BlockSyntax>.None);
+
+        return new BlockSyntax([
+            new IfElseSyntax(projection.Visible, new BlockSyntax([collision]), Maybe<BlockSyntax>.None),
+        ]);
+    }
+
+    private static IReadOnlyList<StatementSyntax> ProjectileTileCollisionStatements(
+        ProjectilePool pool,
+        string arrayName,
+        string indexName,
+        ProjectileDef def,
+        ActorFrameworkState state)
+    {
+        var statements = ProjectileEffectRequestStatements(
+            pool,
+            def,
+            def.ImpactEffect,
+            "projectile_tile",
+            PoolField(arrayName, indexName, "x"),
+            PoolField(arrayName, indexName, "xHi"),
+            PoolField(arrayName, indexName, "y"),
+            PoolField(arrayName, indexName, "yHi"),
+            state).ToList();
+
+        statements.AddRange(def.TileCollision switch
+        {
+            "Expire" => [FieldAssignment(arrayName, indexName, "active", "=", Constant(0))],
+            "Bounce" => [FieldAssignment(arrayName, indexName, "vy", "=", new BinaryExpressionSyntax(Constant(0), new IdentifierSyntax($"{def.Name}BounceSpeedY"), Operator.Subtraction))],
+            _ => throw new InvalidOperationException($"Unknown projectile tile collision '{def.TileCollision}'."),
+        });
+
+        return statements;
     }
 
     private static IReadOnlyList<StatementSyntax> ProjectileTouchActorsStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
@@ -3316,15 +3492,22 @@ public static class ActorFrameworkLowerer
         for (var index = 0; index < projectileDefs.Count; index++)
         {
             var def = projectileDefs[index];
+            if (!ProjectileTileCollisionIds.TryGetValue(def.TileCollision, out var tileCollisionId))
+            {
+                throw new InvalidOperationException($"Unknown projectile tile collision '{def.TileCollision}'.");
+            }
+
             yield return Constant(def.Name, index + 1);
             yield return Constant($"{def.Name}Team", new IdentifierSyntax(def.Team));
             yield return Constant($"{def.Name}Behavior", new IdentifierSyntax(def.Behavior));
+            yield return Constant($"{def.Name}TileCollision", tileCollisionId);
             yield return Constant($"{def.Name}SpeedX", def.SpeedX);
             yield return Constant($"{def.Name}SpeedY", def.SpeedY);
             yield return Constant($"{def.Name}Damage", def.Damage);
             yield return Constant($"{def.Name}Lifetime", def.Lifetime);
             yield return Constant($"{def.Name}HitboxWidth", def.HitboxWidth);
             yield return Constant($"{def.Name}HitboxHeight", def.HitboxHeight);
+            yield return Constant($"{def.Name}BounceSpeedY", def.BounceSpeedY);
         }
     }
 
@@ -3456,12 +3639,14 @@ public static class ActorFrameworkLowerer
             yield return new GeneratedName(def.Name, $"Projectiles.Def '{def.Name}' kind constant");
             yield return new GeneratedName($"{def.Name}Team", $"Projectiles.Def '{def.Name}' team constant");
             yield return new GeneratedName($"{def.Name}Behavior", $"Projectiles.Def '{def.Name}' behavior constant");
+            yield return new GeneratedName($"{def.Name}TileCollision", $"Projectiles.Def '{def.Name}' tile collision constant");
             yield return new GeneratedName($"{def.Name}SpeedX", $"Projectiles.Def '{def.Name}' speed-x constant");
             yield return new GeneratedName($"{def.Name}SpeedY", $"Projectiles.Def '{def.Name}' speed-y constant");
             yield return new GeneratedName($"{def.Name}Damage", $"Projectiles.Def '{def.Name}' damage constant");
             yield return new GeneratedName($"{def.Name}Lifetime", $"Projectiles.Def '{def.Name}' lifetime constant");
             yield return new GeneratedName($"{def.Name}HitboxWidth", $"Projectiles.Def '{def.Name}' hitbox width constant");
             yield return new GeneratedName($"{def.Name}HitboxHeight", $"Projectiles.Def '{def.Name}' hitbox height constant");
+            yield return new GeneratedName($"{def.Name}BounceSpeedY", $"Projectiles.Def '{def.Name}' bounce-speed-y constant");
         }
 
         if (state.EffectPools.Count != 0)
@@ -4077,12 +4262,14 @@ public static class ActorFrameworkLowerer
         string Team,
         string Sprite,
         string Behavior,
+        string TileCollision,
         int SpeedX,
         int SpeedY,
         int Damage,
         int Lifetime,
         int HitboxWidth,
         int HitboxHeight,
+        int BounceSpeedY,
         string? SpawnEffect,
         string? ImpactEffect,
         string? ExpireEffect)

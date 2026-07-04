@@ -4315,11 +4315,72 @@ public class GameBoyRomCompilerTests
         var lowered = visitor.ToString();
 
         Assert.Contains("u8 __shots_update_hero_i_vx=(u8)shotsHero[__shots_update_hero_i].vx;", lowered);
-        Assert.Contains("u8 __shots_update_hero_i_vy=(u8)shotsHero[__shots_update_hero_i].vy;", lowered);
+        Assert.Contains("i8 __shots_update_hero_i_vy=shotsHero[__shots_update_hero_i].vy;", lowered);
         Assert.Contains("shotsHero[__shots_update_hero_i].x+=__shots_update_hero_i_vx;", lowered);
-        Assert.Contains("shotsHero[__shots_update_hero_i].y+=__shots_update_hero_i_vy;", lowered);
+        Assert.Contains("__shots_update_hero_i_vy<0", lowered);
+        Assert.Contains("u8 __shots_update_hero_i_vy_up=(u8)(0-__shots_update_hero_i_vy);", lowered);
+        Assert.Contains("u8 __shots_update_hero_i_vy_down=(u8)__shots_update_hero_i_vy;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].y-=__shots_update_hero_i_vy_up;", lowered);
+        Assert.Contains("shotsHero[__shots_update_hero_i].y+=__shots_update_hero_i_vy_down;", lowered);
         Assert.Contains("shotsHero[__shots_update_hero_i].vy+=1;", lowered);
         Assert.DoesNotContain("shotsHero[__shots_update_hero_i].y+=ArcShotSpeedY;", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_lowers_bouncing_tile_collision()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(fireball, "fireball.sprite.json");
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16);
+                                  Projectiles.Def(Fireball, team: Hero, sprite: fireball, speedX: 3, speedY: 0, damage: 1, lifetime: 48, hitboxWidth: 8, hitboxHeight: 8, behavior: GravityArc, tileCollision: Bounce, bounceSpeedY: 4);
+                                  shots.TouchTiles(0, 1);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("RetroSharp_Portable2D_portable2d_camera_screen_aabb_tiles(\"default\", __shots_tiles_hero_screen_x, __shots_tiles_hero_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains("shotsHero[__shots_tiles_hero_i].vy=0-FireballBounceSpeedY;", lowered);
+        Assert.DoesNotContain("shotsHero[__shots_tiles_hero_i].active=0;", lowered);
+    }
+
+    [Fact]
+    public void Projectile_framework_lowers_expiring_tile_collision_with_impact_effect()
+    {
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(bomb, "bomb.sprite.json");
+                                  Sprite.Asset(spark, "spark.sprite.json");
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
+                                  Effects.Pool(fx, capacity: 2, requests: 2);
+                                  Effects.Def(Spark, sprite: spark, lifetime: 6);
+                                  Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16, effects: fx);
+                                  Projectiles.Def(Bomb, team: Hero, sprite: bomb, speedX: 2, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 8, hitboxHeight: 8, tileCollision: Expire, impactEffect: Spark);
+                                  shots.TouchTiles(0, 1);
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var loweredProgram = ActorFrameworkLowerer.Lower(program, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var visitor = new PrintNodeVisitor();
+        loweredProgram.Accept(visitor);
+        var lowered = visitor.ToString();
+
+        Assert.Contains("RetroSharp_Portable2D_portable2d_camera_screen_aabb_tiles(\"default\", __shots_tiles_hero_screen_x, __shots_tiles_hero_screen_y, 8, 8, 1)", lowered);
+        Assert.Contains(".kind=Spark;", lowered);
+        Assert.Contains("shotsHero[__shots_tiles_hero_i].active=0;", lowered);
     }
 
     [Fact]
