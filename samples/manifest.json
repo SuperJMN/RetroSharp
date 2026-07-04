@@ -92,6 +92,12 @@
       "targets": ["gb", "nes"]
     },
     {
+      "path": "samples/shots-simple/shots-simple.retrosharp.json",
+      "readme": "samples/shots-simple/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "path": "samples/runner/diagnostics/00-static-background.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",

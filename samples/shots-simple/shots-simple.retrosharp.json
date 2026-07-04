@@ -1,0 +1,14 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/shots-simple.gb",
+    "nes": "bin/shots-simple.nes"
+  },
+  "rootNamespace": "ShotsSimple",
+  "sourceRoot": "src",
+  "namespaceMode": "physical",
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": [
+    "src/main.rs"
+  ]
+}
