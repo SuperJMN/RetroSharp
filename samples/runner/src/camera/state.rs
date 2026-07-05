@@ -192,7 +192,7 @@ class CameraState
         }
     }
 
-    inline void ApplyMotionStep(PlayerState player, Pixel wallProbeY)
+    void ApplyMotionStep(PlayerState player, Pixel wallProbeY)
     {
         if (movementRemainder >= MotionSpeed.Subpixel)
         {
@@ -214,8 +214,12 @@ class CameraState
         if (speed != 0)
         {
             movementRemainder += speed;
-            ApplyMotionStep(player, wallProbeY);
-            ApplyMotionStep(player, wallProbeY);
+            u8 steps = 0;
+            while (steps < MotionSpeed.MaxSteps)
+            {
+                ApplyMotionStep(player, wallProbeY);
+                steps++;
+            }
         }
     }
 

@@ -7129,11 +7129,12 @@ public class GameBoyRomCompilerTests
         var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("enum Direction", source);
-        Assert.Contains("Walk = 8", source);
-        Assert.Contains("RunMax = 12", source);
+        Assert.Contains("Walk = 10", source);
+        Assert.Contains("RunMax = 16", source);
         Assert.Contains("Subpixel = 8", source);
-        Assert.Contains("RunAcceleration = 1", source);
-        Assert.Contains("Friction = 2", source);
+        Assert.Contains("RunAcceleration = 2", source);
+        Assert.Contains("Friction = 3", source);
+        Assert.Contains("MaxSteps = 2", source);
 
         var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
         var frameStart = source.IndexOf("class FrameState", StringComparison.Ordinal);
@@ -7151,7 +7152,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("StartDirection(Direction.Left);", cameraBlock);
         Assert.Contains("speed = MotionSpeed.Walk;", cameraBlock);
         Assert.Contains("movementRemainder += speed;", cameraBlock);
-        Assert.Contains("inline void ApplyMotionStep(PlayerState player, Pixel wallProbeY)", cameraBlock);
+        Assert.Contains("void ApplyMotionStep(PlayerState player, Pixel wallProbeY)", cameraBlock);
         Assert.Contains("movementRemainder -= MotionSpeed.Subpixel;", cameraBlock);
         Assert.Contains("MoveRightOnePixel(player, wallProbeY);", cameraBlock);
         Assert.Contains("MoveLeftOnePixel(player, wallProbeY);", cameraBlock);
@@ -7171,8 +7172,8 @@ public class GameBoyRomCompilerTests
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("RunMax = 12", source);
-        Assert.Contains("RunAcceleration = 1", source);
+        Assert.Contains("RunMax = 16", source);
+        Assert.Contains("RunAcceleration = 2", source);
 
         var cameraStart = source.IndexOf("class CameraState", StringComparison.Ordinal);
         var frameStart = source.IndexOf("class FrameState", StringComparison.Ordinal);
@@ -7203,11 +7204,12 @@ public class GameBoyRomCompilerTests
         var horizontalStart = cameraBlock.IndexOf("inline void HandleHorizontalInput", motionStart, StringComparison.Ordinal);
         Assert.True(horizontalStart > motionStart);
         var motionBlock = cameraBlock[motionStart..horizontalStart];
-        Assert.Equal(2, CountOccurrences(motionBlock, "ApplyMotionStep(player, wallProbeY);"));
+        Assert.Contains("while (steps < MotionSpeed.MaxSteps)", motionBlock);
+        Assert.Equal(1, CountOccurrences(motionBlock, "ApplyMotionStep(player, wallProbeY);"));
         Assert.DoesNotContain("while (movementRemainder >= MotionSpeed.Subpixel)", motionBlock);
 
-        // Regression guard: the camera state is advanced per single-pixel step, then synced twice per
-        // frame so the 1px-per-call camera backend can catch up to a two-pixel run frame.
+        // Regression guard: the camera state is advanced per single-pixel step, then synced once per
+        // frame so the camera backend can catch up to a faster two-pixel run frame.
         Assert.Contains("player.x += 1;", cameraBlock);
         Assert.Contains("x += 1;", cameraBlock);
         Assert.Contains("player.x -= 1;", cameraBlock);

@@ -60,11 +60,12 @@ enum Direction
 
 static class MotionSpeed
 {
-    const i16 Walk = 8;
-    const i16 RunMax = 12;
+    const i16 Walk = 10;
+    const i16 RunMax = 16;
     const i16 Subpixel = 8;
-    const i16 RunAcceleration = 1;
-    const i16 Friction = 2;
+    const i16 RunAcceleration = 2;
+    const i16 Friction = 3;
+    const u8 MaxSteps = 2;
 }
 
 static class RunAnimation

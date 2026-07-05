@@ -34,19 +34,35 @@ internal static class NesRomBuilder
     private static byte[] BuildPrgRom(NesVideoProgram program, bool useFourScreenNametables)
     {
         var longForLoopIds = new HashSet<int>();
+        var longWhileLoopIds = new HashSet<int>();
         while (true)
         {
             try
             {
-                return BuildPrgRom(program, longForLoopIds, useFourScreenNametables);
+                return BuildPrgRom(program, longForLoopIds, longWhileLoopIds, useFourScreenNametables);
             }
-            catch (BranchOutOfRangeException ex) when (TryForEndLabelId(ex.Label, out var id) && longForLoopIds.Add(id))
+            catch (BranchOutOfRangeException ex)
             {
+                if (TryForEndLabelId(ex.Label, out var forId) && longForLoopIds.Add(forId))
+                {
+                    continue;
+                }
+
+                if (TryWhileEndLabelId(ex.Label, out var whileId) && longWhileLoopIds.Add(whileId))
+                {
+                    continue;
+                }
+
+                throw;
             }
         }
     }
 
-    private static byte[] BuildPrgRom(NesVideoProgram program, IReadOnlySet<int> longForLoopIds, bool useFourScreenNametables)
+    private static byte[] BuildPrgRom(
+        NesVideoProgram program,
+        IReadOnlySet<int> longForLoopIds,
+        IReadOnlySet<int> longWhileLoopIds,
+        bool useFourScreenNametables)
     {
         var builder = new PrgBuilder();
         var nameTableUploadByteCount = useFourScreenNametables ? 4096 : 2048;
@@ -67,7 +83,7 @@ internal static class NesRomBuilder
         EmitPaletteUpload(builder);
         EmitNameTableUpload(builder, nameTableUploadByteCount);
 
-        var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds, useFourScreenNametables);
+        var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds, longWhileLoopIds, useFourScreenNametables);
         runtimeCompiler.EmitInitialization();
 
         builder.Emit(0xA9, 0x00);                   // LDA #$00
@@ -112,6 +128,19 @@ internal static class NesRomBuilder
     private static bool TryForEndLabelId(string label, out int id)
     {
         const string prefix = "for_end_";
+        if (label.StartsWith(prefix, StringComparison.Ordinal) &&
+            int.TryParse(label[prefix.Length..], CultureInfo.InvariantCulture, out id))
+        {
+            return true;
+        }
+
+        id = 0;
+        return false;
+    }
+
+    private static bool TryWhileEndLabelId(string label, out int id)
+    {
+        const string prefix = "while_end_";
         if (label.StartsWith(prefix, StringComparison.Ordinal) &&
             int.TryParse(label[prefix.Length..], CultureInfo.InvariantCulture, out id))
         {
@@ -682,9 +711,11 @@ internal sealed class NesRuntimeCompiler
     private readonly Stack<InlineVariableScope> inlineVariableScopes = [];
     private readonly Stack<LoopTarget> loopTargets = [];
     private readonly IReadOnlySet<int> longForLoopIds;
+    private readonly IReadOnlySet<int> longWhileLoopIds;
     private readonly bool useFourScreenNametables;
     private byte nextVariableAddress = FirstVariableAddress;
     private int nextForLoopId;
+    private int nextWhileLoopId;
     private int nextHardwareSprite;
     private int nextInlineVariableScopeId;
     private bool apuBodySubroutineReferenced;
@@ -696,11 +727,13 @@ internal sealed class NesRuntimeCompiler
         PrgBuilder builder,
         NesVideoProgram program,
         IReadOnlySet<int>? longForLoopIds = null,
+        IReadOnlySet<int>? longWhileLoopIds = null,
         bool useFourScreenNametables = false)
     {
         this.builder = builder;
         this.program = program;
         this.longForLoopIds = longForLoopIds ?? new HashSet<int>();
+        this.longWhileLoopIds = longWhileLoopIds ?? new HashSet<int>();
         this.useFourScreenNametables = useFourScreenNametables;
     }
 
@@ -2192,12 +2225,20 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
-        var loopLabel = builder.CreateLabel("while");
-        var endLabel = builder.CreateLabel("while_end");
+        var whileLoopId = nextWhileLoopId++;
+        var loopLabel = $"while_{whileLoopId}";
+        var endLabel = $"while_end_{whileLoopId}";
         builder.Label(loopLabel);
         if (!conditionIsConstant)
         {
-            EmitConditionFalseJump(whileSyntax.Condition, endLabel);
+            if (longWhileLoopIds.Contains(whileLoopId))
+            {
+                EmitConditionFalseJumpToFarLabel(whileSyntax.Condition, endLabel, $"while_condition_false_{whileLoopId}");
+            }
+            else
+            {
+                EmitConditionFalseJump(whileSyntax.Condition, endLabel);
+            }
         }
 
         loopTargets.Push(new LoopTarget(endLabel, loopLabel));

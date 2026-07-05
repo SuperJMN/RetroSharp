@@ -75,6 +75,25 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Compiles_while_with_large_body_using_far_condition_trampoline()
+    {
+        var repeatedBody = string.Join(Environment.NewLine, Enumerable.Repeat("x += 1;", 120));
+        var source = $$"""
+                       void Main() {
+                           Video.Init();
+                           u8 x = 0;
+                           while (x != 1) {
+                               {{repeatedBody}}
+                           }
+                       }
+                       """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(40976, rom.Length);
+    }
+
+    [Fact]
     public void Portable2D_import_does_not_affect_nes_rom_bytes()
     {
         const string implicitSdk = """
