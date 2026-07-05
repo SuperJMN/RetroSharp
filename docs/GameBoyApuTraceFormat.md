@@ -336,3 +336,11 @@ Near-term recommendation: keep `.gbapu.json` as the explicit GBS fidelity path, 
 - The current compiler accepts the direct file and the `retrosharp.music.v1` envelope variant `format: "gbapu"`.
 - Unknown JSON fields are ignored today, but required fields are strict.
 - If event timing semantics, loop semantics, or address encoding change, bump the format string instead of silently changing `retrosharp.gbapu.v1`.
+
+## Sound effects (SFX)
+
+Sound effects reuse this same compiled APU-trace format but are filtered to **channel 1** (the square+sweep channel, `$FF10`..`$FF14`) at compile time. Every other write captured in the source VGM/VGZ is dropped: the globals `NR50` (`$FF24`), `NR51` (`$FF25`) and `NR52` (`$FF26` - whose `0` power-off would silence the whole APU), plus channels 2-4 and wave RAM. Dropped events' `deltaCycles` are folded into the next kept channel 1 event so the effect's frame timing is preserved.
+
+### SFX runtime and BGM priority
+
+`Sfx.Play(name)` arms the separate one-shot SFX engine, which is ticked after the BGM each `Audio.Update()` and drives channel 1 directly from the effect's order stream (with its per-entry frame waits, so the note rings out for the effect's authored length). To give the effect priority over the BGM on channel 1, the BGM player suppresses its own channel 1 writes (register offsets `$10`..`$14`) while `SfxActive != 0`, but it still shadows its full intended channel 1 state (`NR10`..`NR14`) to RAM. When the effect reaches its one-shot sentinel it stops and restores the shadowed `NR10`..`NR14` (`NR14` with the shadowed trigger bit, which reloads `NR12`'s envelope), so the BGM reclaims a clean channel with none of the effect's sweep/duty/envelope: restoring only `NR10` would leave the effect's `NR11`/`NR12` (duty/envelope) on the melody because the BGM does not rewrite those every note. The BGM's other channels (2-4) and the global registers are never touched by the effect, so the music keeps playing underneath it.
