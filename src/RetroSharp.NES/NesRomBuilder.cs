@@ -763,8 +763,9 @@ internal sealed class NesRuntimeCompiler
         if (program.SoundEffectAssetsInLoadOrder.Count > 0)
         {
             builder.StoreAAbsolute(SfxActiveAddress);
-            // Seed the pulse 1 sweep shadow with "no sweep" so an early effect restores a clean
-            // channel before the BGM has written $4001 (the BGM writes $4000/$4002 every note).
+            // Seed the pulse 1 sweep shadow ($4001) with "no sweep" so an early effect restores a
+            // sweep-free channel before the BGM has written $4001 (which it rarely does). The BGM
+            // writes $4000/$4002/$4003 constantly, so those shadow slots are populated before any SFX.
             builder.StoreAAbsolute((ushort)(Pulse1ShadowBaseAddress + 1));
         }
     }
@@ -3013,10 +3014,19 @@ internal sealed class NesRuntimeCompiler
         builder.Label(stopLabel);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(SfxActiveAddress);
-        // Release pulse 1 back to the BGM: restore its shadowed $4001 (sweep) so the channel no longer
-        // carries the effect's residue. $4000/$4002/$4003 are re-written by the BGM on its next note.
-        builder.LoadAAbsolute((ushort)(Pulse1ShadowBaseAddress + 1));
-        builder.StoreAAbsolute(0x4001);
+        // Release pulse 1 back to the BGM: restore its full shadowed state ($4000-$4003) so the channel
+        // no longer carries the effect's duty/volume/sweep/frequency. Restoring only $4001 (sweep) left
+        // the effect's $4000 (duty + volume/envelope) on the channel, because the BGM can go dozens of
+        // frames without rewriting pulse 1. The four stores all land within this frame, before the next
+        // APU frame-sequencer clock re-reads $4000, so the descending order (which writes the $4003
+        // length/trigger first) still ends up with the BGM's final register state.
+        var restoreLoopLabel = builder.CreateLabel("nes_sfx_restore");
+        builder.LoadXImmediate(3);
+        builder.Label(restoreLoopLabel);
+        builder.LoadAAbsoluteX(Pulse1ShadowBaseAddress);
+        builder.StoreAAbsoluteX(0x4000);
+        builder.DecrementX();
+        builder.BranchRelative(0x10, restoreLoopLabel); // BPL restoreLoopLabel
     }
 
     // Plays the APU trace body pointed to by MusicBodyPointer via the shared subroutine. X selects the
@@ -6055,6 +6065,8 @@ internal sealed class PrgBuilder
 
     public void StoreAAbsoluteX(ushort address) => Emit(0x9D, Low(address), High(address));
 
+    public void LoadAAbsoluteX(ushort address) => Emit(0xBD, Low(address), High(address));
+
     public void StoreAAbsoluteY(ushort address) => Emit(0x99, Low(address), High(address));
 
     public void StoreAIndirectY(byte address) => Emit(0x91, address);
@@ -6104,6 +6116,8 @@ internal sealed class PrgBuilder
     public void IncrementZeroPage(byte address) => Emit(0xE6, address);
 
     public void IncrementX() => Emit(0xE8);
+
+    public void DecrementX() => Emit(0xCA);
 
     public void IncrementY() => Emit(0xC8);
 

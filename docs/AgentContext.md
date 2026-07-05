@@ -185,12 +185,15 @@ Progress (2026-06-14):
   filtered to that channel (GB: `$FF10-$FF14`, dropping globals `NR50/NR51/NR52` and
   other channels; NES: `$4000-$4003`, dropping `$4010/$4015/$4017`), the BGM player
   suppresses *and shadows* its own channel writes while an effect is active, and the
-  shadowed state is restored when the effect ends so the BGM melody is not left
-  carrying the effect's residue. GB shadows and restores the full channel 1 state
-  (`NR10-NR14`, page-aligned shadow at `$C200` so the address is `$C200 + register
-  offset`; `NR14` restored with its trigger to reload the `NR12` envelope) because
-  the BGM rarely rewrites `NR11`/`NR12` (duty/envelope); NES restores just the
-  `$4001` sweep because the BGM rewrites `$4000/$4002/$4003` every note. Game Boy
+  full shadowed channel state is restored when the effect ends so the BGM melody is
+  not left carrying the effect's residue. GB shadows/restores `NR10-NR14` (page-aligned
+  shadow at `$C200` so the address is `$C200 + register offset`; `NR14` restored with
+  its trigger to reload the `NR12` envelope). NES shadows/restores `$4000-$4003` (a
+  descending-order restore loop; because all four stores land in one frame before the
+  next APU sequencer clock, the order still yields the BGM's final state). Both must
+  restore the whole channel, not just the sweep, because the BGM can go many frames
+  without rewriting the duty/volume register (GB `NR11`/`NR12`, NES `$4000`), so that
+  residue would otherwise stick on the melody. Game Boy
   advances active SFX streams from `Audio.Update()` after BGM writes (its trace has
   per-order-entry frame waits, so it rings out naturally); NES plays SFX as a flat
   per-frame one-shot trace ticked once per `Audio.Update()` after BGM, arms the
