@@ -111,8 +111,10 @@ public sealed class NesMusicTests
         // The BGM body writer shadows its intended pulse 1 values (STA $0313,Y) so the channel can be
         // restored when the effect ends...
         Assert.True(ContainsSequence(rom, [0x99, 0x13, 0x03]), "BGM should shadow pulse 1 writes to $0313,Y.");
-        // ...specifically the sweep register (STA $4001) is restored on SFX end so no residue is left.
-        Assert.True(ContainsSequence(rom, [0x8D, 0x01, 0x40]), "SFX end should restore the BGM's $4001 sweep.");
+        // ...and on SFX end the full pulse 1 state ($4000-$4003) is restored from the shadow via a
+        // loop (LDA $0313,X ; STA $4000,X), not just the sweep, so no duty/volume/frequency residue is
+        // left on the BGM's channel.
+        Assert.True(ContainsSequence(rom, [0xBD, 0x13, 0x03, 0x9D, 0x00, 0x40]), "SFX end should restore pulse 1 $4000-$4003 from the shadow.");
     }
 
     [Fact]
