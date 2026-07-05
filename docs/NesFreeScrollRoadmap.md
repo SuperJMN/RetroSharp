@@ -100,7 +100,7 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   spans and is also used by the shared capability/budget model.
 - `samples/nes-free-scroll/freescroll.rs` remains the source-authored NES four-screen
   behavioral proof and now also builds for Game Boy, where the same diagonal source
-  exercises the GB staggered one-edge-per-VBlank streaming policy. `samples/tiled-free-scroll/free-scroll.rs`
+  exercises the GB staggered one-axis-queue-per-VBlank streaming policy. `samples/tiled-free-scroll/free-scroll.rs`
   is the matching Tiled `World.Load(...)` diagonal proof inside the 64x60 four-screen surface.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).

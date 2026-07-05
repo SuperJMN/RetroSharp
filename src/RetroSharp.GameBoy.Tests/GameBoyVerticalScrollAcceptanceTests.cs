@@ -277,6 +277,70 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     }
 
     [Fact]
+    public void Game_boy_camera_set_position_streams_fast_horizontal_targets_without_one_tile_ceiling()
+    {
+        const int mapWidth = 64;
+        const int mapHeight = 18;
+        const int stepPixels = 16;
+        var source = FastCameraSource(mapWidth, mapHeight, stepPixels, vertical: false);
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+
+        var scxWrites = cpu.RunUntilIoRegisterWrites(0xFF43, 12, maxInstructions: 50_000_000);
+        var movementWrites = scxWrites.Where(value => value != 0).ToArray();
+
+        Assert.True(movementWrites.Length >= 8, $"Expected at least 8 non-zero SCX writes, got: {string.Join(", ", scxWrites)}.");
+        Assert.Equal((byte)stepPixels, movementWrites[0]);
+        Assert.Equal((byte)(stepPixels * 8), movementWrites[7]);
+        AssertVisibleTilesMatchGeneratedWorld(cpu, mapWidth, mapHeight, tileByRow: false, "fast horizontal camera");
+
+        var unsafeWrites = cpu.VramWrites
+            .Where(write => write is { Address: >= 0x9800 and < 0x9C00, LcdEnabled: true, Applied: false })
+            .Take(8)
+            .ToArray();
+        Assert.True(
+            unsafeWrites.Length == 0,
+            "Fast camera streaming wrote background tiles outside VBlank: "
+            + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
+    }
+
+    [Fact]
+    public void Game_boy_camera_set_position_streams_fast_vertical_targets_without_one_tile_ceiling()
+    {
+        const int mapWidth = 21;
+        const int mapHeight = 64;
+        const int stepPixels = 16;
+        var source = FastCameraSource(mapWidth, mapHeight, stepPixels, vertical: true);
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+
+        var scyWrites = cpu.RunUntilIoRegisterWrites(0xFF42, 12, maxInstructions: 50_000_000);
+        var movementWrites = scyWrites.Where(value => value != 0).ToArray();
+
+        Assert.True(movementWrites.Length >= 8, $"Expected at least 8 non-zero SCY writes, got: {string.Join(", ", scyWrites)}.");
+        Assert.Equal((byte)stepPixels, movementWrites[0]);
+        Assert.Equal((byte)(stepPixels * 8), movementWrites[7]);
+        AssertVisibleTilesMatchGeneratedWorld(cpu, mapWidth, mapHeight, tileByRow: true, "fast vertical camera");
+
+        var unsafeWrites = cpu.VramWrites
+            .Where(write => write is { Address: >= 0x9800 and < 0x9C00, LcdEnabled: true, Applied: false })
+            .Take(8)
+            .ToArray();
+        Assert.True(
+            unsafeWrites.Length == 0,
+            "Fast vertical camera streaming wrote background tiles outside VBlank: "
+            + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
+    }
+
+    [Fact]
     public void Game_boy_dead_zone_follow_sample_keeps_scroll_still_inside_band_then_follows_both_axes()
     {
         var samplePath = RepositoryFile("samples/deadzone-follow/deadzone.rs");
@@ -317,6 +381,103 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         cpu.RunFrames(56);
         Assert.Equal((byte)(followedX + 1), cpu.IoRegister(0xFF43));
         Assert.Equal((byte)(followedY + 1), cpu.IoRegister(0xFF42));
+    }
+
+    private static string FastCameraSource(int mapWidth, int mapHeight, int stepPixels, bool vertical)
+    {
+        var columns = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, mapWidth)
+                .Select(column =>
+                {
+                    var tiles = string.Join(
+                        ", ",
+                        Enumerable.Range(0, mapHeight)
+                            .Select(row => (vertical ? row + 1 : column + 1).ToString()));
+                    return $"    World.Column({column}, {tiles});";
+                }));
+        var position = vertical
+            ? $"Camera.SetPosition(0, cameraY);"
+            : $"Camera.SetPosition(cameraX, 0);";
+        var variable = vertical
+            ? "u8 cameraY = 0;"
+            : "u8 cameraX = 0;";
+        var movement = vertical
+            ? $"cameraY += {stepPixels};"
+            : $"cameraX += {stepPixels};";
+
+        return $$"""
+                 void Main() {
+                     Video.Init();
+                 {{columns}}
+                     World.Map({{mapWidth}}, 0, {{mapHeight}});
+                     Camera.Init({{mapWidth}}, 0, {{mapHeight}});
+                     {{variable}}
+                     while (true) {
+                         Video.WaitVBlank();
+                         Camera.Apply();
+                         {{movement}}
+                         {{position}}
+                     }
+                 }
+                 """;
+    }
+
+    private static void AssertVisibleTilesMatchGeneratedWorld(GameBoyTestCpu cpu, int mapWidth, int mapHeight, bool tileByRow, string label)
+    {
+        var scx = cpu.IoRegister(0xFF43);
+        var scy = cpu.IoRegister(0xFF42);
+        var cameraX = cpu.Wram(0xC0E0) | cpu.Wram(0xC0E1) << 8;
+        var cameraY = cpu.Wram(0xC0E8) | cpu.Wram(0xC0E9) << 8;
+        var firstBufferColumn = scx / 8;
+        var firstBufferRow = scy / 8;
+        var screenColumns = scx % 8 == 0 ? 20 : 21;
+        var screenRows = scy % 8 == 0 ? 18 : 19;
+        var mismatches = new List<string>();
+
+        for (var screenRow = 0; screenRow < screenRows; screenRow++)
+        {
+            var sourceRow = (cameraY + screenRow * 8) / 8 % mapHeight;
+            var bufferRow = (firstBufferRow + screenRow) % 32;
+            for (var screenColumn = 0; screenColumn < screenColumns; screenColumn++)
+            {
+                var sourceColumn = (cameraX + screenColumn * 8) / 8 % mapWidth;
+                var bufferColumn = (firstBufferColumn + screenColumn) % 32;
+                var expected = (byte)((tileByRow ? sourceRow : sourceColumn) + 1);
+                var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
+                if (actual != expected)
+                {
+                    mismatches.Add(
+                        $"{label}: camera=({cameraX},{cameraY}) scx={scx} scy={scy} screen=({screenColumn},{screenRow}) "
+                        + $"state={CameraState(cpu)} "
+                        + $"buffer=({bufferColumn},{bufferRow}) source=({sourceColumn},{sourceRow}) "
+                        + $"expected=0x{expected:X2} actual=0x{actual:X2}");
+                    if (mismatches.Count >= 12)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (mismatches.Count >= 12)
+            {
+                break;
+            }
+        }
+
+        Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+    }
+
+    private static string CameraState(GameBoyTestCpu cpu)
+    {
+        return $"fine=({cpu.Wram(0xC0E2)},{cpu.Wram(0xC0EA)}) "
+            + $"screenLeft={cpu.Wram(0xC0E3)} bgLeft={cpu.Wram(0xC0E5)} bgRight={cpu.Wram(0xC0E4)} "
+            + $"srcLeft={cpu.Wram(0xC0E7)} srcRight={cpu.Wram(0xC0E6)} "
+            + $"topBg={cpu.Wram(0xC0EB)} bottomBg={cpu.Wram(0xC0EC)} "
+            + $"topSrc={cpu.Wram(0xC0ED)} bottomSrc={cpu.Wram(0xC0EE)} "
+            + $"pending={cpu.Wram(0xC119)}/{cpu.Wram(0xC13A)}/{cpu.Wram(0xC11A)}/{cpu.Wram(0xC11B)}/{cpu.Wram(0xC13B)}/{cpu.Wram(0xC13C)} "
+            + $"diagCol={cpu.Wram(0xC11F)}/{cpu.Wram(0xC13D)}/{cpu.Wram(0xC120)}/{cpu.Wram(0xC121)}/{cpu.Wram(0xC13E)}/{cpu.Wram(0xC13F)} "
+            + $"diagRow={cpu.Wram(0xC122)}/{cpu.Wram(0xC140)}/{cpu.Wram(0xC123)}/{cpu.Wram(0xC124)}/{cpu.Wram(0xC141)}/{cpu.Wram(0xC142)}";
     }
 
     private static string StationarySource(string source)

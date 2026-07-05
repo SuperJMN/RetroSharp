@@ -1815,7 +1815,7 @@ public class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal("2506B2000708BC0E7479CA33ED5E35429998299D96EA60E0A79268EF1276D8F2", Fingerprint(rom));
+        Assert.Equal("7CB72A479DB9A7B23E341C041368D48FCAE9947FFD14196F5B648265640724F2", Fingerprint(rom));
     }
 
     [Fact]
@@ -2274,7 +2274,7 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xEA, 0x2D, 0xC1, 0x3E, 0x08, 0xEA, 0x2E, 0xC1]), "camera_set_position should cache the requested position and seed the per-frame step budget.");
+        Assert.True(ContainsSequence(rom, [0xEA, 0x2D, 0xC1, 0x3E, 0x10, 0xEA, 0x2E, 0xC1]), "camera_set_position should cache the requested position and seed the two-tile per-frame step budget.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE0, 0xC0, 0x4F, 0x78, 0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compare modular camera X delta and keep a no-movement path.");
         Assert.True(ContainsSequence(rom, [0x91, 0xFE, 0x00, 0xCA]), "camera_set_position should compute requested-low minus current-low before choosing a step direction.");
         Assert.True(ContainsSequence(rom, [0xFE, 0x80, 0xDA]), "camera_set_position should treat small unsigned deltas as positive movement across byte wrap.");
@@ -2329,7 +2329,7 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0x3E, 0x0B, 0xEA, 0xEB, 0xC0, 0x3E, 0x0F, 0xEA, 0xEC, 0xC0]), "camera_init should seed top and bottom background row cursors.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xED, 0xC0, 0x3E, 0x04, 0xEA, 0xEE, 0xC0]), "camera_init should seed top and bottom source row cursors.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xEA, 0x1B, 0xC1]), "downward crossing should queue the current bottom source row for deferred streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0xFE, 0x04, 0xC2]), "downward row streaming should select the queued bottom source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x5F, 0x16, 0x00, 0x21]), "downward row streaming should resolve the queued bottom source row through the row-pointer table.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "downward row streaming should fill the visible row from the current background-left column.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xFE, 0x08, 0xDA]), "downward row streaming should compute the target background row address from the queued bottom row cursor.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xEC, 0xC0, 0xC6, 0x01, 0xEA, 0xEC, 0xC0]), "downward row streaming should advance the bottom background row cursor.");
@@ -2358,7 +2358,7 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xD6, 0x01, 0xEA, 0xEB, 0xC0]), "upward row streaming should move the top background row cursor before streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xD6, 0x01, 0xEA, 0xED, 0xC0]), "upward row streaming should move the top source row cursor before streaming.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x1B, 0xC1]), "upward crossing should queue the wrapped top source row for deferred streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0xFE, 0x05, 0xC2]), "upward row streaming should select the queued top source row.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x5F, 0x16, 0x00, 0x21]), "upward row streaming should resolve the queued top source row through the row-pointer table.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xFE, 0x08, 0xDA]), "upward row streaming should compute the target background row address from the queued top row cursor.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "upward row streaming should fill the visible row from the current background-left column.");
     }
