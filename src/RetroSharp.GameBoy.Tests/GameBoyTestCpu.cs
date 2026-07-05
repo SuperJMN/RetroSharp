@@ -154,12 +154,14 @@ internal sealed class GameBoyTestCpu
         0xC9 => 16,                                      // RET
         0xF5 => 16,                                      // PUSH AF
         0xF1 => 12,                                      // POP AF
+        0xE5 => 16,                                      // PUSH HL
+        0xE1 => 12,                                      // POP HL
         0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
         0x16 or 0x26 or 0x2E or 0x06 or 0x0E or 0x1E or 0x3E => 8, // LD r,n
         0xC6 or 0xCE or 0xD6 or 0xDE or 0xE6 or 0xF6 or 0xEE or 0xFE => 8, // ALU A,n
         0x0B or 0x03 or 0x13 or 0x1B or 0x23 or 0x2B => 8,        // INC/DEC rr
         0x09 or 0x19 or 0x29 => 8,                       // ADD HL,rr
-        0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x7E => 8, // LD A,(rr)/(HL) loads/stores
+        0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x72 or 0x7E => 8, // LD A,(rr)/(HL) loads/stores
         0x46 or 0x4E or 0x56 or 0x5E => 8,               // LD r,(HL)
         0xE2 or 0xF2 => 8,                               // LDH (C),A / LDH A,(C)
         0xCB => 8,                                       // CB-prefixed (SWAP/SRL on A)
@@ -362,6 +364,7 @@ internal sealed class GameBoyTestCpu
             case 0x2A: a = ReadByte(Hl); SetHl((ushort)(Hl + 1)); break; // LD A,(HL+)
             case 0x32: WriteByte(Hl, a); SetHl((ushort)(Hl - 1)); break; // LD (HL-),A
             case 0x77: WriteByte(Hl, a); break;                 // LD (HL),A
+            case 0x72: WriteByte(Hl, d); break;                 // LD (HL),D
             case 0x7E: a = ReadByte(Hl); break;                 // LD A,(HL)
             case 0x46: b = ReadByte(Hl); break;                 // LD B,(HL)
             case 0x4E: c = ReadByte(Hl); break;                 // LD C,(HL)
@@ -437,6 +440,8 @@ internal sealed class GameBoyTestCpu
             case 0xC9: pc = PopWord(); break;                 // RET
             case 0xF5: PushWord((ushort)((a << 8) | f)); break; // PUSH AF
             case 0xF1: { var v = PopWord(); a = (byte)(v >> 8); f = (byte)(v & 0xF0); break; } // POP AF
+            case 0xE5: PushWord(Hl); break;                     // PUSH HL
+            case 0xE1: SetHl(PopWord()); break;                 // POP HL
             case 0x18: { var off = (sbyte)NextByte(); pc = (ushort)(pc + off); break; } // JR e
             case 0x20: { var off = (sbyte)NextByte(); if ((f & FlagZ) == 0) pc = (ushort)(pc + off); break; } // JR NZ,e
             case 0x28: { var off = (sbyte)NextByte(); if ((f & FlagZ) != 0) pc = (ushort)(pc + off); break; } // JR Z,e

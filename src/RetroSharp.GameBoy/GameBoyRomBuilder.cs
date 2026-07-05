@@ -938,6 +938,14 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort SfxDataBankAddress = 0xC137;
     private const ushort SfxCurrentBankAddress = 0xC138;
     private const ushort SfxDataCursorBankAddress = 0xC139;
+    // Shadow of the BGM's intended channel 1 state (NR10-NR14, $FF10-$FF14). The music updates it on
+    // every channel 1 write even while the channel is muted by an active SFX, so when the effect
+    // releases the channel it can be restored to the BGM's full channel 1 state instead of the effect's
+    // residue (the BGM rewrites NR13/NR14 every note but rarely NR10/NR11/NR12, so otherwise its notes
+    // would inherit the SFX sweep/duty/envelope). The shadow is page-aligned so that its address equals
+    // $C200 + register offset (C = $10..$14), letting the music write path index it with `ld l,c`.
+    private const byte Channel1ShadowPageHigh = 0xC2;
+    private const ushort Channel1ShadowBaseAddress = 0xC210; // NR10 shadow; NR11-NR14 at +1..+4
     // Camera movement walks the camera toward the requested position one pixel at a time. A single
     // move never crosses more than one tile boundary (8 px), which is the per-frame streaming budget
     // (one queued column/row drained by camera apply). Capping the walk here keeps that invariant while
@@ -2660,6 +2668,11 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(SfxCurrentPointerHighAddress);
         builder.StoreA(SfxDataBankAddress);
         builder.StoreA(SfxCurrentBankAddress);
+        builder.StoreA((ushort)(Channel1ShadowBaseAddress + 0)); // NR10 shadow
+        builder.StoreA((ushort)(Channel1ShadowBaseAddress + 1)); // NR11 shadow
+        builder.StoreA((ushort)(Channel1ShadowBaseAddress + 2)); // NR12 shadow
+        builder.StoreA((ushort)(Channel1ShadowBaseAddress + 3)); // NR13 shadow
+        builder.StoreA((ushort)(Channel1ShadowBaseAddress + 4)); // NR14 shadow
         if (romLayout.UsesBankedMusic)
         {
             builder.StoreA(MusicDataCursorBankAddress);
@@ -2899,7 +2912,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadCFromA();
         EmitAdvanceMusicHl(MusicDataCursorBankAddress);
         builder.LoadAFromHl();                      // value
-        builder.StoreHighRamCFromA();               // LDH (C),A
+        EmitMusicApuRegisterWrite();                // LDH (C),A, muting/shadowing channel 1 for SFX
         EmitAdvanceMusicHl(MusicDataCursorBankAddress);
         builder.JumpAbsolute(commandDoneLabel);
 
@@ -2926,6 +2939,49 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(loopLabel);
         EmitResetApuTracePointerToLoop();
         builder.JumpAbsolute(endLabel);
+    }
+
+    // Writes the music's APU register value (A) to register offset (C). Without SFX assets this is a
+    // plain LDH (C),A. With SFX, channel 1 ($FF10-$FF14) gets priority for effects: the music always
+    // shadows its full channel 1 state (so the channel can be restored when an effect ends) and, while
+    // an effect owns channel 1 (SfxActive != 0), the music's channel 1 writes are suppressed so the
+    // effect note is not stomped. Every other register (channels 2-4 and the globals NR50/NR51/NR52) is
+    // written normally. Uses D as a scratch for the value; D is free inside the music command loop
+    // (only B/C/HL are live there), and HL (the data cursor) is preserved across the shadow store.
+    private void EmitMusicApuRegisterWrite()
+    {
+        if (program.SoundEffectAssetsInLoadOrder.Count == 0)
+        {
+            builder.StoreHighRamCFromA();           // LDH (C),A
+            return;
+        }
+
+        var writeHwLabel = builder.CreateLabel("music_apu_write_hw");
+        var skipLabel = builder.CreateLabel("music_apu_skip");
+
+        builder.LoadDFromA();                       // D = value (A/flags get clobbered)
+        builder.LoadAFromC();                       // A = register offset
+        builder.SubtractAImmediate(0x10);           // A = offset - $10
+        builder.CompareImmediate(0x05);             // carry set if A < 5 (channel 1: offsets $10..$14)
+        builder.JumpRelative(0x30, writeHwLabel);   // JR NC -> not channel 1, write hardware
+
+        // Channel 1: shadow the value at $C200 + offset (== $C200 + C). The shadow page low byte equals
+        // the register offset, so the whole NR10-NR14 state is captured with no per-register branching.
+        builder.PushHl();                           // preserve the music data cursor
+        builder.Emit(0x26, Channel1ShadowPageHigh); // LD H, $C2
+        builder.Emit(0x69);                         // LD L, C
+        builder.Emit(0x72);                         // LD (HL), D  -> shadow[$C200+offset] = value
+        builder.PopHl();
+
+        builder.LoadA(SfxActiveAddress);
+        builder.CompareImmediate(0x00);
+        builder.JumpRelative(0x20, skipLabel);      // JR NZ -> SFX owns channel 1, skip hardware write
+
+        builder.Label(writeHwLabel);
+        builder.LoadAFromD();                       // A = value
+        builder.StoreHighRamCFromA();               // LDH (C),A
+
+        builder.Label(skipLabel);
     }
 
     private void EmitUpdateSoundEffectApuTrace(string endLabel)
@@ -3006,6 +3062,20 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(SfxCurrentPointerLowAddress);
         builder.StoreA(SfxCurrentPointerHighAddress);
         builder.StoreA(SfxCurrentBankAddress);
+        // Release channel 1 back to the BGM: restore its full shadowed state (NR10-NR14) so the melody
+        // is not left carrying the effect's sweep/duty/envelope. NR14 is restored with the shadowed
+        // trigger bit, which reloads NR12's envelope, fully re-establishing the BGM's channel 1; the
+        // BGM's next note re-writes them anyway.
+        builder.LoadA((ushort)(Channel1ShadowBaseAddress + 0));
+        builder.StoreHighRamA(0x10);                // NR10 (sweep)
+        builder.LoadA((ushort)(Channel1ShadowBaseAddress + 1));
+        builder.StoreHighRamA(0x11);                // NR11 (duty + length)
+        builder.LoadA((ushort)(Channel1ShadowBaseAddress + 2));
+        builder.StoreHighRamA(0x12);                // NR12 (envelope)
+        builder.LoadA((ushort)(Channel1ShadowBaseAddress + 3));
+        builder.StoreHighRamA(0x13);                // NR13 (frequency low)
+        builder.LoadA((ushort)(Channel1ShadowBaseAddress + 4));
+        builder.StoreHighRamA(0x14);                // NR14 (frequency high + trigger)
         builder.JumpAbsolute(endLabel);
     }
 
@@ -7698,6 +7768,16 @@ internal sealed class GbBuilder
     public void PopAf()
     {
         Emit(0xF1);
+    }
+
+    public void PushHl()
+    {
+        Emit(0xE5);
+    }
+
+    public void PopHl()
+    {
+        Emit(0xE1);
     }
 
     public void LoadAFromC()

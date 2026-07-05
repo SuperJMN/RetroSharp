@@ -861,6 +861,12 @@ internal static class GameBoyMusicAssetCompiler
     }
 }
 
+// Game Boy action SFX plays on channel 1 (the square+sweep channel, $FF10-$FF14) while the music
+// keeps the other channels. The source trace is filtered down to channel 1 registers so the effect
+// never replays the globals it captured (NR50 $FF24, NR51 $FF25, NR52 $FF26 - the last one would
+// power the whole APU off) or the music's other channels. The runtime music player mutes and shadows
+// its own channel 1 writes while an effect is active, giving the effect priority over the BGM on that
+// channel, and restores the shadowed NR10 (sweep) when the effect ends.
 internal static class GameBoySoundEffectAssetCompiler
 {
     public static GameBoyCompiledSoundEffectAsset CompileFromFile(string name, string path)
@@ -873,7 +879,36 @@ internal static class GameBoySoundEffectAssetCompiler
         }
 
         var trace = GameBoyMusicAssetCompiler.ReadVgmDmgTrace(resolvedPath);
-        var asset = GameBoyMusicAssetCompiler.CompileApuTrace(name, trace);
+        var channel1Trace = FilterToChannel1(trace);
+        if (channel1Trace.Events.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Game Boy SFX asset '{Path.GetFileName(path)}' has no channel 1 ($FF10-$FF14) register writes; SFX play on channel 1.");
+        }
+
+        var asset = GameBoyMusicAssetCompiler.CompileApuTrace(name, channel1Trace);
         return new GameBoyCompiledSoundEffectAsset(name, asset.Data);
+    }
+
+    // Keep only channel 1 register writes ($FF10-$FF14). Dropped events' DeltaCycles are folded into
+    // the next kept event so the effect's frame timing is preserved.
+    private static GameBoyApuTrace FilterToChannel1(GameBoyApuTrace trace)
+    {
+        var events = new List<GameBoyApuTraceEvent>(trace.Events.Count);
+        var carriedCycles = 0L;
+        foreach (var traceEvent in trace.Events)
+        {
+            if (traceEvent.Address is >= 0xFF10 and <= 0xFF14)
+            {
+                events.Add(traceEvent with { DeltaCycles = traceEvent.DeltaCycles + carriedCycles });
+                carriedCycles = 0;
+            }
+            else
+            {
+                carriedCycles += traceEvent.DeltaCycles;
+            }
+        }
+
+        return trace with { Events = events };
     }
 }

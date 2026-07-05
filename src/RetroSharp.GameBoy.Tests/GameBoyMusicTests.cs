@@ -184,6 +184,36 @@ public sealed class GameBoyMusicTests
         Assert.True(ContainsSequence(rom, [0x12, 0xF0]), "SFX VGM writes should be compiled into the Game Boy APU stream.");
         Assert.True(ContainsSequence(rom, [0x14, 0x87]), "SFX trigger writes should survive the one-shot repack.");
         Assert.True(ContainsSequence(rom, [0xE2]), "SFX playback should write dynamic high-RAM APU register offsets through LDH (C),A.");
+        // The music player shadows its full channel 1 state to page $C200 (push hl; ld h,$C2; ld l,c;
+        // ld (hl),d; pop hl) so the channel can be restored when the SFX ends.
+        Assert.True(ContainsSequence(rom, [0xE5, 0x26, 0xC2, 0x69, 0x72, 0xE1]), "Music player should shadow channel 1 to page $C200 while SFX assets exist.");
+        // On SFX end NR10 is restored from the shadow (LD A,($C210) ; LDH ($10),A).
+        Assert.True(ContainsSequence(rom, [0xFA, 0x10, 0xC2, 0xE0, 0x10]), "SFX end should restore NR10 from the channel 1 shadow.");
+        // ...and the envelope NR12 too (LD A,($C212) ; LDH ($12),A), which is what carried the residue.
+        Assert.True(ContainsSequence(rom, [0xFA, 0x12, 0xC2, 0xE0, 0x12]), "SFX end should restore NR12 (envelope) from the channel 1 shadow.");
+    }
+
+    [Fact]
+    public void Game_boy_sfx_asset_is_filtered_to_channel_1()
+    {
+        var directory = CreateTempDirectory();
+        // A trace mixing channel 1 (VGM regs $00-$04 = $FF10-$FF14), a global ($16 = $FF26 NR52), and
+        // another channel ($06 = $FF16 NR21). Only channel 1 must survive so the effect never powers
+        // the APU off or stomps the music's other channels.
+        WriteVgmGzipFrames(
+            Path.Combine(directory, "jump.gb.vgz"),
+            [
+                [[0x16, 0x80], [0x00, 0x37], [0x01, 0x40], [0x02, 0xD2], [0x03, 0x27], [0x04, 0x86], [0x06, 0x80]],
+                [[0x00, 0x00], [0x06, 0x00]],
+            ]);
+
+        var asset = GameBoySoundEffectAssetCompiler.CompileFromFile("jump_sfx", Path.Combine(directory, "jump.vgz"));
+
+        Assert.Equal("jump_sfx", asset.Name);
+        Assert.True(ContainsSequence(asset.Data, [0x10, 0x37]), "Channel 1 NR10 write must survive.");
+        Assert.True(ContainsSequence(asset.Data, [0x14, 0x86]), "Channel 1 trigger (NR14) must survive.");
+        Assert.False(ContainsSequence(asset.Data, [0x26, 0x80]), "NR52 (power) writes must be dropped so the SFX cannot power the APU off.");
+        Assert.False(ContainsSequence(asset.Data, [0x16, 0x80]), "Other-channel (NR21) writes must be dropped.");
     }
 
     [Fact]
@@ -766,6 +796,41 @@ public sealed class GameBoyMusicTests
             new GameBoyApuTraceMetadata("Large Trace"),
             events);
         GameBoyApuTraceBinary.Write(path, trace);
+    }
+
+    private static void WriteVgmGzipFrames(string path, IReadOnlyList<IReadOnlyList<byte[]>> frames)
+    {
+        var commands = new List<byte>();
+        foreach (var frame in frames)
+        {
+            foreach (var write in frame)
+            {
+                commands.Add(0xB3);
+                commands.AddRange(write);
+            }
+
+            commands.Add(0x61);
+            commands.Add(0xDF);
+            commands.Add(0x02);
+        }
+
+        commands.Add(0x66);
+
+        var bytes = new byte[0xC0 + commands.Count];
+        bytes[0] = (byte)'V';
+        bytes[1] = (byte)'g';
+        bytes[2] = (byte)'m';
+        bytes[3] = (byte)' ';
+        WriteUInt32(bytes, 0x08, 0x00000161);
+        WriteUInt32(bytes, 0x18, (uint)(735 * frames.Count));
+        WriteUInt32(bytes, 0x34, 0x8C);
+        WriteUInt32(bytes, 0x80, 4_194_304);
+        commands.CopyTo(bytes, 0xC0);
+        WriteUInt32(bytes, 0x04, (uint)(bytes.Length - 4));
+
+        using var file = File.Create(path);
+        using var gzip = new GZipStream(file, CompressionLevel.SmallestSize);
+        gzip.Write(bytes);
     }
 
     private static void WriteVgmGzip(

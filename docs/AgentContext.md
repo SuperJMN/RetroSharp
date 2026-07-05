@@ -180,17 +180,25 @@ Progress (2026-06-14):
   One-shot FX now follow the same pattern: `Sfx.Asset(...)` is a source-package
   `[resource("sfx_asset")]` declaration, `Sfx.Play(...)` wraps the `sfx_play`
   target intrinsic with a compile-time `AssetRef`, and both Game Boy and NES
-  lower it separately from BGM. Game Boy advances active SFX streams from
-  `Audio.Update()` after BGM writes; NES plays SFX on pulse 1 as a flat per-frame
-  one-shot trace ticked once per `Audio.Update()` after BGM, keeps only the pulse 1
-  registers (`$4000-$4003`) and drops captured global/other-channel writes, arms
-  the effect via a zero-page cursor, a ring-out linger counter, and an `SfxActive`
-  flag (never touching the BGM tick/order state), suppresses *and shadows* the BGM's
-  own pulse 1 writes while an effect is active, keeps owning the channel for the
-  linger frames so the note rings out fully, restores the shadowed `$4001` sweep
-  when the effect ends so the BGM reclaims a clean channel, and shares one APU body
-  writer with the BGM engine to fit NROM. The SFX data is emitted after the DPCM
-  samples so it does not shrink the DPCM window.
+  lower it separately from BGM. Both targets give an effect priority over the BGM
+  on its channel (channel 1 / square+sweep on GB, pulse 1 on NES): the SFX trace is
+  filtered to that channel (GB: `$FF10-$FF14`, dropping globals `NR50/NR51/NR52` and
+  other channels; NES: `$4000-$4003`, dropping `$4010/$4015/$4017`), the BGM player
+  suppresses *and shadows* its own channel writes while an effect is active, and the
+  shadowed state is restored when the effect ends so the BGM melody is not left
+  carrying the effect's residue. GB shadows and restores the full channel 1 state
+  (`NR10-NR14`, page-aligned shadow at `$C200` so the address is `$C200 + register
+  offset`; `NR14` restored with its trigger to reload the `NR12` envelope) because
+  the BGM rarely rewrites `NR11`/`NR12` (duty/envelope); NES restores just the
+  `$4001` sweep because the BGM rewrites `$4000/$4002/$4003` every note. Game Boy
+  advances active SFX streams from `Audio.Update()` after BGM writes (its trace has
+  per-order-entry frame waits, so it rings out naturally); NES plays SFX as a flat
+  per-frame one-shot trace ticked once per `Audio.Update()` after BGM, arms the
+  effect via a zero-page cursor, a ring-out linger counter, and an `SfxActive` flag
+  (never touching the BGM tick/order state), keeps owning the channel for the linger
+  frames so the note rings out fully, and shares one APU body writer with the BGM
+  engine to fit NROM. The NES SFX data is emitted after the DPCM samples so it does
+  not shrink the DPCM window.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
   `audio_init(...)` builtin kept as an alias.
