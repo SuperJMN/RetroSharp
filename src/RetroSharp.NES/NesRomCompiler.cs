@@ -135,12 +135,13 @@ public static class NesRomCompiler
             throw new InvalidOperationException($"Unknown NES sprite asset '{draw.SpriteId}'. Declare it with sprite_asset(...).");
         }
 
+        var scanlinePieces = asset.Pieces.Where(piece => !piece.Optional).ToArray();
         return new Sdk2DFrameBudget(
             hardwareSprites: asset.Pieces.Count,
             spriteSizeModes: SpriteSizeMode.Sprite8x8,
             hardwareSpritesByScanline: HardwareSpriteScanlineCounts(
                 draw.Y,
-                asset.Pieces.Select(piece => piece.YOffset),
+                scanlinePieces.Select(piece => piece.YOffset),
                 spriteHeight: 8,
                 screenHeight: NesTarget.Capabilities.ScreenPixels.Height));
     }
@@ -152,9 +153,10 @@ public static class NesRomCompiler
             throw new InvalidOperationException($"Unknown NES sprite asset '{spriteId}'. Declare it with sprite_asset(...).");
         }
 
+        var budgetPieces = asset.Pieces.Where(piece => !piece.Optional).ToArray();
         return new ActorMetaspriteGeometry(
-            asset.Pieces.Count,
-            asset.Pieces.Select(piece => piece.YOffset).ToArray(),
+            budgetPieces.Length,
+            budgetPieces.Select(piece => piece.YOffset).ToArray(),
             HardwareSpriteHeight: 8);
     }
 
@@ -212,6 +214,8 @@ public static class NesRomCompiler
 
 internal sealed class NesVideoProgram
 {
+    private readonly record struct SpritePaletteUse(string SpriteId, int RequestedBaseSlot);
+
     public const int FirstSpriteTile = 6;
 
     private readonly List<NesCompiledSpriteAsset> spriteAssetsInLoadOrder = [];
@@ -222,6 +226,7 @@ internal sealed class NesVideoProgram
     private readonly Dictionary<string, NesCompiledSoundEffectAsset> soundEffectAssets = [];
     private readonly List<(int FirstTile, byte[] Data)> generatedBackgroundTiles = [];
     private readonly Dictionary<string, SpriteAnimationClip> animationClips = [];
+    private readonly Dictionary<SpritePaletteUse, int> spritePalettePhysicalBaseSlots = [];
     private readonly SortedDictionary<int, byte[]> mapColumns = [];
     private readonly SortedDictionary<int, byte[]> worldColumns = [];
     private readonly SortedDictionary<int, WorldTileFlags[]> worldFlagColumns = [];
@@ -279,6 +284,13 @@ internal sealed class NesVideoProgram
     public required IReadOnlyDictionary<string, StructSyntax> Structs { get; init; }
 
     public required BlockSyntax MainBlock { get; init; }
+
+    public int ResolveSpritePaletteBaseSlot(string spriteId, int requestedBaseSlot)
+    {
+        return spritePalettePhysicalBaseSlots.TryGetValue(new SpritePaletteUse(spriteId, requestedBaseSlot), out var physicalBaseSlot)
+            ? physicalBaseSlot
+            : requestedBaseSlot;
+    }
 
     public static NesVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
     {
@@ -559,23 +571,123 @@ internal sealed class NesVideoProgram
         foreach (var operation in operations.OfType<Sdk2DOperation.DrawLogicalSprite>())
         {
             if (!spriteAssets.TryGetValue(operation.SpriteId, out var asset)
-                || asset.SuggestedPalette is null
-                || operation.PaletteSlot < 0
-                || operation.PaletteSlot >= NesTarget.Capabilities.SpritePaletteSlots
-                || SpritePaletteSlotHasRawOverrides(operation.PaletteSlot))
+                || operation.PaletteSlot < 0)
             {
                 continue;
             }
 
-            if (appliedPalettes.TryGetValue(operation.PaletteSlot, out var existingPalette)
-                && !existingPalette.SequenceEqual(asset.SuggestedPalette))
+            ValidateSpritePaletteSlots(asset, operation.PaletteSlot);
+            var paletteUse = new SpritePaletteUse(operation.SpriteId, operation.PaletteSlot);
+            if (spritePalettePhysicalBaseSlots.ContainsKey(paletteUse))
             {
-                throw new InvalidOperationException(
-                    $"NES sprite palette slot {operation.PaletteSlot} is used by multiple PNG sprite assets with different derived palettes. Declare an explicit raw object palette resource or draw them with different palette slots.");
+                continue;
             }
 
-            ApplySpritePalette(operation.PaletteSlot, asset.SuggestedPalette);
-            appliedPalettes[operation.PaletteSlot] = asset.SuggestedPalette;
+            var physicalBaseSlot = ResolveDerivedSpritePaletteBaseSlot(asset, operation.PaletteSlot, appliedPalettes);
+            spritePalettePhysicalBaseSlots[paletteUse] = physicalBaseSlot;
+            ApplyDerivedSpritePaletteRange(asset, physicalBaseSlot, appliedPalettes);
+        }
+    }
+
+    private int ResolveDerivedSpritePaletteBaseSlot(
+        NesCompiledSpriteAsset asset,
+        int requestedBaseSlot,
+        Dictionary<int, byte[]> appliedPalettes)
+    {
+        if (CanApplyDerivedSpritePaletteRange(asset, requestedBaseSlot, appliedPalettes, allowRawOverrides: true))
+        {
+            return requestedBaseSlot;
+        }
+
+        for (var candidateBaseSlot = 0; candidateBaseSlot < NesTarget.Capabilities.SpritePaletteSlots; candidateBaseSlot++)
+        {
+            if (candidateBaseSlot == requestedBaseSlot
+                || candidateBaseSlot + asset.MaxPaletteSlotOffset >= NesTarget.Capabilities.SpritePaletteSlots)
+            {
+                continue;
+            }
+
+            if (CanApplyDerivedSpritePaletteRange(asset, candidateBaseSlot, appliedPalettes, allowRawOverrides: false))
+            {
+                return candidateBaseSlot;
+            }
+        }
+
+        throw new InvalidOperationException(
+            $"NES sprite asset '{asset.Name}' cannot place its derived PNG palette for logical sprite palette slot {requestedBaseSlot} because the compatible physical sprite palette slots are already used by different derived palettes. Declare an explicit raw object palette resource or draw one asset with another palette slot.");
+    }
+
+    private bool CanApplyDerivedSpritePaletteRange(
+        NesCompiledSpriteAsset asset,
+        int basePaletteSlot,
+        IReadOnlyDictionary<int, byte[]> appliedPalettes,
+        bool allowRawOverrides)
+    {
+        if (basePaletteSlot < 0 || basePaletteSlot + asset.MaxPaletteSlotOffset >= NesTarget.Capabilities.SpritePaletteSlots)
+        {
+            return false;
+        }
+
+        for (var paletteOffset = 0; paletteOffset < asset.SuggestedPalettes.Count; paletteOffset++)
+        {
+            var suggestedPalette = asset.SuggestedPalettes[paletteOffset];
+            if (suggestedPalette is null)
+            {
+                continue;
+            }
+
+            var paletteSlot = basePaletteSlot + paletteOffset;
+            if (SpritePaletteSlotHasRawOverrides(paletteSlot))
+            {
+                if (allowRawOverrides)
+                {
+                    continue;
+                }
+
+                return false;
+            }
+
+            if (appliedPalettes.TryGetValue(paletteSlot, out var existingPalette)
+                && !existingPalette.SequenceEqual(suggestedPalette))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void ApplyDerivedSpritePaletteRange(
+        NesCompiledSpriteAsset asset,
+        int basePaletteSlot,
+        Dictionary<int, byte[]> appliedPalettes)
+    {
+        for (var paletteOffset = 0; paletteOffset < asset.SuggestedPalettes.Count; paletteOffset++)
+        {
+            var suggestedPalette = asset.SuggestedPalettes[paletteOffset];
+            var paletteSlot = basePaletteSlot + paletteOffset;
+            if (suggestedPalette is null || SpritePaletteSlotHasRawOverrides(paletteSlot))
+            {
+                continue;
+            }
+
+            ApplySpritePalette(paletteSlot, suggestedPalette);
+            appliedPalettes[paletteSlot] = suggestedPalette;
+        }
+    }
+
+    private static void ValidateSpritePaletteSlots(NesCompiledSpriteAsset asset, int basePaletteSlot)
+    {
+        if (asset.MaxPaletteSlotOffset == 0 || basePaletteSlot >= NesTarget.Capabilities.SpritePaletteSlots)
+        {
+            return;
+        }
+
+        var requiredSlot = basePaletteSlot + asset.MaxPaletteSlotOffset;
+        if (requiredSlot >= NesTarget.Capabilities.SpritePaletteSlots)
+        {
+            throw new InvalidOperationException(
+                $"NES sprite asset '{asset.Name}' needs sprite palette slot {requiredSlot} for an automatic PNG overlay, but target 'nes' supports slots 0..{NesTarget.Capabilities.SpritePaletteSlots - 1}.");
         }
     }
 
