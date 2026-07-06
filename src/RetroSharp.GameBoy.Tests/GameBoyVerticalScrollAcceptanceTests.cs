@@ -113,6 +113,29 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     }
 
     [Fact]
+    public void Game_boy_tiled_vscroll_keeps_visible_rows_aligned_at_bottom_wrap()
+    {
+        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var sampleDirectory = Path.GetDirectoryName(samplePath)
+            ?? throw new InvalidOperationException("Could not locate tiled vertical scroll sample directory.");
+        var source = File.ReadAllText(samplePath);
+        var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
+        var map = GameBoyTiledMapImporter.Load(Path.Combine(sampleDirectory, "vscroll.tmj"));
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+
+        for (var frame = 1; frame <= 260; frame++)
+        {
+            cpu.RunFrames(frame);
+
+            Assert.Equal(0, cpu.IoRegister(0xFF43)); // SCX
+            if (cpu.IoRegister(0xFF42) >= 200)
+            {
+                AssertVisibleTilesMatchTiledWorld(cpu, map, $"tiled-vscroll frame {frame}");
+            }
+        }
+    }
+
+    [Fact]
     public void Game_boy_free_scroll_sample_streams_fresh_columns_and_rows_with_staggered_diagonal_commit()
     {
         var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
@@ -474,6 +497,51 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
                 var sourceColumn = (cameraX + screenColumn * 8) / 8 % mapWidth;
                 var bufferColumn = (firstBufferColumn + screenColumn) % 32;
                 var expected = (byte)((tileByRow ? sourceRow : sourceColumn) + 1);
+                var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
+                if (actual != expected)
+                {
+                    mismatches.Add(
+                        $"{label}: camera=({cameraX},{cameraY}) scx={scx} scy={scy} screen=({screenColumn},{screenRow}) "
+                        + $"state={CameraState(cpu)} "
+                        + $"buffer=({bufferColumn},{bufferRow}) source=({sourceColumn},{sourceRow}) "
+                        + $"expected=0x{expected:X2} actual=0x{actual:X2}");
+                    if (mismatches.Count >= 12)
+                    {
+                        break;
+                    }
+                }
+            }
+
+            if (mismatches.Count >= 12)
+            {
+                break;
+            }
+        }
+
+        Assert.True(mismatches.Count == 0, string.Join(Environment.NewLine, mismatches));
+    }
+
+    private static void AssertVisibleTilesMatchTiledWorld(GameBoyTestCpu cpu, GameBoyTiledMap map, string label)
+    {
+        var scx = cpu.IoRegister(0xFF43);
+        var scy = cpu.IoRegister(0xFF42);
+        var cameraX = cpu.Wram(0xC0E0) | cpu.Wram(0xC0E1) << 8;
+        var cameraY = cpu.Wram(0xC0E8) | cpu.Wram(0xC0E9) << 8;
+        var firstBufferColumn = scx / 8;
+        var firstBufferRow = scy / 8;
+        var screenColumns = scx % 8 == 0 ? 20 : 21;
+        var screenRows = scy % 8 == 0 ? 18 : 19;
+        var mismatches = new List<string>();
+
+        for (var screenRow = 0; screenRow < screenRows; screenRow++)
+        {
+            var sourceRow = (cameraY + screenRow * 8) / 8 % map.Height;
+            var bufferRow = (firstBufferRow + screenRow) % 32;
+            for (var screenColumn = 0; screenColumn < screenColumns; screenColumn++)
+            {
+                var sourceColumn = (cameraX + screenColumn * 8) / 8 % map.Width;
+                var bufferColumn = (firstBufferColumn + screenColumn) % 32;
+                var expected = (byte)map.WorldTileIds[sourceRow * map.Width + sourceColumn];
                 var actual = cpu.Vram((ushort)(0x9800 + bufferRow * 32 + bufferColumn));
                 if (actual != expected)
                 {

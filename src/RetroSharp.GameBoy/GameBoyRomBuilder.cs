@@ -4568,11 +4568,12 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraFineYAddress);
-        EmitQueuePendingRow(CameraBottomBackgroundRowAddress, CameraBottomSourceRowAddress);
         EmitIncrementAddressModulo(CameraTopBackgroundRowAddress, 32);
         EmitIncrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
         EmitIncrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
         EmitIncrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
+        // After a downward tile crossing, the fine-scroll-exposed bottom row is the advanced row.
+        EmitQueuePendingRow(CameraBottomBackgroundRowAddress, CameraBottomSourceRowAddress);
 
         builder.Label(endLabel);
     }
