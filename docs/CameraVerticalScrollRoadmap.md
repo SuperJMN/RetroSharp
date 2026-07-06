@@ -372,6 +372,19 @@ stream-edge budget.
 Same-axis movement now has a separate optimized two-edge path for runner-scale
 horizontal or vertical scroll.
 
+> **Fixed (2026-07): bottom-edge init bug.** `CameraBottomBackgroundRow` /
+> `CameraBottomSourceRow` were seeded with the full *clamped* stream height, so a
+> tall map (`height` clamped to the 32-row background buffer) computed
+> `(y + 32) % 32 == y` and collapsed the bottom edge onto the top edge. Because both
+> edges advance together, downward row crossings then streamed into the **top** band
+> and the real bottom rows were only ever backfilled by column crossings — so at
+> fast diagonal scroll (e.g. the runner at 6 px/frame) any bottom cell whose column
+> crossed while that row was outside the window stayed permanently stale ("diagonal
+> corner garbage"). The fix seeds the bottom edge a *visible* screen-height below the
+> top (`Math.Min(height, VisibleScreenTileHeight)`). This was a plain init bug, **not**
+> a throughput/Strategy-B limit; guarded by
+> `GameBoyVerticalScrollAcceptanceTests.Game_boy_tall_camera_seeds_bottom_edge_a_screen_height_below_the_top`.
+
 Real Game Boy games (e.g. Super Mario Land 2) scroll in 8 directions, so diagonal
 is clearly feasible on hardware. The blockers are two of *our* design choices, not
 the DMG:
@@ -448,6 +461,9 @@ concrete needs appears:
   per-VBlank commit slot and the **row queue starves** → visible gaps/garbage on
   the newly exposed row edge. Strategy B (both edges in one VBlank) is then the
   correct fix. Triggers: rapid free-look, chases, strong screen-shake, snap moves.
+  (Note: garbage on the *bottom* edge at moderate diagonal speed — e.g. the runner
+  at 6 px/frame — was a separate bottom-edge init bug, now fixed; see Phase E. Only
+  genuine per-VBlank throughput starvation at very high speed needs Strategy B.)
 - **Pixel-perfect / no 1-frame edge lag.** Strategy A updates the second-axis edge
   one frame late; at the crossing instant a freshly revealed corner/row can show a
   stale tile for one frame. On high-contrast scenes or for visual polish, B removes

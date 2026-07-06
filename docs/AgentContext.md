@@ -356,6 +356,7 @@ When `samples/runner/src/*.rs`, `runner.tmj`, the tileset, or GB/NES asset lower
 | Editing generated Game Boy ROMs by hand | Regenerate from source using `tools/gameboy/generate_sample_roms.py`. |
 | Treating generated screenshots as source artifacts | Leave `samples/runner/*.png` alone unless explicitly requested. |
 | Fixing emulator/hardware mismatches only in samples | Check backend/runtime behavior first, especially input and LCD/PPU state. |
+| Assuming fast GB diagonal scroll garbage is a throughput limit | The bottom-edge init (`CameraBottomBackgroundRow/SourceRow`) must seed a visible screen-height below the top, not the clamped buffer height; a wrong seed streams downward crossings into the top band. |
 | Adding portable APIs without diagnostics | Add or reuse target capability checks before lowering. |
 | Debugging the full runner without isolation | Run `tools/gameboy/runner_diagnostics.py` and report the first failing step and scenario. |
 

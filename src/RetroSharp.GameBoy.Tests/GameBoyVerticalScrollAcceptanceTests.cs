@@ -341,6 +341,36 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     }
 
     [Fact]
+    public void Game_boy_tall_camera_seeds_bottom_edge_a_screen_height_below_the_top()
+    {
+        // Regression test for the bottom-edge init bug: CameraBottomBackgroundRow/SourceRow were seeded
+        // with the full clamped stream height, so for a tall map (y + 32) % 32 == y collapsed the bottom
+        // edge onto the top edge. The top and bottom edges then advance together, so their gap is an
+        // invariant equal to the initial offset. It must be the visible screen height (a screen-height
+        // window), not zero; a zero gap made every downward row crossing stream into the top band and
+        // left the real bottom rows permanently stale during fast diagonal scroll.
+        const int mapWidth = 21;
+        const int mapHeight = 64;
+        var source = FastCameraSource(mapWidth, mapHeight, stepPixels: 16, vertical: true);
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source)) { CycleAccurateLy = true };
+
+        // Run past Camera.Init and several scroll steps; the edge gap is invariant under scrolling.
+        cpu.RunFrames(20);
+
+        const int topBackgroundRow = 0xC0EB;
+        const int bottomBackgroundRow = 0xC0EC;
+        const int topSourceRow = 0xC0ED;
+        const int bottomSourceRow = 0xC0EE;
+        const int visibleScreenTileHeight = 18;
+
+        var backgroundGap = (cpu.Wram(bottomBackgroundRow) - cpu.Wram(topBackgroundRow) + 32) % 32;
+        var sourceGap = (cpu.Wram(bottomSourceRow) - cpu.Wram(topSourceRow) + mapHeight) % mapHeight;
+
+        Assert.Equal(visibleScreenTileHeight, backgroundGap);
+        Assert.Equal(visibleScreenTileHeight, sourceGap);
+    }
+
+    [Fact]
     public void Game_boy_dead_zone_follow_sample_keeps_scroll_still_inside_band_then_follows_both_axes()
     {
         var samplePath = RepositoryFile("samples/deadzone-follow/deadzone.rs");

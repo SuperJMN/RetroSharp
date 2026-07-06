@@ -4059,11 +4059,17 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.LoadAImmediate(y);
         builder.StoreA(CameraTopBackgroundRowAddress);
-        builder.LoadAImmediate((y + height) % 32);
+        // The bottom edge tracks the row just below the visible window, not the full buffered/stream
+        // height: for a tall map the streamed height is clamped to the 32-row background buffer, and
+        // (y + 32) % 32 == y would collapse the bottom edge onto the top so every downward row crossing
+        // streamed into the top band and left the real bottom rows permanently stale. Offsetting by the
+        // visible tile height keeps the bottom edge a screen-height below the top.
+        var bottomRowOffset = Math.Min(height, VisibleScreenTileHeight);
+        builder.LoadAImmediate((y + bottomRowOffset) % 32);
         builder.StoreA(CameraBottomBackgroundRowAddress);
         builder.LoadAImmediate(0);
         builder.StoreA(CameraTopSourceRowAddress);
-        builder.LoadAImmediate(height % program.MapColumnHeight);
+        builder.LoadAImmediate(bottomRowOffset % program.MapColumnHeight);
         builder.StoreA(CameraBottomSourceRowAddress);
     }
 
