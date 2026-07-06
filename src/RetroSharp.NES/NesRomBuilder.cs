@@ -5072,6 +5072,14 @@ internal sealed class NesRuntimeCompiler
             throw new InvalidOperationException($"Unknown NES sprite asset '{operation.SpriteId}'. Declare it with sprite_asset(...).");
         }
 
+        var physicalPaletteSlot = program.ResolveSpritePaletteBaseSlot(operation.SpriteId, operation.PaletteSlot);
+        var requiredPaletteSlot = physicalPaletteSlot + asset.MaxPaletteSlotOffset;
+        if (requiredPaletteSlot >= NesTarget.Capabilities.SpritePaletteSlots)
+        {
+            throw new InvalidOperationException(
+                $"NES sprite asset '{asset.Name}' needs sprite palette slot {requiredPaletteSlot} for an automatic PNG overlay, but target 'nes' supports slots 0..{NesTarget.Capabilities.SpritePaletteSlots - 1}.");
+        }
+
         var firstHardwareSprite = nextHardwareSprite;
         if (firstHardwareSprite + asset.Pieces.Count > NesTarget.Capabilities.SpriteCount)
         {
@@ -5089,7 +5097,7 @@ internal sealed class NesRuntimeCompiler
             EmitSpriteTile(operation.Frame, asset, piece.TileOffset);
             builder.StoreAAbsolute((ushort)(oamAddress + 1));
 
-            EmitSpriteDrawAttributes(operation.FlipX, operation.PaletteSlot, (ushort)(oamAddress + 2));
+            EmitSpriteDrawAttributes(operation.FlipX, physicalPaletteSlot + piece.PaletteSlotOffset, (ushort)(oamAddress + 2));
 
             EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 3));
         }

@@ -4046,6 +4046,98 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Colored_png_sprite_sheet_splits_extra_colors_into_optional_overlay_pieces()
+    {
+        var baseDirectory = WriteSpritePng(
+            "hero.nes.png",
+            8,
+            8,
+            [
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+                (R: (byte)0xFC, G: (byte)0xBC, B: (byte)0xB0, A: (byte)0xFF),
+                (R: (byte)0xD8, G: (byte)0x28, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
+            ],
+            Rows(
+                8,
+                8,
+                "11111111",
+                "11111111",
+                "22222222",
+                "22222222",
+                "33333333",
+                "33333333",
+                "11114411",
+                "11114411"));
+
+        var asset = NesSpriteAssetCompiler.CompileFromFile(
+            "hero",
+            Path.Combine(baseDirectory, "hero.nes.png"),
+            6,
+            8,
+            8);
+
+        Assert.Equal(2, asset.Pieces.Count);
+        Assert.False(asset.Pieces[0].Optional);
+        Assert.True(asset.Pieces[1].Optional);
+        Assert.Equal(0, asset.Pieces[0].PaletteSlotOffset);
+        Assert.Equal(1, asset.Pieces[1].PaletteSlotOffset);
+        Assert.Equal(2, asset.TilesPerFrame);
+
+        var baseTile = asset.TileData.Take(16).ToArray();
+        var overlayTile = asset.TileData.Skip(16).Take(16).ToArray();
+        Assert.Equal(0, TileColor(baseTile, 4, 6));
+        Assert.NotEqual(0, TileColor(baseTile, 0, 6));
+        Assert.NotEqual(0, TileColor(overlayTile, 4, 6));
+        Assert.Equal(0, TileColor(overlayTile, 0, 6));
+    }
+
+    [Fact]
+    public void Rejects_png_overlay_draw_when_base_palette_slot_has_no_overlay_slot()
+    {
+        var baseDirectory = WriteSpritePng(
+            "hero.nes.png",
+            8,
+            8,
+            [
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+                (R: (byte)0xFC, G: (byte)0xBC, B: (byte)0xB0, A: (byte)0xFF),
+                (R: (byte)0xD8, G: (byte)0x28, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
+            ],
+            Rows(
+                8,
+                8,
+                "11111111",
+                "11111111",
+                "22222222",
+                "22222222",
+                "33333333",
+                "33333333",
+                "11114411",
+                "11114411"));
+
+        const string source = """
+                              void Main() {
+                                  video_init();
+                                  sprite_asset(hero, "hero.png", 8, 8);
+                                  while (true) {
+                                      video_wait_vblank();
+                                      sprite_draw(hero, 24, 32, 0, false, 3);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "NES sprite asset 'hero' needs sprite palette slot 4 for an automatic PNG overlay, but target 'nes' supports slots 0..3.",
+            exception.Message);
+    }
+
+    [Fact]
     public void Colored_png_sprite_sheet_applies_derived_nes_sprite_palette_to_draw_slot()
     {
         var baseDirectory = WriteSpritePng(
@@ -4089,6 +4181,79 @@ public class NesRomCompilerTests
         Assert.True(
             ContainsSequence(rom, [0x30, 0x36, 0x16, 0x0F]),
             "colored NES PNG sprite assets should drive the sprite palette slot without overwriting the universal background color.");
+    }
+
+    [Fact]
+    public void Colored_png_sprite_sheets_with_distinct_palettes_can_share_a_logical_slot_when_nes_has_free_physical_slots()
+    {
+        var baseDirectory = Path.Combine(Path.GetTempPath(), "RetroSharp.NES.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(baseDirectory);
+
+        WriteSpritePngFile(
+            baseDirectory,
+            "hero.nes.png",
+            8,
+            8,
+            [
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+                (R: (byte)0xFC, G: (byte)0xBC, B: (byte)0xB0, A: (byte)0xFF),
+                (R: (byte)0xD8, G: (byte)0x28, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
+            ],
+            Rows(
+                8,
+                8,
+                "11111111",
+                "11111111",
+                "22222222",
+                "22222222",
+                "33333333",
+                "33333333",
+                "11114411",
+                "11114411"));
+        WriteSpritePngFile(
+            baseDirectory,
+            "enemy.nes.png",
+            8,
+            8,
+            [
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+                (R: (byte)0x00, G: (byte)0xEB, B: (byte)0xDB, A: (byte)0xFF),
+                (R: (byte)0x4F, G: (byte)0xDF, B: (byte)0x4B, A: (byte)0xFF),
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+            ],
+            Rows(
+                8,
+                8,
+                "11112222",
+                "11112222",
+                "11112222",
+                "11112222",
+                "33333333",
+                "33333333",
+                "33333333",
+                "33333333"));
+
+        const string source = """
+                              void Main() {
+                                  video_init();
+                                  sprite_asset(hero, "hero.png", 8, 8);
+                                  sprite_asset(enemy, "enemy.png", 8, 8);
+                                  while (true) {
+                                      video_wait_vblank();
+                                      sprite_draw(hero, 24, 32, 0, false, 0);
+                                      sprite_draw(enemy, 40, 32, 0, false, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(ContainsSequence(prg, [0xA9, 0x00, 0x8D, 0x02, 0x02]), "hero base pieces should keep the requested logical slot 0.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x8D, 0x06, 0x02]), "hero overlay pieces should use the next physical sprite palette slot.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x8D, 0x0A, 0x02]), "enemy pieces should be remapped to a free NES physical sprite palette slot.");
     }
 
     [Fact]
@@ -4461,7 +4626,18 @@ public class NesRomCompilerTests
     {
         var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.NES.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
+        WriteSpritePngFile(directory, fileName, frameWidth, frameHeight, palette, frames);
+        return directory;
+    }
 
+    private static void WriteSpritePngFile(
+        string directory,
+        string fileName,
+        int frameWidth,
+        int frameHeight,
+        IReadOnlyList<(byte R, byte G, byte B, byte A)> palette,
+        params string[][] frames)
+    {
         var width = frameWidth * frames.Length;
         var height = frameHeight;
         var rgba = new byte[width * height * 4];
@@ -4485,7 +4661,6 @@ public class NesRomCompilerTests
         }
 
         File.WriteAllBytes(Path.Combine(directory, fileName), EncodeRgbaPng(width, height, rgba));
-        return directory;
     }
 
     private static string[] Rows(int width, int height, params string[] overrides)
@@ -4497,6 +4672,14 @@ public class NesRomCompilerTests
         }
 
         return rows;
+    }
+
+    private static int TileColor(IReadOnlyList<byte> tile, int x, int y)
+    {
+        var bit = 7 - x;
+        var plane0 = (tile[y] >> bit) & 1;
+        var plane1 = (tile[y + 8] >> bit) & 1;
+        return plane0 | (plane1 << 1);
     }
 
     private static byte[] EncodeRgbaPng(int width, int height, byte[] rgba)
