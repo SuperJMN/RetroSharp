@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-06-30.
+Last updated: 2026-07-05.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -21,9 +21,11 @@ This document preserves project knowledge that previously lived only in agent me
   byte-identical for docs-only work.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
-  diagonal camera movement is proven by `samples/nes-free-scroll/freescroll.rs`
-  and `samples/tiled-free-scroll/free-scroll.rs` with staggered one-edge-per-VBlank
-  column/row commits. NES has a four-screen free-scroll path with preloaded 64x60
+  `Camera.SetPosition` can walk up to two same-axis tile crossings per frame and
+  commit both exposed edges during `Camera.Apply()`. Game Boy diagonal camera
+  movement is proven by `samples/nes-free-scroll/freescroll.rs` and
+  `samples/tiled-free-scroll/free-scroll.rs` with staggered column/row commits.
+  NES has a four-screen free-scroll path with preloaded 64x60
   movement, Tiled diagonal coverage inside that surface, horizontal column streaming
   for wider worlds, and staggered vertical row plus zero-palette attribute streaming
   for source-authored worlds taller than the buffer. NF-10 mapper-backed scale and
@@ -354,6 +356,7 @@ When `samples/runner/src/*.rs`, `runner.tmj`, the tileset, or GB/NES asset lower
 | Editing generated Game Boy ROMs by hand | Regenerate from source using `tools/gameboy/generate_sample_roms.py`. |
 | Treating generated screenshots as source artifacts | Leave `samples/runner/*.png` alone unless explicitly requested. |
 | Fixing emulator/hardware mismatches only in samples | Check backend/runtime behavior first, especially input and LCD/PPU state. |
+| Assuming fast GB diagonal scroll garbage is a throughput limit | The bottom-edge init (`CameraBottomBackgroundRow/SourceRow`) must seed a visible screen-height below the top, not the clamped buffer height; a wrong seed streams downward crossings into the top band. |
 | Adding portable APIs without diagnostics | Add or reuse target capability checks before lowering. |
 | Debugging the full runner without isolation | Run `tools/gameboy/runner_diagnostics.py` and report the first failing step and scenario. |
 

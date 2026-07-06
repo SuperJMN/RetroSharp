@@ -17,8 +17,8 @@ current supported subset per target.
   slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix. The diagonal Strategy A slice is also proven
   by `samples/nes-free-scroll/freescroll.rs`, `samples/tiled-diagonal/diag.rs`,
-  and `samples/tiled-free-scroll/free-scroll.rs` on Game Boy: the runtime queues
-  a column and row independently and drains one visible background-map edge per VBlank.
+	  and `samples/tiled-free-scroll/free-scroll.rs` on Game Boy: diagonal movement
+	  queues columns and rows independently and drains one axis queue per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
   coarse-Y wrap for maps that fit 64x60 tiles. Tall Tiled `World.Load(...)`
@@ -132,7 +132,7 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
     is **taller than the visible band** and moves the camera with non-zero Y, e.g.
     `Camera.SetPosition(0, y)` where `y` ramps up/down per frame. As of the
     per-frame walk change, `Camera.SetPosition` walks the camera toward the
-    requested position on its own (up to one tile crossing / ≤8 px per axis per
+    requested position on its own (up to two tile crossings / 16 px per axis per
     call), so a single call per frame suffices even when `y` moves several pixels.
   - [x] Keep horizontal at 0 first to isolate vertical; add diagonal only after
     VS-2 passes.
@@ -367,20 +367,37 @@ Status: **implemented with staggered edge commits.** A `Camera.SetPosition(x, y)
 that moves both axes remains a diagonal SDK request; the collector does not
 degrade it to horizontal or vertical. Game Boy accepts it because
 `GameBoyTarget.Capabilities` declares staggered camera stream draining and each
-committed visible edge fits the 21-tile background write budget.
+committed diagonal-axis queue is made of edges that fit the 21-tile explicit
+stream-edge budget.
+Same-axis movement now has a separate optimized two-edge path for runner-scale
+horizontal or vertical scroll.
+
+> **Fixed (2026-07): bottom-edge init bug.** `CameraBottomBackgroundRow` /
+> `CameraBottomSourceRow` were seeded with the full *clamped* stream height, so a
+> tall map (`height` clamped to the 32-row background buffer) computed
+> `(y + 32) % 32 == y` and collapsed the bottom edge onto the top edge. Because both
+> edges advance together, downward row crossings then streamed into the **top** band
+> and the real bottom rows were only ever backfilled by column crossings — so at
+> fast diagonal scroll (e.g. the runner at 6 px/frame) any bottom cell whose column
+> crossed while that row was outside the window stayed permanently stale ("diagonal
+> corner garbage"). The fix seeds the bottom edge a *visible* screen-height below the
+> top (`Math.Min(height, VisibleScreenTileHeight)`). This was a plain init bug, **not**
+> a throughput/Strategy-B limit; guarded by
+> `GameBoyVerticalScrollAcceptanceTests.Game_boy_tall_camera_seeds_bottom_edge_a_screen_height_below_the_top`.
 
 Real Game Boy games (e.g. Super Mario Land 2) scroll in 8 directions, so diagonal
 is clearly feasible on hardware. The blockers are two of *our* design choices, not
 the DMG:
 
 - `MaxBackgroundTileWritesPerFrame: 21`
-  (`src/RetroSharp.GameBoy/GameBoyTarget.cs`). A diagonal tile-boundary crossing
-  exposes a visible background-map column (19 tiles) **and** a visible background-map row (21 tiles) -> 40 writes if committed in
-  one VBlank.
-- Horizontal/vertical-only programs still use the original deferred stream slot
-  (`PendingStreamKind/Target/Source`) so their ROM shape stays compact. Diagonal
-  programs emit separate pending column and row slots so the second edge is not
-  overwritten.
+  (`src/RetroSharp.GameBoy/GameBoyTarget.cs`) remains the SDK-declared explicit
+  stream-edge budget. A diagonal tile-boundary crossing exposes a visible
+  background-map column (19 tiles) **and** a visible background-map row
+  (21 tiles) -> 40 writes if committed in one VBlank.
+- Horizontal/vertical-only programs use the same-axis deferred stream slots
+  (`PendingStreamKind/Target/Source` plus a second target/source pair) so two
+  crossings on that axis are not overwritten. Diagonal programs emit separate
+  pending column and row slots so the second axis edge is not overwritten.
 
 The real VBlank (~4560 cycles) easily affords ~38 tiles with tight copy loops, so
 this is engineering cost in our pipeline, not a hardware limit.
@@ -391,15 +408,17 @@ this is engineering cost in our pipeline, not a hardware limit.
 **and** a row to be pending at once, but drain **one per VBlank** within the
 existing 21-tile budget. Cost: a two-slot pending queue (a few WRAM bytes + a
 commit that handles both kinds) and a validator rule keyed off the target's
-staggered-stream capability. **No streamer rewrite.** Price: the second-axis edge appears one frame
-late — practically invisible at 1px/frame. Effort is comparable to the GB vertical
-slice this branch shipped.
+staggered-stream capability. The shipped path now also has a same-axis two-edge
+queue plus tighter row/column stream loops so fast horizontal-only or vertical-only
+camera motion can cross two tile boundaries in one frame. Price: the second
+diagonal-axis edge appears one frame late — practically invisible at 1px/frame.
+Effort is comparable to the GB vertical slice this branch shipped.
 
 **Strategy B — full same-frame diagonal (matches SML2 exactly).** Commit column +
-row in one VBlank. Requires raising the budget to ≥38 **and** rewriting the row/
-column streamers from per-tile address recomputation (modulo + pointer math) into
-precomputed-pointer tight copy loops so they fit the VBlank cycle budget (this also
-speeds up the single-axis path). Needs cycle measurement, likely a GB cycle-budget
+row in one VBlank. The same-axis speed fix already moved row streaming onto a
+precomputed row-pointer path and tightened the copy loops; full diagonal still
+requires raising the declared combined budget, scheduling column+row together, and
+cycle-proofing the combined path. Needs cycle measurement, likely a GB cycle-budget
 test harness. Effort: a small epic; this is the risky part.
 
 ### What is already in place (no cost)
@@ -407,9 +426,9 @@ test harness. Effort: a small epic; this is the risky part.
 - Both-axis source data exists: column source tables (horizontal) and row source
   tables (`MapRowLabel`, vertical).
 - `Camera.SetPosition` walks toward the target one pixel per step, bounded to at
-  most one tile crossing (≤8 px) per axis per call, and queues per axis; only the
-  destination slot is single. `AxesFor(x, y)` already produces
-  `Horizontal | Vertical` when both move.
+  most two tile crossings (16 px) per axis per call. Same-axis movement queues up
+  to two edge slots; diagonal movement queues column and row slots separately.
+  `AxesFor(x, y)` already produces `Horizontal | Vertical` when both move.
 - Runner/actor ROMs are unaffected unless they adopt diagonal movement.
 
 ### VS-DIAG tasks
@@ -430,24 +449,29 @@ one-frame edge lag is visible in real gameplay.
 
 ### When to escalate to Strategy B (decision criteria)
 
-Strategy A (shipped) commits at most one edge per VBlank with column priority.
-That is correct and imperceptible at platformer/runner scroll speeds (≤1-2 px per
-frame), where boundary crossings are sparse (~every 8 frames per axis). Do **not**
-pursue Strategy B preemptively. Escalate only when one of these concrete needs
-appears:
+Strategy A (shipped) commits at most one diagonal-axis queue per VBlank with column
+priority; same-axis fast scroll can commit two queued edges in that frame. The
+diagonal policy is correct and imperceptible at platformer/runner scroll speeds
+(<=1-2 px per frame), where boundary crossings are sparse (~every 8 frames per
+axis). Do **not** pursue Strategy B preemptively. Escalate only when one of these
+concrete needs appears:
 
 - **Fast diagonal scrolling.** If the camera can cross a column boundary almost
   every frame (≈8 px/frame horizontal), the priority column monopolizes the single
   per-VBlank commit slot and the **row queue starves** → visible gaps/garbage on
   the newly exposed row edge. Strategy B (both edges in one VBlank) is then the
   correct fix. Triggers: rapid free-look, chases, strong screen-shake, snap moves.
+  (Note: garbage on the *bottom* edge at moderate diagonal speed — e.g. the runner
+  at 6 px/frame — was a separate bottom-edge init bug, now fixed; see Phase E. Only
+  genuine per-VBlank throughput starvation at very high speed needs Strategy B.)
 - **Pixel-perfect / no 1-frame edge lag.** Strategy A updates the second-axis edge
   one frame late; at the crossing instant a freshly revealed corner/row can show a
   stale tile for one frame. On high-contrast scenes or for visual polish, B removes
   it.
 - **Large camera cuts/jumps** (respawn, cut, teleport moving many tiles at once):
-  A repaints one edge per frame → a multi-frame "wipe". B (or a full VRAM rebuild
-  path) repaints faster.
+  the current runtime still repaints only one diagonal-axis queue or two same-axis
+  edges per frame -> a multi-frame "wipe". B (or a full VRAM rebuild path)
+  repaints faster.
 - **VBlank headroom for other features.** Strategy B requires rewriting the
   streamers from per-tile address recomputation into precomputed-pointer tight copy
   loops (`LDI`-style). That also speeds up the **single-axis** horizontal/vertical
