@@ -353,6 +353,83 @@ until their compile-time-operand intrinsic migrations are proven. Not everything
 descriptor-role form for those future intrinsics and records the byte-identity goldens that
 later SAL-8 slices must preserve.
 
+## Compiler-Owned SDK Operation Inventory
+
+Last reviewed for #245 on 2026-07-07. This inventory lists internal compiler
+operation records and target-intrinsic operations, not public source-package
+facade names. Public APIs still live in `sdk/RetroSharp.Portable2D`; the rows
+below explain which compiler-owned paths those helpers currently rely on.
+
+### SDK 2D Operations
+
+| Operation | Classification | Current path and next decision |
+| --- | --- | --- |
+| `Sdk2DOperation.WaitFrame` | Stable SDK operation | Collected from package helpers over `wait_frame` / `wait_vblank` and lowered per target. Keep as a shared frame-boundary operation. |
+| `Sdk2DOperation.PollInput` | Stable SDK operation | Collected from `poll_input`; keep as the tick/input boundary operation. |
+| `Sdk2DOperation.DrawLogicalSprite` | Stable SDK operation over target intrinsics | Public `Sprite.Draw(...)` resolves through compile-time `AssetRef` and `ConstPaletteSlot` intrinsic operands, then collects to this shared operation for budget validation and target lowering. |
+| `Sdk2DOperation.SetCameraPosition` | Stable SDK operation | Public `Camera.SetPosition(x, y)` is package-backed over `camera_set_position`; keep scroll-axis inference and frame-budget accounting here. |
+| `Sdk2DOperation.ApplyCamera` | Stable SDK operation | Public `Camera.Apply()` is package-backed over `camera_apply`; keep as the camera commit boundary. |
+| `Sdk2DOperation.StreamMapColumn` | Internal compiler-emitted operation | Camera/runtime streaming uses this after capability and write-budget checks. Do not expose it as a portable public API until a target-neutral streaming contract exists. |
+| `Sdk2DOperation.StreamMapRow` | Internal compiler-emitted operation | Same policy as `StreamMapColumn`; row streaming stays compiler-owned while camera movement owns map exposure. |
+| `Sdk2DOperation.ReadWorldTile` | Migration candidate, not public-stable | Represents tile-id reads, but the public SDK should prefer collision flags or a named tile-id contract before exposing it broadly. Keep compiler-owned until `World.TileAt`/tile-id semantics are designed. |
+| `Sdk2DOperation.ReadWorldTileFlags` | Stable capability-gated operation where cataloged | Game Boy `World.TileFlagsAt(x, y)` reaches this path through `world_tile_flags_at` / `world_tile_flags_for_world`. NES currently lacks the world-tile-flag capability and target-selected helper. |
+| `Sdk2DOperation.CameraAabbTiles` | Stable SDK bridge over target intrinsics | Public camera-relative collision bridge; `WorldId` and `EnumFlags` are compile-time intrinsic operands, with capability checks before lowering. |
+| `Sdk2DOperation.CameraAabbHitTop` | Stable SDK bridge over target intrinsics | Same bridge policy as `CameraAabbTiles`; preserves the `255` no-hit contract. |
+| `Sdk2DOperation.CameraScreenAabbTiles` | Stable SDK bridge over target intrinsics | Screen-space actor collision bridge for generated actor code; keep capability-gated and byte-identity tested. |
+| `Sdk2DOperation.CameraScreenAabbHitTop` | Stable SDK bridge over target intrinsics | Screen-space hit-top bridge; keep alongside `CameraScreenAabbTiles`. |
+| `Sdk2DOperation.SetHudTile` | Next migration candidate, keep compiler-owned for now | HUD modes are still optional and capability-sensitive, and NES declares no HUD mode. Next agent-sized action: introduce a `hud_set_tile` target-intrinsic descriptor for the supported Game Boy HUD modes, route package HUD helpers through it, and prove the existing `SetHudTile` bytes or emitted operation stream are unchanged. Do not add broader HUD concepts in that slice. |
+
+### SDK Audio Operations
+
+| Operation | Classification | Current path and next decision |
+| --- | --- | --- |
+| `SdkAudioOperation.InitializeAudio` | Stable audio SDK operation | Public `Audio.Init()` resolves through `audio_init`, is collected by the audio operation stream where needed, and validates against target audio capabilities. |
+| `SdkAudioOperation.PlayMusic` | Stable audio SDK operation over target intrinsics | `Music.Play(...)` uses compile-time `AssetRef` and remains a semantic BGM operation, not a 2D operation. |
+| `SdkAudioOperation.PlaySoundEffect` | Stable audio SDK operation over target intrinsics | `Sfx.Play(...)` uses compile-time `AssetRef` and stays separate from BGM state. |
+| `SdkAudioOperation.UpdateAudio` | Stable audio SDK operation | `Audio.Update()` uses `audio_update`; Game Boy consumes it from the audio stream, while NES may emit inline at the target boundary. |
+| `SdkAudioOperation.StopMusic` | Stable audio SDK operation | `Music.Stop()` uses `music_stop`; keep as an audio operation rather than folding it into generic 2D SDK state. |
+
+### Target Intrinsic Operations
+
+Target intrinsic descriptors are the sanctioned escape hatch for target-backed
+package helpers. A new `TargetIntrinsicOperation.*` member is compiler-owned
+surface area: it needs a target catalog entry, capability requirements when
+applicable, resolver coverage for compile-time operands, target lowering, and a
+matching docs update.
+
+| Operation | Classification | Current path and next decision |
+| --- | --- | --- |
+| `TargetIntrinsicOperation.InitializeVideo` | Target intrinsic escape hatch | Cataloged as `video_init`; keep as a target setup leaf unless a broader portable video lifecycle is designed. |
+| `TargetIntrinsicOperation.PresentVideo` | Target intrinsic escape hatch | Cataloged as `video_present`; target-specific frame presentation leaf. |
+| `TargetIntrinsicOperation.WaitFrame` | Stable SDK leaf intrinsic | Feeds `Sdk2DOperation.WaitFrame` when collected. |
+| `TargetIntrinsicOperation.PollInput` | Stable SDK leaf intrinsic | Feeds `Sdk2DOperation.PollInput` when collected. |
+| `TargetIntrinsicOperation.ButtonDown` | Target intrinsic escape hatch | Value-returning input predicate under package `Input.*`; not an `Sdk2DOperation` because it is ordinary expression input. |
+| `TargetIntrinsicOperation.ButtonJustPressed` | Target intrinsic escape hatch | Same input-predicate policy as `ButtonDown`. |
+| `TargetIntrinsicOperation.ButtonJustReleased` | Target intrinsic escape hatch | Same input-predicate policy as `ButtonDown`. |
+| `TargetIntrinsicOperation.ButtonHoldTicks` | Target intrinsic escape hatch | Same input-predicate policy as `ButtonDown`; returns an `i16` tick count. |
+| `TargetIntrinsicOperation.InitializeAudio` | Stable audio intrinsic | Feeds `SdkAudioOperation.InitializeAudio` where the target consumes audio streams. |
+| `TargetIntrinsicOperation.UpdateAudio` | Stable audio intrinsic | Feeds `SdkAudioOperation.UpdateAudio` or target inline emission. |
+| `TargetIntrinsicOperation.PlayMusic` | Stable audio intrinsic with compile-time operands | Uses `AssetRef`; feeds `SdkAudioOperation.PlayMusic`. |
+| `TargetIntrinsicOperation.PlaySoundEffect` | Stable audio intrinsic with compile-time operands | Uses `AssetRef`; feeds `SdkAudioOperation.PlaySoundEffect`. |
+| `TargetIntrinsicOperation.StopMusic` | Stable audio intrinsic | Feeds `SdkAudioOperation.StopMusic`. |
+| `TargetIntrinsicOperation.ReadWorldTileFlags` | Capability-gated target intrinsic | Game Boy catalogs world flag reads; other targets must opt in through capabilities and target-selected helpers. |
+| `TargetIntrinsicOperation.InitializeCamera` | Target intrinsic escape hatch | Cataloged as `camera_init`; camera setup remains target-backed while position/apply semantics stay shared. |
+| `TargetIntrinsicOperation.CameraAabbTiles` | Stable compile-time-operand intrinsic | Uses `WorldId` and `EnumFlags`; feeds `Sdk2DOperation.CameraAabbTiles`. |
+| `TargetIntrinsicOperation.CameraAabbHitTop` | Stable compile-time-operand intrinsic | Uses `WorldId` and `EnumFlags`; feeds `Sdk2DOperation.CameraAabbHitTop`. |
+| `TargetIntrinsicOperation.CameraScreenAabbTiles` | Stable compile-time-operand intrinsic | Uses `WorldId` and `EnumFlags`; feeds `Sdk2DOperation.CameraScreenAabbTiles`. |
+| `TargetIntrinsicOperation.CameraScreenAabbHitTop` | Stable compile-time-operand intrinsic | Uses `WorldId` and `EnumFlags`; feeds `Sdk2DOperation.CameraScreenAabbHitTop`. |
+| `TargetIntrinsicOperation.SetCameraPosition` | Stable SDK intrinsic | Feeds `Sdk2DOperation.SetCameraPosition`; keep capability and frame-budget logic in the shared operation. |
+| `TargetIntrinsicOperation.ApplyCamera` | Stable SDK intrinsic | Feeds `Sdk2DOperation.ApplyCamera`. |
+| `TargetIntrinsicOperation.DrawLogicalSprite` | Stable compile-time-operand intrinsic | Uses `AssetRef` and `ConstPaletteSlot`; feeds `Sdk2DOperation.DrawLogicalSprite`. |
+| `TargetIntrinsicOperation.ReadSpriteWidth` | Target intrinsic escape hatch | Value helper over `Sprite.Width(...)`; keep out of `Sdk2DOperation` unless sprite geometry reads become a validated frame operation. |
+| `TargetIntrinsicOperation.ReadAnimationFrame` | Target intrinsic escape hatch | Value helper over `Animation.Frame(...)`; keep as a source-package helper over target data tables, not a new 2D operation. |
+
+Resource declarations are deliberately separate from this table:
+`Sprite.Asset`, `World.Load`, `Music.Asset`, `Sfx.Asset`,
+`Palette.Background`, `Palette.Sprite`, and `Animation.Clip` are package
+methods annotated with `[resource(...)]` and resolved through generic resource
+descriptors. They do not add runtime SDK operations by themselves.
+
 ## Layer Boundary and Golden Rule
 
 `Sdk2DOperation` is an opinionated 2D-game framework model (camera, sprites, tilemap streaming, HUD) used as an intermediate representation on the cartridge path. It is deliberately **isolated** in `RetroSharp.Core.Sdk`. The language and its classic intermediate code (`RetroSharp.Generation.Intermediate`) stay framework-neutral: they must not gain cameras, sprites, scroll, tilemaps, or controller concepts.
