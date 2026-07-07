@@ -91,42 +91,42 @@ Intrinsic work belongs here:
 | `WorldMap2D` | Portable SDK resource | Dimensions plus per-tile collision `WorldTileFlags`. Holds no target tile numbers. |
 | `WorldTileGrid` | Target render data | Already-lowered per-target background tile numbers, produced and consumed per target. |
 | `WorldTileFlags` | Portable SDK resource | Defines `Empty`, `Solid`, `Hazard`, and `Platform`. |
-| `world_column(...)` | Portable SDK resource/setup candidate | Current source authoring call for one world column of tile ids. |
-| `world_flags(...)` | Portable SDK resource/setup candidate | Current source authoring call for one world column of collision flags. |
-| `world_map(...)` | Portable SDK resource/setup candidate | Current Game Boy call builds the initial visible tilemap from declared world columns. |
+| `World.Column(...)` | Portable SDK resource/setup candidate | Current source authoring call for one world column of tile ids. |
+| `World.Flags(...)` | Portable SDK resource/setup candidate | Current source authoring call for one world column of collision flags. |
+| `World.Map(...)` | Portable SDK resource/setup candidate | Current Game Boy call builds the initial visible tilemap from declared world columns. |
 | `GameBoyRomCompiler.CollectSdkOperations(...)` | Compiler architecture boundary | Observes portable `Sdk2DOperation` records before Game Boy lowering. |
-| `video_wait_vblank()` | Portable SDK candidate | Rename or alias to frame terminology later. |
-| `input_poll()` | Portable SDK | Current tick boundary. |
+| `Video.WaitVBlank()` | Portable SDK candidate | Rename or alias to frame terminology later. |
+| `Input.Poll()` | Portable SDK | Current tick boundary. |
 | `Input.IsDown(...)` | Portable SDK | Good shared input semantics. |
 | `Input.WasPressed(...)` | Portable SDK | Good shared input semantics. |
 | `Input.WasReleased(...)` | Portable SDK | Good shared input semantics. |
 | `Input.HoldTicks(...)` | Portable SDK | Accepted current variable-height jump seam. |
-| `button_pressed(...)` | Transitional/intrinsic-like | Direct-read compatibility path. Prefer tick-based API. |
-| `sprite_asset(...)` | Portable SDK candidate | Needs target-neutral asset contract and palette slots. |
-| `sprite_draw(...)` | Transitional compatibility alias | Game Boy and NES `Sprite.Draw(...)` now lower through compile-time-operand target intrinsics; the snake_case builtin remains accepted. |
+| `Button.*` arguments | Portable SDK | Input helpers accept enum members; bare lowercase button names are no longer public source. |
+| `Sprite.Asset(...)` | Portable SDK candidate | Needs target-neutral asset contract and palette slots. |
+| `Sprite.Draw(...)` | Portable SDK | Game Boy and NES lower it through compile-time-operand target intrinsics supplied by the source package. |
 | `Sprite.Width(...)` | Portable SDK | Source-package helper over a compile-time `sprite_width` target intrinsic. Add `sprite_height(...)`. |
 | `sprite_set(...)` | Target intrinsic/transitional | Raw hardware sprite write. |
 | `scroll_set(...)` | Target intrinsic/transitional | Raw scroll register concept. Portable API should be camera based. |
-| `camera_init(...)` | Transitional compatibility alias | `Camera.Init(...)` is now a source-package helper over the `camera_init` target intrinsic; the snake_case builtin remains accepted. |
-| `camera_set_position(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES supports four-screen X/Y movement with horizontal column streaming, vertical row streaming, and staggered diagonal edge updates. |
-| `camera_apply()` | Portable SDK candidate | Valid concept, but should apply SDK camera state. |
-| `camera_move_right()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
-| `camera_move_left()` | Transitional SDK helper | Replace with `camera_set_position(x, y)`. |
+| `Camera.Init(...)` | Portable SDK | Source-package helper over the `camera_init` target intrinsic. |
+| `Camera.SetPosition(...)` | Portable SDK camera | Position-based camera API; Game Boy supports X and Y within the declared write budget, while NES supports four-screen X/Y movement with horizontal column streaming, vertical row streaming, and staggered diagonal edge updates. |
+| `Camera.Apply()` | Portable SDK candidate | Valid concept, but should apply SDK camera state. |
+| `camera_move_right()` | Transitional SDK helper | Replace with `Camera.SetPosition(x, y)`. |
+| `camera_move_left()` | Transitional SDK helper | Replace with `Camera.SetPosition(x, y)`. |
 | `camera_tile_column_at(...)` | Transitional SDK helper | Move collision and map reads to world coordinates. |
 | `camera_span_tile_at(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_tile(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge. |
-| `camera_aabb_tiles(...)` | Portable SDK capability-gated query | Camera-relative AABB bridge for fixed-screen actors and projected world-space actors on long maps; requires target support for `CameraRelativeAabb`. |
-| `camera_aabb_hit_top(...)` | Portable SDK capability-gated query | Camera-relative AABB tile-hit bridge that returns the top world-pixel Y of the first matching tile, or `255` when none hit; requires target support for `CameraRelativeAabbHitTop`. |
-| `map_column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `world_column(...)` now. |
+| `Camera.AabbTiles(...)` | Portable SDK capability-gated query | Camera-relative AABB bridge for fixed-screen actors and projected world-space actors on long maps; requires target support for `CameraRelativeAabb`. |
+| `Camera.AabbHitTop(...)` | Portable SDK capability-gated query | Camera-relative AABB tile-hit bridge that returns the top world-pixel Y of the first matching tile, or `255` when none hit; requires target support for `CameraRelativeAabbHitTop`. |
+| `World.Column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `World.Column(...)` now. |
 | `map_tile_at(...)` | Portable SDK candidate | Reads generated world tile-id rows. |
 | `map_flags_at(...)` | Portable SDK candidate | Reads generated world flag rows. |
 | `map_stream_column(...)` | Target intrinsic/transitional | SDK camera should own streaming. |
 | `tilemap_set(...)` | Target intrinsic/transitional | Useful setup primitive, not a full portable map contract. |
 | `tilemap_fill(...)` | Target intrinsic/transitional | Useful setup primitive, not a full portable map contract. |
 | `tilemap_fill_column(...)` | Target intrinsic/transitional | Camera streaming implementation detail. |
-| `palette_set(...)` | Target intrinsic/transitional | Portable SDK should use logical palette slots. |
-| `object_palette_set(...)` | Game Boy intrinsic/transitional | Exposes GB object palette model. |
+| `Palette.Set(...)` | Target intrinsic/transitional | Portable SDK should use logical palette slots. |
+| `ObjectPalette.Set(...)` | Game Boy intrinsic/transitional | Exposes GB object palette model. |
 | `palette_background(...)` | Portable SDK capability-gated declaration | Declares a logical background palette slot with four target color values. |
 | `palette_sprite(...)` | Portable SDK capability-gated declaration | Declares a logical sprite palette slot with four target color values. |
 
@@ -250,19 +250,19 @@ longer depends on public SDK names being hard-coded in the compiler.
 `[target("gb")]` / `[target("nes")]` function variants before constant folding
 or function indexing, so a portable helper can name one target-specific extern
 and let the active target select the matching declaration.
-#200 makes public SDK facades package-only at the public-name layer. The flat
-calls remain accepted as compatibility aliases where documented, but PascalCase
+#200 makes public SDK facades package-only at the public-name layer. PascalCase
 public facades such as `Video.WaitVBlank`, `Input.Poll`, `Audio.Init`,
 `Audio.Update`, `Camera.SetPosition`, `Camera.Apply`, `Sprite.Draw`, and
-`Camera.AabbTiles` must be supplied by source packages.
+`Camera.AabbTiles` must be supplied by source packages; flat target-intrinsic
+names are implementation IDs rather than public source calls.
 SDKLIB-5 applies the same public-name rule to resource declarations:
 `Sprite.Asset`, `World.Load`, `Music.Asset`, `Sfx.Asset`, `Palette.Background`, `Palette.Sprite`,
 and `Animation.Clip` are source-package methods annotated with `[resource(...)]`.
 The frontend resolves that metadata to a generic resource declaration descriptor
-instead of making targets key off the public facade name. The flat declaration calls
-remain accepted as compatibility aliases while target-specific asset import, target
+instead of making targets key off the public facade name. Flat declaration calls
+are no longer public compatibility aliases; target-specific asset import, target
 variant resolution, palette validation, and clip validation stay in the existing
-GB/NES resource pipelines.
+GB/NES resource pipelines behind the package metadata.
 
 The library can also carry **capability-gated, value-returning** members. Game Boy
 catalogs a `world_tile_flags_at` intrinsic and exposes `World.TileFlagsAt(x, y)` — a
@@ -281,7 +281,7 @@ as `AssetRef`, `ConstPaletteSlot`, `EnumFlags`, or `WorldId`, and the SDK/fronte
 separates those compile-time operands from runtime operands before operation collection while
 validating extern return types against the descriptor. The
 minimal proof is a Game Boy `world_tile_flags_for_world` intrinsic whose `WorldId` slot lowers
-byte-identically to `world_tile_flags_at(x, y)` for `"default"` while rejecting runtime locals
+byte-identically to `World.TileFlagsAt(x, y)` for `"default"` while rejecting runtime locals
 in that slot.
 
 SAL-8.3 applies that mechanism to Game Boy `Sprite.Draw`, and SAL-8.4 applies the same pattern
@@ -289,7 +289,7 @@ to NES: the `RetroSharp.Portable2D` helper calls a target intrinsic `[intrinsic(
 extern, each target descriptor marks the asset id as `AssetRef` and the palette slot as
 `ConstPaletteSlot`, and the collector turns the resolved call back into
 `Sdk2DOperation.DrawLogicalSprite`. This keeps metasprite resolution, capability validation,
-frame-budget validation, and emission byte-identical to the legacy `sprite_draw` builtin on both
+frame-budget validation, and emission aligned with the common sprite draw operation on both
 targets.
 
 SAL-8.5 applies the descriptor-role form to Game Boy `Camera.AabbTiles` and
@@ -305,16 +305,15 @@ SAL-8.6 applies the same descriptor-role form to NES `Camera.AabbTiles` and
 collision. `NesTarget.Intrinsics` catalogs `camera_aabb_tiles` and `camera_aabb_hit_top`
 with the same `WorldId`/`EnumFlags` slots, so `RetroSharp.Portable2D` declares the same
 `Camera.AabbTiles` / `Camera.AabbHitTop` helpers for NES. The NES value-call path resolves the
-extern intrinsic and re-derives the same operation it already emitted from the legacy
-`camera_aabb_tiles(...)` / `camera_aabb_hit_top(...)` builtin, which remains a compatibility
-alias, so `Golden_collision_aabb_emission_is_pinned_nes` stays byte-identical.
+extern intrinsic and re-derives the same operation shape used by camera AABB lowering, so
+`Golden_collision_aabb_emission_is_pinned_nes` stays byte-identical.
 
 SAL-8.9 extends the same descriptor-role form to screen-space camera collision on both targets:
 Game Boy and NES catalog `camera_screen_aabb_tiles` and `camera_screen_aabb_hit_top` with the
 same hidden `WorldId` and `EnumFlags` slots, `RetroSharp.Portable2D` declares `Camera.ScreenAabbTiles`
 / `Camera.ScreenAabbHitTop` helpers, and the collector/emitter re-derive the same
-`Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the legacy
-`camera_screen_aabb_*(...)` builtins (kept as aliases). All four camera-relative collision
+`Sdk2DOperation.CameraScreenAabbTiles` / `CameraScreenAabbHitTop` as the common
+screen-space camera collision operation. All four camera-relative collision
 queries now reach their operations through compile-time-operand intrinsics on both targets;
 the actor framework's generated `Camera.ScreenAabb*` calls stay byte-identical.
 
@@ -336,9 +335,8 @@ The remaining friction is at the **extern-intrinsic boundary**, not the language
   camera initialization, position, and apply emission paths.
 - `Sprite.Draw()` mixes **compile-time** operands (the asset id, the constant palette slot)
   with runtime ones (X/Y/frame/flipX). Game Boy and NES now use the compile-time-operand
-  descriptor form, so the public `Sprite.Draw(...)` helper can live in the source package
-  while still collecting to the same capability-checked `Sdk2DOperation`. The legacy
-  `sprite_draw(...)` spelling remains a compatibility alias during the transition.
+  descriptor form, so the public `Sprite.Draw(...)` helper lives in the source package
+  while still collecting to the same capability-checked `Sdk2DOperation`.
 - Internal streaming (`StreamMapColumn`/`StreamMapRow`) stays compiler-emitted. Camera-relative
   collision still collects to SDK operations, but Game Boy and NES public `Camera.AabbTiles`,
   `Camera.AabbHitTop`, `Camera.ScreenAabbTiles`, and `Camera.ScreenAabbHitTop` now reach those
@@ -384,7 +382,7 @@ The first portable world resource lives under `RetroSharp.Core.Sdk`:
 
 Interpreting Tiled collision data into portable `WorldTileFlags` is target-neutral and lives in `RetroSharp.Core.Sdk.Tiled.TiledCollisionFlags`. It reads Tiled JSON/XML objectgroups, `retrosharpCollision`/`retrosharpFlags` custom properties, and collision-layer GIDs without any Game Boy or NES specifics, so collision modeling is shared rather than owned by a target backend. The Game Boy Tiled importer still owns the genuinely target-specific work (Game Boy tile quantization, deduplication, single-tilemap flattening) and calls this shared collision interpretation.
 
-The first Game Boy integration is `world_column(...)`, `world_flags(...)`, and `world_map(width, streamY, height)`. `world_map(...)` builds a `WorldMap2D`, derives the initial visible background rows from it, regenerates the streaming ROM column tables, and generates parallel collision flag tables from the same resource. `map_column(...)` remains as a compatibility path for older tests and samples, but new runner-level world data should use `world_column(...)` and `world_flags(...)`.
+The first Game Boy integration is `World.Column(...)`, `World.Flags(...)`, and `World.Map(width, streamY, height)`. `World.Map(...)` builds a `WorldMap2D`, derives the initial visible background rows from it, regenerates the streaming ROM column tables, and generates parallel collision flag tables from the same resource. `World.Column(...)` remains as a compatibility path for older tests and samples, but new runner-level world data should use `World.Column(...)` and `World.Flags(...)`.
 
 ## Agent Task Contract
 
@@ -499,8 +497,8 @@ Purpose: replace direction-specific camera commands with position-based camera s
 
 Tasks:
 
-- Add `camera_set_position(x, y)` or equivalent SDK operation.
-- Keep `camera_apply()` as the apply boundary.
+- Add `Camera.SetPosition(x, y)` or equivalent SDK operation.
+- Keep `Camera.Apply()` as the apply boundary.
 - Lower X-only movement to the existing Game Boy camera runtime first.
 - Mark `camera_move_right()` and `camera_move_left()` as transitional.
 - Update the runner to maintain camera/world X in source and call the position API.
@@ -581,9 +579,9 @@ Purpose: make collision world-based and independent from camera internals.
 
 Tasks:
 
-- Add `world_tile_flags_at(worldX, worldY)` while the prototype has one active world map.
+- Add `World.TileFlagsAt(worldX, worldY)` while the prototype has one active world map.
 - Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
-- Add `camera_aabb_tiles(screenX, worldY, width, height, flags)` as a camera-relative bridge for long scrolling maps while source locals are still byte-backed.
+- Add `Camera.AabbTiles(screenX, worldY, width, height, flags)` as a camera-relative bridge for long scrolling maps while source locals are still byte-backed.
 - Support tile/AABB overlap checks against map flags.
 - Keep resolution helpers optional and separate from queries.
 - Migrate runner ground, hole, and hazard checks away from camera span APIs.
@@ -818,7 +816,7 @@ Status: landed 2026-06-08.
 - Layer: portable SDK camera/resource integration.
 - Candidate files: Game Boy map-column generation, `samples/runner/src/main.rs`, tests.
 - Steps:
-  - Replace separate `map_column(...)` source data with generated map columns from the unified world map.
+  - Replace separate `World.Column(...)` source data with generated map columns from the unified world map.
   - Keep source-map column ROM tables equivalent for the current runner.
   - Add a test proving streamed columns and initial visible columns share the same source.
 - Verification:
@@ -847,7 +845,7 @@ Status: landed 2026-06-08.
 - Layer: portable SDK camera.
 - Candidate files: parser call handling if needed, Game Boy compiler, SDK operation model, tests.
 - Steps:
-  - Add `camera_set_position(x, y)` as a portable SDK candidate.
+  - Add `Camera.SetPosition(x, y)` as a portable SDK candidate.
   - Validate arity and byte-backed expression support.
   - Create a `SetCameraPosition` operation.
   - Keep `camera_move_right()` and `camera_move_left()` working as transitional APIs.
@@ -877,7 +875,7 @@ Status: landed 2026-06-08.
 - Steps:
   - Add a source variable for camera/world X.
   - Update input handling to mutate camera/world X.
-  - Replace `camera_move_right()` and `camera_move_left()` calls with `camera_set_position(cameraX, 0)` or the chosen API shape.
+  - Replace `camera_move_right()` and `camera_move_left()` calls with `Camera.SetPosition(cameraX, 0)` or the chosen API shape.
   - Keep gameplay behavior equivalent.
 - Verification:
   - Runner source no longer contains `camera_move_right()` or `camera_move_left()`.
@@ -991,7 +989,7 @@ Status: landed 2026-06-08.
 - Layer: portable SDK runtime helper.
 - Candidate files: SDK operation model, target lowering tests.
 - Steps:
-  - Add a helper such as `animation_frame(clip, tick)`.
+  - Add a helper such as `Animation.Frame(clip, tick)`.
   - Document whether it loops, clamps, or errors on invalid clips.
   - Lower the helper with predictable cost.
 - Verification:
@@ -1019,7 +1017,7 @@ Status: landed 2026-06-08.
 - Layer: portable SDK collision.
 - Candidate files: world map resource, SDK operation model, Game Boy lowering, tests.
 - Steps:
-  - Add `world_tile_flags_at(worldX, worldY)` while the prototype has one active world map. The SDK operation records `WorldId = "default"` as the future named-map extension point.
+  - Add `World.TileFlagsAt(worldX, worldY)` while the prototype has one active world map. The SDK operation records `WorldId = "default"` as the future named-map extension point.
   - Convert pixel coordinates to tile coordinates explicitly.
   - Validate map bounds behavior.
 - Verification:
@@ -1033,7 +1031,7 @@ Status: landed 2026-06-08.
 - Candidate files: collision helper lowering, tests.
 - Steps:
   - Add `collision_aabb_tiles(x, y, width, height, flags)` while the prototype has one active world map.
-  - Add `camera_aabb_tiles(screenX, worldY, width, height, flags)` for camera-relative actor checks on long maps.
+  - Add `Camera.AabbTiles(screenX, worldY, width, height, flags)` for camera-relative actor checks on long maps.
   - Check every tile overlapped by the AABB.
   - Return a simple boolean: `1` when any overlapped tile matches the requested flag mask, otherwise `0`.
   - Keep collision resolution outside this helper.

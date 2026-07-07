@@ -4,6 +4,7 @@ using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using RetroSharp.Parser;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class GameBoySdkOperationBoundaryTests
@@ -41,9 +42,9 @@ public sealed class GameBoySdkOperationBoundaryTests
         var program = ProgramWithOverriddenSdkOperations(
             """
             void Main() {
-                video_init();
-                sprite_asset(player_run, "player.sprite.json");
-                sprite_draw(player_run, 72, 80, 0);
+                Video.Init();
+                Sprite.Asset(player_run, "player.sprite.json");
+                Sprite.Draw(player_run, 72, 80, 0);
             }
             """,
             WriteSpriteAsset(),
@@ -78,8 +79,8 @@ public sealed class GameBoySdkOperationBoundaryTests
             builder,
             """
             void Main() {
-                video_init();
-                sprite_asset(player_run, "player.sprite.json");
+                Video.Init();
+                Sprite.Asset(player_run, "player.sprite.json");
             }
             """,
             WriteSpriteAsset());
@@ -109,9 +110,10 @@ public sealed class GameBoySdkOperationBoundaryTests
             builder,
             """
             void Main() {
-                video_init();
-                map_column(0, 1, 2, 3, 4);
-                map_column(1, 5, 6, 7, 8);
+                Video.Init();
+                World.Column(0, 1, 2, 3, 4);
+                World.Column(1, 5, 6, 7, 8);
+                World.Map(2, 11, 4);
             }
             """,
             Directory.GetCurrentDirectory());
@@ -136,23 +138,39 @@ public sealed class GameBoySdkOperationBoundaryTests
 
     private static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder)
     {
-        var program = GameBoyVideoProgram.FromProgram(new SomeParser().Parse("void Main() { }").Value);
+        var program = GameBoyVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));
         return new GameBoyRuntimeCompiler(builder, program);
     }
 
     private static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder, string source, string baseDirectory)
     {
-        var program = GameBoyVideoProgram.FromProgram(new SomeParser().Parse(source).Value, baseDirectory);
+        var program = GameBoyVideoProgram.FromProgram(ParseLoweredProgram(source), baseDirectory);
         return new GameBoyRuntimeCompiler(builder, program);
     }
 
     private static GameBoyVideoProgram ProgramWithOverriddenSdkOperations(string source, string baseDirectory, IReadOnlyList<Sdk2DOperation> operations)
     {
-        var program = GameBoyVideoProgram.FromProgram(new SomeParser().Parse(source).Value, baseDirectory);
+        var program = GameBoyVideoProgram.FromProgram(ParseLoweredProgram(source), baseDirectory);
         typeof(GameBoyVideoProgram)
             .GetProperty(nameof(GameBoyVideoProgram.SdkOperations))!
             .SetValue(program, operations);
         return program;
+    }
+
+    private static ProgramSyntax ParseLoweredProgram(string source)
+    {
+        var merged = SdkLibrarySource.Merge(
+            GameBoyTarget.Intrinsics,
+            source,
+            libraryImportPaths: [SdkImportResolver.Portable2D]);
+        var parse = new SomeParser().Parse(merged);
+        if (parse.IsFailure)
+        {
+            throw new InvalidOperationException(parse.Error.ToString());
+        }
+
+        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
+        return SdkSourcePackageFacadeLowerer.Lower(targetProgram);
     }
 
     [Fact]
@@ -160,14 +178,14 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void tick() {
-                                  input_poll();
+                                  Input.Poll();
                                   scroll_set(0, 0);
                                   return;
                               }
 
                               void Main() {
                                   while (true) {
-                                      video_wait_vblank();
+                                      Video.WaitVBlank();
                                       tick();
                                       sprite_set(0, 8, 16, 6, 0);
                                   }
@@ -189,12 +207,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  map_column(0, 0, 4);
-                                  map_column(1, 0, 4);
-                                  camera_init(2, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Column(1, 0, 4);
+                                  World.Map(2, 11, 2);
+                                  Camera.Init(2, 11, 2);
                                   i16 cameraX = 1;
-                                  camera_set_position(cameraX, 0);
-                                  camera_apply();
+                                  Camera.SetPosition(cameraX, 0);
+                                  Camera.Apply();
                               }
                               """;
 
@@ -222,12 +241,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  map_column(0, 0, 4);
-                                  map_column(1, 0, 4);
-                                  camera_init(2, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Column(1, 0, 4);
+                                  World.Map(2, 11, 2);
+                                  Camera.Init(2, 11, 2);
                                   i16 cameraY = 1;
-                                  camera_set_position(0, cameraY);
-                                  camera_apply();
+                                  Camera.SetPosition(0, cameraY);
+                                  Camera.Apply();
                               }
                               """;
 
@@ -255,18 +275,18 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string direct = """
                               void Main() {
-                                  world_column(0, 0, 4);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
                                   i16 worldX = 0;
-                                  i16 flags = world_tile_flags_at(worldX, 8);
+                                  i16 flags = World.TileFlagsAt(worldX, 8);
                               }
                               """;
         const string library = """
                                void Main() {
-                                   world_column(0, 0, 4);
-                                   world_flags(0, 0, 1);
-                                   world_map(1, 11, 2);
+                                   World.Column(0, 0, 4);
+                                   World.Flags(0, 0, 1);
+                                   World.Map(1, 11, 2);
                                    i16 worldX = 0;
                                    i16 flags = World.TileFlagsAt(worldX, 8);
                                }
@@ -279,11 +299,11 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 0, 4);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
                                   i16 worldX = 0;
-                                  i16 flags = world_tile_flags_at(worldX, 8);
+                                  i16 flags = World.TileFlagsAt(worldX, 8);
                               }
                               """;
 
@@ -300,10 +320,10 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 0, 4);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 11, 2);
-                                  camera_init(1, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
+                                  Camera.Init(1, 11, 2);
                                   i16 footY = 16;
                                   i16 hit = Camera.AabbTiles(72, footY, 16, 8, 1);
                               }
@@ -326,13 +346,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 0, 4);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 11, 2);
-                                  camera_init(1, 11, 2);
-                                  sprite_asset(player_run, "player.sprite.json");
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
+                                  Camera.Init(1, 11, 2);
+                                  Sprite.Asset(player_run, "player.sprite.json");
                                   i16 footY = 16;
-                                  i16 hit = Camera.AabbTiles(72, footY, sprite_width(player_run), 8, 1);
+                                  i16 hit = Camera.AabbTiles(72, footY, Sprite.Width(player_run), 8, 1);
                               }
                               """;
 
@@ -347,10 +367,10 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 0, 4);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 11, 2);
-                                  camera_init(1, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
+                                  Camera.Init(1, 11, 2);
                                   i16 footY = 16;
                                   i16 hit = Camera.AabbTiles(72, footY - 8, 16, 8, 1);
                               }
@@ -368,13 +388,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 0, 4);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 11, 2);
-                                  camera_init(1, 11, 2);
-                                  sprite_asset(player_run, "player.sprite.json");
+                                  World.Column(0, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 11, 2);
+                                  Camera.Init(1, 11, 2);
+                                  Sprite.Asset(player_run, "player.sprite.json");
                                   i16 footY = 40;
-                                  i16 hitTop = Camera.AabbHitTop(72, footY - 32, sprite_width(player_run), 40, 1);
+                                  i16 hitTop = Camera.AabbHitTop(72, footY - 32, Sprite.Width(player_run), 40, 1);
                               }
                               """;
 
@@ -467,7 +487,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                                   i16 y = 80;
                                   i16 frame = 1;
                                   bool flipX = true;
-                                  sprite_draw(player_run, 72, y, frame, flipX, 1);
+                                  Sprite.Draw(player_run, 72, y, frame, flipX, 1);
                               }
                               """;
 
@@ -515,7 +535,7 @@ public sealed class GameBoySdkOperationBoundaryTests
                               void Main() {
                                   Actor actor = { x: 24 };
                                   u8 frames[3] = [0, 1, 2];
-                                  sprite_draw(player_run, actor.x, frames[2], 0);
+                                  Sprite.Draw(player_run, actor.x, frames[2], 0);
                               }
                               """;
 
@@ -531,8 +551,8 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  map_column(0, 1, 2, 3, 4);
-                                  map_column(1, 5, 6, 7, 8);
+                                  World.Column(0, 1, 2, 3, 4);
+                                  World.Column(1, 5, 6, 7, 8);
                                   i16 targetColumn = 20;
                                   i16 sourceColumn = 0;
                                   map_stream_column(targetColumn, sourceColumn, 11, 4);
@@ -553,14 +573,15 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                                  Video.Init();
+                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+                                  World.Map(1, 0, 11);
                                   i16 targetColumn = 20;
                                   i16 sourceColumn = 0;
                                   while (true) {
-                                      video_wait_vblank();
-                                      map_stream_column(targetColumn, sourceColumn, 0, 16);
-                                      map_stream_column(targetColumn, sourceColumn, 0, 17);
+                                      Video.WaitVBlank();
+                                      map_stream_column(targetColumn, sourceColumn, 0, 11);
+                                      map_stream_column(targetColumn, sourceColumn, 0, 11);
                                   }
                               }
                               """;
@@ -568,7 +589,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 21 background tile writes per frame, but 33 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 
@@ -577,16 +598,17 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void stream_once(i16 targetColumn, i16 sourceColumn) {
-                                  map_stream_column(targetColumn, sourceColumn, 0, 17);
+                                  map_stream_column(targetColumn, sourceColumn, 0, 11);
                               }
 
                               void Main() {
-                                  video_init();
-                                  map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                                  Video.Init();
+                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+                                  World.Map(1, 0, 11);
                                   i16 targetColumn = 20;
                                   i16 sourceColumn = 0;
                                   while (true) {
-                                      video_wait_vblank();
+                                      Video.WaitVBlank();
                                       stream_once(targetColumn, sourceColumn);
                                       stream_once(targetColumn, sourceColumn);
                                   }
@@ -596,7 +618,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
 
         Assert.Equal(
-            "Target 'gb' supports 21 background tile writes per frame, but 34 are required for streaming background tiles in one frame.",
+            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
             exception.Message);
     }
 
@@ -605,14 +627,15 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  map_column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+                                  Video.Init();
+                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+                                  World.Map(1, 0, 11);
                                   i16 targetColumn = 20;
                                   i16 sourceColumn = 0;
                                   while (true) {
-                                      video_wait_vblank();
+                                      Video.WaitVBlank();
                                       if (targetColumn == 20) {
-                                          map_stream_column(targetColumn, sourceColumn, 0, 12);
+                                          map_stream_column(targetColumn, sourceColumn, 0, 11);
                                       } else {
                                           map_stream_column(targetColumn, sourceColumn, 0, 10);
                                       }
@@ -628,13 +651,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         var draws = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 41).Select(index => $"        sprite_draw(player_run, {index % 20}, {(index % 4) * 20}, 0);"));
+            Enumerable.Range(0, 41).Select(index => $"        Sprite.Draw(player_run, {index % 20}, {(index % 4) * 20}, 0);"));
         var source = """
                      void Main() {
-                         video_init();
-                         sprite_asset(player_run, "player.sprite.json");
+                         Video.Init();
+                         Sprite.Asset(player_run, "player.sprite.json");
                          while (true) {
-                             video_wait_vblank();
+                             Video.WaitVBlank();
 
                      """ + draws + """
                          }
@@ -653,13 +676,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         var draws = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 11).Select(index => $"        sprite_draw(player_run, {index * 8}, 16, 0);"));
+            Enumerable.Range(0, 11).Select(index => $"        Sprite.Draw(player_run, {index * 8}, 16, 0);"));
         var source = """
                      void Main() {
-                         video_init();
-                         sprite_asset(player_run, "player.sprite.json");
+                         Video.Init();
+                         Sprite.Asset(player_run, "player.sprite.json");
                          while (true) {
-                             video_wait_vblank();
+                             Video.WaitVBlank();
 
                      """ + draws + """
                          }
@@ -678,13 +701,14 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  map_column(0, 0, 4);
-                                  map_column(1, 0, 4);
-                                  camera_init(2, 11, 2);
+                                  World.Column(0, 0, 4);
+                                  World.Column(1, 0, 4);
+                                  World.Map(2, 11, 2);
+                                  Camera.Init(2, 11, 2);
                                   i16 cameraX = 1;
                                   i16 cameraY = 1;
-                                  camera_set_position(cameraX, cameraY);
-                                  camera_apply();
+                                  Camera.SetPosition(cameraX, cameraY);
+                                  Camera.Apply();
                               }
                               """;
 
@@ -704,13 +728,13 @@ public sealed class GameBoySdkOperationBoundaryTests
     {
         const string source = """
                               void Main() {
-                                  camera_set_position(0);
+                                  Camera.SetPosition(0);
                               }
                               """;
 
         var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CollectSdkOperations(source));
 
-        Assert.Equal("camera_set_position expects 2 arguments, got 1.", exception.Message);
+        Assert.Contains("argument 2", exception.Message, StringComparison.Ordinal);
     }
 
     private static string WriteSpriteAsset()

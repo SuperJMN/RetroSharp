@@ -365,32 +365,18 @@ internal sealed class GameBoyVideoProgram
 
     private static bool HasRuntimeCall(FunctionCall call, IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
-        switch (call.Name)
+        if (call.Name is "video_init" or "video_present" or "tilemap_set" or "tilemap_fill")
         {
-            case "video_init":
-            case "video_present":
-            case "palette_set":
-            case "object_palette_set":
-            case "palette_background":
-            case "palette_sprite":
-            case "tilemap_set":
-            case "tilemap_fill":
-            case "map_column":
-            case "world_column":
-            case "world_flags":
-            case "world_map":
-            case "world_load":
-            case "sprite_asset":
-            case "music_asset":
-            case "sfx_asset":
-            case "animation_clip":
-            case "hud_set_tile":
-                return false;
-            default:
-                return !functions.TryGetValue(call.Name, out var function)
-                       || function.IsExtern
-                       || HasRuntimeWork(function.Block, functions);
+            return false;
         }
+
+        if (!functions.TryGetValue(call.Name, out var function))
+        {
+            return true;
+        }
+
+        return !SdkResourceDeclarationResolver.TryResolve(function, out _)
+               && (function.IsExtern || HasRuntimeWork(function.Block, functions));
     }
 
     private static void CountCalls(BlockSyntax block, IDictionary<string, int> callCounts)
@@ -668,20 +654,6 @@ internal sealed class GameBoyVideoProgram
 
             switch (call.Name)
             {
-                case "palette_set":
-                    RequireArity(call, 2);
-                    SetPaletteColor(ConstArg(call, 0, 0, 3), ConstArg(call, 1, 0, 3));
-                    break;
-                case "object_palette_set":
-                    RequireArity(call, 2);
-                    SetObjectPaletteColor(ConstArg(call, 0, 0, 3), ConstArg(call, 1, 0, 3));
-                    break;
-                case "palette_background":
-                    ApplyLogicalPalette(call, PaletteKind.Background);
-                    break;
-                case "palette_sprite":
-                    ApplyLogicalPalette(call, PaletteKind.Sprite);
-                    break;
                 case "tilemap_set":
                     RequireArity(call, 3);
                     SetTile(ConstArg(call, 0, 0, 31), ConstArg(call, 1, 0, 31), ConstArg(call, 2, 0, 255));
@@ -694,36 +666,6 @@ internal sealed class GameBoyVideoProgram
                         ConstArg(call, 2, 1, 32),
                         ConstArg(call, 3, 1, 32),
                         ConstArg(call, 4, 0, 255));
-                    break;
-                case "map_column":
-                    ApplyMapColumn(call);
-                    break;
-                case "world_column":
-                    ApplyWorldColumn(call);
-                    break;
-                case "world_flags":
-                    ApplyWorldFlags(call);
-                    break;
-                case "world_map":
-                    ApplyWorldMap(call);
-                    break;
-                case "world_load":
-                    ApplyWorldLoad(call);
-                    break;
-                case "sprite_asset":
-                    ApplySpriteAsset(call);
-                    break;
-                case "music_asset":
-                    ApplyMusicAsset(call);
-                    break;
-                case "sfx_asset":
-                    ApplySoundEffectAsset(call);
-                    break;
-                case "animation_clip":
-                    ApplyAnimationClip(call);
-                    break;
-                case "hud_set_tile":
-                    ApplyHudSetTile(call);
                     break;
                 default:
                     ApplyStaticUserFunction(call, callStack);

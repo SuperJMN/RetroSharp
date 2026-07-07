@@ -2042,27 +2042,11 @@ internal sealed class NesRuntimeCompiler
 
         switch (call.Name)
         {
-            case "video_init":
-            case "video_present":
-                NesVideoProgram.RequireArity(call, 0);
-                break;
-            case "palette_set":
-                NesVideoProgram.RequireArity(call, 2);
-                break;
-            case "palette_background":
-            case "palette_sprite":
-                NesVideoProgram.RequireArity(call, 5);
-                break;
             case "tilemap_set":
                 NesVideoProgram.RequireArity(call, 3);
                 break;
             case "tilemap_fill":
                 NesVideoProgram.RequireArity(call, 5);
-                break;
-            case "map_column":
-            case "world_column":
-            case "world_flags":
-            case "world_map":
                 break;
             case "map_stream_column":
                 EmitSdkOperation(Sdk2DOperationCollector.ReadStreamMapColumn(call));
@@ -2070,71 +2054,8 @@ internal sealed class NesRuntimeCompiler
             case "map_stream_row":
                 EmitSdkOperation(Sdk2DOperationCollector.ReadStreamMapRow(call));
                 break;
-            case "world_load":
-                NesVideoProgram.RequireArity(call, 1);
-                break;
-            case "sprite_asset":
-                var count = call.Parameters.Count();
-                if (count is not 2 and not 4)
-                {
-                    throw new InvalidOperationException($"sprite_asset expects 2 or 4 arguments, got {count}.");
-                }
-
-                break;
-            case "animation_clip":
-                if (call.Parameters.Count() < 3)
-                {
-                    throw new InvalidOperationException($"animation_clip expects at least 3 arguments, got {call.Parameters.Count()}.");
-                }
-
-                break;
-            case "music_asset":
-            case "sfx_asset":
-                NesVideoProgram.RequireArity(call, 2);
-                break;
-            case "audio_init":
-                NesVideoProgram.RequireArity(call, 0);
-                EmitAudioInit();
-                break;
-            case "audio_update":
-                NesVideoProgram.RequireArity(call, 0);
-                EmitAudioUpdate();
-                break;
-            case "music_stop":
-                NesVideoProgram.RequireArity(call, 0);
-                EmitMusicStop();
-                break;
-            case "music_play":
-                NesVideoProgram.RequireArity(call, 1);
-                EmitMusicPlay(call);
-                break;
-            case "sfx_play":
-                NesVideoProgram.RequireArity(call, 1);
-                EmitSoundEffectPlay(call);
-                break;
             case "hud_set_tile":
                 NesVideoProgram.ValidateHudSetTile(call);
-                break;
-            case "camera_init":
-                EmitCameraInit(call);
-                break;
-            case "camera_set_position":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadSetCameraPosition(call));
-                break;
-            case "camera_apply":
-                NesVideoProgram.RequireArity(call, 0);
-                EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
-                break;
-            case "video_wait_vblank":
-                NesVideoProgram.RequireArity(call, 0);
-                EmitSdkOperation(new Sdk2DOperation.WaitFrame());
-                break;
-            case "input_poll":
-                NesVideoProgram.RequireArity(call, 0);
-                EmitSdkOperation(new Sdk2DOperation.PollInput());
-                break;
-            case "sprite_draw":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadDrawLogicalSprite(call));
                 break;
             default:
                 if (TryEmitTargetIntrinsic(call))
@@ -5636,36 +5557,6 @@ internal sealed class NesRuntimeCompiler
     {
         switch (call.Name)
         {
-            case "button_down":
-                EmitButtonDown(call);
-                break;
-            case "button_just_pressed":
-                EmitButtonJustPressed(call);
-                break;
-            case "button_just_released":
-                EmitButtonJustReleased(call);
-                break;
-            case "button_hold_ticks":
-                EmitButtonHoldTicks(call);
-                break;
-            case "camera_aabb_tiles":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbTiles(call));
-                break;
-            case "camera_aabb_hit_top":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(call));
-                break;
-            case "camera_screen_aabb_tiles":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbTiles(call));
-                break;
-            case "camera_screen_aabb_hit_top":
-                EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbHitTop(call));
-                break;
-            case "animation_frame":
-                EmitAnimationFrame(call);
-                break;
-            case "sprite_width":
-                EmitSpriteWidth(call);
-                break;
             case "__rs_actor_camera_x_lo":
                 NesVideoProgram.RequireArity(call, 0);
                 builder.LoadAZeroPage(CameraXAddress);
@@ -5873,8 +5764,7 @@ internal sealed class NesRuntimeCompiler
         var argument = call.Parameters.ElementAt(0);
 
         // A `Button` enum member (e.g. Button.A) is constant-folded to its ordinal,
-        // which matches the canonical Buttons order, so resolve it by index. The bare
-        // lowercase identifier form (e.g. `a`) is kept as a transitional alias.
+        // which matches the canonical Buttons order, so resolve it by index.
         if (argument is ConstantSyntax)
         {
             var ordinal = NesVideoProgram.ConstValue(argument, context);
@@ -5886,18 +5776,7 @@ internal sealed class NesRuntimeCompiler
             return Buttons[ordinal];
         }
 
-        var name = argument is MemberAccessSyntax memberAccess
-            ? memberAccess.Member.ToLowerInvariant()
-            : NesVideoProgram.IdentifierArg(argument, context);
-        foreach (var button in Buttons)
-        {
-            if (button.Name == name)
-            {
-                return button;
-            }
-        }
-
-        throw new InvalidOperationException($"Unsupported NES button '{name}'.");
+        throw new InvalidOperationException($"{context} must be a Button enum member.");
     }
 
     private bool TryConst(ExpressionSyntax expression, out int value)

@@ -145,7 +145,7 @@ Progress (2026-06-14):
   preserves the existing map row table and VRAM write byte shape, and NES lowers horizontal
   column streaming into `$2006`/`$2007` writes across a two-nametable buffer.
 - Operation stream decision implemented 2026-06-14: `GameBoyRuntimeCompiler` walks the collected
-  operation list with a cursor for migrated statement calls and `world_tile_flags_at(...)`; it
+  operation list with a cursor for migrated statement calls and `World.TileFlagsAt(...)`; it
   fails if the next operation type does not match the source call or if operations remain
   unconsumed after runtime emission.
 - Operand contract decision implemented 2026-06-14: SDK byte variables preserve the
@@ -164,21 +164,20 @@ Progress (2026-06-14):
   resolver validates extern return types and names the intrinsic id in compile-time operand
   diagnostics.
   `Sprite.Draw(...)` now comes from the `RetroSharp.Portable2D` source package over role-bearing `sprite_draw`
-  intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`
-  as the legacy `sprite_draw(...)` alias. Game Boy and NES `Camera.AabbTiles(...)` and
+  intrinsics on both Game Boy and NES, collecting to the same `Sdk2DOperation.DrawLogicalSprite`.
+  Game Boy and NES `Camera.AabbTiles(...)` and
   `Camera.AabbHitTop(...)` also come from package helpers over target intrinsics with a hidden
   `"default"` world id and compile-time flag mask, still collecting to the same camera AABB
-  SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract
-  (NES migrated in SAL-8.6; the legacy `camera_aabb_tiles(...)`/`camera_aabb_hit_top(...)`
-  builtins remain compatibility aliases). SAL-8.9 then migrated `Camera.ScreenAabbTiles(...)` /
+  SDK operations and preserving `Sprite.Width(...)` extents and the `255` no-hit contract.
+  SAL-8.9 then migrated `Camera.ScreenAabbTiles(...)` /
   `Camera.ScreenAabbHitTop(...)` to the same intrinsic path on both targets (catalogued as
   `camera_screen_aabb_*` with hidden `WorldId`/`EnumFlags`), so all four camera-relative
   collision queries share the intrinsic path; the actor framework's generated `Camera.ScreenAabb*`
   calls stay byte-identical (`actors.gb`/`actors.nes` ROMs unchanged).
   SAL-8.7 migrated Game Boy and NES `Music.Play(...)` / `Music.Stop()` to `Music`
   helpers in `RetroSharp.Portable2D` over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
-  collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `music_play(...)`/
-  `music_stop(...)` builtins remain aliases.
+  collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `Music.Play(...)`/
+  `Music.Stop(...)` builtins remain aliases.
   One-shot FX now follow the same pattern: `Sfx.Asset(...)` is a source-package
   `[resource("sfx_asset")]` declaration, `Sfx.Play(...)` wraps the `sfx_play`
   target intrinsic with a compile-time `AssetRef`, and both Game Boy and NES
@@ -206,7 +205,7 @@ Progress (2026-06-14):
   not shrink the DPCM window.
   SAL-8.8 completed the `audio` class by migrating `Audio.Init()` to a void-leaf `audio_init`
   target intrinsic on both targets (collecting `SdkAudioOperation.InitializeAudio`), with the
-  `audio_init(...)` builtin kept as an alias.
+  `Audio.Init(...)` builtin kept as an alias.
   SDKLIB-4 retired the simple runtime facades `Video.WaitVBlank`, `Input.Poll`,
   `Audio.Init`, `Audio.Update`, `Camera.SetPosition`, and `Camera.Apply` from
   hard-coded public-name lowering; those public names now come from SDK source
@@ -222,9 +221,9 @@ Progress (2026-06-14):
   are now provided by `RetroSharp.Portable2D` source methods over target intrinsics.
   Actor-framework generated calls now use imported target-intrinsic extern
   functions discovered from the source package, so generated actor code no longer
-  relies on public SDK names being hard-coded in the compiler. Legacy flat declaration calls
-  such as `sprite_asset(...)`, `world_load(...)`, `music_asset(...)`, and `sfx_asset(...)` remain
-  compatibility aliases.
+  relies on public SDK names being hard-coded in the compiler. Flat declaration calls
+  such as `Sprite.Asset(...)`, `World.Load(...)`, `Music.Asset(...)`, and `Sfx.Asset(...)`
+  are package-provided resource declarations, not compatibility aliases.
   Internal stream operations (`StreamMapColumn`/`StreamMapRow`) remain compiler-emitted effects
   of camera lowering, not public source calls.
 - Pending in the edited #106 slice: none known after PL-E1.
@@ -282,8 +281,8 @@ Suggested next steps for the next agent, in order:
 ## Game Boy Runner Lessons
 
 - Normal runner debugging should start with the full app, then use `tools/gameboy/runner_diagnostics.py` to find the first failing diagnostic step before editing code.
-- `Input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the `RetroSharp.Portable2D` source package under `sdk/RetroSharp.Portable2D`. The snake_case builtins (`button_down`, `button_just_pressed`, ..., `sprite_width`) and bare lowercase button identifiers (`a`, `right`, ...) remain accepted as transitional aliases and lower to the same masks. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
-- `button_hold_ticks` saturates at `255` and is the accepted seam for variable-height jump timing.
+- `Input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the `RetroSharp.Portable2D` source package under `sdk/RetroSharp.Portable2D`. Direct snake_case button calls, direct `sprite_width`, and bare lowercase button identifiers (`a`, `right`, ...) are not public source APIs. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
+- `Input.HoldTicks` saturates at `255` and is the accepted seam for variable-height jump timing.
 - On original DMG hardware, `JOYP` row selection must settle. The backend should select a row, read it several times, use the final sample, and deselect both rows with `0x30`.
 - `Sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
 - Sprite PNG paths can be generic. `Sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.

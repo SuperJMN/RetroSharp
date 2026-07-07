@@ -89,7 +89,7 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 - The runner now uses `World.Load(...)` over `samples/runner/assets/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
 - Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
 - Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
-- `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Prefer `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`) over the direct `button_pressed` read and the snake_case `button_*`/`sprite_width` builtins, which remain only as transitional aliases.
+- `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` with `Button.*` enum members, plus `Sprite.Width`. The direct `button_pressed` read, snake_case `button_*`/`sprite_width` calls, and bare lowercase button identifiers are not public source APIs.
 - Original DMG hardware needs settled `JOYP` row reads. If d-pad input bleeds into A/B behavior, treat it as backend/runtime behavior first, not as sample logic.
 - Byte-backed target values can wrap. Clamp vertical runner state before collision/reset code when working near the top of the scene.
 

@@ -156,31 +156,6 @@ public static class SdkAudioOperationCollector
 
             switch (call.Name)
             {
-                case "audio_init":
-                    SdkCallReader.RequireArity(call, 0);
-                    AddOp(new SdkAudioOperation.InitializeAudio());
-                    break;
-                case "audio_update":
-                    SdkCallReader.RequireArity(call, 0);
-                    AddOp(new SdkAudioOperation.UpdateAudio());
-                    break;
-                case "music_play":
-                    SdkCallReader.RequireArity(call, 1);
-                    AddOp(new SdkAudioOperation.PlayMusic(SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "music_play argument 1")));
-                    break;
-                case "sfx_play":
-                    SdkCallReader.RequireArity(call, 1);
-                    AddOp(new SdkAudioOperation.PlaySoundEffect(SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "sfx_play argument 1")));
-                    break;
-                case "music_stop":
-                    SdkCallReader.RequireArity(call, 0);
-                    AddOp(new SdkAudioOperation.StopMusic());
-                    break;
-                case "music_asset":
-                case "sfx_asset":
-                    SdkCallReader.RequireArity(call, 2);
-                    CollectCallArguments(call);
-                    break;
                 default:
                     if (CollectTargetIntrinsic(call))
                     {
