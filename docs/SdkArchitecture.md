@@ -62,3 +62,8 @@ Move a feature into the internal SDK model only when targets must validate or
 lower a new portable semantic operation. That change should update the matching
 operation model, target capability checks, backend lowerers, and public SDK
 documentation in the same patch.
+
+The current compiler-owned operation and target-intrinsic inventory lives in
+`docs/ArchitectureRoadmap.md` under "Compiler-Owned SDK Operation Inventory".
+Use that table before adding a new `Sdk2DOperation`, `SdkAudioOperation`, or
+`TargetIntrinsicOperation`.
