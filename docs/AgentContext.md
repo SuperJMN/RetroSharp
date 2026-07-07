@@ -176,8 +176,8 @@ Progress (2026-06-14):
   calls stay byte-identical (`actors.gb`/`actors.nes` ROMs unchanged).
   SAL-8.7 migrated Game Boy and NES `Music.Play(...)` / `Music.Stop()` to `Music`
   helpers in `RetroSharp.Portable2D` over `music_play` (compile-time `AssetRef` theme) / `music_stop` target intrinsics,
-  collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; the `Music.Play(...)`/
-  `Music.Stop(...)` builtins remain aliases.
+  collecting to the same `SdkAudioOperation.PlayMusic`/`StopMusic`; direct backend aliases for those
+  calls are no longer public source APIs.
   One-shot FX now follow the same pattern: `Sfx.Asset(...)` is a source-package
   `[resource("sfx_asset")]` declaration, `Sfx.Play(...)` wraps the `sfx_play`
   target intrinsic with a compile-time `AssetRef`, and both Game Boy and NES
