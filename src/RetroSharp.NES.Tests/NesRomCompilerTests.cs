@@ -860,14 +860,12 @@ public class NesRomCompilerTests
     {
         var source = RunnerSample.CompiledSource();
 
-        var libraryRom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
-        var legacyRom = NesRomCompiler.CompileSource(
-            SdkLibrarySource.Merge(
-                NesTarget.Intrinsics,
-                source.Replace("Sprite.Draw(", "Sprite.Draw(", StringComparison.Ordinal)),
+        var defaultImportRom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
+        var mergedSourceRom = NesRomCompiler.CompileSource(
+            SdkLibrarySource.Merge(NesTarget.Intrinsics, source),
             RunnerSample.Directory);
 
-        Assert.Equal(legacyRom, libraryRom);
+        Assert.Equal(mergedSourceRom, defaultImportRom);
     }
 
     [Fact]
@@ -930,7 +928,7 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Legacy_sprite_draw_builtin_still_compiles_nes()
+    public void Sprite_draw_source_package_helper_compiles_nes()
     {
         var baseDirectory = WriteSpriteAsset(
             "hero.nes.json",
@@ -1798,41 +1796,41 @@ public class NesRomCompilerTests
     }
 
     [Fact]
-    public void Input_facade_predicates_lower_like_button_builtins()
+    public void Input_facade_predicates_lower_like_explicit_numeric_checks()
     {
-        const string builtinSource = """
-                                     void Main() {
-                                         Video.Init();
-                                         i16 w = 0;
-                                         i16 h = 0;
-                                         while (true) {
-                                             Video.WaitVBlank();
-                                             Input.Poll();
-                                             if (Input.WasPressed(Button.A) != 0) { w += 1; }
-                                             if (Input.IsDown(Button.A) != 0) { w += 1; }
-                                             if (Input.WasReleased(Button.A) != 0) { w += 1; }
-                                             h = Input.HoldTicks(Button.A);
-                                         }
-                                     }
-                                     """;
+        const string explicitComparisonSource = """
+                                                void Main() {
+                                                    Video.Init();
+                                                    i16 w = 0;
+                                                    i16 h = 0;
+                                                    while (true) {
+                                                        Video.WaitVBlank();
+                                                        Input.Poll();
+                                                        if (Input.WasPressed(Button.A) != 0) { w += 1; }
+                                                        if (Input.IsDown(Button.A) != 0) { w += 1; }
+                                                        if (Input.WasReleased(Button.A) != 0) { w += 1; }
+                                                        h = Input.HoldTicks(Button.A);
+                                                    }
+                                                }
+                                                """;
 
-        const string facadeSource = """
-                                    void Main() {
-                                        Video.Init();
-                                        i16 w = 0;
-                                        i16 h = 0;
-                                        while (true) {
-                                            Video.WaitVBlank();
-                                            Input.Poll();
-                                            if (Input.WasPressed(Button.A)) { w += 1; }
-                                            if (Input.IsDown(Button.A)) { w += 1; }
-                                            if (Input.WasReleased(Button.A)) { w += 1; }
-                                            h = Input.HoldTicks(Button.A);
-                                        }
-                                    }
-                                    """;
+        const string predicateConditionSource = """
+                                               void Main() {
+                                                   Video.Init();
+                                                   i16 w = 0;
+                                                   i16 h = 0;
+                                                   while (true) {
+                                                       Video.WaitVBlank();
+                                                       Input.Poll();
+                                                       if (Input.WasPressed(Button.A)) { w += 1; }
+                                                       if (Input.IsDown(Button.A)) { w += 1; }
+                                                       if (Input.WasReleased(Button.A)) { w += 1; }
+                                                       h = Input.HoldTicks(Button.A);
+                                                   }
+                                               }
+                                               """;
 
-        Assert.Equal(NesRomCompiler.CompileSource(builtinSource), NesRomCompiler.CompileSource(facadeSource));
+        Assert.Equal(NesRomCompiler.CompileSource(explicitComparisonSource), NesRomCompiler.CompileSource(predicateConditionSource));
     }
 
     [Fact]
