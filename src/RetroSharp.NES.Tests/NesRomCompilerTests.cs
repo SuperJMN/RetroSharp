@@ -43,15 +43,15 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  palette_set(0, 15);
-                                  palette_set(1, 39);
-                                  palette_set(2, 22);
-                                  palette_set(3, 48);
-                                  tilemap_set(14, 12, 1);
-                                  tilemap_set(15, 12, 2);
-                                  tilemap_set(16, 12, 1);
-                                  tilemap_set(15, 13, 3);
+                                  Video.Init();
+                                  Palette.Set(0, 15);
+                                  Palette.Set(1, 39);
+                                  Palette.Set(2, 22);
+                                  Palette.Set(3, 48);
+                                  Tilemap.Set(14, 12, 1);
+                                  Tilemap.Set(15, 12, 2);
+                                  Tilemap.Set(16, 12, 1);
+                                  Tilemap.Set(15, 13, 3);
                                   return;
                               }
                               """;
@@ -215,34 +215,34 @@ public class NesRomCompilerTests
     {
         const string directSource = """
                                     void Main() {
-                                        video_init();
-                                        palette_set(0, 15);
-                                        palette_set(1, 39);
-                                        tilemap_set(14, 12, 1);
-                                        tilemap_set(15, 12, 2);
-                                        video_present();
+                                        Video.Init();
+                                        Palette.Set(0, 15);
+                                        Palette.Set(1, 39);
+                                        Tilemap.Set(14, 12, 1);
+                                        Tilemap.Set(15, 12, 2);
+                                        Video.Present();
                                         return;
                                     }
                                     """;
 
         const string functionSource = """
                                       void setup_palette() {
-                                          palette_set(0, 15);
-                                          palette_set(1, 39);
+                                          Palette.Set(0, 15);
+                                          Palette.Set(1, 39);
                                           return;
                                       }
 
                                       void draw_mark() {
-                                          tilemap_set(14, 12, 1);
-                                          tilemap_set(15, 12, 2);
+                                          Tilemap.Set(14, 12, 1);
+                                          Tilemap.Set(15, 12, 2);
                                           return;
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           setup_palette();
                                           draw_mark();
-                                          video_present();
+                                          Video.Present();
                                           return;
                                       }
                                       """;
@@ -255,25 +255,25 @@ public class NesRomCompilerTests
     {
         const string directSource = """
                                     void Main() {
-                                        video_init();
-                                        tilemap_set(14, 12, 1);
-                                        tilemap_set(15, 12, 2);
-                                        video_present();
+                                        Video.Init();
+                                        Tilemap.Set(14, 12, 1);
+                                        Tilemap.Set(15, 12, 2);
+                                        Video.Present();
                                         return;
                                     }
                                     """;
 
         const string functionSource = """
                                       void draw_tile(u8 x, u8 tile) {
-                                          tilemap_set(x, 12, tile);
+                                          Tilemap.Set(x, 12, tile);
                                           return;
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           draw_tile(14, 1);
                                           draw_tile(15, 2);
-                                          video_present();
+                                          Video.Present();
                                           return;
                                       }
                                       """;
@@ -286,28 +286,28 @@ public class NesRomCompilerTests
     {
         const string directSource = """
                                     void Main() {
-                                        video_init();
-                                        world_column(0, 1, 2);
-                                        world_column(1, 3, 4);
-                                        world_map(2, 10, 2);
-                                        camera_init(2, 10, 2);
-                                        camera_set_position(4, 0);
+                                        Video.Init();
+                                        World.Column(0, 1, 2);
+                                        World.Column(1, 3, 4);
+                                        World.Map(2, 10, 2);
+                                        Camera.Init(2, 10, 2);
+                                        Camera.SetPosition(4, 0);
                                         return;
                                     }
                                     """;
 
         const string functionSource = """
                                       void apply_camera(u8 amount) {
-                                          camera_set_position(amount, 0);
+                                          Camera.SetPosition(amount, 0);
                                           return;
                                       }
 
                                       void Main() {
-                                          video_init();
-                                          world_column(0, 1, 2);
-                                          world_column(1, 3, 4);
-                                          world_map(2, 10, 2);
-                                          camera_init(2, 10, 2);
+                                          Video.Init();
+                                          World.Column(0, 1, 2);
+                                          World.Column(1, 3, 4);
+                                          World.Map(2, 10, 2);
+                                          Camera.Init(2, 10, 2);
                                           apply_camera(4);
                                           return;
                                       }
@@ -322,16 +322,16 @@ public class NesRomCompilerTests
         const string source = """
                               void apply_camera(u8 x) {
                                   u8 scratch = x;
-                                  camera_set_position(scratch, 0);
+                                  Camera.SetPosition(scratch, 0);
                                   return;
                               }
 
                               void Main() {
-                                  video_init();
-                                  world_column(0, 1, 2);
-                                  world_column(1, 3, 4);
-                                  world_map(2, 10, 2);
-                                  camera_init(2, 10, 2);
+                                  Video.Init();
+                                  World.Column(0, 1, 2);
+                                  World.Column(1, 3, 4);
+                                  World.Map(2, 10, 2);
+                                  Camera.Init(2, 10, 2);
                                   apply_camera(14);
                                   apply_camera(15);
                                   return;
@@ -350,12 +350,12 @@ public class NesRomCompilerTests
                                   enum World { Width = 2, StreamY = 10, Height = 2 }
 
                                   void Main() {
-                                      video_init();
-                                      world_column(0, 1, 2);
-                                      world_column(1, 3, 4);
-                                      world_map(World.Width, World.StreamY, World.Height);
-                                      camera_init(World.Width, World.StreamY, World.Height);
-                                      camera_set_position(4, 0);
+                                      Video.Init();
+                                      World.Column(0, 1, 2);
+                                      World.Column(1, 3, 4);
+                                      World.Map(World.Width, World.StreamY, World.Height);
+                                      Camera.Init(World.Width, World.StreamY, World.Height);
+                                      Camera.SetPosition(4, 0);
                                       return;
                                   }
                                   """;
@@ -364,12 +364,12 @@ public class NesRomCompilerTests
                                           static class World { const i16 Width = 2; const i16 StreamY = 10; const i16 Height = 2; }
 
                                           void Main() {
-                                              video_init();
-                                              world_column(0, 1, 2);
-                                              world_column(1, 3, 4);
-                                              world_map(World.Width, World.StreamY, World.Height);
-                                              camera_init(World.Width, World.StreamY, World.Height);
-                                              camera_set_position(4, 0);
+                                              Video.Init();
+                                              World.Column(0, 1, 2);
+                                              World.Column(1, 3, 4);
+                                              World.Map(World.Width, World.StreamY, World.Height);
+                                              Camera.Init(World.Width, World.StreamY, World.Height);
+                                              Camera.SetPosition(4, 0);
                                               return;
                                           }
                                           """;
@@ -388,12 +388,12 @@ public class NesRomCompilerTests
                                      if (s.grounded == 0) { s.x += 1; }
                                  }
                                  void Main() {
-                                     video_init();
+                                     Video.Init();
                                      S s; s.grounded = 1; s.moving = 0; s.x = 0;
                                      s.step(s.grounded);
                                      Pixel frame = s.grounded switch { 0 => 4, _ => s.moving switch { 0 => 0, _ => 7 } };
                                      i16 sink = frame + s.x;
-                                     if (sink != 0) { video_present(); }
+                                     if (sink != 0) { Video.Present(); }
                                      return;
                                  }
                                  """;
@@ -406,12 +406,12 @@ public class NesRomCompilerTests
                                       if (!s.grounded) { s.x += 1; }
                                   }
                                   void Main() {
-                                      video_init();
+                                      Video.Init();
                                       S s; s.grounded = true; s.moving = false; s.x = 0;
                                       s.step(s.grounded);
                                       Pixel frame = s.grounded switch { false => 4, _ => s.moving switch { false => 0, _ => 7 } };
                                       i16 sink = frame + s.x;
-                                      if (sink != 0) { video_present(); }
+                                      if (sink != 0) { Video.Present(); }
                                       return;
                                   }
                                   """;
@@ -428,7 +428,7 @@ public class NesRomCompilerTests
                                    }
 
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        u8 moving = 1;
                                        u8 fast = 2;
                                        u8 speed = choose_speed(moving, fast);
@@ -440,7 +440,7 @@ public class NesRomCompilerTests
                                         u8 choose_speed(u8 moving, u8 fast) => moving != 0 ? fast : 0;
 
                                         void Main() {
-                                            video_init();
+                                            Video.Init();
                                             u8 moving = 1;
                                             u8 fast = 2;
                                             u8 speed = choose_speed(moving, fast);
@@ -458,7 +458,7 @@ public class NesRomCompilerTests
                                       u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 next = step(4, 5);
                                           return;
                                       }
@@ -468,7 +468,7 @@ public class NesRomCompilerTests
                                      u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
                                      void Main() {
-                                         video_init();
+                                         Video.Init();
                                          u8 next = step(4);
                                          return;
                                      }
@@ -484,7 +484,7 @@ public class NesRomCompilerTests
                                       u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 next = step(4, 5);
                                           return;
                                       }
@@ -494,7 +494,7 @@ public class NesRomCompilerTests
                                    u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        u8 next = step(amount: 5, value: 4);
                                        return;
                                    }
@@ -504,7 +504,7 @@ public class NesRomCompilerTests
                                           u8 step(u8 value, u8 amount = value + 1) => value + amount;
 
                                           void Main() {
-                                              video_init();
+                                              Video.Init();
                                               u8 next = step(value: 4);
                                               return;
                                           }
@@ -520,7 +520,7 @@ public class NesRomCompilerTests
     {
         const string variableSource = """
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 speed = 2;
                                           u8 next = speed + 1;
                                           u8 sink = 0;
@@ -531,7 +531,7 @@ public class NesRomCompilerTests
 
         const string letSource = """
                                  void Main() {
-                                     video_init();
+                                     Video.Init();
                                      let speed = 2;
                                      u8 next = speed + 1;
                                      u8 sink = 0;
@@ -550,7 +550,7 @@ public class NesRomCompilerTests
                                       u8 step(u8 value, u8 amount = 1) => value + amount;
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 next = step(4);
                                           return;
                                       }
@@ -560,7 +560,7 @@ public class NesRomCompilerTests
                                       inline pure u8 step(u8 value, u8 amount = 1) => value + amount;
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 next = step(4);
                                           return;
                                       }
@@ -574,7 +574,7 @@ public class NesRomCompilerTests
     {
         const string conditionalSource = """
                                          void Main() {
-                                             video_init();
+                                             Video.Init();
                                              u8 state = 2;
                                              u8 speed = state == 0 ? 0 : state == 1 ? 2 : state >= 2 && state < 5 ? 3 : 1;
                                              u8 sink = 0;
@@ -585,7 +585,7 @@ public class NesRomCompilerTests
 
         const string switchSource = """
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         u8 state = 2;
                                         u8 speed = state switch { 0 => 0, 1 => 2, 2..5 => 3, _ => 1 };
                                         u8 sink = 0;
@@ -604,7 +604,7 @@ public class NesRomCompilerTests
                               u8 next(u8 value) => value + 1;
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 speed = next(1) switch { 0 => 0, _ => 1 };
                                   return;
                               }
@@ -619,14 +619,14 @@ public class NesRomCompilerTests
     {
         const string functionSource = """
                                       void Main() {
-                                          video_init();
-                                          world_column(0, 1, 2);
-                                          world_column(1, 3, 4);
-                                          world_map(2, 10, 2);
-                                          camera_init(2, 10, 2);
-                                          camera_set_position(4, 0);
-                                          video_wait_vblank();
-                                          input_poll();
+                                          Video.Init();
+                                          World.Column(0, 1, 2);
+                                          World.Column(1, 3, 4);
+                                          World.Map(2, 10, 2);
+                                          Camera.Init(2, 10, 2);
+                                          Camera.SetPosition(4, 0);
+                                          Video.WaitVBlank();
+                                          Input.Poll();
                                           return;
                                       }
                                       """;
@@ -653,7 +653,7 @@ public class NesRomCompilerTests
     {
         const string sdkSource = """
                                  void Main() {
-                                     video_wait_vblank();
+                                     Video.WaitVBlank();
                                  }
                                  """;
 
@@ -679,7 +679,7 @@ public class NesRomCompilerTests
     {
         const string sdkSource = """
                                  void Main() {
-                                     input_poll();
+                                     Input.Poll();
                                  }
                                  """;
 
@@ -705,7 +705,7 @@ public class NesRomCompilerTests
     {
         const string sdkSource = """
                                  void Main() {
-                                     audio_update();
+                                     Audio.Update();
                                  }
                                  """;
 
@@ -714,12 +714,14 @@ public class NesRomCompilerTests
                                        [intrinsic("audio_update")]
                                        extern void nes_audio_update();
 
-                                       inline void audio_update() {
-                                           nes_audio_update();
+                                       class Audio {
+                                           static inline void Update() {
+                                               nes_audio_update();
+                                           }
                                        }
 
                                        void Main() {
-                                           audio_update();
+                                           Audio.Update();
                                        }
                                        """;
 
@@ -751,8 +753,8 @@ public class NesRomCompilerTests
     {
         const string direct = """
                               void Main() {
-                                  audio_init();
-                                  audio_update();
+                                  Audio.Init();
+                                  Audio.Update();
                               }
                               """;
         const string library = """
@@ -773,13 +775,13 @@ public class NesRomCompilerTests
     {
         const string direct = """
                               void Main() {
-                                  video_init();
-                                  world_column(0, 1, 2);
-                                  world_map(1, 10, 2);
-                                  camera_init(1, 10, 2);
+                                  Video.Init();
+                                  World.Column(0, 1, 2);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
                                   i16 x = 4;
-                                  camera_set_position(x, 0);
-                                  camera_apply();
+                                  Camera.SetPosition(x, 0);
+                                  Camera.Apply();
                                   return;
                               }
                               """;
@@ -827,11 +829,11 @@ public class NesRomCompilerTests
 
         const string direct = """
                               void Main() {
-                                  video_init();
-                                  sprite_asset(hero, "hero.nes.json");
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.nes.json");
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0, false, 2);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, false, 2);
                                   }
                               }
                               """;
@@ -862,7 +864,7 @@ public class NesRomCompilerTests
         var legacyRom = NesRomCompiler.CompileSource(
             SdkLibrarySource.Merge(
                 NesTarget.Intrinsics,
-                source.Replace("Sprite.Draw(", "sprite_draw(", StringComparison.Ordinal)),
+                source.Replace("Sprite.Draw(", "Sprite.Draw(", StringComparison.Ordinal)),
             RunnerSample.Directory);
 
         Assert.Equal(legacyRom, libraryRom);
@@ -955,11 +957,11 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
-                                  sprite_asset(hero, "hero.nes.json");
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.nes.json");
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0);
                                   }
                               }
                               """;
@@ -1006,7 +1008,7 @@ public class NesRomCompilerTests
     {
         const string sdkSource = """
                                  void Main() {
-                                     video_wait_vblank();
+                                     Video.WaitVBlank();
                                  }
                                  """;
 
@@ -1054,10 +1056,10 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  world_column(0, 1, 2);
-                                  world_column(1, 3, 4);
-                                  world_map(2, 10, 2);
+                                  Video.Init();
+                                  World.Column(0, 1, 2);
+                                  World.Column(1, 3, 4);
+                                  World.Map(2, 10, 2);
                                   Camera.Init(2, 10, 2);
                                   Camera.SetPosition(4, 1);
                                   return;
@@ -1074,12 +1076,12 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  world_column(0, 1, 2, 3, 4);
-                                  world_column(1, 5, 6, 7, 8);
-                                  world_column(2, 9, 10, 11, 12);
-                                  world_column(3, 13, 14, 15, 16);
-                                  world_map(4, 0, 4);
+                                  Video.Init();
+                                  World.Column(0, 1, 2, 3, 4);
+                                  World.Column(1, 5, 6, 7, 8);
+                                  World.Column(2, 9, 10, 11, 12);
+                                  World.Column(3, 13, 14, 15, 16);
+                                  World.Map(4, 0, 4);
                                   map_stream_row(29, 3, 0, 4);
                                   return;
                               }
@@ -1101,13 +1103,13 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 60);
+                           Video.Init();
+                           World.Column(0, {{tallColumn}});
+                           World.Map(1, 0, 61);
+                           Camera.Init(1, 0, 60);
                            map_stream_row(0, 60, 0, 1);
-                           camera_set_position(0, 1);
-                           camera_apply();
+                           Camera.SetPosition(0, 1);
+                           Camera.Apply();
                        }
                        """;
 
@@ -1122,15 +1124,15 @@ public class NesRomCompilerTests
         var column = string.Join(", ", Enumerable.Range(0, 14).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{column}});
-                           world_column(67, {{column}});
-                           world_map(68, 0, 14);
-                           camera_init(68, 0, 14);
+                           Video.Init();
+                           World.Column(0, {{column}});
+                           World.Column(67, {{column}});
+                           World.Map(68, 0, 14);
+                           Camera.Init(68, 0, 14);
                            u8 x = 8;
                            u8 y = 1;
-                           camera_set_position(x, y);
-                           camera_apply();
+                           Camera.SetPosition(x, y);
+                           Camera.Apply();
                        }
                        """;
 
@@ -1151,13 +1153,13 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 60);
+                           Video.Init();
+                           World.Column(0, {{tallColumn}});
+                           World.Map(1, 0, 61);
+                           Camera.Init(1, 0, 60);
                            u8 y = 8;
-                           camera_set_position(0, y);
-                           camera_apply();
+                           Camera.SetPosition(0, y);
+                           Camera.Apply();
                        }
                        """;
 
@@ -1178,14 +1180,14 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 60);
+                           Video.Init();
+                           World.Column(0, {{tallColumn}});
+                           World.Map(1, 0, 61);
+                           Camera.Init(1, 0, 60);
                            u8 y = 8;
-                           video_wait_vblank();
-                           camera_set_position(0, y);
-                           camera_apply();
+                           Video.WaitVBlank();
+                           Camera.SetPosition(0, y);
+                           Camera.Apply();
                        }
                        """;
 
@@ -1203,9 +1205,9 @@ public class NesRomCompilerTests
     {
         const string source = """
                        void Main() {
-                           video_init();
+                           Video.Init();
                            while (true) {
-                               video_wait_vblank();
+                               Video.WaitVBlank();
                            }
                        }
                        """;
@@ -1223,17 +1225,17 @@ public class NesRomCompilerTests
     {
         const string source = """
                        void Main() {
-                           video_init();
-                           palette_sprite(0, 0, 1, 2, 3);
-                           world_column(0, 1);
-                           world_map(1, 0, 1);
-                           camera_init(1, 0, 1);
-                           sprite_asset(marker, "samples/cross-target-camera/marker.json");
-                           camera_set_position(0, 0);
+                           Video.Init();
+                           Palette.Sprite(0, 0, 1, 2, 3);
+                           World.Column(0, 1);
+                           World.Map(1, 0, 1);
+                           Camera.Init(1, 0, 1);
+                           Sprite.Asset(marker, "samples/cross-target-camera/marker.json");
+                           Camera.SetPosition(0, 0);
                            while (true) {
-                               video_wait_vblank();
-                               sprite_draw(marker, 72, 72, 0, false, 0);
-                               camera_apply();
+                               Video.WaitVBlank();
+                               Sprite.Draw(marker, 72, 72, 0, false, 0);
+                               Camera.Apply();
                            }
                        }
                        """;
@@ -1258,14 +1260,14 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 60);
+                           Video.Init();
+                           World.Column(0, {{tallColumn}});
+                           World.Map(1, 0, 61);
+                           Camera.Init(1, 0, 60);
                            u8 y = 8;
-                           video_wait_vblank();
-                           camera_set_position(0, y);
-                           camera_apply();
+                           Video.WaitVBlank();
+                           Camera.SetPosition(0, y);
+                           Camera.Apply();
                        }
                        """;
 
@@ -1283,14 +1285,14 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{tallColumn}});
-                           world_map(1, 0, 61);
-                           camera_init(1, 0, 60);
+                           Video.Init();
+                           World.Column(0, {{tallColumn}});
+                           World.Map(1, 0, 61);
+                           Camera.Init(1, 0, 60);
                            u8 y = 8;
-                           video_wait_vblank();
-                           camera_set_position(0, y);
-                           camera_apply();
+                           Video.WaitVBlank();
+                           Camera.SetPosition(0, y);
+                           Camera.Apply();
                        }
                        """;
 
@@ -1316,7 +1318,7 @@ public class NesRomCompilerTests
                                     }
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor actor;
                                         Move(actor, 2);
                                         return;
@@ -1331,7 +1333,7 @@ public class NesRomCompilerTests
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           Actor actor;
                                           actor.Move(2);
                                           return;
@@ -1352,7 +1354,7 @@ public class NesRomCompilerTests
                                     }
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor actor;
                                         actor.Move(2);
                                         return;
@@ -1369,7 +1371,7 @@ public class NesRomCompilerTests
                                    }
 
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        Actor actor;
                                        actor.Move(2);
                                        return;
@@ -1394,7 +1396,7 @@ public class NesRomCompilerTests
                                     }
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor actor;
                                         actor.Move();
                                         return;
@@ -1415,7 +1417,7 @@ public class NesRomCompilerTests
                                    }
 
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        Actor actor;
                                        actor.Move();
                                        return;
@@ -1438,7 +1440,7 @@ public class NesRomCompilerTests
                                   struct Actor { u8 x; }
 
                                   void Main() {
-                                      video_init();
+                                      Video.Init();
                                       Actor actor = { x: Step };
                                       actor.x = Apply(actor.x);
                                       return;
@@ -1457,7 +1459,7 @@ public class NesRomCompilerTests
                                    class Actor { u8 x; }
 
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        Actor actor = { x: Tuning.Step };
                                        actor.x = Tuning.Apply(actor.x);
                                        return;
@@ -1478,7 +1480,7 @@ public class NesRomCompilerTests
                                     }
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor video;
                                         if (true) {
                                             Move(video, 2);
@@ -1495,7 +1497,7 @@ public class NesRomCompilerTests
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           Actor video;
                                           if (true) {
                                               video.Move(2);
@@ -1515,7 +1517,7 @@ public class NesRomCompilerTests
                                     u8 SnapToTile(u8 value) => value & 0xF8;
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         u8 value = 130;
                                         u8 snapped = SnapToTile(Clamp(value, 0, 120));
                                         return;
@@ -1527,7 +1529,7 @@ public class NesRomCompilerTests
                                       u8 SnapToTile(u8 value) => value & 0xF8;
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 value = 130;
                                           u8 snapped = value |> Clamp(0, 120) |> SnapToTile();
                                           return;
@@ -1546,7 +1548,7 @@ public class NesRomCompilerTests
                                     u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor actor = { x: 130 };
                                         u8 clamped = Clamp(X(actor), max: 120);
                                         return;
@@ -1559,7 +1561,7 @@ public class NesRomCompilerTests
                                       u8 Clamp(u8 value, u8 min = 0, u8 max = 120) => value < min ? min : value > max ? max : value;
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           Actor actor = { x: 130 };
                                           u8 clamped = actor.X() |> Clamp(max: 120);
                                           return;
@@ -1574,7 +1576,7 @@ public class NesRomCompilerTests
     {
         var statementEffect = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource("""
                                                                                                          pure void draw() {
-                                                                                                             video_init();
+                                                                                                             Video.Init();
                                                                                                          }
 
                                                                                                          void Main() {
@@ -1589,7 +1591,7 @@ public class NesRomCompilerTests
                                                                                                     pure u8 step(u8 value) => next(value);
 
                                                                                                     void Main() {
-                                                                                                        video_init();
+                                                                                                        Video.Init();
                                                                                                         u8 result = step(4);
                                                                                                         return;
                                                                                                     }
@@ -1607,7 +1609,7 @@ public class NesRomCompilerTests
                               }
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 result = step(4);
                                   return;
                               }
@@ -1622,7 +1624,7 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   let speed = 2;
                                   speed = 3;
                                   return;
@@ -1638,7 +1640,7 @@ public class NesRomCompilerTests
     {
         var compound = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource("""
                                                                                                   void Main() {
-                                                                                                      video_init();
+                                                                                                      Video.Init();
                                                                                                       let speed = 2;
                                                                                                       speed += 1;
                                                                                                       return;
@@ -1648,7 +1650,7 @@ public class NesRomCompilerTests
 
         var postfix = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource("""
                                                                                                  void Main() {
-                                                                                                     video_init();
+                                                                                                     Video.Init();
                                                                                                      let speed = 2;
                                                                                                      speed++;
                                                                                                      return;
@@ -1685,8 +1687,8 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  hud_set_tile(window, 0, 0, 1);
+                                  Video.Init();
+                                  Hud.SetTile(window, 0, 0, 1);
                                   return;
                               }
                               """;
@@ -1703,8 +1705,8 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  hud_set_tile(none, 0, 0, 1);
+                                  Video.Init();
+                                  Hud.SetTile(none, 0, 0, 1);
                                   return;
                               }
                               """;
@@ -1715,37 +1717,84 @@ public class NesRomCompilerTests
     }
 
     [Theory]
-    [InlineData("a", "Button.A")]
-    [InlineData("b", "Button.B")]
-    [InlineData("select", "Button.Select")]
-    [InlineData("start", "Button.Start")]
-    [InlineData("right", "Button.Right")]
-    [InlineData("left", "Button.Left")]
-    [InlineData("up", "Button.Up")]
-    [InlineData("down", "Button.Down")]
-    public void Button_enum_member_lowers_like_bare_button_identifier(string bare, string enumMember)
+    [InlineData("Button.A")]
+    [InlineData("Button.B")]
+    [InlineData("Button.Select")]
+    [InlineData("Button.Start")]
+    [InlineData("Button.Right")]
+    [InlineData("Button.Left")]
+    [InlineData("Button.Up")]
+    [InlineData("Button.Down")]
+    public void Button_enum_members_are_accepted_by_input_facade(string enumMember)
     {
-        string Program(string button) => $$"""
+        var source = $$"""
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   i16 down = 0;
                                   i16 pressed = 0;
                                   i16 released = 0;
                                   i16 held = 0;
                                   while (true) {
-                                      video_wait_vblank();
-                                      input_poll();
-                                      down = button_down({{button}});
-                                      pressed = button_just_pressed({{button}});
-                                      released = button_just_released({{button}});
-                                      held = button_hold_ticks({{button}});
+                                      Video.WaitVBlank();
+                                      Input.Poll();
+                                      down = Input.IsDown({{enumMember}});
+                                      pressed = Input.WasPressed({{enumMember}});
+                                      released = Input.WasReleased({{enumMember}});
+                                      held = Input.HoldTicks({{enumMember}});
                                   }
                               }
                               """;
 
-        Assert.Equal(
-            NesRomCompiler.CompileSource(Program(bare)),
-            NesRomCompiler.CompileSource(Program(enumMember)));
+        Assert.Equal(40976, NesRomCompiler.CompileSource(source).Length);
+    }
+
+    [Fact]
+    public void Bare_button_identifiers_are_rejected_by_input_facade()
+    {
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Input.Poll();
+                                  if (Input.IsDown(a)) {
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+        Assert.Contains("Button enum member", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("video_wait_vblank();", "video_wait_vblank")]
+    [InlineData("input_poll();", "input_poll")]
+    [InlineData("i16 down = button_down(Button.A);", "button_down")]
+    [InlineData("i16 pressed = button_just_pressed(Button.A);", "button_just_pressed")]
+    [InlineData("i16 released = button_just_released(Button.A);", "button_just_released")]
+    [InlineData("i16 ticks = button_hold_ticks(Button.A);", "button_hold_ticks")]
+    public void Direct_legacy_sdk_builtins_are_rejected(string statement, string legacyName)
+    {
+        var source = $$"""
+                       void Main() {
+                           {{statement}}
+                       }
+                       """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+        Assert.Contains(legacyName, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Direct_legacy_resource_declarations_are_rejected()
+    {
+        const string source = """
+                              void Main() {
+                                  world_column(0, 1, 2);
+                                  world_map(1, 10, 2);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+        Assert.Contains("world_column", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1753,28 +1802,28 @@ public class NesRomCompilerTests
     {
         const string builtinSource = """
                                      void Main() {
-                                         video_init();
+                                         Video.Init();
                                          i16 w = 0;
                                          i16 h = 0;
                                          while (true) {
-                                             video_wait_vblank();
-                                             input_poll();
-                                             if (button_just_pressed(Button.A) != 0) { w += 1; }
-                                             if (button_down(Button.A) != 0) { w += 1; }
-                                             if (button_just_released(Button.A) != 0) { w += 1; }
-                                             h = button_hold_ticks(Button.A);
+                                             Video.WaitVBlank();
+                                             Input.Poll();
+                                             if (Input.WasPressed(Button.A) != 0) { w += 1; }
+                                             if (Input.IsDown(Button.A) != 0) { w += 1; }
+                                             if (Input.WasReleased(Button.A) != 0) { w += 1; }
+                                             h = Input.HoldTicks(Button.A);
                                          }
                                      }
                                      """;
 
         const string facadeSource = """
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         i16 w = 0;
                                         i16 h = 0;
                                         while (true) {
-                                            video_wait_vblank();
-                                            input_poll();
+                                            Video.WaitVBlank();
+                                            Input.Poll();
                                             if (Input.WasPressed(Button.A)) { w += 1; }
                                             if (Input.IsDown(Button.A)) { w += 1; }
                                             if (Input.WasReleased(Button.A)) { w += 1; }
@@ -1791,18 +1840,18 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   i16 down = 0;
                                   i16 pressed = 0;
                                   i16 released = 0;
                                   i16 held = 0;
                                   while (true) {
-                                      video_wait_vblank();
-                                      input_poll();
-                                      down = button_down(a);
-                                      pressed = button_just_pressed(a);
-                                      released = button_just_released(a);
-                                      held = button_hold_ticks(a);
+                                      Video.WaitVBlank();
+                                      Input.Poll();
+                                      down = Input.IsDown(Button.A);
+                                      pressed = Input.WasPressed(Button.A);
+                                      released = Input.WasReleased(Button.A);
+                                      held = Input.HoldTicks(Button.A);
                                   }
                               }
                               """;
@@ -1814,9 +1863,9 @@ public class NesRomCompilerTests
         Assert.True(ContainsSequence(prg, [0xA5, 0xF0, 0x85, 0xF1]), "input_poll should snapshot previous controller state before reading the current tick.");
         Assert.True(ContainsSequence(prg, [0xA9, 0x01, 0x8D, 0x16, 0x40, 0xA9, 0x00, 0x8D, 0x16, 0x40]), "input_poll should strobe NES controller port $4016.");
         Assert.True(ContainsSequence(prg, [0xAD, 0x16, 0x40, 0x29, 0x01]), "input_poll should read serial button bits from NES controller port $4016.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0xF0, 0x29, 0x01]), "button_down(a) should read the current tick mask.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xF0, 0x29, 0x01]), "Input.IsDown(Button.A) should read the current tick mask.");
         Assert.True(ContainsSequence(prg, [0xA5, 0xF1, 0x29, 0x01]), "edge helpers should read the previous tick mask.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0xF2]), "button_hold_ticks(a) should read the A-button hold counter.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xF2]), "Input.HoldTicks(Button.A) should read the A-button hold counter.");
     }
 
     [Fact]
@@ -1829,7 +1878,7 @@ public class NesRomCompilerTests
                               }
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Vec2 position;
                                   position.x = 40;
                                   position.y = position.x;
@@ -1855,7 +1904,7 @@ public class NesRomCompilerTests
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 seed = 4;
                                           Vec2 position;
                                           position.x = 2;
@@ -1871,7 +1920,7 @@ public class NesRomCompilerTests
                                          }
 
                                          void Main() {
-                                             video_init();
+                                             Video.Init();
                                              u8 seed = 4;
                                              Vec2 position = { y: seed + 1, x: 2 };
                                              return;
@@ -1891,7 +1940,7 @@ public class NesRomCompilerTests
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 x = 2;
                                           u8 y = 4;
                                           Vec2 position;
@@ -1908,7 +1957,7 @@ public class NesRomCompilerTests
                                          }
 
                                          void Main() {
-                                             video_init();
+                                             Video.Init();
                                              u8 x = 2;
                                              u8 y = 4;
                                              Vec2 position = { x, y: y + 1 };
@@ -1933,7 +1982,7 @@ public class NesRomCompilerTests
                               type Position = Vec2;
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   ActorIndex actor = 7;
                                   Position position;
                                   position.x = actor;
@@ -1959,7 +2008,7 @@ public class NesRomCompilerTests
                               const u8 Copy = StartX - 39;
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   i16 x = StartX;
                                   i16 y = Copy;
                                   y = x;
@@ -1981,7 +2030,7 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   const u8 StartX = 40;
                                   const u8 Copy = StartX + 1;
                                   i16 x = Copy;
@@ -2008,7 +2057,7 @@ public class NesRomCompilerTests
                               const Speed = UseFast ? 2 : 0;
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 speed = Speed;
                                   return;
                               }
@@ -2029,7 +2078,7 @@ public class NesRomCompilerTests
                                      const Tile = 42;
 
                                      void Main() {
-                                         video_init();
+                                         Video.Init();
                                          u8 flags = Mask | 15;
                                          u8 tile = Tile;
                                          u16 distance = 128;
@@ -2042,7 +2091,7 @@ public class NesRomCompilerTests
                                      const Tile = 0x2A;
 
                                      void Main() {
-                                         video_init();
+                                         Video.Init();
                                          u8 flags = Mask | 0x0F;
                                          u8 tile = Tile;
                                          u16 distance = 1_28u16;
@@ -2064,7 +2113,7 @@ public class NesRomCompilerTests
                               }
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 actorSize = sizeof(Actor);
                                   u8 pointerSize = sizeof(ptr<u8>);
                                   pointerSize = actorSize;
@@ -2092,7 +2141,7 @@ public class NesRomCompilerTests
                               }
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 yOffset = offsetof(Actor, y);
                                   u8 activeOffset = offsetof(Actor, active);
                                   activeOffset = yOffset;
@@ -2170,7 +2219,7 @@ public class NesRomCompilerTests
     {
         const string explicitSource = """
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 seed = 3;
                                           u8 values[4];
                                           values[0] = 1;
@@ -2183,7 +2232,7 @@ public class NesRomCompilerTests
 
         const string initializerSource = """
                                          void Main() {
-                                             video_init();
+                                             Video.Init();
                                              u8 seed = 3;
                                              u8 values[4] = [1, seed, seed + 1];
                                              u8 copy = values[3];
@@ -2205,7 +2254,7 @@ public class NesRomCompilerTests
                                       }
 
                                       void Main() {
-                                          video_init();
+                                          Video.Init();
                                           u8 seed = 3;
                                           Actor actors[3];
                                           actors[0].x = 1;
@@ -2224,7 +2273,7 @@ public class NesRomCompilerTests
                                          }
 
                                          void Main() {
-                                             video_init();
+                                             Video.Init();
                                              u8 seed = 3;
                                              Actor actors[3] = [{ x: 1, active: 1 }, { y: seed + 1 }];
                                              u8 copy = actors[2].active;
@@ -2240,7 +2289,7 @@ public class NesRomCompilerTests
     {
         const string explicitLengthSource = """
                                             void Main() {
-                                                video_init();
+                                                Video.Init();
                                                 u8 seed = 3;
                                                 u8 values[3] = [1, seed, seed + 1];
                                                 u8 size = countof(values);
@@ -2250,7 +2299,7 @@ public class NesRomCompilerTests
 
         const string inferredLengthSource = """
                                             void Main() {
-                                                video_init();
+                                                Video.Init();
                                                 u8 seed = 3;
                                                 u8 values[] = [1, seed, seed + 1];
                                                 u8 size = countof(values);
@@ -2266,7 +2315,7 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 values[4];
                                   u8 size = countof(values);
                                   values[0] = size;
@@ -2502,7 +2551,7 @@ public class NesRomCompilerTests
                               }
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Actor actors[3];
                                   u8 i = 2;
                                   actors[1].active = 7;
@@ -2534,7 +2583,7 @@ public class NesRomCompilerTests
                               }
 
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Actor actors[3] = [{ active: 1, x: 4 }, { x: 9 }, { active: 1, x: 12 }];
                                   for (u8 i = 0; i < countof(actors); i += 1) {
                                       if (actors[i].active != 0) {
@@ -2618,7 +2667,7 @@ public class NesRomCompilerTests
                                     inline u8 enemy_cooldown(u8 kind) => kind == Goomba ? GoombaCooldown : 0;
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor enemies[2];
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
@@ -2631,7 +2680,7 @@ public class NesRomCompilerTests
 
         const string actorSource = """
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        Actors.Pool(enemies, 0b10);
                                        Enemies.Def(Goomba, behavior: Walker, speed: 0x01u8, hp: 0b1, cooldown: 0x3Cu8);
                                        enemies[0].active = 1;
@@ -2688,13 +2737,13 @@ public class NesRomCompilerTests
             """);
         const string source = """
                               void Main() {
-                                  world_column(0, 0, 0);
-                                  world_map(40, 10, 40);
-                                  camera_init(40, 10, 40);
+                                  World.Column(0, 0, 0);
+                                  World.Map(40, 10, 40);
+                                  Camera.Init(40, 10, 40);
                                   Sprite.Asset(goomba, "goomba.nes.json");
                                   Actors.Pool(enemies, 2);
                                   Enemies.Def(Goomba, sprite: goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
-                                  camera_set_position(0, 160);
+                                  Camera.SetPosition(0, 160);
                                   Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                   enemies.TouchTiles(0, 1);
                                   enemies.LandOnTiles(4, 12, 1);
@@ -2753,7 +2802,7 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Sprite.Asset(goomba, "wide-goomba.nes.json");
                                   Actors.Pool(enemies, 23);
                                   Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
@@ -2781,7 +2830,7 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Sprite.Asset(goomba, "goomba.png", 8, 16);
                                   Actors.Pool(enemies, 8);
                                   Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
@@ -2823,7 +2872,7 @@ public class NesRomCompilerTests
             """);
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Sprite.Asset(hero_shot, "hero-shot.nes.json");
                                   Projectiles.Pool(shots, hero: 1, enemy: 1, requests: 1, offscreenMargin: 16);
                                   Projectiles.Def(HeroShot, team: Hero, sprite: hero_shot, speedX: 3, speedY: 0, damage: 1, lifetime: 32, hitboxWidth: 4, hitboxHeight: 4);
@@ -2869,7 +2918,7 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Sprite.Asset(goomba, "goomba.nes.json");
                                   Actors.Pool(enemies, 9);
                                   Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
@@ -2911,7 +2960,7 @@ public class NesRomCompilerTests
                                     const GoombaSpeed = 1;
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Actor enemies[1];
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
@@ -2935,7 +2984,7 @@ public class NesRomCompilerTests
 
         const string actorSource = """
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        Actors.Pool(enemies, 1);
                                        Enemies.Def(Goomba, behavior: Walker, speed: 1, hp: 1);
                                        enemies[0].active = 1;
@@ -2997,7 +3046,7 @@ public class NesRomCompilerTests
                                     const Goomba = 1;
 
                                     void Main() {
-                                        video_init();
+                                        Video.Init();
                                         Sprite.Asset(goomba, "goomba.nes.json");
                                         Actor enemies[1];
                                         enemies[0].active = 1;
@@ -3040,7 +3089,7 @@ public class NesRomCompilerTests
 
         const string actorSource = """
                                    void Main() {
-                                       video_init();
+                                       Video.Init();
                                        Sprite.Asset(goomba, "goomba.nes.json");
                                        Actors.Pool(enemies, 1);
                                        Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
@@ -3085,10 +3134,10 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
-                                  world_column(0, 0, 0);
-                                  world_map(1, 10, 2);
-                                  camera_init(1, 10, 2);
+                                  Video.Init();
+                                  World.Column(0, 0, 0);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
                                   Sprite.Asset(goomba, "goomba.nes.json");
                                   Actors.Pool(enemies, 1);
                                   Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1, hp: 1);
@@ -3097,7 +3146,7 @@ public class NesRomCompilerTests
                                   enemies[0].x = 20;
                                   enemies[0].xHi = 0;
                                   enemies[0].y = 48;
-                                  camera_set_position(4, 0);
+                                  Camera.SetPosition(4, 0);
                                   Video.WaitVBlank();
                                   enemies.Draw();
                                   return;
@@ -3137,12 +3186,12 @@ public class NesRomCompilerTests
                                     const Goomba = 1;
 
                                     void Main() {
-                                        world_column(0, 0, 0);
-                                        world_flags(0, 0, 1);
-                                        world_column(1, 0, 0);
-                                        world_flags(1, 0, 2);
-                                        world_map(2, 10, 2);
-                                        camera_init(2, 10, 2);
+                                        World.Column(0, 0, 0);
+                                        World.Flags(0, 0, 1);
+                                        World.Column(1, 0, 0);
+                                        World.Flags(1, 0, 2);
+                                        World.Map(2, 10, 2);
+                                        Camera.Init(2, 10, 2);
                                         Actor enemies[2];
                                         enemies[0].active = 1;
                                         enemies[0].kind = Goomba;
@@ -3154,7 +3203,7 @@ public class NesRomCompilerTests
                                         enemies[1].x = 104;
                                         enemies[1].xHi = 0;
                                         enemies[1].y = 0;
-                                        camera_set_position(0, 0);
+                                        Camera.SetPosition(0, 0);
 
                                         u8 __enemies_touch_camera_x_lo = __rs_actor_camera_x_lo();
                                         u8 __enemies_touch_camera_x_hi = __rs_actor_camera_x_hi();
@@ -3188,12 +3237,12 @@ public class NesRomCompilerTests
 
         const string actorSource = """
                                    void Main() {
-                                       world_column(0, 0, 0);
-                                       world_flags(0, 0, 1);
-                                       world_column(1, 0, 0);
-                                       world_flags(1, 0, 2);
-                                       world_map(2, 10, 2);
-                                       camera_init(2, 10, 2);
+                                       World.Column(0, 0, 0);
+                                       World.Flags(0, 0, 1);
+                                       World.Column(1, 0, 0);
+                                       World.Flags(1, 0, 2);
+                                       World.Map(2, 10, 2);
+                                       Camera.Init(2, 10, 2);
                                        Actors.Pool(enemies, 2);
                                        Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 8, hitboxHeight: 8);
                                        enemies[0].active = 1;
@@ -3206,7 +3255,7 @@ public class NesRomCompilerTests
                                        enemies[1].x = 104;
                                        enemies[1].xHi = 0;
                                        enemies[1].y = 0;
-                                       camera_set_position(0, 0);
+                                       Camera.SetPosition(0, 0);
                                        enemies.TouchTiles(0, 1);
                                        return;
                                    }
@@ -3267,16 +3316,16 @@ public class NesRomCompilerTests
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 
                              void Main() {
-                                 world_column(0, 0, 0);
-                                 world_map(40, 10, 2);
-                                 camera_init(40, 10, 2);
+                                 World.Column(0, 0, 0);
+                                 World.Map(40, 10, 2);
+                                 Camera.Init(40, 10, 2);
                                  Actor enemies[1];
                                  u8 __enemies_spawn_0_used[2];
 
-                                 camera_set_position(0, 0);
+                                 Camera.SetPosition(0, 0);
                              {{RuntimeSpawnActivationBlockForNes("__enemies_spawn_0_call0")}}
 
-                                 camera_set_position(128, 0);
+                                 Camera.SetPosition(128, 0);
                              {{RuntimeSpawnActivationBlockForNes("__enemies_spawn_0_call1")}}
                                  return;
                              }
@@ -3284,15 +3333,15 @@ public class NesRomCompilerTests
 
         const string actorSource = """
                                    void Main() {
-                                       world_column(0, 0, 0);
-                                       world_map(40, 10, 2);
-                                       camera_init(40, 10, 2);
+                                       World.Column(0, 0, 0);
+                                       World.Map(40, 10, 2);
+                                       Camera.Init(40, 10, 2);
                                        Actors.Pool(enemies, 1);
                                        Enemies.Def(Goomba, behavior: Walker);
                                        Enemies.Def(Bat, behavior: Flyer);
-                                       camera_set_position(0, 0);
+                                       Camera.SetPosition(0, 0);
                                        Actors.SpawnLayer(enemies, "level.tmj", "actors");
-                                       camera_set_position(128, 0);
+                                       Camera.SetPosition(128, 0);
                                        Actors.SpawnLayer(enemies, "level.tmj", "actors");
                                        return;
                                    }
@@ -3605,7 +3654,7 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   u8 state = 1;
                                   u8 value;
                                   switch (state) {
@@ -3861,11 +3910,11 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
-                                  sprite_asset(hero, "hero.nes.json");
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.nes.json");
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0, 0, 2);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 2);
                                   }
                               }
                               """;
@@ -3954,13 +4003,13 @@ public class NesRomCompilerTests
     {
         const string direct = """
                               void Main() {
-                                  world_column(0, 1, 2);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 10, 2);
-                                  camera_init(1, 10, 2);
+                                  World.Column(0, 1, 2);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
                                   u8 footY = 16;
-                                  u8 hit = camera_aabb_tiles(72, footY - 8, 16, 16, 1);
-                                  u8 hitTop = camera_aabb_hit_top(72, footY - 8, 16, 16, 1);
+                                  u8 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
+                                  u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
                               }
                               """;
         const string library = """
@@ -3987,14 +4036,14 @@ public class NesRomCompilerTests
     {
         const string direct = """
                               void Main() {
-                                  world_column(0, 1, 2);
-                                  world_flags(0, 0, 1);
-                                  world_map(1, 10, 2);
-                                  camera_init(1, 10, 2);
+                                  World.Column(0, 1, 2);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(1, 10, 2);
+                                  Camera.Init(1, 10, 2);
                                   u8 screenX = 40;
                                   u8 screenY = 16;
-                                  u8 hit = camera_screen_aabb_tiles(screenX, screenY, 16, 16, 1);
-                                  u8 hitTop = camera_screen_aabb_hit_top(screenX, screenY, 16, 16, 1);
+                                  u8 hit = Camera.ScreenAabbTiles(screenX, screenY, 16, 16, 1);
+                                  u8 hitTop = Camera.ScreenAabbHitTop(screenX, screenY, 16, 16, 1);
                               }
                               """;
         const string library = """
@@ -4028,11 +4077,11 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
-                                  sprite_asset(hero, "hero.png", 8, 8);
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.png", 8, 8);
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0, 0, 0);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 0);
                                   }
                               }
                               """;
@@ -4121,11 +4170,11 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
-                                  sprite_asset(hero, "hero.png", 8, 8);
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.png", 8, 8);
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0, false, 3);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, false, 3);
                                   }
                               }
                               """;
@@ -4164,13 +4213,13 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
+                                  Video.Init();
                                   Palette.Background(0, 0, 1, 2, 3);
                                   Palette.Sprite(0, 0, 0, 1, 3);
-                                  sprite_asset(hero, "hero.png", 8, 8);
+                                  Sprite.Asset(hero, "hero.png", 8, 8);
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0, 0, 0);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 0);
                                   }
                               }
                               """;
@@ -4237,13 +4286,13 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  video_init();
-                                  sprite_asset(hero, "hero.png", 8, 8);
-                                  sprite_asset(enemy, "enemy.png", 8, 8);
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.png", 8, 8);
+                                  Sprite.Asset(enemy, "enemy.png", 8, 8);
                                   while (true) {
-                                      video_wait_vblank();
-                                      sprite_draw(hero, 24, 32, 0, false, 0);
-                                      sprite_draw(enemy, 40, 32, 0, false, 0);
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, false, 0);
+                                      Sprite.Draw(enemy, 40, 32, 0, false, 0);
                                   }
                               }
                               """;
@@ -4284,9 +4333,9 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  sprite_asset(hero, "hero.nes.json");
+                                  Sprite.Asset(hero, "hero.nes.json");
                                   while (true) {
-                                      sprite_draw(hero, 24, 32, 0, 0, 4);
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 4);
                                   }
                               }
                               """;
@@ -4307,9 +4356,9 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  sprite_asset(hero, "hero.nes.png", 8, 8);
+                                  Sprite.Asset(hero, "hero.nes.png", 8, 8);
                                   while (true) {
-                                      sprite_draw(hero, 24, 32, 0, 0, 4);
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 4);
                                   }
                               }
                               """;
@@ -4346,13 +4395,13 @@ public class NesRomCompilerTests
             """);
         var draws = string.Join(
             Environment.NewLine,
-            Enumerable.Range(0, 9).Select(index => $"        sprite_draw(hero, {index * 8}, 24, 0);"));
+            Enumerable.Range(0, 9).Select(index => $"        Sprite.Draw(hero, {index * 8}, 24, 0);"));
         var source = """
                      void Main() {
-                         video_init();
-                         sprite_asset(hero, "hero.nes.json");
+                         Video.Init();
+                         Sprite.Asset(hero, "hero.nes.json");
                          while (true) {
-                             video_wait_vblank();
+                             Video.WaitVBlank();
 
                      """ + draws + """
                          }
@@ -4377,9 +4426,9 @@ public class NesRomCompilerTests
 
         const string source = """
                               void Main() {
-                                  sprite_asset(wide, "wide.nes.json");
+                                  Sprite.Asset(wide, "wide.nes.json");
                                   while (true) {
-                                      sprite_draw(wide, 0, 0, 0);
+                                      Sprite.Draw(wide, 0, 0, 0);
                                   }
                               }
                               """;
@@ -4394,15 +4443,15 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  video_init();
-                                  world_column(0, 1, 2);
-                                  world_column(1, 3, 4);
-                                  world_map(2, 10, 2);
-                                  camera_init(2, 10, 2);
+                                  Video.Init();
+                                  World.Column(0, 1, 2);
+                                  World.Column(1, 3, 4);
+                                  World.Map(2, 10, 2);
+                                  Camera.Init(2, 10, 2);
                                   while (true) {
-                                      video_wait_vblank();
-                                      camera_set_position(8, 0);
-                                      camera_apply();
+                                      Video.WaitVBlank();
+                                      Camera.SetPosition(8, 0);
+                                      Camera.Apply();
                                   }
                               }
                               """;
@@ -4419,8 +4468,8 @@ public class NesRomCompilerTests
 
         Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, expectedRows), "world_map should seed the visible NES nametable from world_column data.");
-        Assert.True(ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xE7, 0xA5, 0xE7, 0x85, 0xE0]), "camera_set_position(8, 0) should store the requested horizontal camera byte after the movement check.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0xE7, 0x4A, 0x4A, 0x4A, 0x85, 0xE1]), "camera_set_position(8, 0) should derive the absolute camera tile on short maps too.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0x08, 0x85, 0xE7, 0xA5, 0xE7, 0x85, 0xE0]), "Camera.SetPosition(8, 0) should store the requested horizontal camera byte after the movement check.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0xE7, 0x4A, 0x4A, 0x4A, 0x85, 0xE1]), "Camera.SetPosition(8, 0) should derive the absolute camera tile on short maps too.");
         Assert.True(ContainsSequence(prg, [0xAD, 0x02, 0x20, 0xA5, 0xE1, 0x29, 0x20]), "camera_apply should derive the horizontal nametable bit from the absolute camera tile.");
         Assert.True(ContainsSequence(prg, [0x8D, 0x00, 0x20, 0xA5, 0xE0, 0x8D, 0x05, 0x20, 0xA9, 0x00, 0x8D, 0x05, 0x20]), "camera_apply should write PPUCTRL before horizontal and zero vertical scroll.");
     }
@@ -4431,19 +4480,19 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           video_init();
-                           world_column(0, {{tallColumn}});
-                           world_column(63, {{tallColumn}});
-                           world_map(64, 0, 60);
-                           camera_init(64, 0, 60);
+                           Video.Init();
+                           World.Column(0, {{tallColumn}});
+                           World.Column(63, {{tallColumn}});
+                           World.Map(64, 0, 60);
+                           Camera.Init(64, 0, 60);
                            u8 x = 0;
                            u8 y = 0;
                            while (true) {
-                               video_wait_vblank();
+                               Video.WaitVBlank();
                                x += 1;
                                y += 1;
-                               camera_set_position(x, y);
-                               camera_apply();
+                               Camera.SetPosition(x, y);
+                               Camera.Apply();
                            }
                        }
                        """;
@@ -4464,12 +4513,12 @@ public class NesRomCompilerTests
         var column = string.Join(", ", Enumerable.Range(0, 14).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           world_column(0, {{column}});
-                           world_map(1, 0, 14);
-                           camera_init(1, 0, 14);
+                           World.Column(0, {{column}});
+                           World.Map(1, 0, 14);
+                           Camera.Init(1, 0, 14);
                            u8 y = 56;
-                           camera_set_position(0, y);
-                           camera_apply();
+                           Camera.SetPosition(0, y);
+                           Camera.Apply();
                        }
                        """;
 
@@ -4489,14 +4538,14 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 1, 2);
-                                  world_flags(0, 0, 1);
-                                  world_map(68, 10, 2);
-                                  camera_init(68, 10, 2);
+                                  World.Column(0, 1, 2);
+                                  World.Flags(0, 0, 1);
+                                  World.Map(68, 10, 2);
+                                  Camera.Init(68, 10, 2);
                                   while (true) {
-                                      video_wait_vblank();
-                                      u8 x = button_hold_ticks(right);
-                                      camera_set_position(x, 0);
+                                      Video.WaitVBlank();
+                                      u8 x = Input.HoldTicks(Button.Right);
+                                      Camera.SetPosition(x, 0);
                                       u8 hit = Camera.AabbTiles(72, 8, 16, 8, 1);
                                   }
                               }
@@ -4517,12 +4566,12 @@ public class NesRomCompilerTests
         var tallColumn = string.Join(", ", Enumerable.Range(0, 96).Select(row => row % 4 + 1));
         var source = $$"""
                        void Main() {
-                           world_column(0, {{tallColumn}});
-                           world_map(1, 0, 96);
-                           camera_init(1, 0, 96);
+                           World.Column(0, {{tallColumn}});
+                           World.Map(1, 0, 96);
+                           Camera.Init(1, 0, 96);
                            while (true) {
-                               camera_set_position(0, 1);
-                               camera_apply();
+                               Camera.SetPosition(0, 1);
+                               Camera.Apply();
                            }
                        }
                        """;
@@ -4537,12 +4586,12 @@ public class NesRomCompilerTests
     {
         const string source = """
                               void Main() {
-                                  world_column(0, 1);
-                                  world_map(1, 0, 1);
-                                  camera_init(1, 60, 1);
+                                  World.Column(0, 1);
+                                  World.Map(1, 0, 1);
+                                  Camera.Init(1, 60, 1);
                                   while (true) {
-                                      camera_set_position(0, 1);
-                                      camera_apply();
+                                      Camera.SetPosition(0, 1);
+                                      Camera.Apply();
                                   }
                               }
                               """;

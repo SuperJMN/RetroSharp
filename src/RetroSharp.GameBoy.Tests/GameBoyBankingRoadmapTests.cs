@@ -457,6 +457,7 @@ public sealed class GameBoyBankingRoadmapTests
                 Sprite.Asset(player2, "player.png", 18, 32);
                 Sprite.Asset(player3, "player.png", 18, 32);
             """ + MapColumns(200, 16) + """
+                World.Map(200, 0, 16);
                 Music.Asset(theme, "large.gbapu");
                 Audio.Init();
                 Music.Play(theme);
@@ -522,7 +523,7 @@ public sealed class GameBoyBankingRoadmapTests
             var values = Enumerable
                 .Range(0, height)
                 .Select(row => column == 2 && row == 1 ? "7" : ((column + row) % 5 + 1).ToString());
-            lines.Add($"    map_column({column}, {string.Join(", ", values)});");
+            lines.Add($"    World.Column({column}, {string.Join(", ", values)});");
         }
 
         return string.Join(Environment.NewLine, lines) + Environment.NewLine;

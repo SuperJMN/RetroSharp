@@ -104,7 +104,7 @@ public sealed class SdkV1ReferenceTests
         "effects.ProcessRequests()",
         "effects.Update()",
         "effects.Draw()",
-        "world_tile_flags_at(worldX, worldY)",
+        "World.TileFlagsAt(worldX, worldY)",
         "collision_aabb_tiles(x, y, width, height, flags)",
         "Camera.AabbTiles(screenX, worldY, width, height, flags)",
         "Camera.AabbHitTop(screenX, worldY, width, height, flags)",

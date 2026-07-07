@@ -544,13 +544,6 @@ public static class Sdk2DOperationCollector
             return false;
         }
 
-        if (call.Name == "sprite_width")
-        {
-            SdkCallReader.RequireArity(call, 1);
-            spriteId = SdkCallReader.IdentifierArg(call.Parameters.ElementAt(0), "sprite_width argument 1");
-            return true;
-        }
-
         if (functions is null || !functions.TryGetValue(call.Name, out var function))
         {
             return false;
@@ -818,34 +811,11 @@ public static class Sdk2DOperationCollector
 
             switch (call.Name)
             {
-                case "video_wait_vblank":
-                    SdkCallReader.RequireArity(call, 0);
-                    AddOp(new Sdk2DOperation.WaitFrame());
-                    break;
-                case "input_poll":
-                    SdkCallReader.RequireArity(call, 0);
-                    AddOp(new Sdk2DOperation.PollInput());
-                    break;
-                case "camera_set_position":
-                    CollectCameraSetPosition(call);
-                    break;
-                case "camera_apply":
-                    CollectCameraApply(call);
-                    break;
-                case "sprite_draw":
-                    CollectDrawLogicalSprite(call);
-                    break;
                 case "map_stream_column":
                     CollectStreamMapColumn(call);
                     break;
                 case "map_stream_row":
                     CollectStreamMapRow(call);
-                    break;
-                case "hud_set_tile":
-                    CollectHudSetTile(call);
-                    break;
-                case "world_load":
-                    SdkCallReader.RequireArity(call, 1);
                     break;
                 default:
                     if (CollectTargetIntrinsic(call))
@@ -993,21 +963,6 @@ public static class Sdk2DOperationCollector
         {
             switch (call.Name)
             {
-                case "world_tile_flags_at":
-                    CollectWorldTileFlagsAt(call);
-                    break;
-                case "camera_aabb_tiles":
-                    CollectCameraAabbTiles(call);
-                    break;
-                case "camera_aabb_hit_top":
-                    CollectCameraAabbHitTop(call);
-                    break;
-                case "camera_screen_aabb_tiles":
-                    CollectCameraScreenAabbTiles(call);
-                    break;
-                case "camera_screen_aabb_hit_top":
-                    CollectCameraScreenAabbHitTop(call);
-                    break;
                 default:
                     if (CollectTargetValueIntrinsic(call))
                     {
@@ -1455,19 +1410,10 @@ public static class Sdk2DOperationCollector
 
             switch (call.Name)
             {
-                case "video_wait_vblank":
-                    SdkCallReader.RequireArity(call, 0);
-                    return state.CloseOpenFrames();
-                case "input_poll":
-                    SdkCallReader.RequireArity(call, 0);
-                    return state.CloseOpenFrames();
                 case "map_stream_column":
                     return state.AddBudget(new Sdk2DFrameBudget(backgroundTileWrites: ReadStreamMapColumn(call).Height));
                 case "map_stream_row":
                     return state.AddBudget(new Sdk2DFrameBudget(backgroundTileWrites: ReadStreamMapRow(call).Width));
-                case "sprite_draw":
-                    var draw = ReadDrawLogicalSprite(call);
-                    return state.AddBudget(drawSpriteBudget?.Invoke(draw) ?? Sdk2DFrameBudget.Empty);
                 default:
                     if (TryCollectTargetIntrinsic(state, call, out var intrinsicState))
                     {

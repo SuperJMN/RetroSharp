@@ -84,14 +84,14 @@ public sealed class GameBoyMusicTests
 
         const string direct = """
                               void Main() {
-                                  video_init();
-                                  music_asset(stage_theme, "stage.gbapu.json");
-                                  audio_init();
-                                  music_play(stage_theme);
-                                  music_stop();
+                                  Video.Init();
+                                  Music.Asset(stage_theme, "stage.gbapu.json");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
+                                  Music.Stop();
                                   while (true) {
-                                      video_wait_vblank();
-                                      audio_update();
+                                      Video.WaitVBlank();
+                                      Audio.Update();
                                   }
                               }
                               """;

@@ -396,20 +396,7 @@ internal sealed class NesVideoProgram
         {
             case "video_init":
             case "video_present":
-            case "video_wait_vblank":
                 RequireArity(call, 0);
-                break;
-            case "palette_set":
-                RequireArity(call, 2);
-                var index = ConstArg(call, 0, 0, 31);
-                Palette[index] = (byte)ConstArg(call, 1, 0, 63);
-                rawPaletteIndexes.Add(index);
-                break;
-            case "palette_background":
-                ApplyLogicalPalette(call, PaletteKind.Background);
-                break;
-            case "palette_sprite":
-                ApplyLogicalPalette(call, PaletteKind.Sprite);
                 break;
             case "tilemap_set":
                 RequireArity(call, 3);
@@ -423,47 +410,6 @@ internal sealed class NesVideoProgram
                     ConstArg(call, 2, 1, 32),
                     ConstArg(call, 3, 1, 30),
                     ConstArg(call, 4, 0, 255));
-                break;
-            case "map_column":
-                ApplyMapColumn(call);
-                break;
-            case "world_column":
-                ApplyWorldColumn(call);
-                break;
-            case "world_flags":
-                ApplyWorldFlags(call);
-                break;
-            case "world_map":
-                ApplyWorldMap(call);
-                break;
-            case "world_load":
-                ApplyWorldLoad(call);
-                break;
-            case "sprite_asset":
-                ApplySpriteAsset(call);
-                break;
-            case "animation_clip":
-                ApplyAnimationClip(call);
-                break;
-            case "music_asset":
-                ApplyMusicAsset(call);
-                break;
-            case "sfx_asset":
-                ApplySoundEffectAsset(call);
-                break;
-            case "audio_init":
-            case "audio_update":
-            case "music_stop":
-                RequireArity(call, 0);
-                break;
-            case "music_play":
-                RequireArity(call, 1);
-                break;
-            case "sfx_play":
-                RequireArity(call, 1);
-                break;
-            case "hud_set_tile":
-                ValidateHudSetTile(call);
                 break;
             default:
                 ApplyStaticUserFunction(call, callStack);

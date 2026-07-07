@@ -2457,45 +2457,8 @@ internal sealed class GameBoyRuntimeCompiler
 
         switch (call.Name)
         {
-            case "video_init":
-            case "video_present":
-            case "palette_set":
-            case "object_palette_set":
-            case "palette_background":
-            case "palette_sprite":
-            case "tilemap_set":
-            case "tilemap_fill":
-            case "map_column":
-            case "world_column":
-            case "world_flags":
-            case "world_map":
-            case "world_load":
-            case "sprite_asset":
-            case "music_asset":
-            case "sfx_asset":
-                break;
-            case "animation_clip":
-                break;
             case "hud_set_tile":
                 _ = ConsumeSdkOperation<Sdk2DOperation.SetHudTile>(call.Name);
-                break;
-            case "input_poll":
-                EmitNextSdkOperation<Sdk2DOperation.PollInput>(call.Name);
-                break;
-            case "audio_init":
-                EmitNextSdkAudioOperation<SdkAudioOperation.InitializeAudio>(call.Name);
-                break;
-            case "audio_update":
-                EmitNextSdkAudioOperation<SdkAudioOperation.UpdateAudio>(call.Name);
-                break;
-            case "music_play":
-                EmitNextSdkAudioOperation<SdkAudioOperation.PlayMusic>(call.Name);
-                break;
-            case "sfx_play":
-                EmitNextSdkAudioOperation<SdkAudioOperation.PlaySoundEffect>(call.Name);
-                break;
-            case "music_stop":
-                EmitNextSdkAudioOperation<SdkAudioOperation.StopMusic>(call.Name);
                 break;
             case "tilemap_fill_column":
                 EmitTilemapFillColumn(call);
@@ -2503,29 +2466,14 @@ internal sealed class GameBoyRuntimeCompiler
             case "map_stream_column":
                 EmitNextSdkOperation<Sdk2DOperation.StreamMapColumn>(call.Name);
                 break;
-            case "camera_init":
-                EmitCameraInit(call);
-                break;
-            case "camera_set_position":
-                EmitNextSdkOperation<Sdk2DOperation.SetCameraPosition>(call.Name);
-                break;
-            case "camera_apply":
-                EmitNextSdkOperation<Sdk2DOperation.ApplyCamera>(call.Name);
-                break;
             case "camera_move_right":
                 EmitCameraMoveRight(call);
                 break;
             case "camera_move_left":
                 EmitCameraMoveLeft(call);
                 break;
-            case "video_wait_vblank":
-                EmitNextSdkOperation<Sdk2DOperation.WaitFrame>(call.Name);
-                break;
             case "sprite_set":
                 EmitSpriteSet(call);
-                break;
-            case "sprite_draw":
-                EmitNextSdkOperation<Sdk2DOperation.DrawLogicalSprite>(call.Name);
                 break;
             case "scroll_set":
                 EmitScrollSet(call);
@@ -5696,44 +5644,8 @@ internal sealed class GameBoyRuntimeCompiler
             case "map_flags_at":
                 EmitMapFlagsAt(call);
                 break;
-            case "world_tile_flags_at":
-                EmitReadWorldTileFlags(ConsumeSdkOperation<Sdk2DOperation.ReadWorldTileFlags>(call.Name));
-                break;
             case "collision_aabb_tiles":
                 EmitCollisionAabbTiles(call);
-                break;
-            case "camera_aabb_tiles":
-                EmitCameraAabbTiles(ConsumeSdkOperation<Sdk2DOperation.CameraAabbTiles>(call.Name));
-                break;
-            case "camera_aabb_hit_top":
-                EmitCameraAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraAabbHitTop>(call.Name));
-                break;
-            case "camera_screen_aabb_tiles":
-                EmitCameraScreenAabbTiles(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbTiles>(call.Name));
-                break;
-            case "camera_screen_aabb_hit_top":
-                EmitCameraScreenAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbHitTop>(call.Name));
-                break;
-            case "button_pressed":
-                EmitButtonPressed(call);
-                break;
-            case "button_down":
-                EmitButtonDown(call);
-                break;
-            case "button_just_pressed":
-                EmitButtonJustPressed(call);
-                break;
-            case "button_just_released":
-                EmitButtonJustReleased(call);
-                break;
-            case "button_hold_ticks":
-                EmitButtonHoldTicks(call);
-                break;
-            case "sprite_width":
-                EmitSpriteWidth(call);
-                break;
-            case "animation_frame":
-                EmitAnimationFrame(call);
                 break;
             case "__rs_actor_camera_x_lo":
                 GameBoyVideoProgram.RequireArity(call, 0);
@@ -6987,8 +6899,7 @@ internal sealed class GameBoyRuntimeCompiler
         var argument = call.Parameters.ElementAt(0);
 
         // A `Button` enum member (e.g. Button.A) is constant-folded to its ordinal,
-        // which matches the canonical Buttons order, so resolve it by index. The bare
-        // lowercase identifier form (e.g. `a`) is kept as a transitional alias.
+        // which matches the canonical Buttons order, so resolve it by index.
         if (argument is ConstantSyntax)
         {
             var ordinal = GameBoyVideoProgram.ConstValue(argument, context);
@@ -7000,16 +6911,7 @@ internal sealed class GameBoyRuntimeCompiler
             return Buttons[ordinal];
         }
 
-        var name = argument is MemberAccessSyntax memberAccess
-            ? memberAccess.Member.ToLowerInvariant()
-            : GameBoyVideoProgram.IdentifierArg(argument, context);
-        var button = Buttons.FirstOrDefault(button => button.Name == name);
-        if (button.Name is null)
-        {
-            throw new InvalidOperationException($"Unsupported Game Boy button '{name}'.");
-        }
-
-        return button;
+        throw new InvalidOperationException($"{context} must be a Button enum member.");
     }
 
     private void EmitBinaryExpressionToA(BinaryExpressionSyntax binary)
@@ -7295,12 +7197,6 @@ internal sealed class GameBoyRuntimeCompiler
         if (expression is not FunctionCall call)
         {
             return false;
-        }
-
-        if (call.Name == "sprite_width")
-        {
-            width = SpriteWidth(call);
-            return true;
         }
 
         if (!program.Functions.TryGetValue(call.Name, out var function))

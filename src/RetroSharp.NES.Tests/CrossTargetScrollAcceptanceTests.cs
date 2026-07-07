@@ -43,7 +43,7 @@ public sealed class CrossTargetScrollAcceptanceTests
             while (true) {
                 Video.WaitVBlank();
                 Input.Poll();
-                let cameraX = button_hold_ticks(right);
+                let cameraX = Input.HoldTicks(Button.Right);
                 u8 frame = 0;
                 bool flipX = false;
                 Camera.SetPosition(cameraX, 0);
@@ -410,7 +410,7 @@ public sealed class CrossTargetScrollAcceptanceTests
                 while (true) {
                     Video.WaitVBlank();
                     Input.Poll();
-                    let cameraX = button_hold_ticks(right);
+                    let cameraX = Input.HoldTicks(Button.Right);
                     Camera.SetPosition(cameraX, 0);
                     Camera.Apply();
                 }

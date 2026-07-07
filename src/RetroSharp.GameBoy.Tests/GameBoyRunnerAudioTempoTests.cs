@@ -279,19 +279,13 @@ public sealed class GameBoyRunnerAudioTempoTests
         // top-of-frame VBlank). A program that scrolls and applies the camera every frame must
         // therefore still mutate the background tilemap as new columns are exposed; a program that
         // applies without moving must leave it untouched.
-        const string columns = "map_column(0,1,1,1,1);map_column(1,2,2,2,2);map_column(2,3,3,3,3);"
-            + "map_column(3,4,4,4,4);map_column(4,5,5,5,5);map_column(5,6,6,6,6);map_column(6,7,7,7,7);"
-            + "map_column(7,8,8,8,8);map_column(8,9,9,9,9);map_column(9,10,10,10,10);map_column(10,11,11,11,11);"
-            + "map_column(11,12,12,12,12);map_column(12,13,13,13,13);map_column(13,14,14,14,14);"
-            + "map_column(14,15,15,15,15);map_column(15,16,16,16,16);map_column(16,17,17,17,17);"
-            + "map_column(17,18,18,18,18);map_column(18,19,19,19,19);map_column(19,20,20,20,20);"
-            + "map_column(20,21,21,21,21);map_column(21,22,22,22,22);map_column(22,23,23,23,23);"
-            + "map_column(23,24,24,24,24);";
+        var columns = string.Concat(Enumerable.Range(0, 40).Select(column =>
+            $"World.Column({column},{column + 1},{column + 1},{column + 1},{column + 1});"));
 
         var scrolling = CompileCameraProgram(columns, move: true);
         var still = CompileCameraProgram(columns, move: false);
 
-        const int frames = 40;
+        const int frames = 120;
         var scrollingCpu = new GameBoyTestCpu(scrolling) { CycleAccurateLy = true };
         scrollingCpu.RunFrames(frames);
         var stillCpu = new GameBoyTestCpu(still) { CycleAccurateLy = true };
@@ -310,7 +304,7 @@ public sealed class GameBoyRunnerAudioTempoTests
             }
 
             // Every streamed tile must be a valid source tile id (1..24), never garbage.
-            Assert.InRange(scrollingCpu.Vram(address), (byte)0, (byte)24);
+            Assert.InRange(scrollingCpu.Vram(address), (byte)0, (byte)40);
         }
 
         Assert.True(scrolled, "Scrolling did not stream any new columns into the background tilemap during Camera.Apply.");
@@ -396,12 +390,13 @@ public sealed class GameBoyRunnerAudioTempoTests
         var movement = move ? "camera_move_right();" : "";
         var source = $$"""
                        void Main() {
-                           video_init();
+                           Video.Init();
                            {{columns}}
-                           camera_init(24, 11, 4);
+                           World.Map(40, 11, 4);
+                           Camera.Init(40, 11, 4);
                            while (true) {
-                               video_wait_vblank();
-                               camera_apply();
+                               Video.WaitVBlank();
+                               Camera.Apply();
                                {{movement}}
                            }
                        }

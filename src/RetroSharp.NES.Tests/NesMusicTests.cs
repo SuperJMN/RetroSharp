@@ -249,11 +249,11 @@ public sealed class NesMusicTests
 
         const string direct = """
                               void Main() {
-                                  music_asset(stage_theme, "stage.vgz");
-                                  audio_init();
-                                  music_play(stage_theme);
-                                  audio_update();
-                                  music_stop();
+                                  Music.Asset(stage_theme, "stage.vgz");
+                                  Audio.Init();
+                                  Music.Play(stage_theme);
+                                  Audio.Update();
+                                  Music.Stop();
                                   return;
                               }
                               """;

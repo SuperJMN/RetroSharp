@@ -688,7 +688,7 @@ public sealed class NesWorldLoadTests : IDisposable
                 while (true) {
                     Video.WaitVBlank();
                     Input.Poll();
-                    let cx = button_hold_ticks(right);
+                    let cx = Input.HoldTicks(Button.Right);
                     Camera.SetPosition(cx, 0);
                     Camera.Apply();
                 }
