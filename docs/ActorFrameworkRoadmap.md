@@ -1,8 +1,8 @@
 # Actor Framework Roadmap (scalable platformer actors / enemies)
 
 Status: **feature-complete for the first scrolling platformer slice on branch
-`feature/actor-framework`; AF-5.8..AF-5.10 remain non-blocking follow-ups.**
-Phases 1-4 and AF-5.1..AF-5.7 landed as a working, byte-reproducible
+`feature/actor-framework`; AF-5.9..AF-5.10 remain non-blocking follow-ups.**
+Phases 1-4 and AF-5.1..AF-5.8 landed as a working, byte-reproducible
 Game Boy/NES actor-framework acceptance slice. Phase 5 moved the framework from
 the early non-scrolling closure to world-space actors, per-actor collision,
 runtime activation, and metasprite-aware budgets.
@@ -312,7 +312,7 @@ Candidate file names are guidance; inspect the real code paths first.
   - [x] Classify the new sample in `samples/manifest.json`.
   - [x] Flip Iteration 14 status in `ArchitectureRoadmap.md` to
     feature-complete for the first scrolling platformer slice while preserving
-    AF-5.8..AF-5.10 as open non-blocking follow-ups.
+    AF-5.9..AF-5.10 as open non-blocking follow-ups.
 - Verification:
   - [x] `git diff --check`; manifest-reading tests pass.
 - Depends on: AF-4.2.
@@ -446,19 +446,19 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   - [x] Differential tests prove the optimized lowering preserves behavior while
     reducing repeated projection code.
 
-#### AF-5.8: Harden `TouchPlayer` right-edge overflow (non-blocking)
-- Problem: `pool.TouchPlayer(...)` currently compares
+#### AF-5.8: Harden `TouchPlayer` right-edge overflow (closed)
+- Problem: `pool.TouchPlayer(...)` used to compare
   `screenX + enemyHitboxWidth > playerX` with byte-backed arithmetic. If
   `screenX + width` wraps, a wide or near-right-edge actor can produce an
   incorrect X overlap result.
 - Layer: framework source-to-source lowering / byte expression guards.
 - Candidate files: `ActorFrameworkLowerer.cs`, GB/NES helper tests.
 - Steps:
-  - [ ] Detect or avoid byte overflow in the actor-right-edge comparison.
-  - [ ] Keep player arguments and enemy hitbox dimensions literal bytes unless a
+  - [x] Detect or avoid byte overflow in the actor-right-edge comparison.
+  - [x] Keep player arguments and enemy hitbox dimensions literal bytes unless a
     broader API change is explicitly accepted.
 - Verification:
-  - [ ] Tests cover a near-viewport-edge actor whose right edge wraps in the
+  - [x] Tests cover a near-viewport-edge actor whose right edge wraps in the
     current byte expression shape.
 
 #### AF-5.9: Decide one-shot versus reactivation spawn policy (non-blocking)
@@ -497,11 +497,10 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 
 ## Known limitations and follow-ups
 
-AF-5.1 through AF-5.7 are closed, and the branch is feature-complete for the first
+AF-5.1 through AF-5.8 are closed, and the branch is feature-complete for the first
 scrolling platformer slice. The remaining limitations are not blockers for that
 slice, but they should stay visible:
 
-- AF-5.8: `TouchPlayer` still needs a non-wrapping actor-right-edge comparison.
 - AF-5.9: spawn activation is intentionally one-shot; reactivation is not yet a
   source-level policy.
 - AF-5.10: runtime activation currently scans authored spawns each frame.

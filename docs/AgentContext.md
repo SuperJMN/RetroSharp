@@ -262,11 +262,10 @@ Progress (2026-06-14):
   window or source code clears `active`; authored spawns are one-shot and do not respawn after a
   successful activation. Capacity diagnostics use the maximum simultaneous spawns in the declared
   camera-relative window, not total layer count.
-- Actor framework closure state on branch `feature/actor-framework`: AF-5.1..AF-5.6 are landed,
+- Actor framework closure state on branch `feature/actor-framework`: AF-5.1..AF-5.8 are landed,
   making Iteration 14 feature-complete for the first scrolling platformer slice. Open follow-ups
-  are non-blocking robustness/scale items: AF-5.7 hoist repeated camera-X projection, AF-5.8 avoid
-  `TouchPlayer` actor-right-edge byte overflow, AF-5.9 decide one-shot versus reactivation spawn
-  policy, and AF-5.10 reduce O(spawns)/frame activation scans.
+  are non-blocking robustness/scale items: AF-5.9 decide one-shot versus reactivation spawn policy
+  and AF-5.10 reduce O(spawns)/frame activation scans.
 
 Suggested next steps for the next agent, in order:
 1. The previously open issues are now resolved in `master`: #130 (NES streaming flicker)
