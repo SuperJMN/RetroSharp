@@ -4255,6 +4255,31 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Actor_touch_player_detects_overlap_when_actor_right_edge_wraps()
+    {
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 1);
+                                  Enemies.Def(Goomba, behavior: Walker, contactDamage: 7, hitboxWidth: 128, hitboxHeight: 8);
+                                  enemies[0].active = 1;
+                                  enemies[0].kind = Goomba;
+                                  enemies[0].x = 150;
+                                  enemies[0].y = 40;
+                                  enemies.TouchPlayer(140, 40, 16, 16);
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        Assert.Equal(7, cpu.Wram(0xC008));
+    }
+
+    [Fact]
     public void Projectile_framework_lowers_requests_update_and_draw_as_fixed_pools()
     {
         const string source = """

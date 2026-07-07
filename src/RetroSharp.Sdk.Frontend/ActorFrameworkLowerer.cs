@@ -2593,10 +2593,7 @@ public static class ActorFrameworkLowerer
     {
         var overlapsX = And(
             new BinaryExpressionSyntax(projection.ScreenX, Constant(playerRight), Operator.LessThan),
-            new BinaryExpressionSyntax(
-                new BinaryExpressionSyntax(projection.ScreenX, Constant(def.HitboxWidth), Operator.Get("+")),
-                Constant(playerX),
-                Operator.Get(">")));
+            ActorRightOverlapsPlayerLeft(projection.ScreenX, def.HitboxWidth, playerX));
         var overlapsY = And(
             new BinaryExpressionSyntax(projection.ScreenY, Constant(playerBottom), Operator.LessThan),
             new BinaryExpressionSyntax(OffsetExpression(projection.ScreenY, def.HitboxHeight, subtract: false), Constant(playerY), Operator.Get(">")));
@@ -2611,6 +2608,21 @@ public static class ActorFrameworkLowerer
         return new BlockSyntax([
             new IfElseSyntax(projection.Visible, new BlockSyntax([touchPlayer]), Maybe<BlockSyntax>.None),
         ]);
+    }
+
+    private static ExpressionSyntax ActorRightOverlapsPlayerLeft(ExpressionSyntax actorScreenX, int actorWidth, int playerX)
+    {
+        if (actorWidth == 0)
+        {
+            return new BinaryExpressionSyntax(actorScreenX, Constant(playerX), Operator.Get(">"));
+        }
+
+        return Or(
+            new BinaryExpressionSyntax(actorScreenX, Constant(playerX), Operator.GreaterThanOrEqual),
+            new BinaryExpressionSyntax(
+                new BinaryExpressionSyntax(Constant(playerX), actorScreenX, Operator.Get("-")),
+                Constant(actorWidth),
+                Operator.LessThan));
     }
 
     private static IReadOnlyList<StatementSyntax> ActorCameraDeclarations(ActorPool pool, string phase)
