@@ -13,7 +13,7 @@ Until RetroSharp grows a dedicated `module` or `const group` syntax, samples may
 | `target-capability-spike` | A target-specific spike for a capability-gated SDK feature whose cross-target contract is not complete yet. |
 | `target-acceptance` | A target-specific acceptance sample for a runnable scenario. It can use transitional calls while they are explicitly documented. |
 
-The portable quarantine check in `RetroSharp.Core.Tests` reads the manifest and rejects transitional or target-intrinsic calls inside `portable-sdk` samples.
+The portable quarantine check in `RetroSharp.Core.Tests` reads the manifest and rejects transitional or target-intrinsic calls inside `portable-sdk` samples. Raw calls such as `Scroll.Set(...)`, `Sprite.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `ObjectPalette.Set(...)` belong only in `target-intrinsic`, `target-capability-spike`, or documented `target-acceptance` samples.
 
 For game-owned source organization, samples can use a `retrosharp.json` or
 `*.retrosharp.json` project manifest that lists multiple source files and local

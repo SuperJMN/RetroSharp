@@ -18,7 +18,7 @@ Build the NES ROM:
 dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out cross-camera.nes camera.rs
 ```
 
-The sample intentionally avoids raw target calls such as `Sprite.Set(...)`, `Scroll.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `map_stream_column(...)`, and `ObjectPalette.Set(...)`.
+The sample intentionally avoids raw target calls such as `Sprite.Set(...)`, `Scroll.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `ObjectPalette.Set(...)`.
 
 Current intentionally excluded optional features:
 
