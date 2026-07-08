@@ -480,7 +480,16 @@ Portable calls should fail early with target-specific diagnostics instead of rea
 | Actor pool dynamic capacity | `Actors.Pool for 'enemies' requires a literal capacity from 1 to 255.` |
 | Actor pool metasprite budget overflow | `Target 'gb' supports 40 hardware sprites per frame, but Actors.Pool for 'enemies' can draw up to 42 because capacity 21 times Enemies.Def 'Goomba' sprite 'goomba' uses 2 hardware sprites.` |
 
-Calls that expose raw hardware state are outside SDK v1. Examples include `Scroll.Set(...)`, `Sprite.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `ObjectPalette.Set(...)`. They can remain available in target-intrinsic samples while compatibility is needed. Prefer `Palette.Background(...)` and `Palette.Sprite(...)` for SDK-shaped logical-tone palette declarations.
+Calls that expose raw hardware state are outside SDK v1. They can remain available in `target-intrinsic`, `target-capability-spike`, or `target-acceptance` samples while compatibility is needed, but they are not evidence that the API is portable. `portable-sdk` samples are quarantined by `SampleApiQuarantineTests` and must use SDK/package facades instead.
+
+| Raw or transitional call | Current classification | Preferred SDK direction |
+| --- | --- | --- |
+| `Scroll.Set(...)` | Target-intrinsic scroll-register escape hatch. | Use `Camera.SetPosition(...)` and `Camera.Apply()` for position-based camera movement. |
+| `Sprite.Set(...)` | Target-intrinsic OAM escape hatch. | Use `Sprite.Asset(...)` and `Sprite.Draw(...)` for logical sprites. |
+| `Tilemap.Set(...)` / `Tilemap.Fill(...)` | Target-intrinsic static background setup helpers. | Use `World.Load(...)` or `World.Column(...)` / `World.Map(...)` plus camera/world APIs. |
+| `tilemap_fill_column(...)` | Transitional runtime tilemap-write primitive. | Keep as backend/runtime implementation detail; camera streaming should come from `Camera.SetPosition(...)` / `Camera.Apply()`. |
+| `map_stream_column(...)` | Transitional explicit streaming helper. | Keep as a compiler-emitted camera-stream operation or migrate behind a narrower target intrinsic. |
+| `Palette.Set(...)` / `ObjectPalette.Set(...)` | Target-intrinsic palette-register or palette-RAM setup. | Use `Palette.Background(...)` and `Palette.Sprite(...)` for SDK-shaped logical-tone palette declarations. |
 
 ## Current Stabilization Gaps
 

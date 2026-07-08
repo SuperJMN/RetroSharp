@@ -15,14 +15,13 @@ public sealed class SampleApiQuarantineTests
         "map_stream_column(",
         "tilemap_set(",
         "tilemap_fill(",
+        "tilemap_fill_column(",
         "Palette.Set(",
         "ObjectPalette.Set(",
         "Sprite.Set(",
         "Scroll.Set(",
         "Tilemap.Set(",
         "Tilemap.Fill(",
-        "Palette.Set(",
-        "ObjectPalette.Set(",
     ];
 
     [Fact]
@@ -60,6 +59,28 @@ public sealed class SampleApiQuarantineTests
                 }
             }
         }
+    }
+
+    [Fact]
+    public void Portable_quarantine_includes_documented_raw_escape_hatches()
+    {
+        string[] documentedRawCallPatterns =
+        [
+            "Scroll.Set(",
+            "Sprite.Set(",
+            "Tilemap.Set(",
+            "Tilemap.Fill(",
+            "tilemap_fill_column(",
+            "map_stream_column(",
+            "Palette.Set(",
+            "ObjectPalette.Set(",
+        ];
+
+        var missingPatterns = documentedRawCallPatterns
+            .Except(PortableForbiddenCalls, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(missingPatterns);
     }
 
     [Fact]
