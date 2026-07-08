@@ -78,12 +78,13 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 - Do not add `Option/Result` or lambdas by default; they were explicitly excluded from the accepted near-term ergonomics direction.
 - The actor framework is source-to-source sugar in `RetroSharp.Sdk.Frontend`.
   `Actors.Pool`, `Actors.SpawnLayer`, `Actors.SpawnWindow`, `Enemies.Def`, called
-  `Enemies.*` helpers, and pool helper calls lower before target emission to fixed
+  `Enemies.*` helpers now enter through `RetroSharp.Portable2D` `sdk_role("...")`
+  metadata rather than public-name switches. Pool receiver helper calls remain a
+  compiler-owned semantic boundary and lower before target emission to fixed
   `Actor` arrays, constants, generated spawn helpers, `used[]`, direct `kind`
   branches, and existing SDK calls such as `Sprite.Draw`, `Camera.AabbTiles`,
   `Camera.AabbHitTop`, `Camera.ScreenAabbTiles`, `Camera.ScreenAabbHitTop`,
-  and `Animation.Frame`. Do not add actor-specific target intrinsics for this
-  slice.
+  and `Animation.Frame`. Do not add actor-specific target intrinsics for this slice.
 
 ## Portability Lowering Roadmap (epic #106)
 

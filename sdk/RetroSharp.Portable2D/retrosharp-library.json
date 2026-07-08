@@ -13,6 +13,7 @@
     "src/sfx.rs",
     "src/palette.rs",
     "src/animation.rs",
+    "src/actors.rs",
     "src/tilemap.rs",
     "src/hud.rs"
   ]

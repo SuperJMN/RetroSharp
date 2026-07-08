@@ -27,6 +27,10 @@ public sealed class SdkApiLeakGuardTests
         "\"(?<module>Video|Input|Audio|Camera|Sprite|World|Music|Palette|ObjectPalette|Tilemap|Hud)\"\\s*,\\s*\"(?<method>WaitVBlank|Poll|IsDown|WasPressed|WasReleased|HoldTicks|Init|Update|SetPosition|Apply|AabbTiles|AabbHitTop|ScreenAabbTiles|ScreenAabbHitTop|Draw|Width|Load|Asset|Play|Stop|Background|Sprite|Set|Fill|SetTile)\"",
         RegexOptions.Compiled);
 
+    private static readonly Regex ActorFacadeRecognitionPattern = new(
+        "Qualifier:\\s*\"(?<module>Actors|Enemies)\"\\s*,\\s*Method:\\s*\"(?<method>Pool|SpawnLayer|SpawnWindow|Def)\"",
+        RegexOptions.Compiled);
+
     [Fact]
     public void Compiler_layers_do_not_reference_public_sdk_facade_names()
     {
@@ -48,6 +52,25 @@ public sealed class SdkApiLeakGuardTests
 
         Assert.Contains(leaks, leak => leak.Contains("Sprite.Draw", StringComparison.Ordinal));
         Assert.Contains(leaks, leak => leak.Contains("Camera.AabbTiles", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Scanner_reports_synthetic_actor_facade_recognition_leaks()
+    {
+        var leaks = ScanText(
+            "src/RetroSharp.Sdk.Frontend/Fake.cs",
+            """
+            if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } })
+            {
+            }
+
+            if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } })
+            {
+            }
+            """).ToArray();
+
+        Assert.Contains(leaks, leak => leak.Contains("Actors.Pool", StringComparison.Ordinal));
+        Assert.Contains(leaks, leak => leak.Contains("Enemies.Def", StringComparison.Ordinal));
     }
 
     private static IEnumerable<string> ScanRepository()
@@ -83,6 +106,11 @@ public sealed class SdkApiLeakGuardTests
             }
 
             foreach (Match match in FacadePairPattern.Matches(line))
+            {
+                yield return Leak(path, i + 1, match.Groups["module"].Value, match.Groups["method"].Value);
+            }
+
+            foreach (Match match in ActorFacadeRecognitionPattern.Matches(line))
             {
                 yield return Leak(path, i + 1, match.Groups["module"].Value, match.Groups["method"].Value);
             }

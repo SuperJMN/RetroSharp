@@ -3421,6 +3421,62 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Actor_framework_directives_can_come_from_renamed_sdk_role_metadata_gb()
+    {
+        const string manualSource = """
+                                    struct Actor {
+                                        u8 kind;
+                                        u8 active;
+                                        u8 x;
+                                        u8 xHi;
+                                        u8 y;
+                                        u8 yHi;
+                                        i8 vx;
+                                        i8 vy;
+                                        u8 state;
+                                        u8 timer;
+                                        u8 facing;
+                                        u8 animTick;
+                                        u8 health;
+                                    }
+
+                                    const Slime = 1;
+                                    const SlimeSpeed = 3;
+
+                                    inline u8 enemy_speed(u8 kind) => kind == Slime ? SlimeSpeed : 0;
+
+                                    void Main() {
+                                        Actor mobs[1];
+                                        mobs[0].active = 1;
+                                        mobs[0].kind = Slime;
+                                        mobs[0].vx = (i8)enemy_speed(mobs[0].kind);
+                                    }
+                                    """;
+
+        const string roleBackedSource = """
+                                        class EncounterKit {
+                                            static inline [sdk_role("actor_pool")] void Reserve(i16 name, i16 capacity) {
+                                            }
+
+                                            static inline [sdk_role("actor_enemy_def")] void Enemy(i16 name) {
+                                            }
+
+                                            static inline [sdk_role("actor_enemy_speed")] i16 Pace(i16 kind) => 0;
+                                        }
+
+                                        void Main() {
+                                            EncounterKit.Reserve(mobs, 1);
+                                            EncounterKit.Enemy(Slime, behavior: Walker, speed: 3);
+                                            mobs[0].active = 1;
+                                            mobs[0].kind = Slime;
+                                            mobs[0].vx = (i8)EncounterKit.Pace(mobs[0].kind);
+                                        }
+                                        """;
+
+        Assert.Equal(GameBoyRomCompiler.CompileSource(manualSource), GameBoyRomCompiler.CompileSource(roleBackedSource));
+    }
+
+    [Fact]
     public void Rejects_actor_generated_name_collision_with_user_symbol()
     {
         const string source = """
@@ -3473,13 +3529,11 @@ public class GameBoyRomCompilerTests
                                   }
                                   """;
 
-        var unusedParse = new SomeParser().Parse(unusedSource);
-        Assert.True(unusedParse.IsSuccess, unusedParse.IsFailure ? unusedParse.Error : string.Empty);
-        var unusedLowered = ActorFrameworkLowerer.Lower(unusedParse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var unusedProgram = ParseGameBoySourceWithPortable2D(unusedSource);
+        var unusedLowered = ActorFrameworkLowerer.Lower(unusedProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
 
-        var usedParse = new SomeParser().Parse(usedSource);
-        Assert.True(usedParse.IsSuccess, usedParse.IsFailure ? usedParse.Error : string.Empty);
-        var usedLowered = ActorFrameworkLowerer.Lower(usedParse.Value, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
+        var usedProgram = ParseGameBoySourceWithPortable2D(usedSource);
+        var usedLowered = ActorFrameworkLowerer.Lower(usedProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true);
 
         Assert.DoesNotContain(unusedLowered.Functions, function => function.Name.StartsWith("enemy_", StringComparison.Ordinal));
         Assert.Contains(usedLowered.Functions, function => function.Name == "enemy_speed");

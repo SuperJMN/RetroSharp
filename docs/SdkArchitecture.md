@@ -55,6 +55,17 @@ capability validators, resource importers, or backend lowerers. Those still live
 in the compiler and target assemblies until RetroSharp has a proven need for a
 stable plugin surface.
 
+Some compiler-owned frontend transforms are entered through package-declared
+metadata rather than public-name switches. The actor framework is the current
+example: `sdk/RetroSharp.Portable2D/src/actors.rs` declares the public
+`Actors.*` and `Enemies.*` facade methods with `sdk_role("...")` attributes.
+`ActorFrameworkLowerer` consumes roles such as `actor_pool`,
+`actor_spawn_layer`, `actor_spawn_window`, and `actor_enemy_def`; it does not
+derive those public entry points from the names `Actors.Pool` or
+`Enemies.Def`. The semantic lowering remains compiler-owned because it generates
+fixed storage, spawn tables, direct dispatch, validation, and helper functions.
+This is not the SDK plugin layer from #252.
+
 ## Dependency Direction
 
 The dependency direction should stay:
