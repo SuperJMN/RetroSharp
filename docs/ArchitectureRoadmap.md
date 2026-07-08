@@ -370,7 +370,10 @@ namespaced descriptor and target hook, not a new `Sdk2DOperation`,
 `SdkAudioOperation`, or `TargetIntrinsicOperation` entry, unless it deliberately
 graduates into built-in SDK semantics. The first proof hook is intentionally
 small: statement operations receive a `SdkPluginTargetLoweringContext` with
-validated operand metadata and a minimal target byte emitter.
+validated operand metadata and a minimal target byte emitter. Targets grant
+plugin capabilities per hook (`ProvidedCapabilities`) and are host-registered by
+the CLI through `--sdk-plugin <id>` or a manifest `plugins` array; the reference
+descriptor is `RetroSharp.Sdk.Plugins.Platformer2D.Platformer2DPlugin`.
 
 ### SDK 2D Operations
 

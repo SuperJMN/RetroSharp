@@ -111,6 +111,19 @@ package subdirectories. This MVP deliberately does not include package
 versioning, remote feeds, transitive dependencies, binary libraries, or target
 backend plugins.
 
+Source-only libraries cannot add new compiler semantics. When a feature needs a
+new namespaced operation, resource, capability, validator, or per-target
+lowering hook, the host registers a static in-process **SDK plugin** instead.
+Pass `--sdk-plugin <id>` (repeatable) or list `"plugins": ["<id>"]` in a project
+manifest; unknown ids are rejected before compiling. A registered plugin is
+enforced per target: a target lowers a plugin operation only when it provides a
+matching lowering hook and grants the operation's required capabilities,
+otherwise the build fails before lowering with a diagnostic naming the plugin
+feature and target id. The experimental reference plugin is
+`RetroSharp.Platformer2D` (`Platformer.GroundProbe()`), which lowers on Game Boy
+and is unsupported on NES. There is no dynamic plugin loader or binary plugin
+ABI. See [`docs/SdkPluginBoundary.md`](docs/SdkPluginBoundary.md).
+
 When a library package opts into `namespaceMode: "physical"`, folder names under
 `sourceRoot` become compile-time namespaces just like project sources. Root
 source files commonly act as the package's public facade after `import`, while

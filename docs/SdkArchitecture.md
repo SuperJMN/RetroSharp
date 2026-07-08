@@ -68,7 +68,18 @@ Targets opt in by registering a matching `SdkPluginTargetLoweringDescriptor`.
 For the static v1 proof, statement hooks receive a minimal target byte emitter
 through `SdkPluginTargetLoweringContext`; broader target services remain outside
 this slice. Targets without that hook fail before lowering with a diagnostic
-naming the plugin feature and target id.
+naming the plugin feature and target id. A hook also grants capabilities: an
+operation's `RequiredCapabilities` must be covered by the hook's
+`ProvidedCapabilities`, otherwise the target fails before lowering with a
+capability-specific diagnostic.
+
+The host, not the compiler, decides which plugins are active. The RetroSharp CLI
+resolves plugin ids to descriptors from a static known-plugins table and passes
+the registry through `--sdk-plugin <id>` (repeatable) or a project manifest
+`"plugins": [...]` array. The reference plugin lives in
+`src/RetroSharp.Sdk.Plugins.Platformer2D` (`Platformer2DPlugin.Create()`),
+outside the compiler core. Builds that do not request a plugin stay
+byte-identical.
 
 Some compiler-owned frontend transforms are entered through package-declared
 metadata rather than public-name switches. The actor framework is the current
