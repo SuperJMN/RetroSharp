@@ -50,7 +50,7 @@ The language defines source syntax, types, data layout, and ABI. It must not kno
 Language work belongs here:
 
 - Fixed-width primitives: `u8`, `i8`, `u16`, `i16`, `bool`.
-- Pointers and addressable storage: `ptr<T>`, static data, ROM data, RAM data.
+- Internal addressability and ABI policy for static data, ROM data, RAM data, and target intrinsics. Public gameplay source should use SDK/resource facades instead of `ptr<T>`, raw buffers, or hardware addresses.
 - `struct`, `enum`, fixed-size arrays, constants, casts, operators, and structured control flow. The current cartridge path already has the first zero-cost slice of type aliases, top-level and block-local constants with optional type annotations, decimal/hex/binary integer literal spellings with `_` separators and width suffixes, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, enums, local structs with named and shorthand initializer lists, fixed-size local arrays of scalar values or mixed-width structs, byte-array initializer lists and initializer-inferred lengths, per-element struct-array initializer lists, constant or runtime indices, struct-array field access such as `actors[i].x`, explicit casts to scalar local types, byte and direct 16-bit arithmetic/compare/assignment, bitwise compound assignment, statement-only `++`/`--`, half-open range membership expressions, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, post-test `do while`, `while (true)` infinite loops, short-circuit logical conditions and byte-backed 0/1 logical value expressions including unary `!`, byte-backed conditional value expressions, inline statement helpers, inline single-return expression helpers, expression-bodied helpers, named arguments and default parameter values for inline helpers, counted `for` loops, half-open range `for` loops, and `break`/`continue`; the broader shared ABI/layout work remains outside this slice.
 - Functions, parameters, returns, calling convention, and attributes.
 - Memory placement attributes such as `[section]`, `[bank]`, `[zeropage]`, or `[align]`.
@@ -1307,7 +1307,7 @@ V1 includes type aliases, top-level and block-local constants, enum constants, p
 Tasks:
 
 - [x] Keep the v1 language surface bounded to features implemented by the front-end and current Game Boy/NES cartridge targets.
-- [x] Document remaining gaps as pointer/member access, address-of fields, wider ABI/layout, backend calling conventions, and canonical-type diagnostics.
+- [x] Document remaining gaps as internal addressability policy, wider ABI/layout, backend calling conventions, canonical-type diagnostics, and explicit rejection of public pointer/address forms.
 - [x] Migrate runnable samples to use the v1 style where it improves clarity without changing target behavior.
 - [x] Keep diagnostic samples simple enough to isolate target regressions while still using the stable `while (true)` and mutation syntax.
 - [x] Move dot-call SDK namespaces, receiver methods, immutable `let`, switch expressions, pipeline syntax, and explicit `pure`/`inline` contracts out of v1 and into post-v1 candidates. Trait-like constraints remain outside v1 and outside Iteration 12.

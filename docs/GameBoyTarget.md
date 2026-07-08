@@ -71,7 +71,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - `void Main()`
 - Top-level and block-local `const` declarations, with or without type annotations, folded into literal expressions
 - Type aliases normalized to their underlying type before Game Boy lowering
-- `sizeof(type)` folded into literal byte-size expressions for primitive, pointer, enum, and plain struct types
+- `sizeof(type)` folded into literal byte-size expressions for primitive, reserved internal pointer-size marker, enum, and plain struct types
 - `offsetof(type, field)` folded into literal byte-offset expressions for direct fields of plain struct types
 - `countof(array)` folded into literal element-count expressions for fixed-size local arrays
 - Decimal, hexadecimal (`0x2A`), binary (`0b1010_0000`), `_`-separated, and width-suffixed (`255u8`, `0x1234u16`) integer literals folded to the same immediates
@@ -106,7 +106,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 
 Numeric and enum locals use fixed-width WRAM storage: `u8`, `i8`, `bool`, and enums reserve one byte; `u16` and `i16` reserve two adjacent little-endian bytes. Type aliases are normalized to their underlying type before Game Boy lowering, so `type Pixel = i16;` has the same two-byte runtime shape as `i16`. Top-level constants, block-local constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members are substituted before ROM lowering and do not reserve WRAM.
 
-`sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive and pointer types; and the sum of field sizes for plain structs. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. Plain local structs and struct arrays are flattened to adjacent WRAM byte slots using mixed-width field offsets. For example, `struct Actor { u16 worldX; u8 y; }` has stride 3, `actors[0].worldX` occupies low/high bytes at offsets 0/1, and `actors[0].y` is offset 2.
+`sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive types and the reserved internal `sizeof(ptr<T>)` pointer-size marker; and the sum of field sizes for plain structs. `ptr<T>` is not a public storage, signature, field, or cast type in gameplay source. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. Plain local structs and struct arrays are flattened to adjacent WRAM byte slots using mixed-width field offsets. For example, `struct Actor { u16 worldX; u8 y; }` has stride 3, `actors[0].worldX` occupies low/high bytes at offsets 0/1, and `actors[0].y` is offset 2.
 
 Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to zero-fill plus direct field stores in declaration order; shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are also flattened to adjacent WRAM byte slots. Runtime element access computes `HL = base + i * sizeof(element)` and runtime struct-field access computes `HL = fieldBase + i * targetStructStride`; there is no implicit bounds check, heap object, or helper call. Direct 16-bit assignment, add/sub, and comparisons preserve both bytes; APIs that still consume byte expressions read the low byte.
 
