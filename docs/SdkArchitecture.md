@@ -18,6 +18,21 @@ portable operations and validate target capabilities, but it should not contain
 the public facade source for classes such as `Video`, `Input`, `Camera`,
 `Sprite`, or `World`.
 
+## Three Extension Levels
+
+RetroSharp has three separate extension levels:
+
+| Level | Status | Boundary |
+| --- | --- | --- |
+| Source-only library | Supported today | Package manifests plus source files provide facades and helpers over intrinsics, resource declarations, and SDK semantics already known to the active target. |
+| Built-in SDK semantics | Supported today, compiler-owned | `Sdk2DOperation`, `SdkAudioOperation`, resource descriptors, validators, capability models, asset pipelines, and GB/NES lowerers live inside this repo. |
+| SDK plugin | Future design boundary | A host-registered SDK extension could bring source facades plus descriptors, validators, importers, capabilities, and per-target lowering hooks without adding those concepts to the language layer. |
+
+The detailed design boundary for the third level is
+[`docs/SdkPluginBoundary.md`](SdkPluginBoundary.md). That document is the
+implementation handoff for #252; it does not imply a dynamic loader or any
+current migration of `RetroSharp.Portable2D`.
+
 ## Current Pluggability
 
 RetroSharp supports source-only SDK libraries. A package directory contains a
