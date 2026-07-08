@@ -2496,7 +2496,7 @@ internal sealed class GameBoyRuntimeCompiler
     private bool IsResourceDeclarationCall(FunctionCall call)
     {
         return program.Functions.TryGetValue(call.Name, out var function)
-               && SdkResourceDeclarationResolver.TryResolve(function, out _);
+               && SdkResourceDeclarationResolver.TryResolve(function, out _, program.ResourceDeclarations);
     }
 
     private void EmitSdkOperation(Sdk2DOperation operation)
@@ -3408,8 +3408,14 @@ internal sealed class GameBoyRuntimeCompiler
             return false;
         }
 
-        var intrinsic = TargetIntrinsicResolver.Resolve(function, GameBoyTarget.Intrinsics);
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
         GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+        if (intrinsic.IsPluginOperation)
+        {
+            EmitSdkPluginOperation(function, call, intrinsic);
+            return true;
+        }
+
         switch (intrinsic.Operation)
         {
             case TargetIntrinsicOperation.InitializeVideo:
@@ -3451,6 +3457,25 @@ internal sealed class GameBoyRuntimeCompiler
             default:
                 throw new NotSupportedException($"Game Boy intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
+    }
+
+    private void EmitSdkPluginOperation(
+        FunctionSyntax function,
+        FunctionCall call,
+        TargetIntrinsicDescriptor intrinsic)
+    {
+        if (intrinsic.PluginOperation.CallKind != SdkPluginOperationCallKind.Statement)
+        {
+            throw new InvalidOperationException($"SDK plugin feature '{intrinsic.PluginOperation.OperationId}' cannot be emitted as a statement.");
+        }
+
+        var resolved = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
+        intrinsic.PluginTargetLowering.Lower(new SdkPluginTargetLoweringContext(
+            program.TargetIntrinsics.TargetId,
+            intrinsic.PluginOperation,
+            resolved.RuntimeOperands.Select(operand => new SdkPluginRuntimeOperand(operand.Slot)).ToArray(),
+            resolved.CompileTimeOperands.Select(operand => new SdkPluginCompileTimeOperand(operand.Slot, operand.Role, operand.Identifier, operand.Constant)).ToArray(),
+            new SdkPluginTargetEmitter(bytes => builder.Emit(bytes.ToArray()))));
     }
 
     private bool TryEmitUserFunction(FunctionCall call)
@@ -5697,7 +5722,12 @@ internal sealed class GameBoyRuntimeCompiler
             return false;
         }
 
-        var intrinsic = TargetIntrinsicResolver.Resolve(function, GameBoyTarget.Intrinsics);
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
+        if (intrinsic.IsPluginOperation)
+        {
+            return false;
+        }
+
         switch (intrinsic.Operation)
         {
             case TargetIntrinsicOperation.ReadWorldTileFlags:
@@ -5738,12 +5768,12 @@ internal sealed class GameBoyRuntimeCompiler
                 return true;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
-                _ = TargetIntrinsicResolver.ResolveCall(function, call, GameBoyTarget.Intrinsics);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitSpriteWidth(call);
                 return true;
             case TargetIntrinsicOperation.ReadAnimationFrame:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
-                _ = TargetIntrinsicResolver.ResolveCall(function, call, GameBoyTarget.Intrinsics);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitAnimationFrame(call);
                 return true;
             default:
@@ -7211,8 +7241,8 @@ internal sealed class GameBoyRuntimeCompiler
                 return false;
             }
 
-            var intrinsic = TargetIntrinsicResolver.Resolve(function, GameBoyTarget.Intrinsics);
-            if (intrinsic.Operation != TargetIntrinsicOperation.ReadSpriteWidth)
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
+            if (intrinsic.IsPluginOperation || intrinsic.Operation != TargetIntrinsicOperation.ReadSpriteWidth)
             {
                 return false;
             }

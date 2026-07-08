@@ -15,9 +15,10 @@ public static class GameBoyRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports);
+        var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry);
         ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.Build(videoProgram);
@@ -28,9 +29,10 @@ public static class GameBoyRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports).SdkOperations;
+        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkOperations;
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
@@ -38,9 +40,10 @@ public static class GameBoyRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports).SdkAudioOperations;
+        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkAudioOperations;
     }
 
     private static GameBoyVideoProgram ParseVideoProgram(
@@ -48,26 +51,42 @@ public static class GameBoyRomCompiler
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,
         SdkLibraryRegistry? sdkLibraryRegistry,
-        IReadOnlyList<string>? sdkLibraryImports)
+        IReadOnlyList<string>? sdkLibraryImports,
+        SdkPluginRegistry? sdkPluginRegistry)
     {
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(GameBoyTarget.Intrinsics, source, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports));
+        sdkPluginRegistry ??= SdkPluginRegistry.Empty;
+        var targetIntrinsics = GameBoyTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
+        var effectiveLibraryRegistry = (sdkLibraryRegistry ?? SdkLibraryRegistry.Default).WithSdkPlugins(sdkPluginRegistry);
+        var resourceDeclarations = ResourceDeclarationsFor(sdkPluginRegistry);
+        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(targetIntrinsics, source, sdkImportMode, effectiveLibraryRegistry, sdkLibraryImports));
         if (parse.IsFailure)
         {
             throw new InvalidOperationException(parse.Error);
         }
 
-        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
-        SdkImportResolver.ValidateImports(targetProgram, sdkLibraryRegistry);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
+        SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         ValidateFunctionContracts(loweredProgram);
-        var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory);
+        var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
             targetProgram,
             GameBoyTarget.Capabilities,
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
             baseDirectory);
         return videoProgram;
+    }
+
+    private static SdkResourceDeclarationRegistry ResourceDeclarationsFor(SdkPluginRegistry pluginRegistry)
+    {
+        var registry = SdkResourceDeclarationRegistry.Default;
+        foreach (var plugin in pluginRegistry.Plugins)
+        {
+            registry = registry.Register(plugin);
+        }
+
+        return registry;
     }
 
     private static void ValidateFunctionContracts(ProgramSyntax program)
@@ -91,7 +110,8 @@ public static class GameBoyRomCompiler
             videoProgram.Functions,
             "Game Boy",
             draw => DrawSpriteBudget(videoProgram, draw),
-            GameBoyTarget.Intrinsics);
+            videoProgram.TargetIntrinsics,
+            videoProgram.ResourceDeclarations);
         foreach (var budget in frameBudgets)
         {
             Sdk2DOperationValidator.ValidateFrameBudget(GameBoyTarget.Capabilities, budget);
@@ -261,6 +281,10 @@ internal sealed class GameBoyVideoProgram
 
     public required BlockSyntax MainBlock { get; init; }
 
+    public required TargetIntrinsicCatalog TargetIntrinsics { get; init; }
+
+    public required SdkResourceDeclarationRegistry ResourceDeclarations { get; init; }
+
     public required IReadOnlyList<Sdk2DOperation> SdkOperations { get; init; }
 
     public required Sdk2DProgram SdkProgram { get; init; }
@@ -271,8 +295,14 @@ internal sealed class GameBoyVideoProgram
 
     public required IReadOnlySet<string> SubroutineNames { get; init; }
 
-    public static GameBoyVideoProgram FromProgram(ProgramSyntax program, string? baseDirectory = null)
+    public static GameBoyVideoProgram FromProgram(
+        ProgramSyntax program,
+        string? baseDirectory = null,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
+        targetIntrinsics ??= GameBoyTarget.Intrinsics;
+        resourceDeclarations ??= SdkResourceDeclarationRegistry.Default;
         program = ConstantFolder.Fold(program);
 
         var main = program.Functions.FirstOrDefault(f => f.Name == "Main")
@@ -281,15 +311,16 @@ internal sealed class GameBoyVideoProgram
         var functions = BuildFunctionIndex(program.Functions);
         var enums = BuildEnumIndex(program.Enums);
         var structs = BuildStructIndex(program.Structs);
-        var subroutineNames = SelectSubroutineNames(main.Block, functions);
+        var subroutineNames = SelectSubroutineNames(main.Block, functions, resourceDeclarations);
         var sdkProgram = Sdk2DOperationCollector.CollectProgram(
             main.Block,
             functions,
             "Game Boy",
             GameBoyTarget.Capabilities,
             subroutineNames,
-            GameBoyTarget.Intrinsics);
-        var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames, GameBoyTarget.Intrinsics);
+            targetIntrinsics,
+            resourceDeclarations);
+        var sdkAudioProgram = SdkAudioOperationCollector.CollectProgram(main.Block, functions, "Game Boy", subroutineNames, targetIntrinsics, resourceDeclarations);
         var result = new GameBoyVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
@@ -297,6 +328,8 @@ internal sealed class GameBoyVideoProgram
             Enums = enums,
             Structs = structs,
             MainBlock = main.Block,
+            TargetIntrinsics = targetIntrinsics,
+            ResourceDeclarations = resourceDeclarations,
             SdkOperations = FlattenSdkProgram(sdkProgram),
             SdkProgram = sdkProgram,
             SdkAudioOperations = FlattenSdkAudioProgram(sdkAudioProgram),
@@ -310,7 +343,8 @@ internal sealed class GameBoyVideoProgram
 
     private static IReadOnlySet<string> SelectSubroutineNames(
         BlockSyntax mainBlock,
-        IReadOnlyDictionary<string, FunctionSyntax> functions)
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        SdkResourceDeclarationRegistry resourceDeclarations)
     {
         var callCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         CountCalls(mainBlock, callCounts);
@@ -325,45 +359,57 @@ internal sealed class GameBoyVideoProgram
         }
 
         return callCounts
-            .Where(pair => pair.Value > 1 && IsSubroutineCandidate(functions, pair.Key))
+            .Where(pair => pair.Value > 1 && IsSubroutineCandidate(functions, pair.Key, resourceDeclarations))
             .Select(pair => pair.Key)
             .ToHashSet(StringComparer.Ordinal);
     }
 
-    private static bool IsSubroutineCandidate(IReadOnlyDictionary<string, FunctionSyntax> functions, string name)
+    private static bool IsSubroutineCandidate(
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string name,
+        SdkResourceDeclarationRegistry resourceDeclarations)
     {
         return functions.TryGetValue(name, out var function)
                && function is { Type: "void", IsInline: false, IsExtern: false }
                && function.Parameters.All(parameter => !parameter.IsReceiver)
-               && HasRuntimeWork(function.Block, functions);
+               && HasRuntimeWork(function.Block, functions, resourceDeclarations);
     }
 
-    private static bool HasRuntimeWork(BlockSyntax block, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    private static bool HasRuntimeWork(
+        BlockSyntax block,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        SdkResourceDeclarationRegistry resourceDeclarations)
     {
-        return block.Statements.Any(statement => HasRuntimeWork(statement, functions));
+        return block.Statements.Any(statement => HasRuntimeWork(statement, functions, resourceDeclarations));
     }
 
-    private static bool HasRuntimeWork(StatementSyntax statement, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    private static bool HasRuntimeWork(
+        StatementSyntax statement,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        SdkResourceDeclarationRegistry resourceDeclarations)
     {
         return statement switch
         {
             DeclarationSyntax => true,
             ExpressionStatementSyntax { Expression: AssignmentSyntax } => true,
-            ExpressionStatementSyntax { Expression: FunctionCall call } => HasRuntimeCall(call, functions),
-            WhileSyntax loop => HasRuntimeWork(loop.Body, functions),
-            DoWhileSyntax loop => HasRuntimeWork(loop.Body, functions),
-            RangeForSyntax loop => HasRuntimeWork(loop.Body, functions),
-            ForSyntax loop => HasRuntimeWork(loop.Body, functions),
-            IfElseSyntax branch => HasRuntimeWork(branch.ThenBlock, functions)
-                                   || (branch.ElseBlock.HasValue && HasRuntimeWork(branch.ElseBlock.Value, functions)),
-            SwitchSyntax switchSyntax => switchSyntax.Cases.Any(switchCase => HasRuntimeWork(switchCase.Block, functions))
-                                         || (switchSyntax.DefaultBlock.HasValue && HasRuntimeWork(switchSyntax.DefaultBlock.Value, functions)),
+            ExpressionStatementSyntax { Expression: FunctionCall call } => HasRuntimeCall(call, functions, resourceDeclarations),
+            WhileSyntax loop => HasRuntimeWork(loop.Body, functions, resourceDeclarations),
+            DoWhileSyntax loop => HasRuntimeWork(loop.Body, functions, resourceDeclarations),
+            RangeForSyntax loop => HasRuntimeWork(loop.Body, functions, resourceDeclarations),
+            ForSyntax loop => HasRuntimeWork(loop.Body, functions, resourceDeclarations),
+            IfElseSyntax branch => HasRuntimeWork(branch.ThenBlock, functions, resourceDeclarations)
+                                   || (branch.ElseBlock.HasValue && HasRuntimeWork(branch.ElseBlock.Value, functions, resourceDeclarations)),
+            SwitchSyntax switchSyntax => switchSyntax.Cases.Any(switchCase => HasRuntimeWork(switchCase.Block, functions, resourceDeclarations))
+                                         || (switchSyntax.DefaultBlock.HasValue && HasRuntimeWork(switchSyntax.DefaultBlock.Value, functions, resourceDeclarations)),
             ReturnSyntax { Expression.HasValue: true } => true,
             _ => false,
         };
     }
 
-    private static bool HasRuntimeCall(FunctionCall call, IReadOnlyDictionary<string, FunctionSyntax> functions)
+    private static bool HasRuntimeCall(
+        FunctionCall call,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        SdkResourceDeclarationRegistry resourceDeclarations)
     {
         if (call.Name is "video_init" or "video_present" or "tilemap_set" or "tilemap_fill")
         {
@@ -375,8 +421,8 @@ internal sealed class GameBoyVideoProgram
             return true;
         }
 
-        return !SdkResourceDeclarationResolver.TryResolve(function, out _)
-               && (function.IsExtern || HasRuntimeWork(function.Block, functions));
+        return !SdkResourceDeclarationResolver.TryResolve(function, out _, resourceDeclarations)
+               && (function.IsExtern || HasRuntimeWork(function.Block, functions, resourceDeclarations));
     }
 
     private static void CountCalls(BlockSyntax block, IDictionary<string, int> callCounts)
@@ -677,7 +723,7 @@ internal sealed class GameBoyVideoProgram
     private bool TryApplySdkResourceDeclaration(FunctionCall call)
     {
         if (!Functions.TryGetValue(call.Name, out var function) ||
-            !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor))
+            !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor, ResourceDeclarations))
         {
             return false;
         }
@@ -688,6 +734,11 @@ internal sealed class GameBoyVideoProgram
 
     private void ApplySdkResourceDeclaration(FunctionCall call, SdkResourceDeclarationDescriptor descriptor)
     {
+        if (descriptor.IsPluginResource)
+        {
+            throw new InvalidOperationException($"Target 'gb' does not support SDK plugin resource '{descriptor.PluginResource.ResourceId}'.");
+        }
+
         switch (descriptor.Kind)
         {
             case SdkResourceDeclarationKind.RawPalette:

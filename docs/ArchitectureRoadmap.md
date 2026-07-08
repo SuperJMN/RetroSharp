@@ -362,6 +362,16 @@ operation records and target-intrinsic operations, not public source-package
 facade names. Public APIs still live in `sdk/RetroSharp.Portable2D`; the rows
 below explain which compiler-owned paths those helpers currently rely on.
 
+SDK plugin descriptors are intentionally outside this inventory. The #258 static
+plugin path registers namespaced `SdkPluginOperationDescriptor` values through
+`SdkPluginRegistry` and exposes them to a target through
+`TargetIntrinsicCatalog.WithSdkPlugins(...)`. A plugin-owned feature should add a
+namespaced descriptor and target hook, not a new `Sdk2DOperation`,
+`SdkAudioOperation`, or `TargetIntrinsicOperation` entry, unless it deliberately
+graduates into built-in SDK semantics. The first proof hook is intentionally
+small: statement operations receive a `SdkPluginTargetLoweringContext` with
+validated operand metadata and a minimal target byte emitter.
+
 ### SDK 2D Operations
 
 | Operation | Classification | Current path and next decision |
@@ -411,7 +421,9 @@ rename ids. Use it to decide where new work belongs:
 - `platformer/plugin`: genre-shaped helpers that are useful enough to keep as
   current Portable2D compatibility bridges, but should not be forced into the
   core forever. A future plugin boundary can own these through a separate,
-  non-breaking migration.
+  non-breaking migration. New platformer-shaped experiments should prefer
+  `SdkPluginOperationDescriptor` plus explicit target hooks over growing this
+  enum.
 - `target-specific`: raw hardware or target-only escape hatches. The current
   GB/NES `TargetIntrinsicOperation` catalog has no preferred raw-hardware id in
   this bucket; legacy flat calls such as `sprite_set(...)`, `scroll_set(...)`,

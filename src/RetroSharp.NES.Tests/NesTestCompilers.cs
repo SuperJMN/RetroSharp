@@ -12,14 +12,16 @@ internal static class NesRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
         return RetroSharp.NES.NesRomCompiler.CompileSource(
             source,
             baseDirectory,
             sdkImportMode,
             sdkLibraryRegistry,
-            sdkLibraryImports ?? DefaultLibraryImports);
+            sdkLibraryImports ?? DefaultLibraryImports,
+            sdkPluginRegistry);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
@@ -27,14 +29,16 @@ internal static class NesRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
         return RetroSharp.NES.NesRomCompiler.CollectSdkOperations(
             source,
             baseDirectory,
             sdkImportMode,
             sdkLibraryRegistry,
-            sdkLibraryImports ?? DefaultLibraryImports);
+            sdkLibraryImports ?? DefaultLibraryImports,
+            sdkPluginRegistry);
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
@@ -42,14 +46,16 @@ internal static class NesRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
         return RetroSharp.NES.NesRomCompiler.CollectSdkAudioOperations(
             source,
             baseDirectory,
             sdkImportMode,
             sdkLibraryRegistry,
-            sdkLibraryImports ?? DefaultLibraryImports);
+            sdkLibraryImports ?? DefaultLibraryImports,
+            sdkPluginRegistry);
     }
 }
 
@@ -62,14 +68,16 @@ internal static class GameBoyRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
         return RetroSharp.GameBoy.GameBoyRomCompiler.CompileSource(
             source,
             baseDirectory,
             sdkImportMode,
             sdkLibraryRegistry,
-            sdkLibraryImports ?? DefaultLibraryImports);
+            sdkLibraryImports ?? DefaultLibraryImports,
+            sdkPluginRegistry);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
@@ -77,13 +85,15 @@ internal static class GameBoyRomCompiler
         string? baseDirectory = null,
         SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
         SdkLibraryRegistry? sdkLibraryRegistry = null,
-        IReadOnlyList<string>? sdkLibraryImports = null)
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
     {
         return RetroSharp.GameBoy.GameBoyRomCompiler.CollectSdkOperations(
             source,
             baseDirectory,
             sdkImportMode,
             sdkLibraryRegistry,
-            sdkLibraryImports ?? DefaultLibraryImports);
+            sdkLibraryImports ?? DefaultLibraryImports,
+            sdkPluginRegistry);
     }
 }

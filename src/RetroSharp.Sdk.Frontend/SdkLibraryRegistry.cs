@@ -1,6 +1,7 @@
 namespace RetroSharp.Sdk;
 
 using System.Text.Json;
+using RetroSharp.Core.Sdk;
 
 public sealed class SdkLibraryRegistry
 {
@@ -32,6 +33,15 @@ public sealed class SdkLibraryRegistry
     public bool TryResolve(string importPath, out SdkLibrary? library)
     {
         return libraries.TryGetValue(importPath, out library);
+    }
+
+    public SdkLibraryRegistry WithSdkPlugins(SdkPluginRegistry pluginRegistry)
+    {
+        var pluginLibraries = pluginRegistry.Plugins.Select(plugin =>
+            new SdkLibrary(
+                plugin.SourcePackage.ImportPath,
+                catalog => plugin.SourcePackage.SourceForTarget(catalog)));
+        return new SdkLibraryRegistry(libraries.Values.Concat(pluginLibraries));
     }
 
     public static SdkLibraryRegistry FromDirectories(IEnumerable<string> libraryPaths, bool includeDefaultLibraries = true)

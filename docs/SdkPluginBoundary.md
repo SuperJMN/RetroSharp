@@ -1,12 +1,13 @@
 # SDK Plugin Boundary
 
-Status: design boundary for issue #252. No runtime loader or compiler code is
-implemented by this document.
+Status: static in-process descriptor boundary implemented for issue #258. No
+runtime loader, package feed, or binary plugin ABI is implemented.
 
 RetroSharp already has source-only SDK packages and compiler-owned SDK
 semantics. This document defines where a future SDK plugin layer would fit so
 new SDK concepts do not leak into the language layer or keep growing the core
-operation enums forever.
+operation enums forever. The implemented slice proves the static registry path;
+it does not migrate existing `RetroSharp.Portable2D` APIs.
 
 ## Layer Decision
 
@@ -16,7 +17,7 @@ Use the smallest extension level that can express the feature:
 | --- | --- | --- | --- |
 | Source-only library | Package manifest and RetroSharp source files | Public facades, inline helpers, physical namespaces, target-gated source variants, wrappers over known `[intrinsic(...)]` and `[resource(...)]` metadata | New compiler semantics, new resource kinds, new asset importers, new target capabilities, validators, or backend lowering |
 | Built-in SDK semantics | `RetroSharp.Sdk.Frontend`, `RetroSharp.Core.Sdk`, and target projects in this repo | `Sdk2DOperation`, `SdkAudioOperation`, `TargetIntrinsicDescriptor`, `SdkResourceDeclarationDescriptor`, resource models, validators, asset pipelines, target capability checks, and GB/NES lowerers | A public package or external ABI; public facade names should still come from source packages |
-| SDK plugin | Future host-registered SDK descriptor | Source package files plus namespaced descriptors, resource kinds, importers, validators, capabilities, and per-target lowering hooks | New language syntax, managed object semantics, automatic loader discovery, package-feed resolution, or hidden target runtime services |
+| SDK plugin | Host-registered static descriptor | Source package files plus namespaced resource/operation descriptors, validators, capability metadata, and explicit per-target lowering hooks | New language syntax, managed object semantics, automatic loader discovery, package-feed resolution, binary ABI, or hidden target runtime services |
 
 The language remains target-neutral in all three levels. A plugin may define
 SDK semantics consumed by the SDK frontend, internal SDK model, and target
@@ -26,18 +27,19 @@ dispatch, or hidden object identity in RetroSharp source or emitted target code.
 
 ## Extension Points
 
-A real SDK plugin needs these extension points. They are named as design
-interfaces/descriptors, not as committed C# API names:
+A real SDK plugin needs these extension points. The first static C# API now
+covers the descriptor, registry, resource, operation, validator, capability, and
+target-lowering-hook pieces; asset importers remain a future extension point:
 
 | Extension point | Purpose | Current built-in analogue |
 | --- | --- | --- |
 | Source package files and facades | Provide the public source API through the same manifest/source-package path as `RetroSharp.Portable2D`. | `retrosharp-library.json`, `SdkLibraryRegistry`, physical namespace source rewriting |
 | Intrinsic and operation descriptors | Declare namespaced operations, runtime arity, return kind, compile-time operand roles, required capabilities, and whether a call is a statement or value fact. | `TargetIntrinsicDescriptor`, `Sdk2DOperation`, `SdkAudioOperation` |
 | Resource declaration kinds | Map `[resource("...")]` ids to typed resource declarations with validation and target consumption rules. | `SdkResourceDeclarationDescriptor` and `SdkResourceDeclarationKind` |
-| Asset importers | Convert plugin resource declarations and asset roots into target-neutral or target-ready resource models. | Tiled, PNG sprite, palette, animation, music, and SFX import paths |
+| Asset importers | Convert plugin resource declarations and asset roots into target-neutral or target-ready resource models. | Tiled, PNG sprite, palette, animation, music, and SFX import paths. Not implemented in the static v1 proof. |
 | Capability declarations | Let targets opt into plugin features and expose limits used by diagnostics. | `Target2DCapabilities`, `TargetAudioCapabilities`, target intrinsic required capabilities |
 | Validators | Check resource shape, target support, compile-time operands, operation streams, and cross-operation budgets before lowering. | `Sdk2DOperationValidator`, `SdkAudioOperationValidator`, frame-budget validation |
-| Per-target lowering hooks | Let a target that supports the plugin lower a plugin operation or resource without adding a generic core enum member for every plugin concept. | `GameBoySdkOperationLowerer`, `NesSdkOperationLowerer`, target asset lowerers |
+| Per-target lowering hooks | Let a target that supports the plugin lower a plugin operation or resource without adding a generic core enum member for every plugin concept. The static v1 statement hook receives a minimal target byte emitter. | `GameBoySdkOperationLowerer`, `NesSdkOperationLowerer`, target asset lowerers |
 | Compatibility and version metadata | State plugin id, descriptor ABI version, supported compiler range, supported target ids, migration aliases, and non-breaking compatibility policy. | Package `targets`, current docs-only intrinsic taxonomy |
 
 Plugin-owned operations should be namespaced descriptors rather than new
@@ -50,19 +52,17 @@ they later graduate into built-in semantics deliberately.
 
 ## Descriptor Shape
 
-The first ABI shape should be descriptor-first and host-registered. The exact
-C# names can change, but the design should carry this information:
+The first ABI shape is descriptor-first and host-registered:
 
 ```csharp
 SdkPluginDescriptor
   Id: "RetroSharp.Platformer2D"
   Version: "0.1.0"
   RequiredCompilerAbi: "sdk-plugin-static-v1"
-  SourcePackage: SdkLibraryDescriptor
-  ResourceKinds: SdkPluginResourceKindDescriptor[]
+  SourcePackage: SdkPluginSourcePackageDescriptor
+  ResourceDeclarations: SdkPluginResourceDeclarationDescriptor[]
   Operations: SdkPluginOperationDescriptor[]
   Capabilities: SdkPluginCapabilityDescriptor[]
-  AssetImporters: SdkPluginAssetImporterDescriptor[]
   Validators: SdkPluginValidatorDescriptor[]
   TargetLoweringHooks: SdkPluginTargetLoweringDescriptor[]
   Compatibility: SdkPluginCompatibilityDescriptor
@@ -79,10 +79,18 @@ Important constraints:
   features.
 - Source packages remain the public source surface. The compiler should not
   learn plugin facade names as hard-coded public API strings.
+- The host passes `SdkPluginRegistry` explicitly to the target compiler. The
+  compiler builds an effective target intrinsic catalog through
+  `TargetIntrinsicCatalog.WithSdkPlugins(...)` and an effective source library
+  registry through `SdkLibraryRegistry.WithSdkPlugins(...)`.
+- Resource ids resolve through `SdkResourceDeclarationRegistry`, so built-in ids
+  such as `world_load` stay compatible while plugin ids such as
+  `RetroSharp.Platformer2D.CollisionProfile` do not need central table entries.
 
 ## First Slice
 
-The first implementation issue after #252 should be deliberately small:
+The first implementation slice after #252 is deliberately small and is now
+represented by focused tests:
 
 1. Add a static `SdkPluginDescriptor` model and a host-provided registry.
 2. Allow the host to register one plugin descriptor directly in-process; do not
@@ -91,14 +99,17 @@ The first implementation issue after #252 should be deliberately small:
    - one source package;
    - one resource declaration kind;
    - one validator for that resource or operation;
-   - one target capability declaration;
+   - one capability declaration;
    - one per-target lowering hook for a single target.
 4. Keep all existing GB/NES output unchanged unless the proof sample opts into
    the plugin.
 
-A useful proof can be an in-repo experimental `RetroSharp.Platformer2D`
-descriptor registered by tests or by a host fixture. It should be static data
-plus host services, not a binary plugin loader.
+The current proof is an in-test experimental `RetroSharp.Platformer2D`
+descriptor. It supplies a source package with `Platformer.TouchProbe()`, a
+namespaced plugin operation descriptor, a validator, a capability id, and a Game
+Boy lowering hook that emits target bytes through the static hook emitter. Game
+Boy compiles through the hook when the registry is provided; NES fails before
+lowering because it does not opt into that hook.
 
 ## Platformer2D Example
 

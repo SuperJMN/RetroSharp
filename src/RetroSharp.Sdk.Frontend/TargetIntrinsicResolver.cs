@@ -78,6 +78,19 @@ public static class TargetIntrinsicResolver
                 $"Intrinsic '{descriptor.Name}' expects {descriptor.RuntimeArity} runtime operands, got {runtimeOperands.Count}.");
         }
 
+        if (descriptor.IsPluginOperation)
+        {
+            var context = new SdkPluginValidationContext(
+                catalog.TargetId,
+                descriptor.PluginOperation,
+                runtimeOperands.Select(operand => new SdkPluginRuntimeOperand(operand.Slot)).ToArray(),
+                compileTimeValues.Select(value => new SdkPluginCompileTimeOperand(value.Slot, value.Role, value.Identifier, value.Constant)).ToArray());
+            foreach (var validator in descriptor.PluginValidators)
+            {
+                validator.Validate(context);
+            }
+        }
+
         return new ResolvedTargetIntrinsicCall(descriptor, runtimeOperands, compileTimeValues);
     }
 

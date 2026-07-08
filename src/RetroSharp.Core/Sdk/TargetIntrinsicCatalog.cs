@@ -72,11 +72,13 @@ public sealed record TargetIntrinsicDescriptor
 
         IntrinsicId = intrinsicId;
         Name = intrinsicId;
-        Operation = operation;
+        BuiltInOperation = operation;
         ReturnKind = returnKind;
         RuntimeArity = runtimeArity;
         CompileTimeOperands = (compileTimeOperands ?? []).OrderBy(operand => operand.Slot).ToArray();
         RequiredCapabilities = (requiredCapabilities ?? []).Distinct().Order().ToArray();
+        RequiredPluginCapabilities = [];
+        PluginValidators = [];
 
         var duplicate = CompileTimeOperands
             .GroupBy(operand => operand.Slot)
@@ -87,14 +89,47 @@ public sealed record TargetIntrinsicDescriptor
         }
     }
 
+    private TargetIntrinsicDescriptor(
+        SdkPluginOperationDescriptor operation,
+        SdkPluginTargetLoweringDescriptor loweringHook,
+        IEnumerable<SdkPluginValidatorDescriptor> validators)
+    {
+        IntrinsicId = operation.OperationId;
+        Name = operation.OperationId;
+        ReturnKind = operation.ReturnKind;
+        RuntimeArity = operation.RuntimeArity;
+        CompileTimeOperands = operation.CompileTimeOperands;
+        RequiredCapabilities = [];
+        RequiredPluginCapabilities = operation.RequiredCapabilities;
+        PluginOperation = operation;
+        PluginTargetLowering = loweringHook;
+        PluginValidators = validators.ToArray();
+    }
+
     public string IntrinsicId { get; }
     public string Name { get; }
-    public TargetIntrinsicOperation Operation { get; }
+    public TargetIntrinsicOperation Operation =>
+        BuiltInOperation ?? throw new InvalidOperationException($"SDK plugin intrinsic '{IntrinsicId}' has no built-in target intrinsic operation.");
+
+    public TargetIntrinsicOperation? BuiltInOperation { get; }
     public TargetIntrinsicReturnKind ReturnKind { get; }
     public int RuntimeArity { get; }
     public IReadOnlyList<TargetIntrinsicCompileTimeOperand> CompileTimeOperands { get; }
     public IReadOnlyList<TargetIntrinsicCapabilityRequirement> RequiredCapabilities { get; }
+    public IReadOnlyList<string> RequiredPluginCapabilities { get; }
+    public SdkPluginOperationDescriptor PluginOperation { get; } = null!;
+    public SdkPluginTargetLoweringDescriptor PluginTargetLowering { get; } = null!;
+    public IReadOnlyList<SdkPluginValidatorDescriptor> PluginValidators { get; }
+    public bool IsPluginOperation => PluginOperation is not null;
     public int Arity => RuntimeArity + CompileTimeOperands.Count;
+
+    public static TargetIntrinsicDescriptor FromPluginOperation(
+        SdkPluginOperationDescriptor operation,
+        SdkPluginTargetLoweringDescriptor loweringHook,
+        IEnumerable<SdkPluginValidatorDescriptor> validators)
+    {
+        return new TargetIntrinsicDescriptor(operation, loweringHook, validators);
+    }
 
     public static TargetIntrinsicDescriptor WaitFrame(string name, int arity)
     {
@@ -334,18 +369,38 @@ public sealed record TargetIntrinsicDescriptor
 public sealed class TargetIntrinsicCatalog
 {
     private readonly Dictionary<string, TargetIntrinsicDescriptor> intrinsics;
+    private readonly IReadOnlySet<string> unsupportedPluginOperationIds;
 
     public TargetIntrinsicCatalog(string targetId, string targetName, IEnumerable<TargetIntrinsicDescriptor> intrinsics)
+        : this(targetId, targetName, intrinsics, new HashSet<string>(StringComparer.Ordinal))
+    {
+    }
+
+    private TargetIntrinsicCatalog(
+        string targetId,
+        string targetName,
+        IEnumerable<TargetIntrinsicDescriptor> intrinsics,
+        IReadOnlySet<string> unsupportedPluginOperationIds)
     {
         TargetId = targetId;
         TargetName = targetName;
         this.intrinsics = intrinsics.ToDictionary(intrinsic => intrinsic.Name, StringComparer.Ordinal);
+        this.unsupportedPluginOperationIds = unsupportedPluginOperationIds;
     }
 
     public string TargetId { get; }
     public string TargetName { get; }
 
     public IReadOnlyCollection<TargetIntrinsicDescriptor> Intrinsics => intrinsics.Values;
+
+    public TargetIntrinsicCatalog WithSdkPlugins(SdkPluginRegistry registry)
+    {
+        return new TargetIntrinsicCatalog(
+            TargetId,
+            TargetName,
+            intrinsics.Values.Concat(registry.TargetIntrinsicDescriptorsFor(TargetId)),
+            registry.UnsupportedOperationIdsFor(TargetId));
+    }
 
     public bool TryResolve(string name, out TargetIntrinsicDescriptor descriptor)
     {
@@ -357,6 +412,12 @@ public sealed class TargetIntrinsicCatalog
         if (TryResolve(name, out var descriptor))
         {
             return descriptor;
+        }
+
+        if (unsupportedPluginOperationIds.Contains(name))
+        {
+            throw new InvalidOperationException(
+                $"Target '{TargetId}' does not support SDK plugin feature '{name}' on extern function '{functionName}'.");
         }
 
         throw new InvalidOperationException(
