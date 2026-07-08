@@ -12,6 +12,7 @@ public class SemanticAnalyzer
         node = TypeAliasResolver.Resolve(node);
         node = StaticClassLowerer.LowerStaticCalls(node, DeclaredStaticMethodIndex.Build(node));
         var types = BuildTypeTable(node.Enums, node.Structs);
+        var structFieldTypeErrors = StructFieldReservedTypeErrors(node.Structs).ToList();
         var constantsResult = DeclareConstants(node.Constants, scope, types);
         scope = constantsResult.Scope;
         var functionIndex = node.Functions.ToDictionary(function => function.Name, StringComparer.Ordinal);
@@ -25,7 +26,7 @@ public class SemanticAnalyzer
 
         return new AnalyzeResult<SemanticNode>(new ProgramNode(functions)
         {
-            Errors = constantsResult.Errors
+            Errors = constantsResult.Errors.Concat(structFieldTypeErrors)
         }, scope);
     }
 
@@ -34,6 +35,7 @@ public class SemanticAnalyzer
         var errors = new List<string>();
         foreach (var constant in constants)
         {
+            errors.AddRange(ReservedPointerTypeErrors($"Constant '{constant.Name}'", constant.Type));
             errors.AddRange(ConstantInitializerErrors(constant.Type, constant.Value));
             errors.AddRange(KnownInitializerTypeErrors(constant.Type, constant.Value, scope, types));
             var result = scope.TryDeclare(new Symbol(constant.Name, ResolveType(constant.Type, types)));
@@ -99,7 +101,7 @@ public class SemanticAnalyzer
 
     private static bool TrySizeOfType(string typeName, IReadOnlyDictionary<string, SymbolType> types, out int size)
     {
-        if (typeName.StartsWith("ptr<", StringComparison.Ordinal) && typeName.EndsWith(">", StringComparison.Ordinal))
+        if (IsReservedPointerType(typeName))
         {
             size = 2;
             return true;
@@ -115,15 +117,43 @@ public class SemanticAnalyzer
         return false;
     }
 
+    private static bool IsReservedPointerType(string typeName)
+    {
+        return typeName.StartsWith("ptr<", StringComparison.Ordinal) && typeName.EndsWith(">", StringComparison.Ordinal);
+    }
+
+    private static IEnumerable<string> StructFieldReservedTypeErrors(IEnumerable<StructSyntax> structs)
+    {
+        foreach (var structSyntax in structs)
+        {
+            foreach (var field in structSyntax.Fields)
+            {
+                foreach (var error in ReservedPointerTypeErrors($"Struct field '{structSyntax.Name}.{field.Name}'", field.Type))
+                {
+                    yield return error;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> ReservedPointerTypeErrors(string subject, string typeName)
+    {
+        if (IsReservedPointerType(typeName))
+        {
+            yield return $"{subject} type '{typeName}' is reserved for internal SDK/backend addressability.";
+        }
+    }
+
     private AnalyzeResult<FunctionNode> AnalyzeFunction(FunctionSyntax function, Scope parentScope, IReadOnlyDictionary<string, SymbolType> types, IReadOnlyDictionary<string, FunctionSyntax> functions)
     {
         // Create a child scope for the function body so locals don't leak out
         var functionScope = new Scope(parentScope);
 
         // Declare parameters in the function scope so they can be referenced in the body
-        var errors = new List<string>();
+        var errors = ReservedPointerTypeErrors("Function return", function.Type).ToList();
         foreach (var p in function.Parameters)
         {
+            errors.AddRange(ReservedPointerTypeErrors($"Function parameter '{p.Name}'", p.Type));
             p.DefaultValue.Execute(defaultValue =>
             {
                 var defaultResult = AnalyzeExpression(defaultValue, functionScope, types);
@@ -656,7 +686,11 @@ public class SemanticAnalyzer
     {
         var expression = AnalyzeExpression(castExpression.Expression, scope, types, functions);
         var errors = new List<string>();
-        if (!TrySizeOfType(castExpression.Type, types, out _))
+        if (IsReservedPointerType(castExpression.Type))
+        {
+            errors.Add($"Cannot cast to '{castExpression.Type}': pointer types are reserved for internal SDK/backend addressability.");
+        }
+        else if (!TrySizeOfType(castExpression.Type, types, out _))
         {
             errors.Add($"Cannot cast to unknown type '{castExpression.Type}'");
         }
@@ -749,6 +783,10 @@ public class SemanticAnalyzer
             IdentifierLValue identifier => GetSymbolNode(scope, identifier.Identifier),
             MemberAccessLValue memberAccess => GetMemberSymbolNode(scope, memberAccess.MemberAccess, new Dictionary<string, SymbolType>(), false),
             IndexLValue index => GetIndexedSymbolNode(scope, new IndexExpressionSyntax(index.BaseIdentifier, index.Index)),
+            PointerDerefLValue => new KnownSymbolNode(new Symbol("pointer dereference", SymbolType.Unknown))
+            {
+                Errors = ["Pointer dereference assignment is reserved for internal SDK/backend addressability."]
+            },
             _ => new UnknownSymbol(lValue.ToString() ?? "<lvalue>")
             {
                 Errors = ["Unsupported assignment target"]
@@ -759,7 +797,8 @@ public class SemanticAnalyzer
     private AnalyzeResult<StatementNode> AnalyzeConstDeclaration(ConstDeclarationSyntax constDeclaration, Scope scope, IReadOnlyDictionary<string, SymbolType> types)
     {
         var value = AnalyzeExpression(constDeclaration.Value, scope, types);
-        var initializerErrors = value.Node.AllErrors
+        var initializerErrors = ReservedPointerTypeErrors($"Constant '{constDeclaration.Name}'", constDeclaration.Type)
+            .Concat(value.Node.AllErrors)
             .Concat(ConstantInitializerErrors(constDeclaration.Type, constDeclaration.Value))
             .Concat(KnownInitializerTypeErrors(constDeclaration.Type, constDeclaration.Value, scope, types))
             .ToList();
@@ -791,7 +830,9 @@ public class SemanticAnalyzer
             type = new ArrayType(type, ArrayLength(declarationStatement.ArrayLength.Value));
         }
 
-        var initializerErrors = AnalyzeDeclarationInitializer(declarationStatement, scope, types, functions).ToList();
+        var initializerErrors = ReservedPointerTypeErrors($"Local '{declarationStatement.Name}'", declarationStatement.Type)
+            .Concat(AnalyzeDeclarationInitializer(declarationStatement, scope, types, functions))
+            .ToList();
         var declaration = scope
             .TryDeclare(new Symbol(declarationStatement.Name, type, declarationStatement.IsImmutable))
             .Match(

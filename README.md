@@ -52,7 +52,7 @@ Right now, RetroSharp can compile simple programs with:
 - Type aliases normalized at compile time
 - Compound assignment with `+=`, `-=`, `&=`, `|=`, and `^=`, plus statement-only `++` and `--`
 - Top-level and block-local constants with optional type annotations folded at compile time, including constant boolean and conditional expressions
-- `sizeof(type)` folded at compile time for primitive, pointer, enum, and plain struct types
+- `sizeof(type)` folded at compile time for primitive, reserved internal pointer-size marker, enum, and plain struct types
 - `offsetof(type, field)` folded at compile time for direct fields of plain struct types
 - `countof(array)` folded at compile time for fixed-size local arrays
 - Top-level enums with qualified members folded at compile time
@@ -67,7 +67,7 @@ Right now, RetroSharp can compile simple programs with:
 - Byte-backed bitwise `&`, `|`, and `^`, plus folded constant `~` masks, in the current cartridge targets
 - Explicit casts such as `(u8)expr` as validated zero-cost expression markers in the current cartridge targets
 - Canonical fixed-width types (`u8`, `i8`, `u16`, `i16`, `bool`) plus source aliases where the current target accepts them
-- Pointers with `ptr<T>` syntax in the language model; full cartridge-target pointer/member lowering remains planned
+- Public gameplay code stays at the SDK/resource level; raw buffers, hardware addresses, pointer member access, and `ptr<T>` APIs remain reserved for internal SDK/backend addressability policy
 
 Example program:
 ```csharp

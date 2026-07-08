@@ -219,6 +219,53 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
+    public void Reserved_pointer_size_marker_is_allowed_in_sizeof_only()
+    {
+        Errors("void Main(){ const u8 PtrSize = sizeof(ptr<u8>); }")
+            .Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Pointer_types_are_reserved_for_internal_addressability()
+    {
+        Errors("ptr<u8> Read(){ return 0; }")
+            .Should().ContainMatch("*return type*ptr<u8>*reserved*internal*");
+
+        Errors("void Write(ptr<u8> address){ }")
+            .Should().ContainMatch("*parameter*address*ptr<u8>*reserved*internal*");
+
+        Errors("void Main(){ ptr<u8> address; }")
+            .Should().ContainMatch("*Local*address*ptr<u8>*reserved*internal*");
+
+        Errors("type Address = ptr<u8>; void Main(){ Address address; }")
+            .Should().ContainMatch("*Local*address*ptr<u8>*reserved*internal*");
+
+        Errors("const ptr<u8> Address = 0; void Main(){ }")
+            .Should().ContainMatch("*Constant*Address*ptr<u8>*reserved*internal*");
+    }
+
+    [Fact]
+    public void Struct_fields_cannot_expose_reserved_pointer_types()
+    {
+        Errors("struct Buffer { ptr<u8> data; } void Main(){ }")
+            .Should().ContainMatch("*field*Buffer.data*ptr<u8>*reserved*internal*");
+    }
+
+    [Fact]
+    public void Casts_cannot_target_reserved_pointer_types()
+    {
+        Errors("void Main(){ u8 value = (ptr<u8>)1; }")
+            .Should().ContainMatch("*cast*ptr<u8>*reserved*internal*");
+    }
+
+    [Fact]
+    public void Pointer_deref_assignment_is_reserved_for_internal_addressability()
+    {
+        Errors("void Main(){ u8 address; *address = 1; }")
+            .Should().ContainMatch("*Pointer dereference*reserved*internal*");
+    }
+
+    [Fact]
     public void Offsetof_field_expression_resolves_to_constant()
     {
         var input = "struct Actor { u8 x; u16 y; bool active; } void Main(){ const u8 YOffset = offsetof(Actor, y); u8 x; x = YOffset; }";

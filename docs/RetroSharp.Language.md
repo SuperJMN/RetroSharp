@@ -2,7 +2,7 @@
 
 This document captures the current design decisions for RetroSharp, a C#-inspired language targeting 8-bit systems with zero hidden runtime. It focuses on explicit cost, portability, and predictable code generation.
 
-Status: Language v1 preview. Top-level import declarations for built-in compile-time libraries, type aliases, top-level and block-local numeric constants with optional type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, top-level enums, restricted `static class` declarations with `const` members and `static` methods for zero-cost constant groups, plain local structs with named, shorthand, and optional type-named initializer lists, `.` member access, fixed-size local arrays of scalar values or mixed-width structs, initializer lists for scalar value arrays and mixed-width struct arrays, initializer-inferred lengths for value arrays, constant or runtime index access, struct-array field access such as `actors[i].x`, explicit casts, byte and direct 16-bit arithmetic/compare/assignment, bitwise compound assignment, statement-only `++`/`--`, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, half-open range membership expressions, `while`, `do while`, short-circuit logical conditions including unary `!`, byte-backed conditional value expressions with `condition ? whenTrue : whenFalse`, C-style `for` loops, half-open range `for` loops, `break`/`continue`, and inline helper functions with parameters, named arguments, default parameter values, single return expressions, or `=>` expression bodies are implemented for the front-end and the current Game Boy/NES cartridge targets; pointer-based member access and full ABI layout work remain planned.
+Status: Language v1 preview. Top-level import declarations for built-in compile-time libraries, type aliases, top-level and block-local numeric constants with optional type annotations, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, top-level enums, restricted `static class` declarations with `const` members and `static` methods for zero-cost constant groups, plain local structs with named, shorthand, and optional type-named initializer lists, `.` member access, fixed-size local arrays of scalar values or mixed-width structs, initializer lists for scalar value arrays and mixed-width struct arrays, initializer-inferred lengths for value arrays, constant or runtime index access, struct-array field access such as `actors[i].x`, explicit casts, byte and direct 16-bit arithmetic/compare/assignment, bitwise compound assignment, statement-only `++`/`--`, `if`/`else if`/`else`, no-fallthrough `switch` with multi-value and half-open range cases, half-open range membership expressions, `while`, `do while`, short-circuit logical conditions including unary `!`, byte-backed conditional value expressions with `condition ? whenTrue : whenFalse`, C-style `for` loops, half-open range `for` loops, `break`/`continue`, and inline helper functions with parameters, named arguments, default parameter values, single return expressions, or `=>` expression bodies are implemented for the front-end and the current Game Boy/NES cartridge targets. Public gameplay source should stay at the SDK/resource level rather than exposing raw buffers, hardware addresses, or pointer member access; the remaining ABI work is an internal SDK/backend addressability policy.
 
 ---
 
@@ -22,7 +22,7 @@ Non-goals:
 
 Canonical types in the core:
 - i8, u8, i16, u16, bool
-- ptr<T> (16-bit pointer)
+- ptr<T> is reserved for internal/backend-facing addressability policy, not for public gameplay APIs
 - struct, enum (plain aggregates)
 - `type Name = ExistingType;` aliases for source-level intent without layout changes
 - Top-level and block-local `const` declarations for symbolic compile-time values
@@ -31,7 +31,7 @@ Rationale:
 - Width and signedness are explicit; maps 1:1 to 8/16-bit registers.
 - Simplifies ABI and codegen; avoids surprising promotions.
 - Type aliases are normalized to the underlying type before semantic lowering and target codegen. They do not create new runtime types, storage, casts, or dispatch.
-- `sizeof(type)` is compile-time only. It currently returns 1 for `i8`, `u8`, `bool`, and enum types; 2 for `i16`, `u16`, and `ptr<T>`; and the sum of field sizes for plain struct types.
+- `sizeof(type)` is compile-time only. It currently returns 1 for `i8`, `u8`, `bool`, and enum types; 2 for `i16`, `u16`, and reserved internal `ptr<T>` types; and the sum of field sizes for plain struct types.
 - `offsetof(type, field)` is compile-time only. It returns the byte offset of a direct field in a plain struct using the same layout as `sizeof`; nested field paths remain planned.
 - `countof(array)` is compile-time only. It returns the declared element count of a fixed-size local array visible at that point.
 
@@ -64,26 +64,23 @@ Literals:
 
 ---
 
-## 4. Member access with '.' and controlled auto-deref
+## 4. Member access with '.'
 
 You always use '.' to access and mutate fields.
 
 Semantics:
 - By value: if s: S, then s.x is an lvalue to the field x of s.
-- Via pointer: if p: ptr<S>, then p.x is equivalent to (*p).x (single implicit deref) and is an lvalue.
-- Arrays of structs: a: S[N] → a[i].x; p: ptr<S> → p[i].x.
-- Address-of field: &s.x yields ptr<FieldType>.
-- Error if the base is neither S nor ptr<S>.
-- Only one implicit dereference is performed. For deeper levels, use explicit '*': (*pp).x when pp: ptr<ptr<S>>.
+- Arrays of structs: a: S[N] -> a[i].x.
+- Error if the base is not a known struct value or fixed struct-array element.
+- Public gameplay source does not use pointer auto-deref, address-of fields, pointer-backed arrays, raw buffers, or hardware addresses. If a library or target backend needs addressable storage internally, it must hide that behind SDK/resource facades, target intrinsics, or backend lowering.
 
 Codegen notes (Z80):
-- Load p.x: HL ← p + offset(x); load from (HL)/(HL+1) depending on width.
-- Store p.x = v: HL ← p + offset(x); store to (HL)/(HL+1).
+- Load s.x or a[i].x from the statically known field offset, using the target's fixed local or fixed array layout.
 - Offsets are computed at compile time.
 
 Rationale:
-- C/C# familiarity without introducing a separate operator (like '=>').
-- Keeps cost explicit and predictable while staying ergonomic.
+- C#-style member access stays familiar for plain data without making address arithmetic part of the user-facing language.
+- User code names gameplay intent through SDK libraries; buffers, DMA, ROM/RAM tables, and registers stay in SDK/backend implementation layers.
 
 ---
 
@@ -226,7 +223,7 @@ remains the entry point name.
 
 ## 8. Grammar updates (EBNF excerpt)
 
-Current parser support includes top-level plain enum and struct declarations, identifier-based member access as an expression and as an lvalue, member access through fixed-size array elements such as `actors[i].x`, and local fixed-size array declarations with constant or byte-backed runtime index reads/writes. Pointer/member forms remain planned.
+Current parser support includes top-level plain enum and struct declarations, identifier-based member access as an expression and as an lvalue, member access through fixed-size array elements such as `actors[i].x`, and local fixed-size array declarations with constant or byte-backed runtime index reads/writes. The grammar still recognizes reserved `ptr<T>` type syntax for backend-facing size markers, but public semantic analysis rejects `ptr<T>` storage, signatures, casts, struct fields, and pointer dereference lvalues.
 
 ```
 Program       = (ImportDecl | UsingDecl)* TopLevelDecl* EOF ;
@@ -331,25 +328,20 @@ void f() {
 }
 ```
 
-Planned pointer access:
-
-```c
-void g(ptr<Vec2> p) {
-    p.x = 1;
-    p.y = p.y + 4;
-    ptr<i16> px = &p.x;
-}
-```
+Backend-facing addressability remains a design topic for SDK and target
+implementations. It should not expose public pointer syntax in gameplay code:
+portable APIs should accept resource identifiers, values, and domain concepts,
+while targets resolve any ROM/RAM addresses behind those facades.
 
 ---
 
 ## 10. V1 closure and next steps
 
-- Extend member access beyond identifier-based local structs and fixed struct-array elements to pointer targets and address-of fields.
-- Extend array support from local byte-backed elements and byte-sized struct elements to pointer-backed arrays and wider element layouts.
+- Define the internal SDK/backend addressability policy for ROM/RAM tables, resource data, and target intrinsics without exposing public pointer APIs.
+- Keep pointer member access, address-of fields, pointer-backed arrays, raw buffers, and hardware addresses out of public gameplay source unless a future, separately justified low-level profile is defined.
 - Extend enum support beyond byte-backed cartridge-target locals when the shared ABI and wider integer layout are implemented.
 - Enforce canonical types and friendly errors for disallowed aliases (int/long).
-- Add unit tests covering pointer field access, address-of, and backend-specific word-sized field layout.
+- Keep unit tests covering rejected public pointer/address forms, and add any internal addressability descriptors needed by SDK/backend code.
 - Document ABI details per backend (register conventions, preserved registers).
 
 ## 11. Post-v1 high-level surface
@@ -387,5 +379,5 @@ Traits, constraints, managed objects, closures, delegates, runtime polymorphism,
 ## 12. Rationale summary
 
 - Canonical fixed-width types make cost and ABI explicit and portable on 8-bit.
-- '.'-based member access with single-level auto-deref provides familiarity and keeps codegen simple (base + offset).
+- '.'-based member access on plain values provides familiarity and keeps codegen simple (base + offset) without exposing pointer auto-deref to gameplay code.
 - Frontend sugar (byte/short) maintains approachability without importing 32/64-bit assumptions.
