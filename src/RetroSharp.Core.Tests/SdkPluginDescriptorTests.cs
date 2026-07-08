@@ -106,6 +106,76 @@ public sealed class SdkPluginDescriptorTests
         Assert.Equal("Target 'nes' does not support SDK plugin feature 'RetroSharp.Platformer2D.TouchProbe' on extern function 'platformer_touch_probe'.", exception.Message);
     }
 
+    [Fact]
+    public void Plugin_descriptor_rejects_required_capability_that_is_not_declared()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new SdkPluginDescriptor(
+                Id: "RetroSharp.Platformer2D",
+                Version: "0.1.0",
+                RequiredCompilerAbi: "sdk-plugin-static-v1",
+                SourcePackage: SourcePackage(),
+                ResourceDeclarations: [],
+                Operations:
+                [
+                    new SdkPluginOperationDescriptor(
+                        OperationId: "RetroSharp.Platformer2D.TouchProbe",
+                        ReturnKind: TargetIntrinsicReturnKind.Void,
+                        RuntimeArity: 0,
+                        CallKind: SdkPluginOperationCallKind.Statement,
+                        CompileTimeOperands: [],
+                        RequiredCapabilities: ["RetroSharp.Platformer2D.CollisionProbe"]),
+                ],
+                Capabilities: [],
+                Validators: [],
+                TargetLoweringHooks: [],
+                Compatibility: SdkPluginCompatibilityDescriptor.Unspecified));
+
+        Assert.Equal(
+            "SDK plugin operation 'RetroSharp.Platformer2D.TouchProbe' requires capability 'RetroSharp.Platformer2D.CollisionProbe', which plugin 'RetroSharp.Platformer2D' does not declare.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void Target_intrinsic_catalog_reports_plugin_operation_missing_target_capability()
+    {
+        var registry = SdkPluginRegistry.Empty.Register(new SdkPluginDescriptor(
+            Id: "RetroSharp.Platformer2D",
+            Version: "0.1.0",
+            RequiredCompilerAbi: "sdk-plugin-static-v1",
+            SourcePackage: SourcePackage(),
+            ResourceDeclarations: [],
+            Operations:
+            [
+                new SdkPluginOperationDescriptor(
+                    OperationId: "RetroSharp.Platformer2D.TouchProbe",
+                    ReturnKind: TargetIntrinsicReturnKind.Void,
+                    RuntimeArity: 0,
+                    CallKind: SdkPluginOperationCallKind.Statement,
+                    CompileTimeOperands: [],
+                    RequiredCapabilities: ["RetroSharp.Platformer2D.CollisionProbe"]),
+            ],
+            Capabilities:
+            [
+                new SdkPluginCapabilityDescriptor("RetroSharp.Platformer2D.CollisionProbe"),
+            ],
+            Validators: [],
+            TargetLoweringHooks:
+            [
+                new SdkPluginTargetLoweringDescriptor("gb", "RetroSharp.Platformer2D.TouchProbe", _ => { }),
+            ],
+            Compatibility: SdkPluginCompatibilityDescriptor.Unspecified));
+        var catalog = new TargetIntrinsicCatalog("gb", "Game Boy", [])
+            .WithSdkPlugins(registry);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            catalog.Resolve("RetroSharp.Platformer2D.TouchProbe", "platformer_touch_probe"));
+
+        Assert.Equal(
+            "Target 'gb' does not provide SDK plugin capability 'RetroSharp.Platformer2D.CollisionProbe' required by feature 'RetroSharp.Platformer2D.TouchProbe' on extern function 'platformer_touch_probe'.",
+            exception.Message);
+    }
+
     private static SdkPluginDescriptor PlatformerPlugin()
     {
         return new SdkPluginDescriptor(
@@ -137,7 +207,11 @@ public sealed class SdkPluginDescriptorTests
             ],
             TargetLoweringHooks:
             [
-                new SdkPluginTargetLoweringDescriptor("gb", "RetroSharp.Platformer2D.TouchProbe", _ => { }),
+                new SdkPluginTargetLoweringDescriptor(
+                    "gb",
+                    "RetroSharp.Platformer2D.TouchProbe",
+                    _ => { },
+                    ProvidedCapabilities: ["RetroSharp.Platformer2D.CollisionProbe"]),
             ],
             Compatibility: new SdkPluginCompatibilityDescriptor(
                 MinimumCompilerVersion: "0.0.0",

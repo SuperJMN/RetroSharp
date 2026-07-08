@@ -106,10 +106,32 @@ public sealed record SdkPluginValidatorDescriptor(
     string FeatureId,
     Action<SdkPluginValidationContext> Validate);
 
-public sealed record SdkPluginTargetLoweringDescriptor(
-    string TargetId,
-    string OperationId,
-    Action<SdkPluginTargetLoweringContext> Lower);
+public sealed record SdkPluginTargetLoweringDescriptor
+{
+    public SdkPluginTargetLoweringDescriptor(
+        string TargetId,
+        string OperationId,
+        Action<SdkPluginTargetLoweringContext> Lower,
+        IReadOnlyList<string>? ProvidedCapabilities = null)
+    {
+        this.TargetId = TargetId;
+        this.OperationId = OperationId;
+        this.Lower = Lower;
+        this.ProvidedCapabilities = (ProvidedCapabilities ?? [])
+            .Where(capability => !string.IsNullOrWhiteSpace(capability))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    public string TargetId { get; }
+
+    public string OperationId { get; }
+
+    public Action<SdkPluginTargetLoweringContext> Lower { get; }
+
+    public IReadOnlyList<string> ProvidedCapabilities { get; }
+}
 
 public sealed record SdkPluginCompatibilityDescriptor(
     string? MinimumCompilerVersion,
@@ -149,6 +171,7 @@ public sealed record SdkPluginDescriptor
         this.Compatibility = Compatibility;
 
         ValidateNamespacedIds();
+        ValidateCapabilities();
         ValidateTargetLoweringHooks();
     }
 
@@ -233,6 +256,34 @@ public sealed record SdkPluginDescriptor
         }
     }
 
+    private void ValidateCapabilities()
+    {
+        var declared = Capabilities.Select(capability => capability.CapabilityId).ToHashSet(StringComparer.Ordinal);
+        foreach (var operation in Operations)
+        {
+            foreach (var capability in operation.RequiredCapabilities)
+            {
+                if (!declared.Contains(capability))
+                {
+                    throw new InvalidOperationException(
+                        $"SDK plugin operation '{operation.OperationId}' requires capability '{capability}', which plugin '{Id}' does not declare.");
+                }
+            }
+        }
+
+        foreach (var hook in TargetLoweringHooks)
+        {
+            foreach (var capability in hook.ProvidedCapabilities)
+            {
+                if (!declared.Contains(capability))
+                {
+                    throw new InvalidOperationException(
+                        $"SDK plugin target hook '{hook.OperationId}' for target '{hook.TargetId}' provides capability '{capability}', which plugin '{Id}' does not declare.");
+                }
+            }
+        }
+    }
+
     private void RequireNamespaced(string descriptorId)
     {
         if (!descriptorId.StartsWith(Id + ".", StringComparison.Ordinal))
@@ -304,36 +355,41 @@ public sealed class SdkPluginRegistry
         return false;
     }
 
-    public IEnumerable<TargetIntrinsicDescriptor> TargetIntrinsicDescriptorsFor(string targetId)
+    public SdkPluginTargetSupport TargetSupportFor(string targetId)
     {
+        var supported = new List<TargetIntrinsicDescriptor>();
+        var unsupported = new Dictionary<string, TargetIntrinsicPluginUnsupportedReason>(StringComparer.Ordinal);
         foreach (var plugin in plugins.Values)
         {
-            foreach (var hook in plugin.TargetLoweringHooks.Where(hook => hook.TargetId == targetId))
+            foreach (var operation in plugin.Operations)
             {
-                if (!plugin.TryResolveOperation(hook.OperationId, out var operation))
+                var hook = plugin.TargetLoweringHooks
+                    .FirstOrDefault(candidate => candidate.TargetId == targetId && candidate.OperationId == operation.OperationId);
+                if (hook is null)
                 {
+                    unsupported[operation.OperationId] = TargetIntrinsicPluginUnsupportedReason.MissingHook(operation.OperationId);
                     continue;
                 }
 
-                yield return TargetIntrinsicDescriptor.FromPluginOperation(
+                var missingCapability = operation.RequiredCapabilities
+                    .FirstOrDefault(capability => !hook.ProvidedCapabilities.Contains(capability));
+                if (missingCapability is not null)
+                {
+                    unsupported[operation.OperationId] = TargetIntrinsicPluginUnsupportedReason.MissingCapability(operation.OperationId, missingCapability);
+                    continue;
+                }
+
+                supported.Add(TargetIntrinsicDescriptor.FromPluginOperation(
                     operation,
                     hook,
-                    plugin.ValidatorsFor(operation.OperationId));
+                    plugin.ValidatorsFor(operation.OperationId)));
             }
         }
-    }
 
-    public IReadOnlySet<string> UnsupportedOperationIdsFor(string targetId)
-    {
-        var allOperations = plugins.Values
-            .SelectMany(plugin => plugin.Operations)
-            .Select(operation => operation.OperationId)
-            .ToHashSet(StringComparer.Ordinal);
-        foreach (var supported in plugins.Values.SelectMany(plugin => plugin.TargetLoweringHooks).Where(hook => hook.TargetId == targetId))
-        {
-            allOperations.Remove(supported.OperationId);
-        }
-
-        return allOperations;
+        return new SdkPluginTargetSupport(supported, unsupported);
     }
 }
+
+public sealed record SdkPluginTargetSupport(
+    IReadOnlyList<TargetIntrinsicDescriptor> SupportedDescriptors,
+    IReadOnlyDictionary<string, TargetIntrinsicPluginUnsupportedReason> UnsupportedOperations);

@@ -55,6 +55,14 @@ public enum TargetIntrinsicCapabilityRequirement
 
 public sealed record TargetIntrinsicCompileTimeOperand(int Slot, TargetIntrinsicOperandRole Role);
 
+public sealed record TargetIntrinsicPluginUnsupportedReason(string OperationId, string? MissingCapabilityId)
+{
+    public static TargetIntrinsicPluginUnsupportedReason MissingHook(string operationId) => new(operationId, null);
+
+    public static TargetIntrinsicPluginUnsupportedReason MissingCapability(string operationId, string capabilityId) =>
+        new(operationId, capabilityId);
+}
+
 public sealed record TargetIntrinsicDescriptor
 {
     public TargetIntrinsicDescriptor(
@@ -369,10 +377,10 @@ public sealed record TargetIntrinsicDescriptor
 public sealed class TargetIntrinsicCatalog
 {
     private readonly Dictionary<string, TargetIntrinsicDescriptor> intrinsics;
-    private readonly IReadOnlySet<string> unsupportedPluginOperationIds;
+    private readonly IReadOnlyDictionary<string, TargetIntrinsicPluginUnsupportedReason> unsupportedPluginOperations;
 
     public TargetIntrinsicCatalog(string targetId, string targetName, IEnumerable<TargetIntrinsicDescriptor> intrinsics)
-        : this(targetId, targetName, intrinsics, new HashSet<string>(StringComparer.Ordinal))
+        : this(targetId, targetName, intrinsics, new Dictionary<string, TargetIntrinsicPluginUnsupportedReason>(StringComparer.Ordinal))
     {
     }
 
@@ -380,12 +388,12 @@ public sealed class TargetIntrinsicCatalog
         string targetId,
         string targetName,
         IEnumerable<TargetIntrinsicDescriptor> intrinsics,
-        IReadOnlySet<string> unsupportedPluginOperationIds)
+        IReadOnlyDictionary<string, TargetIntrinsicPluginUnsupportedReason> unsupportedPluginOperations)
     {
         TargetId = targetId;
         TargetName = targetName;
         this.intrinsics = intrinsics.ToDictionary(intrinsic => intrinsic.Name, StringComparer.Ordinal);
-        this.unsupportedPluginOperationIds = unsupportedPluginOperationIds;
+        this.unsupportedPluginOperations = unsupportedPluginOperations;
     }
 
     public string TargetId { get; }
@@ -395,11 +403,12 @@ public sealed class TargetIntrinsicCatalog
 
     public TargetIntrinsicCatalog WithSdkPlugins(SdkPluginRegistry registry)
     {
+        var support = registry.TargetSupportFor(TargetId);
         return new TargetIntrinsicCatalog(
             TargetId,
             TargetName,
-            intrinsics.Values.Concat(registry.TargetIntrinsicDescriptorsFor(TargetId)),
-            registry.UnsupportedOperationIdsFor(TargetId));
+            intrinsics.Values.Concat(support.SupportedDescriptors),
+            support.UnsupportedOperations);
     }
 
     public bool TryResolve(string name, out TargetIntrinsicDescriptor descriptor)
@@ -414,8 +423,14 @@ public sealed class TargetIntrinsicCatalog
             return descriptor;
         }
 
-        if (unsupportedPluginOperationIds.Contains(name))
+        if (unsupportedPluginOperations.TryGetValue(name, out var reason))
         {
+            if (reason.MissingCapabilityId is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Target '{TargetId}' does not provide SDK plugin capability '{reason.MissingCapabilityId}' required by feature '{name}' on extern function '{functionName}'.");
+            }
+
             throw new InvalidOperationException(
                 $"Target '{TargetId}' does not support SDK plugin feature '{name}' on extern function '{functionName}'.");
         }
