@@ -5,7 +5,10 @@ using RetroSharp.Parser;
 
 public static class SdkResourceDeclarationResolver
 {
-    public static bool TryResolve(FunctionSyntax function, out SdkResourceDeclarationDescriptor descriptor)
+    public static bool TryResolve(
+        FunctionSyntax function,
+        out SdkResourceDeclarationDescriptor descriptor,
+        SdkResourceDeclarationRegistry? registry = null)
     {
         var resourceId = TargetAttributeReader.StringArgument(function, "resource");
         if (resourceId is null)
@@ -14,7 +17,7 @@ public static class SdkResourceDeclarationResolver
             return false;
         }
 
-        descriptor = SdkResourceDeclarationDescriptor.Create(resourceId);
+        descriptor = SdkResourceDeclarationDescriptor.Create(resourceId, registry ?? SdkResourceDeclarationRegistry.Default);
         return true;
     }
 }

@@ -26,12 +26,12 @@ RetroSharp has three separate extension levels:
 | --- | --- | --- |
 | Source-only library | Supported today | Package manifests plus source files provide facades and helpers over intrinsics, resource declarations, and SDK semantics already known to the active target. |
 | Built-in SDK semantics | Supported today, compiler-owned | `Sdk2DOperation`, `SdkAudioOperation`, resource descriptors, validators, capability models, asset pipelines, and GB/NES lowerers live inside this repo. |
-| SDK plugin | Future design boundary | A host-registered SDK extension could bring source facades plus descriptors, validators, importers, capabilities, and per-target lowering hooks without adding those concepts to the language layer. |
+| SDK plugin | Static in-process registry supported for the first proof | A host-registered SDK extension can bring source facades plus namespaced resource/operation descriptors, validator/capability metadata, and explicit per-target lowering hooks without adding those concepts to the language layer or central operation enums. |
 
 The detailed design boundary for the third level is
 [`docs/SdkPluginBoundary.md`](SdkPluginBoundary.md). That document is the
-implementation handoff for #252; it does not imply a dynamic loader or any
-current migration of `RetroSharp.Portable2D`.
+implementation handoff for #252 and #258; it does not imply a dynamic loader or
+any current migration of `RetroSharp.Portable2D`.
 
 ## Current Pluggability
 
@@ -54,6 +54,32 @@ compiler semantics: it does not add new `Sdk2DOperation` records, target
 capability validators, resource importers, or backend lowerers. Those still live
 in the compiler and target assemblies until RetroSharp has a proven need for a
 stable plugin surface.
+
+The first SDK plugin surface is deliberately static and host-provided. A host can
+construct an `SdkPluginDescriptor`, register it in `SdkPluginRegistry`, and pass
+that registry to a target compiler. The SDK frontend then exposes the plugin's
+source package through `SdkLibraryRegistry.WithSdkPlugins(...)`, resource ids
+resolve through `SdkResourceDeclarationRegistry`, and each target receives an
+effective `TargetIntrinsicCatalog` built with `WithSdkPlugins(...)`. A plugin
+operation remains a namespaced descriptor such as
+`RetroSharp.Platformer2D.TouchProbe`; it does not require a new
+`Sdk2DOperation`, `SdkAudioOperation`, or `TargetIntrinsicOperation` member.
+Targets opt in by registering a matching `SdkPluginTargetLoweringDescriptor`.
+For the static v1 proof, statement hooks receive a minimal target byte emitter
+through `SdkPluginTargetLoweringContext`; broader target services remain outside
+this slice. Targets without that hook fail before lowering with a diagnostic
+naming the plugin feature and target id. A hook also grants capabilities: an
+operation's `RequiredCapabilities` must be covered by the hook's
+`ProvidedCapabilities`, otherwise the target fails before lowering with a
+capability-specific diagnostic.
+
+The host, not the compiler, decides which plugins are active. The RetroSharp CLI
+resolves plugin ids to descriptors from a static known-plugins table and passes
+the registry through `--sdk-plugin <id>` (repeatable) or a project manifest
+`"plugins": [...]` array. The reference plugin lives in
+`src/RetroSharp.Sdk.Plugins.Platformer2D` (`Platformer2DPlugin.Create()`),
+outside the compiler core. Builds that do not request a plugin stay
+byte-identical.
 
 Some compiler-owned frontend transforms are entered through package-declared
 metadata rather than public-name switches. The actor framework is the current
@@ -88,6 +114,12 @@ Move a feature into the internal SDK model only when targets must validate or
 lower a new portable semantic operation. That change should update the matching
 operation model, target capability checks, backend lowerers, and public SDK
 documentation in the same patch.
+
+Use the SDK plugin layer when a feature needs new compiler semantics but should
+not become a built-in RetroSharp operation. The current static plugin ABI can
+prove source package + descriptor + validator + target hook flows in-process,
+but it is not a dynamic plugin loader, package manager, binary ABI, or migration
+mechanism for existing `RetroSharp.Portable2D` APIs.
 
 The current compiler-owned operation and target-intrinsic inventory lives in
 `docs/ArchitectureRoadmap.md` under "Compiler-Owned SDK Operation Inventory".

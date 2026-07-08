@@ -2075,7 +2075,7 @@ internal sealed class NesRuntimeCompiler
     private bool IsResourceDeclarationCall(FunctionCall call)
     {
         return program.Functions.TryGetValue(call.Name, out var function)
-               && SdkResourceDeclarationResolver.TryResolve(function, out _);
+               && SdkResourceDeclarationResolver.TryResolve(function, out _, program.ResourceDeclarations);
     }
 
     private bool TryEmitUserFunction(FunctionCall call)
@@ -2762,8 +2762,14 @@ internal sealed class NesRuntimeCompiler
             return false;
         }
 
-        var intrinsic = TargetIntrinsicResolver.Resolve(function, NesTarget.Intrinsics);
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
         NesVideoProgram.RequireArity(call, intrinsic.Arity);
+        if (intrinsic.IsPluginOperation)
+        {
+            EmitSdkPluginOperation(function, call, intrinsic);
+            return true;
+        }
+
         switch (intrinsic.Operation)
         {
             case TargetIntrinsicOperation.InitializeVideo:
@@ -2801,11 +2807,30 @@ internal sealed class NesRuntimeCompiler
                 return true;
             case TargetIntrinsicOperation.DrawLogicalSprite:
                 EmitSdkOperation(Sdk2DOperationCollector.ReadDrawLogicalSprite(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics)));
+                    TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics)));
                 return true;
             default:
                 throw new NotSupportedException($"NES intrinsic lowering does not support {intrinsic.Operation} yet.");
         }
+    }
+
+    private void EmitSdkPluginOperation(
+        FunctionSyntax function,
+        FunctionCall call,
+        TargetIntrinsicDescriptor intrinsic)
+    {
+        if (intrinsic.PluginOperation.CallKind != SdkPluginOperationCallKind.Statement)
+        {
+            throw new InvalidOperationException($"SDK plugin feature '{intrinsic.PluginOperation.OperationId}' cannot be emitted as a statement.");
+        }
+
+        var resolved = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
+        intrinsic.PluginTargetLowering.Lower(new SdkPluginTargetLoweringContext(
+            program.TargetIntrinsics.TargetId,
+            intrinsic.PluginOperation,
+            resolved.RuntimeOperands.Select(operand => new SdkPluginRuntimeOperand(operand.Slot)).ToArray(),
+            resolved.CompileTimeOperands.Select(operand => new SdkPluginCompileTimeOperand(operand.Slot, operand.Role, operand.Identifier, operand.Constant)).ToArray(),
+            new SdkPluginTargetEmitter(bytes => builder.Emit(bytes.ToArray()))));
     }
 
     private void EmitAudioInit()
@@ -5621,36 +5646,41 @@ internal sealed class NesRuntimeCompiler
             return false;
         }
 
-        var intrinsic = TargetIntrinsicResolver.Resolve(function, NesTarget.Intrinsics);
+        var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
+        if (intrinsic.IsPluginOperation)
+        {
+            return false;
+        }
+
         switch (intrinsic.Operation)
         {
             case TargetIntrinsicOperation.CameraAabbTiles:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbTiles(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
-                    NesTarget.Intrinsics));
+                    program.TargetIntrinsics));
                 return true;
             case TargetIntrinsicOperation.CameraAabbHitTop:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
-                    NesTarget.Intrinsics));
+                    program.TargetIntrinsics));
                 return true;
             case TargetIntrinsicOperation.CameraScreenAabbTiles:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbTiles(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
-                    NesTarget.Intrinsics));
+                    program.TargetIntrinsics));
                 return true;
             case TargetIntrinsicOperation.CameraScreenAabbHitTop:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbHitTop(
-                    TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics),
+                    TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
-                    NesTarget.Intrinsics));
+                    program.TargetIntrinsics));
                 return true;
             case TargetIntrinsicOperation.ButtonDown:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
@@ -5670,12 +5700,12 @@ internal sealed class NesRuntimeCompiler
                 return true;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
-                _ = TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitSpriteWidth(call);
                 return true;
             case TargetIntrinsicOperation.ReadAnimationFrame:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
-                _ = TargetIntrinsicResolver.ResolveCall(function, call, NesTarget.Intrinsics);
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitAnimationFrame(call);
                 return true;
             default:

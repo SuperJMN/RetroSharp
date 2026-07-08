@@ -55,6 +55,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetroSharp.Sdk.Frontend", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetroSharp.Architecture.Tests", "src\RetroSharp.Architecture.Tests\RetroSharp.Architecture.Tests.csproj", "{E113D25C-3E00-4D61-9FDB-63EB32179139}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RetroSharp.Sdk.Plugins.Platformer2D", "src\RetroSharp.Sdk.Plugins.Platformer2D\RetroSharp.Sdk.Plugins.Platformer2D.csproj", "{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -329,6 +331,18 @@ Global
 		{E113D25C-3E00-4D61-9FDB-63EB32179139}.Release|x64.Build.0 = Release|Any CPU
 		{E113D25C-3E00-4D61-9FDB-63EB32179139}.Release|x86.ActiveCfg = Release|Any CPU
 		{E113D25C-3E00-4D61-9FDB-63EB32179139}.Release|x86.Build.0 = Release|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Debug|x64.Build.0 = Debug|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Debug|x86.Build.0 = Debug|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Release|x64.ActiveCfg = Release|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Release|x64.Build.0 = Release|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Release|x86.ActiveCfg = Release|Any CPU
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -358,6 +372,7 @@ Global
 		{84EB7576-D3F6-4477-9348-C89E4D94B7B2} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
 		{12BADA72-F8E2-441A-98C3-A0C835678186} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
 		{E113D25C-3E00-4D61-9FDB-63EB32179139} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
+		{8B431B1D-3EE7-4402-8B72-AFF62DEDB68D} = {2CF2EAAB-E568-432A-B6A3-FF79D471B785}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {D913E0AD-76F5-46F9-9F9A-378CC38F61EF}

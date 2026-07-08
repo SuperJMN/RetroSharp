@@ -227,6 +227,112 @@ public sealed class CrossTargetCliAcceptanceTests
     }
 
     [Fact]
+    public void Cli_builds_game_boy_rom_with_registered_sdk_plugin_option()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourcePath = Path.Combine(workspace.Path, "ground-probe.rs");
+        var outputPath = Path.Combine(workspace.Path, "ground-probe.gb");
+        File.WriteAllText(
+            sourcePath,
+            """
+            import RetroSharp.Platformer2D;
+
+            void Main()
+            {
+                Platformer.GroundProbe();
+            }
+            """);
+
+        var result = RunCli("--target", "gb", "--sdk-plugin", "RetroSharp.Platformer2D", "--out", outputPath, sourcePath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_reports_plugin_feature_unsupported_on_nes_with_nonzero_exit_code()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourcePath = Path.Combine(workspace.Path, "ground-probe.rs");
+        var outputPath = Path.Combine(workspace.Path, "ground-probe.nes");
+        File.WriteAllText(
+            sourcePath,
+            """
+            import RetroSharp.Platformer2D;
+
+            void Main()
+            {
+                Platformer.GroundProbe();
+            }
+            """);
+
+        var result = RunCli("--target", "nes", "--sdk-plugin", "RetroSharp.Platformer2D", "--out", outputPath, sourcePath);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.False(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Contains(
+            "Target 'nes' does not support SDK plugin feature 'RetroSharp.Platformer2D.GroundProbe'",
+            result.CombinedOutput,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_builds_game_boy_rom_with_sdk_plugin_declared_in_project_manifest()
+    {
+        using var workspace = TemporaryWorkspace();
+        File.WriteAllText(
+            Path.Combine(workspace.Path, "ground-probe.rs"),
+            """
+            import RetroSharp.Platformer2D;
+
+            void Main()
+            {
+                Platformer.GroundProbe();
+            }
+            """);
+        var projectPath = Path.Combine(workspace.Path, "ground-probe.retrosharp.json");
+        File.WriteAllText(
+            projectPath,
+            """
+            {
+                "target": "gb",
+                "sources": ["ground-probe.rs"],
+                "plugins": ["RetroSharp.Platformer2D"],
+                "output": "ground-probe.gb"
+            }
+            """);
+
+        var outputPath = Path.Combine(workspace.Path, "ground-probe.gb");
+        var result = RunCli("--target", "gb", "--out", outputPath, projectPath);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(outputPath), result.CombinedOutput);
+        Assert.Equal(32768, new FileInfo(outputPath).Length);
+    }
+
+    [Fact]
+    public void Cli_reports_unknown_sdk_plugin_with_nonzero_exit_code()
+    {
+        using var workspace = TemporaryWorkspace();
+        var sourcePath = Path.Combine(workspace.Path, "probe.rs");
+        var outputPath = Path.Combine(workspace.Path, "probe.gb");
+        File.WriteAllText(
+            sourcePath,
+            """
+            void Main()
+            {
+                return;
+            }
+            """);
+
+        var result = RunCli("--target", "gb", "--sdk-plugin", "RetroSharp.DoesNotExist", "--out", outputPath, sourcePath);
+
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains("Unknown SDK plugin 'RetroSharp.DoesNotExist'", result.CombinedOutput, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Cli_builds_game_boy_rom_with_local_library_manifest_from_lib_path()
     {
         using var workspace = TemporaryWorkspace();

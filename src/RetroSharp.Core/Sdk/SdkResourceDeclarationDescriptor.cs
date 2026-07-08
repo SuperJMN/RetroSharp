@@ -19,43 +19,117 @@ public enum SdkResourceDeclarationKind
     HudSetTile,
 }
 
-public sealed record SdkResourceDeclarationDescriptor(string ResourceId, SdkResourceDeclarationKind Kind)
+public sealed record SdkResourceDeclarationDescriptor
 {
+    private readonly SdkResourceDeclarationKind? kind;
+
+    public SdkResourceDeclarationDescriptor(string ResourceId, SdkResourceDeclarationKind Kind)
+    {
+        this.ResourceId = ResourceId;
+        kind = Kind;
+    }
+
+    private SdkResourceDeclarationDescriptor(SdkPluginResourceDeclarationDescriptor pluginResource)
+    {
+        ResourceId = pluginResource.ResourceId;
+        PluginResource = pluginResource;
+    }
+
+    public string ResourceId { get; }
+
+    public SdkResourceDeclarationKind Kind =>
+        kind ?? throw new InvalidOperationException($"SDK resource declaration '{ResourceId}' is plugin-owned and has no built-in resource kind.");
+
+    public bool IsPluginResource => PluginResource is not null;
+
+    public SdkPluginResourceDeclarationDescriptor PluginResource { get; } = null!;
+
     public static bool TryCreate(string resourceId, out SdkResourceDeclarationDescriptor descriptor)
     {
-        if (Descriptors.TryGetValue(resourceId, out descriptor!))
-        {
-            return true;
-        }
+        return SdkResourceDeclarationRegistry.Default.TryResolve(resourceId, out descriptor);
+    }
 
-        descriptor = null!;
-        return false;
+    public static bool TryCreate(
+        string resourceId,
+        SdkResourceDeclarationRegistry registry,
+        out SdkResourceDeclarationDescriptor descriptor)
+    {
+        return registry.TryResolve(resourceId, out descriptor);
     }
 
     public static SdkResourceDeclarationDescriptor Create(string resourceId)
     {
-        return TryCreate(resourceId, out var descriptor)
+        return SdkResourceDeclarationRegistry.Default.Resolve(resourceId);
+    }
+
+    public static SdkResourceDeclarationDescriptor Create(
+        string resourceId,
+        SdkResourceDeclarationRegistry registry)
+    {
+        return registry.Resolve(resourceId);
+    }
+
+    public static SdkResourceDeclarationDescriptor FromPlugin(SdkPluginResourceDeclarationDescriptor pluginResource)
+    {
+        return new SdkResourceDeclarationDescriptor(pluginResource);
+    }
+}
+
+public sealed class SdkResourceDeclarationRegistry
+{
+    private readonly Dictionary<string, SdkResourceDeclarationDescriptor> descriptors;
+
+    public static SdkResourceDeclarationRegistry Default { get; } = new(BuiltInDescriptors());
+
+    public SdkResourceDeclarationRegistry(IEnumerable<SdkResourceDeclarationDescriptor> descriptors)
+    {
+        this.descriptors = new Dictionary<string, SdkResourceDeclarationDescriptor>(StringComparer.Ordinal);
+        foreach (var descriptor in descriptors)
+        {
+            if (!this.descriptors.TryAdd(descriptor.ResourceId, descriptor))
+            {
+                throw new InvalidOperationException($"SDK resource declaration '{descriptor.ResourceId}' is registered more than once.");
+            }
+        }
+    }
+
+    public SdkResourceDeclarationRegistry Register(SdkPluginDescriptor plugin)
+    {
+        return new SdkResourceDeclarationRegistry(
+            descriptors.Values.Concat(plugin.ResourceDeclarations.Select(SdkResourceDeclarationDescriptor.FromPlugin)));
+    }
+
+    public bool TryResolve(string resourceId, out SdkResourceDeclarationDescriptor descriptor)
+    {
+        return descriptors.TryGetValue(resourceId, out descriptor!);
+    }
+
+    public SdkResourceDeclarationDescriptor Resolve(string resourceId)
+    {
+        return TryResolve(resourceId, out var descriptor)
             ? descriptor
             : throw new InvalidOperationException($"Unknown SDK resource declaration '{resourceId}'.");
     }
 
-    private static readonly Dictionary<string, SdkResourceDeclarationDescriptor> Descriptors =
-        new(StringComparer.Ordinal)
-        {
-            ["palette_background"] = new SdkResourceDeclarationDescriptor("palette_background", SdkResourceDeclarationKind.BackgroundPalette),
-            ["palette_sprite"] = new SdkResourceDeclarationDescriptor("palette_sprite", SdkResourceDeclarationKind.SpritePalette),
-            ["palette_set"] = new SdkResourceDeclarationDescriptor("palette_set", SdkResourceDeclarationKind.RawPalette),
-            ["object_palette_set"] = new SdkResourceDeclarationDescriptor("object_palette_set", SdkResourceDeclarationKind.RawObjectPalette),
-            ["world_load"] = new SdkResourceDeclarationDescriptor("world_load", SdkResourceDeclarationKind.WorldLoad),
-            ["world_column"] = new SdkResourceDeclarationDescriptor("world_column", SdkResourceDeclarationKind.WorldColumn),
-            ["world_flags"] = new SdkResourceDeclarationDescriptor("world_flags", SdkResourceDeclarationKind.WorldFlags),
-            ["world_map"] = new SdkResourceDeclarationDescriptor("world_map", SdkResourceDeclarationKind.WorldMap),
-            ["sprite_asset"] = new SdkResourceDeclarationDescriptor("sprite_asset", SdkResourceDeclarationKind.SpriteAsset),
-            ["music_asset"] = new SdkResourceDeclarationDescriptor("music_asset", SdkResourceDeclarationKind.MusicAsset),
-            ["sfx_asset"] = new SdkResourceDeclarationDescriptor("sfx_asset", SdkResourceDeclarationKind.SoundEffectAsset),
-            ["animation_clip"] = new SdkResourceDeclarationDescriptor("animation_clip", SdkResourceDeclarationKind.AnimationClip),
-            ["tilemap_set"] = new SdkResourceDeclarationDescriptor("tilemap_set", SdkResourceDeclarationKind.TilemapSet),
-            ["tilemap_fill"] = new SdkResourceDeclarationDescriptor("tilemap_fill", SdkResourceDeclarationKind.TilemapFill),
-            ["hud_set_tile"] = new SdkResourceDeclarationDescriptor("hud_set_tile", SdkResourceDeclarationKind.HudSetTile),
-        };
+    private static IReadOnlyList<SdkResourceDeclarationDescriptor> BuiltInDescriptors()
+    {
+        return
+        [
+            new SdkResourceDeclarationDescriptor("palette_background", SdkResourceDeclarationKind.BackgroundPalette),
+            new SdkResourceDeclarationDescriptor("palette_sprite", SdkResourceDeclarationKind.SpritePalette),
+            new SdkResourceDeclarationDescriptor("palette_set", SdkResourceDeclarationKind.RawPalette),
+            new SdkResourceDeclarationDescriptor("object_palette_set", SdkResourceDeclarationKind.RawObjectPalette),
+            new SdkResourceDeclarationDescriptor("world_load", SdkResourceDeclarationKind.WorldLoad),
+            new SdkResourceDeclarationDescriptor("world_column", SdkResourceDeclarationKind.WorldColumn),
+            new SdkResourceDeclarationDescriptor("world_flags", SdkResourceDeclarationKind.WorldFlags),
+            new SdkResourceDeclarationDescriptor("world_map", SdkResourceDeclarationKind.WorldMap),
+            new SdkResourceDeclarationDescriptor("sprite_asset", SdkResourceDeclarationKind.SpriteAsset),
+            new SdkResourceDeclarationDescriptor("music_asset", SdkResourceDeclarationKind.MusicAsset),
+            new SdkResourceDeclarationDescriptor("sfx_asset", SdkResourceDeclarationKind.SoundEffectAsset),
+            new SdkResourceDeclarationDescriptor("animation_clip", SdkResourceDeclarationKind.AnimationClip),
+            new SdkResourceDeclarationDescriptor("tilemap_set", SdkResourceDeclarationKind.TilemapSet),
+            new SdkResourceDeclarationDescriptor("tilemap_fill", SdkResourceDeclarationKind.TilemapFill),
+            new SdkResourceDeclarationDescriptor("hud_set_tile", SdkResourceDeclarationKind.HudSetTile),
+        ];
+    }
 }

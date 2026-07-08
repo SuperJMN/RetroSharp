@@ -55,6 +55,14 @@ public enum TargetIntrinsicCapabilityRequirement
 
 public sealed record TargetIntrinsicCompileTimeOperand(int Slot, TargetIntrinsicOperandRole Role);
 
+public sealed record TargetIntrinsicPluginUnsupportedReason(string OperationId, string? MissingCapabilityId)
+{
+    public static TargetIntrinsicPluginUnsupportedReason MissingHook(string operationId) => new(operationId, null);
+
+    public static TargetIntrinsicPluginUnsupportedReason MissingCapability(string operationId, string capabilityId) =>
+        new(operationId, capabilityId);
+}
+
 public sealed record TargetIntrinsicDescriptor
 {
     public TargetIntrinsicDescriptor(
@@ -72,11 +80,13 @@ public sealed record TargetIntrinsicDescriptor
 
         IntrinsicId = intrinsicId;
         Name = intrinsicId;
-        Operation = operation;
+        BuiltInOperation = operation;
         ReturnKind = returnKind;
         RuntimeArity = runtimeArity;
         CompileTimeOperands = (compileTimeOperands ?? []).OrderBy(operand => operand.Slot).ToArray();
         RequiredCapabilities = (requiredCapabilities ?? []).Distinct().Order().ToArray();
+        RequiredPluginCapabilities = [];
+        PluginValidators = [];
 
         var duplicate = CompileTimeOperands
             .GroupBy(operand => operand.Slot)
@@ -87,14 +97,47 @@ public sealed record TargetIntrinsicDescriptor
         }
     }
 
+    private TargetIntrinsicDescriptor(
+        SdkPluginOperationDescriptor operation,
+        SdkPluginTargetLoweringDescriptor loweringHook,
+        IEnumerable<SdkPluginValidatorDescriptor> validators)
+    {
+        IntrinsicId = operation.OperationId;
+        Name = operation.OperationId;
+        ReturnKind = operation.ReturnKind;
+        RuntimeArity = operation.RuntimeArity;
+        CompileTimeOperands = operation.CompileTimeOperands;
+        RequiredCapabilities = [];
+        RequiredPluginCapabilities = operation.RequiredCapabilities;
+        PluginOperation = operation;
+        PluginTargetLowering = loweringHook;
+        PluginValidators = validators.ToArray();
+    }
+
     public string IntrinsicId { get; }
     public string Name { get; }
-    public TargetIntrinsicOperation Operation { get; }
+    public TargetIntrinsicOperation Operation =>
+        BuiltInOperation ?? throw new InvalidOperationException($"SDK plugin intrinsic '{IntrinsicId}' has no built-in target intrinsic operation.");
+
+    public TargetIntrinsicOperation? BuiltInOperation { get; }
     public TargetIntrinsicReturnKind ReturnKind { get; }
     public int RuntimeArity { get; }
     public IReadOnlyList<TargetIntrinsicCompileTimeOperand> CompileTimeOperands { get; }
     public IReadOnlyList<TargetIntrinsicCapabilityRequirement> RequiredCapabilities { get; }
+    public IReadOnlyList<string> RequiredPluginCapabilities { get; }
+    public SdkPluginOperationDescriptor PluginOperation { get; } = null!;
+    public SdkPluginTargetLoweringDescriptor PluginTargetLowering { get; } = null!;
+    public IReadOnlyList<SdkPluginValidatorDescriptor> PluginValidators { get; }
+    public bool IsPluginOperation => PluginOperation is not null;
     public int Arity => RuntimeArity + CompileTimeOperands.Count;
+
+    public static TargetIntrinsicDescriptor FromPluginOperation(
+        SdkPluginOperationDescriptor operation,
+        SdkPluginTargetLoweringDescriptor loweringHook,
+        IEnumerable<SdkPluginValidatorDescriptor> validators)
+    {
+        return new TargetIntrinsicDescriptor(operation, loweringHook, validators);
+    }
 
     public static TargetIntrinsicDescriptor WaitFrame(string name, int arity)
     {
@@ -334,18 +377,39 @@ public sealed record TargetIntrinsicDescriptor
 public sealed class TargetIntrinsicCatalog
 {
     private readonly Dictionary<string, TargetIntrinsicDescriptor> intrinsics;
+    private readonly IReadOnlyDictionary<string, TargetIntrinsicPluginUnsupportedReason> unsupportedPluginOperations;
 
     public TargetIntrinsicCatalog(string targetId, string targetName, IEnumerable<TargetIntrinsicDescriptor> intrinsics)
+        : this(targetId, targetName, intrinsics, new Dictionary<string, TargetIntrinsicPluginUnsupportedReason>(StringComparer.Ordinal))
+    {
+    }
+
+    private TargetIntrinsicCatalog(
+        string targetId,
+        string targetName,
+        IEnumerable<TargetIntrinsicDescriptor> intrinsics,
+        IReadOnlyDictionary<string, TargetIntrinsicPluginUnsupportedReason> unsupportedPluginOperations)
     {
         TargetId = targetId;
         TargetName = targetName;
         this.intrinsics = intrinsics.ToDictionary(intrinsic => intrinsic.Name, StringComparer.Ordinal);
+        this.unsupportedPluginOperations = unsupportedPluginOperations;
     }
 
     public string TargetId { get; }
     public string TargetName { get; }
 
     public IReadOnlyCollection<TargetIntrinsicDescriptor> Intrinsics => intrinsics.Values;
+
+    public TargetIntrinsicCatalog WithSdkPlugins(SdkPluginRegistry registry)
+    {
+        var support = registry.TargetSupportFor(TargetId);
+        return new TargetIntrinsicCatalog(
+            TargetId,
+            TargetName,
+            intrinsics.Values.Concat(support.SupportedDescriptors),
+            support.UnsupportedOperations);
+    }
 
     public bool TryResolve(string name, out TargetIntrinsicDescriptor descriptor)
     {
@@ -357,6 +421,18 @@ public sealed class TargetIntrinsicCatalog
         if (TryResolve(name, out var descriptor))
         {
             return descriptor;
+        }
+
+        if (unsupportedPluginOperations.TryGetValue(name, out var reason))
+        {
+            if (reason.MissingCapabilityId is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Target '{TargetId}' does not provide SDK plugin capability '{reason.MissingCapabilityId}' required by feature '{name}' on extern function '{functionName}'.");
+            }
+
+            throw new InvalidOperationException(
+                $"Target '{TargetId}' does not support SDK plugin feature '{name}' on extern function '{functionName}'.");
         }
 
         throw new InvalidOperationException(

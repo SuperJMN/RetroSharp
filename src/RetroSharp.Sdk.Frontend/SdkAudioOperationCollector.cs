@@ -12,9 +12,10 @@ public static class SdkAudioOperationCollector
         BlockSyntax mainBlock,
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
-        TargetIntrinsicCatalog? targetIntrinsics = null)
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
-        var collector = new Collector(functions, targetName, targetIntrinsics: targetIntrinsics);
+        var collector = new Collector(functions, targetName, targetIntrinsics: targetIntrinsics, resourceDeclarations: resourceDeclarations);
         collector.CollectBlock(mainBlock);
         return collector.Operations;
     }
@@ -24,9 +25,10 @@ public static class SdkAudioOperationCollector
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
         IReadOnlySet<string> subroutineNames,
-        TargetIntrinsicCatalog? targetIntrinsics = null)
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
-        var collector = new Collector(functions, targetName, subroutineNames, targetIntrinsics);
+        var collector = new Collector(functions, targetName, subroutineNames, targetIntrinsics, resourceDeclarations);
         collector.CollectBlock(mainBlock);
         return collector.Program;
     }
@@ -35,10 +37,12 @@ public static class SdkAudioOperationCollector
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
         IReadOnlySet<string>? subroutineNames = null,
-        TargetIntrinsicCatalog? targetIntrinsics = null)
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
         private readonly IReadOnlySet<string> subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
         private readonly TargetIntrinsicCatalog? targetIntrinsics = targetIntrinsics;
+        private readonly SdkResourceDeclarationRegistry resourceDeclarations = resourceDeclarations ?? SdkResourceDeclarationRegistry.Default;
         private readonly List<SdkAudioStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<SdkAudioStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
@@ -178,6 +182,12 @@ public static class SdkAudioOperationCollector
             }
 
             var intrinsic = TargetIntrinsicResolver.Resolve(function, targetIntrinsics);
+            if (intrinsic.IsPluginOperation)
+            {
+                _ = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
+                return true;
+            }
+
             switch (intrinsic.Operation)
             {
                 case TargetIntrinsicOperation.InitializeAudio:
@@ -218,7 +228,7 @@ public static class SdkAudioOperationCollector
         private bool IsResourceDeclarationCall(FunctionCall call)
         {
             return functions.TryGetValue(call.Name, out var function)
-                   && SdkResourceDeclarationResolver.TryResolve(function, out _);
+                   && SdkResourceDeclarationResolver.TryResolve(function, out _, resourceDeclarations);
         }
 
         private void CollectExpression(ExpressionSyntax expression)

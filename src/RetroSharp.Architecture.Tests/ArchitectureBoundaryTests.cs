@@ -56,6 +56,7 @@ public sealed class ArchitectureBoundaryTests
         "Game Boy",
         "NES",
         "Sdk2D",
+        "SdkPlugin",
         "PPU",
         "APU",
         "OAM",

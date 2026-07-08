@@ -14,9 +14,10 @@ public static class Sdk2DOperationCollector
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
         Target2DCapabilities capabilities,
-        TargetIntrinsicCatalog? targetIntrinsics = null)
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
-        var collector = new Collector(functions, targetName, capabilities, targetIntrinsics: targetIntrinsics);
+        var collector = new Collector(functions, targetName, capabilities, targetIntrinsics: targetIntrinsics, resourceDeclarations: resourceDeclarations);
         collector.CollectBlock(mainBlock);
         return collector.Operations;
     }
@@ -30,9 +31,10 @@ public static class Sdk2DOperationCollector
         string targetName,
         Target2DCapabilities capabilities,
         IReadOnlySet<string> subroutineNames,
-        TargetIntrinsicCatalog? targetIntrinsics = null)
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
-        var collector = new Collector(functions, targetName, capabilities, subroutineNames, targetIntrinsics);
+        var collector = new Collector(functions, targetName, capabilities, subroutineNames, targetIntrinsics, resourceDeclarations);
         collector.CollectBlock(mainBlock);
         return collector.Program;
     }
@@ -42,9 +44,10 @@ public static class Sdk2DOperationCollector
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
         Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget = null,
-        TargetIntrinsicCatalog? targetIntrinsics = null)
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
     {
-        var collector = new FrameBudgetCollector(functions, targetName, drawSpriteBudget, targetIntrinsics);
+        var collector = new FrameBudgetCollector(functions, targetName, drawSpriteBudget, targetIntrinsics, resourceDeclarations);
         return collector.Collect(mainBlock);
     }
 
@@ -665,6 +668,7 @@ public static class Sdk2DOperationCollector
         private readonly Target2DCapabilities capabilities;
         private readonly IReadOnlySet<string> subroutineNames;
         private readonly TargetIntrinsicCatalog? targetIntrinsics;
+        private readonly SdkResourceDeclarationRegistry resourceDeclarations;
         private readonly List<Sdk2DStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
@@ -676,13 +680,15 @@ public static class Sdk2DOperationCollector
             string targetName,
             Target2DCapabilities capabilities,
             IReadOnlySet<string>? subroutineNames = null,
-            TargetIntrinsicCatalog? targetIntrinsics = null)
+            TargetIntrinsicCatalog? targetIntrinsics = null,
+            SdkResourceDeclarationRegistry? resourceDeclarations = null)
         {
             this.functions = functions;
             this.targetName = targetName;
             this.capabilities = capabilities;
             this.subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
             this.targetIntrinsics = targetIntrinsics;
+            this.resourceDeclarations = resourceDeclarations ?? SdkResourceDeclarationRegistry.Default;
             currentItems = mainItems;
         }
 
@@ -832,7 +838,7 @@ public static class Sdk2DOperationCollector
         private bool IsResourceDeclarationCall(FunctionCall call)
         {
             return functions.TryGetValue(call.Name, out var function)
-                   && SdkResourceDeclarationResolver.TryResolve(function, out _);
+                   && SdkResourceDeclarationResolver.TryResolve(function, out _, resourceDeclarations);
         }
 
         private bool CollectTargetIntrinsic(FunctionCall call)
@@ -845,6 +851,11 @@ public static class Sdk2DOperationCollector
             }
 
             var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
+            if (resolved.Descriptor.IsPluginOperation)
+            {
+                return true;
+            }
+
             switch (resolved.Descriptor.Operation)
             {
                 case TargetIntrinsicOperation.SetCameraPosition:
@@ -990,6 +1001,11 @@ public static class Sdk2DOperationCollector
             }
 
             var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics, runtimeIdentifiers);
+            if (resolved.Descriptor.IsPluginOperation)
+            {
+                return true;
+            }
+
             switch (resolved.Descriptor.Operation)
             {
                 case TargetIntrinsicOperation.ReadWorldTileFlags:
@@ -1228,11 +1244,13 @@ public static class Sdk2DOperationCollector
         IReadOnlyDictionary<string, FunctionSyntax> functions,
         string targetName,
         Func<Sdk2DOperation.DrawLogicalSprite, Sdk2DFrameBudget>? drawSpriteBudget,
-        TargetIntrinsicCatalog? targetIntrinsics)
+        TargetIntrinsicCatalog? targetIntrinsics,
+        SdkResourceDeclarationRegistry? resourceDeclarations)
     {
         private const int MaxLoopIterationsToAnalyze = 64;
 
         private readonly HashSet<string> userFunctionCallStack = [];
+        private readonly SdkResourceDeclarationRegistry resourceDeclarations = resourceDeclarations ?? SdkResourceDeclarationRegistry.Default;
 
         public IReadOnlyList<Sdk2DFrameBudget> Collect(BlockSyntax block)
         {
@@ -1436,6 +1454,12 @@ public static class Sdk2DOperationCollector
             }
 
             var resolved = TargetIntrinsicResolver.ResolveCall(function, call, targetIntrinsics);
+            if (resolved.Descriptor.IsPluginOperation)
+            {
+                result = state;
+                return true;
+            }
+
             result = resolved.Descriptor.Operation switch
             {
                 TargetIntrinsicOperation.WaitFrame or TargetIntrinsicOperation.PollInput => state.CloseOpenFrames(),
@@ -1449,7 +1473,7 @@ public static class Sdk2DOperationCollector
         private bool IsResourceDeclarationCall(FunctionCall call)
         {
             return functions.TryGetValue(call.Name, out var function)
-                   && SdkResourceDeclarationResolver.TryResolve(function, out _);
+                   && SdkResourceDeclarationResolver.TryResolve(function, out _, resourceDeclarations);
         }
 
         private FrameBudgetState CollectExpression(FrameBudgetState state, ExpressionSyntax expression)

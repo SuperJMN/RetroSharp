@@ -31,5 +31,6 @@
     <ProjectReference Include="..\RetroSharp.GameBoy\RetroSharp.GameBoy.csproj" />
     <ProjectReference Include="..\..\libs\Z80DotNet\Main\Main.csproj" />
     <ProjectReference Include="..\..\libs\6502DotNet\Sixty502DotNet.Shared\Sixty502DotNet.Shared.csproj" />
+    <ProjectReference Include="..\RetroSharp.Sdk.Plugins.Platformer2D\RetroSharp.Sdk.Plugins.Platformer2D.csproj" />
   </ItemGroup>
 </Project>

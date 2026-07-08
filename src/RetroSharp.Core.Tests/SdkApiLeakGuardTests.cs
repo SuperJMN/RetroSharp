@@ -31,12 +31,44 @@ public sealed class SdkApiLeakGuardTests
         "Qualifier:\\s*\"(?<module>Actors|Enemies)\"\\s*,\\s*Method:\\s*\"(?<method>Pool|SpawnLayer|SpawnWindow|Def)\"",
         RegexOptions.Compiled);
 
+    private static readonly Regex PluginOperationIdPattern = new(
+        @"RetroSharp\.Platformer2D\.[A-Za-z0-9_]+",
+        RegexOptions.Compiled);
+
     [Fact]
     public void Compiler_layers_do_not_reference_public_sdk_facade_names()
     {
         var leaks = ScanRepository().ToArray();
 
         Assert.True(leaks.Length == 0, "Forbidden public SDK facade references:" + Environment.NewLine + string.Join(Environment.NewLine, leaks));
+    }
+
+    [Fact]
+    public void Compiler_layers_do_not_hardcode_sdk_plugin_operation_ids()
+    {
+        var leaks = ScanRepository()
+            .Where(leak => leak.Contains("RetroSharp.Platformer2D.", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(
+            leaks.Length == 0,
+            "Compiler layers must reach SDK plugin operations through descriptors, not hard-coded ids:"
+            + Environment.NewLine
+            + string.Join(Environment.NewLine, leaks));
+    }
+
+    [Fact]
+    public void Scanner_reports_synthetic_sdk_plugin_operation_id_leaks()
+    {
+        var leaks = ScanText(
+            "src/RetroSharp.GameBoy/Fake.cs",
+            """
+            if (intrinsic.Name == "RetroSharp.Platformer2D.GroundProbe")
+            {
+            }
+            """).ToArray();
+
+        Assert.Contains(leaks, leak => leak.Contains("RetroSharp.Platformer2D.GroundProbe", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -113,6 +145,11 @@ public sealed class SdkApiLeakGuardTests
             foreach (Match match in ActorFacadeRecognitionPattern.Matches(line))
             {
                 yield return Leak(path, i + 1, match.Groups["module"].Value, match.Groups["method"].Value);
+            }
+
+            foreach (Match match in PluginOperationIdPattern.Matches(line))
+            {
+                yield return $"{path}:{i + 1}: {match.Value}";
             }
         }
     }

@@ -130,12 +130,13 @@ void PrintIR(RetroSharp.Generation.Intermediate.Model.IntermediateCodeProgram ir
     PrintSection("Intermediate code:", text);
 }
 
-static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths) ParseCommandLine(string[] args)
+static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) ParseCommandLine(string[] args)
 {
     string? inputPath = null;
     string? outputPath = null;
     string? target = null;
     var libraryPaths = new List<string>();
+    var plugins = new List<string>();
 
     for (var i = 0; i < args.Length; i++)
     {
@@ -154,6 +155,10 @@ static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<str
                 if (i + 1 >= args.Length) throw new ArgumentException("--lib-path requires a value.");
                 libraryPaths.Add(args[++i]);
                 break;
+            case "--sdk-plugin":
+                if (i + 1 >= args.Length) throw new ArgumentException("--sdk-plugin requires a value.");
+                plugins.Add(args[++i]);
+                break;
             default:
                 if (args[i].StartsWith("-", StringComparison.Ordinal))
                 {
@@ -165,7 +170,29 @@ static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<str
         }
     }
 
-    return (inputPath, outputPath, target, libraryPaths);
+    return (inputPath, outputPath, target, libraryPaths, plugins);
+}
+
+static RetroSharp.Core.Sdk.SdkPluginRegistry ResolveSdkPluginRegistry(IReadOnlyList<string> pluginIds)
+{
+    var registry = RetroSharp.Core.Sdk.SdkPluginRegistry.Empty;
+    foreach (var pluginId in pluginIds)
+    {
+        registry = registry.Register(CreateSdkPlugin(pluginId));
+    }
+
+    return registry;
+}
+
+static RetroSharp.Core.Sdk.SdkPluginDescriptor CreateSdkPlugin(string pluginId)
+{
+    return pluginId switch
+    {
+        RetroSharp.Sdk.Plugins.Platformer2D.Platformer2DPlugin.PluginId =>
+            RetroSharp.Sdk.Plugins.Platformer2D.Platformer2DPlugin.Create(),
+        _ => throw new ArgumentException(
+            $"Unknown SDK plugin '{pluginId}'. Known plugins: {RetroSharp.Sdk.Plugins.Platformer2D.Platformer2DPlugin.PluginId}."),
+    };
 }
 
 static RetroSharp.Sdk.SdkLibraryRegistry? ResolveSdkLibraryRegistry(IReadOnlyList<string> libraryPaths)
@@ -175,7 +202,7 @@ static RetroSharp.Sdk.SdkLibraryRegistry? ResolveSdkLibraryRegistry(IReadOnlyLis
         : RetroSharp.Sdk.SdkLibraryRegistry.FromDirectories(libraryPaths);
 }
 
-static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths) options)
+static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options)
 {
     if (options.InputPath is null)
     {
@@ -187,7 +214,7 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath
         : [ResolveSourceBuildInput(options)];
 }
 
-static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths) options)
+static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options)
 {
     var inputPath = options.InputPath ?? throw new ArgumentException("No source file has been specified");
     var fullPath = Path.GetFullPath(inputPath);
@@ -198,10 +225,11 @@ static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? 
         options.OutputPath,
         options.LibraryPaths,
         [],
-        inputPath);
+        inputPath,
+        options.Plugins);
 }
 
-static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths) options)
+static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options)
 {
     var projectPath = Path.GetFullPath(options.InputPath ?? throw new ArgumentException("No project file has been specified"));
     var projectDirectory = Path.GetDirectoryName(projectPath)
@@ -222,6 +250,12 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? In
         .ToArray();
     var libraryPaths = projectLibraryPaths.Concat(options.LibraryPaths).ToArray();
     var libraries = ResolveProjectLibraries(projectPath, manifest);
+    var plugins = (manifest.Plugins ?? [])
+        .Select(plugin => plugin.Trim())
+        .Where(plugin => plugin.Length > 0)
+        .Concat(options.Plugins)
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
     var targets = ResolveProjectTargets(options, manifest);
     if (options.OutputPath is not null && targets.Length > 1)
     {
@@ -236,7 +270,8 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? In
             options.OutputPath ?? ResolveProjectOutputPath(projectDirectory, ResolveProjectOutput(manifest, target)),
             libraryPaths,
             libraries,
-            projectPath))
+            projectPath,
+            plugins))
         .ToArray();
 }
 
@@ -256,7 +291,7 @@ static string[] ResolveProjectLibraries(string projectPath, RetroSharpProjectMan
 }
 
 static string[] ResolveProjectTargets(
-    (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths) options,
+    (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options,
     RetroSharpProjectManifest manifest)
 {
     if (!string.IsNullOrWhiteSpace(options.Target))
@@ -606,7 +641,8 @@ int BuildInput(RetroSharpBuildInput buildInput)
                 buildInput.Source,
                 buildInput.BaseDirectory,
                 sdkLibraryRegistry: sdkLibraryRegistry,
-                sdkLibraryImports: buildInput.LibraryImports);
+                sdkLibraryImports: buildInput.LibraryImports,
+                sdkPluginRegistry: ResolveSdkPluginRegistry(buildInput.Plugins));
             var outputPath = buildInput.OutputPath ?? DefaultOutputPath(buildInput, ".nes");
             WriteOutputBytes(outputPath, rom);
             Console.Error.WriteLine($"Wrote NES ROM: {outputPath}");
@@ -628,7 +664,8 @@ int BuildInput(RetroSharpBuildInput buildInput)
                 buildInput.Source,
                 buildInput.BaseDirectory,
                 sdkLibraryRegistry: sdkLibraryRegistry,
-                sdkLibraryImports: buildInput.LibraryImports);
+                sdkLibraryImports: buildInput.LibraryImports,
+                sdkPluginRegistry: ResolveSdkPluginRegistry(buildInput.Plugins));
             var outputPath = buildInput.OutputPath ?? DefaultOutputPath(buildInput, ".gb");
             WriteOutputBytes(outputPath, rom);
             Console.Error.WriteLine($"Wrote Game Boy ROM: {outputPath}");
@@ -708,7 +745,8 @@ file sealed record RetroSharpBuildInput(
     string? OutputPath,
     IReadOnlyList<string> LibraryPaths,
     IReadOnlyList<string> LibraryImports,
-    string PrimaryPath);
+    string PrimaryPath,
+    IReadOnlyList<string> Plugins);
 
 file sealed record RetroSharpProjectManifest
 {
@@ -720,6 +758,7 @@ file sealed record RetroSharpProjectManifest
     public string[]? Sources { get; init; }
     public string[]? LibraryPaths { get; init; }
     public string[]? Libraries { get; init; }
+    public string[]? Plugins { get; init; }
     public string? RootNamespace { get; init; }
     public string? SourceRoot { get; init; }
     public string? NamespaceMode { get; init; }
