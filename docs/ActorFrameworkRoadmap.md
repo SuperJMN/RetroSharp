@@ -504,6 +504,10 @@ slice, but they should stay visible:
 - AF-5.9: spawn activation is intentionally one-shot; reactivation is not yet a
   source-level policy.
 - AF-5.10: runtime activation currently scans authored spawns each frame.
+- AF-5.11: `Projectiles.*` and `Effects.*` still have compiler-owned public
+  directive recognition in `ActorFrameworkLowerer`; migrate them behind
+  package-declared metadata in a separate slice if their lifecycle surface needs
+  the same source-only facade boundary as actors.
 - Design note: actor pool scanline diagnostics are conservative. They charge pool
   capacity times the busiest resolved metasprite scanline because runtime actor Y
   positions cannot be placed on exact scanlines statically.
@@ -516,8 +520,10 @@ this branch and was extended by AF-5.1..AF-5.7 for scrolling-platformer behavior
 world-space X split into `x`/`xHi`, camera-relative draw/collision/contact,
 runtime spawn activation, metasprite-aware capability checks, generated-name
 guards, reentrant byte expression lowering, and per-phase camera-X projection
-hoisting. Future work should start from the follow-ups above rather than from
-the original minimal-slice plan.
+hoisting. The public actor facade now enters the compiler through
+`RetroSharp.Portable2D` `sdk_role("...")` metadata, while the fixed-storage
+semantic lowering remains compiler-owned. Future work should start from the
+follow-ups above rather than from the original minimal-slice plan.
 
 ## Validation commands
 

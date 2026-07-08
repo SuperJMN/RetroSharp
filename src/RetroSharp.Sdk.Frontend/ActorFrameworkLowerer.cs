@@ -28,6 +28,7 @@ public static class ActorFrameworkLowerer
     private const string CameraScreenAabbTilesIntrinsic = "camera_screen_aabb_tiles";
     private const string CameraScreenAabbHitTopIntrinsic = "camera_screen_aabb_hit_top";
     private const string SpriteDrawIntrinsic = "sprite_draw";
+    private const string SdkRoleAttribute = "sdk_role";
 
     private static readonly IReadOnlyDictionary<string, int> BehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
     {
@@ -58,15 +59,30 @@ public static class ActorFrameworkLowerer
         ["Bounce"] = 2,
     };
 
-    private static readonly IReadOnlyDictionary<string, string> EnemyLookupFunctions = new Dictionary<string, string>(StringComparer.Ordinal)
+    private static readonly IReadOnlyDictionary<string, ActorFrameworkRole> RolesByMetadata = new Dictionary<string, ActorFrameworkRole>(StringComparer.Ordinal)
     {
-        ["Behavior"] = "enemy_behavior",
-        ["Speed"] = "enemy_speed",
-        ["Hp"] = "enemy_hp",
-        ["Cooldown"] = "enemy_cooldown",
-        ["ContactDamage"] = "enemy_contact_damage",
-        ["HitboxWidth"] = "enemy_hitbox_width",
-        ["HitboxHeight"] = "enemy_hitbox_height",
+        ["actor_pool"] = ActorFrameworkRole.ActorPool,
+        ["actor_spawn_layer"] = ActorFrameworkRole.ActorSpawnLayer,
+        ["actor_spawn_window"] = ActorFrameworkRole.ActorSpawnWindow,
+        ["actor_enemy_def"] = ActorFrameworkRole.ActorEnemyDef,
+        ["actor_enemy_behavior"] = ActorFrameworkRole.ActorEnemyBehavior,
+        ["actor_enemy_speed"] = ActorFrameworkRole.ActorEnemySpeed,
+        ["actor_enemy_hp"] = ActorFrameworkRole.ActorEnemyHp,
+        ["actor_enemy_cooldown"] = ActorFrameworkRole.ActorEnemyCooldown,
+        ["actor_enemy_contact_damage"] = ActorFrameworkRole.ActorEnemyContactDamage,
+        ["actor_enemy_hitbox_width"] = ActorFrameworkRole.ActorEnemyHitboxWidth,
+        ["actor_enemy_hitbox_height"] = ActorFrameworkRole.ActorEnemyHitboxHeight,
+    };
+
+    private static readonly IReadOnlyDictionary<ActorFrameworkRole, EnemyLookupDescriptor> EnemyLookupFunctions = new Dictionary<ActorFrameworkRole, EnemyLookupDescriptor>
+    {
+        [ActorFrameworkRole.ActorEnemyBehavior] = new("enemy_behavior", "Behavior", "Enemies.Behavior"),
+        [ActorFrameworkRole.ActorEnemySpeed] = new("enemy_speed", "Speed", "Enemies.Speed"),
+        [ActorFrameworkRole.ActorEnemyHp] = new("enemy_hp", "Hp", "Enemies.Hp"),
+        [ActorFrameworkRole.ActorEnemyCooldown] = new("enemy_cooldown", "Cooldown", "Enemies.Cooldown"),
+        [ActorFrameworkRole.ActorEnemyContactDamage] = new("enemy_contact_damage", "ContactDamage", "Enemies.ContactDamage"),
+        [ActorFrameworkRole.ActorEnemyHitboxWidth] = new("enemy_hitbox_width", "HitboxWidth", "Enemies.HitboxWidth"),
+        [ActorFrameworkRole.ActorEnemyHitboxHeight] = new("enemy_hitbox_height", "HitboxHeight", "Enemies.HitboxHeight"),
     };
 
     private static readonly IReadOnlyList<string> SpawnInitialFieldNames =
@@ -83,11 +99,13 @@ public static class ActorFrameworkLowerer
 
     public static ProgramSyntax Lower(ProgramSyntax program, Target2DCapabilities capabilities, bool supportsUpdate, bool supportsDraw, string? baseDirectory = null)
     {
+        var roles = ActorFrameworkRoleIndex.Build(program);
         var state = new ActorFrameworkState(
             capabilities,
             supportsUpdate,
             supportsDraw,
             baseDirectory,
+            roles,
             IntrinsicFunctionIndex.Build(program));
         foreach (var function in program.Functions)
         {
@@ -184,7 +202,12 @@ public static class ActorFrameworkLowerer
         Func<string, ActorMetaspriteGeometry> metaspriteGeometry,
         string? baseDirectory = null)
     {
-        var state = new ActorFrameworkState(capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
+        var state = new ActorFrameworkState(
+            capabilities,
+            supportsUpdate: true,
+            supportsDraw: true,
+            baseDirectory,
+            ActorFrameworkRoleIndex.Build(program));
         foreach (var function in program.Functions)
         {
             CollectPoolBudgetDirectives(function.Block, state);
@@ -233,16 +256,51 @@ public static class ActorFrameworkLowerer
     {
         WalkStatements(block, statement =>
         {
-            switch (statement)
+            if (!TryActorFrameworkStatementCall(statement, state, out var call))
             {
-                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } poolCall }:
-                    state.AddPool(ReadPool(poolCall));
+                return;
+            }
+
+            switch (call.Role)
+            {
+                case ActorFrameworkRole.ActorPool:
+                    state.AddPool(ReadPool(call));
                     break;
-                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } defCall }:
-                    state.AddEnemyDef(ReadEnemyDef(defCall));
+                case ActorFrameworkRole.ActorEnemyDef:
+                    state.AddEnemyDef(ReadEnemyDef(call));
                     break;
             }
         });
+    }
+
+    private static bool TryActorFrameworkStatementCall(
+        StatementSyntax statement,
+        ActorFrameworkState state,
+        out ActorFrameworkCall call)
+    {
+        if (statement is ExpressionStatementSyntax { Expression: FunctionCall functionCall } &&
+            state.Roles.TryRole(functionCall, out call))
+        {
+            return true;
+        }
+
+        call = null!;
+        return false;
+    }
+
+    private static bool TryActorFrameworkExpressionCall(
+        ExpressionSyntax expression,
+        ActorFrameworkState state,
+        out ActorFrameworkCall call)
+    {
+        if (expression is FunctionCall functionCall &&
+            state.Roles.TryRole(functionCall, out call))
+        {
+            return true;
+        }
+
+        call = null!;
+        return false;
     }
 
     private static void CollectDrawnPools(BlockSyntax block, ISet<string> drawnPools)
@@ -355,17 +413,25 @@ public static class ActorFrameworkLowerer
     {
         foreach (var statement in block.Statements)
         {
+            if (TryActorFrameworkStatementCall(statement, state, out var actorCall))
+            {
+                switch (actorCall.Role)
+                {
+                    case ActorFrameworkRole.ActorPool:
+                        state.AddPool(ReadPool(actorCall));
+                        break;
+                    case ActorFrameworkRole.ActorEnemyDef:
+                        state.AddEnemyDef(ReadEnemyDef(actorCall));
+                        break;
+                    case ActorFrameworkRole.ActorSpawnLayer:
+                    case ActorFrameworkRole.ActorSpawnWindow:
+                        state.AddSpawnLayer(ReadSpawnDirective(actorCall, state.BaseDirectory));
+                        break;
+                }
+            }
+
             switch (statement)
             {
-                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } poolCall }:
-                    state.AddPool(ReadPool(poolCall));
-                    break;
-                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } defCall }:
-                    state.AddEnemyDef(ReadEnemyDef(defCall));
-                    break;
-                case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall }:
-                    state.AddSpawnLayer(ReadSpawnDirective(spawnCall, state.BaseDirectory));
-                    break;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } projectilePoolCall }:
                     state.AddProjectilePool(ReadProjectilePool(projectilePoolCall));
                     break;
@@ -420,7 +486,7 @@ public static class ActorFrameworkLowerer
         }
     }
 
-    private static ActorPool ReadPool(QualifiedCallSyntax call)
+    private static ActorPool ReadPool(ActorFrameworkCall call)
     {
         var parameters = call.Parameters.ToList();
         if (parameters.Count != 2 || parameters[0] is not IdentifierSyntax poolName)
@@ -578,15 +644,15 @@ public static class ActorFrameworkLowerer
         return new EffectDef(name, sprite, lifetime);
     }
 
-    private static ActorSpawnLayer ReadSpawnDirective(QualifiedCallSyntax call, string baseDirectory)
+    private static ActorSpawnLayer ReadSpawnDirective(ActorFrameworkCall call, string baseDirectory)
     {
         var parameters = call.Parameters.ToList();
-        if (call.Method == "SpawnLayer" && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
+        if (call.Role == ActorFrameworkRole.ActorSpawnLayer && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
         {
             throw new InvalidOperationException("Actors.SpawnLayer expects a pool identifier, a map path string, and a layer name string.");
         }
 
-        if (call.Method == "SpawnWindow" && (parameters.Count != 5 || parameters[0] is not IdentifierSyntax))
+        if (call.Role == ActorFrameworkRole.ActorSpawnWindow && (parameters.Count != 5 || parameters[0] is not IdentifierSyntax))
         {
             throw new InvalidOperationException("Actors.SpawnWindow expects a pool identifier, a map path string, a layer name string, a literal left edge, and a literal width.");
         }
@@ -603,16 +669,16 @@ public static class ActorFrameworkLowerer
 
         int? windowLeft = null;
         int? windowWidth = null;
-        if (call.Method == "SpawnWindow")
+        if (call.Role == ActorFrameworkRole.ActorSpawnWindow)
         {
             windowLeft = RequiredLiteralByte(parameters[3], "Actors.SpawnWindow argument 4");
             windowWidth = RequiredLiteralByte(parameters[4], "Actors.SpawnWindow argument 5");
         }
 
-        return new ActorSpawnLayer(call.Method, poolName.Identifier, mapPath, layerName, windowLeft, windowWidth, spawns, RuntimeName: string.Empty);
+        return new ActorSpawnLayer(call.SpawnMethodName, poolName.Identifier, mapPath, layerName, windowLeft, windowWidth, spawns, RuntimeName: string.Empty);
     }
 
-    private static EnemyDef ReadEnemyDef(QualifiedCallSyntax call)
+    private static EnemyDef ReadEnemyDef(ActorFrameworkCall call)
     {
         var parameters = call.Parameters.ToList();
         if (parameters.Count == 0 || parameters[0] is not IdentifierSyntax enemyName)
@@ -968,15 +1034,19 @@ public static class ActorFrameworkLowerer
 
     private static IEnumerable<StatementSyntax> RewriteStatements(StatementSyntax statement, ActorFrameworkState state)
     {
-        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "SpawnLayer" or "SpawnWindow" } spawnCall })
+        if (TryActorFrameworkStatementCall(statement, state, out var actorCall))
         {
-            var spawnLayer = state.SpawnLayer(spawnCall);
-            return RuntimeSpawnActivationStatements(spawnLayer, state.NextActivationPrefix(spawnLayer), state.ScreenWidth);
-        }
-
-        if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } poolCall })
-        {
-            return PoolDeclarations(state.Pool(poolCall), state);
+            switch (actorCall.Role)
+            {
+                case ActorFrameworkRole.ActorSpawnLayer:
+                case ActorFrameworkRole.ActorSpawnWindow:
+                    var spawnLayer = state.SpawnLayer(actorCall);
+                    return RuntimeSpawnActivationStatements(spawnLayer, state.NextActivationPrefix(spawnLayer), state.ScreenWidth);
+                case ActorFrameworkRole.ActorPool:
+                    return PoolDeclarations(state.Pool(actorCall), state);
+                case ActorFrameworkRole.ActorEnemyDef:
+                    return [];
+            }
         }
 
         if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } projectilePoolCall })
@@ -1047,8 +1117,6 @@ public static class ActorFrameworkLowerer
     {
         return statement switch
         {
-            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Actors", Method: "Pool" } } => null,
-            ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Enemies", Method: "Def" } } => null,
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } } => null,
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } } => null,
             ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Pool" } } => null,
@@ -3439,8 +3507,7 @@ public static class ActorFrameworkLowerer
     {
         return expression switch
         {
-            QualifiedCallSyntax { Qualifier: "Enemies" } enemyCall => RewriteEnemyCall(enemyCall, state),
-            QualifiedCallSyntax { Qualifier: "Actors" } actorCall => throw new InvalidOperationException($"Actors.{actorCall.Method} can only be used as a statement."),
+            FunctionCall call when TryActorFrameworkExpressionCall(call, state, out var actorCall) => RewriteActorFrameworkExpressionCall(actorCall, state),
             QualifiedCallSyntax { Qualifier: "Projectiles" } projectileCall => throw new InvalidOperationException($"Projectiles.{projectileCall.Method} can only be used as a statement."),
             QualifiedCallSyntax { Qualifier: "Effects" } effectCall => throw new InvalidOperationException($"Effects.{effectCall.Method} can only be used as a statement."),
             AssignmentSyntax assignment => new AssignmentSyntax(RewriteLValue(assignment.Left, state), assignment.OperatorSymbol, RewriteExpression(assignment.Right, state)),
@@ -3476,25 +3543,25 @@ public static class ActorFrameworkLowerer
         };
     }
 
-    private static ExpressionSyntax RewriteEnemyCall(QualifiedCallSyntax call, ActorFrameworkState state)
+    private static ExpressionSyntax RewriteActorFrameworkExpressionCall(ActorFrameworkCall call, ActorFrameworkState state)
     {
-        if (call.Method == "Def")
+        if (call.Role == ActorFrameworkRole.ActorEnemyDef)
         {
             throw new InvalidOperationException("Enemies.Def can only be used as a statement.");
         }
 
-        if (!EnemyLookupFunctions.TryGetValue(call.Method, out var functionName))
+        if (!EnemyLookupFunctions.TryGetValue(call.Role, out var lookup))
         {
-            throw new InvalidOperationException($"Unknown actor framework enemy helper 'Enemies.{call.Method}'.");
+            throw new InvalidOperationException($"{call.DisplayName} can only be used as a statement.");
         }
 
         if (state.EnemyDefs.Count == 0)
         {
-            throw new InvalidOperationException($"Enemies.{call.Method} requires at least one Enemies.Def declaration.");
+            throw new InvalidOperationException($"{lookup.DisplayName} requires at least one Enemies.Def declaration.");
         }
 
-        state.RecordEnemyLookupMethod(call.Method);
-        return new FunctionCall(functionName, call.Parameters.Select(parameter => RewriteExpression(parameter, state)));
+        state.RecordEnemyLookupMethod(call.Role);
+        return new FunctionCall(lookup.FunctionName, call.Parameters.Select(parameter => RewriteExpression(parameter, state)));
     }
 
     private static LValue RewriteLValue(LValue lValue, ActorFrameworkState state)
@@ -3680,7 +3747,7 @@ public static class ActorFrameworkLowerer
 
         foreach (var lookup in EnemyLookupFunctions.Where(pair => state.UsedEnemyLookupMethods.Contains(pair.Key)))
         {
-            yield return new GeneratedName(lookup.Value, $"Enemies.{lookup.Key} lookup helper function");
+            yield return new GeneratedName(lookup.Value.FunctionName, $"{lookup.Value.DisplayName} lookup helper function");
         }
 
         foreach (var layer in state.SpawnLayers.Where(layer => layer.Spawns.Count != 0))
@@ -3749,7 +3816,7 @@ public static class ActorFrameworkLowerer
         }
     }
 
-    private static IEnumerable<FunctionSyntax> GeneratedLookupFunctions(IReadOnlyList<EnemyDef> enemyDefs, IReadOnlySet<string> usedMethods)
+    private static IEnumerable<FunctionSyntax> GeneratedLookupFunctions(IReadOnlyList<EnemyDef> enemyDefs, IReadOnlySet<ActorFrameworkRole> usedMethods)
     {
         if (enemyDefs.Count == 0)
         {
@@ -3758,7 +3825,7 @@ public static class ActorFrameworkLowerer
 
         foreach (var lookup in EnemyLookupFunctions.Where(pair => usedMethods.Contains(pair.Key)))
         {
-            yield return LookupFunction(lookup.Value, enemyDefs, lookup.Key);
+            yield return LookupFunction(lookup.Value.FunctionName, enemyDefs, lookup.Value.ConstantSuffix);
         }
     }
 
@@ -3939,6 +4006,7 @@ public static class ActorFrameworkLowerer
         bool supportsUpdate,
         bool supportsDraw,
         string? baseDirectory,
+        ActorFrameworkRoleIndex roles,
         IReadOnlyDictionary<string, string>? intrinsicFunctionNames = null)
     {
         private readonly Dictionary<string, ActorPool> pools = new(StringComparer.Ordinal);
@@ -3958,7 +4026,7 @@ public static class ActorFrameworkLowerer
         private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> projectileRequestCallCounts = new(StringComparer.Ordinal);
         private readonly Dictionary<string, int> effectRequestCallCounts = new(StringComparer.Ordinal);
-        private readonly HashSet<string> usedEnemyLookupMethods = new(StringComparer.Ordinal);
+        private readonly HashSet<ActorFrameworkRole> usedEnemyLookupMethods = [];
         private readonly IReadOnlyDictionary<string, string> intrinsicFunctions = intrinsicFunctionNames ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
         public string TargetName { get; } = capabilities.Name;
@@ -3974,8 +4042,9 @@ public static class ActorFrameworkLowerer
         public IReadOnlyList<EffectPool> EffectPools => effectPoolsInOrder;
         public IReadOnlyList<EffectDef> EffectDefs => effectDefsInOrder;
         public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
-        public IReadOnlySet<string> UsedEnemyLookupMethods => usedEnemyLookupMethods;
+        public IReadOnlySet<ActorFrameworkRole> UsedEnemyLookupMethods => usedEnemyLookupMethods;
         public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0 || projectilePools.Count != 0 || projectileDefs.Count != 0 || effectPools.Count != 0 || effectDefs.Count != 0;
+        public ActorFrameworkRoleIndex Roles { get; } = roles;
 
         // True once the program is seen to call the camera-init facade (either the qualified
         // `<Camera>.Init(...)` form or its resolved static `..._Camera_Init(...)` call). Without a
@@ -4009,7 +4078,7 @@ public static class ActorFrameworkLowerer
             poolsInOrder.Add(pool);
         }
 
-        public ActorPool Pool(QualifiedCallSyntax call)
+        public ActorPool Pool(ActorFrameworkCall call)
         {
             var pool = ReadPool(call);
             return pools[pool.Name];
@@ -4122,9 +4191,9 @@ public static class ActorFrameworkLowerer
             throw new InvalidOperationException($"Unknown projectile kind '{name}'. Declare Projectiles.Def({name}, ...).");
         }
 
-        public void RecordEnemyLookupMethod(string method)
+        public void RecordEnemyLookupMethod(ActorFrameworkRole role)
         {
-            usedEnemyLookupMethods.Add(method);
+            usedEnemyLookupMethods.Add(role);
         }
 
         public void AddSpawnLayer(ActorSpawnLayer spawnLayer)
@@ -4141,24 +4210,24 @@ public static class ActorFrameworkLowerer
             spawnLayersInOrder.Add(runtimeLayer);
         }
 
-        public ActorSpawnLayer SpawnLayer(QualifiedCallSyntax call)
+        public ActorSpawnLayer SpawnLayer(ActorFrameworkCall call)
         {
             var parameters = call.Parameters.ToList();
-            if (call.Method == "SpawnLayer" && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
+            if (call.Role == ActorFrameworkRole.ActorSpawnLayer && (parameters.Count != 3 || parameters[0] is not IdentifierSyntax))
             {
                 throw new InvalidOperationException("Actors.SpawnLayer expects a pool identifier, a map path string, and a layer name string.");
             }
 
-            if (call.Method == "SpawnWindow" && (parameters.Count != 5 || parameters[0] is not IdentifierSyntax))
+            if (call.Role == ActorFrameworkRole.ActorSpawnWindow && (parameters.Count != 5 || parameters[0] is not IdentifierSyntax))
             {
                 throw new InvalidOperationException("Actors.SpawnWindow expects a pool identifier, a map path string, a layer name string, a literal left edge, and a literal width.");
             }
 
-            var windowLeft = call.Method == "SpawnWindow" ? RequiredLiteralByte(parameters[3], "Actors.SpawnWindow argument 4") : (int?)null;
-            var windowWidth = call.Method == "SpawnWindow" ? RequiredLiteralByte(parameters[4], "Actors.SpawnWindow argument 5") : (int?)null;
+            var windowLeft = call.Role == ActorFrameworkRole.ActorSpawnWindow ? RequiredLiteralByte(parameters[3], "Actors.SpawnWindow argument 4") : (int?)null;
+            var windowWidth = call.Role == ActorFrameworkRole.ActorSpawnWindow ? RequiredLiteralByte(parameters[4], "Actors.SpawnWindow argument 5") : (int?)null;
             var poolName = (IdentifierSyntax)parameters[0];
             var key = ActorSpawnLayerKey.From(
-                call.Method,
+                call.SpawnMethodName,
                 poolName.Identifier,
                 StringLiteral(parameters[1], "Actors.SpawnLayer argument 2"),
                 StringLiteral(parameters[2], "Actors.SpawnLayer argument 3"),
@@ -4269,6 +4338,93 @@ public static class ActorFrameworkLowerer
 
             return max;
         }
+    }
+
+    private enum ActorFrameworkRole
+    {
+        ActorPool,
+        ActorSpawnLayer,
+        ActorSpawnWindow,
+        ActorEnemyDef,
+        ActorEnemyBehavior,
+        ActorEnemySpeed,
+        ActorEnemyHp,
+        ActorEnemyCooldown,
+        ActorEnemyContactDamage,
+        ActorEnemyHitboxWidth,
+        ActorEnemyHitboxHeight,
+    }
+
+    private sealed record EnemyLookupDescriptor(string FunctionName, string ConstantSuffix, string DisplayName);
+
+    private sealed record ActorFrameworkCall(
+        ActorFrameworkRole Role,
+        IReadOnlyList<ExpressionSyntax> Parameters,
+        string DisplayName)
+    {
+        public string SpawnMethodName => Role switch
+        {
+            ActorFrameworkRole.ActorSpawnLayer => "SpawnLayer",
+            ActorFrameworkRole.ActorSpawnWindow => "SpawnWindow",
+            _ => throw new InvalidOperationException($"Actor framework role '{Role}' is not a spawn directive."),
+        };
+    }
+
+    private sealed class ActorFrameworkRoleIndex
+    {
+        private readonly IReadOnlyDictionary<string, ActorFrameworkRole> rolesByFunction;
+
+        private ActorFrameworkRoleIndex(IReadOnlyDictionary<string, ActorFrameworkRole> rolesByFunction)
+        {
+            this.rolesByFunction = rolesByFunction;
+        }
+
+        public static ActorFrameworkRoleIndex Build(ProgramSyntax program)
+        {
+            var roles = new Dictionary<string, ActorFrameworkRole>(StringComparer.Ordinal);
+            foreach (var function in program.Functions)
+            {
+                var roleName = TargetAttributeReader.StringArgument(function, SdkRoleAttribute);
+                if (roleName is null)
+                {
+                    continue;
+                }
+
+                if (!RolesByMetadata.TryGetValue(roleName, out var role))
+                {
+                    throw new InvalidOperationException($"Unknown SDK role '{roleName}' on function '{function.Name}'.");
+                }
+
+                roles[function.Name] = role;
+            }
+
+            return new ActorFrameworkRoleIndex(roles);
+        }
+
+        public bool TryRole(FunctionCall call, out ActorFrameworkCall actorCall)
+        {
+            if (rolesByFunction.TryGetValue(call.Name, out var role))
+            {
+                actorCall = new ActorFrameworkCall(role, call.Parameters.ToList(), DisplayName(role));
+                return true;
+            }
+
+            actorCall = null!;
+            return false;
+        }
+    }
+
+    private static string DisplayName(ActorFrameworkRole role)
+    {
+        return role switch
+        {
+            ActorFrameworkRole.ActorPool => "Actors.Pool",
+            ActorFrameworkRole.ActorSpawnLayer => "Actors.SpawnLayer",
+            ActorFrameworkRole.ActorSpawnWindow => "Actors.SpawnWindow",
+            ActorFrameworkRole.ActorEnemyDef => "Enemies.Def",
+            _ when EnemyLookupFunctions.TryGetValue(role, out var lookup) => lookup.DisplayName,
+            _ => role.ToString(),
+        };
     }
 
     private sealed record ActorPool(string Name, int Capacity);

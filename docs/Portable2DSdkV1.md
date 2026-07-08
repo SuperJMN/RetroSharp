@@ -140,6 +140,12 @@ On Game Boy and NES, `Sprite.Draw(...)` is injected as an SDK library helper ove
 The current actor framework frontend is source sugar over fixed storage. It does
 not add actor-specific target intrinsics and does not introduce heap allocation,
 object identity, virtual dispatch, delegates, closures, or function pointers.
+The public `Actors.*` and `Enemies.*` facade methods are declared by
+`RetroSharp.Portable2D` with `sdk_role("...")` metadata. The frontend consumes
+those roles and then performs compiler-owned lowering to fixed arrays,
+constants, spawn-table helpers, and direct branches. Pool receiver helpers such
+as `pool.Update()` and `pool.Draw()` remain a compiler-owned boundary because
+the pool itself is generated fixed storage, not a runtime object.
 
 | Signature | Semantics |
 | --- | --- |
@@ -157,6 +163,10 @@ object identity, virtual dispatch, delegates, closures, or function pointers.
 The projectile frontend is source sugar over fixed local storage, like the actor
 framework. It does not add projectile-specific target intrinsics, heap
 allocation, replacement policies, virtual dispatch, or direct OAM writes.
+Unlike the actor `Actors.*`/`Enemies.*` entry points, the
+`Projectiles.*`/`Effects.*` public directive recognition has not yet been moved
+behind package metadata. Treat that as adjacent follow-up work rather than part
+of the actor-framework role migration.
 
 | Signature | Semantics |
 | --- | --- |
