@@ -65,5 +65,7 @@ documentation in the same patch.
 
 The current compiler-owned operation and target-intrinsic inventory lives in
 `docs/ArchitectureRoadmap.md` under "Compiler-Owned SDK Operation Inventory".
-Use that table before adding a new `Sdk2DOperation`, `SdkAudioOperation`, or
-`TargetIntrinsicOperation`.
+Use that table, especially its target-intrinsic taxonomy buckets
+(`core-runtime`, `portable-2d`, `platformer/plugin`, `target-specific`, and
+`compat/deprecated`), before adding a new `Sdk2DOperation`,
+`SdkAudioOperation`, or `TargetIntrinsicOperation`.
