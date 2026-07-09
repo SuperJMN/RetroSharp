@@ -1643,8 +1643,9 @@ Acceptance criteria:
 
 ### Iteration 15: Scalable Large-World Assets and Banked Streaming
 
-Status: planned. Wave 0 (measurement and ADRs) and Wave 1 (shared coordinate,
-collision, packed-world, Tiled, and budget foundations) are ready for execution.
+Status: active under [GitHub epic #275](https://github.com/SuperJMN/RetroSharp/issues/275).
+Wave 0 (measurement and ADRs) and Wave 1 (shared coordinate, collision,
+packed-world, Tiled, and budget foundations) are seeded for execution.
 Target production readers remain intentionally unseeded until those contracts
 merge.
 

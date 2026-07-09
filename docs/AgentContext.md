@@ -33,7 +33,8 @@ This document preserves project knowledge that previously lived only in agent me
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
   acceptance target and keeps Wave 0/1 separate from later Game Boy MBC1 and NES
-  mapper production readers. Do not dispatch the parent epic as one task.
+  mapper production readers. GitHub #275 is the parent/integrator issue with
+  Wave 0/1 attached as native subissues; do not dispatch the parent as one task.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
