@@ -5407,7 +5407,13 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        // Preserve the left operand in A while the right operand is materialized: loading the right
+        // byte routes through A, so without this it would clobber the left byte and the comparison
+        // would degrade to right-vs-right (always equal), breaking every word variable-vs-variable
+        // relational compare. Mirrors the byte path in EmitVariableOperandsToAAndB.
+        builder.PushAf();
         EmitLoadWordByteToB(right, highByte, signedHighByte);
+        builder.PopAf();
         builder.CompareB();
     }
 

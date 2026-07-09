@@ -44,6 +44,46 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Word_variable_vs_variable_relational_comparisons_do_not_clobber_the_left_operand()
+    {
+        // Regression: 16-bit relational compares loaded the left operand into A and then materialized
+        // the right operand into A as well, degrading the comparison to right-vs-right (always equal).
+        // The runner's Camera.FollowPlayer used `y < maxScrollY` (both i16), so the camera could scroll
+        // up but never back down. Force runtime i16 values (so they are not folded to constants) and
+        // check every relational operator resolves against the real operands.
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  i16 a = 10;   i8 da = 5;   a += da;   // a = 15
+                                  i16 b = 40;   i8 db = 5;   b += db;   // b = 45
+                                  u8 lt = 0;    if (a < b)  { lt = 1; }
+                                  u8 le = 0;    if (a <= b) { le = 1; }
+                                  u8 gt = 0;    if (a > b)  { gt = 1; }
+                                  u8 ge = 0;    if (a >= b) { ge = 1; }
+                                  u8 gtR = 0;   if (b > a)  { gtR = 1; }
+                                  u8 ltR = 0;   if (b < a)  { ltR = 1; }
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        // a(C000/C001) da(C002) b(C003/C004) db(C005) lt(C006) le(C007) gt(C008) ge(C009) gtR(C00A) ltR(C00B)
+        Assert.Equal(15, cpu.Wram(0xC000) | cpu.Wram(0xC001) << 8);
+        Assert.Equal(45, cpu.Wram(0xC003) | cpu.Wram(0xC004) << 8);
+        Assert.Equal(1, cpu.Wram(0xC006)); // 15 < 45
+        Assert.Equal(1, cpu.Wram(0xC007)); // 15 <= 45
+        Assert.Equal(0, cpu.Wram(0xC008)); // 15 > 45
+        Assert.Equal(0, cpu.Wram(0xC009)); // 15 >= 45
+        Assert.Equal(1, cpu.Wram(0xC00A)); // 45 > 15
+        Assert.Equal(0, cpu.Wram(0xC00B)); // 45 < 15
+    }
+
+    [Fact]
     public void Compiles_video_api_calls_to_a_game_boy_rom()
     {
         const string source = """
