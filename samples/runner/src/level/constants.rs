@@ -2,19 +2,19 @@ type Pixel = i16;
 
 static class Level
 {
-    const i16 Width = 48;
+    const i16 Width = 176;
     const i16 StreamY = 0;
-    const i16 Height = 96;
-    const i16 StreamHeight = 96;
-    const i16 PixelWidth = 384;
+    const i16 Height = 30;
+    const i16 StreamHeight = 30;
+    const i16 PixelWidth = 1408;
 }
 
 static class Player
 {
     const i16 StartX = 72;
-    const i16 StartY = 193;
+    const i16 StartY = 97;
     const i16 FootOffset = 31;
-    const i16 FallResetY = 240;
+    const i16 FallResetY = 160;
 }
 
 static class DeadZone
@@ -27,7 +27,7 @@ static class DeadZone
 
 static class CameraBounds
 {
-    const i16 MaxY = 196;
+    const i16 MaxY = 0;
 }
 
 static class CollisionProbe

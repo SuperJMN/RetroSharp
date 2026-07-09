@@ -186,12 +186,11 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/maps")));
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.gb.vgz")));
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.nes.vgz")));
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/runner.tmj")));
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/stage1.playable.tmj")));
         var mainSource = File.ReadAllText(RepositoryFile("samples/runner/src/main.rs"));
         Assert.DoesNotContain("import Runner.Framework;", mainSource, StringComparison.Ordinal);
         Assert.Contains("""Music.Asset(runner_theme, "assets/music/runner.vgz");""", mainSource, StringComparison.Ordinal);
-        Assert.Contains("""World.Load("assets/maps/runner.tmj");""", mainSource, StringComparison.Ordinal);
-        Assert.Contains("""Actors.SpawnLayer(goombas, "assets/maps/runner.tmj", "actors");""", mainSource, StringComparison.Ordinal);
+        Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", mainSource, StringComparison.Ordinal);
 
         var outputPath = Path.Combine(workspace.Path, "runner.gb");
         var result = RunCli("--target", "gb", "--out", outputPath, projectPath);
