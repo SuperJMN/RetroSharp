@@ -44,6 +44,50 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
+    public void Nes_runner_shifts_render_up_one_tile_row_so_the_ground_clears_bottom_overscan()
+    {
+        // The runner world is exactly screen tall (30 rows) and its ground reaches the bottom visible
+        // row, so the NES render is shifted up one tile row to keep the full ground inside the safe
+        // area: the camera scroll restore adds 8 px of vertical scroll (CLC; ADC #$08; STA $2005) and
+        // sprites are offset by the same amount. Vertically scrolling worlds must not get this inset.
+        var runnerRom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        byte[] verticalScrollInset = [0x18, 0x69, 0x08, 0x8D, 0x05, 0x20];
+        Assert.True(
+            ContainsSequence(runnerRom, verticalScrollInset),
+            "Runner NES ROM should apply the 8 px bottom-overscan vertical inset.");
+
+        var scrollingSamplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var scrollingSource = File.ReadAllText(scrollingSamplePath);
+        var scrollingRom = NesRomCompiler.CompileSource(scrollingSource, Path.GetDirectoryName(scrollingSamplePath));
+        Assert.False(
+            ContainsSequence(scrollingRom, verticalScrollInset),
+            "A vertically scrolling world must keep its framing without the bottom-overscan inset.");
+    }
+
+    private static bool ContainsSequence(IReadOnlyList<byte> data, IReadOnlyList<byte> pattern)
+    {
+        for (var i = 0; i <= data.Count - pattern.Count; i++)
+        {
+            var match = true;
+            for (var j = 0; j < pattern.Count; j++)
+            {
+                if (data[i + j] != pattern[j])
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    [Fact]
     public void Nes_runner_initial_four_screen_nametables_match_imported_world_tiles()
     {
         var runnerDirectory = RunnerSample.Directory;
