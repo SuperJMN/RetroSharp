@@ -5742,8 +5742,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Right = 96", source);
         Assert.Contains("Top = 56", source);
         Assert.Contains("Bottom = 88", source);
-        Assert.Contains("static class CameraBounds", source);
-        Assert.Contains("MaxY = 0", source);
+        Assert.Contains("Camera.VerticalScrollMax()", source);
+        Assert.DoesNotContain("static class CameraBounds", source);
         Assert.Contains("StartX = 72", source);
         Assert.DoesNotContain("ScreenX = 72", source);
 
@@ -5760,7 +5760,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Pixel y;", playerBlock);
         Assert.Contains("inline void Reset(CameraState view)", playerBlock);
         Assert.Contains("x = view.x + Player.StartX;", playerBlock);
-        Assert.Contains("y = view.y + Player.StartY;", playerBlock);
+        Assert.Contains("y = Player.StartY;", playerBlock);
         Assert.Contains("inline pure Pixel ScreenX(PlayerState player) => player.x - x;", cameraBlock);
         Assert.Contains("inline pure Pixel ScreenY(PlayerState player) => player.y - y;", cameraBlock);
         Assert.DoesNotContain("Pixel screenX;", cameraBlock);
@@ -6204,10 +6204,10 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
-        Assert.NotEqual(0, program.TileMap[16 * 32]);
+        Assert.NotEqual(0, program.TileMap[26 * 32]);
         Assert.NotEqual(0, program.TileMap[24 * 32 + 16]);
         Assert.NotEqual(0, program.TileMap[28 * 32 + 4]);
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(16, 24));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(30, 20));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(4, 28));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 4));
     }
@@ -7536,13 +7536,13 @@ public class GameBoyRomCompilerTests
 
         Assert.Equal(176, worldMap.Width);
         Assert.Equal(30, worldMap.Height);
-        Assert.NotEqual(0, program.TileMap[16 * 32]);
+        Assert.NotEqual(0, program.TileMap[26 * 32]);
         Assert.NotEqual(0, program.TileMap[28 * 32 + 8]);
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 16));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(46, 16));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 28));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 28));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 28));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(0, 4));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 20));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(40, 20));
         Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 4));
 
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
@@ -7569,17 +7569,16 @@ public class GameBoyRomCompilerTests
         Assert.Contains("Height = 30", source);
         Assert.Contains("StreamHeight = 30", source);
         Assert.Contains("PixelWidth = 1408", source);
-        Assert.Contains("MaxY = 0", source);
         Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);", source);
 
         var program = CompileVideoProgram(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
         Assert.Equal(176, worldMap.Width);
         Assert.Equal(30, worldMap.Height);
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 16));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(46, 16));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 28));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 28));
         Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 28));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 20));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(40, 20));
     }
 
     [Fact]
@@ -7604,11 +7603,11 @@ public class GameBoyRomCompilerTests
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("StartY = 97", source);
+        Assert.Contains("StartY = 193", source);
         Assert.Contains("FootOffset = 31", source);
         Assert.DoesNotContain("TopWrapY", source);
-        Assert.Contains("y = view.y + Player.StartY;", source);
-        Assert.Equal(1, CountOccurrences(source, "y = view.y + Player.StartY;"));
+        Assert.Contains("y = Player.StartY;", source);
+        Assert.Equal(1, CountOccurrences(source, "y = Player.StartY;"));
         Assert.Equal(1, CountOccurrences(source, "player.Land(footTile - Player.FootOffset);"));
         Assert.DoesNotContain("player.y = 77;", source);
         Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", source);

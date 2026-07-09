@@ -29,10 +29,11 @@ class CameraState
     inline void FollowPlayer(PlayerState player)
     {
         let screenY = ScreenY(player);
+        let maxScrollY = Camera.VerticalScrollMax();
 
         if (screenY > DeadZone.Bottom)
         {
-            if (y < CameraBounds.MaxY)
+            if (y < maxScrollY)
             {
                 y += 1;
             }

@@ -7,6 +7,9 @@ extern void portable2d_camera_set_position(i16 x, i16 y);
 [intrinsic("camera_apply")]
 extern void portable2d_camera_apply();
 
+[intrinsic("camera_vertical_scroll_max")]
+extern i16 portable2d_camera_vertical_scroll_max();
+
 [intrinsic("camera_aabb_tiles")]
 extern i16 portable2d_camera_aabb_tiles(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
 
@@ -34,6 +37,15 @@ class Camera
     static inline void Apply()
     {
         portable2d_camera_apply();
+    }
+
+    // Maximum camera Y (in pixels) the world can scroll to on this target without exposing area
+    // below the map: worldHeight - screenHeight, clamped to >= 0. Folds to a per-target constant
+    // (e.g. 0 when the world exactly fills the screen), so callers can clamp their own camera Y and
+    // keep sprite/background alignment consistent.
+    static inline i16 VerticalScrollMax()
+    {
+        return portable2d_camera_vertical_scroll_max();
     }
 
     static inline i16 AabbTiles(i16 screenX, i16 worldY, i16 width, i16 height, i16 flags)

@@ -10,14 +10,15 @@ targets keep world Y collision reads in an 8-bit range (map height must stay
 This tool derives `stage1.playable.tmj`, the trimmed map the runner actually
 loads. It:
   * keeps the first `WIDTH` source columns (the level start),
-  * keeps the bottom `KEEP_ROWS` source rows (ground + immediate platforms),
-  * pads `PAD_ROWS` solid rows below the ground so the taller NES viewport is
-    filled with underground instead of a mirrored wrap,
+  * keeps the bottom `KEEP_ROWS` source rows so the ground sits on the map's
+    bottom row and the level's platforms fill the rows above it,
+  * (optionally) pads `PAD_ROWS` solid rows below the ground,
   * renames the single tile layer to `world` and adds the `retrosharp*` map
     properties the importer requires.
 
-The full design (`stage1.tmj` / `stage1.tmx`) is never modified, so editing the
-level in Tiled and re-exporting stays safe; just re-run this tool afterwards.
+The runner anchors the world's bottom to each target's screen bottom via
+`Camera.VerticalScrollMax()`, so the ground frames at the bottom on both the
+Game Boy (144 px) and NES (240 px) screens without exposing area below the map.
 
 Usage (from repo root):
     tools/runner/build_stage1_playable_map.py
@@ -30,9 +31,9 @@ SRC = os.path.join(MAPS, "stage1.tmj")            # full authored design (raw Ti
 OUT = os.path.join(MAPS, "stage1.playable.tmj")   # trimmed runtime map the runner loads
 
 WIDTH = 88      # source columns kept -> 176 hw columns (widest that fits NES NROM + full music)
-KEEP_ROWS = 9   # bottom source rows kept (ground + platforms)
-PAD_ROWS = 6    # solid underground rows appended below the ground
-PAD_GID = 104   # ground tile used to fill the underground rows
+KEEP_ROWS = 15  # bottom source rows kept: ground row + platforms above, filling the 30 hw-row screen
+PAD_ROWS = 0    # no underground fill; the ground sits at the map (and screen) bottom
+PAD_GID = 104   # ground tile used to fill the underground rows (unused when PAD_ROWS == 0)
 
 
 def main():

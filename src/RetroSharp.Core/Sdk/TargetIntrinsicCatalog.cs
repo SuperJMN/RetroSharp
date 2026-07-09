@@ -23,6 +23,7 @@ public enum TargetIntrinsicOperation
     CameraScreenAabbHitTop,
     SetCameraPosition,
     ApplyCamera,
+    CameraVerticalScrollMax,
     DrawLogicalSprite,
     ReadSpriteWidth,
     ReadAnimationFrame,
@@ -330,6 +331,11 @@ public sealed record TargetIntrinsicDescriptor
     public static TargetIntrinsicDescriptor ApplyCamera(string name, int arity)
     {
         return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.ApplyCamera, TargetIntrinsicReturnKind.Void, arity);
+    }
+
+    public static TargetIntrinsicDescriptor CameraVerticalScrollMax(string name, int arity)
+    {
+        return new TargetIntrinsicDescriptor(name, TargetIntrinsicOperation.CameraVerticalScrollMax, TargetIntrinsicReturnKind.I16, arity);
     }
 
     public static TargetIntrinsicDescriptor DrawLogicalSprite(

@@ -17,7 +17,7 @@ class PlayerState
     inline void Reset(CameraState view)
     {
         x = view.x + Player.StartX;
-        y = view.y + Player.StartY;
+        y = Player.StartY;
         velocityY = 0;
         grounded = true;
         displayFrame = 0;

@@ -37,6 +37,7 @@ void Main()
     FrameState frame;
 
     view.ResetMotion();
+    view.y = Camera.VerticalScrollMax();
     player.Reset(view);
 
     while (true)

@@ -35,6 +35,19 @@ public sealed class TargetIntrinsicCatalogTests
     }
 
     [Fact]
+    public void Camera_vertical_scroll_max_is_an_i16_value_intrinsic_without_sdk_facade_names()
+    {
+        var descriptor = TargetIntrinsicDescriptor.CameraVerticalScrollMax("camera_vertical_scroll_max", arity: 0);
+
+        Assert.Equal("camera_vertical_scroll_max", descriptor.IntrinsicId);
+        Assert.Equal(TargetIntrinsicOperation.CameraVerticalScrollMax, descriptor.Operation);
+        Assert.Equal(TargetIntrinsicReturnKind.I16, descriptor.ReturnKind);
+        Assert.Equal(0, descriptor.Arity);
+        Assert.Equal(0, descriptor.RuntimeArity);
+        Assert.Empty(descriptor.CompileTimeOperands);
+    }
+
+    [Fact]
     public void Input_value_intrinsics_are_described_without_sdk_facade_names()
     {
         var buttonDown = TargetIntrinsicDescriptor.ButtonDown("button_down", arity: 1);
