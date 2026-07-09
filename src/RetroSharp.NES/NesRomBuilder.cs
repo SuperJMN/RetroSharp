@@ -109,6 +109,7 @@ internal static class NesRomBuilder
         EmitPpuRowAddressTables(builder, program.WorldMap);
         EmitWorldMapFlagRows(builder, program.WorldMap);
         EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
+        EmitWorldColumnAttributes(builder, program.WorldColumnAttributes);
         EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder);
 
         var prg = new byte[PrgRomSize];
@@ -305,6 +306,26 @@ internal static class NesRomBuilder
     }
 
     internal static string WorldMapFlagRowLabel(int row) => $"world_map_flags_row_{row}";
+
+    internal static string WorldMapColumnAttributeRowLabel(int row) => $"world_map_col_attr_row_{row}";
+
+    // Emits one attribute-byte table per visible attribute row, indexed by the streamed source column
+    // divided by four (one entry per 4-column attribute block). Horizontal column streaming uses these to
+    // refresh the NES attribute table so streamed background columns keep the palette slots the initial
+    // upload derived.
+    private static void EmitWorldColumnAttributes(PrgBuilder builder, NesColumnAttributeStream? attributes)
+    {
+        if (attributes is null)
+        {
+            return;
+        }
+
+        for (var row = 0; row < attributes.Rows.Count; row++)
+        {
+            builder.Label(WorldMapColumnAttributeRowLabel(row));
+            builder.Emit(attributes.Rows[row].BytesByColumnBlock);
+        }
+    }
 
     internal const string WorldMapFlagRowPointerLowLabel = "world_map_flags_row_ptr_lo";
     internal const string WorldMapFlagRowPointerHighLabel = "world_map_flags_row_ptr_hi";
@@ -4131,11 +4152,80 @@ internal sealed class NesRuntimeCompiler
         {
             EmitLoadPendingCameraColumnToStreamAddresses();
             EmitStreamColumnFromAddresses(config);
+            EmitStreamColumnAttributes();
             EmitClearPendingCameraStream(kind);
         }
         else
         {
             EmitCommitPendingCameraRowStream(config);
+        }
+    }
+
+    // Refreshes the NES attribute table for the column that was just streamed. Column tile streaming only
+    // rewrites nametable tiles; without this the streamed tiles would inherit the palette slot the
+    // initial upload left in that buffer position, corrupting background colors as the camera scrolls.
+    private void EmitStreamColumnAttributes()
+    {
+        var attributes = program.WorldColumnAttributes;
+        if (attributes is null)
+        {
+            return;
+        }
+
+        var highRightLabel = builder.CreateLabel("nes_col_attr_high_right");
+        var highStoreLabel = builder.CreateLabel("nes_col_attr_high_store");
+
+        builder.LoadAAbsolute(0x2002);                          // reset the PPU address latch (w = 0)
+
+        // X = streamed source column / 4 (attribute block index), preserved across the row loop.
+        builder.LoadAZeroPage(CameraSourceColumnAddress);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.TransferAToX();
+
+        // Base attribute address high byte: $23 for the left nametable, $27 for the right one.
+        builder.LoadAZeroPage(CameraTargetColumnAddress);
+        builder.CompareImmediate(32);
+        builder.BranchRelative(0xB0, highRightLabel); // BCS highRightLabel
+        builder.LoadAImmediate(0x23);
+        builder.JumpAbsolute(highStoreLabel);
+        builder.Label(highRightLabel);
+        builder.LoadAImmediate(0x27);
+        builder.Label(highStoreLabel);
+        builder.StoreAZeroPage(SpriteFrameScratchAddress);
+
+        // Base attribute address low byte: $C0 + (targetColumn % 32) / 4.
+        builder.LoadAZeroPage(CameraTargetColumnAddress);
+        builder.AndImmediate(0x1F);
+        builder.ShiftRightA();
+        builder.ShiftRightA();
+        builder.OrImmediate(0xC0);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+
+        for (var row = 0; row < attributes.Rows.Count; row++)
+        {
+            var descriptor = attributes.Rows[row];
+
+            builder.LoadAZeroPage(SpriteFrameScratchAddress);
+            if (descriptor.HighOffset != 0)
+            {
+                builder.ClearCarry();
+                builder.AddImmediate(descriptor.HighOffset);
+            }
+
+            builder.StoreAAbsolute(0x2006);
+
+            builder.LoadAZeroPage(CollisionColumnScratchAddress);
+            if (descriptor.LowOffset != 0)
+            {
+                builder.ClearCarry();
+                builder.AddImmediate(descriptor.LowOffset);
+            }
+
+            builder.StoreAAbsolute(0x2006);
+
+            builder.LdaAbsoluteX(NesRomBuilder.WorldMapColumnAttributeRowLabel(row));
+            builder.StoreAAbsolute(0x2007);
         }
     }
 

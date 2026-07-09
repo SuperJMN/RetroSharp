@@ -393,6 +393,87 @@ public sealed class NesWorldLoadTests : IDisposable
     }
 
     [Fact]
+    public void World_load_precomputes_streamed_column_attributes_for_wide_maps()
+    {
+        // A map wider than the 64-column buffer streams columns at runtime. The compiler must precompute
+        // the attribute bytes for those streamed columns so a background tile beyond the initial surface
+        // keeps the palette slot its colors derive, instead of inheriting a stale slot when it scrolls in.
+        WriteSkyCloudGroundTilesheetPng(Path.Combine(directory, "tiles.png"));
+        const int width = 68;
+        const int height = 8;
+        var data = new int[width * height];
+        for (var i = 0; i < data.Length; i++)
+        {
+            data[i] = 1; // sky (universal background color)
+        }
+
+        for (var y = height - 2; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                data[y * width + x] = 3; // ground palette, dense enough to take slot 0
+            }
+        }
+
+        // Cloud tiles fill the top-left quadrant of attribute block 16 (source columns 64-65, rows 0-1),
+        // which only exists beyond the initial 64-column buffer and therefore streams in at runtime.
+        foreach (var (cx, cy) in new[] { (64, 0), (65, 0), (64, 1), (65, 1) })
+        {
+            data[cy * width + cx] = 2;
+        }
+
+        var dataJson = string.Join(",", data);
+        File.WriteAllText(Path.Combine(directory, "level.tmj"), $$"""
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": {{width}},
+          "height": {{height}},
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldHeight", "type": "int", "value": {{height}} }
+          ],
+          "tilesets": [
+            {
+              "firstgid": 1,
+              "name": "tiles",
+              "tilewidth": 8,
+              "tileheight": 8,
+              "tilecount": 3,
+              "columns": 3,
+              "image": "tiles.png",
+              "imagewidth": 24,
+              "imageheight": 8
+            }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "world", "width": {{width}}, "height": {{height}}, "data": [{{dataJson}}] }
+          ]
+        }
+        """);
+
+        const string source = """
+            void Main() {
+                Video.Init();
+                World.Load("level.tmj");
+            }
+            """;
+
+        var program = BuildProgram(source);
+
+        Assert.NotNull(program.WorldColumnAttributes);
+        var cloudBlockByte = program.WorldColumnAttributes!.Rows[0].BytesByColumnBlock[64 / 4];
+        var cloudSlot = cloudBlockByte & 0x03; // top-left quadrant covers the streamed cloud tiles
+        var cloudSlotPalette = program.Palette.Skip(cloudSlot * 4).Take(4).ToArray();
+
+        Assert.Contains(NesPalette.NearestIndex(0xFF, 0xFF, 0xFF), cloudSlotPalette);
+    }
+
+    [Fact]
     public void World_load_seeds_background_rows_above_the_streamed_world_band()
     {
         WriteTwoToneTilesheetPng(Path.Combine(directory, "tiles.png"));
@@ -845,6 +926,56 @@ public sealed class NesWorldLoadTests : IDisposable
                     if (x is 16 or 31 || y == 15)
                     {
                         color = (0x00, 0x00, 0x00);
+                    }
+                }
+
+                var offset = (y * width + x) * 4;
+                rgba[offset] = color.R;
+                rgba[offset + 1] = color.G;
+                rgba[offset + 2] = color.B;
+                rgba[offset + 3] = 0xFF;
+            }
+        }
+
+        File.WriteAllBytes(path, EncodeRgbaPng(width, height, rgba));
+    }
+
+    private static void WriteSkyCloudGroundTilesheetPng(string path)
+    {
+        // Three 8x8 tiles: sky (universal cyan), cloud (white + blue detail on cyan), ground (orange +
+        // black). Sky dominates so cyan becomes the universal color; ground and cloud derive two distinct
+        // background palettes.
+        const int width = 24;
+        const int height = 8;
+        var rgba = new byte[width * height * 4];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                (byte R, byte G, byte B) color;
+                if (x < 8)
+                {
+                    color = (0x56, 0xED, 0xFF); // sky
+                }
+                else if (x < 16)
+                {
+                    color = (0x56, 0xED, 0xFF);
+                    if (x is >= 10 and < 14 && y is >= 2 and < 6)
+                    {
+                        color = (0xFF, 0xFF, 0xFF); // cloud body
+                    }
+
+                    if (x == 12 && y == 4)
+                    {
+                        color = (0x00, 0x00, 0xFF); // cloud detail
+                    }
+                }
+                else
+                {
+                    color = (0xF0, 0x80, 0x00); // ground
+                    if (y is 0 or 7 || x is 16 or 23)
+                    {
+                        color = (0x00, 0x00, 0x00); // ground edges
                     }
                 }
 

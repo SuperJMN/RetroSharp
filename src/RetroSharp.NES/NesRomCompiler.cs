@@ -241,6 +241,14 @@ public static class NesRomCompiler
     }
 }
 
+internal sealed record NesColumnAttributeStream(IReadOnlyList<NesColumnAttributeRow> Rows);
+
+// One visible attribute row for runtime column streaming. LowOffset/HighOffset are the compile-time
+// offsets added to the runtime-computed base PPU attribute address to reach this row (LowOffset =
+// intra-nametable attribute-row offset, HighOffset = nametable-Y offset). BytesByColumnBlock is indexed
+// by the streamed source column divided by four (one entry per 4-column attribute block).
+internal sealed record NesColumnAttributeRow(int LowOffset, int HighOffset, byte[] BytesByColumnBlock);
+
 internal sealed class NesVideoProgram
 {
     private readonly record struct SpritePaletteUse(string SpriteId, int RequestedBaseSlot);
@@ -289,6 +297,8 @@ internal sealed class NesVideoProgram
     public WorldMap2D? WorldMap { get; private set; }
 
     public WorldTileGrid? WorldTileGrid { get; private set; }
+
+    public NesColumnAttributeStream? WorldColumnAttributes { get; private set; }
 
     public IReadOnlyList<NesCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
@@ -841,6 +851,8 @@ internal sealed class NesVideoProgram
 
         ApplyWorldAttributes(world);
 
+        WorldColumnAttributes = BuildColumnAttributes(world);
+
         WorldMap = new WorldMap2D(world.Width, world.Height, world.WorldFlags);
         WorldTileGrid = new WorldTileGrid(world.Width, world.Height, world.WorldTileIds);
     }
@@ -931,6 +943,21 @@ internal sealed class NesVideoProgram
 
     private static int MostCommonPaletteSlot(NesTiledWorld world, int baseX, int baseY, bool useFourScreenNametables)
     {
+        return MostCommonPaletteSlot(baseX, baseY, (x, y) => PaletteCellAtScreenTile(world, x, y, useFourScreenNametables));
+    }
+
+    // Source-space counterpart used to precompute the attribute bytes for background columns that are
+    // streamed into the buffer at runtime. It reuses the exact same quadrant majority and tie-break as
+    // the initial upload so a streamed column ends up with the same palette slot the initial 64-column
+    // upload would have produced, avoiding a palette seam between the initial surface and streamed
+    // content.
+    private static int MostCommonSourcePaletteSlot(NesTiledWorld world, int baseX, int baseY, bool useFourScreenNametables)
+    {
+        return MostCommonPaletteSlot(baseX, baseY, (x, y) => PaletteCellAtSourceTile(world, x, y, useFourScreenNametables));
+    }
+
+    private static int MostCommonPaletteSlot(int baseX, int baseY, Func<int, int, PaletteCell> cellAt)
+    {
         Span<int> counts = stackalloc int[4];
         Span<int> worldCounts = stackalloc int[4];
         Span<int> upperWorldCounts = stackalloc int[4];
@@ -939,7 +966,7 @@ internal sealed class NesVideoProgram
         {
             for (var x = baseX; x < baseX + 2; x++)
             {
-                var cell = PaletteCellAtScreenTile(world, x, y, useFourScreenNametables);
+                var cell = cellAt(x, y);
                 var slot = cell.Slot;
                 counts[slot]++;
                 if (cell.IsWorldLayer)
@@ -1027,6 +1054,85 @@ internal sealed class NesVideoProgram
         }
 
         return new PaletteCell(world.BackgroundPaletteSlots[backgroundY * world.BackgroundWidth + x % world.BackgroundWidth], false);
+    }
+
+    // Reads a background palette cell straight from the imported world grid in source coordinates
+    // (source column + source row), mirroring the four-screen row wrap of PaletteCellAtScreenTile so the
+    // precomputed streamed-column attributes match the initial upload exactly.
+    private static PaletteCell PaletteCellAtSourceTile(NesTiledWorld world, int sourceX, int sourceRow, bool useFourScreenNametables)
+    {
+        if (world.Width <= 0 || sourceX < 0 || sourceX >= world.Width || sourceRow < 0)
+        {
+            return new PaletteCell(0, false);
+        }
+
+        var withinBand = useFourScreenNametables ? sourceRow < 60 - world.StreamY : sourceRow < world.Height;
+        if (!withinBand)
+        {
+            return new PaletteCell(0, false);
+        }
+
+        var sourceY = world.Height > sourceRow ? sourceRow : sourceRow % world.Height;
+        var index = sourceY * world.Width + sourceX;
+        return new PaletteCell(world.WorldPaletteSlots[index], world.WorldSourceTiles[index] != 0);
+    }
+
+    private static byte SourceAttributeByte(NesTiledWorld world, int columnBlockX, int rowTop, bool useFourScreenNametables)
+    {
+        var attributeByte = 0;
+        for (var quadrantY = 0; quadrantY < 2; quadrantY++)
+        {
+            for (var quadrantX = 0; quadrantX < 2; quadrantX++)
+            {
+                var slot = MostCommonSourcePaletteSlot(
+                    world,
+                    columnBlockX + quadrantX * 2,
+                    rowTop + quadrantY * 2,
+                    useFourScreenNametables);
+                var shift = (quadrantY * 2 + quadrantX) * 2;
+                attributeByte |= (slot & 0x03) << shift;
+            }
+        }
+
+        return (byte)attributeByte;
+    }
+
+    // Precomputes the attribute bytes for every source column of a wide (streamed) world so runtime
+    // horizontal column streaming can refresh the NES attribute table instead of leaving stale palette
+    // slots behind newly streamed tiles. One byte table per visible attribute row, indexed by source
+    // column and filled per 4-column attribute block; the runtime picks the byte for the streamed source
+    // column and writes it at the attribute address derived from the target buffer column.
+    private NesColumnAttributeStream? BuildColumnAttributes(NesTiledWorld world)
+    {
+        if (world.Width <= 64)
+        {
+            return null;
+        }
+
+        var streamY = world.StreamY;
+        var bandEnd = streamY + world.Height;
+        var blockCount = (world.Width + 3) / 4;
+        var rows = new List<NesColumnAttributeRow>();
+        for (var blockTop = streamY - streamY % 4; blockTop < bandEnd; blockTop += 4)
+        {
+            if (blockTop + 4 <= streamY)
+            {
+                continue;
+            }
+
+            var lowOffset = (blockTop % 30) / 4 * 8;
+            var highOffset = blockTop / 30 * 0x08;
+            var sourceRowTop = blockTop - streamY;
+            var bytes = new byte[blockCount];
+            for (var block = 0; block < blockCount; block++)
+            {
+                bytes[block] = SourceAttributeByte(world, block * 4, sourceRowTop, UseFourScreenNametables);
+            }
+
+            rows.Add(new NesColumnAttributeRow(lowOffset, highOffset, bytes));
+        }
+
+        return rows.Count == 0 ? null : new NesColumnAttributeStream(rows);
     }
 
     private readonly record struct PaletteCell(int Slot, bool IsWorldLayer);
