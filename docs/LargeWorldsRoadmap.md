@@ -1,6 +1,6 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **planned; Wave 0 and Wave 1 are ready for issue execution.**
+Status: **active; Wave 0 and Wave 1 are seeded for issue execution.**
 Last updated: 2026-07-10.
 
 This roadmap is the executable plan for levels that exceed the current
@@ -416,10 +416,24 @@ debug workflow.
 
 ## 10. Remote tracking
 
-- Planned milestone: `Large Worlds v1 — full stage1`.
-- Planned parent issue: `EPIC: scalable large worlds and banked map streaming for GB/NES`.
-- Seed initially: Wave 0 and Wave 1 only, as native GitHub subissues.
-- Related open issues: #244 (wide-map spawn activation) and #247 (broader NES
-  target gaps, including mapper-backed levels).
-- GitHub URLs are added here after the roadmap is merged and the remote tracking
-  objects exist.
+- Milestone: [Large Worlds v1 — full stage1](https://github.com/SuperJMN/RetroSharp/milestone/11).
+- Parent/integrator issue: [#275 — EPIC: Large Worlds v1 — scalable banked map streaming for GB/NES](https://github.com/SuperJMN/RetroSharp/issues/275).
+- Wave 0 native subissues:
+  - [#276 — LW-0.1: freeze full stage1 acceptance baseline and budget report](https://github.com/SuperJMN/RetroSharp/issues/276)
+  - [#277 — LW-0.2: decide WorldPack metatile, chunk, compression, and staging format](https://github.com/SuperJMN/RetroSharp/issues/277)
+  - [#279 — LW-0.3: select the NES Large Worlds v1 cartridge profile](https://github.com/SuperJMN/RetroSharp/issues/279)
+  - [#278 — LW-0.4: define 16-bit world-coordinate and collision-hit contract](https://github.com/SuperJMN/RetroSharp/issues/278)
+- Wave 1 native subissues:
+  - [#282 — LW-1.1: implement 16-bit world dimensions and camera-position lowering](https://github.com/SuperJMN/RetroSharp/issues/282)
+  - [#280 — LW-1.2: implement the widened collision-hit contract](https://github.com/SuperJMN/RetroSharp/issues/280)
+  - [#281 — LW-1.3: add the target-neutral WorldPack model](https://github.com/SuperJMN/RetroSharp/issues/281)
+  - [#284 — LW-1.4: compile Tiled worlds into deterministic WorldPack chunks](https://github.com/SuperJMN/RetroSharp/issues/284)
+  - [#283 — LW-1.5: add deterministic world and cartridge budget diagnostics](https://github.com/SuperJMN/RetroSharp/issues/283)
+- Related open issues: [#244](https://github.com/SuperJMN/RetroSharp/issues/244)
+  (wide-map spawn activation) and
+  [#247](https://github.com/SuperJMN/RetroSharp/issues/247) (broader NES target
+  gaps, including mapper-backed levels).
+
+Wave 2 onward is intentionally not seeded. The parent issue remains the
+integrator surface; implementation agents receive one child issue, not the
+parent or an open-ended request to continue the epic.
