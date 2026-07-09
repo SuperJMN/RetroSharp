@@ -1,0 +1,9 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
+# Large-world roadmap work is architecture-heavy and crosses the shared SDK,
+# Game Boy banking, NES cartridge layout, and runtime validation. Keep the repo
+# default on the strongest available agentic coding model and reasoning tier;
+# individual mechanical tasks may still override this from the CLI.
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"
+plan_mode_reasoning_effort = "xhigh"

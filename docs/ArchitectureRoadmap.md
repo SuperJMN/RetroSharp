@@ -1,7 +1,7 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-07-01.
+Last updated: 2026-07-10.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
@@ -21,6 +21,8 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 - #122 adds a runner-shaped cross-target validation sample, or a precise NES capability diagnostic when the runner-shaped slice is not portable yet.
 
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
+
+The next architecture frontier is Iteration 15: scalable large-world assets and banked streaming. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. `docs/LargeWorldsRoadmap.md` owns the measured execution plan, decision gates, AI task contract, and Wave 0/1 issue backlog. Game Boy MBC1 foundations and NES four-screen streaming remain target building blocks, not substitutes for the shared packed-world contract.
 
 ## Goals
 
@@ -1639,19 +1641,59 @@ Acceptance criteria:
 - Platformer use cases covered by the first slice include patrolling ground enemies, flying enemies, stationary shooters, hazards, map collision, player contact, animation, and activation/deactivation.
 - The framework exposes target capability errors when a behavior or pool budget cannot fit the selected target.
 
+### Iteration 15: Scalable Large-World Assets and Banked Streaming
+
+Status: planned. Wave 0 (measurement and ADRs) and Wave 1 (shared coordinate,
+collision, packed-world, Tiled, and budget foundations) are ready for execution.
+Target production readers remain intentionally unseeded until those contracts
+merge.
+
+Purpose: allow `World.Load(...)` content to grow beyond the current one-byte
+hardware-tile-column and monolithic ROM-data limits without exposing banking or mapper
+details to gameplay source. The first end-to-end acceptance target is the full
+156x20-cell runner `stage1` map on both Game Boy and NES with complete music,
+collision beyond world Y 255, and bidirectional movement across hardware-tile
+column 255.
+
+The detailed task graph, locked invariants, decision gates, dependency waves,
+stop conditions, and validation matrix live in
+`docs/LargeWorldsRoadmap.md`. Keep implementation work in its `LW-x.y` child
+issues; this architecture section records only the durable boundary:
+
+- the language remains target-neutral;
+- `World.Load(...)` remains the authoring boundary;
+- logical coordinates may be fixed 16-bit values while hardware scroll
+  registers remain target-owned bytes;
+- portable world semantics stay separate from target-owned packed tile data;
+- large maps remain in ROM behind fixed-size runtime staging buffers;
+- Game Boy MBC1 and the selected NES mapper are linker/lowering decisions, not
+  public SDK parameters;
+- small ROM-only Game Boy and mapper-0 NES outputs remain stable when they fit;
+- no heap, GC, RTTI, virtual dispatch, delegates, closures, or unbounded runtime
+  collections are introduced.
+
+Acceptance criteria:
+
+- Wave 0 produces measured, accepted decisions for packing, addressing,
+  collision, staging, and the first NES mapper profile.
+- Wave 1 can pack the complete `stage1` source deterministically for both
+  targets and report its exact budgets without switching production readers.
+- Later GB/NES target waves are decomposed only after their shared dependencies
+  are merged and measured.
+- The final epic acceptance preserves the complete authored map, BGM, collision,
+  and target capability diagnostics without sample-specific degradation.
+
 ## First Recommended Implementation Slice
 
-Start with Iterations 1 through 3:
-
-1. Add capability descriptors.
-2. Add the shared SDK operation model.
-3. Unify map visual/logical data.
-
-This gives the project a durable architecture before adding vertical scrolling, NES runtime support, or HUD. It also reduces the highest current maintenance risk: the runner's visual map and collision map are represented separately.
+Start with Large Worlds Wave 0 and Wave 1 in
+`docs/LargeWorldsRoadmap.md`. Land `LW-0.1` first, then resolve the independent
+packing, NES cartridge, and coordinate/collision ADRs before implementing the
+shared `WorldPack` and wider contracts. Do not begin target production banking
+or mapper work until those shared decisions are merged.
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It now uses a 2-axis dead-zone camera and variable projected screen-position collision over a tall 24x48 Tiled map that expands to a 48x96 tile world. It also declares per-target VGM/VGZ background music through the portable audio calls, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Larger diagonal free scroll is proven separately by `samples/nes-free-scroll/freescroll.rs` and the Tiled `World.Load(...)` path by `samples/tiled-free-scroll/free-scroll.rs` so unsupported camera modes are not hidden behind sample-specific degradation.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It currently loads the derived horizontal `stage1.playable.tmj` map (88x15 source cells, expanding to 176x30 hardware cells) while preserving the complete 156x20-cell `stage1.tmj` design as the Large Worlds acceptance target. It declares per-target VGM/VGZ background music through the portable audio calls, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Vertical and diagonal scroll remain proven separately by the focused Tiled/free-scroll samples so unsupported camera modes are not hidden behind runner-specific degradation.
 
 The final cross-target sample should prove:
 

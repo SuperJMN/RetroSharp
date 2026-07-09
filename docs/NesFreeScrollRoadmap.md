@@ -345,7 +345,7 @@ requirement.
 - Steps:
   - [x] Golden-byte tests for the four-screen header, scroll-register writes,
     explicit row streaming, runtime row streaming, attribute refresh, and the
-    shared runner using its playable 2-axis dead-zone camera path.
+    shared runner using its current horizontal `stage1.playable` path.
   - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
     and `read_ppu_state` assert both axes move and the four nametables stay
     distinct.
@@ -377,8 +377,8 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
   source-authored worlds stream columns/rows with the staggered one-edge-per-
   VBlank policy; NF-10 remains only for mapper-backed scale, banking, and HUD IRQs.
 - Horizontal-only NES programs stay on the horizontal camera path. The shared
-  runner uses the same four-screen path as other vertical-camera samples because
-  its Tiled world expands to 48x96 tiles.
+  runner currently uses that path over `stage1.playable`; the focused vertical
+  and diagonal samples continue to own four-screen acceptance coverage.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a
   clear diagnostic.
