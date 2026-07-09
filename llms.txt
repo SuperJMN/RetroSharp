@@ -11,6 +11,7 @@
 - [README.md](README.md): project overview and examples.
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
+- [docs/LargeWorldsRoadmap.md](docs/LargeWorldsRoadmap.md): executable full-stage1 plan for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
 - [docs/ActorFrameworkRoadmap.md](docs/ActorFrameworkRoadmap.md): actor framework roadmap and AF-5 follow-ups for scalable platformer actors.
 - [docs/CameraVerticalScrollRoadmap.md](docs/CameraVerticalScrollRoadmap.md): AR-5 vertical scroll execution plan (GB proven by sample/tests, NES PPU deep-dive and gate).

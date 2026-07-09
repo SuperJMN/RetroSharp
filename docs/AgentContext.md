@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-05.
+Last updated: 2026-07-10.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -30,6 +30,10 @@ This document preserves project knowledge that previously lived only in agent me
   for wider worlds, and staggered vertical row plus zero-palette attribute streaming
   for source-authored worlds taller than the buffer. NF-10 mapper-backed scale and
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
+- The Large Worlds epic now has a dedicated execution source in
+  `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
+  acceptance target and keeps Wave 0/1 separate from later Game Boy MBC1 and NES
+  mapper production readers. Do not dispatch the parent epic as one task.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
@@ -62,6 +66,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
 | How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |
 | How do we implement free 2-axis scroll on NES? | `docs/NesFreeScrollRoadmap.md` |
+| How do we scale Tiled worlds beyond one-byte/monolithic ROM limits? | `docs/LargeWorldsRoadmap.md` |
 | What should a generic AI agent read first? | `AGENTS.md` and `llms.txt` |
 
 ## Decisions To Preserve
@@ -274,9 +279,10 @@ Suggested next steps for the next agent, in order:
    declared static methods plus receiver-method lowering.
 2. If continuing beyond #106/#200, open new focused issues for package dependencies,
    library asset roots, or backend plugin boundaries before migrating more SDK calls.
-3. Genuinely-open roadmap frontiers (tracked in docs, not issues): HUD/AR-10 (Game Boy window
-   HUD is achievable now and capability-gated; NES HUD needs NF-10 mapper IRQ), NF-10
-   (mapper-backed large NES levels), and Game Boy banking (`docs/GameBoyBankingRoadmap.md`).
+3. The active cross-target scale frontier is `docs/LargeWorldsRoadmap.md`: first
+   measure/decide packed worlds, coordinates/collision, and the NES cartridge
+   profile; then implement target production readers. HUD/AR-10, broader #247
+   NES gaps, and #244 spawn-scan cost remain related but independently scoped.
 
 ## Game Boy Runner Lessons
 
@@ -295,7 +301,12 @@ Suggested next steps for the next agent, in order:
 
 ## Tiled Map Pipeline
 
-The runner's editable level lives at `samples/runner/assets/maps/runner.tmj` and uses `samples/runner/assets/maps/Super Mario Land 2.tsx`.
+The runner loads `samples/runner/assets/maps/stage1.playable.tmj`, derived from
+the complete editable `samples/runner/assets/maps/stage1.tmj` design and
+`stage1.tsx` tileset by `tools/runner/build_stage1_playable_map.py`. The complete
+156x20 source map is the Large Worlds acceptance payload; the current 88x15
+derived map remains the stable runtime input until a target acceptance task
+switches it deliberately.
 
 Pipeline shape (two phases, after #105 partial extraction):
 
@@ -316,10 +327,11 @@ Pipeline shape (two phases, after #105 partial extraction):
   free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
-- The shared runner now uses a 2-axis dead-zone camera over a tall 24x48 Tiled map that expands to a
-  48x96 tile world. It keeps player collision keyed from the projected screen X and forces vertical
-  plus horizontal camera movement on both Game Boy and NES; do not silently degrade unsupported
-  camera axes in the collector.
+- The shared runner currently uses a horizontal camera over the 88x15 source
+  `stage1.playable.tmj` map, expanding to 176x30 hardware tiles. The complete
+  156x20 source `stage1` design expands to 312x40 hardware tiles and is retained
+  as the explicit Large Worlds acceptance target instead of being silently
+  trimmed by future target work.
 - Portable/target split (#105 collision resource done): `WorldMap2D` now stores only dimensions and
   per-tile `WorldTileFlags` (portable collision); already-lowered target background tile numbers live
   in a separate `WorldTileGrid` owned by each target. Per-pixel layer flattening stays per target
@@ -342,7 +354,9 @@ Important current behavior:
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.
 
-When `samples/runner/src/*.rs`, `runner.tmj`, the tileset, or GB/NES asset lowering changes, rebuild the tracked runner ROMs with `tools/gameboy/generate_sample_roms.py`.
+When `samples/runner/src/*.rs`, `stage1.playable.tmj`, `stage1.tmj`, the tileset,
+or GB/NES asset lowering changes, rebuild the tracked runner ROMs with
+`tools/gameboy/generate_sample_roms.py`.
 
 ## Known Traps
 

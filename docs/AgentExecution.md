@@ -1,7 +1,7 @@
 # Autonomous Agent Execution
 
 Status: operational guide.
-Last updated: 2026-06-13.
+Last updated: 2026-07-10.
 
 This document explains how to turn `docs/ArchitectureRoadmap.md` into GitHub milestones, labels, and issues that agents can execute with minimal coordination overhead.
 
@@ -9,14 +9,22 @@ For generic repo orientation, read `../AGENTS.md` first. For memory-derived cont
 
 ## Source Of Truth
 
-- Architecture and task backlog: `docs/ArchitectureRoadmap.md`
+- Architecture and broad iteration backlog: `docs/ArchitectureRoadmap.md`
+- Dedicated epic execution plans: linked `docs/*Roadmap.md` files such as
+  `docs/LargeWorldsRoadmap.md`
 - Agent entrypoint: `AGENTS.md`
 - Agent memory/context: `docs/AgentContext.md`
 - Issue seeding script: `tools/roadmap/seed_github_issues.py`
 - Issue template: `.github/ISSUE_TEMPLATE/agent-roadmap-task.yml`
 - Pull request template: `.github/PULL_REQUEST_TEMPLATE.md`
 
-Do not duplicate task bodies in another file. The seeding script parses the `AR-x.y` task cards from `docs/ArchitectureRoadmap.md`.
+Do not duplicate a detailed task body across two local roadmaps. The broad
+architecture roadmap owns layer boundaries and links to a dedicated roadmap
+when an epic needs a larger decision log or dependency graph. The dedicated
+roadmap then owns its detailed task ids and issue-ready contracts. The existing
+seeding script parses `AR-x.y` cards from `docs/ArchitectureRoadmap.md`; epics
+with another task prefix may be seeded manually until the script supports that
+prefix.
 
 ## Prerequisites
 
@@ -48,6 +56,25 @@ python3 tools/roadmap/seed_github_issues.py --apply
 ```
 
 The script is idempotent by title prefix. If an issue titled `AR-1.1: ...` already exists, it is skipped.
+
+### Dedicated epics and native subissues
+
+For a broad, dependency-heavy epic:
+
+1. Land the dedicated roadmap before creating remote issues.
+2. Create one milestone and one parent tracking issue.
+3. Create only the first decision/foundation waves initially.
+4. Attach executable tasks as native GitHub subissues of the parent.
+5. Keep the parent issue for integrator state; never dispatch it as an
+   implementation task.
+6. Seed later target waves only after their shared contracts and ADRs merge.
+7. Add remote issue URLs back to the dedicated roadmap after creation.
+
+Every child issue remains self-contained enough for a fresh agent session, but
+links to its canonical roadmap section for architecture context. A child owns
+one observable result and normally one PR. If new work crosses a declared layer
+or target boundary, stop and return it to the integrator instead of expanding
+the child silently.
 
 ## Execution Roles
 

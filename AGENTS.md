@@ -12,11 +12,12 @@ Use this order when you need project context:
 2. `docs/AgentContext.md`: memory-derived context, known traps, and recent changes.
 3. `README.md`: project summary and basic examples.
 4. `docs/ArchitectureRoadmap.md`: language vs portable 2D SDK vs target-intrinsics boundary.
-5. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
-6. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
-7. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
-8. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
-9. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
+5. `docs/LargeWorldsRoadmap.md`: large-map, banking, mapper, chunking, and full-`stage1` execution plan when that epic is in scope.
+6. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
+7. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
+8. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
+9. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
+10. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
 
 `WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
 
@@ -86,7 +87,7 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 - NES and Game Boy both use per-target VGM/VGZ runner music variants via `assets/music/runner.vgz`; do not treat NES audio calls as no-ops.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
-- The runner now uses `World.Load(...)` over `samples/runner/assets/maps/runner.tmj` and the external `Super Mario Land 2.tsx` tileset.
+- The runner currently uses `World.Load(...)` over the derived `samples/runner/assets/maps/stage1.playable.tmj` and `stage1.tsx`. The complete `stage1.tmj` design is the Large Worlds acceptance payload; do not replace the playable input until the corresponding target task asks for it.
 - Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
 - Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
 - `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` with `Button.*` enum members, plus `Sprite.Width`. The direct `button_pressed` read, snake_case `button_*`/`sprite_width` calls, and bare lowercase button identifiers are not public source APIs.
