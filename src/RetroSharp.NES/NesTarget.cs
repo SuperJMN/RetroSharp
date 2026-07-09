@@ -80,6 +80,7 @@ public static class NesTarget
                 ]),
             TargetIntrinsicDescriptor.SetCameraPosition("camera_set_position", arity: 2),
             TargetIntrinsicDescriptor.ApplyCamera("camera_apply", arity: 0),
+            TargetIntrinsicDescriptor.CameraVerticalScrollMax("camera_vertical_scroll_max", arity: 0),
         ]);
 
     public static TargetAudioCapabilities AudioCapabilities { get; } = new(

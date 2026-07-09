@@ -461,6 +461,7 @@ portable-2d and platformer/plugin bridge intrinsics already listed below.
 | `portable-2d` | `TargetIntrinsicOperation.InitializeCamera` | `camera_init` | GB, NES | Camera setup for package `Camera.Init(...)`; target-backed while position/apply semantics stay shared. |
 | `portable-2d` | `TargetIntrinsicOperation.SetCameraPosition` | `camera_set_position` | GB, NES | Feeds `Sdk2DOperation.SetCameraPosition`; keep capability and frame-budget logic in the shared operation. |
 | `portable-2d` | `TargetIntrinsicOperation.ApplyCamera` | `camera_apply` | GB, NES | Feeds `Sdk2DOperation.ApplyCamera`; keep as the camera commit boundary. |
+| `portable-2d` | `TargetIntrinsicOperation.CameraVerticalScrollMax` | `camera_vertical_scroll_max` | GB, NES | Value helper over `Camera.VerticalScrollMax()`; folds to the per-target `worldHeight - screenHeight` scroll bound so callers can clamp their own camera Y and keep sprite/background alignment. |
 | `portable-2d` | `TargetIntrinsicOperation.DrawLogicalSprite` | `sprite_draw` | GB, NES | Uses compile-time `AssetRef` and `ConstPaletteSlot`; feeds `Sdk2DOperation.DrawLogicalSprite`. |
 | `portable-2d` | `TargetIntrinsicOperation.ReadSpriteWidth` | `sprite_width` | GB, NES | Value helper over `Sprite.Width(...)`; keep out of `Sdk2DOperation` unless sprite geometry reads become a validated frame operation. |
 | `portable-2d` | `TargetIntrinsicOperation.ReadAnimationFrame` | `animation_frame` | GB, NES | Value helper over `Animation.Frame(...)`; keep as a source-package helper over target data tables. |

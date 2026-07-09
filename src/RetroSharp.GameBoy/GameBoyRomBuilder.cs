@@ -3451,6 +3451,10 @@ internal sealed class GameBoyRuntimeCompiler
             case TargetIntrinsicOperation.ApplyCamera:
                 EmitNextSdkOperation<Sdk2DOperation.ApplyCamera>(call.Name);
                 return true;
+            case TargetIntrinsicOperation.CameraVerticalScrollMax:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitCameraVerticalScrollMax();
+                return true;
             case TargetIntrinsicOperation.DrawLogicalSprite:
                 EmitNextSdkOperation<Sdk2DOperation.DrawLogicalSprite>(call.Name);
                 return true;
@@ -5750,6 +5754,10 @@ internal sealed class GameBoyRuntimeCompiler
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraScreenAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbHitTop>(call.Name));
                 return true;
+            case TargetIntrinsicOperation.CameraVerticalScrollMax:
+                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitCameraVerticalScrollMax();
+                return true;
             case TargetIntrinsicOperation.ButtonDown:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonDown(call);
@@ -6461,6 +6469,28 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitSpriteWidth(FunctionCall call)
     {
         builder.LoadAImmediate(SpriteWidth(call));
+    }
+
+    private void EmitCameraVerticalScrollMax()
+    {
+        builder.LoadAImmediate(CameraVerticalScrollMaxValue());
+    }
+
+    private byte CameraVerticalScrollMaxValue()
+    {
+        if (cameraStreamHeight is not { } streamHeight)
+        {
+            throw new InvalidOperationException("camera_vertical_scroll_max requires camera_init to run before it.");
+        }
+
+        var maxPixels = Math.Max(0, (streamHeight - VisibleScreenTileHeight) * 8);
+        if (maxPixels > 255)
+        {
+            throw new InvalidOperationException(
+                $"Camera.VerticalScrollMax() would be {maxPixels}px, which exceeds the 8-bit camera range; use a shorter world.");
+        }
+
+        return (byte)maxPixels;
     }
 
     private void EmitAnimationFrame(FunctionCall call)

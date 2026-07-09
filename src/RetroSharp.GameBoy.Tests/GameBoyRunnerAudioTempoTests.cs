@@ -77,7 +77,7 @@ public sealed class GameBoyRunnerAudioTempoTests
         var scxAfterSecondRun = cpu.IoRegister(0xFF43);
 
         Assert.Equal(0, idleScx);
-        Assert.Equal(0, idleScy);
+        Assert.Equal(96, idleScy);
         Assert.True(scxAfterFirstRun > idleScx, "Runner should start scrolling right after Mario leaves the horizontal dead-zone.");
         Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following right input through the next ramp jump.");
     }

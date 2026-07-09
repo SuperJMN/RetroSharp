@@ -12,9 +12,9 @@ static class Level
 static class Player
 {
     const i16 StartX = 72;
-    const i16 StartY = 97;
+    const i16 StartY = 193;
     const i16 FootOffset = 31;
-    const i16 FallResetY = 160;
+    const i16 FallResetY = 240;
 }
 
 static class DeadZone
@@ -23,11 +23,6 @@ static class DeadZone
     const i16 Right = 96;
     const i16 Top = 56;
     const i16 Bottom = 88;
-}
-
-static class CameraBounds
-{
-    const i16 MaxY = 0;
 }
 
 static class CollisionProbe

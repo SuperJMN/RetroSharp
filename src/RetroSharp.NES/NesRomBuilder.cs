@@ -2805,6 +2805,9 @@ internal sealed class NesRuntimeCompiler
             case TargetIntrinsicOperation.ApplyCamera:
                 EmitSdkOperation(new Sdk2DOperation.ApplyCamera(ScrollAxes.Horizontal));
                 return true;
+            case TargetIntrinsicOperation.CameraVerticalScrollMax:
+                EmitCameraVerticalScrollMax();
+                return true;
             case TargetIntrinsicOperation.DrawLogicalSprite:
                 EmitSdkOperation(Sdk2DOperationCollector.ReadDrawLogicalSprite(
                     TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics)));
@@ -4923,6 +4926,24 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAImmediate(SpriteWidth(call));
     }
 
+    private void EmitCameraVerticalScrollMax()
+    {
+        if (cameraConfig is not { } config)
+        {
+            throw new InvalidOperationException("camera_vertical_scroll_max requires camera_init to run before it.");
+        }
+
+        var screenHeight = NesTarget.Capabilities.ScreenTiles.Height;
+        var maxPixels = Math.Max(0, (config.StreamHeight - screenHeight) * 8);
+        if (maxPixels > 255)
+        {
+            throw new InvalidOperationException(
+                $"Camera.VerticalScrollMax() would be {maxPixels}px, which exceeds the 8-bit camera range; use a shorter world.");
+        }
+
+        builder.LoadAImmediate(maxPixels & 0xFF);
+    }
+
     private int SpriteWidth(FunctionCall call)
     {
         NesVideoProgram.RequireArity(call, 1);
@@ -5681,6 +5702,10 @@ internal sealed class NesRuntimeCompiler
                     TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
                     program.TargetIntrinsics));
+                return true;
+            case TargetIntrinsicOperation.CameraVerticalScrollMax:
+                NesVideoProgram.RequireArity(call, intrinsic.Arity);
+                EmitCameraVerticalScrollMax();
                 return true;
             case TargetIntrinsicOperation.ButtonDown:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
