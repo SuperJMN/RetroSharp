@@ -648,6 +648,13 @@ internal sealed class NesRuntimeCompiler
     // tile boundary (8 px), matching the per-frame streaming budget (one queued column/row drained by
     // camera apply), so one position update per frame can reach targets several pixels away.
     private const byte CameraWalkMaxStepsPerFrame = 8;
+    // Vertical safe-area compensation for the bottom NES overscan. A world whose streamed background
+    // fills the full visible height (StreamY + StreamHeight reaches the 30-row screen) draws its bottom
+    // tile row against the very bottom scanlines, which real hardware and most emulators crop as
+    // overscan. Rendering that scene shifted up by one tile row moves the bottom-most content into the
+    // safe area; the exposed bottom strip wraps to the sky row through vertical mirroring, and sprites
+    // are offset by the same amount so they stay aligned with the background.
+    private const int BottomOverscanInsetPixels = 8;
     private const ushort MusicLoopPointerLowAddress = 0x0310;
     private const ushort MusicLoopPointerHighAddress = 0x0311;
     // Non-zero while a sound effect is playing. The music engine reads it to suppress its own pulse 1
@@ -3916,9 +3923,20 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(0x2000);
         builder.LoadAZeroPage(CameraXAddress);
         builder.StoreAAbsolute(0x2005);
-        builder.LoadAImmediate(0);
+        builder.LoadAImmediate(BottomOverscanInset());
         builder.StoreAAbsolute(0x2005);
     }
+
+    // One tile row of vertical scroll when a screen-tall world's streamed background reaches the bottom
+    // visible row, so its bottom tile row would otherwise be lost to bottom overscan; zero otherwise.
+    // Scoped to worlds that do not scroll vertically (map fits the screen height) so scrolling maps keep
+    // their framing. Sprites apply the same offset so they stay aligned with the shifted background.
+    private int BottomOverscanInset()
+        => cameraConfig is { } config
+           && config.MapHeight <= NesTarget.Capabilities.ScreenTiles.Height
+           && config.StreamY + config.StreamHeight >= NesTarget.Capabilities.ScreenTiles.Height
+            ? BottomOverscanInsetPixels
+            : 0;
 
     private void EmitRestoreFourScreenCameraScroll()
     {
@@ -3971,6 +3989,13 @@ internal sealed class NesRuntimeCompiler
         builder.AndImmediate(0x07);
         builder.ClearCarry();
         builder.AddZeroPage(ExpressionScratchAddress);
+        var fourScreenInset = BottomOverscanInset();
+        if (fourScreenInset > 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(fourScreenInset);
+        }
+
         builder.StoreAAbsolute(0x2005);
     }
 
@@ -5075,7 +5100,7 @@ internal sealed class NesRuntimeCompiler
     private void EmitSpriteDrawY(SdkByteExpression yExpression, int offset, ushort oamAddress)
     {
         EmitSdkByteExpressionToA(yExpression);
-        EmitAddSignedImmediate(offset - 1);
+        EmitAddSignedImmediate(offset - 1 - BottomOverscanInset());
         builder.StoreAAbsolute(oamAddress);
     }
 
