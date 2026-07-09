@@ -77,71 +77,9 @@ public sealed class GameBoyRunnerAudioTempoTests
         var scxAfterSecondRun = cpu.IoRegister(0xFF43);
 
         Assert.Equal(0, idleScx);
-        Assert.True(idleScy > 0, "Runner should use the vertical dead-zone camera path even before horizontal input.");
+        Assert.Equal(0, idleScy);
         Assert.True(scxAfterFirstRun > idleScx, "Runner should start scrolling right after Mario leaves the horizontal dead-zone.");
         Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following right input through the next ramp jump.");
-    }
-
-    [Fact]
-    public void Runner_free_scroll_camera_follows_platform_climb_in_two_axes()
-    {
-        var runnerDirectory = LocateRunnerDirectory();
-        var source = RunnerSample.CompiledSource();
-        var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
-
-        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        var frame = 0;
-
-        Run(cpu, ref frame, 130);
-        var idle = Sample(cpu);
-
-        Run(cpu, ref frame, 18, "right", "b");
-        Run(cpu, ref frame, 22, "right", "b", "a");
-        Run(cpu, ref frame, 15, "right", "b");
-        var firstPlatform = Sample(cpu);
-
-        Run(cpu, ref frame, 22, "right", "b", "a");
-        Run(cpu, ref frame, 15, "right", "b");
-        var secondPlatform = Sample(cpu);
-
-        Run(cpu, ref frame, 22, "right", "b", "a");
-        Run(cpu, ref frame, 11, "right", "b");
-        var thirdPlatform = Sample(cpu);
-
-        Assert.True(idle.WorldY >= 190, $"Runner should settle on the lower floor before climbing; observed worldY={idle.WorldY}.");
-
-        Assert.True(firstPlatform.Scx > idle.Scx, $"Expected horizontal scroll on first climb; idle={idle.Scx}, first={firstPlatform.Scx}.");
-        Assert.True(firstPlatform.Scy < idle.Scy, $"Expected upward vertical scroll on first climb; idle={idle.Scy}, first={firstPlatform.Scy}.");
-        Assert.True(firstPlatform.WorldY <= 165, $"Expected Mario on the first elevated platform; observed worldY={firstPlatform.WorldY}.");
-
-        Assert.True(secondPlatform.Scx > firstPlatform.Scx, $"Expected horizontal scroll to continue on second climb; first={firstPlatform.Scx}, second={secondPlatform.Scx}.");
-        Assert.True(secondPlatform.Scy < firstPlatform.Scy, $"Expected camera to keep following upward on second climb; first={firstPlatform.Scy}, second={secondPlatform.Scy}.");
-        Assert.True(secondPlatform.WorldY <= 132, $"Expected Mario on the second elevated platform; observed worldY={secondPlatform.WorldY}.");
-
-        Assert.True(thirdPlatform.Scx > secondPlatform.Scx, $"Expected horizontal scroll to continue on third climb; second={secondPlatform.Scx}, third={thirdPlatform.Scx}.");
-        Assert.True(thirdPlatform.Scy < secondPlatform.Scy, $"Expected camera to keep following upward on third climb; second={secondPlatform.Scy}, third={thirdPlatform.Scy}.");
-        Assert.True(thirdPlatform.WorldY <= 100, $"Expected Mario on the third elevated platform; observed worldY={thirdPlatform.WorldY}.");
-
-        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
-        {
-            cpu.Held.Clear();
-            foreach (var button in held)
-            {
-                cpu.Held.Add(button);
-            }
-
-            frame += frames;
-            cpu.RunFrames(frame);
-        }
-
-        static (int Scx, int Scy, int WorldX, int WorldY) Sample(GameBoyTestCpu cpu)
-        {
-            var scx = cpu.IoRegister(0xFF43);
-            var scy = cpu.IoRegister(0xFF42);
-            var worldX = scx + cpu.Oam(0xFE01) - 8;
-            var worldY = scy + cpu.Oam(0xFE00) - 16;
-            return (scx, scy, worldX, worldY);
-        }
     }
 
     [Fact]

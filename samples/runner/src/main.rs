@@ -10,8 +10,6 @@ void SetupVideo()
     Palette.Sprite(0, 0, 0, 1, 3);
     Sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
     Animation.Clip(run, 1, 48, 48, 48);
-    Sprite.Asset(goomba, "assets/goomba.png", 16, 16);
-    Animation.Clip(goomba_walk, 0, 16, 16);
 }
 
 void SetupAudio()
@@ -24,7 +22,7 @@ void SetupAudio()
 
 void LoadWorld()
 {
-    World.Load("assets/maps/runner.tmj");
+    World.Load("assets/maps/stage1.playable.tmj");
 }
 
 void Main()
@@ -37,30 +35,17 @@ void Main()
     PlayerState player;
     CameraState view;
     FrameState frame;
-    u8 goombaTick = 0;
 
     view.ResetMotion();
     player.Reset(view);
-
-    Actors.Pool(goombas, 1);
-    Enemies.Def(Goomba, sprite: goomba, behavior: Patrol, animation: goomba_walk, speed: 1, cooldown: 96, hitboxWidth: 16, hitboxHeight: 16);
 
     while (true)
     {
         // Present the frame simulated last tick, then service audio and latch input.
         PresentFrame(player, view);
         Camera.Apply();
-        goombas.Draw();
         Audio.Update();
         Input.Poll();
-
-        // Enemies step at half the player's tick rate.
-        Actors.SpawnLayer(goombas, "assets/maps/runner.tmj", "actors");
-        goombaTick ^= 1;
-        if (goombaTick == 0)
-        {
-            goombas.Update();
-        }
 
         SimulatePlayer(player, view, frame);
     }
