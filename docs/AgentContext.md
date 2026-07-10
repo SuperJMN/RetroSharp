@@ -40,8 +40,14 @@ This document preserves project knowledge that previously lived only in agent me
   relative offsets, collision profiles and decoded IDs stay portable, target
   expansion records remain opaque bytes, and tooling can explicitly
   materialize the unchanged `WorldMap2D`/`WorldTileGrid` compatibility types.
-  Packing, codecs, cartridge placement, and target runtime readers remain later
-  Large Worlds tasks.
+  That milestone deliberately stopped before packing/codecs; cartridge
+  placement and target runtime readers remain later Large Worlds tasks.
+- LW-1.4 adds the production Tiled-to-pack planning and canonical raw/element-RLE
+  serializer used by tooling/tests. GB and NES inspection paths preserve their
+  historical pattern/CHR dedup order while mapping lexicographic authoring IDs
+  to target expansion records. Full normalized `stage1` is 2,550 bytes on GB
+  and 2,762 on NES with raw-importer parity; production readers, banking,
+  mappers, and the runner input remain unchanged.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`

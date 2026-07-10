@@ -343,6 +343,10 @@ tasks follow the dependency graph below.
 
 ### LW-1.4: Compile Tiled worlds into deterministic `WorldPack` chunks
 
+- Status: **complete; the shared Tiled plan assigns canonical visual/collision
+  IDs, Core writes canonical raw/element-RLE chunks, and GB/NES expose
+  inspectable target payloads without changing production world readers. Full
+  `stage1` serializes to 2,550 bytes on GB and 2,762 bytes on NES.**
 - Layer: shared Tiled asset pipeline with target-owned payload generation.
 - Dependencies: `LW-1.3`.
 - Candidate files: logical Tiled importer, GB/NES Tiled importers, world-pack

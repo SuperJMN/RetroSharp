@@ -6907,6 +6907,67 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void World_pack_matches_raw_game_boy_import_for_a_shifted_composed_slice()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        WriteTiledTilesheetPng(directory, "tiles.png", 8, 8, 1, 3);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tsx"),
+            """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <tileset version="1.10" tiledversion="1.12.2" name="Level" tilewidth="8" tileheight="8" tilecount="2" columns="2">
+             <image source="tiles.png" width="16" height="8"/>
+            </tileset>
+            """);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tmj"),
+            """
+            {
+              "type": "map",
+              "orientation": "orthogonal",
+              "infinite": false,
+              "width": 3,
+              "height": 3,
+              "tilewidth": 8,
+              "tileheight": 8,
+              "properties": [
+                { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+                { "name": "retrosharpWorldY", "type": "int", "value": 1 },
+                { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+              ],
+              "tilesets": [
+                { "firstgid": 1, "source": "level.tsx" }
+              ],
+              "layers": [
+                { "type": "tilelayer", "name": "background", "width": 3, "height": 3, "data": [2, 2, 2, 1, 1, 1, 1, 1, 1] },
+                { "type": "tilelayer", "name": "world", "width": 3, "height": 3, "data": [0, 0, 0, 2, 0, 2, 0, 2, 0] },
+                { "type": "tilelayer", "name": "collision", "width": 3, "height": 3, "data": [0, 0, 0, 1, 0, 2, 4, 0, 1] }
+              ]
+            }
+            """);
+        var path = Path.Combine(directory, "level.tmj");
+        var firstGeneratedTile = GameBoyVideoProgram.FirstGeneratedBackgroundTile;
+        var raw = GameBoyTiledMapImporter.Load(path, firstGeneratedTile);
+
+        var compiled = GameBoyTiledMapImporter.CompileWorldPack(path, firstGeneratedTile);
+        var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+        var decodedTiles = decoded.ToWorldTileGrid(cell => cell.Span[0]);
+
+        Assert.Equal(3, decoded.Descriptor.HardwareWidth);
+        Assert.Equal(2, decoded.Descriptor.HardwareHeight);
+        Assert.NotEqual(raw.WorldTileIds[0], raw.WorldTileIds[1]);
+        Assert.Equal(raw.GeneratedTileData, compiled.GeneratedTileData);
+        for (var index = 0; index < raw.WorldTileIds.Length; index++)
+        {
+            var x = index % raw.Width;
+            var y = index / raw.Width;
+            Assert.Equal(raw.WorldTileIds[index], decodedTiles.TileIdAt(x, y));
+            Assert.Equal(raw.WorldFlags[index], decoded.CollisionAt(x, y));
+        }
+    }
+
+    [Fact]
     public void World_load_uses_game_boy_tileset_png_variant_when_present()
     {
         var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
@@ -6971,8 +7032,14 @@ public class GameBoyRomCompilerTests
         var program = CompileVideoProgram(source, directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
         var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
+        var packed = GameBoyTiledMapImporter.CompileWorldPack(
+            Path.Combine(directory, "level.tmj"),
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var packedTileGrid = WorldPackSerializer.Deserialize(packed.SerializedBytes).ToWorldTileGrid(cell => cell.Span[0]);
 
         Assert.Equal(0, worldTileGrid.TileIdAt(0, 0));
+        Assert.Equal(0, packedTileGrid.TileIdAt(0, 0));
+        Assert.Empty(packed.GeneratedTileData);
         Assert.Equal(0, program.TileMap[0]);
     }
 

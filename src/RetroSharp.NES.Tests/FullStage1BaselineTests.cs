@@ -10,6 +10,78 @@ using Xunit.Abstractions;
 public sealed class FullStage1BaselineTests(ITestOutputHelper output)
 {
     [Fact]
+    public void External_tsj_background_world_map_round_trips_through_nes_world_pack()
+    {
+        var mapPath = RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj");
+        var firstGeneratedTile = NesVideoProgram.FirstSpriteTile;
+        var raw = NesTiledWorldImporter.Load(mapPath, firstGeneratedTile);
+        var compiled = NesTiledWorldImporter.CompileWorldPack(mapPath, firstGeneratedTile);
+        var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+        var decodedTiles = decoded.ToWorldTileGrid(cell => cell.Span[0]);
+
+        Assert.Equal(raw.GeneratedTileData, compiled.GeneratedTileData);
+        Assert.Equal(raw.BackgroundPalette, compiled.BackgroundPalette);
+        for (var index = 0; index < raw.WorldTileIds.Length; index++)
+        {
+            var x = index % raw.Width;
+            var y = index / raw.Width;
+            Assert.Equal(raw.WorldTileIds[index], decodedTiles.TileIdAt(x, y));
+            Assert.Equal(raw.WorldFlags[index], decoded.CollisionAt(x, y));
+
+            var coordinate = decoded.Locate(x, y);
+            var expansionCell = decoded.VisualIdAt(x, y);
+            var expansionOffset = (expansionCell * decoded.Descriptor.MetatileWidth * decoded.Descriptor.MetatileHeight + coordinate.SubcellIndex) * 2;
+            Assert.Equal(
+                (byte)(raw.WorldPaletteSlots[index] | (raw.WorldSourceTiles[index] << 2)),
+                decoded.TargetExpansions.Span[expansionOffset + 1]);
+        }
+    }
+
+    [Fact]
+    public void Full_stage1_nes_world_pack_matches_raw_chr_palette_provenance_and_is_byte_deterministic()
+    {
+        using var workspace = CreateNormalizedFullStage1();
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var firstGeneratedTile = NesVideoProgram.FirstSpriteTile + 95;
+        var raw = NesTiledWorldImporter.Load(mapPath, firstGeneratedTile);
+
+        var first = NesTiledWorldImporter.CompileWorldPack(mapPath, firstGeneratedTile);
+        var second = NesTiledWorldImporter.CompileWorldPack(mapPath, firstGeneratedTile);
+        var decoded = WorldPackSerializer.Deserialize(first.SerializedBytes);
+        var decodedTiles = decoded.ToWorldTileGrid(cell => cell.Span[0]);
+        var decodedCollision = decoded.ToWorldMap2D();
+
+        Assert.Equal(53, first.Pack.Descriptor.VisualMetatileCount);
+        Assert.Equal(2, first.Pack.Descriptor.CollisionProfileCount);
+        Assert.Equal(60, first.Pack.Chunks.Count);
+        Assert.Equal(2, first.Pack.Descriptor.TargetCellStride);
+        Assert.Equal(2_762, first.SerializedBytes.Length);
+        Assert.True(first.SerializedBytes.Length <= 7_920, $"NES WorldPack used {first.SerializedBytes.Length} bytes.");
+        Assert.Equal(first.SerializedBytes, second.SerializedBytes);
+        Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);
+        Assert.Equal(raw.BackgroundPalette, first.BackgroundPalette);
+        Assert.Equal(raw.GeneratedTileData, second.GeneratedTileData);
+        Assert.Equal(raw.BackgroundPalette, second.BackgroundPalette);
+
+        for (var index = 0; index < raw.WorldTileIds.Length; index++)
+        {
+            var x = index % raw.Width;
+            var y = index / raw.Width;
+            Assert.Equal(raw.WorldTileIds[index], decodedTiles.TileIdAt(x, y));
+            Assert.Equal(raw.WorldFlags[index], decodedCollision.FlagsAt(x, y));
+
+            var coordinate = decoded.Locate(x, y);
+            var visualId = decoded.VisualIdAt(x, y);
+            var expansionCell = visualId * 4 + coordinate.SubcellIndex;
+            var metadata = decoded.TargetExpansions.Span[expansionCell * 2 + 1];
+            Assert.Equal((byte)(raw.WorldPaletteSlots[index] | (raw.WorldSourceTiles[index] << 2)), metadata);
+            Assert.Equal(0, metadata & 0xF8);
+        }
+
+        output.WriteLine($"NES full stage1 WorldPack: {first.SerializedBytes.Length} bytes");
+    }
+
+    [Fact]
     public void Full_stage1_nes_baseline_is_frozen()
     {
         using var workspace = CreateNormalizedFullStage1();

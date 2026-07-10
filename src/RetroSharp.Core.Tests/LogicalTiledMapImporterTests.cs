@@ -128,6 +128,53 @@ public sealed class LogicalTiledMapImporterTests : IDisposable
     }
 
     [Fact]
+    public void Explicit_collision_layer_overrides_tileset_metadata_in_the_world_pack_plan()
+    {
+        var path = Path.Combine(directory, "collision-override.tmj");
+        File.WriteAllText(path, """
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 2,
+          "height": 1,
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 }
+          ],
+          "tilesets": [
+            {
+              "firstgid": 1,
+              "name": "inline",
+              "tilewidth": 8,
+              "tileheight": 8,
+              "tilecount": 1,
+              "columns": 1,
+              "tiles": [
+                { "id": 0, "objectgroup": { "objects": [ { "width": 8, "height": 8 } ] } }
+              ]
+            }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "world", "width": 2, "height": 1, "data": [1, 1] },
+            { "type": "tilelayer", "name": "collision", "width": 2, "height": 1, "data": [0, 2] }
+          ]
+        }
+        """);
+
+        var logical = LogicalTiledMapImporter.Load(path);
+        var plan = TiledWorldPackPlan.Create(logical);
+        var compiled = plan.Build(new byte[] { 0 }, targetCellStride: 1);
+
+        Assert.Equal(new[] { WorldTileFlags.Empty, WorldTileFlags.Hazard }, logical.WorldFlags);
+        Assert.Equal(2, plan.CollisionProfiles.Count);
+        Assert.Equal(new ushort[] { 0, 1 }, plan.CollisionProfileIds);
+        Assert.Equal(WorldTileFlags.Empty, compiled.Pack.CollisionAt(0, 0));
+        Assert.Equal(WorldTileFlags.Hazard, compiled.Pack.CollisionAt(1, 0));
+    }
+
+    [Fact]
     public void Load_rounds_fractional_actor_coordinates_to_the_nearest_pixel()
     {
         var path = Path.Combine(directory, "fractional-actors.tmj");
