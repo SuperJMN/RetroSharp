@@ -101,6 +101,42 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void Portable_world_pack_model_does_not_expose_target_storage_terms()
+    {
+        var root = RepositoryRoot();
+        var modelFiles = Directory
+            .EnumerateFiles(Path.Combine(root, "src/RetroSharp.Core/Sdk"), "WorldPack*.cs", SearchOption.TopDirectoryOnly)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.NotEmpty(modelFiles);
+
+        string[] forbiddenTerms =
+        [
+            "gameboy",
+            "game boy",
+            "nes",
+            "mbc",
+            "mapper",
+            "bank",
+            "cartridge",
+            "ppu",
+            "chr",
+            "prg",
+            "register",
+            "address",
+        ];
+        var violations = modelFiles
+            .SelectMany(file => File.ReadLines(file)
+                .Select((text, index) => (Text: text, Line: index + 1))
+                .SelectMany(line => forbiddenTerms
+                    .Where(term => line.Text.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    .Select(term => $"{Path.GetRelativePath(root, file)}:{line.Line} exposes forbidden term '{term}'.")))
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
     public void Language_sources_do_not_contain_portable_sdk_or_target_domain_terms()
     {
         var violations = SourceTermMatches(LanguageSourceRoots, ForbiddenLanguageTerms);

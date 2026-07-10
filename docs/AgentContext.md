@@ -35,6 +35,13 @@ This document preserves project knowledge that previously lived only in agent me
   acceptance target and keeps Wave 0/1 separate from later Game Boy MBC1 and NES
   mapper production readers. GitHub #275 is the parent/integrator issue with
   Wave 0/1 attached as native subissues; do not dispatch the parent as one task.
+- LW-1.3 adds the target-neutral `RetroSharp.Core.Sdk.WorldPack` model: the v1
+  header/directory and exact clipped coverage are validated with checked
+  relative offsets, collision profiles and decoded IDs stay portable, target
+  expansion records remain opaque bytes, and tooling can explicitly
+  materialize the unchanged `WorldMap2D`/`WorldTileGrid` compatibility types.
+  Packing, codecs, cartridge placement, and target runtime readers remain later
+  Large Worlds tasks.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
