@@ -321,6 +321,9 @@ tasks follow the dependency graph below.
 
 ### LW-1.3: Add the target-neutral `WorldPack` model
 
+- Status: **complete; Core now models and validates the accepted v1 descriptor,
+  directory, clipped chunk coverage, collision profiles, coordinates, and
+  opaque target-expansion bytes while retaining explicit legacy adapters.**
 - Layer: portable SDK asset model.
 - Dependencies: `LW-0.2`, `LW-0.4`.
 - Candidate files: Core SDK world/Tiled records, target import boundaries, Core

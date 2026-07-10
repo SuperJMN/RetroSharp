@@ -52,21 +52,23 @@ coordinate failure.
 | 2 | `collision-abi` | **Passes after LW-1.2.** The floor returns `30 01` and no hit returns `FF FF`. | **Passes after LW-1.2.** The same complete word result is returned through the NES ABI. |
 | 3 | `rom-capacity` | **Capacity probe passes, runtime acceptance does not.** Both the unchanged runner payload with redirected `World.Load` and the real 312x40 camera-dimension probe emit a 131,072-byte MBC1 ROM with full map, collision, BGM, and SFX. | **Blocked.** Even after removing audio only for decomposition, code plus full visual/collision data emits 41,851 bytes against 32,762 available PRG bytes. With full audio restored, the `$E980` DPCM block (1,153 bytes) cannot be placed after earlier data ending at `$134C4`. |
 | 4 | `tile-patterns` | **Passes.** 6 reserved + 82 background + 60 sprite tiles use 148 of 256 indexes. | **Passes.** 6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3,056 of 8,192 CHR bytes. |
-| 5 | `ram-staging` | **Blocked by missing contract, not measured RAM exhaustion.** Each 12,480-byte visual/flag blob fits one 16 KiB bank, but there is no fixed large-world chunk staging contract. | **Blocked by missing path.** Mapper 0 has no mapper-backed world reader or fixed large-world staging contract. |
+| 5 | `ram-staging` | **Contract accepted; production path still missing.** The `WorldPack` ADR fixes bounded chunk/edge staging, but no target runtime reader or staging implementation consumes it yet. | **Contract accepted; production path still missing.** The same bounded staging contract exists, but mapper 0 has no mapper-backed world reader or staging implementation. |
 | 6 | `vblank` | **Current edge work is bounded.** Visible column and row commits fit the 21-tile write budget; future lookup/decompression still has to happen outside VBlank. | **Current phase work is bounded.** Limits are 32 tile writes and 9 attribute writes; row streaming remains split into bounded phases. |
 
 The 131,072-byte Game Boy result is intentionally called a *capacity probe*.
 One probe keeps `Level.Width = 176` and the current runner runtime constants so
 the builder can expose cartridge usage independently. A second probe uses the
 real 312x40 dimensions and proves the LW-1.1 address-width path. Neither is
-evidence that the complete level is playable today: collision widening,
-packing, and a production runtime reader remain separate work.
+evidence that the complete level is playable today: collision widening is now
+complete through LW-1.2, while packing and a production runtime reader remain
+separate work.
 
 The focused NES LW-1.1 runtime probe keeps the complete 312x40 map, target BGM
 and SFX, a 312-cell camera width, and a word camera request of 1,888 pixels. It
-intentionally excludes gameplay collision queries owned by LW-1.2. The probe
-passes logical address lowering and reaches the cartridge-capacity blocker:
-the `$E980` DPCM block cannot be placed after music data ending at `$10A06`.
+historically excluded gameplay collision queries owned by LW-1.2; the later
+LW-1.2 focused probes cover those queries separately. The LW-1.1 probe passes
+logical address lowering and reaches the cartridge-capacity blocker: the
+`$E980` DPCM block cannot be placed after music data ending at `$10A06`.
 
 ## Target resource facts
 
@@ -89,7 +91,8 @@ LW-0.1 reads but must not modify:
 - the target BGM, SFX, and sprite source assets under `samples/runner/assets`;
 - `samples/runner/bin/runner.gb` and `samples/runner/bin/runner.nes`.
 
-There is deliberately no tracked normalized full map, full-stage1 ROM, packed
-world, staging buffer, collision-result widening, compression, mapper
-selection, or runner-input switch in this task. Those remain separate
-dependent work.
+LW-0.1 deliberately added no tracked normalized full map, full-stage1 ROM,
+packed world, staging buffer, collision-result widening, compression, mapper
+selection, or runner-input switch. Collision-result widening later landed in
+LW-1.2; the packed world, production staging/runtime reader, mapper selection,
+and runner-input switch remain separate dependent work.

@@ -1,6 +1,7 @@
 # ADR: `WorldPack` v1 logical, packed, and staging format
 
-Status: **accepted for LW-0.2 on 2026-07-10.**
+Status: **accepted for LW-0.2 on 2026-07-10; the target-neutral Core model and
+validation are implemented by LW-1.3.**
 
 This decision is the implementation contract for LW-1.3 and LW-1.4. It fixes
 the shared logical seam and the target-owned packed payload shape; it does not
@@ -422,6 +423,14 @@ walking chunks, but large-world runtimes use bounded lookup. Existing small
 outputs stay on the current raw path and remain byte-identical unless a test or
 later task explicitly selects packing.
 
+The LW-1.3 model lives in `RetroSharp.Core.Sdk.WorldPack`. It keeps decoded
+visual and collision-profile IDs beside their validated directory entries,
+holds target expansion records as opaque bytes plus their declared cell stride,
+and exposes coordinate lookup without interpreting those bytes. Its
+`ToWorldMap2D()` and selector-based `ToWorldTileGrid(...)` methods are the
+explicit tooling compatibility path described above; they do not select the
+large-world runtime path or a physical storage location.
+
 ## Consequences, rejected alternatives, and non-goals
 
 - Expanded 8x8 raw rows retain the measured 24,960-byte duplication and do not
@@ -441,8 +450,8 @@ identities quantize alike. In return, RAM is fixed, collision and visuals can be
 fetched independently, output order is deterministic, and future cartridge
 placement does not alter the logical or binary pack.
 
-This ADR does not implement the production model, packer, codec, reader,
-banking, mapper, cartridge placement, accepted coordinate/collision ABI, or
-runner migration. Later work may optimize target expansion records or add codecs only
+This ADR and LW-1.3 do not implement a packer, codec, target reader, cartridge
+placement, or runner migration, and they do not alter the accepted
+coordinate/collision ABI. Later work may optimize target expansion records or add codecs only
 behind a new compatible version; it must not reopen the v1 topology or leak
 target hardware into portable source.
