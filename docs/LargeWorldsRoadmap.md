@@ -71,7 +71,7 @@ These constraints apply to every task in the epic:
    dimensions, camera coordinates, and chunk selection may use fixed 16-bit
    state; SCX/SCY and PPUSCROLL remain target-owned low-byte registers.
 4. **Large worlds live in ROM, not as full RAM copies.** Runtime RAM cost is
-   bounded by fixed descriptors and staging buffers for the current/next edge.
+   bounded by fixed descriptors and two peer edge-staging buffers.
 5. **Streaming work is split by phase.** Bank selection, lookup, decompression,
    and staging happen outside VBlank where possible; VBlank commits only the
    bounded VRAM/PPU write shape declared by target capabilities.
@@ -188,6 +188,9 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 
 ### LW-0.2: Decide the `WorldPack` metatile, chunk, compression, and staging format
 
+- Status: **complete; format accepted by
+  [`WorldPackFormatV1.md`](WorldPackFormatV1.md) with reproducible full-`stage1`
+  cost coverage.**
 - Layer: portable SDK asset model and target-lowering architecture.
 - Dependencies: `LW-0.1`.
 - Candidate files: logical Tiled importer, `WorldMap2D`, `WorldTileGrid`, both

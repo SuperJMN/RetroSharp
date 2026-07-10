@@ -24,6 +24,13 @@ Separate design debts: #104 tracks type-system soundness and #105 tracks the rem
 
 The next architecture frontier is Iteration 15: scalable large-world assets and banked streaming. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. `docs/LargeWorldsRoadmap.md` owns the measured execution plan, decision gates, AI task contract, and Wave 0/1 issue backlog. Game Boy MBC1 foundations and NES four-screen streaming remain target building blocks, not substitutes for the shared packed-world contract.
 
+The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
+contract as deterministic 8x8 source-metatile chunks with independently
+compressed visual and collision planes, relative offsets, target-owned visual
+expansion records, and fixed dual-edge staging. It deliberately leaves
+cartridge placement and the wider coordinate/collision ABI to their target and
+Wave 0 decisions.
+
 ## Goals
 
 - Keep the RetroSharp language small, explicit, and target-neutral.
