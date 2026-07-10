@@ -139,6 +139,15 @@ screen-relative hit-top keeps byte `255`. This is the contract for
 LW-1.1/LW-1.2; the current NES builder remains one-byte and this ADR does not
 change mapper-0 output or tracked ROMs.
 
+Large Worlds LW-0.3 selects the future banked NES profile in
+[`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md):
+mapper 4 with a TVROM-style 64 KiB PRG, 16 KiB CHR-ROM, and four-screen board
+shape. The measured full-`stage1` sketch keeps `WorldPack`, pinned audio data,
+boot data, fixed execution/DPCM, and vectors in explicit banks. This is an
+accepted architecture contract, not current compiler behavior: mapper 0 stays
+the default whenever the final program fits, and no production mapper reader
+or IRQ HUD is implemented by the ADR.
+
 `Animation.Clip(name, firstFrame, duration...)` stores a looping frame-duration table whose frame indexes and total duration must fit one byte. `Animation.Frame(name, tick)` is declared by the source package over the `animation_frame` target intrinsic and returns the current frame for that clip. `Sprite.Width(name)` is likewise a source-package helper over the compile-time `sprite_width` target intrinsic and returns the logical sprite width for a declared sprite asset.
 
 ## HUD Decision
