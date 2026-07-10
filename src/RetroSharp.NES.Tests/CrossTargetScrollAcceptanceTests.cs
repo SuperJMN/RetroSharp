@@ -284,8 +284,11 @@ public sealed class CrossTargetScrollAcceptanceTests
                 Camera.Init(1, 10, 2);
                 while (true) {
                     Video.WaitVBlank();
-                    u8 footY = 16;
-                    u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                    i16 footY = 16;
+                    i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
+                    if (hitTop != -1) {
+                        footY = hitTop;
+                    }
                 }
             }
             """;

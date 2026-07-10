@@ -34,7 +34,7 @@ static class CollisionProbe
     const i16 WallProbeHeight = 8;
     const i16 CeilingProbeTopOffset = 28;
     const i16 CeilingProbeHeight = 4;
-    const i16 NoTileHit = 255;
+    const i16 NoTileHit = -1;
 }
 
 static class Jump

@@ -242,9 +242,10 @@ Progress (2026-06-14):
   through `Sdk2DOperation.CameraAabbTiles`.
 - Landing tile-hit decision implemented after #106: `Camera.AabbHitTop(...)` is a
   capability-gated SDK query that returns the top world-pixel Y of the first matching tile in a
-  caller-defined camera-relative AABB, or `255` when none hit. Game Boy and NES lower it
-  through `Sdk2DOperation.CameraAabbHitTop`. The runner uses it to remove the old repeated
-  tile-offset landing probe ladder while keeping the downward-velocity gate and
+  caller-defined camera-relative AABB, or `-1` (`0xFFFF`) when none hit. Its world-Y operand and
+  result are complete words; Game Boy returns the result through `HL` and NES through `A:X`.
+  Byte destinations remain compatible only while the active world is at most 32 hardware rows.
+  The runner uses an explicit `i16` local and keeps the downward-velocity gate and
   `player.Land(...)` policy in source.
 - Runner-shaped NES parity decision: `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES runner
   project. It lists `src/main.rs` plus helper/state code from `samples/runner/src`. It declares
@@ -297,7 +298,7 @@ Suggested next steps for the next agent, in order:
 - The accepted runner object palette is `0, 0, 1, 3`, which compiles to `OBP0 = 0xD0`.
 - Collision over wider sprites should use logical sprite width through helpers such as `Sprite.Width(...)`; runner actors should project current screen X/Y from actor/player world position minus camera position, then pass byte-backed screen coordinates to `Camera.AabbTiles(...)`/`Camera.AabbHitTop(...)` or the fully screen-space `Camera.ScreenAabbTiles(...)`/`Camera.ScreenAabbHitTop(...)` forms so collision stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
-- Byte-backed Y values can wrap at the top of the scene; clamp before collision/reset logic.
+- Clamp vertical runner state before collision/reset logic when it can cross the top of the scene.
 - The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
 
 ## Tiled Map Pipeline

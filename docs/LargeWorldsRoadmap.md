@@ -50,8 +50,8 @@ Current blockers are independent and must not be conflated:
   bytes. Packed/banked world reads are still absent.
 - NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR; mapper-backed level
   data is not implemented.
-- `Camera.AabbHitTop(...)` still exposes an 8-bit world-pixel result with `255`
-  as the no-hit sentinel on the current runner path.
+- `Camera.AabbHitTop(...)` now exposes a complete world-pixel word with `-1`
+  as no hit; screen-relative hit-top retains its byte-range `255` sentinel.
 - Tiled 16x16 cells are expanded into repeated 8x8 visual and flag cells. The
   tile patterns are deduplicated, but the world grid itself is not packed as
   metatiles or chunks.
@@ -300,6 +300,9 @@ tasks follow the dependency graph below.
 
 ### LW-1.2: Implement the widened collision-hit contract
 
+- Status: **complete; world collision Y operands and hit results use complete
+  words on GB/NES, the runner uses `i16`/`-1`, screen-hit byte compatibility
+  remains intact, and unsafe tall-world narrowing is diagnosed.**
 - Layer: portable SDK collision contract and GB/NES lowering.
 - Dependencies: `LW-0.4`.
 - Candidate files: Portable2D camera/collision helpers, operation/intrinsic

@@ -1578,6 +1578,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(expression, type);
         EmitExpressionToA(expression);
         builder.StoreA(address);
     }
@@ -1621,6 +1622,11 @@ internal sealed class GameBoyRuntimeCompiler
                 EmitRuntimeStorageFromHlToWordStorage(address, VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, 0)));
                 return;
             case FunctionCall call:
+                if (TryEmitWordValueFunctionToStorage(call, address, targetType))
+                {
+                    return;
+                }
+
                 EmitValueCallToA(call);
                 builder.StoreA(address);
                 builder.LoadAImmediate(0);
@@ -2157,6 +2163,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(assignment.Right, targetType);
         EmitAssignmentRightToA(assignment);
         builder.StoreA(address);
     }
@@ -2201,6 +2208,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(assignment.Right, elementType);
         switch (assignment.OperatorSymbol)
         {
             case "=":
@@ -2281,6 +2289,7 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(assignment.Right, fieldType);
         switch (assignment.OperatorSymbol)
         {
             case "=":
@@ -3759,6 +3768,102 @@ internal sealed class GameBoyRuntimeCompiler
         return true;
     }
 
+    private bool TryEmitWordValueFunctionToStorage(FunctionCall call, ushort address, string targetType)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
+        {
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
+            if (intrinsic.ReturnKind != TargetIntrinsicReturnKind.I16
+                || !TryEmitTargetValueIntrinsic(call, preserveWordReturn: true))
+            {
+                return false;
+            }
+
+            builder.LoadAFromL();
+            builder.StoreA(address);
+            builder.LoadAFromH();
+            builder.StoreA(HighAddress(address));
+            return true;
+        }
+
+        if (!userFunctionCallStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive Game Boy user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            EmitWordExpressionToStorage(
+                ParameterSubstitution.SubstituteReturnExpression(function, call, "Game Boy"),
+                address,
+                targetType);
+        }
+        finally
+        {
+            userFunctionCallStack.Remove(function.Name);
+        }
+
+        return true;
+    }
+
+    private void ValidateWorldHitTopNarrowing(ExpressionSyntax expression, string destinationType)
+    {
+        if (!IsWorldHitTopValue(expression, []))
+        {
+            return;
+        }
+
+        var world = WorldMapForFlagQuery("camera_aabb_hit_top");
+        if (world.Height <= 32)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"World hit-top cannot be stored in byte destination type '{destinationType}' because the active world is {world.Height} hardware rows tall; use an i16 local and compare it with -1.");
+    }
+
+    private bool IsWorldHitTopValue(ExpressionSyntax expression, HashSet<string> callStack)
+    {
+        if (expression is CastSyntax cast)
+        {
+            return IsWorldHitTopValue(cast.Expression, callStack);
+        }
+
+        if (expression is not FunctionCall call
+            || !program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
+        {
+            return TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics).Operation
+                   == TargetIntrinsicOperation.CameraAabbHitTop;
+        }
+
+        if (!callStack.Add(function.Name))
+        {
+            return false;
+        }
+
+        try
+        {
+            return IsWorldHitTopValue(
+                ParameterSubstitution.SubstituteReturnExpression(function, call, "Game Boy"),
+                callStack);
+        }
+        finally
+        {
+            callStack.Remove(function.Name);
+        }
+    }
+
     internal void EmitPollInput()
     {
         builder.LoadA(InputCurrentAddress);
@@ -3927,6 +4032,18 @@ internal sealed class GameBoyRuntimeCompiler
     private static bool TrySdkConst(SdkByteExpression expression, out int value)
     {
         if (expression is SdkByteExpression.Constant constant)
+        {
+            value = constant.Value;
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private static bool TrySdkConst(SdkWordExpression expression, out int value)
+    {
+        if (expression is SdkWordExpression.Constant constant)
         {
             value = constant.Value;
             return true;
@@ -6004,7 +6121,7 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
-    private bool TryEmitTargetValueIntrinsic(FunctionCall call)
+    private bool TryEmitTargetValueIntrinsic(FunctionCall call, bool preserveWordReturn = false)
     {
         if (!program.Functions.TryGetValue(call.Name, out var function) || !function.IsExtern)
         {
@@ -6017,61 +6134,79 @@ internal sealed class GameBoyRuntimeCompiler
             return false;
         }
 
+        var completeWordReturn = false;
         switch (intrinsic.Operation)
         {
             case TargetIntrinsicOperation.ReadWorldTileFlags:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitReadWorldTileFlags(ConsumeSdkOperation<Sdk2DOperation.ReadWorldTileFlags>(call.Name));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraAabbTiles:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraAabbTiles(ConsumeSdkOperation<Sdk2DOperation.CameraAabbTiles>(call.Name));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraAabbHitTop:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraAabbHitTop>(call.Name));
-                return true;
+                completeWordReturn = true;
+                break;
             case TargetIntrinsicOperation.CameraScreenAabbTiles:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraScreenAabbTiles(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbTiles>(call.Name));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraScreenAabbHitTop:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraScreenAabbHitTop(ConsumeSdkOperation<Sdk2DOperation.CameraScreenAabbHitTop>(call.Name));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraVerticalScrollMax:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraVerticalScrollMax();
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonDown:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonDown(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonJustPressed:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonJustPressed(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonJustReleased:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonJustReleased(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonHoldTicks:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonHoldTicks(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitSpriteWidth(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ReadAnimationFrame:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
                 _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitAnimationFrame(call);
-                return true;
+                break;
             default:
                 return false;
         }
+
+        if (intrinsic.ReturnKind == TargetIntrinsicReturnKind.I16)
+        {
+            if (!completeWordReturn)
+            {
+                builder.LoadLFromA();
+                builder.LoadHImmediate(0);
+            }
+
+            if (!preserveWordReturn)
+            {
+                builder.LoadAFromL();
+            }
+        }
+
+        return true;
     }
 
     private void EmitMapTileAt(FunctionCall call)
@@ -6237,15 +6372,52 @@ internal sealed class GameBoyRuntimeCompiler
         builder.ShiftRightLogicalA();
     }
 
-    private void EmitWorldPixelTileTop(SdkByteExpression expression, int offset)
+    private void EmitWorldPixelToTileCoordinate(SdkWordExpression expression, int offset)
     {
-        EmitSdkByteExpressionToA(expression);
+        EmitSdkWordExpressionWithOffsetToHl(expression, offset);
+        builder.LoadAFromH();
+        builder.AndImmediate(0x07);
+        builder.SwapA();
+        builder.AddAFromA();
+        builder.LoadBFromA();
+        builder.LoadAFromL();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.ShiftRightLogicalA();
+        builder.OrAFromB();
+    }
+
+    private void EmitWorldPixelTileTop(SdkWordExpression expression, int offset)
+    {
+        EmitSdkWordExpressionWithOffsetToHl(expression, offset);
+        builder.LoadAFromL();
+        builder.AndImmediate(0xF8);
+        builder.LoadLFromA();
+    }
+
+    private void EmitSdkWordExpressionWithOffsetToHl(SdkWordExpression expression, int offset)
+    {
+        EmitSdkWordExpressionToA(expression, highByte: false);
+        builder.StoreA(WordScratchLowAddress);
+        EmitSdkWordExpressionToA(expression, highByte: true);
+        builder.StoreA(WordScratchHighAddress);
+
+        builder.LoadA(WordScratchLowAddress);
         if (offset != 0)
         {
-            builder.AddAImmediate(offset);
+            builder.AddAImmediate(offset & 0xFF);
         }
 
-        builder.AndImmediate(0xF8);
+        builder.StoreA(WordScratchLowAddress);
+        builder.LoadA(WordScratchHighAddress);
+        if (offset != 0)
+        {
+            builder.AdcAImmediate((offset >> 8) & 0xFF);
+        }
+
+        builder.LoadHFromA();
+        builder.LoadA(WordScratchLowAddress);
+        builder.LoadLFromA();
     }
 
     private void EmitCollisionAabbTiles(FunctionCall call)
@@ -6333,7 +6505,7 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         var config = EnsureCameraConfigured("camera_aabb_tiles");
-        _ = WorldMapForFlagQuery("camera_aabb_tiles");
+        var worldMap = WorldMapForFlagQuery("camera_aabb_tiles");
         var width = CameraAabbWidth(operation.Width);
         var flags = (int)operation.Flags;
         if (width == 0 || operation.Height == 0 || flags == 0)
@@ -6346,15 +6518,36 @@ internal sealed class GameBoyRuntimeCompiler
 
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
+        var constantWorldY = TrySdkConst(operation.WorldY, out _);
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
         {
+            var hitTopOffset = operation.WorldYOffset + yOffset;
+            var nextRowLabel = builder.CreateLabel("camera_aabb_tiles_next_row");
+            if (!constantWorldY)
+            {
+                EmitWorldPixelToTileCoordinate(operation.WorldY, hitTopOffset);
+                builder.CompareImmediate(worldMap.Height);
+                builder.JumpAbsolute(0xD2, nextRowLabel); // JP NC,nextRowLabel
+                builder.StoreA(WordScratchHighAddress);
+            }
+
             foreach (var xOffset in AabbSampleOffsets(width))
             {
-                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                if (constantWorldY)
+                {
+                    EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, "camera_aabb_tiles");
+                }
+                else
+                {
+                    EmitCameraTileFlagsAtStoredRow(operation.ScreenX, xOffset, config);
+                }
+
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.JumpAbsolute(0xC2, foundLabel); // JP NZ,foundLabel
             }
+
+            builder.Label(nextRowLabel);
         }
 
         builder.LoadAImmediate(0);
@@ -6373,25 +6566,43 @@ internal sealed class GameBoyRuntimeCompiler
 
         var callName = "camera_aabb_hit_top";
         var config = EnsureCameraConfigured(callName);
-        _ = WorldMapForFlagQuery(callName);
+        var worldMap = WorldMapForFlagQuery(callName);
         var width = CameraAabbWidth(operation.Width);
         var flags = (int)operation.Flags;
         if (width == 0 || operation.Height == 0 || flags == 0)
         {
-            builder.LoadAImmediate(255);
+            builder.LoadHl(0xFFFF);
             return;
         }
 
         ValidateConstantCameraAabbSpan(operation.ScreenX, width, 160, "camera_aabb_hit_top");
 
         var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
+        var constantWorldY = TrySdkConst(operation.WorldY, out _);
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
         {
+            var hitTopOffset = operation.WorldYOffset + yOffset;
+            var nextRowLabel = builder.CreateLabel("camera_aabb_hit_top_next_row");
+            if (!constantWorldY)
+            {
+                EmitWorldPixelToTileCoordinate(operation.WorldY, hitTopOffset);
+                builder.CompareImmediate(worldMap.Height);
+                builder.JumpAbsolute(0xD2, nextRowLabel); // JP NC,nextRowLabel
+                builder.StoreA(WordScratchHighAddress);
+            }
+
             foreach (var xOffset in AabbSampleOffsets(width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
-                var hitTopOffset = operation.WorldYOffset + yOffset;
-                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
+                if (constantWorldY)
+                {
+                    EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
+                }
+                else
+                {
+                    EmitCameraTileFlagsAtStoredRow(operation.ScreenX, xOffset, config);
+                }
+
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.JumpAbsolute(0xCA, nextProbeLabel); // JP Z,nextProbeLabel
@@ -6399,9 +6610,11 @@ internal sealed class GameBoyRuntimeCompiler
                 builder.JumpAbsolute(endLabel);
                 builder.Label(nextProbeLabel);
             }
+
+            builder.Label(nextRowLabel);
         }
 
-        builder.LoadAImmediate(255);
+        builder.LoadHl(0xFFFF);
         builder.Label(endLabel);
     }
 
@@ -6525,7 +6738,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitCameraTileFlagsAt(int screenPixelX, SdkByteExpression worldY, int worldYOffset, CameraConfig config, string callName)
+    private void EmitCameraTileFlagsAt(int screenPixelX, SdkWordExpression worldY, int worldYOffset, CameraConfig config, string callName)
     {
         var worldMap = WorldMapForFlagQuery(callName);
         var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
@@ -6544,13 +6757,12 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
-        builder.LoadBFromA();
-
         EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
+        EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
+        builder.LoadBFromA();
         EmitMapFlagsAtSourceColumnInBAndRowInC();
         builder.JumpAbsolute(endLabel);
 
@@ -6559,7 +6771,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkByteExpression worldY, int worldYOffset, CameraConfig config, string callName)
+    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkWordExpression worldY, int worldYOffset, CameraConfig config, string callName)
     {
         if (TrySdkConst(screenPixelX, out var constantScreenX))
         {
@@ -6584,19 +6796,27 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
-        builder.LoadBFromA();
-
         EmitWorldPixelToTileCoordinate(worldY, worldYOffset);
         builder.CompareImmediate(worldMap.Height);
         builder.JumpAbsolute(0xD2, outOfBoundsLabel); // JP NC,outOfBoundsLabel
         builder.LoadCFromA();
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.LoadBFromA();
         EmitMapFlagsAtSourceColumnInBAndRowInC();
         builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraTileFlagsAtStoredRow(SdkByteExpression screenPixelX, int screenPixelXOffset, CameraConfig config)
+    {
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.LoadBFromA();
+        builder.LoadA(WordScratchHighAddress);
+        builder.LoadCFromA();
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
     }
 
     private void EmitCameraScreenTileFlagsAt(

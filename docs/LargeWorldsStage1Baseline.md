@@ -1,6 +1,6 @@
 # Full `stage1` baseline (LW-0.1)
 
-Status: **frozen on 2026-07-10 and refreshed after LW-1.1 by the focused GB/NES baseline tests.**
+Status: **frozen on 2026-07-10 and refreshed after LW-1.2 by the focused GB/NES baseline tests.**
 
 This report records why the complete authored runner `stage1` cannot run on the
 current Game Boy or NES paths. It is measurement and acceptance evidence only:
@@ -49,8 +49,8 @@ coordinate failure.
 | Order | Category | Game Boy | NES |
 | ---: | --- | --- | --- |
 | 1 | `address-width` | **Passes after LW-1.1.** The 312 hardware columns and word camera/source-edge positions compile without truncation. | **Passes after LW-1.1.** The 312 hardware columns reach the existing PRG-capacity failure without camera/source-column truncation. |
-| 2 | `collision-abi` | **Blocked.** The floor hit Y 304 cannot be returned unambiguously while hit-top is an 8-bit value and 255 means no hit. | **Blocked.** The same hit-top ABI and sentinel are used by the runner path. |
-| 3 | `rom-capacity` | **Capacity probe passes, runtime acceptance does not.** Both the unchanged runner payload with redirected `World.Load` and the real 312x40 camera-dimension probe emit a 131,072-byte MBC1 ROM with full map, collision, BGM, and SFX. | **Blocked.** Even after removing audio only for decomposition, code plus full visual/collision data emits 41,921 bytes against 32,762 available PRG bytes. With full audio restored, the `$E980` DPCM block (1,153 bytes) cannot be placed after earlier data ending at `$1350A`. |
+| 2 | `collision-abi` | **Passes after LW-1.2.** The floor returns `30 01` and no hit returns `FF FF`. | **Passes after LW-1.2.** The same complete word result is returned through the NES ABI. |
+| 3 | `rom-capacity` | **Capacity probe passes, runtime acceptance does not.** Both the unchanged runner payload with redirected `World.Load` and the real 312x40 camera-dimension probe emit a 131,072-byte MBC1 ROM with full map, collision, BGM, and SFX. | **Blocked.** Even after removing audio only for decomposition, code plus full visual/collision data emits 41,851 bytes against 32,762 available PRG bytes. With full audio restored, the `$E980` DPCM block (1,153 bytes) cannot be placed after earlier data ending at `$134C4`. |
 | 4 | `tile-patterns` | **Passes.** 6 reserved + 82 background + 60 sprite tiles use 148 of 256 indexes. | **Passes.** 6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3,056 of 8,192 CHR bytes. |
 | 5 | `ram-staging` | **Blocked by missing contract, not measured RAM exhaustion.** Each 12,480-byte visual/flag blob fits one 16 KiB bank, but there is no fixed large-world chunk staging contract. | **Blocked by missing path.** Mapper 0 has no mapper-backed world reader or fixed large-world staging contract. |
 | 6 | `vblank` | **Current edge work is bounded.** Visible column and row commits fit the 21-tile write budget; future lookup/decompression still has to happen outside VBlank. | **Current phase work is bounded.** Limits are 32 tile writes and 9 attribute writes; row streaming remains split into bounded phases. |

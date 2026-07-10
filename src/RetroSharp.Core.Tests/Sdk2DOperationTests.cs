@@ -7,6 +7,32 @@ using Xunit;
 public sealed class Sdk2DOperationTests
 {
     [Fact]
+    public void World_camera_collision_queries_keep_complete_word_y_operands()
+    {
+        var worldY = new SdkWordExpression.Constant(304);
+
+        var tiles = new Sdk2DOperation.CameraAabbTiles(
+            WorldId: "level1",
+            ScreenX: 72,
+            WorldY: worldY,
+            Width: 16,
+            Height: 12,
+            Flags: WorldTileFlags.Solid);
+        var hitTop = new Sdk2DOperation.CameraAabbHitTop(
+            WorldId: "level1",
+            ScreenX: 72,
+            WorldY: worldY,
+            Width: 16,
+            Height: 12,
+            Flags: WorldTileFlags.Solid);
+
+        Assert.Equal(worldY, tiles.WorldY);
+        Assert.Equal(worldY, hitTop.WorldY);
+        Sdk2DOperationValidator.Validate(FullCapabilities(), tiles);
+        Sdk2DOperationValidator.Validate(FullCapabilities(), hitTop);
+    }
+
+    [Fact]
     public void Operation_records_keep_semantic_sdk_data()
     {
         Sdk2DOperation[] operations =
@@ -34,14 +60,14 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.CameraAabbTiles(
                 WorldId: "level1",
                 ScreenX: 72,
-                WorldY: Field("player", "footY"),
+                WorldY: WordField("player", "footY"),
                 Width: 16,
                 Height: 8,
                 Flags: WorldTileFlags.Solid),
             new Sdk2DOperation.CameraAabbHitTop(
                 WorldId: "level1",
                 ScreenX: 72,
-                WorldY: Field("player", "footY"),
+                WorldY: WordField("player", "footY"),
                 Width: 16,
                 Height: 40,
                 Flags: WorldTileFlags.Solid),
@@ -67,7 +93,7 @@ public sealed class Sdk2DOperationTests
         Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operations[8]);
         var cameraAabb = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operations[9]);
         Assert.Equal(new SdkByteExpression.Constant(72), cameraAabb.ScreenX);
-        Assert.Equal(Field("player", "footY"), cameraAabb.WorldY);
+        Assert.Equal(WordField("player", "footY"), cameraAabb.WorldY);
         Assert.Equal(new SdkAabbExtent.Constant(16), cameraAabb.Width);
         Assert.Equal(WorldTileFlags.Solid, cameraAabb.Flags);
         var cameraHitTop = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operations[10]);
@@ -115,7 +141,7 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.CameraAabbTiles(
                 WorldId: "level1",
                 ScreenX: 72,
-                WorldY: Field("player", "footY"),
+                WorldY: WordField("player", "footY"),
                 Width: 16,
                 Height: 8,
                 Flags: WorldTileFlags.Solid));
@@ -124,7 +150,7 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.CameraAabbHitTop(
                 WorldId: "level1",
                 ScreenX: 72,
-                WorldY: Field("player", "footY"),
+                WorldY: WordField("player", "footY"),
                 Width: 16,
                 Height: 40,
                 Flags: WorldTileFlags.Solid));
@@ -140,7 +166,7 @@ public sealed class Sdk2DOperationTests
                 new Sdk2DOperation.CameraAabbTiles(
                     WorldId: "level1",
                     ScreenX: 150,
-                    WorldY: Field("player", "footY"),
+                    WorldY: WordField("player", "footY"),
                     Width: 16,
                     Height: 8,
                     Flags: WorldTileFlags.Solid)));
@@ -160,7 +186,7 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.CameraAabbTiles(
                 WorldId: "level1",
                 ScreenX: Local("actorScreenX"),
-                WorldY: Field("actor", "footY"),
+                WorldY: WordField("actor", "footY"),
                 Width: 16,
                 Height: 8,
                 Flags: WorldTileFlags.Solid));
@@ -169,7 +195,7 @@ public sealed class Sdk2DOperationTests
             new Sdk2DOperation.CameraAabbHitTop(
                 WorldId: "level1",
                 ScreenX: Local("actorScreenX"),
-                WorldY: Field("actor", "footY"),
+                WorldY: WordField("actor", "footY"),
                 Width: 16,
                 Height: 16,
                 Flags: WorldTileFlags.Solid));
@@ -190,7 +216,7 @@ public sealed class Sdk2DOperationTests
                 new Sdk2DOperation.CameraAabbTiles(
                     WorldId: "level1",
                     ScreenX: 72,
-                    WorldY: Field("player", "footY"),
+                    WorldY: WordField("player", "footY"),
                     Width: 16,
                     Height: 8,
                     Flags: WorldTileFlags.Solid)));
@@ -234,7 +260,7 @@ public sealed class Sdk2DOperationTests
                 new Sdk2DOperation.CameraAabbHitTop(
                     WorldId: "level1",
                     ScreenX: 72,
-                    WorldY: Field("player", "footY"),
+                    WorldY: WordField("player", "footY"),
                     Width: 16,
                     Height: 40,
                     Flags: WorldTileFlags.Solid)));
@@ -462,6 +488,14 @@ public sealed class Sdk2DOperationTests
     private static SdkWordExpression.Variable WordLocal(string name)
     {
         return new SdkWordExpression.Variable(new SdkStorageLocation.Local(name));
+    }
+
+    private static SdkWordExpression.Variable WordField(string baseName, string fieldName)
+    {
+        return new SdkWordExpression.Variable(
+            new SdkStorageLocation.Field(
+                new SdkStorageLocation.Local(baseName),
+                fieldName));
     }
 
     private static SdkByteExpression.Variable Field(string baseName, string fieldName)

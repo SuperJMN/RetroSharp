@@ -1849,7 +1849,7 @@ public class GameBoyRomCompilerTests
 
         var rom = GameBoyRomCompiler.CompileSource(source);
 
-        Assert.Equal("7CB72A479DB9A7B23E341C041368D48FCAE9947FFD14196F5B648265640724F2", Fingerprint(rom));
+        Assert.Equal("927F804320BC973C4139D33F5010C236EE595EE39AEC17DA0A2D02D05B42099F", Fingerprint(rom));
     }
 
     [Fact]
@@ -1992,11 +1992,11 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xFE]), "tick 0 should select frame 1.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x06, 0xFE]), "tick 5 should still select frame 1.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0xEA, 0x0A, 0xFE]), "tick 6 should select frame 2.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0xEA, 0x0E, 0xFE]), "tick 17 should select frame 3.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x12, 0xFE]), "tick 18 should loop to frame 1.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x02, 0xFE]), "tick 0 should select frame 1 through the complete zero-extended I16 intrinsic return.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x06, 0xFE]), "tick 5 should still select frame 1 through the complete zero-extended I16 intrinsic return.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x0A, 0xFE]), "tick 6 should select frame 2 through the complete zero-extended I16 intrinsic return.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x0E, 0xFE]), "tick 17 should select frame 3 through the complete zero-extended I16 intrinsic return.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x12, 0xFE]), "tick 18 should loop to frame 1 through the complete zero-extended I16 intrinsic return.");
     }
 
     [Fact]
@@ -5688,7 +5688,7 @@ public class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xEA, 0xF1, 0xC0]), "input_poll should snapshot the previous button mask before reading the current tick.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0x47]), "input_poll should read the settled action-button group into the current tick mask.");
         Assert.True(ContainsSequence(rom, [0x3E, 0x20, 0xE0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0xF0, 0x00, 0x2F, 0xE6, 0x0F, 0xCB, 0x37, 0xB0, 0xEA, 0xF0, 0xC0]), "input_poll should read the settled direction-button group and store a combined button mask.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xF2, 0xC0, 0xEA, 0x06, 0xC0, 0x3E, 0x00, 0xEA, 0x07, 0xC0]), "Input.HoldTicks(Button.A) should read the A-button hold counter into a game variable.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0xF2, 0xC0, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x06, 0xC0, 0x7C, 0xEA, 0x07, 0xC0]), "Input.HoldTicks(Button.A) should return a complete zero-extended I16 value into a game variable.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xCA]), "Input.IsDown(Button.A) and Input.WasPressed(Button.A) should test the current tick mask.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xF1, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Input.WasPressed(Button.A) should reject buttons that were already down in the previous tick.");
         Assert.True(ContainsSequence(rom, [0xFA, 0xF0, 0xC0, 0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Input.WasReleased(Button.A) should require the button to be up in the current tick.");
@@ -5819,7 +5819,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
         Assert.Contains("frame.ResolveCeilingHit(player, screenX, footWorldY);", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid)", source);
         Assert.Contains("let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
         Assert.Contains("let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
@@ -7243,8 +7243,80 @@ public class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0xFF]), "Camera.AabbHitTop should return 255 when no overlapped tile has the requested flags.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0xF8, 0xE6, 0xF8]), "Camera.AabbHitTop should apply the search offset and return the hit tile's top world Y.");
+        Assert.True(ContainsSequence(rom, [0x21, 0xFF, 0xFF]), "Camera.AabbHitTop should return -1 as FF FF when no overlapped tile has the requested flags.");
+        Assert.True(ContainsSequence(rom, [0xCE, 0xFF, 0x67, 0xFA]), "Camera.AabbHitTop should propagate the signed search offset into the high result byte.");
+    }
+
+    [Fact]
+    public void World_camera_hit_top_returns_y_304_and_minus_one_as_complete_words_on_game_boy()
+    {
+        var source = CollisionHitContractSource(
+            height: 40,
+            solidRow: 38,
+            body: """
+                      i16 footWorldY = 304;
+                      i16 hitTop = Camera.AabbHitTop(0, footWorldY - 4, 8, 12, 1);
+                      i16 noHit = Camera.AabbHitTop(0, footWorldY - 4, 8, 12, 4);
+                      while (true) {
+                          Video.WaitVBlank();
+                      }
+                  """);
+
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source));
+        cpu.RunFrames(2);
+
+        Assert.Equal(0x30, cpu.Wram(0xC002));
+        Assert.Equal(0x01, cpu.Wram(0xC003));
+        Assert.Equal(0xFF, cpu.Wram(0xC004));
+        Assert.Equal(0xFF, cpu.Wram(0xC005));
+    }
+
+    [Fact]
+    public void Screen_camera_hit_top_keeps_byte_semantics_and_zero_extends_word_results_on_game_boy()
+    {
+        var source = CollisionHitContractSource(
+            height: 40,
+            solidRow: 38,
+            body: """
+                      u8 legacyNoHit = Camera.ScreenAabbHitTop(0, 0, 8, 8, 4);
+                      i16 completeNoHit = Camera.ScreenAabbHitTop(0, 0, 8, 8, 4);
+                      while (true) {
+                          Video.WaitVBlank();
+                      }
+                  """);
+
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source));
+        cpu.RunFrames(2);
+
+        Assert.Equal(0xFF, cpu.Wram(0xC000));
+        Assert.Equal(0xFF, cpu.Wram(0xC001));
+        Assert.Equal(0x00, cpu.Wram(0xC002));
+    }
+
+    [Fact]
+    public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_game_boy_world()
+    {
+        var source = CollisionHitContractSource(
+            height: 40,
+            solidRow: 38,
+            body: "u8 hitTop = Camera.AabbHitTop(0, 300, 8, 12, 1);");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "World hit-top cannot be stored in byte destination type 'u8' because the active world is 40 hardware rows tall; use an i16 local and compare it with -1.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void World_camera_hit_top_keeps_legacy_byte_destination_for_32_row_game_boy_world()
+    {
+        var source = CollisionHitContractSource(
+            height: 32,
+            solidRow: 31,
+            body: "u8 noHit = Camera.AabbHitTop(0, 0, 8, 8, 4);");
+
+        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
     }
 
     [Fact]
@@ -7286,10 +7358,10 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("LandingSearchTopOffset = 4", source);
         Assert.Contains("LandingSearchHeight = 12", source);
-        Assert.Contains("NoTileHit = 255", source);
+        Assert.Contains("NoTileHit = -1", source);
         Assert.Contains("inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("if (footTile != CollisionProbe.NoTileHit)", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("CollisionProbe.TileSize2", source);
@@ -7481,7 +7553,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("if (velocityY < 0)", source);
         Assert.DoesNotContain("y = 0;", source);
         Assert.Contains("player.velocityY > 0", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
@@ -7656,7 +7728,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("World.Map(", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
-        Assert.Contains("let footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
         Assert.Contains("player.velocityY > 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("failTile", source);
@@ -8119,6 +8191,23 @@ public class GameBoyRomCompilerTests
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private static string CollisionHitContractSource(int height, int solidRow, string body)
+    {
+        var visual = string.Join(", ", Enumerable.Repeat("0", height));
+        var flags = string.Join(", ", Enumerable.Range(0, height).Select(row => row == solidRow ? "1" : "0"));
+        return $$"""
+                 void Main() {
+                     World.Column(0, {{visual}});
+                     World.Flags(0, {{flags}});
+                     World.Map(1, 0, {{height}});
+                     Camera.Init(1, 0, {{height}});
+                     Camera.SetPosition(0, 1);
+                     Camera.Apply();
+                     {{body}}
+                 }
+                 """;
     }
 
     private static string RepositoryDirectory(string relativePath)

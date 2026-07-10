@@ -157,7 +157,7 @@ public static class Sdk2DOperationCollector
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var screenX = ReadByteExpression(args[0], "camera_aabb_tiles argument 1");
-        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_tiles argument 2");
+        var (worldY, worldYOffset) = ReadWordExpressionWithConstantOffset(args[1], "camera_aabb_tiles argument 2");
         var width = ReadAabbExtent(args[2], "camera_aabb_tiles argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(args[3], 0, 255, "camera_aabb_tiles argument 4");
         var flags = (WorldTileFlags)ConstRange(
@@ -201,7 +201,7 @@ public static class Sdk2DOperationCollector
             (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
             "camera_aabb_tiles argument 5");
         var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_tiles argument 1");
-        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_tiles argument 2");
+        var (worldY, worldYOffset) = ReadWordExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_tiles argument 2");
         var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_tiles argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_tiles argument 4");
 
@@ -224,7 +224,7 @@ public static class Sdk2DOperationCollector
         SdkCallReader.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var screenX = ReadByteExpression(args[0], "camera_aabb_hit_top argument 1");
-        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(args[1], "camera_aabb_hit_top argument 2");
+        var (worldY, worldYOffset) = ReadWordExpressionWithConstantOffset(args[1], "camera_aabb_hit_top argument 2");
         var width = ReadAabbExtent(args[2], "camera_aabb_hit_top argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(args[3], 0, 255, "camera_aabb_hit_top argument 4");
         var flags = (WorldTileFlags)ConstRange(
@@ -268,7 +268,7 @@ public static class Sdk2DOperationCollector
             (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform),
             "camera_aabb_hit_top argument 5");
         var screenX = ReadByteExpression(screenXArg.Expression, "camera_aabb_hit_top argument 1");
-        var (worldY, worldYOffset) = ReadByteExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_hit_top argument 2");
+        var (worldY, worldYOffset) = ReadWordExpressionWithConstantOffset(worldYArg.Expression, "camera_aabb_hit_top argument 2");
         var width = ReadAabbExtent(widthArg.Expression, "camera_aabb_hit_top argument 3", functions, targetIntrinsics, runtimeIdentifiers);
         var height = ConstRange(heightArg.Expression, 0, 255, "camera_aabb_hit_top argument 4");
 
@@ -638,6 +638,30 @@ public static class Sdk2DOperationCollector
         }
 
         return (ReadByteExpression(expression, context), 0);
+    }
+
+    private static (SdkWordExpression Expression, int Offset) ReadWordExpressionWithConstantOffset(ExpressionSyntax expression, string context)
+    {
+        if (expression is BinaryExpressionSyntax { Operator.Symbol: "+" } plus)
+        {
+            if (TryConstValue(plus.Right, out var rightOffset))
+            {
+                return (ReadWordExpression(plus.Left, context), rightOffset);
+            }
+
+            if (TryConstValue(plus.Left, out var leftOffset))
+            {
+                return (ReadWordExpression(plus.Right, context), leftOffset);
+            }
+        }
+
+        if (expression is BinaryExpressionSyntax { Operator.Symbol: "-" } minus
+            && TryConstValue(minus.Right, out var offset))
+        {
+            return (ReadWordExpression(minus.Left, context), -offset);
+        }
+
+        return (ReadWordExpression(expression, context), 0);
     }
 
     private static SdkByteExpression? ReadFlipXExpression(IReadOnlyList<ExpressionSyntax> args)
