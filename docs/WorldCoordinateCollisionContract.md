@@ -1,12 +1,13 @@
 # ADR: 16-bit world coordinates and collision hits
 
-Status: **accepted for LW-0.4 on 2026-07-10.**
+Status: **accepted for LW-0.4 on 2026-07-10; production coordinate lowering
+implemented by LW-1.1 and collision lowering implemented by LW-1.2.**
 
 This decision is the implementation contract for LW-1.1 and LW-1.2. It fixes
 the portable scalar meanings, byte layout, collision sentinel, and target
-lowering boundary. It does not widen the current operations or target
-runtimes, migrate callers, change `WorldPack` topology, or implement banking,
-mapping, packing, or physics.
+lowering boundary. The accepted width and ABI changes are now implemented by
+LW-1.1/LW-1.2; the contract still does not change `WorldPack` topology or
+implement banking, mapping, packing, or physics.
 
 ## Decision summary
 
@@ -36,7 +37,7 @@ mapping, packing, or physics.
 No public type names a register, scroll register, mapper, bank, pointer, heap
 object, or target runtime structure.
 
-## Context and current break
+## Context and pre-implementation break
 
 The frozen [full `stage1` baseline](LargeWorldsStage1Baseline.md) has these
 logical extents:
@@ -356,10 +357,10 @@ LW-1.2 owns these changes:
   the complete target word ABI;
 - add a diagnostic for unsafe narrowing described below.
 
-The runner's `let footTile` inherits the `i16` return. Its
-`CollisionProbe.NoTileHit` constant must change from `255` to `-1` in LW-1.2;
-the landing expression remains `footTile - Player.FootOffset`. This ADR does
-not edit the sample or its tracked ROMs.
+The runner now declares `i16 footTile`, and its `CollisionProbe.NoTileHit`
+constant is `-1`; the landing expression remains
+`footTile - Player.FootOffset`. This migration changes only the collision fact
+and sentinel, while landing policy stays in source.
 
 An explicit byte destination for world `AabbHitTop` consumes the low result
 byte. That preserves legacy behavior only when the active map has at most 32
@@ -405,4 +406,5 @@ dotnet test src/RetroSharp.Core.Tests/RetroSharp.Core.Tests.csproj -m:1 \
   --filter "FullyQualifiedName~WorldCoordinateCollisionContractAnalysisTests"
 ```
 
-The production target paths remain unchanged until LW-1.1 and LW-1.2.
+Focused shared, Game Boy, and NES production tests now cover these layouts in
+addition to the analysis proof.

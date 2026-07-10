@@ -263,20 +263,20 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `Sprite.Asset(...)`.
 
-`Camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` and `worldY` can be byte-backed runtime expressions; `width`, `height`, and `flags` are compile-time values, and `width` can use `Sprite.Width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
+`Camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` remains byte-range; `worldY` is a complete word expression and byte-backed values zero-extend. `width`, `height`, and `flags` are compile-time values, and `width` can use `Sprite.Width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
 
-`Camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the top world-pixel Y of the first overlapped tile whose flags match, or `255` when there is no hit. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
+`Camera.AabbHitTop(screenX, worldY, width, height, flags)` scans the supplied camera-relative AABB from top to bottom and returns the complete aligned world-pixel top of the first overlapped tile whose flags match, or `-1` (`FF FF`) when there is no hit. The internal ABI is `HL`, with `L` low and `H` high. A byte destination consumes `L` only when the active world is at most 32 hardware rows; a taller world produces a compile-time diagnostic directing the caller to an `i16` local and `-1`. It is a collision fact, not a physics helper: source code still chooses when to query it, how tall the search window is, and whether to land, bounce, ignore, or reset the actor.
 
-The preferred `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` spellings are declared by the `RetroSharp.Portable2D` source package as inline helpers over Game Boy target intrinsics. Those descriptors carry the hidden `"default"` world id and requested flag mask as compile-time operands while preserving the existing SDK operation shape, so collision capability checks, `Sprite.Width(...)` extents, emitted bytes, and the `255` no-hit sentinel stay tied to the canonical SDK calls rather than direct snake_case public calls.
+The preferred `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` spellings are declared by the `RetroSharp.Portable2D` source package as inline helpers over Game Boy target intrinsics. Those descriptors carry the hidden `"default"` world id and requested flag mask as compile-time operands while preserving the SDK operation shape and capability checks.
 
 `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space AABBs, adding the current camera X/Y state inside the backend. They are the actor-framework collision form for wide world Y actors; hit-top returns a screen-pixel top so the framework can add camera Y back into `y`/`yHi`.
 
 Although screen hit-top is semantically byte-range, its source signature and
 descriptor are `I16`. Under the accepted word ABI, a word destination receives
 `HL = 0x0000..0x00F8` for a hit or `HL = 0x00FF` for no hit (`H = 0`); an
-actor-framework byte destination consumes `L`. The future ABI must return both
-register bytes explicitly rather than relying on an accumulator-only value and
-a caller-synthesized high byte.
+actor-framework byte destination consumes `L`. The target returns both register
+bytes explicitly rather than relying on an accumulator-only value and a
+caller-synthesized high byte.
 
 Large Worlds LW-0.4 is accepted in
 [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md).
@@ -284,8 +284,8 @@ It keeps the screen-relative `255` sentinel above, but specifies complete
 little-endian `i16` camera/world operands and a world `Camera.AabbHitTop(...)`
 result with `-1`/`0xFFFF` for no hit through the internal `HL` word-return ABI
 (`L` low, `H` high). LW-1.1 implements the camera-position and logical
-source-column portion of that contract. LW-1.2 still owns the world-Y operands
-and collision-result ABI.
+source-column portion of that contract; LW-1.2 implements the world-Y operands,
+collision-result ABI, runner migration, and safe-narrowing diagnostic.
 
 `Palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `Palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `Palette.Set(...)` and `ObjectPalette.Set(...)` remain available as explicit Game Boy setup APIs.
 
@@ -411,7 +411,7 @@ Landed after the initial runner loop:
 - `World.TileFlagsAt(...)` lets collision code query generated world flags by pixel coordinates without depending on camera-span helpers.
 - `collision_aabb_tiles(...)` reports whether an actor-sized world-space rectangle overlaps requested tile flags while keeping movement resolution explicit in source.
 - `Camera.AabbTiles(...)` reports collision for camera-relative AABBs against the current camera view, including fine-scroll X alignment.
-- `Camera.AabbHitTop(...)` reports the contacted tile's top world Y for a caller-defined camera-relative search AABB, using `255` as the no-hit sentinel.
+- `Camera.AabbHitTop(...)` reports the contacted tile's complete word top for a caller-defined camera-relative search AABB, using `-1` as the no-hit sentinel.
 
 Landed after the playable-loop pass:
 

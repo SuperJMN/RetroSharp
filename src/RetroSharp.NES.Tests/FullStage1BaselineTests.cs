@@ -47,12 +47,12 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var fullPayloadFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(fullSource, RunnerSample.Directory));
         Assert.Equal(
-            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $1350A.",
+            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $134C4.",
             fullPayloadFailure.Message);
 
         var noAudioFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(WithoutAudio(fullSource), RunnerSample.Directory));
-        Assert.Equal("NES PRG ROM overflow: 41921 bytes emitted, 32762 bytes available.", noAudioFailure.Message);
+        Assert.Equal("NES PRG ROM overflow: 41851 bytes emitted, 32762 bytes available.", noAudioFailure.Message);
 
         var runtimeProbeFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(FullStage1CameraRuntimeSource(mapPath), RunnerSample.Directory));
@@ -74,7 +74,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             target = "nes",
             sourceCells = new { width = 156, height = 20, tilePixels = 16 },
             hardwareTiles = new { width = world.Width, height = world.Height, cells = world.WorldTileIds.Length },
-            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, floorY = 304, noHit = 255 },
+            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, floorY = 304, noHit = -1 },
             resources = new
             {
                 visualBytes = world.WorldTileIds.Length,
@@ -86,14 +86,14 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
                 musicBytes = music.Data.Length,
                 dpcmBytes = music.DpcmBlocks.Sum(block => block.Data.Length),
                 sfxBytes = sfx.Data.Length,
-                prgBytesWithoutAudio = 41_921,
+                prgBytesWithoutAudio = 41_851,
                 prgBytesAvailable = 32_762,
             },
             checks = new[]
             {
                 new { id = "address-width", status = "passes", detail = "312 hardware columns reach the existing PRG-capacity failure without camera/source-column truncation" },
-                new { id = "collision-abi", status = "blocked", detail = "floor Y 304 cannot share an 8-bit hit result whose no-hit sentinel is 255" },
-                new { id = "rom-capacity", status = "blocked", detail = "41921 bytes without audio exceed 32762 bytes; full audio then conflicts with DPCM placement at E980" },
+                new { id = "collision-abi", status = "passes-after-lw-1.2", detail = "world hit-top returns 304 as 30 01 and no hit as FF FF" },
+                new { id = "rom-capacity", status = "blocked", detail = "41851 bytes without audio exceed 32762 bytes; full audio then conflicts with DPCM placement at E980" },
                 new { id = "tile-patterns", status = "passes", detail = "6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3056 of 8192 CHR bytes" },
                 new { id = "ram-staging", status = "blocked", detail = "mapper-0 has no mapper-backed large-world staging path" },
                 new { id = "vblank", status = "bounded-current-phase", detail = "current limits are 32 tile writes and 9 attribute writes per phase" },
@@ -101,7 +101,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         };
 
         output.WriteLine(JsonSerializer.Serialize(facts, JsonOptions));
-        AssertReportDocuments("NES", "41,921", "32,762", "$E980", "$1350A", "$10A06", "3,056", "8,192");
+        AssertReportDocuments("NES", "41,851", "32,762", "$E980", "$134C4", "$10A06", "3,056", "8,192");
     }
 
     private static string FullStage1RunnerSource(string mapPath)

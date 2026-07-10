@@ -3993,7 +3993,71 @@ public class NesRomCompilerTests
 
         var rom = NesRomCompiler.CompileSource(source);
 
-        Assert.Equal("9F40E49489CCD1DEAD44DCA40FC3BC42E5CEFB6139FAD89F5339474304AF1872", Fingerprint(rom));
+        Assert.Equal("9DADC4F11B3870D538625243392EFDAD30BFDFE08220DAC0A6FBC7F9B2A7A9EC", Fingerprint(rom));
+    }
+
+    [Fact]
+    public void World_camera_hit_top_materializes_y_304_and_minus_one_through_a_x_on_nes()
+    {
+        var source = CollisionHitContractSource(
+            height: 40,
+            solidRow: 38,
+            body: """
+                      i16 footWorldY = 304;
+                      i16 hitTop = Camera.AabbHitTop(0, footWorldY - 4, 8, 12, 1);
+                      i16 noHit = Camera.AabbHitTop(0, footWorldY - 4, 8, 12, 4);
+                  """);
+
+        var prg = NesRomCompiler.CompileSource(source).Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(
+            ContainsSequence(prg, [0xA5, 0x01, 0x85, 0xE9, 0xA5, 0xE8, 0x18, 0x69, 0x04, 0x85, 0xE8, 0xA5, 0xE9, 0x69, 0x00, 0xAA, 0xA5, 0xE8, 0x29, 0xF8]),
+            "hit-top should add the matching probe offset as a word, align the low byte, and propagate the world-Y high byte into X.");
+        Assert.True(ContainsSequence(prg, [0x85, 0x02, 0x86, 0x03]), "word hit-top should store A:X into the little-endian destination.");
+        Assert.True(ContainsSequence(prg, [0xA9, 0xFF, 0xAA, 0x85, 0x04, 0x86, 0x05]), "no hit should store FF FF through A:X.");
+    }
+
+    [Fact]
+    public void Screen_camera_hit_top_keeps_byte_semantics_and_zero_extends_word_results_on_nes()
+    {
+        var source = CollisionHitContractSource(
+            height: 40,
+            solidRow: 38,
+            body: """
+                      u8 legacyNoHit = Camera.ScreenAabbHitTop(0, 0, 8, 8, 4);
+                      i16 completeNoHit = Camera.ScreenAabbHitTop(0, 0, 8, 8, 4);
+                  """);
+
+        var prg = NesRomCompiler.CompileSource(source).Skip(16).Take(32 * 1024).ToArray();
+
+        Assert.True(ContainsSequence(prg, [0xA9, 0xFF, 0xA2, 0x00, 0x85, 0x01, 0x86, 0x02]), "word screen no-hit should store FF 00 through A:X.");
+        Assert.True(ContainsSequence(prg, [0x85, 0x00]), "the legacy byte destination should consume the low result byte.");
+    }
+
+    [Fact]
+    public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_nes_world()
+    {
+        var source = CollisionHitContractSource(
+            height: 40,
+            solidRow: 38,
+            body: "u8 hitTop = Camera.AabbHitTop(0, 300, 8, 12, 1);");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source));
+
+        Assert.Equal(
+            "World hit-top cannot be stored in byte destination type 'u8' because the active world is 40 hardware rows tall; use an i16 local and compare it with -1.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void World_camera_hit_top_keeps_legacy_byte_destination_for_32_row_nes_world()
+    {
+        var source = CollisionHitContractSource(
+            height: 32,
+            solidRow: 31,
+            body: "u8 noHit = Camera.AabbHitTop(0, 0, 8, 8, 4);");
+
+        Assert.NotEmpty(NesRomCompiler.CompileSource(source));
     }
 
     [Fact]
@@ -4863,6 +4927,23 @@ public class NesRomCompilerTests
     private static string Fingerprint(byte[] bytes)
     {
         return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+    }
+
+    private static string CollisionHitContractSource(int height, int solidRow, string body)
+    {
+        var visual = string.Join(", ", Enumerable.Repeat("0", height));
+        var flags = string.Join(", ", Enumerable.Range(0, height).Select(row => row == solidRow ? "1" : "0"));
+        return $$"""
+                 void Main() {
+                     World.Column(0, {{visual}});
+                     World.Flags(0, {{flags}});
+                     World.Map(1, 0, {{height}});
+                     Camera.Init(1, 0, {{height}});
+                     Camera.SetPosition(0, 1);
+                     Camera.Apply();
+                     {{body}}
+                 }
+                 """;
     }
 
     private static string BytesAround(IReadOnlyList<byte> bytes, int offset)

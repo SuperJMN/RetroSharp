@@ -1204,6 +1204,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(expression, type);
         EmitExpressionToA(expression);
         builder.StoreAZeroPage(address);
     }
@@ -1247,6 +1248,11 @@ internal sealed class NesRuntimeCompiler
                 EmitRuntimeStorageFromZeroPageXToWordStorage(ArrayBaseAddress(indexExpression.BaseIdentifier), VariableStorageType(IndexedElementName(indexExpression.BaseIdentifier, 0)), address);
                 return;
             case FunctionCall call:
+                if (TryEmitWordValueFunctionToStorage(call, address, targetType))
+                {
+                    return;
+                }
+
                 EmitValueCallToA(call);
                 builder.StoreAZeroPage(address);
                 builder.LoadAImmediate(0);
@@ -1745,6 +1751,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(assignment.Right, targetType);
         EmitAssignmentRightToA(assignment);
         builder.StoreAZeroPage(address);
     }
@@ -1790,6 +1797,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(assignment.Right, elementType);
         switch (assignment.OperatorSymbol)
         {
             case "=":
@@ -1880,6 +1888,7 @@ internal sealed class NesRuntimeCompiler
             return;
         }
 
+        ValidateWorldHitTopNarrowing(assignment.Right, fieldType);
         switch (assignment.OperatorSymbol)
         {
             case "=":
@@ -2171,6 +2180,100 @@ internal sealed class NesRuntimeCompiler
         }
 
         return true;
+    }
+
+    private bool TryEmitWordValueFunctionToStorage(FunctionCall call, byte address, string targetType)
+    {
+        if (!program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
+        {
+            var intrinsic = TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics);
+            if (intrinsic.ReturnKind != TargetIntrinsicReturnKind.I16
+                || !TryEmitTargetValueIntrinsic(call))
+            {
+                return false;
+            }
+
+            builder.StoreAZeroPage(address);
+            builder.StoreXZeroPage(HighAddress(address));
+            return true;
+        }
+
+        if (!userFunctionCallStack.Add(function.Name))
+        {
+            throw new InvalidOperationException($"Recursive NES user function call '{function.Name}' is not supported.");
+        }
+
+        try
+        {
+            EmitWordExpressionToStorage(
+                ParameterSubstitution.SubstituteReturnExpression(function, call, "NES"),
+                address,
+                targetType);
+        }
+        finally
+        {
+            userFunctionCallStack.Remove(function.Name);
+        }
+
+        return true;
+    }
+
+    private void ValidateWorldHitTopNarrowing(ExpressionSyntax expression, string destinationType)
+    {
+        if (!IsWorldHitTopValue(expression, []))
+        {
+            return;
+        }
+
+        var world = WorldMapForFlagQuery("camera_aabb_hit_top");
+        if (world.Height <= 32)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"World hit-top cannot be stored in byte destination type '{destinationType}' because the active world is {world.Height} hardware rows tall; use an i16 local and compare it with -1.");
+    }
+
+    private bool IsWorldHitTopValue(ExpressionSyntax expression, HashSet<string> callStack)
+    {
+        if (expression is CastSyntax cast)
+        {
+            return IsWorldHitTopValue(cast.Expression, callStack);
+        }
+
+        if (expression is not FunctionCall call
+            || !program.Functions.TryGetValue(call.Name, out var function))
+        {
+            return false;
+        }
+
+        if (function.IsExtern)
+        {
+            return TargetIntrinsicResolver.Resolve(function, program.TargetIntrinsics).Operation
+                   == TargetIntrinsicOperation.CameraAabbHitTop;
+        }
+
+        if (!callStack.Add(function.Name))
+        {
+            return false;
+        }
+
+        try
+        {
+            return IsWorldHitTopValue(
+                ParameterSubstitution.SubstituteReturnExpression(function, call, "NES"),
+                callStack);
+        }
+        finally
+        {
+            callStack.Remove(function.Name);
+        }
     }
 
     private void EmitWhile(WhileSyntax whileSyntax)
@@ -5113,7 +5216,7 @@ internal sealed class NesRuntimeCompiler
         }
 
         var config = EnsureCameraConfigured("camera_aabb_tiles");
-        _ = WorldMapForFlagQuery("camera_aabb_tiles");
+        var worldMap = WorldMapForFlagQuery("camera_aabb_tiles");
         var width = CameraAabbWidth(operation.Width);
         var flags = (int)operation.Flags;
         if (width == 0 || operation.Height == 0 || flags == 0)
@@ -5126,18 +5229,42 @@ internal sealed class NesRuntimeCompiler
 
         var foundLabel = builder.CreateLabel("camera_aabb_tiles_found");
         var endLabel = builder.CreateLabel("camera_aabb_tiles_end");
+        var constantWorldY = TrySdkConst(operation.WorldY, out _);
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
         {
+            var hitTopOffset = operation.WorldYOffset + yOffset;
+            var nextRowLabel = builder.CreateLabel("camera_aabb_tiles_next_row");
+            if (!constantWorldY)
+            {
+                EmitWorldPixelToTileCoordinate(operation.WorldY, hitTopOffset);
+                builder.CompareImmediate(worldMap.Height);
+                var inBoundsLabel = builder.CreateLabel("camera_aabb_tiles_row_in_bounds");
+                builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
+                builder.JumpAbsolute(nextRowLabel);
+                builder.Label(inBoundsLabel);
+                builder.StoreAZeroPage(CollisionRowScratchAddress);
+            }
+
             foreach (var xOffset in AabbSampleOffsets(width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_tiles_next");
-                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, operation.WorldYOffset + yOffset, config, "camera_aabb_tiles");
+                if (constantWorldY)
+                {
+                    EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, "camera_aabb_tiles");
+                }
+                else
+                {
+                    EmitCameraTileFlagsAtStoredRow(operation.ScreenX, xOffset, config);
+                }
+
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
                 builder.JumpAbsolute(foundLabel);
                 builder.Label(nextProbeLabel);
             }
+
+            builder.Label(nextRowLabel);
         }
 
         builder.LoadAImmediate(0);
@@ -5156,25 +5283,47 @@ internal sealed class NesRuntimeCompiler
 
         var callName = "camera_aabb_hit_top";
         var config = EnsureCameraConfigured(callName);
-        _ = WorldMapForFlagQuery(callName);
+        var worldMap = WorldMapForFlagQuery(callName);
         var width = CameraAabbWidth(operation.Width);
         var flags = (int)operation.Flags;
         if (width == 0 || operation.Height == 0 || flags == 0)
         {
             builder.LoadAImmediate(255);
+            builder.TransferAToX();
             return;
         }
 
         ValidateConstantCameraAabbSpan(operation.ScreenX, width, NesTarget.Capabilities.ScreenPixels.Width, "camera_aabb_hit_top");
 
         var endLabel = builder.CreateLabel("camera_aabb_hit_top_end");
+        var constantWorldY = TrySdkConst(operation.WorldY, out _);
         foreach (var yOffset in AabbSampleOffsets(operation.Height))
         {
+            var hitTopOffset = operation.WorldYOffset + yOffset;
+            var nextRowLabel = builder.CreateLabel("camera_aabb_hit_top_next_row");
+            if (!constantWorldY)
+            {
+                EmitWorldPixelToTileCoordinate(operation.WorldY, hitTopOffset);
+                builder.CompareImmediate(worldMap.Height);
+                var inBoundsLabel = builder.CreateLabel("camera_aabb_hit_top_row_in_bounds");
+                builder.BranchRelative(0x90, inBoundsLabel); // BCC inBoundsLabel
+                builder.JumpAbsolute(nextRowLabel);
+                builder.Label(inBoundsLabel);
+                builder.StoreAZeroPage(CollisionRowScratchAddress);
+            }
+
             foreach (var xOffset in AabbSampleOffsets(width))
             {
                 var nextProbeLabel = builder.CreateLabel("camera_aabb_hit_top_next");
-                var hitTopOffset = operation.WorldYOffset + yOffset;
-                EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
+                if (constantWorldY)
+                {
+                    EmitCameraTileFlagsAt(operation.ScreenX, xOffset, operation.WorldY, hitTopOffset, config, callName);
+                }
+                else
+                {
+                    EmitCameraTileFlagsAtStoredRow(operation.ScreenX, xOffset, config);
+                }
+
                 builder.AndImmediate(flags);
                 builder.CompareImmediate(0);
                 builder.BranchRelative(0xF0, nextProbeLabel); // BEQ nextProbeLabel
@@ -5182,9 +5331,12 @@ internal sealed class NesRuntimeCompiler
                 builder.JumpAbsolute(endLabel);
                 builder.Label(nextProbeLabel);
             }
+
+            builder.Label(nextRowLabel);
         }
 
         builder.LoadAImmediate(255);
+        builder.TransferAToX();
         builder.Label(endLabel);
     }
 
@@ -5277,7 +5429,7 @@ internal sealed class NesRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitCameraTileFlagsAt(int screenPixelX, SdkByteExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
+    private void EmitCameraTileFlagsAt(int screenPixelX, SdkWordExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
     {
         var worldMap = WorldMapForFlagQuery(callName);
         var outOfBoundsLabel = builder.CreateLabel("camera_tile_flags_oob");
@@ -5314,7 +5466,7 @@ internal sealed class NesRuntimeCompiler
         builder.Label(endLabel);
     }
 
-    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkByteExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
+    private void EmitCameraTileFlagsAt(SdkByteExpression screenPixelX, int screenPixelXOffset, SdkWordExpression worldY, int worldYOffset, NesCameraConfig config, string callName)
     {
         if (TrySdkConst(screenPixelX, out var constantScreenX))
         {
@@ -5355,6 +5507,13 @@ internal sealed class NesRuntimeCompiler
         builder.Label(outOfBoundsLabel);
         builder.LoadAImmediate(0);
         builder.Label(endLabel);
+    }
+
+    private void EmitCameraTileFlagsAtStoredRow(SdkByteExpression screenPixelX, int screenPixelXOffset, NesCameraConfig config)
+    {
+        EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+        EmitMapFlagsAtScratchColumnAndRow();
     }
 
     private void EmitCameraScreenTileFlagsAt(
@@ -5468,20 +5627,55 @@ internal sealed class NesRuntimeCompiler
         }
     }
 
-    private void EmitWorldPixelToTileCoordinate(SdkByteExpression expression, int offset)
+    private void EmitWorldPixelToTileCoordinate(SdkWordExpression expression, int offset)
     {
-        EmitSdkByteExpressionToA(expression);
-        EmitAddSignedImmediate(offset);
+        EmitSdkWordExpressionWithOffsetToAx(expression, offset);
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        builder.StoreXZeroPage(ExpressionScratchAddress);
+        builder.LoadAZeroPage(ExpressionScratchAddress);
+        builder.AndImmediate(0x07);
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.ShiftLeftA();
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.ShiftRightA();
+        builder.OrZeroPage(ExpressionScratchAddress);
     }
 
-    private void EmitWorldPixelTileTop(SdkByteExpression expression, int offset)
+    private void EmitWorldPixelTileTop(SdkWordExpression expression, int offset)
     {
-        EmitSdkByteExpressionToA(expression);
-        EmitAddSignedImmediate(offset);
+        EmitSdkWordExpressionWithOffsetToAx(expression, offset);
         builder.AndImmediate(0xF8);
+    }
+
+    private void EmitSdkWordExpressionWithOffsetToAx(SdkWordExpression expression, int offset)
+    {
+        EmitSdkWordExpressionToA(expression, highByte: false);
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        EmitSdkWordExpressionToA(expression, highByte: true);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+
+        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
+        if (offset != 0)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(offset & 0xFF);
+        }
+
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        builder.LoadAZeroPage(ExpressionScratchAddress);
+        if (offset != 0)
+        {
+            builder.AddImmediate((offset >> 8) & 0xFF);
+        }
+
+        builder.TransferAToX();
+        builder.LoadAZeroPage(RuntimeIndexScratchAddress);
     }
 
     private void EmitCameraPixelToSourceRow(SdkByteExpression screenPixelY, int screenPixelYOffset, int mapHeight)
@@ -5809,6 +6003,18 @@ internal sealed class NesRuntimeCompiler
     private static bool TrySdkConst(SdkByteExpression expression, out int value)
     {
         if (expression is SdkByteExpression.Constant constant)
+        {
+            value = constant.Value;
+            return true;
+        }
+
+        value = 0;
+        return false;
+    }
+
+    private static bool TrySdkConst(SdkWordExpression expression, out int value)
+    {
+        if (expression is SdkWordExpression.Constant constant)
         {
             value = constant.Value;
             return true;
@@ -6319,6 +6525,7 @@ internal sealed class NesRuntimeCompiler
             return false;
         }
 
+        var completeWordReturn = false;
         switch (intrinsic.Operation)
         {
             case TargetIntrinsicOperation.CameraAabbTiles:
@@ -6327,61 +6534,69 @@ internal sealed class NesRuntimeCompiler
                     TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
                     program.TargetIntrinsics));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraAabbHitTop:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraAabbHitTop(
                     TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
                     program.TargetIntrinsics));
-                return true;
+                completeWordReturn = true;
+                break;
             case TargetIntrinsicOperation.CameraScreenAabbTiles:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbTiles(
                     TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
                     program.TargetIntrinsics));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraScreenAabbHitTop:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitSdkOperation(Sdk2DOperationCollector.ReadCameraScreenAabbHitTop(
                     TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics),
                     program.Functions,
                     program.TargetIntrinsics));
-                return true;
+                break;
             case TargetIntrinsicOperation.CameraVerticalScrollMax:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitCameraVerticalScrollMax();
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonDown:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonDown(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonJustPressed:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonJustPressed(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonJustReleased:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonJustReleased(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ButtonHoldTicks:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 EmitButtonHoldTicks(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitSpriteWidth(call);
-                return true;
+                break;
             case TargetIntrinsicOperation.ReadAnimationFrame:
                 NesVideoProgram.RequireArity(call, intrinsic.Arity);
                 _ = TargetIntrinsicResolver.ResolveCall(function, call, program.TargetIntrinsics);
                 EmitAnimationFrame(call);
-                return true;
+                break;
             default:
                 return false;
         }
+
+        if (intrinsic.ReturnKind == TargetIntrinsicReturnKind.I16 && !completeWordReturn)
+        {
+            builder.LoadXImmediate(0);
+        }
+
+        return true;
     }
 
     private void EmitButtonDown(FunctionCall call)
@@ -6683,6 +6898,8 @@ internal sealed class PrgBuilder
     public void LoadAZeroPageX(byte address) => Emit(0xB5, address);
 
     public void StoreAZeroPage(byte address) => Emit(0x85, address);
+
+    public void StoreXZeroPage(byte address) => Emit(0x86, address);
 
     public void StoreAZeroPageX(byte address) => Emit(0x95, address);
 

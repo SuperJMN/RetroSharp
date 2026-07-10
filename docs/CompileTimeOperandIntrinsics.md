@@ -59,7 +59,7 @@ The SDK/frontend collector reads call operands using the descriptor:
 3. `ConstPaletteSlot` and `EnumFlags` slots are read with constant/enum folding and validated at the SDK/target boundary.
 4. `WorldId` slots are read as compile-time resource identifiers. The current proof accepts the existing string-literal form such as `"default"` so it does not require new grammar.
 
-Per-target lowerers then emit through the same machinery that current `Sdk2DOperation` lowering uses. For `Sprite.Draw`, the lowerer still resolves metasprite geometry from target asset metadata. For collision, `Camera.AabbTiles` and `Camera.AabbHitTop` still preserve their capability checks and the `255` no-hit result contract.
+Per-target lowerers then emit through the same machinery that current `Sdk2DOperation` lowering uses. For `Sprite.Draw`, the lowerer still resolves metasprite geometry from target asset metadata. For collision, `Camera.AabbTiles` and `Camera.AabbHitTop` preserve their capability checks; world hit-top returns a complete word with `-1` as no hit.
 
 The parser, AST, ABI, and classic `RetroSharp.Generation.Intermediate` IR do not gain sprite, camera, world, asset, generic, or expression-tree concepts. This is SDK/frontend plus target-intrinsic metadata.
 
@@ -103,7 +103,7 @@ extern i16 __retrosharp_gb_camera_aabb_tiles(i16 worldId, i16 screenX, i16 world
 extern i16 __retrosharp_gb_camera_aabb_hit_top(i16 worldId, i16 screenX, i16 worldY, i16 width, i16 height, i16 flags);
 ```
 
-The package helpers pass `"default"` for the hidden `WorldId` slot and forward the public operands. The descriptors mark slot `0` as `WorldId` and slot `5` as `EnumFlags`; the collector still parses `screenX`, `worldY`, `width`, and `height` through the existing SDK readers, including `SdkAabbExtent` support for constants and `Sprite.Width(...)`. The result is the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` stream as the common camera AABB lowering, preserving byte identity, capability diagnostics, and the `255` no-hit contract.
+The package helpers pass `"default"` for the hidden `WorldId` slot and forward the public operands. The descriptors mark slot `0` as `WorldId` and slot `5` as `EnumFlags`; the collector parses byte screen X, word world Y, width, and height through the SDK readers, including `SdkAabbExtent` support for constants and `Sprite.Width(...)`. The result is the same `Sdk2DOperation.CameraAabbTiles` / `CameraAabbHitTop` stream as the common camera AABB lowering, preserving capability diagnostics and the complete `I16` result contract.
 
 SAL-8.6 wires NES `Camera.AabbTiles` and `Camera.AabbHitTop` through the same descriptor-role form:
 

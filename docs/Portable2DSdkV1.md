@@ -89,8 +89,8 @@ Game Boy currently accepts VGM/VGZ DMG register logs, hUGETracker `.uge` v6 reso
 | `World.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `World.TileFlagsAt(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
-| `Camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. Current lowering accepts literal or byte-backed `screenX`/`worldY`; LW-1.2 widens the world-Y operand under the accepted Large Worlds contract. |
-| `Camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags. Current lowering returns a byte top or `255` for no hit. The accepted Large Worlds contract makes the declared `i16` result a little-endian word and reserves `-1`/`0xFFFF` for no hit in LW-1.2. Landing policy remains source-owned. |
+| `Camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` remains byte-range; `worldY` is a complete word expression and byte-backed callers zero-extend. |
+| `Camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the aligned world-pixel top of the first/top overlapped tile matching the requested flags, or `-1` (`0xFFFF`) when none match. The result and `worldY` use fixed little-endian words. A byte destination is accepted only for active worlds up to 32 hardware rows; taller worlds require an `i16` local. Landing policy remains source-owned. |
 | `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` | Return `1` if a screen-space AABB overlaps requested world flags after adding the current camera X/Y state. This is the actor/runtime form used when both actor axes are projected to screen bytes. |
 | `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` | Return the top screen-pixel Y of the first/top overlapped tile matching the requested flags for a screen-space AABB, or `255` when there is no hit. Its signature/descriptor remain `I16`: a word destination receives zero-extended `0x0000..0x00F8` or no-hit `0x00FF`; a byte destination consumes the low byte. Source/framework code can add the current camera Y bytes back when it needs to resolve a world Y. |
 
@@ -99,8 +99,8 @@ World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values
 The accepted
 [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
 defines the post-LW-1.1/LW-1.2 scalar surface. LW-1.1 now implements word map
-widths, logical camera positions, and source-column addressing; LW-1.2 still
-owns world collision operands/results. Map dimensions, logical camera/world
+widths, logical camera positions, and source-column addressing; LW-1.2 now
+implements world collision operands/results. Map dimensions, logical camera/world
 pixels, hardware-cell coordinates, and world hit tops are non-negative `i16`
 words; world no-hit is
 `-1`/`0xFFFF`; and screen-relative hit-top remains `0..248`/`255` semantically
@@ -509,10 +509,9 @@ SDK v1 is usable for the current cross-target camera sample, and the runner-shap
 
 - `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
 - LW-0.4 is accepted in `docs/WorldCoordinateCollisionContract.md`. LW-1.1 has
-  landed word camera positions and logical source-column addressing. LW-1.2
-  still owns world-Y collision operands and the widened world hit-top result;
-  until then, emitted GB/NES world hit-top keeps the legacy byte `255`
-  sentinel.
+  landed word camera positions and logical source-column addressing. LW-1.2 has
+  landed word world-Y collision operands and complete world hit-top results,
+  including `-1`/`0xFFFF` no-hit behavior on both targets.
 - On Game Boy, `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations used by backend lowering.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `Camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `Palette.Background(...)` and `Palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors, may use the next physical sprite palette slot for automatic optional overlays when a PNG has more than three opaque colors, and may move incompatible PNG-derived palettes to a free physical sprite palette range.

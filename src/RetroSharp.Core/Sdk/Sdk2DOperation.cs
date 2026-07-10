@@ -101,7 +101,7 @@ public abstract record Sdk2DOperation
     public sealed record CameraAabbTiles(
         string WorldId,
         SdkByteExpression ScreenX,
-        SdkByteExpression WorldY,
+        SdkWordExpression WorldY,
         int WorldYOffset,
         SdkAabbExtent Width,
         int Height,
@@ -110,7 +110,7 @@ public abstract record Sdk2DOperation
         public CameraAabbTiles(
             string WorldId,
             int ScreenX,
-            SdkByteExpression WorldY,
+            SdkWordExpression WorldY,
             int Width,
             int Height,
             WorldTileFlags Flags)
@@ -121,7 +121,7 @@ public abstract record Sdk2DOperation
         public CameraAabbTiles(
             string WorldId,
             SdkByteExpression ScreenX,
-            SdkByteExpression WorldY,
+            SdkWordExpression WorldY,
             int Width,
             int Height,
             WorldTileFlags Flags)
@@ -133,7 +133,7 @@ public abstract record Sdk2DOperation
     public sealed record CameraAabbHitTop(
         string WorldId,
         SdkByteExpression ScreenX,
-        SdkByteExpression WorldY,
+        SdkWordExpression WorldY,
         int WorldYOffset,
         SdkAabbExtent Width,
         int Height,
@@ -142,7 +142,7 @@ public abstract record Sdk2DOperation
         public CameraAabbHitTop(
             string WorldId,
             int ScreenX,
-            SdkByteExpression WorldY,
+            SdkWordExpression WorldY,
             int Width,
             int Height,
             WorldTileFlags Flags)
@@ -153,7 +153,7 @@ public abstract record Sdk2DOperation
         public CameraAabbHitTop(
             string WorldId,
             SdkByteExpression ScreenX,
-            SdkByteExpression WorldY,
+            SdkWordExpression WorldY,
             int Width,
             int Height,
             WorldTileFlags Flags)

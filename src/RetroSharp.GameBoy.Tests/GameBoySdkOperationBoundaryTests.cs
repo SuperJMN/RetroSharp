@@ -350,7 +350,7 @@ public sealed class GameBoySdkOperationBoundaryTests
 
         Assert.Equal("default", query.WorldId);
         Assert.Equal(new SdkByteExpression.Constant(72), query.ScreenX);
-        Assert.Equal(Local("footY"), query.WorldY);
+        Assert.Equal(WordLocal("footY"), query.WorldY);
         Assert.Equal(0, query.WorldYOffset);
         Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
         Assert.Equal(8, query.Height);
@@ -395,7 +395,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
         var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
 
-        Assert.Equal(Local("footY"), query.WorldY);
+        Assert.Equal(WordLocal("footY"), query.WorldY);
         Assert.Equal(-8, query.WorldYOffset);
     }
 
@@ -419,7 +419,7 @@ public sealed class GameBoySdkOperationBoundaryTests
 
         Assert.Equal("default", query.WorldId);
         Assert.Equal(new SdkByteExpression.Constant(72), query.ScreenX);
-        Assert.Equal(Local("footY"), query.WorldY);
+        Assert.Equal(WordLocal("footY"), query.WorldY);
         Assert.Equal(-32, query.WorldYOffset);
         Assert.Equal(new SdkAabbExtent.SpriteWidth("player_run"), query.Width);
         Assert.Equal(40, query.Height);

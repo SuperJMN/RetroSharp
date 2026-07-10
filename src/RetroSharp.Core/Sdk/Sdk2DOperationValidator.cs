@@ -219,7 +219,7 @@ public static class Sdk2DOperationValidator
         SdkByteExpression screenX,
         SdkAabbExtent width,
         int height,
-        SdkByteExpression worldY,
+        SdkWordExpression worldY,
         WorldTileFlags flags)
     {
         ValidateByteExpression(screenX, "camera AABB screen X");
@@ -230,7 +230,27 @@ public static class Sdk2DOperationValidator
             throw new InvalidOperationException($"camera AABB height must be between 0 and 255 for target '{capabilities.Name}'.");
         }
 
-        ValidateByteExpression(worldY, "camera AABB world Y");
+        ValidateWordExpression(worldY, "camera AABB world Y");
+        ValidateCollisionFlags(flags, "camera AABB flags");
+    }
+
+    private static void ValidateCameraAabbGeometry(
+        Target2DCapabilities capabilities,
+        SdkByteExpression screenX,
+        SdkAabbExtent width,
+        int height,
+        SdkByteExpression screenY,
+        WorldTileFlags flags)
+    {
+        ValidateByteExpression(screenX, "camera AABB screen X");
+        ValidateAabbWidth(capabilities, screenX, width);
+
+        if (height < 0 || height > 255)
+        {
+            throw new InvalidOperationException($"camera AABB height must be between 0 and 255 for target '{capabilities.Name}'.");
+        }
+
+        ValidateByteExpression(screenY, "camera AABB screen Y");
         ValidateCollisionFlags(flags, "camera AABB flags");
     }
 

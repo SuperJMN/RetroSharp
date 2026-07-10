@@ -62,7 +62,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             target = "gb",
             sourceCells = new { width = 156, height = 20, tilePixels = 16 },
             hardwareTiles = new { width = world.Width, height = world.Height, cells = world.WorldTileIds.Length },
-            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, floorY = 304, noHit = 255 },
+            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, floorY = 304, noHit = -1 },
             resources = new
             {
                 visualBytes = world.WorldTileIds.Length,
@@ -77,7 +77,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             checks = new[]
             {
                 new { id = "address-width", status = "passes", detail = "312 hardware columns and word camera/source-edge positions compile without truncation" },
-                new { id = "collision-abi", status = "blocked", detail = "floor Y 304 cannot share an 8-bit hit result whose no-hit sentinel is 255" },
+                new { id = "collision-abi", status = "passes-after-lw-1.2", detail = "world hit-top returns 304 as 30 01 and no hit as FF FF" },
                 new { id = "rom-capacity", status = "capacity-probe-passes", detail = "the unchanged runner payload with only World.Load redirected emits a 131072-byte MBC1 ROM" },
                 new { id = "tile-patterns", status = "passes", detail = "6 reserved + 82 background + 60 sprite tiles use 148 of 256 indexes" },
                 new { id = "ram-staging", status = "blocked", detail = "no fixed large-world chunk staging contract exists" },

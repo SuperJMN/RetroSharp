@@ -122,14 +122,14 @@ The preferred `Sprite.Draw(...)` spelling is declared by the `RetroSharp.Portabl
 
 `Camera.Init(mapWidth, streamY, streamHeight)` enables the camera path for the current world map. `Camera.SetPosition(x, y)` consumes complete little-endian word operands; byte-backed callers zero-extend. NES compares the logical word and walks toward it one pixel at a time, bounded to at most one tile crossing (≤8 px) per axis per call. Maps whose reachable camera extent is byte-sized keep the compact legacy byte walker; this is a compile-time known-high-zero optimization. Wider camera extents retain or derive the high camera byte, and maps wider than 255 hardware cells keep tile/source cursors and pending edge tags as words across `255 <-> 256`. `Video.WaitVBlank()` edge-polls `$2002`, drains one pending stream phase, and restores camera scroll immediately at VBlank entry. A later `Camera.Apply()` in the same frame is skipped unless camera state changed after the wait. The restore derives `$2000` nametable bits from the 64x60 buffer coordinates and writes only target-derived low scroll bytes through `$2005`. A queued vertical row remains pending across multiple VBlanks: four calls write 8 tile bytes each, and a fifth refreshes row attributes. For four-screen vertical scrolling, `streamY` must start inside the 60-row buffer; `streamHeight` may name the full source height and is clipped to the initial VRAM surface for startup while runtime row streaming uses the full map height.
 
-`Camera.AabbTiles(screenX, worldY, width, height, flags)` and `Camera.AabbHitTop(screenX, worldY, width, height, flags)` query collision flags from the active world map using the current absolute camera tile, camera fine X, and a screen-space AABB whose Y is still supplied as world pixels. `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space X/Y bytes and add the camera X/Y state inside the backend. These forms support both the runner's projected player X and actor-framework world X/Y projections on the four-screen camera path. All four are declared by the `RetroSharp.Portable2D` source package as inline helpers over role-bearing `camera_aabb_tiles`/`camera_aabb_hit_top`/`camera_screen_aabb_tiles`/`camera_screen_aabb_hit_top` target intrinsics (hidden `WorldId` plus `EnumFlags` slots); the value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation` shape. Generic world-space `World.TileFlagsAt(...)` and `collision_aabb_tiles(...)` remain unsupported on NES.
+`Camera.AabbTiles(screenX, worldY, width, height, flags)` and `Camera.AabbHitTop(screenX, worldY, width, height, flags)` query collision flags from the active world map using the current absolute camera tile, camera fine X, and a screen-space AABB whose Y is supplied as a complete world-pixel word. Byte-backed Y values zero-extend. World hit-top returns the aligned world top through `A:X` (`A` low, `X` high), or `FF FF` for no hit. A byte world-hit destination is accepted only when the active world is at most 32 hardware rows; taller worlds require an `i16` destination and `-1` sentinel. `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space X/Y bytes and add the camera X/Y state inside the backend. These forms support both the runner's projected player X and actor-framework world X/Y projections on the four-screen camera path. All four are declared by the `RetroSharp.Portable2D` source package as inline helpers over role-bearing target intrinsics. Generic world-space `World.TileFlagsAt(...)` and `collision_aabb_tiles(...)` remain unsupported on NES.
 
 Although screen hit-top is semantically byte-range, its source signature and
 descriptor are `I16`. Under the accepted word ABI, a word destination receives
 `A:X = 0x0000..0x00F8` for a hit or `0x00FF` for no hit (`A` low, `X = 0`); an
-actor-framework byte destination consumes `A`. The future ABI returns the
-complete pair explicitly rather than relying on an accumulator-only result and
-a caller-synthesized high byte.
+actor-framework byte destination consumes `A`. The target returns the complete
+pair explicitly rather than relying on an accumulator-only result and a
+caller-synthesized high byte.
 
 Large Worlds LW-0.4 is accepted in
 [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md).
@@ -138,7 +138,8 @@ internal NES `A:X` word-return ABI, and world hit-top no-hit bits `0xFFFF`, whil
 screen-relative hit-top keeps byte `255`. This is the contract for
 LW-1.1/LW-1.2. LW-1.1 implements the camera-position and logical
 source-column portion while preserving mapper-0 output for programs that fit;
-LW-1.2 still owns world-Y operands and collision-result widening.
+LW-1.2 implements word world-Y collision operands, complete `A:X` results,
+runner migration, and safe-narrowing diagnostics.
 
 Large Worlds LW-0.3 selects the future banked NES profile in
 [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md):

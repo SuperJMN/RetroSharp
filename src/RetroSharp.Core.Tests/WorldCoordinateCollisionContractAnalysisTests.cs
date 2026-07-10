@@ -97,7 +97,8 @@ public sealed class WorldCoordinateCollisionContractAnalysisTests
         Assert.Equal(10, TotalCycles(NesNoHitSketch));
 
         var adr = File.ReadAllText(RepositoryFile("docs/WorldCoordinateCollisionContract.md"));
-        Assert.Contains("Status: **accepted for LW-0.4 on 2026-07-10.**", adr, StringComparison.Ordinal);
+        Assert.Contains("Status: **accepted for LW-0.4 on 2026-07-10", adr, StringComparison.Ordinal);
+        Assert.Contains("collision lowering implemented by LW-1.2", adr, StringComparison.Ordinal);
         Assert.Contains("0xFFFF", adr, StringComparison.Ordinal);
         Assert.Contains("1887 -> 1888", adr, StringComparison.Ordinal);
         Assert.Contains("2056 -> 2055", adr, StringComparison.Ordinal);
