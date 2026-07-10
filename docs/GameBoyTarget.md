@@ -271,6 +271,22 @@ The preferred `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenA
 
 `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space AABBs, adding the current camera X/Y state inside the backend. They are the actor-framework collision form for wide world Y actors; hit-top returns a screen-pixel top so the framework can add camera Y back into `y`/`yHi`.
 
+Although screen hit-top is semantically byte-range, its source signature and
+descriptor are `I16`. Under the accepted word ABI, a word destination receives
+`HL = 0x0000..0x00F8` for a hit or `HL = 0x00FF` for no hit (`H = 0`); an
+actor-framework byte destination consumes `L`. The future ABI must return both
+register bytes explicitly rather than relying on an accumulator-only value and
+a caller-synthesized high byte.
+
+Large Worlds LW-0.4 is accepted in
+[`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md).
+It keeps the screen-relative `255` sentinel above, but specifies complete
+little-endian `i16` camera/world operands and a world `Camera.AabbHitTop(...)`
+result with `-1`/`0xFFFF` for no hit through the internal `HL` word-return ABI
+(`L` low, `H` high). This is an implementation contract for LW-1.1/LW-1.2, not
+current Game Boy behavior: the production builder and runner still use the
+byte path documented in this section.
+
 `Palette.Background(slot, c0, c1, c2, c3)` declares a logical background palette. Game Boy currently supports background slot `0` and lowers the four colors to `BGP`. `Palette.Sprite(slot, c0, c1, c2, c3)` declares a logical sprite palette. Game Boy supports sprite slots `0` and `1`, lowering them to `OBP0` and `OBP1`. Color values are Game Boy DMG palette indexes `0..3`. Raw `Palette.Set(...)` and `ObjectPalette.Set(...)` remain available as explicit Game Boy setup APIs.
 
 `tilemap_fill_column(column, y, height, tile)` writes a vertical run into the background tilemap at runtime. It is the current primitive for streaming new map columns as the camera advances. The `column` and `tile` arguments can be simple runtime expressions; `y` and `height` are compile-time constants in this prototype.
