@@ -32,11 +32,10 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
-  acceptance target. Waves 0/1 are complete, and Waves 2/3 are issue-ready as
-  ten target-production cards (`LW-2.1`..`LW-2.5` and
-  `LW-3.1`..`LW-3.5`). GitHub #275 remains the parent/integrator issue; do not
-  dispatch the parent as one task, and do not invent Wave 2/3 issue links before
-  their first publication creates the native subissues.
+  acceptance target. Waves 0/1 are complete, and Waves 2/3 are published as ten
+  open, not-started native subissues: `LW-2.1`..`LW-2.5` are #296-#300 and
+  `LW-3.1`..`LW-3.5` are #301-#305. All belong to milestone 11 under parent
+  #275; do not dispatch the parent as one task.
 - LW-1.3 adds the target-neutral `RetroSharp.Core.Sdk.WorldPack` model: the v1
   header/directory and exact clipped coverage are validated with checked
   relative offsets, collision profiles and decoded IDs stay portable, target
@@ -59,14 +58,16 @@ This document preserves project knowledge that previously lived only in agent me
   banker, mapper, production reader, or runner input. Its ROM/PRG number is
   map-only, not a final-link total; only the production link may preserve
   ROM-only/mapper-0 or select a banked profile.
-- Fresh Large Worlds implementation conversations should start with `LW-2.1`
-  and `LW-3.1` in parallel only when both branches start from the same current
-  `master`, then keep each target chain sequential. `LW-2.5` proves full
-  `stage1` on Game Boy through a non-destructive fixture and must not change the
-  shared runner input. Only `LW-3.5`, after `LW-2.5` and `LW-3.4`, migrates the
-  shared runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4;
-  Wave 3 only links the mapper-backed slice from #247 and does not absorb its
-  unrelated gaps.
+- Fresh Large Worlds implementation conversations should start with
+  [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296) and
+  [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) in parallel
+  only when both branches start from the same current `master`, then keep each
+  target chain sequential. `LW-2.5` / #300 proves full `stage1` on Game Boy
+  through a non-destructive fixture and must not change the shared runner input.
+  Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
+  runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4; Wave 3
+  only links the mapper-backed slice from #247 and does not absorb its unrelated
+  gaps.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
@@ -308,8 +309,10 @@ Progress (2026-06-14):
   and AF-5.10 reduce O(spawns)/frame activation scans.
 
 Suggested next steps for the next agent, in order:
-1. For the active cross-target scale frontier, read the exact issue-ready card
-   in `docs/LargeWorldsRoadmap.md`; begin with `LW-2.1` and/or `LW-3.1`, not an
+1. For the active cross-target scale frontier, read the exact published card in
+   `docs/LargeWorldsRoadmap.md`; begin with
+   [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296) and/or
+   [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301), not an
    open-ended request to continue #275.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
    linked ROM/window layout in every placement/selection task.

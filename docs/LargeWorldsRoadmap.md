@@ -1,7 +1,7 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **active; Waves 0 and 1 are complete, and Waves 2 and 3 are
-issue-ready for first publication.**
+Status: **active; Waves 0 and 1 are complete, and Waves 2 and 3 are published
+as open native subissues but not started.**
 Last updated: 2026-07-10.
 
 This roadmap is the executable plan for levels that exceed the legacy
@@ -392,7 +392,7 @@ tasks follow the dependency graph below.
 - Non-goals: no automatic mapper/bank selection beyond reporting accepted
   requirements.
 
-## 8. Target production waves — issue-ready
+## 8. Target production waves — published, not started
 
 The CLI `--world-budget-report` is a map-only analysis path: it serializes the
 selected target `WorldPack` and reports map resources without writing or
@@ -407,8 +407,10 @@ requirement demands it.
 
 Recommended execution and merge order:
 
-1. Start `LW-2.1` and `LW-3.1` from the same current `master`; they may proceed
-   in parallel because they own separate target builders and tests.
+1. Start [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296)
+   and [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) from
+   the same current `master`; they may proceed in parallel because they own
+   separate target builders and tests.
 2. Keep each target chain strictly ordered:
    `LW-2.1 -> LW-2.2 -> LW-2.3 -> LW-2.4 -> LW-2.5` and
    `LW-3.1 -> LW-3.2 -> LW-3.3 -> LW-3.4`.
@@ -423,7 +425,8 @@ Recommended execution and merge order:
 
 #### LW-2.1: Add the fixed-bank MBC1 world-read foundation
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#296](https://github.com/SuperJMN/RetroSharp/issues/296);
+  open and not started.**
 - Layer: Game Boy linker/runtime foundation and validation.
 - Dependencies: merged `LW-1.1` through `LW-1.5` and the accepted
   [`WorldPack` v1 contract](WorldPackFormatV1.md).
@@ -468,9 +471,11 @@ Recommended execution and merge order:
 
 #### LW-2.2: Place serialized WorldPacks in physical MBC1 banks
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#297](https://github.com/SuperJMN/RetroSharp/issues/297);
+  open and not started.**
 - Layer: Game Boy target placement/linking.
-- Dependencies: `LW-2.1` and merged `LW-1.4`/`LW-1.5`.
+- Dependencies: [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296)
+  (native blocked-by) and merged `LW-1.4`/`LW-1.5`.
 - Outcome: carry the canonical serialized Game Boy `WorldPack` into the final
   ROM, assign deterministic far locations after program banks without
   overlapping audio, and select MBC1 only when the final link requires it.
@@ -512,9 +517,11 @@ Recommended execution and merge order:
 
 #### LW-2.3: Implement the fixed-bank WorldPack reader and decoder
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#298](https://github.com/SuperJMN/RetroSharp/issues/298);
+  open and not started.**
 - Layer: Game Boy production runtime reader, decode, and collision lowering.
-- Dependencies: `LW-2.2`, merged `LW-1.1`, and merged `LW-1.2`.
+- Dependencies: [LW-2.2 / #297](https://github.com/SuperJMN/RetroSharp/issues/297)
+  (native blocked-by), merged `LW-1.1`, and merged `LW-1.2`.
 - Outcome: read and validate v1 packs through fixed-bank code, decode raw/RLE
   visual or collision planes into bounded slots, and answer collision lookups
   without copying the whole world to RAM.
@@ -554,9 +561,11 @@ Recommended execution and merge order:
 
 #### LW-2.4: Integrate staged edges with Game Boy camera streaming
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#299](https://github.com/SuperJMN/RetroSharp/issues/299);
+  open and not started.**
 - Layer: Game Boy camera runtime and VBlank integration.
-- Dependencies: `LW-2.3`.
+- Dependencies: [LW-2.3 / #298](https://github.com/SuperJMN/RetroSharp/issues/298)
+  (native blocked-by).
 - Outcome: prepare banked/decompressed peer edges outside VBlank and let
   `Camera.Apply()` commit only immutable resident slots within the existing
   21-tile write bound.
@@ -596,9 +605,11 @@ Recommended execution and merge order:
 
 #### LW-2.5: Prove full stage1 on Game Boy without migrating the shared runner
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#300](https://github.com/SuperJMN/RetroSharp/issues/300);
+  open and not started.**
 - Layer: Game Boy behavioral acceptance and compatibility.
-- Dependencies: `LW-2.4`.
+- Dependencies: [LW-2.4 / #299](https://github.com/SuperJMN/RetroSharp/issues/299)
+  (native blocked-by).
 - Outcome: prove the complete authored `stage1` on the production packed MBC1
   path while leaving `samples/runner/runner.retrosharp.json` and its shared
   `World.Load(...)` input unchanged for NES.
@@ -638,7 +649,8 @@ Recommended execution and merge order:
 
 #### LW-3.1: Add the MMC3/TVROM linker and fixed-runtime foundation
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#301](https://github.com/SuperJMN/RetroSharp/issues/301);
+  open and not started.**
 - Layer: NES target linker/cartridge/runtime foundation and validation.
 - Dependencies: accepted
   [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md) and
@@ -680,9 +692,11 @@ Recommended execution and merge order:
 
 #### LW-3.2: Place WorldPack/data sections and select the final NES profile
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#302](https://github.com/SuperJMN/RetroSharp/issues/302);
+  open and not started.**
 - Layer: NES physical placement, final linking, and profile diagnostics.
-- Dependencies: `LW-3.1` and merged `LW-1.4`/`LW-1.5`.
+- Dependencies: [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301)
+  (native blocked-by) and merged `LW-1.4`/`LW-1.5`.
 - Outcome: carry the canonical NES pack into final PRG sections, perform
   section-aware DPCM relocation, and choose mapper 0 versus MMC3 from the real
   final link rather than the map-only report.
@@ -732,9 +746,11 @@ Recommended execution and merge order:
 
 #### LW-3.3: Implement the fixed-bank NES WorldPack reader
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#303](https://github.com/SuperJMN/RetroSharp/issues/303);
+  open and not started.**
 - Layer: NES fixed runtime reader, decode, collision, and bank restoration.
-- Dependencies: `LW-3.2` and merged `LW-1.2`.
+- Dependencies: [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302)
+  (native blocked-by) and merged `LW-1.2`.
 - Outcome: use one v1 reader for resident mapper-0 sources and far R6 sources,
   with bounded slots and exact R6/shadow restoration on all paths.
 - Scope:
@@ -771,9 +787,11 @@ Recommended execution and merge order:
 
 #### LW-3.4: Integrate staged four-screen NES streaming
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#304](https://github.com/SuperJMN/RetroSharp/issues/304);
+  open and not started.**
 - Layer: NES camera runtime, staging scheduler, and PPU/NMI integration.
-- Dependencies: `LW-3.3`.
+- Dependencies: [LW-3.3 / #303](https://github.com/SuperJMN/RetroSharp/issues/303)
+  (native blocked-by).
 - Outcome: prepare immutable peer edge slots outside VBlank/NMI and reuse the
   proven four-screen commit phases without bank/decode work in the frame-critical
   section.
@@ -815,10 +833,13 @@ Recommended execution and merge order:
 
 #### LW-3.5: Migrate the shared runner and prove joint full-stage1 acceptance
 
-- Status: **issue-ready; not started.**
+- Status: **published as [#305](https://github.com/SuperJMN/RetroSharp/issues/305);
+  open and not started.**
 - Layer: cross-target acceptance, shared sample integration, and tracked
   artifacts.
-- Dependencies: `LW-2.5` and `LW-3.4`.
+- Dependencies: [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300)
+  and [LW-3.4 / #304](https://github.com/SuperJMN/RetroSharp/issues/304)
+  (both native blocked-by).
 - Outcome: switch the shared runner from `stage1.playable.tmj` to the complete
   authored `stage1.tmj`, regenerate both tracked ROMs, and prove the final GB
   and NES production paths together.
@@ -913,16 +934,25 @@ debug workflow.
   - [#281 — LW-1.3: add the target-neutral WorldPack model](https://github.com/SuperJMN/RetroSharp/issues/281)
   - [#284 — LW-1.4: compile Tiled worlds into deterministic WorldPack chunks](https://github.com/SuperJMN/RetroSharp/issues/284)
   - [#283 — LW-1.5: add deterministic world and cartridge budget diagnostics](https://github.com/SuperJMN/RetroSharp/issues/283)
-- Wave 2 and Wave 3 native subissues: links are pending the first publication
-  of this issue-ready plan. Do not invent issue numbers in documentation; add
-  the real links after the native subissues are created under #275.
+- Wave 2 native subissues (open, not started, milestone 11):
+  - [#296 — LW-2.1: add the fixed-bank MBC1 world-read foundation](https://github.com/SuperJMN/RetroSharp/issues/296)
+  - [#297 — LW-2.2: place serialized WorldPacks in physical MBC1 banks](https://github.com/SuperJMN/RetroSharp/issues/297)
+  - [#298 — LW-2.3: implement the fixed-bank WorldPack reader and decoder](https://github.com/SuperJMN/RetroSharp/issues/298)
+  - [#299 — LW-2.4: integrate staged edges with Game Boy camera streaming](https://github.com/SuperJMN/RetroSharp/issues/299)
+  - [#300 — LW-2.5: prove full stage1 on Game Boy without migrating the shared runner](https://github.com/SuperJMN/RetroSharp/issues/300)
+- Wave 3 native subissues (open, not started, milestone 11):
+  - [#301 — LW-3.1: add the MMC3/TVROM linker and fixed-runtime foundation](https://github.com/SuperJMN/RetroSharp/issues/301)
+  - [#302 — LW-3.2: place WorldPack/data sections and select the final NES profile](https://github.com/SuperJMN/RetroSharp/issues/302)
+  - [#303 — LW-3.3: implement the fixed-bank NES WorldPack reader](https://github.com/SuperJMN/RetroSharp/issues/303)
+  - [#304 — LW-3.4: integrate staged four-screen NES streaming](https://github.com/SuperJMN/RetroSharp/issues/304)
+  - [#305 — LW-3.5: migrate the shared runner and prove joint full-stage1 acceptance](https://github.com/SuperJMN/RetroSharp/issues/305)
 - Related open issues: [#244](https://github.com/SuperJMN/RetroSharp/issues/244)
   (Wave 4 wide-map spawn activation) and
   [#247](https://github.com/SuperJMN/RetroSharp/issues/247) (broader NES target
   gaps). Update #247 only with a link to the Wave 3 mapper-backed slice; its
   unrelated gaps remain open and are not duplicated here.
 
-The parent issue remains the integrator surface. After first publication,
-implementation agents receive one native `LW-2.x` or `LW-3.x` child issue, not
-the parent or an open-ended request to continue the epic; no created child is
-started as part of planning/publication.
+All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
+recorded above. The parent remains the integrator surface: implementation
+agents receive one child issue, not the parent or an open-ended request to
+continue the epic. Publication did not start any child.
