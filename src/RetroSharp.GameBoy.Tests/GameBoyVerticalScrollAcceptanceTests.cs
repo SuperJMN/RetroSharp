@@ -20,7 +20,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
 
         Assert.True(camera.Axes.HasFlag(ScrollAxes.Vertical));
-        Assert.IsType<SdkByteExpression.Variable>(camera.Y);
+        Assert.IsType<SdkWordExpression.Variable>(camera.Y);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(32768, rom.Length);
@@ -75,7 +75,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
 
         Assert.True(camera.Axes.HasFlag(ScrollAxes.Vertical));
-        Assert.IsType<SdkByteExpression.Variable>(camera.Y);
+        Assert.IsType<SdkWordExpression.Variable>(camera.Y);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(32768, rom.Length);
@@ -227,8 +227,8 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
 
         Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, camera.Axes);
-        Assert.IsType<SdkByteExpression.Variable>(camera.X);
-        Assert.IsType<SdkByteExpression.Variable>(camera.Y);
+        Assert.IsType<SdkWordExpression.Variable>(camera.X);
+        Assert.IsType<SdkWordExpression.Variable>(camera.Y);
 
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
         Assert.Equal(32768, rom.Length);

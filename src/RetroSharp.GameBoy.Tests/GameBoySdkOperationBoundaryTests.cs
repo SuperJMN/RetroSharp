@@ -224,8 +224,8 @@ public sealed class GameBoySdkOperationBoundaryTests
             {
                 var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(operation);
 
-                Assert.Equal(Local("cameraX"), camera.X);
-                Assert.Equal(new SdkByteExpression.Constant(0), camera.Y);
+                Assert.Equal(WordLocal("cameraX"), camera.X);
+                Assert.Equal(new SdkWordExpression.Constant(0), camera.Y);
                 Assert.Equal(ScrollAxes.Horizontal, camera.Axes);
             },
             operation =>
@@ -234,6 +234,22 @@ public sealed class GameBoySdkOperationBoundaryTests
                 Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, apply.Axes);
             });
         Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
+    }
+
+    [Fact]
+    public void Collects_camera_set_position_constant_above_byte_range_without_truncation()
+    {
+        const string source = """
+                              void Main() {
+                                  Camera.SetPosition(256, 0);
+                              }
+                              """;
+
+        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
+            Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source)));
+
+        Assert.Equal(new SdkWordExpression.Constant(256), camera.X);
+        Assert.Equal(ScrollAxes.Horizontal, camera.Axes);
     }
 
     [Fact]
@@ -258,8 +274,8 @@ public sealed class GameBoySdkOperationBoundaryTests
             {
                 var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(operation);
 
-                Assert.Equal(new SdkByteExpression.Constant(0), camera.X);
-                Assert.Equal(Local("cameraY"), camera.Y);
+                Assert.Equal(new SdkWordExpression.Constant(0), camera.X);
+                Assert.Equal(WordLocal("cameraY"), camera.Y);
                 Assert.Equal(ScrollAxes.Vertical, camera.Axes);
             },
             operation =>
@@ -716,8 +732,8 @@ public sealed class GameBoySdkOperationBoundaryTests
         var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
             Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
 
-        Assert.Equal(Local("cameraX"), camera.X);
-        Assert.Equal(Local("cameraY"), camera.Y);
+        Assert.Equal(WordLocal("cameraX"), camera.X);
+        Assert.Equal(WordLocal("cameraY"), camera.Y);
         Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, camera.Axes);
 
         Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
@@ -800,6 +816,11 @@ public sealed class GameBoySdkOperationBoundaryTests
     private static SdkByteExpression.Variable Local(string name)
     {
         return new SdkByteExpression.Variable(LocalLocation(name));
+    }
+
+    private static SdkWordExpression.Variable WordLocal(string name)
+    {
+        return new SdkWordExpression.Variable(LocalLocation(name));
     }
 
     private static SdkByteExpression.Variable Field(SdkStorageLocation target, string fieldName)

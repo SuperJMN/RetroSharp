@@ -46,9 +46,8 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(131_072, capacityProbeRom.Length);
 
         var runtimeProbe = FullStage1RuntimeSource(fullSource);
-        var addressFailure = Assert.Throws<InvalidOperationException>(
-            () => GameBoyRomCompiler.CompileSource(runtimeProbe, RunnerSample.Directory));
-        Assert.Equal("camera_init argument 1 must be between 1 and 255.", addressFailure.Message);
+        var runtimeProbeRom = GameBoyRomCompiler.CompileSource(runtimeProbe, RunnerSample.Directory);
+        Assert.Equal(131_072, runtimeProbeRom.Length);
 
         Assert.Equal(21, GameBoyTarget.Capabilities.MaxBackgroundTileWritesPerFrame);
         Sdk2DOperationValidator.Validate(
@@ -77,7 +76,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             },
             checks = new[]
             {
-                new { id = "address-width", status = "blocked", detail = "312 hardware columns exceed the current 255-column camera ABI" },
+                new { id = "address-width", status = "passes", detail = "312 hardware columns and word camera/source-edge positions compile without truncation" },
                 new { id = "collision-abi", status = "blocked", detail = "floor Y 304 cannot share an 8-bit hit result whose no-hit sentinel is 255" },
                 new { id = "rom-capacity", status = "capacity-probe-passes", detail = "the unchanged runner payload with only World.Load redirected emits a 131072-byte MBC1 ROM" },
                 new { id = "tile-patterns", status = "passes", detail = "6 reserved + 82 background + 60 sprite tiles use 148 of 256 indexes" },

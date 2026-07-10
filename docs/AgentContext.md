@@ -324,8 +324,12 @@ Pipeline shape (two phases, after #105 partial extraction):
   deduplicating and composing the background under blank world cells. `World.Load(path)` therefore
   lowers on both Game Boy and NES from the same source while keeping the editable `.tsx` pointed at
   one baseline PNG.
-- NES limitations: source map rows and columns must still fit the one-byte runtime, four-screen
-  free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
+- LW-1.1 carries `Camera.SetPosition(...)` through shared `SdkWordExpression`
+  operands and both target lowerings. GB/NES map widths and logical
+  source-column cursors support `1..4096`, byte-backed callers zero-extend, and
+  hardware scroll writes remain bytes. This does not add packed/banked world
+  storage or widen collision hits.
+- NES limitations: four-screen free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
   as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
   IRQs are still deferred to NF-10.
 - The shared runner currently uses a horizontal camera over the 88x15 source

@@ -57,8 +57,8 @@ public static class Sdk2DOperationCollector
     {
         SdkCallReader.RequireArity(call, 2);
         var args = call.Parameters.ToList();
-        var x = ReadByteExpression(args[0], "camera_set_position argument 1");
-        var y = ReadByteExpression(args[1], "camera_set_position argument 2");
+        var x = ReadWordExpression(args[0], "camera_set_position argument 1");
+        var y = ReadWordExpression(args[1], "camera_set_position argument 2");
         var axes = AxesFor(x, y);
         return new Sdk2DOperation.SetCameraPosition(x, y, axes);
     }
@@ -439,6 +439,29 @@ public static class Sdk2DOperationCollector
         }
     }
 
+    public static SdkWordExpression ReadWordExpression(ExpressionSyntax expression, string context)
+    {
+        switch (expression)
+        {
+            case ConstantSyntax:
+                return new SdkWordExpression.Constant(CheckedNonNegativeWord(SdkCallReader.ConstValue(expression, context), context));
+            case IdentifierSyntax { Identifier: "true" }:
+                return new SdkWordExpression.Constant(1);
+            case IdentifierSyntax { Identifier: "false" }:
+                return new SdkWordExpression.Constant(0);
+            case IdentifierSyntax identifier:
+                return new SdkWordExpression.Variable(new SdkStorageLocation.Local(identifier.Identifier));
+            case MemberAccessSyntax memberAccess:
+                return new SdkWordExpression.Variable(ReadStorageLocation(memberAccess, context));
+            case IndexExpressionSyntax indexExpression:
+                return new SdkWordExpression.Variable(IndexedElementLocation(indexExpression.BaseIdentifier, indexExpression.Index, context));
+            case CastSyntax cast:
+                return ReadWordExpression(cast.Expression, context);
+            default:
+                throw new InvalidOperationException($"{context} must be a non-negative i16 constant or scalar local variable.");
+        }
+    }
+
     private static SdkStorageLocation ReadStorageLocation(ExpressionSyntax expression, string context)
     {
         return expression switch
@@ -479,6 +502,16 @@ public static class Sdk2DOperationCollector
         if (value is < 0 or > 255)
         {
             throw new InvalidOperationException($"{context} must be between 0 and 255.");
+        }
+
+        return value;
+    }
+
+    private static int CheckedNonNegativeWord(int value, string context)
+    {
+        if (value is < 0 or > short.MaxValue)
+        {
+            throw new InvalidOperationException($"{context} must be between 0 and {short.MaxValue}.");
         }
 
         return value;
@@ -644,16 +677,16 @@ public static class Sdk2DOperationCollector
         return false;
     }
 
-    private static ScrollAxes AxesFor(SdkByteExpression x, SdkByteExpression y)
+    private static ScrollAxes AxesFor(SdkWordExpression x, SdkWordExpression y)
     {
         var axes = ScrollAxes.None;
 
-        if (x is not SdkByteExpression.Constant { Value: 0 })
+        if (x is not SdkWordExpression.Constant { Value: 0 })
         {
             axes |= ScrollAxes.Horizontal;
         }
 
-        if (y is not SdkByteExpression.Constant { Value: 0 })
+        if (y is not SdkWordExpression.Constant { Value: 0 })
         {
             axes |= ScrollAxes.Vertical;
         }

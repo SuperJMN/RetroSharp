@@ -47,18 +47,18 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var fullPayloadFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(fullSource, RunnerSample.Directory));
         Assert.Equal(
-            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $134FC.",
+            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $1350A.",
             fullPayloadFailure.Message);
 
         var noAudioFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(WithoutAudio(fullSource), RunnerSample.Directory));
-        Assert.Equal("NES PRG ROM overflow: 41907 bytes emitted, 32762 bytes available.", noAudioFailure.Message);
+        Assert.Equal("NES PRG ROM overflow: 41921 bytes emitted, 32762 bytes available.", noAudioFailure.Message);
 
-        var addressFailure = Assert.Throws<InvalidOperationException>(
-            () => NesRomCompiler.CompileSource(FullStage1RuntimeSource(fullSource), RunnerSample.Directory));
+        var runtimeProbeFailure = Assert.Throws<InvalidOperationException>(
+            () => NesRomCompiler.CompileSource(FullStage1CameraRuntimeSource(mapPath), RunnerSample.Directory));
         Assert.Equal(
-            "NES camera_init map width must fit one byte in the current horizontal streaming runtime.",
-            addressFailure.Message);
+            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $10A06.",
+            runtimeProbeFailure.Message);
 
         Assert.Equal(32, NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(9, NesTarget.Capabilities.MaxAttributeWritesPerFrame);
@@ -86,14 +86,14 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
                 musicBytes = music.Data.Length,
                 dpcmBytes = music.DpcmBlocks.Sum(block => block.Data.Length),
                 sfxBytes = sfx.Data.Length,
-                prgBytesWithoutAudio = 41_907,
+                prgBytesWithoutAudio = 41_921,
                 prgBytesAvailable = 32_762,
             },
             checks = new[]
             {
-                new { id = "address-width", status = "blocked", detail = "312 hardware columns exceed the current 255-column camera ABI" },
+                new { id = "address-width", status = "passes", detail = "312 hardware columns reach the existing PRG-capacity failure without camera/source-column truncation" },
                 new { id = "collision-abi", status = "blocked", detail = "floor Y 304 cannot share an 8-bit hit result whose no-hit sentinel is 255" },
-                new { id = "rom-capacity", status = "blocked", detail = "41907 bytes without audio exceed 32762 bytes; full audio then conflicts with DPCM placement at E980" },
+                new { id = "rom-capacity", status = "blocked", detail = "41921 bytes without audio exceed 32762 bytes; full audio then conflicts with DPCM placement at E980" },
                 new { id = "tile-patterns", status = "passes", detail = "6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3056 of 8192 CHR bytes" },
                 new { id = "ram-staging", status = "blocked", detail = "mapper-0 has no mapper-backed large-world staging path" },
                 new { id = "vblank", status = "bounded-current-phase", detail = "current limits are 32 tile writes and 9 attribute writes per phase" },
@@ -101,7 +101,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         };
 
         output.WriteLine(JsonSerializer.Serialize(facts, JsonOptions));
-        AssertReportDocuments("NES", "41,907", "32,762", "$E980", "$134FC", "3,056", "8,192");
+        AssertReportDocuments("NES", "41,921", "32,762", "$E980", "$1350A", "$10A06", "3,056", "8,192");
     }
 
     private static string FullStage1RunnerSource(string mapPath)
@@ -113,13 +113,24 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             StringComparison.Ordinal);
     }
 
-    private static string FullStage1RuntimeSource(string source)
+    private static string FullStage1CameraRuntimeSource(string mapPath)
     {
-        return source
-            .Replace("const i16 Width = 176;", "const i16 Width = 312;", StringComparison.Ordinal)
-            .Replace("const i16 Height = 30;", "const i16 Height = 40;", StringComparison.Ordinal)
-            .Replace("const i16 StreamHeight = 30;", "const i16 StreamHeight = 40;", StringComparison.Ordinal)
-            .Replace("const i16 PixelWidth = 1408;", "const i16 PixelWidth = 2496;", StringComparison.Ordinal);
+        var portablePath = mapPath.Replace('\\', '/');
+        return $$"""
+                 void Main() {
+                     Video.Init();
+                     Music.Asset(runner_theme, "assets/music/runner.vgz");
+                     Sfx.Asset(jump_sfx, "assets/sfx/smb-jump.vgm");
+                     Audio.Init();
+                     Music.Play(runner_theme);
+                     World.Load("{{portablePath}}");
+                     Camera.Init(312, 0, 30);
+                     i16 cameraX = 1888;
+                     Camera.SetPosition(cameraX, 0);
+                     Camera.Apply();
+                     Audio.Update();
+                 }
+                 """;
     }
 
     private static string WithoutAudio(string source)

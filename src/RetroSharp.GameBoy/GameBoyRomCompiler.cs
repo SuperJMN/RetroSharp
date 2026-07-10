@@ -1018,7 +1018,7 @@ internal sealed class GameBoyVideoProgram
             throw new InvalidOperationException("world_map requires at least one world_column or map_column declaration.");
         }
 
-        var width = ConstArg(call, 0, 1, 255);
+        var width = ConstArg(call, 0, 1, 4096);
         var streamY = ConstArg(call, 1, 0, 31);
         var height = ConstArg(call, 2, 1, sourceHeight);
         if (WorldFlagColumnHeight is not 0 && WorldFlagColumnHeight < height)
@@ -1146,7 +1146,7 @@ internal sealed class GameBoyVideoProgram
             throw new InvalidOperationException($"{call.Name} expects an index and at least one tile.");
         }
 
-        var index = CheckedRange(ConstValue(args[0], $"{call.Name} argument 1"), 0, 255, $"{call.Name} argument 1");
+        var index = CheckedRange(ConstValue(args[0], $"{call.Name} argument 1"), 0, 4095, $"{call.Name} argument 1");
         var tiles = args
             .Skip(1)
             .Select((arg, i) => CheckedRange(ConstValue(arg, $"{call.Name} argument {i + 2}"), 0, 255, $"{call.Name} argument {i + 2}"))
@@ -1164,7 +1164,7 @@ internal sealed class GameBoyVideoProgram
             throw new InvalidOperationException("world_flags expects an index and at least one flag value.");
         }
 
-        var index = CheckedRange(ConstValue(args[0], "world_flags argument 1"), 0, 255, "world_flags argument 1");
+        var index = CheckedRange(ConstValue(args[0], "world_flags argument 1"), 0, 4095, "world_flags argument 1");
         var allowedFlags = (int)(WorldTileFlags.Solid | WorldTileFlags.Hazard | WorldTileFlags.Platform);
         var flags = args
             .Skip(1)
