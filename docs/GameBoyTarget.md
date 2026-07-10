@@ -303,6 +303,19 @@ uses 2,550 bytes and retains all 82 generated patterns. This payload is not yet
 read by the production Game Boy runtime; `World.Load(...)`, the runner input,
 and tracked ROMs remain on the existing path.
 
+LW-1.5 exposes that same inspection payload through the explicit CLI form
+`--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to
+stdout only when requested. The report sums exact visual/collision stored bytes
+from the serialized chunk directory, distinguishes measured ROM data from any
+padded cartridge allocation, and reports the accepted 298-byte one-byte-ID
+staging shape (128 visual chunk bytes, 128 collision chunk bytes, and two
+21-byte edge slots) against the format's 554-byte two-byte-ID maximum. The
+machine's 8 KiB WRAM capacity is reported separately rather than treated as
+available staging. Its evaluated current profile is
+`gb-simple-mbc1-current`, while `gb-rom-only-current` remains a separately
+named requirement; `selectedProfile` is null because reporting never chooses
+banking. No pack reader, runtime wiring, or runner input changed.
+
 Runner-level world data should use `World.Load(...)` for editable maps, or `World.Column(...)` plus `World.Flags(...)` for compact source-authored maps, so visual setup, streaming data, and collision flags can share the same world resource.
 
 `map_tile_at(sourceColumn, row)` reads one tile id from the source-level map column data and returns it as a byte expression. `map_flags_at(sourceColumn, row)` reads the generated collision flag byte for the same source coordinate. The current prototype expects `row` to be a compile-time constant and leaves column wrapping to the source program. This is enough for simple terrain collision, for example `if (map_flags_at(column, 2) != 0) { ... }`.

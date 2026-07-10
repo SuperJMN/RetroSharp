@@ -130,13 +130,14 @@ void PrintIR(RetroSharp.Generation.Intermediate.Model.IntermediateCodeProgram ir
     PrintSection("Intermediate code:", text);
 }
 
-static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) ParseCommandLine(string[] args)
+static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) ParseCommandLine(string[] args)
 {
     string? inputPath = null;
     string? outputPath = null;
     string? target = null;
     var libraryPaths = new List<string>();
     var plugins = new List<string>();
+    var worldBudgetReport = false;
 
     for (var i = 0; i < args.Length; i++)
     {
@@ -159,6 +160,9 @@ static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<str
                 if (i + 1 >= args.Length) throw new ArgumentException("--sdk-plugin requires a value.");
                 plugins.Add(args[++i]);
                 break;
+            case "--world-budget-report":
+                worldBudgetReport = true;
+                break;
             default:
                 if (args[i].StartsWith("-", StringComparison.Ordinal))
                 {
@@ -170,7 +174,7 @@ static (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<str
         }
     }
 
-    return (inputPath, outputPath, target, libraryPaths, plugins);
+    return (inputPath, outputPath, target, libraryPaths, plugins, worldBudgetReport);
 }
 
 static RetroSharp.Core.Sdk.SdkPluginRegistry ResolveSdkPluginRegistry(IReadOnlyList<string> pluginIds)
@@ -202,7 +206,7 @@ static RetroSharp.Sdk.SdkLibraryRegistry? ResolveSdkLibraryRegistry(IReadOnlyLis
         : RetroSharp.Sdk.SdkLibraryRegistry.FromDirectories(libraryPaths);
 }
 
-static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options)
+static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
 {
     if (options.InputPath is null)
     {
@@ -214,7 +218,7 @@ static IReadOnlyList<RetroSharpBuildInput> ResolveBuildInputs((string? InputPath
         : [ResolveSourceBuildInput(options)];
 }
 
-static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options)
+static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
 {
     var inputPath = options.InputPath ?? throw new ArgumentException("No source file has been specified");
     var fullPath = Path.GetFullPath(inputPath);
@@ -229,7 +233,7 @@ static RetroSharpBuildInput ResolveSourceBuildInput((string? InputPath, string? 
         options.Plugins);
 }
 
-static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options)
+static IReadOnlyList<RetroSharpBuildInput> ResolveProjectBuildInputs((string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options)
 {
     var projectPath = Path.GetFullPath(options.InputPath ?? throw new ArgumentException("No project file has been specified"));
     var projectDirectory = Path.GetDirectoryName(projectPath)
@@ -291,7 +295,7 @@ static string[] ResolveProjectLibraries(string projectPath, RetroSharpProjectMan
 }
 
 static string[] ResolveProjectTargets(
-    (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins) options,
+    (string? InputPath, string? OutputPath, string? Target, IReadOnlyList<string> LibraryPaths, IReadOnlyList<string> Plugins, bool WorldBudgetReport) options,
     RetroSharpProjectManifest manifest)
 {
     if (!string.IsNullOrWhiteSpace(options.Target))
@@ -714,6 +718,31 @@ if (options.InputPath is null)
 {
     Console.Error.WriteLine("No source file has been specified");
     return 1;
+}
+
+if (options.WorldBudgetReport)
+{
+    try
+    {
+        if (options.OutputPath is not null)
+        {
+            throw new ArgumentException("--world-budget-report writes JSON to stdout and cannot be combined with --out.");
+        }
+
+        var target = options.Target?.ToLowerInvariant()
+            ?? throw new ArgumentException("--world-budget-report requires --target gb or --target nes.");
+        var report = RetroSharp.Cli.WorldBudgetReportFactory.Create(target, options.InputPath);
+        Console.Out.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        }));
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        PrintError(ex.Message);
+        return 1;
+    }
 }
 
 IReadOnlyList<RetroSharpBuildInput> buildInputs;

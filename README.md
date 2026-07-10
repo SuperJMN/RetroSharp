@@ -214,6 +214,48 @@ Then build the project file directly:
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- retrosharp.json
 ```
 
+Inspect a Tiled world's deterministic Game Boy or NES `WorldPack` and target
+budgets without building or writing a ROM by opting into
+`--world-budget-report`:
+
+```bash
+dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target gb \
+  --world-budget-report \
+  samples/tiled-free-scroll/free-scroll.tmj
+```
+
+The option accepts one importer-ready `.tmj`, requires `--target gb` or
+`--target nes`, cannot be combined with `--out`, writes one deterministic
+`retrosharp.world-budget/v1` JSON object to stdout, and writes nothing to
+stderr on success. Without this option, successful GB/NES stdout and stderr
+remain unchanged. `--no-launch-profile` prevents the .NET launcher from
+prepending its own status line to the CLI's JSON stdout.
+
+The JSON reports source and hardware dimensions, metatile placements and
+unique metatiles, chunk count, the exact visual/collision stored bytes from the
+real `WorldPack` chunk directory, total serialized bytes, generated target
+tiles, staging RAM, ROM/PRG bytes and required banks, and the bounded VBlank
+tile/attribute commit shape. Diagnostics are always ordered as `addressing`,
+`rom-prg`, `chr-tile-count`, `staging-ram`, and `vblank`; each carries measured
+usage, the evaluated limit/profile, and an actionable remedy when it
+overflows. `selectedProfile` is deliberately `null`: the report names current
+and accepted-future profiles but never selects a banker or mapper.
+
+`stagingRam.usedBytes` is the pack's actual fixed-slot shape;
+`stagingRam.limitBytes` is the accepted WorldPack v1 maximum (554 bytes on GB,
+594 on NES), while `physicalRamCapacityBytes` separately names the machine's
+total RAM capacity. Addressing permits a 32,768-pixel extent because its last
+coordinate is 32,767.
+
+NES keeps `nes-mapper-0-current` separate from the accepted but unimplemented
+`nes-mmc3-tvrom-v1-accepted-future` requirements. The report likewise keeps
+`currentPhysicalChrCapacityBytes`,
+`acceptedFuturePhysicalChrCapacityBytes`, the 8 KiB resident CHR limit, and the
+256-entry tile-index budget as separate facts. Game Boy
+`cartridge.romPrgBytesUsed` is measured content; `allocatedRomBytes` stays
+`null`, so a padded output ROM length is never misreported as bytes used.
+
 Project paths are resolved relative to the JSON file. `--target`, `--out`, and
 additional `--lib-path` options still work as command-line overrides. Use
 project `sources` for code that belongs to the game itself; use
