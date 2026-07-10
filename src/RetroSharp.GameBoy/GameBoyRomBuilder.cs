@@ -19,6 +19,7 @@ internal static class GameBoyRomBuilder
     private const int FixedBankPayloadLimit = BankSize - FixedBankProgramStart;
     internal const ushort RomBankSelectAddress = 0x2000;
     internal const ushort ProgramCurrentBankAddress = 0xC11C;
+    internal const ushort ActualVisibleBankAddress = GameBoyWramLayout.ActualVisibleBankAddress;
     private const byte CartridgeTypeRomOnly = 0x00;
     private const byte CartridgeTypeMbc1 = 0x01;
     private const string TileDataLabel = "tile_data";
@@ -29,6 +30,7 @@ internal static class GameBoyRomBuilder
     private const string ProgramStartLabel = "program_start";
     private const string ProgramMainEndLabel = "program_main_end";
     internal const string ProgramBankContinuationLabel = "program_bank_continue";
+    internal const string Mbc1FarReadByteLabel = "mbc1_far_read_byte";
 
     private static readonly byte[] NintendoLogo =
     [
@@ -238,11 +240,17 @@ internal static class GameBoyRomBuilder
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
 
         var runtime = new GameBoyRuntimeCompiler(builder, program, layout);
-        runtime.EmitProgramBankInitialization();
+        var usesMbc1Foundation = layout.ProgramTailBankCount > 0 || layout.UsesBankedReadOnlyData || layout.UsesBankedMusic;
+        runtime.EmitProgramBankInitialization(usesMbc1Foundation);
         var usesBankContinuationHelper = layout.ProgramTailBankCount > 0;
-        if (usesBankContinuationHelper || runtime.UsesReadOnlyDataHelpers || runtime.UsesAudioHelpers || runtime.UsesSubroutineTrampolines)
+        if (usesMbc1Foundation || runtime.UsesReadOnlyDataHelpers || runtime.UsesAudioHelpers || runtime.UsesSubroutineTrampolines)
         {
             builder.JumpAbsolute(ProgramStartLabel);
+            if (usesMbc1Foundation)
+            {
+                EmitMbc1FarReadByteHelper(builder);
+            }
+
             if (usesBankContinuationHelper)
             {
                 EmitProgramBankContinuationHelper(builder);
@@ -289,8 +297,63 @@ internal static class GameBoyRomBuilder
     {
         builder.Label(ProgramBankContinuationLabel);
         builder.StoreA(ProgramCurrentBankAddress);
-        builder.StoreA(RomBankSelectAddress);
+        EmitSelectRomBankFromA(builder);
         builder.Emit(0xC3, (byte)(BankedWindowStart & 0xFF), (byte)(BankedWindowStart >> 8)); // JP $4000
+    }
+
+    private static void EmitMbc1FarReadByteHelper(GbBuilder builder)
+    {
+        var missLabel = builder.CreateLabel("mbc1_far_read_miss");
+        var errorLabel = builder.CreateLabel("mbc1_far_read_error");
+        var restoreLabel = builder.CreateLabel("mbc1_far_read_restore");
+
+        // Private ABI: input A=bank and HL=$4000-$7FFF. Output A=data, B=status
+        // (0 success, 1 miss for bank zero, 2 malformed bank/window), Z=miss/error,
+        // and C=error. The actual entry bank is stacked so nested/re-entrant reads restore LIFO.
+        builder.Label(Mbc1FarReadByteLabel);
+        builder.LoadEFromA();
+        builder.LoadA(ActualVisibleBankAddress);
+        builder.LoadCFromA();
+        builder.Emit(0xC5);                         // PUSH BC (C=actual entry bank)
+        builder.LoadAFromE();
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, missLabel);      // JP Z,miss
+        builder.CompareImmediate(32);
+        builder.JumpAbsolute(0xD2, errorLabel);     // JP NC,error
+        builder.LoadAFromH();
+        builder.CompareImmediate(0x40);
+        builder.JumpAbsolute(0xDA, errorLabel);     // JP C,error
+        builder.CompareImmediate(0x80);
+        builder.JumpAbsolute(0xD2, errorLabel);     // JP NC,error
+
+        builder.LoadAFromE();
+        EmitSelectRomBankFromA(builder);
+        builder.LoadAFromHl();
+        builder.LoadDFromA();
+        builder.Emit(0x1E, 0x00);                  // LD E,0 (status=success)
+        builder.LoadAImmediate(1);
+        builder.CompareImmediate(0);                // Z=0,C=0 independent of data
+        builder.JumpAbsolute(restoreLabel);
+
+        builder.Label(missLabel);
+        builder.LoadDImmediate(0);
+        builder.Emit(0x1E, 0x01);                  // LD E,1 (status=miss)
+        builder.XorA();                             // Z=1,C=0
+        builder.JumpAbsolute(restoreLabel);
+
+        builder.Label(errorLabel);
+        builder.LoadDImmediate(0);
+        builder.Emit(0x1E, 0x02);                  // LD E,2 (status=error)
+        builder.XorA();                             // Z=1
+        builder.Emit(0x37);                         // SCF => C=1
+
+        builder.Label(restoreLabel);
+        builder.Emit(0xC1);                         // POP BC (C=actual entry bank)
+        builder.LoadAFromC();
+        EmitSelectRomBankFromA(builder);
+        builder.Emit(0x43);                         // LD B,E (returned status)
+        builder.LoadAFromD();
+        builder.Emit(0xC9);                         // RET
     }
 
     private static IReadOnlyList<GameBoyReadOnlyDataBlob> BuildReadOnlyData(GameBoyVideoProgram program)
@@ -399,6 +462,12 @@ internal static class GameBoyRomBuilder
     private static void EmitSelectRomBank(GbBuilder builder, byte bank)
     {
         builder.LoadAImmediate(bank);
+        EmitSelectRomBankFromA(builder);
+    }
+
+    internal static void EmitSelectRomBankFromA(GbBuilder builder)
+    {
+        builder.StoreA(ActualVisibleBankAddress);
         builder.StoreA(RomBankSelectAddress);
     }
 
@@ -864,6 +933,56 @@ internal sealed record GameBoyReadOnlyDataPlacement(string Label, byte Bank, ush
 
 internal sealed record GameBoyBankedAudioPlacement(string Name, byte Bank, ushort Address, byte[] Data);
 
+internal readonly record struct GameBoyWramRange(string Name, ushort Start, int Length)
+{
+    public int EndExclusive => checked(Start + Length);
+
+    public ushort EndInclusive => checked((ushort)(EndExclusive - 1));
+
+    public bool Overlaps(GameBoyWramRange other) => Start < other.EndExclusive && other.Start < EndExclusive;
+}
+
+internal static class GameBoyWramLayout
+{
+    internal const int CurrentWorldPackStagingBytes = 298;
+    internal const int MaximumWorldPackStagingBytes = 554;
+    internal const ushort ActualVisibleBankAddress = 0xC1FA;
+
+    internal static readonly GameBoyWramRange UserLocals = new("user locals", 0xC000, 0x00E0);
+    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x006D);
+    // Two fixed edge tags (state, axis, direction, 16-bit coordinate) plus actual-visible bank.
+    internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000B);
+    internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
+    internal static readonly GameBoyWramRange WorldPackStaging = new("WorldPack staging", 0xC300, MaximumWorldPackStagingBytes);
+    internal static readonly GameBoyWramRange WramEcho = new("WRAM echo", 0xE000, 0x1E00);
+    internal static readonly GameBoyWramRange Stack = new("stack/HRAM", 0xFF80, 0x0080);
+
+    internal static GameBoyWramRange ValidateStagingBytes(int stagingBytes)
+    {
+        if (stagingBytes is <= 0 or > MaximumWorldPackStagingBytes)
+        {
+            throw new InvalidOperationException(
+                $"Game Boy WorldPack staging requires 1..{MaximumWorldPackStagingBytes} bytes; {stagingBytes} were requested.");
+        }
+
+        var requested = WorldPackStaging with { Length = stagingBytes };
+        ValidateDisjoint(requested, UserLocals, RuntimeState, WorldScalarState, AudioChannel1Shadow, WramEcho, Stack);
+        return requested;
+    }
+
+    private static void ValidateDisjoint(GameBoyWramRange requested, params GameBoyWramRange[] reserved)
+    {
+        foreach (var range in reserved)
+        {
+            if (requested.Overlaps(range))
+            {
+                throw new InvalidOperationException(
+                    $"Game Boy {requested.Name} {requested.Start:X4}-{requested.EndInclusive:X4} overlaps {range.Name} {range.Start:X4}-{range.EndInclusive:X4}.");
+            }
+        }
+    }
+}
+
 internal sealed class GameBoyRuntimeCompiler
 {
     private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
@@ -1064,15 +1183,19 @@ internal sealed class GameBoyRuntimeCompiler
 
     public bool UsesAudioHelpers => UsesAudioUpdateHelper || UsesMusicPlayHelpers || UsesSoundEffectPlayHelpers;
 
-    public void EmitProgramBankInitialization()
+    public void EmitProgramBankInitialization(bool usesMbc1Foundation)
     {
-        if (romLayout.ProgramTailBankCount == 0)
+        if (!usesMbc1Foundation)
         {
             return;
         }
 
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+        if (romLayout.ProgramTailBankCount > 0)
+        {
+            builder.StoreA(GameBoyRomBuilder.ProgramCurrentBankAddress);
+        }
+
         EmitSelectRomBankFromA();
     }
 
@@ -3384,7 +3507,7 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitSelectRomBankFromA()
     {
-        builder.StoreA(GameBoyRomBuilder.RomBankSelectAddress);
+        GameBoyRomBuilder.EmitSelectRomBankFromA(builder);
     }
 
     private void EmitWriteMusicRegister(byte register)

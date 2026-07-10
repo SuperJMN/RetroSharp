@@ -58,6 +58,201 @@ public sealed class GameBoyBankingRoadmapTests
         Assert.True(rom.Length >= 32768);
     }
 
+    [Fact]
+    public void Mbc1_music_only_layout_initializes_actual_bank_without_claiming_a_program_tail()
+    {
+        var directory = CreateTempDirectory();
+        WriteLargeGbApuTrace(Path.Combine(directory, "large.gbapu"), frameCount: 12000);
+        const string source = """
+            void Main() {
+                Video.Init();
+                Music.Asset(theme, "large.gbapu");
+                while (true) {
+                    Video.WaitVBlank();
+                }
+            }
+            """;
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+        var cpu = new GameBoyTestCpu(rom);
+
+        cpu.RunFrames(120);
+
+        Assert.Equal(CartridgeMbc1, rom[0x147]);
+        Assert.Equal(1, cpu.CurrentRomBank);
+        Assert.Equal(1, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
+        Assert.Equal(0, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+    }
+
+    [Fact]
+    public void Mbc1_bank_selection_updates_the_authoritative_actual_bank_shadow()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        var cpu = new GameBoyTestCpu(rom);
+
+        cpu.RunFrames(120);
+
+        Assert.NotEmpty(cpu.RomBankWrites);
+        Assert.All(cpu.RomBankWrites, write => Assert.Equal(write.SelectedBank, write.ShadowBank));
+        Assert.Equal(cpu.CurrentRomBank, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
+    }
+
+    [Fact]
+    public void World_pack_staging_reserves_298_and_554_byte_shapes_without_overlap()
+    {
+        var current = GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.CurrentWorldPackStagingBytes);
+        var maximum = GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.MaximumWorldPackStagingBytes);
+        var protectedRanges = new[]
+        {
+            GameBoyWramLayout.UserLocals,
+            GameBoyWramLayout.RuntimeState,
+            GameBoyWramLayout.WorldScalarState,
+            GameBoyWramLayout.AudioChannel1Shadow,
+            GameBoyWramLayout.WramEcho,
+            GameBoyWramLayout.Stack,
+        };
+
+        Assert.Equal((ushort)0xC000, GameBoyWramLayout.UserLocals.Start);
+        Assert.Equal((ushort)0xC0DF, GameBoyWramLayout.UserLocals.EndInclusive);
+        Assert.Equal((ushort)0xC14C, GameBoyWramLayout.RuntimeState.EndInclusive);
+        Assert.Equal((ushort)0xC210, GameBoyWramLayout.AudioChannel1Shadow.Start);
+        Assert.Equal((ushort)0xC214, GameBoyWramLayout.AudioChannel1Shadow.EndInclusive);
+        Assert.Equal(GameBoyWramLayout.CurrentWorldPackStagingBytes, current.Length);
+        Assert.Equal(GameBoyWramLayout.MaximumWorldPackStagingBytes, maximum.Length);
+        Assert.Equal((ushort)0xC529, maximum.EndInclusive);
+        Assert.All(protectedRanges, range => Assert.False(maximum.Overlaps(range), $"staging overlaps {range.Name}"));
+    }
+
+    [Fact]
+    public void World_pack_staging_rejects_a_one_byte_overflow()
+    {
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.MaximumWorldPackStagingBytes + 1));
+
+        Assert.Contains($"1..{GameBoyWramLayout.MaximumWorldPackStagingBytes} bytes", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Banked_rom_emits_the_far_read_foundation_in_fixed_bank_zero()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+
+        var helperOffset = IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+
+        Assert.InRange(helperOffset, 0x0150, 0x3FFF);
+    }
+
+    [Fact]
+    public void Far_read_success_restores_actual_entry_bank_without_using_program_bank_shadow()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+        var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.SetCurrentRomBank(3);
+        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
+        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, 9);
+
+        var result = cpu.RunFarReadSubroutine(helper, bank: 2, address: 0x4000);
+
+        Assert.Equal(rom[2 * 0x4000], result.Data);
+        Assert.Equal(0, result.Status);
+        Assert.False(result.Zero);
+        Assert.False(result.Carry);
+        Assert.Equal(3, cpu.CurrentRomBank);
+        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
+        Assert.Equal(9, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal([2, 3], cpu.RomBankWrites.Select(write => write.SelectedBank));
+        Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0000, 0x3FFF));
+    }
+
+    [Fact]
+    public void Far_read_interrupt_like_reentry_between_select_and_restore_is_lifo()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+        Array.Resize(ref rom, 8 * 0x4000);
+        rom[4 * 0x4000] = 0x44;
+        rom[5 * 0x4000] = 0x55;
+        var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.SetCurrentRomBank(3);
+        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
+        cpu.InjectFarReadAfterSelecting(selectedBank: 4, helper, bank: 5, address: 0x4000);
+
+        var outer = cpu.RunFarReadSubroutine(helper, bank: 4, address: 0x4000);
+
+        Assert.Equal(0x44, outer.Data);
+        Assert.Equal(0x55, Assert.Single(cpu.InjectedFarReadResults).Data);
+        Assert.Equal([4, 5, 4, 3], cpu.RomBankWrites.Select(write => write.SelectedBank));
+        Assert.Equal(3, cpu.CurrentRomBank);
+        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
+        Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0000, 0x3FFF));
+    }
+
+    [Fact]
+    public void Far_read_supports_two_bounded_nested_reentries()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+        Array.Resize(ref rom, 8 * 0x4000);
+        var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+        var cpu = SeedFarReadCpu(rom, actualBank: 3, programBank: 9);
+        cpu.InjectFarReadAfterSelecting(selectedBank: 4, helper, bank: 5, address: 0x4000);
+        cpu.InjectFarReadAfterSelecting(selectedBank: 5, helper, bank: 6, address: 0x4000);
+
+        cpu.RunFarReadSubroutine(helper, bank: 4, address: 0x4000);
+
+        Assert.Equal([4, 5, 6, 5, 4, 3], cpu.RomBankWrites.Select(write => write.SelectedBank));
+        Assert.Equal(2, cpu.InjectedFarReadResults.Count);
+        AssertFarReadRestored(cpu, 3, 9);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(31)]
+    public void Far_read_accepts_the_complete_low_five_bit_bank_range(byte bank)
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+        Array.Resize(ref rom, 32 * 0x4000);
+        rom[bank * 0x4000] = bank;
+        var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+        var cpu = SeedFarReadCpu(rom, actualBank: 3, programBank: 9);
+
+        var result = cpu.RunFarReadSubroutine(helper, bank, 0x4000);
+
+        Assert.Equal(bank, result.Data);
+        Assert.Equal(0, result.Status);
+        Assert.False(result.Zero);
+        Assert.False(result.Carry);
+        AssertFarReadRestored(cpu, 3, 9);
+    }
+
+    [Fact]
+    public void Far_read_bank_zero_is_a_distinct_miss_and_restores_entry_bank()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+        var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+        var cpu = SeedFarReadCpu(rom, actualBank: 3, programBank: 9);
+
+        var result = cpu.RunFarReadSubroutine(helper, bank: 0, address: 0x4000);
+
+        Assert.Equal(new FarReadResult(0, 1, Zero: true, Carry: false), result);
+        AssertFarReadRestored(cpu, 3, 9);
+    }
+
+    [Theory]
+    [InlineData(32, 0x4000)]
+    [InlineData(4, 0x3FFF)]
+    [InlineData(4, 0x8000)]
+    public void Far_read_unsupported_bank_or_window_is_an_error_and_restores_entry_bank(byte bank, ushort address)
+    {
+        var rom = GameBoyRomCompiler.CompileSource(ProgramWithLargeMainFlow(), null);
+        var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
+        var cpu = SeedFarReadCpu(rom, actualBank: 3, programBank: 9);
+
+        var result = cpu.RunFarReadSubroutine(helper, bank, address);
+
+        Assert.Equal(new FarReadResult(0, 2, Zero: true, Carry: true), result);
+        AssertFarReadRestored(cpu, 3, 9);
+    }
+
     // --- Phase 1: calling convention (subroutine emission) ---
 
     [Fact]
@@ -289,6 +484,23 @@ public sealed class GameBoyBankingRoadmapTests
     }
 
     // --- Helpers ---
+
+    private static GameBoyTestCpu SeedFarReadCpu(byte[] rom, byte actualBank, byte programBank)
+    {
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.SetCurrentRomBank(actualBank);
+        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, actualBank);
+        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, programBank);
+        return cpu;
+    }
+
+    private static void AssertFarReadRestored(GameBoyTestCpu cpu, byte actualBank, byte programBank)
+    {
+        Assert.Equal(actualBank, cpu.CurrentRomBank);
+        Assert.Equal(actualBank, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
+        Assert.Equal(programBank, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0000, 0x3FFF));
+    }
 
     private static string SharedBodyProgram(bool inline)
     {
@@ -549,19 +761,35 @@ public sealed class GameBoyBankingRoadmapTests
         return false;
     }
 
+    private static int IndexOfSequence(byte[] bytes, byte[] sequence)
+    {
+        for (var offset = 0; offset <= bytes.Length - sequence.Length; offset++)
+        {
+            if (bytes.AsSpan(offset, sequence.Length).SequenceEqual(sequence))
+            {
+                return offset;
+            }
+        }
+
+        return -1;
+    }
+
     private static bool ContainsBankedStartupTileCopy(byte[] rom)
     {
-        for (var offset = 0x0150; offset <= 0x4000 - 14; offset++)
+        for (var offset = 0x0150; offset <= 0x4000 - 17; offset++)
         {
             if (rom[offset] == 0x3E &&
                 rom[offset + 1] > 1 &&
                 rom[offset + 2] == 0xEA &&
-                rom[offset + 3] == 0x00 &&
-                rom[offset + 4] == 0x20 &&
-                rom[offset + 5] == 0x11 &&
-                rom[offset + 8] == 0x21 &&
-                rom[offset + 9] == 0x00 &&
-                rom[offset + 10] == 0x80)
+                rom[offset + 3] == 0xFA &&
+                rom[offset + 4] == 0xC1 &&
+                rom[offset + 5] == 0xEA &&
+                rom[offset + 6] == 0x00 &&
+                rom[offset + 7] == 0x20 &&
+                rom[offset + 8] == 0x11 &&
+                rom[offset + 11] == 0x21 &&
+                rom[offset + 12] == 0x00 &&
+                rom[offset + 13] == 0x80)
             {
                 return true;
             }
@@ -572,7 +800,7 @@ public sealed class GameBoyBankingRoadmapTests
 
     private static bool ContainsBankedMapRowReader(byte[] rom)
     {
-        for (var offset = 0x0150; offset <= 0x4000 - 22; offset++)
+        for (var offset = 0x0150; offset <= 0x4000 - 28; offset++)
         {
             if (rom[offset] == 0x5F &&
                 rom[offset + 1] == 0x16 &&
@@ -580,18 +808,24 @@ public sealed class GameBoyBankingRoadmapTests
                 rom[offset + 3] == 0x3E &&
                 rom[offset + 4] > 1 &&
                 rom[offset + 5] == 0xEA &&
-                rom[offset + 6] == 0x00 &&
-                rom[offset + 7] == 0x20 &&
-                rom[offset + 8] == 0x21 &&
-                rom[offset + 11] == 0x19 &&
-                rom[offset + 12] == 0x7E &&
-                rom[offset + 13] == 0x47 &&
-                rom[offset + 14] == 0xFA &&
-                rom[offset + 17] == 0xEA &&
-                rom[offset + 18] == 0x00 &&
-                rom[offset + 19] == 0x20 &&
-                rom[offset + 20] == 0x78 &&
-                rom[offset + 21] == 0xC9)
+                rom[offset + 6] == 0xFA &&
+                rom[offset + 7] == 0xC1 &&
+                rom[offset + 8] == 0xEA &&
+                rom[offset + 9] == 0x00 &&
+                rom[offset + 10] == 0x20 &&
+                rom[offset + 11] == 0x21 &&
+                rom[offset + 14] == 0x19 &&
+                rom[offset + 15] == 0x7E &&
+                rom[offset + 16] == 0x47 &&
+                rom[offset + 17] == 0xFA &&
+                rom[offset + 20] == 0xEA &&
+                rom[offset + 21] == 0xFA &&
+                rom[offset + 22] == 0xC1 &&
+                rom[offset + 23] == 0xEA &&
+                rom[offset + 24] == 0x00 &&
+                rom[offset + 25] == 0x20 &&
+                rom[offset + 26] == 0x78 &&
+                rom[offset + 27] == 0xC9)
             {
                 return true;
             }
@@ -603,7 +837,7 @@ public sealed class GameBoyBankingRoadmapTests
     private static IReadOnlyList<byte> FixedBankTrampolineTargetBanks(byte[] rom)
     {
         var banks = new List<byte>();
-        for (var offset = 0x0150; offset <= 0x4000 - 23; offset++)
+        for (var offset = 0x0150; offset <= 0x4000 - 29; offset++)
         {
             if (IsFixedBankTrampoline(rom, offset, out var bank))
             {
@@ -616,7 +850,7 @@ public sealed class GameBoyBankingRoadmapTests
 
     private static ushort? FixedBankTrampolineAddress(byte[] rom, byte targetBank)
     {
-        for (var offset = 0x0150; offset <= 0x4000 - 23; offset++)
+        for (var offset = 0x0150; offset <= 0x4000 - 29; offset++)
         {
             if (IsFixedBankTrampoline(rom, offset, out var bank) && bank == targetBank)
             {
@@ -635,15 +869,21 @@ public sealed class GameBoyBankingRoadmapTests
             rom[offset + 4] == 0x3E &&
             rom[offset + 6] == 0xEA &&
             rom[offset + 9] == 0xEA &&
-            rom[offset + 10] == 0x00 &&
-            rom[offset + 11] == 0x20 &&
-            rom[offset + 12] == 0xCD &&
-            rom[offset + 15] == 0xF1 &&
-            rom[offset + 16] == 0xEA &&
+            rom[offset + 10] == 0xFA &&
+            rom[offset + 11] == 0xC1 &&
+            rom[offset + 12] == 0xEA &&
+            rom[offset + 13] == 0x00 &&
+            rom[offset + 14] == 0x20 &&
+            rom[offset + 15] == 0xCD &&
+            rom[offset + 18] == 0xF1 &&
             rom[offset + 19] == 0xEA &&
-            rom[offset + 20] == 0x00 &&
-            rom[offset + 21] == 0x20 &&
-            rom[offset + 22] == 0xC9)
+            rom[offset + 22] == 0xEA &&
+            rom[offset + 23] == 0xFA &&
+            rom[offset + 24] == 0xC1 &&
+            rom[offset + 25] == 0xEA &&
+            rom[offset + 26] == 0x00 &&
+            rom[offset + 27] == 0x20 &&
+            rom[offset + 28] == 0xC9)
         {
             targetBank = rom[offset + 5];
             return true;

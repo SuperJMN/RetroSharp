@@ -425,8 +425,9 @@ Recommended execution and merge order:
 
 #### LW-2.1: Add the fixed-bank MBC1 world-read foundation
 
-- Status: **published as [#296](https://github.com/SuperJMN/RetroSharp/issues/296);
-  open and not started.**
+- Status: **implementation complete through
+  [#296](https://github.com/SuperJMN/RetroSharp/issues/296); issue closure is
+  tracked on GitHub.**
 - Layer: Game Boy linker/runtime foundation and validation.
 - Dependencies: merged `LW-1.1` through `LW-1.5` and the accepted
   [`WorldPack` v1 contract](WorldPackFormatV1.md).
@@ -446,6 +447,18 @@ Recommended execution and merge order:
     plus only fixed scalar slot state owned by the target runtime.
   - Keep bank/window/register details internal to Game Boy lowering; this task
     does not place or read a `WorldPack` yet.
+- Implemented foundation:
+  - `$C1FA` is the authoritative actual-visible-bank shadow; `$C11C` remains
+    executable program-bank state. Every generated `$2000` selection updates
+    `$C1FA` first. Every MBC1 layout initializes the actual hardware/shadow to
+    bank 1, while layouts without a program tail leave `$C11C` untouched.
+  - The fixed-bank byte reader accepts banks `1..31`, distinguishes bank-zero
+    miss from unsupported-bank/window error through its private status/flags
+    ABI, saves the actual entry bank on the hardware stack, and restores it
+    LIFO on every exit, including nested and interrupt-like re-entry.
+  - WRAM is formalized as user `$C000-$C0DF`, runtime `$C0E0-$C14C`, fixed
+    world scalar/tag state `$C1F0-$C1FA`, audio `$C210-$C214`, and staging
+    `$C300-$C529`; both 298/554-byte shapes fit and 555 bytes fail.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, Game Boy
   runtime/layout records in that target project,
   `src/RetroSharp.GameBoy.Tests/GameBoyBankingRoadmapTests.cs`, and

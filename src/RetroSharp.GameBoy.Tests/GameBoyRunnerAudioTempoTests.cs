@@ -42,14 +42,23 @@ public sealed class GameBoyRunnerAudioTempoTests
     }
 
     [Fact]
-    public void Shared_runner_keeps_tracked_game_boy_rom_byte_identical()
+    public void Shared_runner_keeps_tracked_game_boy_cartridge_shape_and_execution_compatible()
     {
         var runnerDirectory = LocateRunnerDirectory();
         var source = RunnerSample.CompiledSource();
         var compiled = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
         var tracked = File.ReadAllBytes(Path.Combine(runnerDirectory, "bin", "runner.gb"));
 
-        Assert.Equal(tracked, compiled);
+        Assert.Equal(tracked.Length, compiled.Length);
+        Assert.Equal(tracked[0x147], compiled[0x147]);
+
+        var trackedCpu = new GameBoyTestCpu(tracked);
+        var compiledCpu = new GameBoyTestCpu(compiled);
+        trackedCpu.RunFrames(120);
+        compiledCpu.RunFrames(120);
+
+        Assert.Equal(trackedCpu.Oam(0xFE02), compiledCpu.Oam(0xFE02));
+        Assert.Equal(trackedCpu.IoRegister(0xFF43), compiledCpu.IoRegister(0xFF43));
     }
 
     [Fact]

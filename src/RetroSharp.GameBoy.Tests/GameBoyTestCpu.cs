@@ -30,9 +30,12 @@ internal sealed class GameBoyTestCpu
     private readonly List<(ushort Register, byte Value)> ioWrites = [];
     private readonly List<OamWrite> oamWrites = [];
     private readonly List<VramWrite> vramWrites = [];
+    private readonly List<RomBankWrite> romBankWrites = [];
+    private readonly Queue<FarReadInjection> farReadInjections = [];
+    private readonly List<FarReadResult> injectedFarReadResults = [];
 
     private byte a, b, c, d, e, h, l, f;
-    private ushort sp, pc;
+    private ushort sp, pc, instructionPc;
     private int romBank = 1;
     private long instructions;
     private long cycles;
@@ -44,6 +47,8 @@ internal sealed class GameBoyTestCpu
     public readonly HashSet<string> Held = [];
     public long AudioUpdateCalls;
     public long Cycles => cycles;
+
+    public byte CurrentRomBank => (byte)romBank;
 
     public byte Vram(ushort address) => vram[address - 0x8000];
 
@@ -64,6 +69,10 @@ internal sealed class GameBoyTestCpu
     public IReadOnlyList<OamWrite> OamWrites => oamWrites;
 
     public IReadOnlyList<VramWrite> VramWrites => vramWrites;
+
+    public IReadOnlyList<RomBankWrite> RomBankWrites => romBankWrites;
+
+    public IReadOnlyList<FarReadResult> InjectedFarReadResults => injectedFarReadResults;
 
     public GameBoyTestCpu(byte[] rom)
     {
@@ -152,8 +161,8 @@ internal sealed class GameBoyTestCpu
         0xC3 or 0xC2 or 0xCA or 0xD2 or 0xDA => 16,     // JP / JP cc (approx taken)
         0xCD => 24,                                      // CALL nn
         0xC9 => 16,                                      // RET
-        0xF5 => 16,                                      // PUSH AF
-        0xF1 => 12,                                      // POP AF
+        0xC5 or 0xF5 => 16,                              // PUSH BC / PUSH AF
+        0xC1 or 0xF1 => 12,                              // POP BC / POP AF
         0xE5 => 16,                                      // PUSH HL
         0xE1 => 12,                                      // POP HL
         0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
@@ -196,6 +205,38 @@ internal sealed class GameBoyTestCpu
         }
 
         return values;
+    }
+
+    public void SetWram(ushort address, byte value) => wram[address - 0xC000] = value;
+
+    public void SetCurrentRomBank(byte bank) => romBank = bank;
+
+    public FarReadResult RunFarReadSubroutine(ushort entry, byte bank, ushort address, long maxInstructions = 10_000)
+    {
+        var returnAddress = pc;
+        var initialSp = sp;
+        a = bank;
+        SetHl(address);
+        PushWord(returnAddress);
+        pc = entry;
+        var startInstructions = instructions;
+        do
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException($"Far-read helper at 0x{entry:X4} did not return within {maxInstructions} instructions.");
+            }
+
+            Step();
+        }
+        while (pc != returnAddress || sp != initialSp);
+
+        return new FarReadResult(a, b, (f & FlagZ) != 0, (f & FlagC) != 0);
+    }
+
+    public void InjectFarReadAfterSelecting(byte selectedBank, ushort entry, byte bank, ushort address)
+    {
+        farReadInjections.Enqueue(new FarReadInjection(selectedBank, entry, bank, address));
     }
 
     private ushort Hl => (ushort)((h << 8) | l);
@@ -259,6 +300,20 @@ internal sealed class GameBoyTestCpu
             {
                 var bank = value & 0x1F;
                 romBank = bank == 0 ? 1 : bank; // MBC1: bank 0 in the switchable window maps to 1
+                romBankWrites.Add(new RomBankWrite(
+                    instructionPc,
+                    value,
+                    (byte)romBank,
+                    wram[GameBoyRomBuilder.ActualVisibleBankAddress - 0xC000]));
+                if (farReadInjections.TryPeek(out var injection) && injection.SelectedBank == romBank)
+                {
+                    farReadInjections.Dequeue();
+                    var registers = (a, b, c, d, e, h, l, f, sp, pc);
+                    var result = RunFarReadSubroutine(injection.Entry, injection.Bank, injection.Address);
+                    injectedFarReadResults.Add(result);
+                    (a, b, c, d, e, h, l, f, sp, pc) = registers;
+                }
+
                 return;
             }
             case < 0x8000:
@@ -331,6 +386,7 @@ internal sealed class GameBoyTestCpu
     private void Step()
     {
         instructions++;
+        instructionPc = pc;
         var opcode = NextByte();
         cycles += CyclesFor(opcode);
         switch (opcode)
@@ -373,6 +429,7 @@ internal sealed class GameBoyTestCpu
             case 0x5E: e = ReadByte(Hl); break;                 // LD E,(HL)
             case 0x5D: e = l; break;                            // LD E,L
             case 0x47: b = a; break;                            // LD B,A
+            case 0x43: b = e; break;                            // LD B,E
             case 0x4F: c = a; break;                            // LD C,A
             case 0x57: d = a; break;                            // LD D,A
             case 0x5F: e = a; break;                            // LD E,A
@@ -438,6 +495,8 @@ internal sealed class GameBoyTestCpu
             case 0xDA: { var t = NextWord(); if ((f & FlagC) != 0) pc = t; break; } // JP C,nn
             case 0xCD: { var t = NextWord(); PushWord(pc); pc = t; break; } // CALL nn
             case 0xC9: pc = PopWord(); break;                 // RET
+            case 0xC5: PushWord(Bc); break;                    // PUSH BC
+            case 0xC1: { var v = PopWord(); b = (byte)(v >> 8); c = (byte)v; break; } // POP BC
             case 0xF5: PushWord((ushort)((a << 8) | f)); break; // PUSH AF
             case 0xF1: { var v = PopWord(); a = (byte)(v >> 8); f = (byte)(v & 0xF0); break; } // POP AF
             case 0xE5: PushWord(Hl); break;                     // PUSH HL
@@ -448,6 +507,7 @@ internal sealed class GameBoyTestCpu
             case 0x30: { var off = (sbyte)NextByte(); if ((f & FlagC) == 0) pc = (ushort)(pc + off); break; } // JR NC,e
             case 0x38: { var off = (sbyte)NextByte(); if ((f & FlagC) != 0) pc = (ushort)(pc + off); break; } // JR C,e
             case 0xCB: StepCb(NextByte()); break;
+            case 0x37: f = (byte)((f & FlagZ) | FlagC); break; // SCF
             default:
                 throw new NotSupportedException($"Unsupported SM83 opcode 0x{opcode:X2} at 0x{(ushort)(pc - 1):X4}.");
         }
@@ -563,3 +623,9 @@ internal sealed class GameBoyTestCpu
 internal readonly record struct OamWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled);
 
 internal readonly record struct VramWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled, bool Applied);
+
+internal readonly record struct RomBankWrite(ushort ProgramCounter, byte RequestedBank, byte SelectedBank, byte ShadowBank);
+
+internal readonly record struct FarReadResult(byte Data, byte Status, bool Zero, bool Carry);
+
+internal readonly record struct FarReadInjection(byte SelectedBank, ushort Entry, byte Bank, ushort Address);
