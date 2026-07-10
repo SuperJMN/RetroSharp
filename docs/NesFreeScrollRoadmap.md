@@ -360,10 +360,15 @@ requirement.
 
 Not in this branch. For levels larger than 512x480, or a stable HUD split:
 
-- Move the NES target to a mapper (MMC1/MMC3 + four-screen, e.g. the Gauntlet-II
-  TxSROM config) for PRG/CHR banking and a scanline IRQ HUD split.
-- Note: ADNES currently has no MMC3 — extend ADNES or switch the acceptance
-  emulator (Mesen2) before relying on MMC3 behavior.
+- Large Worlds LW-0.3 has selected the mapper 4 / TVROM-style four-screen
+  profile in
+  [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md).
+  Production header/linker/runtime work remains a later issue.
+- NesMcp `auto` now routes mapper 4 to AprNes. Existing tests prove mapper-4
+  loading, instruction stepping, auto routing, and bank changes; the production
+  slice still owes one combined mapper-4 + four-screen behavioral probe.
+- Keep mapper-backed level reads separate from a scanline IRQ HUD. MMC3 IRQs
+  remain disabled until a HUD issue supplies its own timing and acceptance.
 - Stream content beyond the 2x2 grid as the camera moves across a large level.
 
 ---

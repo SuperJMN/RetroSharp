@@ -1662,11 +1662,12 @@ Acceptance criteria:
 
 Status: active under [GitHub epic #275](https://github.com/SuperJMN/RetroSharp/issues/275).
 Wave 0 (measurement and ADRs) has accepted the full-`stage1` baseline,
-`WorldPack` v1, and the 16-bit coordinate/collision contract. Wave 0 is not
-complete: the NES cartridge profile remains pending in LW-0.3 / issue #279 and
-is neither selected nor implied here. Wave 1 (shared coordinate, collision,
-packed-world, Tiled, and budget foundations) is seeded for execution according
-to the dependency graph.
+`WorldPack` v1, the 16-bit coordinate/collision contract, and the mapper 4 /
+TVROM-style NES cartridge profile. The cartridge decision is specified in
+[`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md); it
+does not change current mapper-0 output and keeps the later IRQ HUD separate.
+Wave 1 (shared coordinate, collision, packed-world, Tiled, and budget
+foundations) is seeded for execution according to the dependency graph.
 Target production readers remain intentionally unseeded until those contracts
 merge.
 

@@ -214,6 +214,9 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 
 ### LW-0.3: Select the NES Large Worlds v1 cartridge profile
 
+- Status: **complete; mapper 4 / TVROM-style four-screen profile accepted by
+  [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md) with
+  reproducible layout and emulator-capability evidence.**
 - Layer: NES target architecture and validation.
 - Dependencies: `LW-0.1`.
 - Candidate files: `NesRomBuilder`, `NesTarget`, NES acceptance tests,
