@@ -9,19 +9,213 @@ using Xunit;
 public sealed class WorldPackTests
 {
     [Fact]
+    public void Tiled_plan_uses_the_playable_slice_and_canonical_authoring_and_collision_ids()
+    {
+        var geometry = new LogicalTiledMapGeometry(
+            sourceWidth: 3,
+            sourceHeight: 3,
+            tileScaleX: 2,
+            tileScaleY: 2,
+            worldY: 1,
+            worldHeight: 2,
+            streamY: 0,
+            width: 6,
+            height: 4,
+            expandedWorldY: 2,
+            backgroundWidth: 6,
+            backgroundHeight: 6,
+            backgroundOffsetY: 2);
+        var tilesets = new[]
+        {
+            new LogicalTileset(1, "first", 16, 16, 2, 2, null, new Dictionary<int, WorldTileFlags>()),
+            new LogicalTileset(20, "second", 16, 16, 2, 2, null, new Dictionary<int, WorldTileFlags>()),
+        };
+        var background = new uint[]
+        {
+            0, 0, 0,
+            20, 2, 1,
+            0, 20, 2,
+        };
+        var world = new uint[]
+        {
+            0, 0, 0,
+            0, 21, 0,
+            2, 0, 1,
+        };
+        var flags = new[]
+        {
+            WorldTileFlags.Empty, WorldTileFlags.Empty, WorldTileFlags.Solid, WorldTileFlags.Solid, WorldTileFlags.Empty, WorldTileFlags.Empty,
+            WorldTileFlags.Empty, WorldTileFlags.Empty, WorldTileFlags.Solid, WorldTileFlags.Solid, WorldTileFlags.Empty, WorldTileFlags.Empty,
+            WorldTileFlags.Platform, WorldTileFlags.Platform, WorldTileFlags.Empty, WorldTileFlags.Empty, WorldTileFlags.Hazard, WorldTileFlags.Hazard,
+            WorldTileFlags.Platform, WorldTileFlags.Platform, WorldTileFlags.Empty, WorldTileFlags.Empty, WorldTileFlags.Hazard, WorldTileFlags.Hazard,
+        };
+        var logical = new LogicalTiledMap(tilesets, background, world, flags, geometry);
+
+        var plan = TiledWorldPackPlan.Create(logical);
+
+        Assert.Equal(3, plan.SourceWidth);
+        Assert.Equal(2, plan.SourceHeight);
+        Assert.Collection(
+            plan.VisualMetatiles,
+            visual => Assert.Equal((-1, -1, 0, 1), (visual.Background.TilesetIndex, visual.Background.LocalTileId, visual.World.TilesetIndex, visual.World.LocalTileId)),
+            visual => Assert.Equal((0, 0, -1, -1), (visual.Background.TilesetIndex, visual.Background.LocalTileId, visual.World.TilesetIndex, visual.World.LocalTileId)),
+            visual => Assert.Equal((0, 1, 0, 0), (visual.Background.TilesetIndex, visual.Background.LocalTileId, visual.World.TilesetIndex, visual.World.LocalTileId)),
+            visual => Assert.Equal((0, 1, 1, 1), (visual.Background.TilesetIndex, visual.Background.LocalTileId, visual.World.TilesetIndex, visual.World.LocalTileId)),
+            visual => Assert.Equal((1, 0, -1, -1), (visual.Background.TilesetIndex, visual.Background.LocalTileId, visual.World.TilesetIndex, visual.World.LocalTileId)));
+        Assert.Equal(new ushort[] { 4, 3, 1, 0, 4, 2 }, plan.VisualIds);
+        Assert.Equal(
+            new[]
+            {
+                WorldTileFlags.Empty,
+                WorldTileFlags.Empty,
+                WorldTileFlags.Empty,
+                WorldTileFlags.Empty,
+            },
+            plan.CollisionProfiles[0].Flags);
+        Assert.Equal(new ushort[] { 0, 1, 0, 3, 0, 2 }, plan.CollisionProfileIds);
+    }
+
+    [Fact]
+    public void Tiled_pack_serializes_canonical_raw_and_rle_planes_and_round_trips()
+    {
+        const int sourceWidth = 10;
+        const int sourceHeight = 2;
+        var geometry = new LogicalTiledMapGeometry(
+            sourceWidth,
+            sourceHeight,
+            tileScaleX: 1,
+            tileScaleY: 1,
+            worldY: 0,
+            worldHeight: sourceHeight,
+            streamY: 0,
+            width: sourceWidth,
+            height: sourceHeight,
+            expandedWorldY: 0,
+            backgroundWidth: sourceWidth,
+            backgroundHeight: sourceHeight,
+            backgroundOffsetY: 0);
+        var tilesets = new[]
+        {
+            new LogicalTileset(1, "tiles", 8, 8, 2, 2, null, new Dictionary<int, WorldTileFlags>()),
+        };
+        var world = new uint[]
+        {
+            1, 1, 1, 1, 1, 1, 1, 1, 2, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 2, 1,
+        };
+        var flags = Enumerable.Repeat(WorldTileFlags.Solid, sourceWidth * sourceHeight).ToArray();
+        var logical = new LogicalTiledMap(tilesets, null, world, flags, geometry);
+        var plan = TiledWorldPackPlan.Create(logical);
+        var targetExpansions = new byte[] { 9, 10 };
+
+        var compiled = plan.Build(targetExpansions, targetCellStride: 1);
+        var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+
+        Assert.Equal(compiled.SerializedBytes, WorldPackSerializer.Serialize(decoded));
+        Assert.Equal(compiled.Pack.Descriptor, decoded.Descriptor);
+        Assert.Equal(new[] { WorldPackCodec.ElementRle, WorldPackCodec.Raw }, compiled.Pack.Chunks.Select(chunk => chunk.Directory.VisualCodec));
+        Assert.All(compiled.Pack.Chunks, chunk => Assert.Equal(WorldPackCodec.ElementRle, chunk.Directory.CollisionCodec));
+        Assert.Equal(
+            new byte[] { 0x8D, 0 },
+            compiled.SerializedBytes.AsSpan(
+                checked((int)compiled.Pack.Chunks[0].Directory.VisualOffset),
+                compiled.Pack.Chunks[0].Directory.VisualStoredBytes).ToArray());
+        Assert.Equal(
+            new byte[] { 0x8D, 1 },
+            compiled.SerializedBytes.AsSpan(
+                checked((int)compiled.Pack.Chunks[0].Directory.CollisionOffset),
+                compiled.Pack.Chunks[0].Directory.CollisionStoredBytes).ToArray());
+        Assert.Equal(
+            new byte[] { 1, 0, 1, 0 },
+            compiled.SerializedBytes.AsSpan(
+                checked((int)compiled.Pack.Chunks[1].Directory.VisualOffset),
+                compiled.Pack.Chunks[1].Directory.VisualStoredBytes).ToArray());
+        Assert.Equal(
+            new byte[] { 0x81, 1 },
+            compiled.SerializedBytes.AsSpan(
+                checked((int)compiled.Pack.Chunks[1].Directory.CollisionOffset),
+                compiled.Pack.Chunks[1].Directory.CollisionStoredBytes).ToArray());
+        Assert.Equal(targetExpansions, decoded.TargetExpansions.ToArray());
+        Assert.Equal(
+            world.Select(gid => gid == 1 ? (ushort)0 : (ushort)1),
+            Enumerable.Range(0, sourceWidth * sourceHeight).Select(index => decoded.VisualIdAt(index % sourceWidth, index / sourceWidth)));
+        Assert.All(Enumerable.Range(0, sourceWidth * sourceHeight), index =>
+            Assert.Equal(WorldTileFlags.Solid, decoded.CollisionAt(index % sourceWidth, index / sourceWidth)));
+    }
+
+    [Fact]
+    public void Element_rle_operates_on_complete_two_byte_ids()
+    {
+        const int sourceWidth = 264;
+        var geometry = new LogicalTiledMapGeometry(
+            sourceWidth,
+            sourceHeight: 1,
+            tileScaleX: 1,
+            tileScaleY: 1,
+            worldY: 0,
+            worldHeight: 1,
+            streamY: 0,
+            width: sourceWidth,
+            height: 1,
+            expandedWorldY: 0,
+            backgroundWidth: sourceWidth,
+            backgroundHeight: 1,
+            backgroundOffsetY: 0);
+        var tileset = new LogicalTileset(
+            1,
+            "wide",
+            8,
+            8,
+            tileCount: 257,
+            columns: 257,
+            imagePath: null,
+            new Dictionary<int, WorldTileFlags>());
+        var gids = Enumerable.Range(1, 256)
+            .Select(value => (uint)value)
+            .Concat(Enumerable.Repeat(257u, 8))
+            .ToArray();
+        var logical = new LogicalTiledMap(
+            [tileset],
+            null,
+            gids,
+            new WorldTileFlags[sourceWidth],
+            geometry);
+        var plan = TiledWorldPackPlan.Create(logical);
+
+        var compiled = plan.Build(new byte[257], targetCellStride: 1);
+        var lastChunk = compiled.Pack.Chunks[^1];
+        var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+
+        Assert.Equal(2, compiled.Pack.Descriptor.VisualIdBytes);
+        Assert.Equal(WorldPackCodec.ElementRle, lastChunk.Directory.VisualCodec);
+        Assert.Equal(
+            new byte[] { 0x85, 0x00, 0x01 },
+            compiled.SerializedBytes.AsSpan(
+                checked((int)lastChunk.Directory.VisualOffset),
+                lastChunk.Directory.VisualStoredBytes).ToArray());
+        Assert.All(Enumerable.Range(256, 8), x => Assert.Equal((ushort)256, decoded.VisualIdAt(x, 0)));
+    }
+
+    [Fact]
     public void Full_stage1_is_represented_by_canonical_clipped_chunks_without_a_physical_location()
     {
         using var workspace = CreateNormalizedFullStage1();
         var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmj"));
-        var expected = DeriveFullStage1(logical);
-        var pack = CreateFullStage1Pack(expected);
+        var plan = TiledWorldPackPlan.Create(logical);
+        var targetExpansions = Enumerable.Range(
+                0,
+                plan.VisualMetatiles.Count * plan.MetatileWidth * plan.MetatileHeight)
+            .Select(value => checked((byte)value))
+            .ToArray();
+        var compiled = plan.Build(targetExpansions, targetCellStride: 1);
+        var pack = compiled.Pack;
 
         Assert.Equal(156, logical.Geometry.SourceWidth);
         Assert.Equal(20, logical.Geometry.SourceHeight);
         Assert.Equal(2, logical.Geometry.TileScaleX);
         Assert.Equal(2, logical.Geometry.TileScaleY);
-        Assert.Equal(53, expected.VisualIdentityCount);
-        Assert.Equal(2, expected.CollisionProfiles.Count);
+        Assert.Equal(53, plan.VisualMetatiles.Count);
+        Assert.Equal(2, plan.CollisionProfiles.Count);
         Assert.Equal(312, pack.Descriptor.HardwareWidth);
         Assert.Equal(40, pack.Descriptor.HardwareHeight);
         Assert.Equal(156, pack.SourceWidth);
@@ -31,7 +225,7 @@ public sealed class WorldPackTests
         Assert.Equal(53, pack.Descriptor.VisualMetatileCount);
         Assert.Equal(2, pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, pack.Chunks.Count);
-        Assert.Equal(7_708u, pack.Descriptor.PackLength);
+        Assert.True(pack.Descriptor.PackLength <= 7_708u);
 
         uint nextOffset = pack.Descriptor.ChunkDataOffset;
         for (var chunkY = 0; chunkY < pack.Descriptor.ChunkRows; chunkY++)
@@ -73,28 +267,23 @@ public sealed class WorldPackTests
                 var subcellX = hardwareX % logical.Geometry.TileScaleX;
                 var subcellY = hardwareY % logical.Geometry.TileScaleY;
                 var subcellIndex = subcellY * logical.Geometry.TileScaleX + subcellX;
-                var expectedVisualId = expected.VisualIds[sourceIndex];
+                var expectedVisualId = plan.VisualIds[sourceIndex];
                 var expectedExpansionByte = expectedVisualId * 4 + subcellIndex;
 
                 Assert.Equal(expectedVisualId, pack.VisualIdAt(hardwareX, hardwareY));
-                Assert.Equal(expected.CollisionProfileIds[sourceIndex], pack.CollisionProfileIdAt(hardwareX, hardwareY));
+                Assert.Equal(plan.CollisionProfileIds[sourceIndex], pack.CollisionProfileIdAt(hardwareX, hardwareY));
                 Assert.Equal(logical.WorldFlags[hardwareY * logical.Geometry.Width + hardwareX], pack.CollisionAt(hardwareX, hardwareY));
                 Assert.Equal(logical.WorldFlags[hardwareY * logical.Geometry.Width + hardwareX], legacyCollision.FlagsAt(hardwareX, hardwareY));
                 Assert.Equal(expectedExpansionByte, legacyTiles.TileIdAt(hardwareX, hardwareY));
             }
         }
 
-        var repeatedExpected = DeriveFullStage1(logical);
-        var repeatedPack = CreateFullStage1Pack(repeatedExpected);
-        Assert.Equal(expected.VisualIds, repeatedExpected.VisualIds);
-        Assert.Equal(expected.CollisionProfileIds, repeatedExpected.CollisionProfileIds);
-        Assert.Equal(pack.Descriptor, repeatedPack.Descriptor);
-        Assert.Equal(pack.TargetExpansions.ToArray(), repeatedPack.TargetExpansions.ToArray());
-        Assert.Equal(pack.Chunks.Select(chunk => chunk.Directory), repeatedPack.Chunks.Select(chunk => chunk.Directory));
-        Assert.Equal(pack.Chunks.SelectMany(chunk => chunk.VisualIds), repeatedPack.Chunks.SelectMany(chunk => chunk.VisualIds));
-        Assert.Equal(
-            pack.Chunks.SelectMany(chunk => chunk.CollisionProfileIds),
-            repeatedPack.Chunks.SelectMany(chunk => chunk.CollisionProfileIds));
+        var repeatedPlan = TiledWorldPackPlan.Create(logical);
+        var repeated = repeatedPlan.Build(targetExpansions, targetCellStride: 1);
+        Assert.Equal(plan.VisualIds, repeatedPlan.VisualIds);
+        Assert.Equal(plan.CollisionProfileIds, repeatedPlan.CollisionProfileIds);
+        Assert.Equal(compiled.SerializedBytes, repeated.SerializedBytes);
+        Assert.Equal(compiled.SerializedBytes, WorldPackSerializer.Serialize(WorldPackSerializer.Deserialize(compiled.SerializedBytes)));
 
         var publicNames = typeof(WorldPack).Assembly
             .GetTypes()
@@ -104,92 +293,6 @@ public sealed class WorldPackTests
         Assert.DoesNotContain(publicNames, name =>
             new[] { "Bank", "Mapper", "Mbc", "Ppu", "Chr", "Prg", "Cartridge", "Address", "Register" }
                 .Any(term => name.Contains(term, StringComparison.OrdinalIgnoreCase)));
-    }
-
-    // Test-only bridge from the live logical fixture to the accepted model. Production
-    // Tiled conversion remains owned by LW-1.4.
-    private static FullStage1Expected DeriveFullStage1(LogicalTiledMap logical)
-    {
-        var geometry = logical.Geometry;
-        var sourceCellCount = checked(geometry.SourceWidth * geometry.SourceHeight);
-        var visualKeys = new string[sourceCellCount];
-        var collisionProfileKeys = new string[sourceCellCount];
-        var collisionProfilesByKey = new Dictionary<string, WorldTileFlags[]>(StringComparer.Ordinal);
-
-        for (var sourceY = 0; sourceY < geometry.SourceHeight; sourceY++)
-        {
-            for (var sourceX = 0; sourceX < geometry.SourceWidth; sourceX++)
-            {
-                var sourceIndex = sourceY * geometry.SourceWidth + sourceX;
-                var backgroundGid = logical.BackgroundGids?[sourceIndex] ?? 0;
-                visualKeys[sourceIndex] = string.Concat(
-                    VisualReferenceKey(logical, backgroundGid, $"background ({sourceX}, {sourceY})"),
-                    "|",
-                    VisualReferenceKey(logical, logical.WorldGids[sourceIndex], $"world ({sourceX}, {sourceY})"));
-
-                var flags = new WorldTileFlags[geometry.TileScaleX * geometry.TileScaleY];
-                for (var subcellY = 0; subcellY < geometry.TileScaleY; subcellY++)
-                {
-                    for (var subcellX = 0; subcellX < geometry.TileScaleX; subcellX++)
-                    {
-                        var hardwareX = sourceX * geometry.TileScaleX + subcellX;
-                        var hardwareY = sourceY * geometry.TileScaleY + subcellY;
-                        flags[subcellY * geometry.TileScaleX + subcellX] =
-                            logical.WorldFlags[hardwareY * geometry.Width + hardwareX];
-                    }
-                }
-
-                var profileKey = Convert.ToHexString(flags.Select(flag => (byte)flag).ToArray());
-                collisionProfileKeys[sourceIndex] = profileKey;
-                collisionProfilesByKey.TryAdd(profileKey, flags);
-            }
-        }
-
-        var orderedVisualKeys = visualKeys
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var visualIdsByKey = orderedVisualKeys
-            .Select((key, index) => (key, id: checked((ushort)index)))
-            .ToDictionary(entry => entry.key, entry => entry.id, StringComparer.Ordinal);
-        var orderedCollisionKeys = collisionProfilesByKey.Keys
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var collisionIdsByKey = orderedCollisionKeys
-            .Select((key, index) => (key, id: checked((ushort)index)))
-            .ToDictionary(entry => entry.key, entry => entry.id, StringComparer.Ordinal);
-
-        return new FullStage1Expected(
-            visualKeys.Select(key => visualIdsByKey[key]).ToArray(),
-            collisionProfileKeys.Select(key => collisionIdsByKey[key]).ToArray(),
-            orderedCollisionKeys
-                .Select(key => new WorldPackCollisionProfile(collisionProfilesByKey[key]))
-                .ToArray(),
-            orderedVisualKeys.Length);
-    }
-
-    private static string VisualReferenceKey(LogicalTiledMap logical, uint gid, string context)
-    {
-        var cleanGid = LogicalTiledMapImporter.CleanTiledGid(gid, context);
-        if (cleanGid == 0)
-        {
-            return "0";
-        }
-
-        var tileset = LogicalTiledMapImporter.FindTileset(logical.Tilesets, cleanGid, context);
-        var tilesetIndex = -1;
-        for (var index = 0; index < logical.Tilesets.Count; index++)
-        {
-            if (ReferenceEquals(logical.Tilesets[index], tileset))
-            {
-                tilesetIndex = index;
-                break;
-            }
-        }
-
-        Assert.True(tilesetIndex >= 0, $"{context} resolved to a tileset outside importer order.");
-        var localTileId = checked((int)cleanGid - tileset.FirstGid);
-        return $"1:{tilesetIndex:D5}:{localTileId:D10}";
     }
 
     private static TemporaryDirectory CreateNormalizedFullStage1()
@@ -254,7 +357,11 @@ public sealed class WorldPackTests
     {
         using var workspace = CreateNormalizedFullStage1();
         var logical = LogicalTiledMapImporter.Load(Path.Combine(workspace.Path, "stage1.worldpack.tmj"));
-        var pack = CreateFullStage1Pack(DeriveFullStage1(logical));
+        var plan = TiledWorldPackPlan.Create(logical);
+        var targetExpansions = Enumerable.Range(0, plan.VisualMetatiles.Count * plan.MetatileWidth * plan.MetatileHeight)
+            .Select(value => checked((byte)value))
+            .ToArray();
+        var pack = plan.Build(targetExpansions, targetCellStride: 1).Pack;
 
         var left = pack.Locate(255, 38);
         Assert.Equal(127, left.MetatileX);
@@ -387,94 +494,6 @@ public sealed class WorldPackTests
         Assert.Contains("32-bit", range.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static WorldPack CreateFullStage1Pack(FullStage1Expected expected)
-    {
-        const int hardwareWidth = 312;
-        const int hardwareHeight = 40;
-        const int metatileWidth = 2;
-        const int metatileHeight = 2;
-        const int sourceWidth = hardwareWidth / metatileWidth;
-        const int sourceHeight = hardwareHeight / metatileHeight;
-        const int chunkColumns = 20;
-        const int chunkRows = 3;
-        var visualCount = expected.VisualIdentityCount;
-        var collisionCount = expected.CollisionProfiles.Count;
-        const int targetStride = 1;
-
-        var targetExpansions = Enumerable.Range(0, visualCount * metatileWidth * metatileHeight)
-            .Select(value => checked((byte)value))
-            .ToArray();
-
-        var collisionProfilesOffset = (uint)WorldPackDescriptor.V1HeaderBytes;
-        var targetExpansionsOffset = collisionProfilesOffset + (uint)(collisionCount * metatileWidth * metatileHeight);
-        var directoryOffset = targetExpansionsOffset + (uint)targetExpansions.Length;
-        var chunkDataOffset = directoryOffset + (uint)(chunkColumns * chunkRows * WorldPackDescriptor.V1DirectoryEntryBytes);
-        var nextOffset = chunkDataOffset;
-        var chunks = new List<WorldPackChunk>();
-
-        for (var chunkY = 0; chunkY < chunkRows; chunkY++)
-        {
-            for (var chunkX = 0; chunkX < chunkColumns; chunkX++)
-            {
-                var validWidth = Math.Min(8, sourceWidth - chunkX * 8);
-                var validHeight = Math.Min(8, sourceHeight - chunkY * 8);
-                var cellCount = validWidth * validHeight;
-                var visualIds = new ushort[cellCount];
-                var collisionIds = new ushort[cellCount];
-                for (var localY = 0; localY < validHeight; localY++)
-                {
-                    for (var localX = 0; localX < validWidth; localX++)
-                    {
-                        var index = localY * validWidth + localX;
-                        var sourceX = chunkX * 8 + localX;
-                        var sourceY = chunkY * 8 + localY;
-                        var sourceIndex = sourceY * sourceWidth + sourceX;
-                        visualIds[index] = expected.VisualIds[sourceIndex];
-                        collisionIds[index] = expected.CollisionProfileIds[sourceIndex];
-                    }
-                }
-
-                var visualBytes = checked((ushort)cellCount);
-                var collisionBytes = checked((ushort)cellCount);
-                var directory = new WorldPackChunkDirectoryEntry(
-                    VisualOffset: nextOffset,
-                    VisualStoredBytes: visualBytes,
-                    VisualDecodedBytes: visualBytes,
-                    CollisionOffset: nextOffset + visualBytes,
-                    CollisionStoredBytes: collisionBytes,
-                    CollisionDecodedBytes: collisionBytes,
-                    ValidWidth: (byte)validWidth,
-                    ValidHeight: (byte)validHeight,
-                    VisualCodec: WorldPackCodec.Raw,
-                    CollisionCodec: WorldPackCodec.Raw);
-                chunks.Add(new WorldPackChunk(directory, visualIds, collisionIds));
-                nextOffset += (uint)(visualBytes + collisionBytes);
-            }
-        }
-
-        var descriptor = new WorldPackDescriptor
-        {
-            HardwareWidth = hardwareWidth,
-            HardwareHeight = hardwareHeight,
-            MetatileWidth = metatileWidth,
-            MetatileHeight = metatileHeight,
-            ChunkColumns = chunkColumns,
-            ChunkRows = chunkRows,
-            VisualMetatileCount = visualCount,
-            CollisionProfileCount = collisionCount,
-            VisualIdBytes = 1,
-            CollisionIdBytes = 1,
-            TargetCellStride = targetStride,
-            CollisionProfilesOffset = collisionProfilesOffset,
-            TargetExpansionsOffset = targetExpansionsOffset,
-            DirectoryOffset = directoryOffset,
-            ChunkDataOffset = chunkDataOffset,
-            PackLength = nextOffset,
-        };
-
-        return new WorldPack(descriptor, expected.CollisionProfiles, targetExpansions, chunks);
-    }
-
     private static PackParts CreateSmallPackParts(
         int collisionProfileCount = 2,
         IReadOnlyList<WorldPackCollisionProfile>? collisionProfiles = null)
@@ -559,12 +578,6 @@ public sealed class WorldPackTests
             IReadOnlyList<WorldPackChunk>? chunks = null) =>
             new(descriptor ?? Descriptor, collisionProfiles ?? CollisionProfiles, TargetExpansions, chunks ?? Chunks);
     }
-
-    private sealed record FullStage1Expected(
-        ushort[] VisualIds,
-        ushort[] CollisionProfileIds,
-        IReadOnlyList<WorldPackCollisionProfile> CollisionProfiles,
-        int VisualIdentityCount);
 
     private sealed class TemporaryDirectory(string path) : IDisposable
     {

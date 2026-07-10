@@ -10,6 +10,54 @@ using Xunit.Abstractions;
 public sealed class FullStage1BaselineTests(ITestOutputHelper output)
 {
     [Fact]
+    public void External_tsj_background_world_map_round_trips_through_game_boy_world_pack()
+    {
+        var mapPath = RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj");
+        var raw = GameBoyTiledMapImporter.Load(mapPath, GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var compiled = GameBoyTiledMapImporter.CompileWorldPack(mapPath, GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+        var decodedTiles = decoded.ToWorldTileGrid(cell => cell.Span[0]);
+
+        Assert.Equal(raw.GeneratedTileData, compiled.GeneratedTileData);
+        Assert.Equal(raw.WorldTileIds, Enumerable.Range(0, raw.WorldTileIds.Length)
+            .Select(index => decodedTiles.TileIdAt(index % raw.Width, index / raw.Width)));
+        Assert.Equal(raw.WorldFlags, Enumerable.Range(0, raw.WorldFlags.Length)
+            .Select(index => decoded.CollisionAt(index % raw.Width, index / raw.Width)));
+        Assert.Contains(compiled.Pack.Chunks, chunk =>
+            chunk.Directory.VisualCodec == WorldPackCodec.ElementRle ||
+            chunk.Directory.CollisionCodec == WorldPackCodec.ElementRle);
+    }
+
+    [Fact]
+    public void Full_stage1_game_boy_world_pack_matches_the_raw_importer_and_is_byte_deterministic()
+    {
+        using var workspace = CreateNormalizedFullStage1();
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var firstGeneratedTile = GameBoyVideoProgram.FirstGeneratedBackgroundTile;
+        var raw = GameBoyTiledMapImporter.Load(mapPath, firstGeneratedTile);
+
+        var first = GameBoyTiledMapImporter.CompileWorldPack(mapPath, firstGeneratedTile);
+        var second = GameBoyTiledMapImporter.CompileWorldPack(mapPath, firstGeneratedTile);
+        var decoded = WorldPackSerializer.Deserialize(first.SerializedBytes);
+        var decodedTiles = decoded.ToWorldTileGrid(cell => cell.Span[0]);
+        var decodedCollision = decoded.ToWorldMap2D();
+
+        Assert.Equal(53, first.Pack.Descriptor.VisualMetatileCount);
+        Assert.Equal(2, first.Pack.Descriptor.CollisionProfileCount);
+        Assert.Equal(60, first.Pack.Chunks.Count);
+        Assert.Equal(2_550, first.SerializedBytes.Length);
+        Assert.True(first.SerializedBytes.Length <= 7_708, $"GB WorldPack used {first.SerializedBytes.Length} bytes.");
+        Assert.Equal(first.SerializedBytes, second.SerializedBytes);
+        Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);
+        Assert.Equal(raw.GeneratedTileData, second.GeneratedTileData);
+        Assert.Equal(raw.WorldTileIds, Enumerable.Range(0, raw.WorldTileIds.Length)
+            .Select(index => decodedTiles.TileIdAt(index % raw.Width, index / raw.Width)));
+        Assert.Equal(raw.WorldFlags, Enumerable.Range(0, raw.WorldFlags.Length)
+            .Select(index => decodedCollision.FlagsAt(index % raw.Width, index / raw.Width)));
+        output.WriteLine($"GB full stage1 WorldPack: {first.SerializedBytes.Length} bytes");
+    }
+
+    [Fact]
     public void Full_stage1_game_boy_baseline_is_frozen()
     {
         using var workspace = CreateNormalizedFullStage1();

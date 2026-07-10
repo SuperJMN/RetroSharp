@@ -20,6 +20,12 @@ internal sealed record NesTiledWorld(
     byte[] GeneratedTileData,
     byte[] BackgroundPalette);
 
+internal sealed record NesTiledWorldPack(
+    WorldPack Pack,
+    byte[] SerializedBytes,
+    byte[] GeneratedTileData,
+    byte[] BackgroundPalette);
+
 // NES lowering of an imported Tiled map. It consumes the target-neutral
 // RetroSharp.Core.Sdk.Tiled.LogicalTiledMap (shared with the Game Boy path) and
 // owns the NES specifics: decoding tileset images, generating and deduplicating
@@ -29,6 +35,48 @@ internal sealed record NesTiledWorld(
 // use the shared four-screen background buffer plus row streaming when needed.
 internal static class NesTiledWorldImporter
 {
+    public static NesTiledWorldPack CompileWorldPack(string path, int firstGeneratedTile)
+    {
+        var logical = LogicalTiledMapImporter.Load(path);
+        var plan = TiledWorldPackPlan.Create(logical);
+
+        // Preserve the current palette plan plus first-encounter CHR dedup order,
+        // then remap those target results into lexicographic WorldPack visual IDs.
+        var lowered = Load(path, firstGeneratedTile);
+        var metatileCells = checked(plan.MetatileWidth * plan.MetatileHeight);
+        const int targetCellStride = 2;
+        var expansions = new byte[checked(plan.VisualMetatiles.Count * metatileCells * targetCellStride)];
+        var representatives = FindVisualRepresentatives(plan);
+        for (var visualId = 0; visualId < representatives.Length; visualId++)
+        {
+            var sourceIndex = representatives[visualId];
+            var sourceX = sourceIndex % plan.SourceWidth;
+            var sourceY = sourceIndex / plan.SourceWidth;
+            for (var subcellY = 0; subcellY < plan.MetatileHeight; subcellY++)
+            {
+                for (var subcellX = 0; subcellX < plan.MetatileWidth; subcellX++)
+                {
+                    var hardwareX = sourceX * plan.MetatileWidth + subcellX;
+                    var hardwareY = sourceY * plan.MetatileHeight + subcellY;
+                    var loweredIndex = hardwareY * lowered.Width + hardwareX;
+                    var subcellIndex = subcellY * plan.MetatileWidth + subcellX;
+                    var expansionOffset = (visualId * metatileCells + subcellIndex) * targetCellStride;
+                    expansions[expansionOffset] = checked((byte)lowered.WorldTileIds[loweredIndex]);
+                    expansions[expansionOffset + 1] = checked((byte)(
+                        lowered.WorldPaletteSlots[loweredIndex] |
+                        (lowered.WorldSourceTiles[loweredIndex] << 2)));
+                }
+            }
+        }
+
+        var compiled = plan.Build(expansions, targetCellStride);
+        return new NesTiledWorldPack(
+            compiled.Pack,
+            compiled.SerializedBytes,
+            lowered.GeneratedTileData,
+            lowered.BackgroundPalette);
+    }
+
     public static NesTiledWorld Load(string path, int firstGeneratedTile)
     {
         var logical = LogicalTiledMapImporter.Load(path);
@@ -105,6 +153,26 @@ internal static class NesTiledWorldImporter
             logical.WorldFlags,
             resolver.GeneratedTileData,
             palettePlan.PaletteRam);
+    }
+
+    private static int[] FindVisualRepresentatives(TiledWorldPackPlan plan)
+    {
+        var representatives = Enumerable.Repeat(-1, plan.VisualMetatiles.Count).ToArray();
+        for (var sourceIndex = 0; sourceIndex < plan.VisualIds.Count; sourceIndex++)
+        {
+            var visualId = plan.VisualIds[sourceIndex];
+            if (representatives[visualId] < 0)
+            {
+                representatives[visualId] = sourceIndex;
+            }
+        }
+
+        if (representatives.Any(index => index < 0))
+        {
+            throw new InvalidOperationException("Tiled WorldPack visual identity has no source-cell representative.");
+        }
+
+        return representatives;
     }
 
     private static ResolvedTiles GenerateBackgroundTiles(uint[] backgroundGids, LogicalTiledMapGeometry geometry, string displayName, NesTileResolver resolver)

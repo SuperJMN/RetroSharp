@@ -1,12 +1,14 @@
 # ADR: `WorldPack` v1 logical, packed, and staging format
 
 Status: **accepted for LW-0.2 on 2026-07-10; the target-neutral Core model and
-validation are implemented by LW-1.3.**
+validation are implemented by LW-1.3, and deterministic Tiled packing plus
+GB/NES inspection payloads are implemented by LW-1.4.**
 
 This decision is the implementation contract for LW-1.3 and LW-1.4. It fixes
-the shared logical seam and the target-owned packed payload shape; it does not
-implement a packer, runtime reader, bank placement, mapper, wider coordinate
-ABI, or runner migration.
+the shared logical seam and the target-owned packed payload shape. LW-1.4 now
+implements the packer and inspectable serialized payloads; this ADR still does
+not provide a production runtime reader, bank placement, mapper, wider
+coordinate ABI, or runner migration.
 
 ## Context and measured choice
 
@@ -431,6 +433,31 @@ and exposes coordinate lookup without interpreting those bytes. Its
 explicit tooling compatibility path described above; they do not select the
 large-world runtime path or a physical storage location.
 
+LW-1.4 adds `TiledWorldPackPlan.Create(...)` beside the logical Tiled importer.
+The plan selects the playable source slice, validates background/world GIDs,
+assigns visual IDs by the authoring tuple order above, and interns collision
+profiles independently. `WorldPackSerializer` builds the clipped chunk model,
+selects raw or canonical element RLE independently for every plane, writes the
+binary envelope, and can deserialize it for tooling/tests. The target
+inspection seams are `GameBoyTiledMapImporter.CompileWorldPack(...)` and
+`NesTiledWorldImporter.CompileWorldPack(...)`.
+
+Those target seams first execute the unchanged historical lowering traversal:
+the complete background precedes the playable world, so first-encounter pattern
+deduplication, GB pattern bytes, and NES CHR/palette planning remain identical.
+They then emit expansion records in the plan's lexicographic visual-ID order.
+The NES record retains palette slot and world-layer provenance in its second
+byte. Duplicate target records remain legal when distinct authoring identities
+quantize to the same target result.
+
+The focused full-`stage1` builds measure 2,550 serialized bytes on Game Boy and
+2,762 on NES, compared with the raw-fallback envelopes of 7,708 and 7,920.
+Both builds retain 60 clipped chunks, 53 visual metatiles, two collision
+profiles, 82 GB patterns, 90 NES patterns, and 788 solid hardware cells. Tests
+also cover external TSJ/TSX tilesets, target PNG variants, background/world
+composition, explicit collision overrides, target metadata parity, canonical
+round-trip decoding, and two fresh byte-identical compilations.
+
 ## Consequences, rejected alternatives, and non-goals
 
 - Expanded 8x8 raw rows retain the measured 24,960-byte duplication and do not
@@ -450,8 +477,8 @@ identities quantize alike. In return, RAM is fixed, collision and visuals can be
 fetched independently, output order is deterministic, and future cartridge
 placement does not alter the logical or binary pack.
 
-This ADR and LW-1.3 do not implement a packer, codec, target reader, cartridge
+This ADR and LW-1.4 do not implement a production target reader, cartridge
 placement, or runner migration, and they do not alter the accepted
-coordinate/collision ABI. Later work may optimize target expansion records or add codecs only
-behind a new compatible version; it must not reopen the v1 topology or leak
-target hardware into portable source.
+coordinate/collision ABI. The implemented raw/element-RLE writer is the v1
+codec contract; later codecs or expansion-record changes require an explicitly
+compatible version and must not leak target hardware into portable source.

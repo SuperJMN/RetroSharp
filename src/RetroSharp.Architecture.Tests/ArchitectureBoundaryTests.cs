@@ -84,6 +84,13 @@ public sealed class ArchitectureBoundaryTests
         "src/RetroSharp.Sdk.Frontend/Sdk2DOperationCollector.cs",
     ];
 
+    private static readonly string[] PortableWorldPackSourceFiles =
+    [
+        "src/RetroSharp.Core/Sdk/WorldPack.cs",
+        "src/RetroSharp.Core/Sdk/WorldPackSerializer.cs",
+        "src/RetroSharp.Core/Sdk/Tiled/TiledWorldPackPlan.cs",
+    ];
+
     [Fact]
     public void Language_projects_do_not_reference_sdk_frontend_or_concrete_targets()
     {
@@ -104,11 +111,10 @@ public sealed class ArchitectureBoundaryTests
     public void Portable_world_pack_model_does_not_expose_target_storage_terms()
     {
         var root = RepositoryRoot();
-        var modelFiles = Directory
-            .EnumerateFiles(Path.Combine(root, "src/RetroSharp.Core/Sdk"), "WorldPack*.cs", SearchOption.TopDirectoryOnly)
-            .Order(StringComparer.Ordinal)
+        var modelFiles = PortableWorldPackSourceFiles
+            .Select(relativePath => Path.Combine(root, relativePath))
             .ToArray();
-        Assert.NotEmpty(modelFiles);
+        Assert.All(modelFiles, file => Assert.True(File.Exists(file), $"Portable WorldPack source '{Path.GetRelativePath(root, file)}' must exist."));
 
         string[] forbiddenTerms =
         [

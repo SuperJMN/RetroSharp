@@ -16,6 +16,11 @@ internal sealed record GameBoyTiledMap(
     WorldTileFlags[] WorldFlags,
     byte[] GeneratedTileData);
 
+internal sealed record GameBoyTiledWorldPack(
+    WorldPack Pack,
+    byte[] SerializedBytes,
+    byte[] GeneratedTileData);
+
 // Game Boy lowering of an imported Tiled map. The target-neutral structure
 // (parsing, tilesets, geometry, world slice, and collision flags) is produced by
 // RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter. This stage owns only the
@@ -24,6 +29,39 @@ internal sealed record GameBoyTiledMap(
 // background under blank world cells.
 internal static class GameBoyTiledMapImporter
 {
+    public static GameBoyTiledWorldPack CompileWorldPack(string path, int firstGeneratedTileId = 6)
+    {
+        var logical = LogicalTiledMapImporter.Load(path);
+        var plan = TiledWorldPackPlan.Create(logical);
+
+        // Load through the historical lowering first. Its traversal (complete
+        // background, then playable world) owns pattern deduplication and tile IDs.
+        // WorldPack visual IDs are independently ordered by authoring identity.
+        var lowered = Load(path, firstGeneratedTileId);
+        var metatileCells = checked(plan.MetatileWidth * plan.MetatileHeight);
+        var expansions = new byte[checked(plan.VisualMetatiles.Count * metatileCells)];
+        var representatives = FindVisualRepresentatives(plan);
+        for (var visualId = 0; visualId < representatives.Length; visualId++)
+        {
+            var sourceIndex = representatives[visualId];
+            var sourceX = sourceIndex % plan.SourceWidth;
+            var sourceY = sourceIndex / plan.SourceWidth;
+            for (var subcellY = 0; subcellY < plan.MetatileHeight; subcellY++)
+            {
+                for (var subcellX = 0; subcellX < plan.MetatileWidth; subcellX++)
+                {
+                    var hardwareX = sourceX * plan.MetatileWidth + subcellX;
+                    var hardwareY = sourceY * plan.MetatileHeight + subcellY;
+                    var tileId = lowered.WorldTileIds[hardwareY * lowered.Width + hardwareX];
+                    expansions[visualId * metatileCells + subcellY * plan.MetatileWidth + subcellX] = checked((byte)tileId);
+                }
+            }
+        }
+
+        var compiled = plan.Build(expansions, targetCellStride: 1);
+        return new GameBoyTiledWorldPack(compiled.Pack, compiled.SerializedBytes, lowered.GeneratedTileData);
+    }
+
     public static GameBoyTiledMap Load(string path, int firstGeneratedTileId = 6)
     {
         var logical = LogicalTiledMapImporter.Load(path);
@@ -90,6 +128,26 @@ internal static class GameBoyTiledMapImporter
             worldTileIds,
             logical.WorldFlags,
             resolver.GeneratedTileData);
+    }
+
+    private static int[] FindVisualRepresentatives(TiledWorldPackPlan plan)
+    {
+        var representatives = Enumerable.Repeat(-1, plan.VisualMetatiles.Count).ToArray();
+        for (var sourceIndex = 0; sourceIndex < plan.VisualIds.Count; sourceIndex++)
+        {
+            var visualId = plan.VisualIds[sourceIndex];
+            if (representatives[visualId] < 0)
+            {
+                representatives[visualId] = sourceIndex;
+            }
+        }
+
+        if (representatives.Any(index => index < 0))
+        {
+            throw new InvalidOperationException("Tiled WorldPack visual identity has no source-cell representative.");
+        }
+
+        return representatives;
     }
 
     private static byte[] GenerateBackgroundTiles(uint[] backgroundGids, LogicalTiledMapGeometry geometry, string displayName, GameBoyTileResolver resolver)

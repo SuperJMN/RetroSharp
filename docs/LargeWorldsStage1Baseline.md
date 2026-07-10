@@ -1,11 +1,12 @@
 # Full `stage1` baseline (LW-0.1)
 
-Status: **frozen on 2026-07-10 and refreshed after LW-1.2 by the focused GB/NES baseline tests.**
+Status: **frozen on 2026-07-10 and refreshed after LW-1.4 by the focused GB/NES baseline and WorldPack parity tests.**
 
 This report records why the complete authored runner `stage1` cannot run on the
-current Game Boy or NES paths. It is measurement and acceptance evidence only:
-it does not choose a packed-world format, staging geometry, coordinate ABI,
-Game Boy banking policy, or NES mapper.
+current Game Boy or NES paths. It began as measurement and acceptance evidence;
+the later ADRs now fix the packed-world format, staging geometry, and coordinate
+ABI. The report still does not choose Game Boy banking policy or a NES mapper,
+and the inspectable LW-1.4 packs are not connected to production readers.
 
 Run the deterministic report from the repository root:
 
@@ -32,6 +33,22 @@ after the test. No tracked runner input or output is used as scratch space.
 | Visual plus collision bytes | 24,960 |
 | Solid collision cells | 788 hardware cells (197 source cells) |
 | Acceptance floor | world-pixel Y 304 |
+
+## LW-1.4 packed result
+
+| Packed fact | Game Boy | NES |
+| --- | ---: | ---: |
+| Serialized `WorldPack` | 2,550 bytes | 2,762 bytes |
+| Raw-fallback envelope | 7,708 bytes | 7,920 bytes |
+| Chunks / visual IDs / collision profiles | 60 / 53 / 2 | 60 / 53 / 2 |
+| Preserved generated patterns | 82 | 90 |
+
+These are canonical header + profiles + target expansions + directory +
+per-plane raw/RLE bytes. Two fresh compilations are byte-identical, and decoded
+tiles, collision flags, target pattern data, NES palette slots, and NES
+world/background provenance match the current raw importers. The numbers are
+packing evidence only; `World.Load(...)` continues to use the existing raw
+production path.
 
 Collision is derived from the `stage1.tsx` tile object groups and expanded with
 the visual map, so the reported 12,480 flag bytes cover the whole authored
@@ -94,5 +111,6 @@ LW-0.1 reads but must not modify:
 LW-0.1 deliberately added no tracked normalized full map, full-stage1 ROM,
 packed world, staging buffer, collision-result widening, compression, mapper
 selection, or runner-input switch. Collision-result widening later landed in
-LW-1.2; the packed world, production staging/runtime reader, mapper selection,
-and runner-input switch remain separate dependent work.
+LW-1.2, and deterministic inspection packs plus raw/RLE serialization landed in
+LW-1.4. Production staging/runtime readers, mapper selection, and the
+runner-input switch remain separate dependent work.

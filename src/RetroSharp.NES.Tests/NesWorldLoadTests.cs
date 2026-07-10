@@ -90,6 +90,71 @@ public sealed class NesWorldLoadTests : IDisposable
     }
 
     [Fact]
+    public void World_pack_matches_raw_nes_import_for_a_shifted_composed_slice()
+    {
+        WriteTilesheetPng(Path.Combine(directory, "tiles.png"), blackThenWhite: false);
+        File.WriteAllText(Path.Combine(directory, "level.tsx"), """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <tileset version="1.10" tiledversion="1.12.2" name="Level" tilewidth="8" tileheight="8" tilecount="2" columns="2">
+         <image source="tiles.png" width="16" height="8"/>
+        </tileset>
+        """);
+        File.WriteAllText(Path.Combine(directory, "level.tmj"), """
+        {
+          "type": "map",
+          "orientation": "orthogonal",
+          "infinite": false,
+          "width": 3,
+          "height": 3,
+          "tilewidth": 8,
+          "tileheight": 8,
+          "properties": [
+            { "name": "retrosharpStreamY", "type": "int", "value": 0 },
+            { "name": "retrosharpWorldY", "type": "int", "value": 1 },
+            { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+          ],
+          "tilesets": [
+            { "firstgid": 1, "source": "level.tsx" }
+          ],
+          "layers": [
+            { "type": "tilelayer", "name": "background", "width": 3, "height": 3, "data": [2, 2, 2, 1, 1, 1, 1, 1, 1] },
+            { "type": "tilelayer", "name": "world", "width": 3, "height": 3, "data": [0, 0, 0, 2, 0, 2, 0, 2, 0] },
+            { "type": "tilelayer", "name": "collision", "width": 3, "height": 3, "data": [0, 0, 0, 1, 0, 2, 4, 0, 1] }
+          ]
+        }
+        """);
+        var path = Path.Combine(directory, "level.tmj");
+        var firstGeneratedTile = NesVideoProgram.FirstSpriteTile;
+        var raw = NesTiledWorldImporter.Load(path, firstGeneratedTile);
+
+        var compiled = NesTiledWorldImporter.CompileWorldPack(path, firstGeneratedTile);
+        var decoded = WorldPackSerializer.Deserialize(compiled.SerializedBytes);
+        var decodedTiles = decoded.ToWorldTileGrid(cell => cell.Span[0]);
+
+        Assert.Equal(3, decoded.Descriptor.HardwareWidth);
+        Assert.Equal(2, decoded.Descriptor.HardwareHeight);
+        Assert.NotEqual(raw.WorldTileIds[0], raw.WorldTileIds[1]);
+        Assert.Equal(new byte[] { 1, 0, 1, 0, 1, 0 }, raw.WorldSourceTiles);
+        Assert.Equal(raw.GeneratedTileData, compiled.GeneratedTileData);
+        Assert.Equal(raw.BackgroundPalette, compiled.BackgroundPalette);
+        for (var index = 0; index < raw.WorldTileIds.Length; index++)
+        {
+            var x = index % raw.Width;
+            var y = index / raw.Width;
+            Assert.Equal(raw.WorldTileIds[index], decodedTiles.TileIdAt(x, y));
+            Assert.Equal(raw.WorldFlags[index], decoded.CollisionAt(x, y));
+
+            var coordinate = decoded.Locate(x, y);
+            var expansionCell = decoded.VisualIdAt(x, y) * decoded.Descriptor.MetatileWidth * decoded.Descriptor.MetatileHeight + coordinate.SubcellIndex;
+            var expansionOffset = expansionCell * decoded.Descriptor.TargetCellStride;
+            Assert.Equal(raw.WorldTileIds[index], decoded.TargetExpansions.Span[expansionOffset]);
+            Assert.Equal(
+                (byte)(raw.WorldPaletteSlots[index] | (raw.WorldSourceTiles[index] << 2)),
+                decoded.TargetExpansions.Span[expansionOffset + 1]);
+        }
+    }
+
+    [Fact]
     public void World_load_uses_nes_tileset_png_variant_when_present()
     {
         WriteTilesheetPng(Path.Combine(directory, "tiles.png"), blackThenWhite: true);
@@ -133,8 +198,14 @@ public sealed class NesWorldLoadTests : IDisposable
         var program = BuildProgram(source);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
         var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
+        var packed = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(directory, "level.tmj"),
+            NesVideoProgram.FirstSpriteTile);
+        var packedTileGrid = WorldPackSerializer.Deserialize(packed.SerializedBytes).ToWorldTileGrid(cell => cell.Span[0]);
 
         Assert.Equal(0, worldTileGrid.TileIdAt(0, 0));
+        Assert.Equal(0, packedTileGrid.TileIdAt(0, 0));
+        Assert.Empty(packed.GeneratedTileData);
         Assert.Empty(program.GeneratedBackgroundTiles);
         Assert.Equal(0, program.NameTable[0]);
     }
