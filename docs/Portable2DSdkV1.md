@@ -98,9 +98,11 @@ World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values
 
 The accepted
 [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
-defines the post-LW-1.1/LW-1.2 scalar surface without claiming it is already
-implemented: map dimensions, logical camera/world pixels, hardware-cell
-coordinates, and world hit tops are non-negative `i16` words; world no-hit is
+defines the post-LW-1.1/LW-1.2 scalar surface. LW-1.1 now implements word map
+widths, logical camera positions, and source-column addressing; LW-1.2 still
+owns world collision operands/results. Map dimensions, logical camera/world
+pixels, hardware-cell coordinates, and world hit tops are non-negative `i16`
+words; world no-hit is
 `-1`/`0xFFFF`; and screen-relative hit-top remains `0..248`/`255` semantically
 while its `I16` word form is `0x0000..0x00F8`/`0x00FF`. Packs whose pixel extent
 exceeds 32768 are diagnosed by this first runtime envelope even though
@@ -122,7 +124,7 @@ The slot is logical and capability-checked against the target descriptor. The fo
 | Signature | Semantics |
 | --- | --- |
 | `Camera.Init(mapWidth, streamY, streamHeight)` | Initialize camera state for the active world map. |
-| `Camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. The accepted Large Worlds contract carries complete `i16` words; current target lowering still consumes their low bytes until LW-1.1. |
+| `Camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition` with complete little-endian `i16` operands. Byte-backed callers are zero-extended. GB/NES compare logical words while hardware scroll writes remain target-owned bytes. |
 | `Camera.Apply()` | Apply the current camera state to the target during the frame. |
 
 Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `Camera.SetPosition(x, y)` by walking toward the requested position up to 16 px per axis per call, queuing up to two same-axis exposed edges, and streaming them during `Camera.Apply()`. Diagonal Game Boy movement is accepted through the target's staggered camera-stream capability: column and row queues can be pending together, but only one axis queue is committed per VBlank; each queued edge is still the 19-tile column or 21-tile row shape described by the declared explicit stream-edge budget. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
@@ -456,8 +458,8 @@ For logical sprites, targets feed their compiled metasprite geometry and hardwar
 | API group | Game Boy | NES |
 | --- | --- | --- |
 | Frame/input | Supported. `Video.WaitVBlank()` and `Input.Poll()` lower to DMG VBlank and JOYP reads. | Supported in the runtime spike. `Input.Poll()` reads controller port `$4016`. |
-| World map setup | Supported. `World.Map(...)` and `World.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags. | Supported for horizontal maps that fit the one-byte streaming runtime. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Four-screen free-scroll maps, including tall Tiled `World.Load(...)` maps, preload the initial 64x60 surface and keep source rows/columns in ROM for staggered runtime streaming beyond that buffer. |
-| Camera X | Supported with position walking up to 16 px per call, queuing and streaming up to two same-axis columns during `Camera.Apply()`. | Supported for `Camera.SetPosition(x, 0)` and `Camera.Apply()`, with absolute source-tile tracking, horizontal nametable selection, and runtime column streaming into the off-screen nametable for horizontal-only maps wider than 32 columns. In four-screen free-scroll mode, X movement pans within the 64x60 buffer and streams wider worlds one edge per VBlank. |
+| World map setup | Supported. `World.Map(...)` and `World.Load(...)` build initial visible tiles, streaming rows/columns, and collision flags; logical widths up to 4,096 hardware cells are accepted when the monolithic cartridge still fits. | Supported with logical widths up to 4,096 hardware cells when mapper-0 PRG still fits. Startup seeds a 64-column two-nametable buffer and runtime camera movement streams wider source maps through it. Four-screen free-scroll maps, including tall Tiled `World.Load(...)` maps, preload the initial 64x60 surface and keep source rows/columns in ROM for staggered runtime streaming beyond that buffer. |
+| Camera X | Supported with complete word position comparison, position walking up to 16 px per call, word source-edge tags for wide maps, and up to two same-axis column streams during `Camera.Apply()`. | Supported with complete word position comparison, absolute word source-column tracking for maps wider than 255 cells, horizontal nametable selection, and runtime column streaming into the off-screen nametable. Four-screen row/column streams retain the full logical source column while the nametable coordinate remains modulo 64. |
 | Camera Y | Supported with position walking up to 16 px per call, queuing and streaming up to two same-axis rows during `Camera.Apply()`. Diagonal movement uses a staggered one-axis-queue-per-VBlank policy. | Supported through four-screen nametables. Maps up to 64x60 move without runtime tile writes; taller source-authored worlds stream the exposed 32-tile row and 9 touched attribute bytes with the staggered one-edge-per-VBlank policy. |
 | Logical sprites | Supported for PNG Game Boy sheets and transitional JSON assets. | Supported for PNG NES sheets and transitional JSON assets with `platforms.nes.frames`. |
 | Palette declarations | Background slot `0` and sprite slots `0..1` through `Palette.Background(...)` and `Palette.Sprite(...)`. | Background and sprite slots `0..3` through `Palette.Background(...)` and `Palette.Sprite(...)`. |
@@ -506,10 +508,11 @@ Calls that expose raw hardware state are outside SDK v1. They can remain availab
 SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because several broader world/HUD contracts are still missing. It currently loads the 88x15-cell derived `stage1.playable.tmj` map, expands it to 176x30 hardware tiles, and declares per-target VGM/VGZ background music. The complete 156x20-cell `stage1.tmj` design is the Large Worlds acceptance payload; larger diagonal free scroll remains demonstrated separately by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `World.Load(...)`.
 
 - `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
-- LW-0.4 is accepted in `docs/WorldCoordinateCollisionContract.md`, but its
-  production widening remains in LW-1.1/LW-1.2. Until then, world hit-top still
-  uses the legacy byte `255` sentinel in emitted GB/NES code; the runner and
-  tracked ROMs are unchanged by the ADR.
+- LW-0.4 is accepted in `docs/WorldCoordinateCollisionContract.md`. LW-1.1 has
+  landed word camera positions and logical source-column addressing. LW-1.2
+  still owns world-Y collision operands and the widened world hit-top result;
+  until then, emitted GB/NES world hit-top keeps the legacy byte `255`
+  sentinel.
 - On Game Boy, `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations used by backend lowering.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `Camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `Palette.Background(...)` and `Palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors, may use the next physical sprite palette slot for automatic optional overlays when a PNG has more than three opaque colors, and may move incompatible PNG-derived palettes to a free physical sprite palette range.

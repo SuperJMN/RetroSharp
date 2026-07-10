@@ -688,6 +688,13 @@ internal sealed class NesRuntimeCompiler
     // write (even while muted by an active SFX), so when the effect releases pulse 1 the channel can be
     // restored to the BGM's state instead of keeping the effect's residue (e.g. a stuck $4001 sweep).
     private const ushort Pulse1ShadowBaseAddress = 0x0313;
+    private const ushort CameraXHighAddress = 0x0318;
+    private const ushort CameraYHighAddress = 0x0319;
+    private const ushort CameraTileColumnHighAddress = 0x031A;
+    private const ushort CameraTileRowHighAddress = 0x031B;
+    private const ushort CameraSourceColumnHighAddress = 0x031E;
+    private const ushort PendingCameraColumnSourceHighAddress = 0x0321;
+    private const ushort PendingCameraRowSourceColumnHighAddress = 0x0323;
     private const ushort OamDmaAddress = 0x4014;
     private const ushort ControllerPortAddress = 0x4016;
     private const byte PendingStreamNone = 0;
@@ -3229,9 +3236,9 @@ internal sealed class NesRuntimeCompiler
         var worldMap = program.WorldMap
                        ?? throw new InvalidOperationException("camera_init requires world_map(...) data for the NES target.");
         var mapWidth = NesVideoProgram.ConstValue(call.Parameters.ElementAt(0), "camera_init argument 1");
-        if (mapWidth is < 1 or > 255)
+        if (mapWidth is < 1 or > 4096)
         {
-            throw new InvalidOperationException("NES camera_init map width must fit one byte in the current horizontal streaming runtime.");
+            throw new InvalidOperationException("NES camera_init map width must be between 1 and 4096 hardware cells.");
         }
 
         if (mapWidth > worldMap.Width)
@@ -3262,12 +3269,26 @@ internal sealed class NesRuntimeCompiler
         }
 
         cameraConfig = new NesCameraConfig(mapWidth, worldMap.Height, streamY, bufferedHeight, useFourScreenNametables);
+        var horizontalUsesWord = Math.Max(0, (mapWidth - NesTarget.Capabilities.ScreenTiles.Width) * 8) > byte.MaxValue;
+        var verticalUsesWord = useFourScreenNametables
+                               && Math.Max(0, (worldMap.Height - NesTarget.Capabilities.ScreenTiles.Height) * 8) > byte.MaxValue;
         builder.LoadAImmediate(0);
         builder.StoreAZeroPage(CameraXAddress);
         builder.StoreAZeroPage(CameraTileColumnAddress);
         builder.StoreAZeroPage(CameraTargetColumnAddress);
         builder.StoreAZeroPage(CameraSourceColumnAddress);
         builder.StoreAZeroPage(CameraNewXAddress);
+        if (horizontalUsesWord && mapWidth > byte.MaxValue)
+        {
+            builder.StoreAAbsolute(CameraXHighAddress);
+        }
+
+        if (mapWidth > byte.MaxValue)
+        {
+            builder.StoreAAbsolute(CameraTileColumnHighAddress);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+        }
+
         builder.StoreAAbsolute(PendingCameraStreamFlagsAddress);
         builder.StoreAAbsolute(PendingCameraRowPhaseAddress);
         if (useFourScreenNametables)
@@ -3275,6 +3296,16 @@ internal sealed class NesRuntimeCompiler
             builder.StoreAZeroPage(CameraYAddress);
             builder.StoreAZeroPage(CameraTileRowAddress);
             builder.StoreAZeroPage(CameraNewYAddress);
+            if (verticalUsesWord && worldMap.Height > byte.MaxValue)
+            {
+                builder.StoreAAbsolute(CameraYHighAddress);
+            }
+
+            if (worldMap.Height > byte.MaxValue)
+            {
+                builder.StoreAAbsolute(CameraTileRowHighAddress);
+            }
+
             builder.StoreAZeroPage(CameraTargetRowAddress);
             builder.StoreAZeroPage(CameraSourceRowAddress);
             builder.StoreAZeroPage(CameraStreamRemainingAddress);
@@ -3290,25 +3321,72 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(CameraScrollAppliedAddress);
-        EmitSdkByteExpressionToA(operation.X);
+        var horizontalFitsByte = Math.Max(0, (config.MapWidth - NesTarget.Capabilities.ScreenTiles.Width) * 8) <= byte.MaxValue;
         if (ShouldStreamColumnsForCamera(config))
         {
-            EmitWalkCameraAxisToTarget(CameraXAddress, CameraNewXAddress, () => EmitStreamColumnForCameraPosition(config), "nes_camera_x");
+            if (horizontalFitsByte)
+            {
+                EmitWalkByteCameraAxisToTarget(
+                    operation.X,
+                    CameraXAddress,
+                    CameraNewXAddress,
+                    () => EmitStreamColumnForCameraPosition(config),
+                    "nes_camera_x");
+            }
+            else
+            {
+                EmitWalkCameraAxisToTarget(
+                    operation.X,
+                    CameraXAddress,
+                    CameraXHighAddress,
+                    CameraNewXAddress,
+                    CameraXHighAddress,
+                    () => EmitStreamColumnForCameraPosition(config),
+                    "nes_camera_x",
+                    deriveCurrentHighFromCell: config.MapWidth <= byte.MaxValue,
+                    currentCellLowAddress: CameraTileColumnAddress);
+            }
         }
         else if (config.MapWidth > 32)
         {
-            EmitWalkCameraAxisToTarget(CameraXAddress, CameraNewXAddress, () => EmitTrackCameraXPosition(config), "nes_camera_x");
+            if (horizontalFitsByte)
+            {
+                EmitWalkByteCameraAxisToTarget(
+                    operation.X,
+                    CameraXAddress,
+                    CameraNewXAddress,
+                    () => EmitTrackCameraXPosition(config),
+                    "nes_camera_x");
+            }
+            else
+            {
+                EmitWalkCameraAxisToTarget(
+                    operation.X,
+                    CameraXAddress,
+                    CameraXHighAddress,
+                    CameraNewXAddress,
+                    CameraXHighAddress,
+                    () => EmitTrackCameraXPosition(config),
+                    "nes_camera_x",
+                    deriveCurrentHighFromCell: config.MapWidth <= byte.MaxValue,
+                    currentCellLowAddress: CameraTileColumnAddress);
+            }
         }
         else
         {
+            EmitSdkWordExpressionToA(operation.X, highByte: false);
             builder.StoreAZeroPage(CameraNewXAddress);
             builder.LoadAZeroPage(CameraNewXAddress);
             builder.StoreAZeroPage(CameraXAddress);
+            EmitSdkWordExpressionToA(operation.X, highByte: true);
+            builder.StoreAAbsolute(CameraXHighAddress);
             builder.LoadAZeroPage(CameraNewXAddress);
             builder.ShiftRightA();
             builder.ShiftRightA();
             builder.ShiftRightA();
             builder.StoreAZeroPage(CameraTileColumnAddress);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(CameraTileColumnHighAddress);
         }
 
         if (operation.Axes.HasFlag(ScrollAxes.Vertical))
@@ -3318,14 +3396,40 @@ internal sealed class NesRuntimeCompiler
                 throw new InvalidOperationException("NES vertical camera movement requires four-screen nametable VRAM.");
             }
 
-            EmitSdkByteExpressionToA(operation.Y);
             if (config.MapHeight > 30)
             {
-                EmitWalkCameraAxisToTarget(CameraYAddress, CameraNewYAddress, () => EmitTrackCameraYPosition(config), "nes_camera_y");
+                var verticalFitsByte = Math.Max(0, (config.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) <= byte.MaxValue;
+                if (verticalFitsByte)
+                {
+                    EmitWalkByteCameraAxisToTarget(
+                        operation.Y,
+                        CameraYAddress,
+                        CameraNewYAddress,
+                        () => EmitTrackCameraYPosition(config),
+                        "nes_camera_y");
+                }
+                else
+                {
+                    EmitWalkCameraAxisToTarget(
+                        operation.Y,
+                        CameraYAddress,
+                        CameraYHighAddress,
+                        CameraNewYAddress,
+                        CameraYHighAddress,
+                        () => EmitTrackCameraYPosition(config),
+                        "nes_camera_y",
+                        deriveCurrentHighFromCell: config.MapHeight <= byte.MaxValue,
+                        currentCellLowAddress: CameraTileRowAddress);
+                }
             }
             else
             {
-                EmitWalkCameraAxisToTarget(CameraYAddress, CameraNewYAddress, EmitTrackShortCameraYPosition, "nes_camera_y");
+                EmitWalkByteCameraAxisToTarget(
+                    operation.Y,
+                    CameraYAddress,
+                    CameraNewYAddress,
+                    EmitTrackShortCameraYPosition,
+                    "nes_camera_y");
             }
         }
     }
@@ -3333,7 +3437,12 @@ internal sealed class NesRuntimeCompiler
     // Walks the camera axis one pixel per step toward the target held in A on entry, driving the
     // existing single-pixel tracking/streaming routine through the axis' "new position" scratch. The
     // per-frame step budget bounds the walk to at most one tile crossing, honoring the streaming slot.
-    private void EmitWalkCameraAxisToTarget(byte currentAddress, byte stepTargetAddress, Action emitTrackStep, string labelPrefix)
+    private void EmitWalkByteCameraAxisToTarget(
+        SdkWordExpression requestedPosition,
+        byte currentAddress,
+        byte stepTargetAddress,
+        Action emitTrackStep,
+        string labelPrefix)
     {
         var loopLabel = builder.CreateLabel(labelPrefix + "_walk");
         var budgetOkLabel = builder.CreateLabel(labelPrefix + "_walk_budget_ok");
@@ -3342,14 +3451,15 @@ internal sealed class NesRuntimeCompiler
         var doStepLabel = builder.CreateLabel(labelPrefix + "_walk_step");
         var endLabel = builder.CreateLabel(labelPrefix + "_walk_end");
 
+        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
         builder.StoreAAbsolute(CameraWalkTargetAddress);
         builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
         builder.StoreAAbsolute(CameraWalkStepsAddress);
 
         builder.Label(loopLabel);
         builder.LoadAAbsolute(CameraWalkStepsAddress);
-        builder.BranchRelative(0xD0, budgetOkLabel); // BNE budgetOkLabel
-        builder.JumpAbsolute(endLabel);              // step budget spent (far jump)
+        builder.BranchRelative(0xD0, budgetOkLabel);
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(budgetOkLabel);
         builder.SetCarry();
@@ -3358,13 +3468,13 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAAbsolute(CameraWalkTargetAddress);
         builder.SetCarry();
-        builder.SubtractZeroPage(currentAddress); // A = target - current (signed 8-bit)
-        builder.BranchRelative(0xD0, reachedCheckLabel); // BNE reachedCheckLabel
-        builder.JumpAbsolute(endLabel);                  // reached target (far jump)
+        builder.SubtractZeroPage(currentAddress);
+        builder.BranchRelative(0xD0, reachedCheckLabel);
+        builder.JumpAbsolute(endLabel);
 
         builder.Label(reachedCheckLabel);
         builder.CompareImmediate(0x80);
-        builder.BranchRelative(0x90, stepForwardLabel); // BCC stepForwardLabel: positive delta => step +1
+        builder.BranchRelative(0x90, stepForwardLabel);
 
         builder.LoadAZeroPage(currentAddress);
         builder.SetCarry();
@@ -3383,6 +3493,101 @@ internal sealed class NesRuntimeCompiler
         builder.JumpAbsolute(loopLabel);
 
         builder.Label(endLabel);
+    }
+
+    private void EmitWalkCameraAxisToTarget(
+        SdkWordExpression requestedPosition,
+        byte currentLowAddress,
+        ushort currentHighAddress,
+        byte stepTargetLowAddress,
+        ushort stepTargetHighAddress,
+        Action emitTrackStep,
+        string labelPrefix,
+        bool deriveCurrentHighFromCell,
+        byte currentCellLowAddress)
+    {
+        var loopLabel = builder.CreateLabel(labelPrefix + "_walk");
+        var budgetOkLabel = builder.CreateLabel(labelPrefix + "_walk_budget_ok");
+        var stepForwardLabel = builder.CreateLabel(labelPrefix + "_walk_forward");
+        var doStepLabel = builder.CreateLabel(labelPrefix + "_walk_step");
+        var endLabel = builder.CreateLabel(labelPrefix + "_walk_end");
+
+        var stepBackwardLabel = builder.CreateLabel(labelPrefix + "_walk_backward");
+        var lowDiffersLabel = builder.CreateLabel(labelPrefix + "_walk_low_differs");
+
+        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
+        builder.StoreAAbsolute(CameraWalkTargetAddress);
+        EmitSdkWordExpressionToA(requestedPosition, highByte: true);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
+        builder.StoreAAbsolute(CameraWalkStepsAddress);
+
+        builder.Label(loopLabel);
+        builder.LoadAAbsolute(CameraWalkStepsAddress);
+        builder.BranchRelative(0xD0, budgetOkLabel); // BNE budgetOkLabel
+        builder.JumpAbsolute(endLabel);              // step budget spent (far jump)
+
+        builder.Label(budgetOkLabel);
+        builder.SetCarry();
+        builder.SubtractImmediate(1);
+        builder.StoreAAbsolute(CameraWalkStepsAddress);
+
+        EmitCurrentHighToA();
+        builder.CompareZeroPage(ExpressionScratchAddress);
+        builder.BranchRelative(0x90, stepForwardLabel); // BCC: current high < target high
+        builder.BranchRelative(0xD0, stepBackwardLabel); // BNE: current high > target high
+        builder.LoadAZeroPage(currentLowAddress);
+        builder.CompareAbsolute(CameraWalkTargetAddress);
+        builder.BranchRelative(0xD0, lowDiffersLabel); // BNE: low bytes differ
+        builder.JumpAbsolute(endLabel); // reached target
+        builder.Label(lowDiffersLabel);
+        builder.BranchRelative(0x90, stepForwardLabel); // BCC: current low < target low
+
+        builder.Label(stepBackwardLabel);
+        builder.LoadAZeroPage(currentLowAddress);
+        builder.SetCarry();
+        builder.SubtractImmediate(1);
+        builder.StoreAZeroPage(stepTargetLowAddress);
+        if (!deriveCurrentHighFromCell)
+        {
+            builder.LoadAAbsolute(currentHighAddress);
+            builder.SubtractImmediate(0);
+            builder.StoreAAbsolute(stepTargetHighAddress);
+        }
+        builder.JumpAbsolute(doStepLabel);
+
+        builder.Label(stepForwardLabel);
+        builder.LoadAZeroPage(currentLowAddress);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAZeroPage(stepTargetLowAddress);
+        if (!deriveCurrentHighFromCell)
+        {
+            builder.LoadAAbsolute(currentHighAddress);
+            builder.AddImmediate(0);
+            builder.StoreAAbsolute(stepTargetHighAddress);
+        }
+
+        builder.Label(doStepLabel);
+        emitTrackStep();
+        builder.JumpAbsolute(loopLabel);
+
+        builder.Label(endLabel);
+
+        void EmitCurrentHighToA()
+        {
+            if (!deriveCurrentHighFromCell)
+            {
+                builder.LoadAAbsolute(currentHighAddress);
+                return;
+            }
+
+            builder.LoadAZeroPage(currentCellLowAddress);
+            for (var i = 0; i < 5; i++)
+            {
+                builder.ShiftRightA();
+            }
+        }
     }
 
     internal void EmitApplyCamera(Sdk2DOperation.ApplyCamera operation)
@@ -3442,6 +3647,48 @@ internal sealed class NesRuntimeCompiler
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
         }
+    }
+
+    private void EmitSdkWordExpressionToA(SdkWordExpression expression, bool highByte)
+    {
+        switch (expression)
+        {
+            case SdkWordExpression.Constant constant:
+                builder.LoadAImmediate(highByte ? (constant.Value >> 8) & 0xFF : constant.Value & 0xFF);
+                break;
+            case SdkWordExpression.Variable variable:
+                EmitSdkWordStorageLocationToA(variable.Location, highByte);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK word expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkWordStorageLocationToA(SdkStorageLocation location, bool highByte)
+    {
+        if (!highByte)
+        {
+            EmitSdkStorageLocationToA(location);
+            return;
+        }
+
+        var type = location is SdkStorageLocation.RuntimeIndexedField runtimeIndexed
+            ? VariableStorageType(IndexedMemberName(runtimeIndexed.BaseName, 0, runtimeIndexed.FieldName))
+            : VariableStorageType(StorageKey(location));
+        if (!IsWordBackedType(type))
+        {
+            builder.LoadAImmediate(0);
+            return;
+        }
+
+        if (location is SdkStorageLocation.RuntimeIndexedField runtime)
+        {
+            EmitRuntimeMemberIndexToX(runtime.BaseName, runtime.Index);
+            builder.LoadAZeroPageX(HighAddress(RuntimeIndexedMemberBaseAddress(runtime.BaseName, runtime.FieldName)));
+            return;
+        }
+
+        builder.LoadAZeroPage(HighAddress(VariableAddress(StorageKey(location))));
     }
 
     private void EmitSdkStorageLocationToA(SdkStorageLocation location)
@@ -3533,7 +3780,9 @@ internal sealed class NesRuntimeCompiler
         EmitStreamColumnForCameraPosition(config, streamColumns: false);
     }
 
-    private void EmitStreamColumnForCameraPosition(NesCameraConfig config, bool streamColumns = true)
+    private void EmitStreamColumnForCameraPosition(
+        NesCameraConfig config,
+        bool streamColumns = true)
     {
         var moveRightLabel = builder.CreateLabel("nes_camera_move_right");
         var moveLeftLabel = builder.CreateLabel("nes_camera_move_left");
@@ -3751,6 +4000,7 @@ internal sealed class NesRuntimeCompiler
 
         builder.Label(storeLabel);
         builder.StoreAZeroPage(CameraYAddress);
+        builder.LoadAZeroPage(CameraYAddress);
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.ShiftRightA();
@@ -3761,68 +4011,141 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitIncrementCameraTile(int mapWidth)
     {
-        var noWrapLabel = builder.CreateLabel("nes_camera_tile_inc_no_wrap");
-        builder.LoadAZeroPage(CameraTileColumnAddress);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.CompareImmediate(mapWidth);
-        builder.BranchRelative(0x90, noWrapLabel);  // BCC noWrapLabel
-        builder.LoadAImmediate(0);
-        builder.Label(noWrapLabel);
-        builder.StoreAZeroPage(CameraTileColumnAddress);
+        if (mapWidth <= byte.MaxValue)
+        {
+            var noWrapLabel = builder.CreateLabel("nes_camera_tile_inc_no_wrap");
+            builder.LoadAZeroPage(CameraTileColumnAddress);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.CompareImmediate(mapWidth);
+            builder.BranchRelative(0x90, noWrapLabel);  // BCC noWrapLabel
+            builder.LoadAImmediate(0);
+            builder.Label(noWrapLabel);
+            builder.StoreAZeroPage(CameraTileColumnAddress);
+            return;
+        }
+
+        EmitIncrementLogicalCell(CameraTileColumnAddress, CameraTileColumnHighAddress, mapWidth, "nes_camera_tile");
     }
 
     private void EmitDecrementCameraTile(int mapWidth)
     {
-        var decrementLabel = builder.CreateLabel("nes_camera_tile_dec");
-        var storeLabel = builder.CreateLabel("nes_camera_tile_dec_store");
+        if (mapWidth <= byte.MaxValue)
+        {
+            var decrementLabel = builder.CreateLabel("nes_camera_tile_dec");
+            var storeLabel = builder.CreateLabel("nes_camera_tile_dec_store");
 
-        builder.LoadAZeroPage(CameraTileColumnAddress);
-        builder.CompareImmediate(0);
-        builder.BranchRelative(0xD0, decrementLabel); // BNE decrementLabel
-        builder.LoadAImmediate(mapWidth - 1);
-        builder.JumpAbsolute(storeLabel);
+            builder.LoadAZeroPage(CameraTileColumnAddress);
+            builder.CompareImmediate(0);
+            builder.BranchRelative(0xD0, decrementLabel); // BNE decrementLabel
+            builder.LoadAImmediate(mapWidth - 1);
+            builder.JumpAbsolute(storeLabel);
+            builder.Label(decrementLabel);
+            builder.LoadAZeroPage(CameraTileColumnAddress);
+            builder.SetCarry();
+            builder.SubtractImmediate(1);
+            builder.Label(storeLabel);
+            builder.StoreAZeroPage(CameraTileColumnAddress);
+            return;
+        }
 
-        builder.Label(decrementLabel);
-        builder.LoadAZeroPage(CameraTileColumnAddress);
-        builder.SetCarry();
-        builder.SubtractImmediate(1);
-
-        builder.Label(storeLabel);
-        builder.StoreAZeroPage(CameraTileColumnAddress);
+        EmitDecrementLogicalCell(CameraTileColumnAddress, CameraTileColumnHighAddress, mapWidth, "nes_camera_tile");
     }
 
     private void EmitIncrementCameraRow(int mapHeight)
     {
-        var noWrapLabel = builder.CreateLabel("nes_camera_row_inc_no_wrap");
-        builder.LoadAZeroPage(CameraTileRowAddress);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.CompareImmediate(mapHeight);
-        builder.BranchRelative(0x90, noWrapLabel);  // BCC noWrapLabel
-        builder.LoadAImmediate(0);
-        builder.Label(noWrapLabel);
-        builder.StoreAZeroPage(CameraTileRowAddress);
+        if (mapHeight <= byte.MaxValue)
+        {
+            var noWrapLabel = builder.CreateLabel("nes_camera_row_inc_no_wrap");
+            builder.LoadAZeroPage(CameraTileRowAddress);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.CompareImmediate(mapHeight);
+            builder.BranchRelative(0x90, noWrapLabel);  // BCC noWrapLabel
+            builder.LoadAImmediate(0);
+            builder.Label(noWrapLabel);
+            builder.StoreAZeroPage(CameraTileRowAddress);
+            return;
+        }
+
+        EmitIncrementLogicalCell(CameraTileRowAddress, CameraTileRowHighAddress, mapHeight, "nes_camera_row");
     }
 
     private void EmitDecrementCameraRow(int mapHeight)
     {
-        var decrementLabel = builder.CreateLabel("nes_camera_row_dec");
-        var storeLabel = builder.CreateLabel("nes_camera_row_dec_store");
+        if (mapHeight <= byte.MaxValue)
+        {
+            var decrementLabel = builder.CreateLabel("nes_camera_row_dec");
+            var storeLabel = builder.CreateLabel("nes_camera_row_dec_store");
 
-        builder.LoadAZeroPage(CameraTileRowAddress);
-        builder.CompareImmediate(0);
+            builder.LoadAZeroPage(CameraTileRowAddress);
+            builder.CompareImmediate(0);
+            builder.BranchRelative(0xD0, decrementLabel); // BNE decrementLabel
+            builder.LoadAImmediate(mapHeight - 1);
+            builder.JumpAbsolute(storeLabel);
+            builder.Label(decrementLabel);
+            builder.LoadAZeroPage(CameraTileRowAddress);
+            builder.SetCarry();
+            builder.SubtractImmediate(1);
+            builder.Label(storeLabel);
+            builder.StoreAZeroPage(CameraTileRowAddress);
+            return;
+        }
+
+        EmitDecrementLogicalCell(CameraTileRowAddress, CameraTileRowHighAddress, mapHeight, "nes_camera_row");
+    }
+
+    private void EmitIncrementLogicalCell(byte lowAddress, ushort highAddress, int modulo, string labelPrefix)
+    {
+        var noCarryLabel = builder.CreateLabel(labelPrefix + "_inc_no_carry");
+        var noWrapLabel = builder.CreateLabel(labelPrefix + "_inc_no_wrap");
+
+        builder.IncrementZeroPage(lowAddress);
+        builder.BranchRelative(0xD0, noCarryLabel); // BNE noCarryLabel
+        builder.LoadAAbsolute(highAddress);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAAbsolute(highAddress);
+        builder.Label(noCarryLabel);
+
+        builder.LoadAAbsolute(highAddress);
+        builder.CompareImmediate((modulo >> 8) & 0xFF);
+        builder.BranchRelative(0xD0, noWrapLabel); // BNE noWrapLabel
+        builder.LoadAZeroPage(lowAddress);
+        builder.CompareImmediate(modulo & 0xFF);
+        builder.BranchRelative(0xD0, noWrapLabel); // BNE noWrapLabel
+        builder.LoadAImmediate(0);
+        builder.StoreAZeroPage(lowAddress);
+        builder.StoreAAbsolute(highAddress);
+        builder.Label(noWrapLabel);
+    }
+
+    private void EmitDecrementLogicalCell(byte lowAddress, ushort highAddress, int modulo, string labelPrefix)
+    {
+        var decrementLabel = builder.CreateLabel(labelPrefix + "_dec_value");
+        var noBorrowLabel = builder.CreateLabel(labelPrefix + "_dec_no_borrow");
+        var doneLabel = builder.CreateLabel(labelPrefix + "_dec_done");
+
+        builder.LoadAAbsolute(highAddress);
         builder.BranchRelative(0xD0, decrementLabel); // BNE decrementLabel
-        builder.LoadAImmediate(mapHeight - 1);
-        builder.JumpAbsolute(storeLabel);
+        builder.LoadAZeroPage(lowAddress);
+        builder.BranchRelative(0xD0, decrementLabel); // BNE decrementLabel
+        builder.LoadAImmediate((modulo - 1) & 0xFF);
+        builder.StoreAZeroPage(lowAddress);
+        builder.LoadAImmediate(((modulo - 1) >> 8) & 0xFF);
+        builder.StoreAAbsolute(highAddress);
+        builder.JumpAbsolute(doneLabel);
 
         builder.Label(decrementLabel);
-        builder.LoadAZeroPage(CameraTileRowAddress);
+        builder.LoadAZeroPage(lowAddress);
+        builder.BranchRelative(0xD0, noBorrowLabel); // BNE noBorrowLabel
+        builder.LoadAAbsolute(highAddress);
         builder.SetCarry();
         builder.SubtractImmediate(1);
-
-        builder.Label(storeLabel);
-        builder.StoreAZeroPage(CameraTileRowAddress);
+        builder.StoreAAbsolute(highAddress);
+        builder.Label(noBorrowLabel);
+        builder.DecrementZeroPage(lowAddress);
+        builder.Label(doneLabel);
     }
 
     private void EmitPrepareRightStreamColumn(NesCameraConfig config)
@@ -3835,16 +4158,30 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(CameraTargetColumnAddress);
 
         builder.LoadAZeroPage(CameraTileColumnAddress);
-        builder.ClearCarry();
-        builder.AddImmediate(lookaheadColumns);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            builder.ClearCarry();
+            builder.AddImmediate(lookaheadColumns);
+            builder.StoreAZeroPage(CameraSourceColumnAddress);
+            var sourceNoWrapLabel = builder.CreateLabel("nes_camera_source_no_wrap");
+            builder.CompareImmediate(config.MapWidth);
+            builder.BranchRelative(0x90, sourceNoWrapLabel); // BCC sourceNoWrapLabel
+            builder.SetCarry();
+            builder.SubtractImmediate(config.MapWidth);
+            builder.StoreAZeroPage(CameraSourceColumnAddress);
+            builder.Label(sourceNoWrapLabel);
+            return;
+        }
+
         builder.StoreAZeroPage(CameraSourceColumnAddress);
-        var sourceNoWrapLabel = builder.CreateLabel("nes_camera_source_no_wrap");
-        builder.CompareImmediate(config.MapWidth);
-        builder.BranchRelative(0x90, sourceNoWrapLabel); // BCC sourceNoWrapLabel
-        builder.SetCarry();
-        builder.SubtractImmediate(config.MapWidth);
-        builder.StoreAZeroPage(CameraSourceColumnAddress);
-        builder.Label(sourceNoWrapLabel);
+        builder.LoadAAbsolute(CameraTileColumnHighAddress);
+        builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+        EmitAddImmediateToLogicalCellModulo(
+            CameraSourceColumnAddress,
+            CameraSourceColumnHighAddress,
+            lookaheadColumns,
+            config.MapWidth,
+            "nes_camera_source");
     }
 
     private void EmitPrepareLeftStreamColumn()
@@ -3855,6 +4192,48 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAZeroPage(CameraTileColumnAddress);
         builder.StoreAZeroPage(CameraSourceColumnAddress);
+        if (cameraConfig is { MapWidth: > byte.MaxValue })
+        {
+            builder.LoadAAbsolute(CameraTileColumnHighAddress);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+        }
+    }
+
+    private void EmitAddImmediateToLogicalCellModulo(
+        byte lowAddress,
+        ushort highAddress,
+        int addend,
+        int modulo,
+        string labelPrefix)
+    {
+        var subtractLabel = builder.CreateLabel(labelPrefix + "_subtract_modulo");
+        var doneLabel = builder.CreateLabel(labelPrefix + "_add_done");
+
+        builder.LoadAZeroPage(lowAddress);
+        builder.ClearCarry();
+        builder.AddImmediate(addend & 0xFF);
+        builder.StoreAZeroPage(lowAddress);
+        builder.LoadAAbsolute(highAddress);
+        builder.AddImmediate((addend >> 8) & 0xFF);
+        builder.StoreAAbsolute(highAddress);
+
+        builder.CompareImmediate((modulo >> 8) & 0xFF);
+        builder.BranchRelative(0x90, doneLabel); // BCC doneLabel: high < modulo high
+        builder.BranchRelative(0xD0, subtractLabel); // BNE subtractLabel: high > modulo high
+        builder.LoadAZeroPage(lowAddress);
+        builder.CompareImmediate(modulo & 0xFF);
+        builder.BranchRelative(0x90, doneLabel); // BCC doneLabel: low < modulo low
+
+        builder.Label(subtractLabel);
+        builder.LoadAZeroPage(lowAddress);
+        builder.SetCarry();
+        builder.SubtractImmediate(modulo & 0xFF);
+        builder.StoreAZeroPage(lowAddress);
+        builder.LoadAAbsolute(highAddress);
+        builder.SubtractImmediate((modulo >> 8) & 0xFF);
+        builder.StoreAAbsolute(highAddress);
+
+        builder.Label(doneLabel);
     }
 
     private void EmitPrepareDownStreamRow(NesCameraConfig config)
@@ -3880,6 +4259,11 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAZeroPage(CameraTileColumnAddress);
         builder.StoreAZeroPage(CameraSourceColumnAddress);
+        if (cameraConfig is { MapWidth: > byte.MaxValue })
+        {
+            builder.LoadAAbsolute(CameraTileColumnHighAddress);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+        }
     }
 
     private void EmitAddCameraRowWithWrap(int addend, int modulo, byte targetAddress)
@@ -4026,6 +4410,11 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(PendingCameraColumnTargetAddress);
         builder.LoadAZeroPage(CameraSourceColumnAddress);
         builder.StoreAAbsolute(PendingCameraColumnSourceAddress);
+        if (cameraConfig is { MapWidth: > byte.MaxValue })
+        {
+            builder.LoadAAbsolute(CameraSourceColumnHighAddress);
+            builder.StoreAAbsolute(PendingCameraColumnSourceHighAddress);
+        }
         builder.LoadAAbsolute(PendingCameraStreamFlagsAddress);
         builder.OrImmediate(PendingStreamColumn);
         builder.StoreAAbsolute(PendingCameraStreamFlagsAddress);
@@ -4041,6 +4430,12 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(PendingCameraRowTargetColumnAddress);
         builder.LoadAZeroPage(CameraSourceColumnAddress);
         builder.StoreAAbsolute(PendingCameraRowSourceColumnAddress);
+        if (cameraConfig is { MapWidth: > byte.MaxValue })
+        {
+            builder.LoadAAbsolute(CameraSourceColumnHighAddress);
+            builder.StoreAAbsolute(PendingCameraRowSourceColumnHighAddress);
+        }
+
         builder.LoadAAbsolute(PendingCameraStreamFlagsAddress);
         builder.OrImmediate(PendingStreamRow);
         builder.StoreAAbsolute(PendingCameraStreamFlagsAddress);
@@ -4152,7 +4547,7 @@ internal sealed class NesRuntimeCompiler
         {
             EmitLoadPendingCameraColumnToStreamAddresses();
             EmitStreamColumnFromAddresses(config);
-            EmitStreamColumnAttributes();
+            EmitStreamColumnAttributes(config);
             EmitClearPendingCameraStream(kind);
         }
         else
@@ -4164,7 +4559,7 @@ internal sealed class NesRuntimeCompiler
     // Refreshes the NES attribute table for the column that was just streamed. Column tile streaming only
     // rewrites nametable tiles; without this the streamed tiles would inherit the palette slot the
     // initial upload left in that buffer position, corrupting background colors as the camera scrolls.
-    private void EmitStreamColumnAttributes()
+    private void EmitStreamColumnAttributes(NesCameraConfig config)
     {
         var attributes = program.WorldColumnAttributes;
         if (attributes is null)
@@ -4177,11 +4572,14 @@ internal sealed class NesRuntimeCompiler
 
         builder.LoadAAbsolute(0x2002);                          // reset the PPU address latch (w = 0)
 
-        // X = streamed source column / 4 (attribute block index), preserved across the row loop.
-        builder.LoadAZeroPage(CameraSourceColumnAddress);
-        builder.ShiftRightA();
-        builder.ShiftRightA();
-        builder.TransferAToX();
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            // X = streamed source column / 4 (attribute block index), preserved across the row loop.
+            builder.LoadAZeroPage(CameraSourceColumnAddress);
+            builder.ShiftRightA();
+            builder.ShiftRightA();
+            builder.TransferAToX();
+        }
 
         // Base attribute address high byte: $23 for the left nametable, $27 for the right one.
         builder.LoadAZeroPage(CameraTargetColumnAddress);
@@ -4224,9 +4622,42 @@ internal sealed class NesRuntimeCompiler
 
             builder.StoreAAbsolute(0x2006);
 
-            builder.LdaAbsoluteX(NesRomBuilder.WorldMapColumnAttributeRowLabel(row));
+            if (config.MapWidth <= byte.MaxValue)
+            {
+                builder.LdaAbsoluteX(NesRomBuilder.WorldMapColumnAttributeRowLabel(row));
+            }
+            else
+            {
+                EmitLoadWideColumnAttributeToA(row);
+            }
+
             builder.StoreAAbsolute(0x2007);
         }
+    }
+
+    private void EmitLoadWideColumnAttributeToA(int row)
+    {
+        var label = NesRomBuilder.WorldMapColumnAttributeRowLabel(row);
+
+        // Build the 16-bit attribute-block index (sourceColumn / 4) in the indirect pointer.
+        builder.LoadAZeroPage(CameraSourceColumnAddress);
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        builder.LoadAAbsolute(CameraSourceColumnHighAddress);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.Emit(0x46, ExpressionScratchAddress); // LSR high
+        builder.Emit(0x66, RuntimeIndexScratchAddress); // ROR low
+        builder.Emit(0x46, ExpressionScratchAddress); // LSR high
+        builder.Emit(0x66, RuntimeIndexScratchAddress); // ROR low
+
+        builder.LoadAImmediateLabelLowByte(label);
+        builder.ClearCarry();
+        builder.AddZeroPage(RuntimeIndexScratchAddress);
+        builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+        builder.LoadAImmediateLabelHighByte(label);
+        builder.AddZeroPage(ExpressionScratchAddress);
+        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.LoadYImmediate(0);
+        builder.LoadAIndirectY(RuntimeIndexScratchAddress);
     }
 
     private void EmitLoadPendingCameraColumnToStreamAddresses()
@@ -4235,6 +4666,11 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(CameraTargetColumnAddress);
         builder.LoadAAbsolute(PendingCameraColumnSourceAddress);
         builder.StoreAZeroPage(CameraSourceColumnAddress);
+        if (cameraConfig is { MapWidth: > byte.MaxValue })
+        {
+            builder.LoadAAbsolute(PendingCameraColumnSourceHighAddress);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+        }
     }
 
     private void EmitLoadPendingCameraRowToStreamAddresses()
@@ -4247,6 +4683,11 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(CameraTargetColumnAddress);
         builder.LoadAAbsolute(PendingCameraRowSourceColumnAddress);
         builder.StoreAZeroPage(CameraSourceColumnAddress);
+        if (cameraConfig is { MapWidth: > byte.MaxValue })
+        {
+            builder.LoadAAbsolute(PendingCameraRowSourceColumnHighAddress);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+        }
     }
 
     private void EmitClearPendingCameraStream(byte kind)
@@ -4302,7 +4743,20 @@ internal sealed class NesRuntimeCompiler
 
         builder.Label(loopLabel);
         EmitAddImmediateModulo(CameraTargetColumnAddress, tilesPerPhase, 64, "nes_camera_row_target_phase");
-        EmitAddImmediateModulo(CameraSourceColumnAddress, tilesPerPhase, config.MapWidth, "nes_camera_row_source_phase");
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            EmitAddImmediateModulo(CameraSourceColumnAddress, tilesPerPhase, config.MapWidth, "nes_camera_row_source_phase");
+        }
+        else
+        {
+            EmitAddImmediateToLogicalCellModulo(
+                CameraSourceColumnAddress,
+                CameraSourceColumnHighAddress,
+                tilesPerPhase,
+                config.MapWidth,
+                "nes_camera_row_source_phase");
+        }
+
         builder.DecrementZeroPage(CameraStreamRemainingAddress);
         builder.BranchRelative(0xD0, loopLabel); // BNE loopLabel
 
@@ -4336,7 +4790,7 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAAbsolute(0x2002);              // reset PPU address latch
         for (var row = 0; row < config.StreamHeight; row++)
         {
-            EmitStreamColumnRow(row, config.StreamY + row);
+            EmitStreamColumnRow(row, config.StreamY + row, config.MapWidth > byte.MaxValue);
         }
     }
 
@@ -4364,6 +4818,12 @@ internal sealed class NesRuntimeCompiler
         builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowPointerLowLabel);
         builder.StoreAZeroPage(RuntimeIndexScratchAddress);
         builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowPointerHighLabel);
+        if (config.MapWidth > byte.MaxValue)
+        {
+            builder.ClearCarry();
+            builder.AddAbsolute(CameraSourceColumnHighAddress);
+        }
+
         builder.StoreAZeroPage(ExpressionScratchAddress);
         builder.LoadAImmediate(width);
         builder.StoreAZeroPage(CameraStreamRemainingAddress);
@@ -4376,14 +4836,46 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAIndirectY(RuntimeIndexScratchAddress);
         builder.StoreAAbsolute(0x2007);
 
-        builder.LoadAZeroPage(CameraSourceColumnAddress);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.CompareImmediate(config.MapWidth);
-        builder.BranchRelative(0x90, sourceNoWrapLabel); // BCC sourceNoWrapLabel
-        builder.LoadAImmediate(0);
-        builder.Label(sourceNoWrapLabel);
-        builder.StoreAZeroPage(CameraSourceColumnAddress);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            builder.LoadAZeroPage(CameraSourceColumnAddress);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.CompareImmediate(config.MapWidth);
+            builder.BranchRelative(0x90, sourceNoWrapLabel); // BCC sourceNoWrapLabel
+            builder.LoadAImmediate(0);
+            builder.Label(sourceNoWrapLabel);
+            builder.StoreAZeroPage(CameraSourceColumnAddress);
+        }
+        else
+        {
+            var noCarryLabel = builder.CreateLabel("nes_stream_row_source_no_carry");
+
+            builder.IncrementZeroPage(CameraSourceColumnAddress);
+            builder.BranchRelative(0xD0, noCarryLabel); // BNE noCarryLabel
+            builder.LoadAAbsolute(CameraSourceColumnHighAddress);
+            builder.ClearCarry();
+            builder.AddImmediate(1);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+            builder.IncrementZeroPage(ExpressionScratchAddress);
+            builder.Label(noCarryLabel);
+
+            builder.LoadAAbsolute(CameraSourceColumnHighAddress);
+            builder.CompareImmediate((config.MapWidth >> 8) & 0xFF);
+            builder.BranchRelative(0xD0, sourceNoWrapLabel); // BNE sourceNoWrapLabel
+            builder.LoadAZeroPage(CameraSourceColumnAddress);
+            builder.CompareImmediate(config.MapWidth & 0xFF);
+            builder.BranchRelative(0xD0, sourceNoWrapLabel); // BNE sourceNoWrapLabel
+            builder.LoadAImmediate(0);
+            builder.StoreAZeroPage(CameraSourceColumnAddress);
+            builder.StoreAAbsolute(CameraSourceColumnHighAddress);
+            builder.LoadXZeroPage(CameraSourceRowAddress);
+            builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowPointerLowLabel);
+            builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+            builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowPointerHighLabel);
+            builder.StoreAZeroPage(ExpressionScratchAddress);
+            builder.Label(sourceNoWrapLabel);
+        }
 
         builder.LoadAZeroPage(CameraTargetColumnAddress);
         builder.ClearCarry();
@@ -4506,7 +4998,7 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(0x2006);
     }
 
-    private void EmitStreamColumnRow(int sourceRow, int targetY)
+    private void EmitStreamColumnRow(int sourceRow, int targetY, bool usesWordSourceColumn)
     {
         var rightNameTableLabel = builder.CreateLabel("nes_stream_right_nt");
         var writeTileLabel = builder.CreateLabel("nes_stream_write_tile");
@@ -4535,9 +5027,25 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(0x2006);
 
         builder.Label(writeTileLabel);
-        builder.LoadAZeroPage(CameraSourceColumnAddress);
-        builder.TransferAToX();
-        builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowLabel(sourceRow));
+        if (usesWordSourceColumn)
+        {
+            builder.LoadAImmediateLabelLowByte(NesRomBuilder.WorldMapRowLabel(sourceRow));
+            builder.ClearCarry();
+            builder.AddZeroPage(CameraSourceColumnAddress);
+            builder.StoreAZeroPage(RuntimeIndexScratchAddress);
+            builder.LoadAImmediateLabelHighByte(NesRomBuilder.WorldMapRowLabel(sourceRow));
+            builder.AddAbsolute(CameraSourceColumnHighAddress);
+            builder.StoreAZeroPage(ExpressionScratchAddress);
+            builder.LoadYImmediate(0);
+            builder.LoadAIndirectY(RuntimeIndexScratchAddress);
+        }
+        else
+        {
+            builder.LoadAZeroPage(CameraSourceColumnAddress);
+            builder.TransferAToX();
+            builder.LdaAbsoluteX(NesRomBuilder.WorldMapRowLabel(sourceRow));
+        }
+
         builder.StoreAAbsolute(0x2007);
     }
 
@@ -5724,12 +6232,27 @@ internal sealed class NesRuntimeCompiler
                 break;
             case "__rs_actor_camera_x_hi":
                 NesVideoProgram.RequireArity(call, 0);
-                builder.LoadAZeroPage(CameraTileColumnAddress);
-                builder.ShiftRightA();
-                builder.ShiftRightA();
-                builder.ShiftRightA();
-                builder.ShiftRightA();
-                builder.ShiftRightA();
+                if (cameraConfig is { } xConfig
+                    && Math.Max(0, (xConfig.MapWidth - NesTarget.Capabilities.ScreenTiles.Width) * 8) > byte.MaxValue)
+                {
+                    if (xConfig.MapWidth <= byte.MaxValue)
+                    {
+                        builder.LoadAZeroPage(CameraTileColumnAddress);
+                        for (var i = 0; i < 5; i++)
+                        {
+                            builder.ShiftRightA();
+                        }
+                    }
+                    else
+                    {
+                        builder.LoadAAbsolute(CameraXHighAddress);
+                    }
+                }
+                else
+                {
+                    builder.LoadAImmediate(0);
+                }
+
                 break;
             case "__rs_actor_camera_y_lo":
                 NesVideoProgram.RequireArity(call, 0);
@@ -5745,14 +6268,22 @@ internal sealed class NesRuntimeCompiler
                 break;
             case "__rs_actor_camera_y_hi":
                 NesVideoProgram.RequireArity(call, 0);
-                if (useFourScreenNametables)
+                if (useFourScreenNametables
+                    && cameraConfig is { } yConfig
+                    && Math.Max(0, (yConfig.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) > byte.MaxValue)
                 {
-                    builder.LoadAZeroPage(CameraTileRowAddress);
-                    builder.ShiftRightA();
-                    builder.ShiftRightA();
-                    builder.ShiftRightA();
-                    builder.ShiftRightA();
-                    builder.ShiftRightA();
+                    if (yConfig.MapHeight <= byte.MaxValue)
+                    {
+                        builder.LoadAZeroPage(CameraTileRowAddress);
+                        for (var i = 0; i < 5; i++)
+                        {
+                            builder.ShiftRightA();
+                        }
+                    }
+                    else
+                    {
+                        builder.LoadAAbsolute(CameraYHighAddress);
+                    }
                 }
                 else
                 {
@@ -6189,6 +6720,8 @@ internal sealed class PrgBuilder
 
     public void CompareZeroPage(byte address) => Emit(0xC5, address);
 
+    public void CompareAbsolute(ushort address) => Emit(0xCD, Low(address), High(address));
+
     public void ClearCarry() => Emit(0x18);
 
     public void SetCarry() => Emit(0x38);
@@ -6198,6 +6731,8 @@ internal sealed class PrgBuilder
     public void AddZeroPage(byte address) => Emit(0x65, address);
 
     public void AddZeroPageX(byte address) => Emit(0x75, address);
+
+    public void AddAbsolute(ushort address) => Emit(0x6D, Low(address), High(address));
 
     public void SubtractImmediate(int value) => Emit(0xE9, CheckedByte(value));
 

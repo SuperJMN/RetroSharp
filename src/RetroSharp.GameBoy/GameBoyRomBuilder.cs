@@ -947,6 +947,16 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort PendingDiagonalRowCountAddress = 0xC140;
     private const ushort PendingDiagonalRowSecondTargetAddress = 0xC141;
     private const ushort PendingDiagonalRowSecondSourceAddress = 0xC142;
+    private const ushort CameraScreenLeftColumnHighAddress = 0xC143;
+    private const ushort CameraRightSourceColumnHighAddress = 0xC144;
+    private const ushort CameraLeftSourceColumnHighAddress = 0xC145;
+    private const ushort PendingStreamSourceHighAddress = 0xC146;
+    private const ushort PendingStreamSecondSourceHighAddress = 0xC147;
+    private const ushort PendingDiagonalColumnSourceHighAddress = 0xC148;
+    private const ushort PendingDiagonalColumnSecondSourceHighAddress = 0xC149;
+    private const ushort CameraSetPositionTargetHighAddress = 0xC14A;
+    private const ushort CameraStreamLogicalSourceColumnLowAddress = 0xC14B;
+    private const ushort CameraStreamLogicalSourceColumnHighAddress = 0xC14C;
     // Shadow of the BGM's intended channel 1 state (NR10-NR14, $FF10-$FF14). The music updates it on
     // every channel 1 write even while the channel is muted by an active SFX, so when the effect
     // releases the channel it can be restored to the BGM's full channel 1 state instead of the effect's
@@ -1688,6 +1698,14 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(address);
         builder.LoadAImmediate((value >> 8) & 0xFF);
         builder.StoreA(HighAddress(address));
+    }
+
+    private void EmitStoreSplitWordImmediate(ushort lowAddress, ushort highAddress, int value)
+    {
+        builder.LoadAImmediate(value & 0xFF);
+        builder.StoreA(lowAddress);
+        builder.LoadAImmediate((value >> 8) & 0xFF);
+        builder.StoreA(highAddress);
     }
 
     private void EmitCopyToWordStorage(ushort sourceAddress, string sourceType, ushort targetAddress)
@@ -3975,7 +3993,7 @@ internal sealed class GameBoyRuntimeCompiler
         }
 
         var args = call.Parameters.ToList();
-        var mapWidth = CheckedRange(GameBoyVideoProgram.ConstValue(args[0], "camera_init argument 1"), 1, 255, "camera_init argument 1");
+        var mapWidth = CheckedRange(GameBoyVideoProgram.ConstValue(args[0], "camera_init argument 1"), 1, 4096, "camera_init argument 1");
         var mapDataColumnCount = program.MapColumns.Keys.Max() + 1;
         if (mapWidth > mapDataColumnCount)
         {
@@ -4005,15 +4023,33 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraXHighAddress);
         builder.StoreA(CameraFineXAddress);
         builder.StoreA(CameraScreenLeftColumnAddress);
+        if (mapWidth > byte.MaxValue)
+        {
+            builder.StoreA(CameraScreenLeftColumnHighAddress);
+        }
 
         builder.LoadAImmediate(VisibleScreenTileWidthWithPartial);
         builder.StoreA(CameraRightBackgroundColumnAddress);
         builder.LoadAImmediate(31);
         builder.StoreA(CameraLeftBackgroundColumnAddress);
-        builder.LoadAImmediate(VisibleScreenTileWidthWithPartial % mapWidth);
-        builder.StoreA(CameraRightSourceColumnAddress);
-        builder.LoadAImmediate(mapWidth - 1);
-        builder.StoreA(CameraLeftSourceColumnAddress);
+        if (mapWidth <= byte.MaxValue)
+        {
+            builder.LoadAImmediate(VisibleScreenTileWidthWithPartial % mapWidth);
+            builder.StoreA(CameraRightSourceColumnAddress);
+            builder.LoadAImmediate(mapWidth - 1);
+            builder.StoreA(CameraLeftSourceColumnAddress);
+        }
+        else
+        {
+            EmitStoreSplitWordImmediate(
+                CameraRightSourceColumnAddress,
+                CameraRightSourceColumnHighAddress,
+                VisibleScreenTileWidthWithPartial % mapWidth);
+            EmitStoreSplitWordImmediate(
+                CameraLeftSourceColumnAddress,
+                CameraLeftSourceColumnHighAddress,
+                mapWidth - 1);
+        }
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraYLowAddress);
@@ -4057,8 +4093,9 @@ internal sealed class GameBoyRuntimeCompiler
         if (operation.Axes.HasFlag(ScrollAxes.Horizontal))
         {
             EmitCameraSetAxisPosition(
-                () => EmitSdkByteExpressionToA(operation.X),
+                operation.X,
                 CameraXLowAddress,
+                CameraXHighAddress,
                 () => EmitCameraMoveLeftStep(config),
                 () => EmitCameraMoveRightStep(config),
                 "camera_set_position_right",
@@ -4068,8 +4105,9 @@ internal sealed class GameBoyRuntimeCompiler
         if (operation.Axes.HasFlag(ScrollAxes.Vertical))
         {
             EmitCameraSetAxisPosition(
-                () => EmitSdkByteExpressionToA(operation.Y),
+                operation.Y,
                 CameraYLowAddress,
+                CameraYHighAddress,
                 () => EmitCameraMoveUpStep(config),
                 () => EmitCameraMoveDownStep(config),
                 "camera_set_position_down",
@@ -4090,6 +4128,49 @@ internal sealed class GameBoyRuntimeCompiler
             default:
                 throw new InvalidOperationException($"Unsupported SDK byte expression '{expression.GetType().Name}'.");
         }
+    }
+
+    private void EmitSdkWordExpressionToA(SdkWordExpression expression, bool highByte)
+    {
+        switch (expression)
+        {
+            case SdkWordExpression.Constant constant:
+                builder.LoadAImmediate(highByte ? (constant.Value >> 8) & 0xFF : constant.Value & 0xFF);
+                break;
+            case SdkWordExpression.Variable variable:
+                EmitSdkWordStorageLocationToA(variable.Location, highByte);
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported SDK word expression '{expression.GetType().Name}'.");
+        }
+    }
+
+    private void EmitSdkWordStorageLocationToA(SdkStorageLocation location, bool highByte)
+    {
+        if (!highByte)
+        {
+            EmitSdkStorageLocationToA(location);
+            return;
+        }
+
+        var type = location is SdkStorageLocation.RuntimeIndexedField runtimeIndexed
+            ? VariableStorageType(IndexedMemberName(runtimeIndexed.BaseName, 0, runtimeIndexed.FieldName))
+            : VariableStorageType(StorageKey(location));
+        if (!IsWordBackedType(type))
+        {
+            builder.LoadAImmediate(0);
+            return;
+        }
+
+        if (location is SdkStorageLocation.RuntimeIndexedField runtime)
+        {
+            EmitRuntimeIndexedMemberAddressToHl(runtime.BaseName, runtime.Index, runtime.FieldName);
+            builder.IncrementHl();
+            builder.LoadAFromHl();
+            return;
+        }
+
+        builder.LoadA(HighAddress(VariableAddress(StorageKey(location))));
     }
 
     private void EmitSdkStorageLocationToA(SdkStorageLocation location)
@@ -4152,8 +4233,10 @@ internal sealed class GameBoyRuntimeCompiler
             PendingStreamCountAddress,
             PendingStreamTargetAddress,
             PendingStreamSourceAddress,
+            PendingStreamSourceHighAddress,
             PendingStreamSecondTargetAddress,
             PendingStreamSecondSourceAddress,
+            PendingStreamSecondSourceHighAddress,
             config);
 
         if (emitRowCommit)
@@ -4199,8 +4282,10 @@ internal sealed class GameBoyRuntimeCompiler
             PendingDiagonalColumnCountAddress,
             PendingDiagonalColumnTargetAddress,
             PendingDiagonalColumnSourceAddress,
+            PendingDiagonalColumnSourceHighAddress,
             PendingDiagonalColumnSecondTargetAddress,
             PendingDiagonalColumnSecondSourceAddress,
+            PendingDiagonalColumnSecondSourceHighAddress,
             config);
         builder.LoadAImmediate(PendingStreamNone);
         builder.StoreA(PendingDiagonalColumnKindAddress);
@@ -4235,20 +4320,22 @@ internal sealed class GameBoyRuntimeCompiler
         ushort pendingCountAddress,
         ushort pendingTargetAddress,
         ushort pendingSourceAddress,
+        ushort pendingSourceHighAddress,
         ushort pendingSecondTargetAddress,
         ushort pendingSecondSourceAddress,
+        ushort pendingSecondSourceHighAddress,
         CameraConfig config)
     {
-        EmitVisibleWorldStreamColumnFromAddresses(pendingTargetAddress, pendingSourceAddress, config);
-        EmitBackgroundStreamColumnFromAddresses(pendingTargetAddress, pendingSourceAddress, config);
+        EmitVisibleWorldStreamColumnFromAddresses(pendingTargetAddress, pendingSourceAddress, pendingSourceHighAddress, config);
+        EmitBackgroundStreamColumnFromAddresses(pendingTargetAddress, pendingSourceAddress, pendingSourceHighAddress, config);
 
         var doneLabel = builder.CreateLabel("camera_commit_second_column_done");
         builder.LoadA(pendingCountAddress);
         builder.CompareImmediate(PendingStreamDouble);
         builder.JumpAbsolute(0xC2, doneLabel); // JP NZ,doneLabel
 
-        EmitVisibleWorldStreamColumnFromAddresses(pendingSecondTargetAddress, pendingSecondSourceAddress, config);
-        EmitBackgroundStreamColumnFromAddresses(pendingSecondTargetAddress, pendingSecondSourceAddress, config);
+        EmitVisibleWorldStreamColumnFromAddresses(pendingSecondTargetAddress, pendingSecondSourceAddress, pendingSecondSourceHighAddress, config);
+        EmitBackgroundStreamColumnFromAddresses(pendingSecondTargetAddress, pendingSecondSourceAddress, pendingSecondSourceHighAddress, config);
 
         builder.Label(doneLabel);
     }
@@ -4304,6 +4391,11 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitQueuePendingColumn(ushort backgroundColumnAddress, ushort sourceColumnAddress)
     {
+        var sourceHighAddress = cameraMapWidth > byte.MaxValue
+            ? CameraRightSourceColumnAddress == sourceColumnAddress
+                ? CameraRightSourceColumnHighAddress
+                : CameraLeftSourceColumnHighAddress
+            : (ushort?)null;
         if (ProgramQueuesDiagonalStreaming())
         {
             EmitQueuePendingStaggeredStream(
@@ -4314,11 +4406,20 @@ internal sealed class GameBoyRuntimeCompiler
                 PendingDiagonalColumnSecondTargetAddress,
                 PendingDiagonalColumnSecondSourceAddress,
                 backgroundColumnAddress,
-                sourceColumnAddress);
+                sourceColumnAddress,
+                sourceHighAddress,
+                sourceHighAddress is null ? null : PendingDiagonalColumnSourceHighAddress,
+                sourceHighAddress is null ? null : PendingDiagonalColumnSecondSourceHighAddress);
             return;
         }
 
-        EmitQueuePendingStream(PendingStreamColumn, backgroundColumnAddress, sourceColumnAddress);
+        EmitQueuePendingStream(
+            PendingStreamColumn,
+            backgroundColumnAddress,
+            sourceColumnAddress,
+            sourceHighAddress,
+            sourceHighAddress is null ? null : PendingStreamSourceHighAddress,
+            sourceHighAddress is null ? null : PendingStreamSecondSourceHighAddress);
     }
 
     private void EmitQueuePendingRow(ushort backgroundRowAddress, ushort sourceRowAddress)
@@ -4333,14 +4434,23 @@ internal sealed class GameBoyRuntimeCompiler
                 PendingDiagonalRowSecondTargetAddress,
                 PendingDiagonalRowSecondSourceAddress,
                 backgroundRowAddress,
-                sourceRowAddress);
+                sourceRowAddress,
+                null,
+                null,
+                null);
             return;
         }
 
-        EmitQueuePendingStream(PendingStreamRow, backgroundRowAddress, sourceRowAddress);
+        EmitQueuePendingStream(PendingStreamRow, backgroundRowAddress, sourceRowAddress, null, null, null);
     }
 
-    private void EmitQueuePendingStream(byte kind, ushort targetAddress, ushort sourceAddress)
+    private void EmitQueuePendingStream(
+        byte kind,
+        ushort targetAddress,
+        ushort sourceAddress,
+        ushort? sourceHighAddress,
+        ushort? pendingSourceHighAddress,
+        ushort? pendingSecondSourceHighAddress)
     {
         var storeFirstLabel = builder.CreateLabel("camera_queue_store_first");
         var storeSecondLabel = builder.CreateLabel("camera_queue_store_second");
@@ -4362,6 +4472,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(PendingStreamTargetAddress);
         builder.LoadA(sourceAddress);
         builder.StoreA(PendingStreamSourceAddress);
+        EmitCopyOptionalHighByte(sourceHighAddress, pendingSourceHighAddress);
         builder.LoadAImmediate(kind);
         builder.StoreA(PendingStreamKindAddress);
         builder.LoadAImmediate(PendingStreamSingle);
@@ -4373,6 +4484,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(PendingStreamSecondTargetAddress);
         builder.LoadA(sourceAddress);
         builder.StoreA(PendingStreamSecondSourceAddress);
+        EmitCopyOptionalHighByte(sourceHighAddress, pendingSecondSourceHighAddress);
         builder.LoadAImmediate(PendingStreamDouble);
         builder.StoreA(PendingStreamCountAddress);
 
@@ -4387,7 +4499,10 @@ internal sealed class GameBoyRuntimeCompiler
         ushort pendingSecondTargetAddress,
         ushort pendingSecondSourceAddress,
         ushort targetAddress,
-        ushort sourceAddress)
+        ushort sourceAddress,
+        ushort? sourceHighAddress,
+        ushort? pendingSourceHighAddress,
+        ushort? pendingSecondSourceHighAddress)
     {
         var storeFirstLabel = builder.CreateLabel("camera_queue_staggered_store_first");
         var storeSecondLabel = builder.CreateLabel("camera_queue_staggered_store_second");
@@ -4406,6 +4521,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(pendingTargetAddress);
         builder.LoadA(sourceAddress);
         builder.StoreA(pendingSourceAddress);
+        EmitCopyOptionalHighByte(sourceHighAddress, pendingSourceHighAddress);
         builder.LoadAImmediate(PendingStreamQueued);
         builder.StoreA(pendingKindAddress);
         builder.LoadAImmediate(PendingStreamSingle);
@@ -4417,15 +4533,28 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(pendingSecondTargetAddress);
         builder.LoadA(sourceAddress);
         builder.StoreA(pendingSecondSourceAddress);
+        EmitCopyOptionalHighByte(sourceHighAddress, pendingSecondSourceHighAddress);
         builder.LoadAImmediate(PendingStreamDouble);
         builder.StoreA(pendingCountAddress);
 
         builder.Label(doneLabel);
     }
 
+    private void EmitCopyOptionalHighByte(ushort? sourceHighAddress, ushort? targetHighAddress)
+    {
+        if (sourceHighAddress is not { } source || targetHighAddress is not { } target)
+        {
+            return;
+        }
+
+        builder.LoadA(source);
+        builder.StoreA(target);
+    }
+
     private void EmitCameraSetAxisPosition(
-        Action emitRequestedPositionToA,
+        SdkWordExpression requestedPosition,
         ushort currentLowAddress,
+        ushort currentHighAddress,
         Action moveNegative,
         Action movePositive,
         string positiveLabelName,
@@ -4433,13 +4562,16 @@ internal sealed class GameBoyRuntimeCompiler
     {
         var loopLabel = builder.CreateLabel(endLabelName + "_step");
         var movePositiveLabel = builder.CreateLabel(positiveLabelName);
+        var moveNegativeLabel = builder.CreateLabel(endLabelName + "_negative");
         var endLabel = builder.CreateLabel(endLabelName);
 
         // Cache the requested absolute position and walk the camera toward it, one pixel per step, up
         // to the per-frame streaming budget. Reaching the target early exits the loop, so callers set
         // the desired position once per frame instead of stepping the camera manually.
-        emitRequestedPositionToA();
+        EmitSdkWordExpressionToA(requestedPosition, highByte: false);
         builder.StoreA(CameraSetPositionTargetAddress);
+        EmitSdkWordExpressionToA(requestedPosition, highByte: true);
+        builder.StoreA(CameraSetPositionTargetHighAddress);
         builder.LoadAImmediate(CameraSetPositionMaxStepsPerFrame);
         builder.StoreA(CameraSetPositionStepsRemainingAddress);
 
@@ -4451,17 +4583,21 @@ internal sealed class GameBoyRuntimeCompiler
         builder.SubtractAImmediate(1);
         builder.StoreA(CameraSetPositionStepsRemainingAddress);
 
+        builder.LoadA(CameraSetPositionTargetHighAddress);
+        builder.LoadBFromA();
+        builder.LoadA(currentHighAddress);
+        builder.CompareB();
+        builder.JumpAbsolute(0xDA, movePositiveLabel); // JP C: current high < target high
+        builder.JumpAbsolute(0xC2, moveNegativeLabel); // JP NZ: current high > target high
+
         builder.LoadA(CameraSetPositionTargetAddress);
         builder.LoadBFromA();
         builder.LoadA(currentLowAddress);
-        builder.LoadCFromA();
-        builder.LoadAFromB();
-        builder.SubtractAFromC();
-        builder.CompareImmediate(0);
+        builder.CompareB();
         builder.JumpAbsolute(0xCA, endLabel); // JP Z,endLabel: reached target
-        builder.CompareImmediate(128);
-        builder.JumpAbsolute(0xDA, movePositiveLabel); // JP C,movePositiveLabel
+        builder.JumpAbsolute(0xDA, movePositiveLabel); // JP C: current low < target low
 
+        builder.Label(moveNegativeLabel);
         moveNegative();
         builder.JumpAbsolute(loopLabel);
 
@@ -4495,9 +4631,18 @@ internal sealed class GameBoyRuntimeCompiler
         EmitQueuePendingColumn(CameraRightBackgroundColumnAddress, CameraRightSourceColumnAddress);
         EmitIncrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitIncrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
-        EmitIncrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
-        EmitIncrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
-        EmitIncrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            EmitIncrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
+            EmitIncrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
+            EmitIncrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+        }
+        else
+        {
+            EmitIncrementWordAddressModulo(CameraScreenLeftColumnAddress, CameraScreenLeftColumnHighAddress, config.MapWidth);
+            EmitIncrementWordAddressModulo(CameraRightSourceColumnAddress, CameraRightSourceColumnHighAddress, config.MapWidth);
+            EmitIncrementWordAddressModulo(CameraLeftSourceColumnAddress, CameraLeftSourceColumnHighAddress, config.MapWidth);
+        }
 
         builder.Label(endLabel);
     }
@@ -4525,9 +4670,18 @@ internal sealed class GameBoyRuntimeCompiler
         EmitQueuePendingColumn(CameraLeftBackgroundColumnAddress, CameraLeftSourceColumnAddress);
         EmitDecrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
         EmitDecrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
-        EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
-        EmitDecrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
-        EmitDecrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
+            EmitDecrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
+            EmitDecrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+        }
+        else
+        {
+            EmitDecrementWordAddressModulo(CameraScreenLeftColumnAddress, CameraScreenLeftColumnHighAddress, config.MapWidth);
+            EmitDecrementWordAddressModulo(CameraRightSourceColumnAddress, CameraRightSourceColumnHighAddress, config.MapWidth);
+            EmitDecrementWordAddressModulo(CameraLeftSourceColumnAddress, CameraLeftSourceColumnHighAddress, config.MapWidth);
+        }
 
         builder.Label(endLabel);
     }
@@ -4600,7 +4754,11 @@ internal sealed class GameBoyRuntimeCompiler
         }
     }
 
-    private void EmitBackgroundStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, CameraConfig config)
+    private void EmitBackgroundStreamColumnFromAddresses(
+        ushort targetColumnAddress,
+        ushort sourceColumnAddress,
+        ushort sourceColumnHighAddress,
+        CameraConfig config)
     {
         var visibleBackgroundRows = Math.Min(program.BackgroundStreamHeight, VisibleScreenTileHeight);
         if (visibleBackgroundRows <= 0)
@@ -4615,7 +4773,15 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadHl(GameBoyRomBuilder.BackgroundRowLabel(0));
         builder.LoadA(sourceColumnAddress);
         builder.LoadEFromA();
-        builder.LoadDImmediate(0);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            builder.LoadDImmediate(0);
+        }
+        else
+        {
+            builder.LoadA(sourceColumnHighAddress);
+            builder.LoadDFromA();
+        }
         builder.AddHlDe();
         EmitLoadDeFromHl();
 
@@ -4628,12 +4794,19 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Emit(0x1A); // LD A,(DE)
         builder.StoreHlA();
 
-        builder.LoadAFromE();
-        builder.AddAImmediate(config.MapWidth);
-        builder.LoadEFromA();
-        builder.JumpAbsolute(0xD2, sourceNoCarryLabel); // JP NC,sourceNoCarryLabel
-        builder.Emit(0x14); // INC D
-        builder.Label(sourceNoCarryLabel);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            builder.LoadAFromE();
+            builder.AddAImmediate(config.MapWidth);
+            builder.LoadEFromA();
+            builder.JumpAbsolute(0xD2, sourceNoCarryLabel); // JP NC,sourceNoCarryLabel
+            builder.Emit(0x14); // INC D
+            builder.Label(sourceNoCarryLabel);
+        }
+        else
+        {
+            EmitAddConstantToDe(config.MapWidth);
+        }
 
         builder.LoadAFromL();
         builder.AddAImmediate(BackgroundTileMapWidth);
@@ -4646,7 +4819,11 @@ internal sealed class GameBoyRuntimeCompiler
         builder.JumpRelative(0x20, loopLabel); // JR NZ,loopLabel
     }
 
-    private void EmitVisibleWorldStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, CameraConfig config)
+    private void EmitVisibleWorldStreamColumnFromAddresses(
+        ushort targetColumnAddress,
+        ushort sourceColumnAddress,
+        ushort sourceColumnHighAddress,
+        CameraConfig config)
     {
         var streamRows = Math.Max(0, Math.Min(config.StreamHeight, VisibleScreenTileHeight + 1));
         if (streamRows == 0)
@@ -4669,7 +4846,15 @@ internal sealed class GameBoyRuntimeCompiler
         EmitLoadMapRowPointerToHl(CameraStreamSourceRowScratchAddress);
         builder.LoadA(sourceColumnAddress);
         builder.LoadEFromA();
-        builder.LoadDImmediate(0);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            builder.LoadDImmediate(0);
+        }
+        else
+        {
+            builder.LoadA(sourceColumnHighAddress);
+            builder.LoadDFromA();
+        }
         builder.AddHlDe();
         EmitLoadDeFromHl();
         builder.LoadA(targetColumnAddress);
@@ -4681,12 +4866,19 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Emit(0x1A); // LD A,(DE)
         builder.StoreHlA();
 
-        builder.LoadAFromE();
-        builder.AddAImmediate(config.MapWidth);
-        builder.LoadEFromA();
-        builder.JumpAbsolute(0xD2, sourceNoCarryLabel); // JP NC,sourceNoCarryLabel
-        builder.Emit(0x14); // INC D
-        builder.Label(sourceNoCarryLabel);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            builder.LoadAFromE();
+            builder.AddAImmediate(config.MapWidth);
+            builder.LoadEFromA();
+            builder.JumpAbsolute(0xD2, sourceNoCarryLabel); // JP NC,sourceNoCarryLabel
+            builder.Emit(0x14); // INC D
+            builder.Label(sourceNoCarryLabel);
+        }
+        else
+        {
+            EmitAddConstantToDe(config.MapWidth);
+        }
 
         builder.LoadAFromL();
         builder.AddAImmediate(BackgroundTileMapWidth);
@@ -4752,9 +4944,22 @@ internal sealed class GameBoyRuntimeCompiler
 
         EmitLoadSourceRowPointerToDe();
         EmitLoadHlFromDe();
-        builder.LoadAFromB();
-        builder.LoadEFromA();
-        builder.LoadDImmediate(0);
+        if (mapWidth <= byte.MaxValue)
+        {
+            builder.LoadAFromB();
+            builder.LoadEFromA();
+            builder.LoadDImmediate(0);
+        }
+        else
+        {
+            builder.LoadA(CameraScreenLeftColumnAddress);
+            builder.StoreA(CameraStreamLogicalSourceColumnLowAddress);
+            builder.LoadEFromA();
+            builder.LoadA(CameraScreenLeftColumnHighAddress);
+            builder.StoreA(CameraStreamLogicalSourceColumnHighAddress);
+            builder.LoadDFromA();
+        }
+
         builder.AddHlDe();
         EmitLoadDeFromHl();
 
@@ -4786,12 +4991,40 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Emit(0x1A); // LD A,(DE)
         builder.Emit(0x22); // LD (HL+),A
         builder.Emit(0x13); // INC DE
-        builder.Emit(0x04); // INC B
-        builder.LoadAFromB();
-        builder.CompareImmediate(mapWidth);
-        builder.JumpAbsolute(0xC2, sourceReadyLabel); // JP NZ,sourceReadyLabel
-        builder.Emit(0x06, 0x00); // LD B,0
-        EmitLoadSourceRowPointerToDe();
+        if (mapWidth <= byte.MaxValue)
+        {
+            builder.Emit(0x04); // INC B
+            builder.LoadAFromB();
+            builder.CompareImmediate(mapWidth);
+            builder.JumpAbsolute(0xC2, sourceReadyLabel); // JP NZ,sourceReadyLabel
+            builder.Emit(0x06, 0x00); // LD B,0
+            EmitLoadSourceRowPointerToDe();
+        }
+        else
+        {
+            var noCarryLabel = builder.CreateLabel("map_stream_row_source_no_carry");
+
+            builder.LoadA(CameraStreamLogicalSourceColumnLowAddress);
+            builder.AddAImmediate(1);
+            builder.StoreA(CameraStreamLogicalSourceColumnLowAddress);
+            builder.JumpAbsolute(0xD2, noCarryLabel); // JP NC,noCarryLabel
+            builder.LoadA(CameraStreamLogicalSourceColumnHighAddress);
+            builder.AddAImmediate(1);
+            builder.StoreA(CameraStreamLogicalSourceColumnHighAddress);
+            builder.Label(noCarryLabel);
+
+            builder.LoadA(CameraStreamLogicalSourceColumnHighAddress);
+            builder.CompareImmediate((mapWidth >> 8) & 0xFF);
+            builder.JumpAbsolute(0xC2, sourceReadyLabel); // JP NZ,sourceReadyLabel
+            builder.LoadA(CameraStreamLogicalSourceColumnLowAddress);
+            builder.CompareImmediate(mapWidth & 0xFF);
+            builder.JumpAbsolute(0xC2, sourceReadyLabel); // JP NZ,sourceReadyLabel
+            builder.LoadAImmediate(0);
+            builder.StoreA(CameraStreamLogicalSourceColumnLowAddress);
+            builder.StoreA(CameraStreamLogicalSourceColumnHighAddress);
+            EmitLoadSourceRowPointerToDe();
+        }
+
         builder.Label(sourceReadyLabel);
         builder.Emit(0x0D); // DEC C
         builder.JumpRelative(0x20, loopLabel); // JR NZ,loopLabel
@@ -4836,6 +5069,16 @@ internal sealed class GameBoyRuntimeCompiler
     {
         builder.Emit(0x62); // LD H,D
         builder.LoadLFromE();
+    }
+
+    private void EmitAddConstantToDe(int value)
+    {
+        builder.LoadAFromE();
+        builder.AddAImmediate(value & 0xFF);
+        builder.LoadEFromA();
+        builder.LoadAFromD();
+        builder.Emit(0xCE, (byte)((value >> 8) & 0xFF)); // ADC A,high(value)
+        builder.LoadDFromA();
     }
 
     private void EmitVisibleBackgroundColumnToC(int screenColumn)
@@ -4925,6 +5168,42 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadA(lowAddress);
         builder.SubtractAImmediate(1);
         builder.StoreA(lowAddress);
+    }
+
+    private void EmitIncrementWordAddressModulo(ushort lowAddress, ushort highAddress, int modulo)
+    {
+        var endLabel = builder.CreateLabel("increment_word_modulo_end");
+
+        EmitIncrement16(lowAddress, highAddress);
+        builder.LoadA(highAddress);
+        builder.CompareImmediate((modulo >> 8) & 0xFF);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+        builder.LoadA(lowAddress);
+        builder.CompareImmediate(modulo & 0xFF);
+        builder.JumpAbsolute(0xC2, endLabel); // JP NZ,endLabel
+        builder.LoadAImmediate(0);
+        builder.StoreA(lowAddress);
+        builder.StoreA(highAddress);
+        builder.Label(endLabel);
+    }
+
+    private void EmitDecrementWordAddressModulo(ushort lowAddress, ushort highAddress, int modulo)
+    {
+        var decrementLabel = builder.CreateLabel("decrement_word_modulo_value");
+        var endLabel = builder.CreateLabel("decrement_word_modulo_end");
+
+        builder.LoadA(highAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, decrementLabel); // JP NZ,decrementLabel
+        builder.LoadA(lowAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, decrementLabel); // JP NZ,decrementLabel
+        EmitStoreSplitWordImmediate(lowAddress, highAddress, modulo - 1);
+        builder.JumpAbsolute(endLabel);
+
+        builder.Label(decrementLabel);
+        EmitDecrement16(lowAddress, highAddress);
+        builder.Label(endLabel);
     }
 
     private void EmitIncrementAddressModulo(ushort address, int modulo)

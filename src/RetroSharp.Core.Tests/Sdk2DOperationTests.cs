@@ -264,8 +264,8 @@ public sealed class Sdk2DOperationTests
             Sdk2DOperationValidator.Validate(
                 FullCapabilities(),
                 new Sdk2DOperation.SetCameraPosition(
-                    Local("cameraX"),
-                    Local("cameraY"),
+                    WordLocal("cameraX"),
+                    WordLocal("cameraY"),
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
@@ -285,8 +285,8 @@ public sealed class Sdk2DOperationTests
         Sdk2DOperationValidator.Validate(
             target,
             new Sdk2DOperation.SetCameraPosition(
-                Local("cameraX"),
-                Local("cameraY"),
+                WordLocal("cameraX"),
+                WordLocal("cameraY"),
                 ScrollAxes.Horizontal | ScrollAxes.Vertical));
     }
 
@@ -303,8 +303,8 @@ public sealed class Sdk2DOperationTests
             Sdk2DOperationValidator.Validate(
                 target,
                 new Sdk2DOperation.SetCameraPosition(
-                    Local("cameraX"),
-                    Local("cameraY"),
+                    WordLocal("cameraX"),
+                    WordLocal("cameraY"),
                     ScrollAxes.Horizontal | ScrollAxes.Vertical)));
 
         Assert.Equal(
@@ -457,6 +457,11 @@ public sealed class Sdk2DOperationTests
     private static SdkByteExpression.Variable Local(string name)
     {
         return new SdkByteExpression.Variable(new SdkStorageLocation.Local(name));
+    }
+
+    private static SdkWordExpression.Variable WordLocal(string name)
+    {
+        return new SdkWordExpression.Variable(new SdkStorageLocation.Local(name));
     }
 
     private static SdkByteExpression.Variable Field(string baseName, string fieldName)

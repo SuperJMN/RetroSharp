@@ -37,12 +37,12 @@ public abstract record Sdk2DOperation
     }
 
     public sealed record SetCameraPosition(
-        SdkByteExpression X,
-        SdkByteExpression Y,
+        SdkWordExpression X,
+        SdkWordExpression Y,
         ScrollAxes Axes) : Sdk2DOperation
     {
         public SetCameraPosition(int X, int Y, ScrollAxes Axes)
-            : this(new SdkByteExpression.Constant(X), new SdkByteExpression.Constant(Y), Axes)
+            : this(new SdkWordExpression.Constant(X), new SdkWordExpression.Constant(Y), Axes)
         {
         }
     }

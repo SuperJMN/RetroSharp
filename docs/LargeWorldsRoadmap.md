@@ -3,8 +3,8 @@
 Status: **active; Wave 0 and Wave 1 are seeded for issue execution.**
 Last updated: 2026-07-10.
 
-This roadmap is the executable plan for levels that exceed the current
-one-byte world addressing and monolithic ROM-data budgets. It coordinates the
+This roadmap is the executable plan for levels that exceed the legacy
+one-byte world addressing and current monolithic ROM-data budgets. It coordinates the
 portable world contract, target-owned map packing, Game Boy MBC1 data access,
 NES mapper-backed data, collision, art residency, and acceptance validation.
 
@@ -45,8 +45,9 @@ Current blockers are independent and must not be conflated:
 
 - Viewport streaming already exists. Map size is not the same problem as the
   32x32 Game Boy background buffer or NES nametable surface.
-- Game Boy already has transparent MBC1 code/data/audio foundations, but map
-  width and runtime row reads still use one-byte source-column indexing.
+- LW-1.1 widens shared camera operands and both targets' logical map-column,
+  camera, edge-tag, and row/column streaming state; hardware scroll writes stay
+  bytes. Packed/banked world reads are still absent.
 - NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR; mapper-backed level
   data is not implemented.
 - `Camera.AabbHitTop(...)` still exposes an 8-bit world-pixel result with `255`
@@ -276,6 +277,9 @@ tasks follow the dependency graph below.
 
 ### LW-1.1: Implement 16-bit world dimensions and camera-position lowering
 
+- Status: **complete; shared word camera operands and GB/NES logical
+  source-column movement/addressing are implemented with 255 <-> 256 boundary
+  coverage while target scroll writes remain bytes.**
 - Layer: portable SDK and GB/NES lowering.
 - Dependencies: `LW-0.4`.
 - Candidate files: SDK camera source/operations, target intrinsic descriptors,
