@@ -32,9 +32,11 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
-  acceptance target and keeps Wave 0/1 separate from later Game Boy MBC1 and NES
-  mapper production readers. GitHub #275 is the parent/integrator issue with
-  Wave 0/1 attached as native subissues; do not dispatch the parent as one task.
+  acceptance target. Waves 0/1 are complete, and Waves 2/3 are issue-ready as
+  ten target-production cards (`LW-2.1`..`LW-2.5` and
+  `LW-3.1`..`LW-3.5`). GitHub #275 remains the parent/integrator issue; do not
+  dispatch the parent as one task, and do not invent Wave 2/3 issue links before
+  their first publication creates the native subissues.
 - LW-1.3 adds the target-neutral `RetroSharp.Core.Sdk.WorldPack` model: the v1
   header/directory and exact clipped coverage are validated with checked
   relative offsets, collision profiles and decoded IDs stay portable, target
@@ -54,7 +56,17 @@ This document preserves project knowledge that previously lived only in agent me
   plus 312 collision stored bytes on both targets, uses 554-byte GB and 594-byte
   NES accepted staging maxima, and keeps mapper-0 versus future MMC3/TVROM plus
   current/future/resident CHR budgets distinct. Reporting never selects a
-  banker, mapper, production reader, or runner input.
+  banker, mapper, production reader, or runner input. Its ROM/PRG number is
+  map-only, not a final-link total; only the production link may preserve
+  ROM-only/mapper-0 or select a banked profile.
+- Fresh Large Worlds implementation conversations should start with `LW-2.1`
+  and `LW-3.1` in parallel only when both branches start from the same current
+  `master`, then keep each target chain sequential. `LW-2.5` proves full
+  `stage1` on Game Boy through a non-destructive fixture and must not change the
+  shared runner input. Only `LW-3.5`, after `LW-2.5` and `LW-3.4`, migrates the
+  shared runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4;
+  Wave 3 only links the mapper-backed slice from #247 and does not absorb its
+  unrelated gaps.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
@@ -296,15 +308,14 @@ Progress (2026-06-14):
   and AF-5.10 reduce O(spawns)/frame activation scans.
 
 Suggested next steps for the next agent, in order:
-1. The previously open issues are now resolved in `master`: #130 (NES streaming flicker)
-   is fixed by `dd58910`, and #103/#200 leave dot-call lowering registry-free through
-   declared static methods plus receiver-method lowering.
-2. If continuing beyond #106/#200, open new focused issues for package dependencies,
-   library asset roots, or backend plugin boundaries before migrating more SDK calls.
-3. The active cross-target scale frontier is `docs/LargeWorldsRoadmap.md`: first
-   measure/decide packed worlds, coordinates/collision, and the NES cartridge
-   profile; then implement target production readers. HUD/AR-10, broader #247
-   NES gaps, and #244 spawn-scan cost remain related but independently scoped.
+1. For the active cross-target scale frontier, read the exact issue-ready card
+   in `docs/LargeWorldsRoadmap.md`; begin with `LW-2.1` and/or `LW-3.1`, not an
+   open-ended request to continue #275.
+2. Treat `--world-budget-report` as map-only evidence and remeasure the final
+   linked ROM/window layout in every placement/selection task.
+3. Keep each GB/NES chain sequential and keep target details out of public
+   SDK/Core. Do not migrate the shared runner before `LW-3.5`; HUD/AR-10,
+   broader #247 gaps, and #244 spawn-scan cost remain independently scoped.
 
 ## Game Boy Runner Lessons
 
@@ -357,7 +368,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   `stage1.playable.tmj` map, expanding to 176x30 hardware tiles. The complete
   156x20 source `stage1` design expands to 312x40 hardware tiles and is retained
   as the explicit Large Worlds acceptance target instead of being silently
-  trimmed by future target work.
+  trimmed by future target work. `LW-2.5` must prove it through a separate
+  non-destructive Game Boy fixture; the shared input stays on the playable map
+  until `LW-3.5` jointly migrates GB/NES and regenerates both tracked ROMs.
 - Portable/target split (#105 collision resource done): `WorldMap2D` now stores only dimensions and
   per-tile `WorldTileFlags` (portable collision); already-lowered target background tile numbers live
   in a separate `WorldTileGrid` owned by each target. Per-pixel layer flattening stays per target
