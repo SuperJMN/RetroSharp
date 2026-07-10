@@ -128,6 +128,21 @@ normalized `stage1` uses 2,762 bytes and retains all 90 generated CHR patterns.
 This payload is not yet read by the mapper-0 runtime; `World.Load(...)`, the
 runner input, and tracked ROMs remain on the existing path.
 
+LW-1.5 exposes that exact inspection payload through the opt-in CLI form
+`--target nes --world-budget-report <map.tmj>`. The deterministic JSON sums the
+actual stored visual/collision bytes from each chunk directory entry and
+reports the accepted 338-byte one-byte-ID staging shape (128 visual chunk
+bytes, 128 collision chunk bytes, and two 41-byte tile/attribute edge slots)
+against the format's 594-byte two-byte-ID maximum. The machine's 2 KiB RAM
+capacity remains a separate reported fact, not the staging allowance.
+It evaluates current PRG use against `nes-mapper-0-current` and separately
+names `nes-mmc3-tvrom-v1-accepted-future` as an unimplemented requirement with
+64 KiB PRG, 8 KiB world-data banks, and 16 KiB physical CHR capacity. The
+current 8 KiB physical CHR capacity, 8 KiB resident CHR limit, and 256-entry
+tile-index limit remain separately named values. The report's
+`selectedProfile` is null: it does not change mapper-0 output, select mapper 4,
+or wire a pack reader into production.
+
 `Camera.Init(mapWidth, streamY, streamHeight)` enables the camera path for the current world map. `Camera.SetPosition(x, y)` consumes complete little-endian word operands; byte-backed callers zero-extend. NES compares the logical word and walks toward it one pixel at a time, bounded to at most one tile crossing (≤8 px) per axis per call. Maps whose reachable camera extent is byte-sized keep the compact legacy byte walker; this is a compile-time known-high-zero optimization. Wider camera extents retain or derive the high camera byte, and maps wider than 255 hardware cells keep tile/source cursors and pending edge tags as words across `255 <-> 256`. `Video.WaitVBlank()` edge-polls `$2002`, drains one pending stream phase, and restores camera scroll immediately at VBlank entry. A later `Camera.Apply()` in the same frame is skipped unless camera state changed after the wait. The restore derives `$2000` nametable bits from the 64x60 buffer coordinates and writes only target-derived low scroll bytes through `$2005`. A queued vertical row remains pending across multiple VBlanks: four calls write 8 tile bytes each, and a fifth refreshes row attributes. For four-screen vertical scrolling, `streamY` must start inside the 60-row buffer; `streamHeight` may name the full source height and is clipped to the initial VRAM surface for startup while runtime row streaming uses the full map height.
 
 `Camera.AabbTiles(screenX, worldY, width, height, flags)` and `Camera.AabbHitTop(screenX, worldY, width, height, flags)` query collision flags from the active world map using the current absolute camera tile, camera fine X, and a screen-space AABB whose Y is supplied as a complete world-pixel word. Byte-backed Y values zero-extend. World hit-top returns the aligned world top through `A:X` (`A` low, `X` high), or `FF FF` for no hit. A byte world-hit destination is accepted only when the active world is at most 32 hardware rows; taller worlds require an `i16` destination and `-1` sentinel. `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space X/Y bytes and add the camera X/Y state inside the backend. These forms support both the runner's projected player X and actor-framework world X/Y projections on the four-screen camera path. All four are declared by the `RetroSharp.Portable2D` source package as inline helpers over role-bearing target intrinsics. Generic world-space `World.TileFlagsAt(...)` and `collision_aabb_tiles(...)` remain unsupported on NES.

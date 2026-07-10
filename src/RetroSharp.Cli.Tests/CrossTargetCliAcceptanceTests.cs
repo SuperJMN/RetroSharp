@@ -2,10 +2,166 @@ namespace RetroSharp.Cli.Tests;
 
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Xunit;
 
 public sealed class CrossTargetCliAcceptanceTests
 {
+    [Fact]
+    public void Cli_world_budget_report_is_explicit_deterministic_json_and_default_output_is_byte_compatible()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");
+        var map = RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj");
+        var rom = Path.Combine(workspace.Path, "free-scroll.gb");
+
+        var normal = RunCli("--target", "gb", "--out", rom, source);
+
+        Assert.Equal(0, normal.ExitCode);
+        Assert.Equal(string.Empty, normal.StandardOutput);
+        Assert.Equal($"Wrote Game Boy ROM: {rom}{Environment.NewLine}", normal.StandardError);
+
+        var nesRom = Path.Combine(workspace.Path, "free-scroll.nes");
+        var normalNes = RunCli("--target", "nes", "--out", nesRom, source);
+
+        Assert.Equal(0, normalNes.ExitCode);
+        Assert.Equal(string.Empty, normalNes.StandardOutput);
+        Assert.Equal($"Wrote NES ROM: {nesRom}{Environment.NewLine}", normalNes.StandardError);
+
+        var first = RunCli("--target", "gb", "--world-budget-report", map);
+        var second = RunCli("--target", "gb", "--world-budget-report", map);
+
+        Assert.Equal(0, first.ExitCode);
+        Assert.Equal(string.Empty, first.StandardError);
+        Assert.Equal(first.StandardOutput, second.StandardOutput);
+        using var json = JsonDocument.Parse(first.StandardOutput);
+        var root = json.RootElement;
+        Assert.Equal("retrosharp.world-budget/v1", root.GetProperty("schema").GetString());
+        Assert.Equal("gb", root.GetProperty("target").GetString());
+        Assert.Equal(50, root.GetProperty("world").GetProperty("hardwareWidth").GetInt32());
+        Assert.Equal(60, root.GetProperty("world").GetProperty("hardwareHeight").GetInt32());
+        Assert.True(root.GetProperty("pack").GetProperty("totalBytes").GetInt32() > 0);
+        Assert.Equal(
+            new[] { "addressing", "rom-prg", "chr-tile-count", "staging-ram", "vblank" },
+            root.GetProperty("diagnostics").EnumerateArray()
+                .Select(item => item.GetProperty("category").GetString()));
+    }
+
+    [Theory]
+    [InlineData("gb", 4_299, 3_000, 112, 2_550, 770, 312, 82, 298, 554, 8_192, 21, 0)]
+    [InlineData("nes", 4_317, 3_000, 112, 2_762, 770, 312, 90, 338, 594, 2_048, 32, 9)]
+    public void Cli_world_budget_report_uses_real_small_and_full_stage1_packs(
+        string target,
+        int smallPackBytes,
+        int smallVisualStoredBytes,
+        int smallCollisionStoredBytes,
+        int stage1PackBytes,
+        int stage1VisualStoredBytes,
+        int stage1CollisionStoredBytes,
+        int stage1BackgroundTiles,
+        int stage1StagingBytes,
+        int stagingLimitBytes,
+        int physicalRamCapacityBytes,
+        int tileWrites,
+        int attributeWrites)
+    {
+        var small = RunCli(
+            "--target",
+            target,
+            "--world-budget-report",
+            RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj"));
+        var smallSecond = RunCli(
+            "--target",
+            target,
+            "--world-budget-report",
+            RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj"));
+
+        Assert.Equal(0, small.ExitCode);
+        Assert.Equal(string.Empty, small.StandardError);
+        Assert.Equal(small.StandardOutput, smallSecond.StandardOutput);
+        using var smallJson = JsonDocument.Parse(small.StandardOutput);
+        Assert.Equal(smallPackBytes, smallJson.RootElement.GetProperty("pack").GetProperty("totalBytes").GetInt32());
+        Assert.Equal(smallVisualStoredBytes, smallJson.RootElement.GetProperty("pack").GetProperty("visualStoredBytes").GetInt32());
+        Assert.Equal(smallCollisionStoredBytes, smallJson.RootElement.GetProperty("pack").GetProperty("collisionStoredBytes").GetInt32());
+
+        using var stage1Workspace = CreateNormalizedFullStage1();
+        var stage1 = RunCli(
+            "--target",
+            target,
+            "--world-budget-report",
+            Path.Combine(stage1Workspace.Path, "stage1.normalized.tmj"));
+        var stage1Second = RunCli(
+            "--target",
+            target,
+            "--world-budget-report",
+            Path.Combine(stage1Workspace.Path, "stage1.normalized.tmj"));
+
+        Assert.Equal(0, stage1.ExitCode);
+        Assert.Equal(string.Empty, stage1.StandardError);
+        Assert.Equal(stage1.StandardOutput, stage1Second.StandardOutput);
+        using var stage1Json = JsonDocument.Parse(stage1.StandardOutput);
+        var root = stage1Json.RootElement;
+        Assert.Equal(156, root.GetProperty("world").GetProperty("sourceWidth").GetInt32());
+        Assert.Equal(20, root.GetProperty("world").GetProperty("sourceHeight").GetInt32());
+        Assert.Equal(312, root.GetProperty("world").GetProperty("hardwareWidth").GetInt32());
+        Assert.Equal(40, root.GetProperty("world").GetProperty("hardwareHeight").GetInt32());
+        Assert.Equal(12_480, root.GetProperty("world").GetProperty("hardwareCells").GetInt32());
+        Assert.Equal(3_120, root.GetProperty("world").GetProperty("metatilePlacements").GetInt32());
+        Assert.Equal(53, root.GetProperty("world").GetProperty("uniqueVisualMetatiles").GetInt32());
+        Assert.Equal(60, root.GetProperty("world").GetProperty("chunks").GetInt32());
+        Assert.Equal(stage1PackBytes, root.GetProperty("pack").GetProperty("totalBytes").GetInt32());
+        Assert.Equal(
+            (stage1VisualStoredBytes, stage1CollisionStoredBytes),
+            (root.GetProperty("pack").GetProperty("visualStoredBytes").GetInt32(),
+             root.GetProperty("pack").GetProperty("collisionStoredBytes").GetInt32()));
+        Assert.Equal(stage1BackgroundTiles, root.GetProperty("targetTiles").GetProperty("generatedBackgroundTiles").GetInt32());
+        Assert.Equal(stage1StagingBytes, root.GetProperty("stagingRam").GetProperty("usedBytes").GetInt32());
+        Assert.Equal(stagingLimitBytes, root.GetProperty("stagingRam").GetProperty("limitBytes").GetInt32());
+        Assert.Equal(physicalRamCapacityBytes, root.GetProperty("stagingRam").GetProperty("physicalRamCapacityBytes").GetInt32());
+        var stagingDiagnostic = Assert.Single(
+            root.GetProperty("diagnostics").EnumerateArray(),
+            item => item.GetProperty("category").GetString() == "staging-ram");
+        Assert.Equal("worldpack-v1-staging-maximum", stagingDiagnostic.GetProperty("profile").GetString());
+        Assert.Equal(tileWrites, root.GetProperty("vblank").GetProperty("tileWritesUsed").GetInt32());
+        Assert.Equal(attributeWrites, root.GetProperty("vblank").GetProperty("attributeWritesUsed").GetInt32());
+        Assert.True(root.GetProperty("cartridge").GetProperty("romPrgBytesUsed").GetInt32() > 0);
+        Assert.True(root.GetProperty("cartridge").GetProperty("requiredBanks").GetInt32() > 0);
+        Assert.Contains(
+            target == "nes" ? "nes-mmc3-tvrom-v1-accepted-future" : "gb-simple-mbc1-current",
+            root.GetProperty("acceptedProfiles").EnumerateArray().Select(item => item.GetString()));
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("selectedProfile").ValueKind);
+
+        if (target == "nes")
+        {
+            var tiles = root.GetProperty("targetTiles");
+            Assert.Equal(16_384, tiles.GetProperty("acceptedFuturePhysicalChrCapacityBytes").GetInt32());
+            Assert.Equal(8_192, tiles.GetProperty("currentPhysicalChrCapacityBytes").GetInt32());
+            Assert.Equal(8_192, tiles.GetProperty("residentChrByteLimit").GetInt32());
+            Assert.Equal(256, tiles.GetProperty("tileIndexLimit").GetInt32());
+            var profiles = root.GetProperty("profileRequirements").EnumerateArray().ToArray();
+            var current = Assert.Single(profiles, profile => profile.GetProperty("name").GetString() == "nes-mapper-0-current");
+            var future = Assert.Single(profiles, profile => profile.GetProperty("name").GetString() == "nes-mmc3-tvrom-v1-accepted-future");
+            Assert.True(current.GetProperty("implementedByCurrentCompiler").GetBoolean());
+            Assert.Equal(32_768, current.GetProperty("bankBytes").GetInt32());
+            Assert.False(future.GetProperty("implementedByCurrentCompiler").GetBoolean());
+            Assert.Equal(8_192, future.GetProperty("bankBytes").GetInt32());
+            Assert.Equal(65_536, future.GetProperty("romPrgAllocationBytes").GetInt32());
+            Assert.Equal(16_384, future.GetProperty("physicalChrCapacityBytes").GetInt32());
+            Assert.Equal(8_192, future.GetProperty("residentChrByteLimit").GetInt32());
+        }
+        else
+        {
+            Assert.Equal(JsonValueKind.Null, root.GetProperty("cartridge").GetProperty("allocatedRomBytes").ValueKind);
+        }
+
+        var chrDiagnostic = Assert.Single(
+            root.GetProperty("diagnostics").EnumerateArray(),
+            item => item.GetProperty("category").GetString() == "chr-tile-count");
+        Assert.Equal(6 + stage1BackgroundTiles, chrDiagnostic.GetProperty("usage").GetProperty("tileIndexes").GetInt32());
+        Assert.Equal((6 + stage1BackgroundTiles) * 16, chrDiagnostic.GetProperty("usage").GetProperty("residentChrBytes").GetInt32());
+        Assert.Equal(256, chrDiagnostic.GetProperty("limit").GetProperty("tileIndexes").GetInt32());
+    }
+
     [Fact]
     public void Cli_builds_portable_sample_for_game_boy_and_nes_under_temp_directory()
     {
@@ -986,6 +1142,41 @@ public sealed class CrossTargetCliAcceptanceTests
         Directory.CreateDirectory(path);
         return new TemporaryDirectory(path);
     }
+
+    private static TemporaryDirectory CreateNormalizedFullStage1()
+    {
+        var workspace = TemporaryWorkspace();
+        var sourcePath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
+        var root = JsonNode.Parse(File.ReadAllText(sourcePath))?.AsObject()
+                   ?? throw new InvalidOperationException($"{sourcePath} is empty.");
+        var height = root["height"]?.GetValue<int>()
+                     ?? throw new InvalidOperationException($"{sourcePath} does not declare height.");
+        root["properties"] = new JsonArray(
+            MapProperty("retrosharpStreamY", 0),
+            MapProperty("retrosharpWorldY", 0),
+            MapProperty("retrosharpWorldHeight", height));
+        foreach (var layer in root["layers"]?.AsArray() ?? [])
+        {
+            if (layer?["type"]?.GetValue<string>() == "tilelayer")
+            {
+                layer["name"] = "world";
+            }
+        }
+
+        File.WriteAllText(
+            Path.Combine(workspace.Path, "stage1.normalized.tmj"),
+            root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.tsx"), Path.Combine(workspace.Path, "stage1.tsx"));
+        File.Copy(RepositoryFile("samples/runner/assets/maps/stage1.png"), Path.Combine(workspace.Path, "stage1.png"));
+        return workspace;
+    }
+
+    private static JsonObject MapProperty(string name, int value) => new()
+    {
+        ["name"] = name,
+        ["type"] = "int",
+        ["value"] = value,
+    };
 
     private static SampleManifest LoadManifest()
     {

@@ -1,6 +1,6 @@
 # Full `stage1` baseline (LW-0.1)
 
-Status: **frozen on 2026-07-10 and refreshed after LW-1.4 by the focused GB/NES baseline and WorldPack parity tests.**
+Status: **frozen on 2026-07-10 and refreshed after LW-1.5 by the focused GB/NES baseline, WorldPack parity tests, and opt-in CLI report.**
 
 This report records why the complete authored runner `stage1` cannot run on the
 current Game Boy or NES paths. It began as measurement and acceptance evidence;
@@ -20,6 +20,23 @@ The two tests print stable JSON objects in the category order used below. They
 normalize `stage1.tmj` into a temporary directory, point an in-memory copy of
 the runner source at that temporary map, and delete every temporary map and ROM
 after the test. No tracked runner input or output is used as scratch space.
+
+For an importer-ready Tiled map, the same production measurement seam is
+available explicitly through the CLI without writing a ROM:
+
+```bash
+dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
+  --target gb --world-budget-report \
+  samples/tiled-free-scroll/free-scroll.tmj
+```
+
+Use `--target nes` for the NES payload. The full authored `stage1.tmj` remains
+an authoring acceptance asset rather than the runner input: it does not carry
+the importer-facing layer name and whole-world properties. The focused CLI
+acceptance tests therefore copy it to a temporary directory, non-destructively
+normalize that temporary JSON, run each target report twice, and remove the
+copy. They freeze identical JSON plus exact 770 visual and 312 collision stored
+bytes for both targets; no tracked map or ROM is modified.
 
 ## Acceptance payload
 

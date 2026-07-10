@@ -48,6 +48,13 @@ This document preserves project knowledge that previously lived only in agent me
   to target expansion records. Full normalized `stage1` is 2,550 bytes on GB
   and 2,762 on NES with raw-importer parity; production readers, banking,
   mappers, and the runner input remain unchanged.
+- LW-1.5 adds the explicit `--world-budget-report` CLI analysis seam for an
+  importer-ready `.tmj`. It emits deterministic JSON from the real LW-1.4
+  payload without writing a ROM, freezes full normalized `stage1` at 770 visual
+  plus 312 collision stored bytes on both targets, uses 554-byte GB and 594-byte
+  NES accepted staging maxima, and keeps mapper-0 versus future MMC3/TVROM plus
+  current/future/resident CHR budgets distinct. Reporting never selects a
+  banker, mapper, production reader, or runner input.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`

@@ -368,6 +368,9 @@ tasks follow the dependency graph below.
 
 ### LW-1.5: Add deterministic world/cart budget diagnostics
 
+- Status: **complete; `--world-budget-report` emits opt-in deterministic GB/NES
+  JSON from the real LW-1.4 payloads, with categorized profile diagnostics and
+  no mapper/banker selection.**
 - Layer: validation and compiler diagnostics.
 - Dependencies: `LW-0.1`, `LW-1.3`.
 - Candidate files: CLI/compiler reporting seam, target builders, capability
