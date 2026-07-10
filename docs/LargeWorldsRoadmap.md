@@ -240,6 +240,9 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 
 ### LW-0.4: Define the 16-bit world-coordinate and collision-hit contract
 
+- Status: **complete; coordinate and collision contract accepted by
+  [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
+  with reproducible cross-target layout evidence.**
 - Layer: portable SDK contract with target lowering.
 - Dependencies: `LW-0.1`.
 - Candidate files: camera SDK source, `Sdk2DOperation`/intrinsic descriptors,

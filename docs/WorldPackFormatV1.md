@@ -279,8 +279,10 @@ buffer. The decoder reads the target-owned ROM source directly into a slot.
 The two edge slots are peers, not permanently `current` and `next`. Each slot is
 tagged with state (`empty`, `preparing`, `resident`, or `committing`), axis
 (`column` or `row`), direction (negative or positive), and the logical
-world-edge coordinate it represents. The coordinate's eventual scalar ABI is
-owned by LW-0.4; the tag equality and residency rules are fixed here.
+world-edge coordinate it represents. The accepted
+[LW-0.4 coordinate contract](WorldCoordinateCollisionContract.md) stores that
+hardware-cell coordinate as a two-byte little-endian non-negative `i16`; the
+tag equality and residency rules remain fixed here.
 
 Outside VBlank/NMI, the scheduler fills the slots required by the requested
 movement before exposing a crossing:
@@ -309,8 +311,10 @@ expanded edge slots stay resident. Thus the same two payload slots cover both
 near/far same-axis and column/row diagonal scheduling without allocating four
 target edges.
 
-This fixes payload staging without selecting a bank register, mapper, runtime
-coordinate ABI, or sentinel; those remain target placement and LW-0.4 work.
+This fixes payload staging without selecting a bank register or mapper. The
+runtime coordinate and collision sentinel are now fixed by
+[`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
+without changing the pack topology.
 
 | Fixed staging | Full `stage1` (1-byte IDs) | V1 maximum (2-byte IDs) |
 | --- | ---: | ---: |
@@ -321,8 +325,9 @@ coordinate ABI, or sentinel; those remain target placement and LW-0.4 work.
 | **NES total** | **338 bytes** | **594 bytes** |
 
 The totals are the complete pack payload/edge buffers. Small target-owned
-control fields (slot tags, progress, and the coordinate representation selected
-by LW-0.4) are not pack buffers and are intentionally not specified here.
+control fields (slot state/progress plus the two-byte logical edge coordinates
+selected by LW-0.4) are not pack buffers; their fixed scalar budget is recorded
+by the coordinate ADR rather than these payload totals.
 
 ## Full `stage1` worst-case costs
 
@@ -437,7 +442,7 @@ fetched independently, output order is deterministic, and future cartridge
 placement does not alter the logical or binary pack.
 
 This ADR does not implement the production model, packer, codec, reader,
-banking, mapper, cartridge placement, coordinate/collision ABI, or runner
-migration. Later work may optimize target expansion records or add codecs only
+banking, mapper, cartridge placement, accepted coordinate/collision ABI, or
+runner migration. Later work may optimize target expansion records or add codecs only
 behind a new compatible version; it must not reopen the v1 topology or leak
 target hardware into portable source.

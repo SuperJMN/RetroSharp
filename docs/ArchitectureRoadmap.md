@@ -28,8 +28,18 @@ The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
 contract as deterministic 8x8 source-metatile chunks with independently
 compressed visual and collision planes, relative offsets, target-owned visual
 expansion records, and fixed dual-edge staging. It deliberately leaves
-cartridge placement and the wider coordinate/collision ABI to their target and
-Wave 0 decisions.
+cartridge placement target-owned and keeps the wider coordinate/collision ABI
+outside the pack topology; the separate Wave 0 decision below now fixes that
+ABI.
+
+The accepted [16-bit world-coordinate and collision-hit
+contract](WorldCoordinateCollisionContract.md) fixes the remaining shared
+scalar boundary for LW-1.1 and LW-1.2: non-negative logical `i16` coordinates
+use little-endian words, world `Camera.AabbHitTop(...)` reserves
+`-1`/`0xFFFF` for no hit, screen-relative hit-top retains its unambiguous
+`0..248`/`255` semantics while zero-extending its declared `I16` result, and
+target scroll writes remain bytes. The current GB/NES production
+lowerers still implement the legacy byte behavior until those Wave 1 tasks.
 
 ## Goals
 
@@ -126,7 +136,7 @@ Intrinsic work belongs here:
 | `camera_span_has_tile(...)` | Transitional SDK helper | Replace with world collision/tile flag API. |
 | `camera_span_has_flags(...)` | Transitional SDK helper | Legacy camera-span collision bridge. |
 | `Camera.AabbTiles(...)` | Portable SDK capability-gated query | Camera-relative AABB bridge for fixed-screen actors and projected world-space actors on long maps; requires target support for `CameraRelativeAabb`. |
-| `Camera.AabbHitTop(...)` | Portable SDK capability-gated query | Camera-relative AABB tile-hit bridge that returns the top world-pixel Y of the first matching tile, or `255` when none hit; requires target support for `CameraRelativeAabbHitTop`. |
+| `Camera.AabbHitTop(...)` | Portable SDK capability-gated query | Camera-relative AABB tile-hit bridge. Current targets return a byte top or `255`; the accepted Large Worlds contract makes the declared `i16` result a full word with `-1`/`0xFFFF` for no hit in LW-1.2. Requires target support for `CameraRelativeAabbHitTop`. |
 | `World.Column(...)` | Transitional/compatibility | Legacy streaming-column authoring; runner uses `World.Column(...)` now. |
 | `map_tile_at(...)` | Portable SDK candidate | Reads generated world tile-id rows. |
 | `map_flags_at(...)` | Portable SDK candidate | Reads generated world flag rows. |
@@ -1651,8 +1661,12 @@ Acceptance criteria:
 ### Iteration 15: Scalable Large-World Assets and Banked Streaming
 
 Status: active under [GitHub epic #275](https://github.com/SuperJMN/RetroSharp/issues/275).
-Wave 0 (measurement and ADRs) and Wave 1 (shared coordinate, collision,
-packed-world, Tiled, and budget foundations) are seeded for execution.
+Wave 0 (measurement and ADRs) has accepted the full-`stage1` baseline,
+`WorldPack` v1, and the 16-bit coordinate/collision contract. Wave 0 is not
+complete: the NES cartridge profile remains pending in LW-0.3 / issue #279 and
+is neither selected nor implied here. Wave 1 (shared coordinate, collision,
+packed-world, Tiled, and budget foundations) is seeded for execution according
+to the dependency graph.
 Target production readers remain intentionally unseeded until those contracts
 merge.
 

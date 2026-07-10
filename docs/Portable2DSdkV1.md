@@ -89,12 +89,22 @@ Game Boy currently accepts VGM/VGZ DMG register logs, hUGETracker `.uge` v6 reso
 | `World.Load(path)` | Import a Tiled JSON map (`.tmj`) into the active `WorldMap2D` resource when the target supports that asset pipeline. |
 | `World.TileFlagsAt(worldX, worldY)` | Read collision flags by world pixel coordinates; out-of-bounds reads return `0`. |
 | `collision_aabb_tiles(x, y, width, height, flags)` | Return `1` if any tile overlapped by a world-space AABB has the requested flag bits. |
-| `Camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. `screenX` and `worldY` may be literals or byte-backed runtime expressions, so fixed-screen actors and projected world-space actors can share the same SDK operation. |
-| `Camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags for a camera-relative AABB, or `255` when there is no hit. This exposes a collision fact for landing resolution without owning movement policy. |
+| `Camera.AabbTiles(screenX, worldY, width, height, flags)` | Return `1` if a camera-relative AABB overlaps requested world flags at the current camera position. Current lowering accepts literal or byte-backed `screenX`/`worldY`; LW-1.2 widens the world-Y operand under the accepted Large Worlds contract. |
+| `Camera.AabbHitTop(screenX, worldY, width, height, flags)` | Return the top world-pixel Y of the first/top overlapped tile matching the requested flags. Current lowering returns a byte top or `255` for no hit. The accepted Large Worlds contract makes the declared `i16` result a little-endian word and reserves `-1`/`0xFFFF` for no hit in LW-1.2. Landing policy remains source-owned. |
 | `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` | Return `1` if a screen-space AABB overlaps requested world flags after adding the current camera X/Y state. This is the actor/runtime form used when both actor axes are projected to screen bytes. |
-| `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` | Return the top screen-pixel Y of the first/top overlapped tile matching the requested flags for a screen-space AABB, or `255` when there is no hit. Source/framework code can add the current camera Y bytes back when it needs to resolve a world Y. |
+| `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` | Return the top screen-pixel Y of the first/top overlapped tile matching the requested flags for a screen-space AABB, or `255` when there is no hit. Its signature/descriptor remain `I16`: a word destination receives zero-extended `0x0000..0x00F8` or no-hit `0x00FF`; a byte destination consumes the low byte. Source/framework code can add the current camera Y bytes back when it needs to resolve a world Y. |
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
+
+The accepted
+[`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
+defines the post-LW-1.1/LW-1.2 scalar surface without claiming it is already
+implemented: map dimensions, logical camera/world pixels, hardware-cell
+coordinates, and world hit tops are non-negative `i16` words; world no-hit is
+`-1`/`0xFFFF`; and screen-relative hit-top remains `0..248`/`255` semantically
+while its `I16` word form is `0x0000..0x00F8`/`0x00FF`. Packs whose pixel extent
+exceeds 32768 are diagnosed by this first runtime envelope even though
+`WorldPack` v1 can serialize larger unsigned cell counts.
 
 For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editable baseline. During target lowering, that PNG path follows the target-variant convention used by sprite assets: `tiles.png` can resolve to `tiles.gb.png`/`tiles.GameBoy.png` on Game Boy or `tiles.nes.png`/`tiles.NES.png` on NES, falling back to `tiles.png` when no variant exists. The current NES lowering derives a universal background color, up to four background palette slots, and the initial attribute table from the selected tileset PNG's placed map tiles; runtime-streamed rows refresh touched attributes as palette slot 0 until richer Tiled palette provenance is carried into the streaming path.
 
@@ -112,7 +122,7 @@ The slot is logical and capability-checked against the target descriptor. The fo
 | Signature | Semantics |
 | --- | --- |
 | `Camera.Init(mapWidth, streamY, streamHeight)` | Initialize camera state for the active world map. |
-| `Camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. |
+| `Camera.SetPosition(x, y)` | Request a camera position in world pixels. This maps to `Sdk2DOperation.SetCameraPosition`. The accepted Large Worlds contract carries complete `i16` words; current target lowering still consumes their low bytes until LW-1.1. |
 | `Camera.Apply()` | Apply the current camera state to the target during the frame. |
 
 Targets may lower camera movement differently. The SDK contract is position-based; direction-specific helpers such as `camera_move_right()` and raw scroll calls such as `scroll_set(...)` are transitional or target-intrinsic APIs. Game Boy supports non-zero Y through `Camera.SetPosition(x, y)` by walking toward the requested position up to 16 px per axis per call, queuing up to two same-axis exposed edges, and streaming them during `Camera.Apply()`. Diagonal Game Boy movement is accepted through the target's staggered camera-stream capability: column and row queues can be pending together, but only one axis queue is committed per VBlank; each queued edge is still the 19-tile column or 21-tile row shape described by the declared explicit stream-edge budget. NES supports non-zero Y through four-screen nametables: maps up to the initial 64x60 surface scroll without runtime tile writes, and larger source-authored worlds stream one exposed column or row per VBlank with a 32-tile row/column budget and a 9-byte row-attribute refresh.
@@ -496,6 +506,10 @@ Calls that expose raw hardware state are outside SDK v1. They can remain availab
 SDK v1 is usable for the current cross-target camera sample, and the runner-shaped camera-relative collision/animation/audio slice now lowers on both Game Boy and NES. The full runner is still a target-acceptance scenario rather than a portable SDK sample because several broader world/HUD contracts are still missing. It currently loads the 88x15-cell derived `stage1.playable.tmj` map, expands it to 176x30 hardware tiles, and declares per-target VGM/VGZ background music. The complete 156x20-cell `stage1.tmj` design is the Large Worlds acceptance payload; larger diagonal free scroll remains demonstrated separately by `samples/nes-free-scroll/freescroll.rs` for source-authored columns and by `samples/tiled-free-scroll/free-scroll.rs` for Tiled `World.Load(...)`.
 
 - `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` are capability-gated SDK queries for camera-relative AABBs. Game Boy and NES both support the runner-shaped projected-screen-X form and actor-framework calls with per-actor projected X/Y.
+- LW-0.4 is accepted in `docs/WorldCoordinateCollisionContract.md`, but its
+  production widening remains in LW-1.1/LW-1.2. Until then, world hit-top still
+  uses the legacy byte `255` sentinel in emitted GB/NES code; the runner and
+  tracked ROMs are unchanged by the ADR.
 - On Game Boy, `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)` are injected library helpers over target intrinsics whose descriptors carry the hidden world id and flags as compile-time operands, then collect to the same SDK operations used by backend lowering.
 - `collision_aabb_tiles(...)` still reports overlap only. Use `Camera.AabbHitTop(...)` when an actor needs the contacted tile's top edge while keeping landing and movement resolution in source.
 - Logical palette declarations now cover background and sprite palette slots through `Palette.Background(...)` and `Palette.Sprite(...)`. The color values are logical tones `0..3`; targets map those tones to their hardware palette registers or palette RAM. NES sprite PNG assets may refine the sprite slot with a derived hardware palette for their opaque colors, may use the next physical sprite palette slot for automatic optional overlays when a PNG has more than three opaque colors, and may move incompatible PNG-derived palettes to a free physical sprite palette range.

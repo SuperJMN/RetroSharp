@@ -124,6 +124,21 @@ The preferred `Sprite.Draw(...)` spelling is declared by the `RetroSharp.Portabl
 
 `Camera.AabbTiles(screenX, worldY, width, height, flags)` and `Camera.AabbHitTop(screenX, worldY, width, height, flags)` query collision flags from the active world map using the current absolute camera tile, camera fine X, and a screen-space AABB whose Y is still supplied as world pixels. `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space X/Y bytes and add the camera X/Y state inside the backend. These forms support both the runner's projected player X and actor-framework world X/Y projections on the four-screen camera path. All four are declared by the `RetroSharp.Portable2D` source package as inline helpers over role-bearing `camera_aabb_tiles`/`camera_aabb_hit_top`/`camera_screen_aabb_tiles`/`camera_screen_aabb_hit_top` target intrinsics (hidden `WorldId` plus `EnumFlags` slots); the value-call path resolves the extern intrinsic and re-derives the same `Sdk2DOperation` shape. Generic world-space `World.TileFlagsAt(...)` and `collision_aabb_tiles(...)` remain unsupported on NES.
 
+Although screen hit-top is semantically byte-range, its source signature and
+descriptor are `I16`. Under the accepted word ABI, a word destination receives
+`A:X = 0x0000..0x00F8` for a hit or `0x00FF` for no hit (`A` low, `X = 0`); an
+actor-framework byte destination consumes `A`. The future ABI returns the
+complete pair explicitly rather than relying on an accumulator-only result and
+a caller-synthesized high byte.
+
+Large Worlds LW-0.4 is accepted in
+[`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md).
+It specifies complete little-endian `i16` logical camera/world operands, an
+internal NES `A:X` word-return ABI, and world hit-top no-hit bits `0xFFFF`, while
+screen-relative hit-top keeps byte `255`. This is the contract for
+LW-1.1/LW-1.2; the current NES builder remains one-byte and this ADR does not
+change mapper-0 output or tracked ROMs.
+
 `Animation.Clip(name, firstFrame, duration...)` stores a looping frame-duration table whose frame indexes and total duration must fit one byte. `Animation.Frame(name, tick)` is declared by the source package over the `animation_frame` target intrinsic and returns the current frame for that clip. `Sprite.Width(name)` is likewise a source-package helper over the compile-time `sprite_width` target intrinsic and returns the logical sprite width for a declared sprite asset.
 
 ## HUD Decision
