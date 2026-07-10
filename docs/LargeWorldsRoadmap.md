@@ -156,6 +156,8 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
 
 ### LW-0.1: Freeze the complete `stage1` acceptance baseline and budget report
 
+- Status: **complete; baseline frozen by the GB/NES focused tests and
+  [`LargeWorldsStage1Baseline.md`](LargeWorldsStage1Baseline.md).**
 - Layer: validation and documentation.
 - Dependencies: none.
 - Candidate files: `samples/runner/assets/maps/stage1.tmj`,
@@ -175,7 +177,9 @@ Wave 0 is sequential at its entry point. `LW-0.1` lands first; `LW-0.2`,
   - The baseline proves that the full level, music, and collision are the final
     acceptance payload.
 - Verification:
-  - Focused baseline/report tests.
+  - `dotnet test RetroSharp.sln -m:1 --filter
+    "FullyQualifiedName~FullStage1BaselineTests" --logger
+    "console;verbosity=detailed"` emits the deterministic GB/NES facts.
   - `tools/gameboy/generate_sample_roms.py --dry-run` shows no unintended
     tracked-ROM changes.
   - `git diff --check`.
