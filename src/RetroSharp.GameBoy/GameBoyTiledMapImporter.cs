@@ -19,7 +19,8 @@ internal sealed record GameBoyTiledMap(
 internal sealed record GameBoyTiledWorldPack(
     WorldPack Pack,
     byte[] SerializedBytes,
-    byte[] GeneratedTileData);
+    byte[] GeneratedTileData,
+    GameBoyTiledMap LoweredMap);
 
 // Game Boy lowering of an imported Tiled map. The target-neutral structure
 // (parsing, tilesets, geometry, world slice, and collision flags) is produced by
@@ -59,7 +60,7 @@ internal static class GameBoyTiledMapImporter
         }
 
         var compiled = plan.Build(expansions, targetCellStride: 1);
-        return new GameBoyTiledWorldPack(compiled.Pack, compiled.SerializedBytes, lowered.GeneratedTileData);
+        return new GameBoyTiledWorldPack(compiled.Pack, compiled.SerializedBytes, lowered.GeneratedTileData, lowered);
     }
 
     public static GameBoyTiledMap Load(string path, int firstGeneratedTileId = 6)

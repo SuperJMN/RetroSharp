@@ -31,6 +31,7 @@ internal static class GameBoyRomBuilder
     private const string ProgramMainEndLabel = "program_main_end";
     internal const string ProgramBankContinuationLabel = "program_bank_continue";
     internal const string Mbc1FarReadByteLabel = "mbc1_far_read_byte";
+    internal const string WorldPackLabel = "worldpack_default";
 
     private static readonly byte[] NintendoLogo =
     [
@@ -44,9 +45,33 @@ internal static class GameBoyRomBuilder
 
     public static byte[] Build(GameBoyVideoProgram program)
     {
-        var readOnlyData = BuildReadOnlyData(program);
+        return BuildWithReport(program).Rom;
+    }
+
+    internal static GameBoyRomBuildResult BuildWithReport(GameBoyVideoProgram program, byte[]? packedWorldOverride = null)
+    {
+        var packedWorldBytes = packedWorldOverride ?? program.PackedWorld?.SerializedBytes;
+        try
+        {
+            return BuildWithReportCore(program, packedWorldBytes);
+        }
+        catch (InvalidOperationException exception) when (
+            packedWorldOverride is null &&
+            program.PackedWorld is not null &&
+            IsMissingLegacyWorldLabel(exception.Message))
+        {
+            // LW-2.2 places canonical packs but deliberately does not implement the LW-2.3
+            // reader. Runtime world queries therefore retain their byte-identical raw route
+            // until that reader exists; pack-only links never enter this compatibility path.
+            return BuildWithReportCore(program, packedWorldBytes: null);
+        }
+    }
+
+    private static GameBoyRomBuildResult BuildWithReportCore(GameBoyVideoProgram program, byte[]? packedWorldBytes)
+    {
+        var readOnlyData = BuildReadOnlyData(program, packedWorldBytes is not null);
         var romOnlyLayout = GameBoyRomLayout.RomOnly;
-        var builder = BuildProgram(program, romOnlyLayout, readOnlyData);
+        var builder = BuildProgram(program, romOnlyLayout, readOnlyData, packedWorldBytes);
         var programBytes = builder.Build();
         if (programBytes.Length <= RomOnlyPayloadLimit)
         {
@@ -54,17 +79,19 @@ internal static class GameBoyRomBuilder
             WriteHeaderSkeleton(rom, CartridgeTypeRomOnly, romSizeCode: 0x00);
             programBytes.CopyTo(rom, FixedBankProgramStart);
             WriteHeaderChecksums(rom);
-            return rom;
+            return new GameBoyRomBuildResult(
+                rom,
+                BuildRomOnlyReport(builder, program, programBytes.Length, packedWorldBytes));
         }
 
-        var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData);
-        builder = BuildProgram(program, bankedLayout, readOnlyData);
+        var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes);
+        builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes);
         programBytes = builder.Build();
         var programTailBanks = CalculateProgramTailBanks(programBytes.Length);
         if (programTailBanks > 1)
         {
-            bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, bankReadOnlyData: true);
-            builder = BuildProgram(program, bankedLayout, readOnlyData);
+            bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes, bankReadOnlyData: true);
+            builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes);
             programBytes = builder.Build();
             programTailBanks = CalculateProgramTailBanks(programBytes.Length);
         }
@@ -75,9 +102,10 @@ internal static class GameBoyRomBuilder
             bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(
                 program,
                 readOnlyData,
+                packedWorldBytes,
                 programTailBanks,
                 bankedLayout.UsesBankedReadOnlyData);
-            builder = BuildProgram(program, bankedLayout, readOnlyData);
+            builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes);
             programBytes = builder.Build();
             programTailBanks = CalculateProgramTailBanks(programBytes.Length);
             EnsureSupportedProgramTailBanks(programTailBanks, bankedLayout.UsesBankedReadOnlyData);
@@ -94,6 +122,15 @@ internal static class GameBoyRomBuilder
         var bankedRom = new byte[bankedLayout.RomSize];
         WriteHeaderSkeleton(bankedRom, CartridgeTypeMbc1, bankedLayout.RomSizeCode);
         CopyProgramToBankedRom(programBytes, bankedRom, programTailBanks);
+
+        if (bankedLayout.WorldPackPlacement is { } worldPackPlacement)
+        {
+            foreach (var segment in worldPackPlacement.Segments)
+            {
+                worldPackPlacement.SerializedBytes.AsSpan(segment.RelativeOffset, segment.Length).CopyTo(
+                    bankedRom.AsSpan(segment.Bank * BankSize + segment.Address - BankedWindowStart, segment.Length));
+            }
+        }
 
         foreach (var placement in bankedLayout.ReadOnlyDataPlacements.Values)
         {
@@ -113,7 +150,22 @@ internal static class GameBoyRomBuilder
         }
 
         WriteHeaderChecksums(bankedRom);
-        return bankedRom;
+        return new GameBoyRomBuildResult(
+            bankedRom,
+            BuildBankedReport(builder, program, bankedLayout, programBytes.Length, packedWorldBytes));
+    }
+
+    private static bool IsMissingLegacyWorldLabel(string message)
+    {
+        if (!message.StartsWith("Unknown Game Boy ROM label '", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return message.Contains("map_row_", StringComparison.Ordinal)
+               || message.Contains(MapDataLabel, StringComparison.Ordinal)
+               || message.Contains(MapFlagDataLabel, StringComparison.Ordinal)
+               || message.Contains("background_stream_row_", StringComparison.Ordinal);
     }
 
     private static void CopyBankedAudioData(byte[] bankedRom, GameBoyBankedAudioPlacement placement)
@@ -127,6 +179,163 @@ internal static class GameBoyRomBuilder
             sourceOffset += chunkLength;
             bank++;
         }
+    }
+
+    private static GameBoyRomBuildReport BuildRomOnlyReport(
+        GbBuilder builder,
+        GameBoyVideoProgram program,
+        int programLength,
+        byte[]? inlineWorldPack)
+    {
+        var segments = BuildInlineProgramSegments(builder, program, programLength, inlineWorldPack);
+        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments);
+    }
+
+    private static GameBoyRomBuildReport BuildBankedReport(
+        GbBuilder builder,
+        GameBoyVideoProgram program,
+        GameBoyRomLayout layout,
+        int programLength,
+        byte[]? packedWorldBytes)
+    {
+        var segments = BuildInlineProgramSegments(
+            builder,
+            program,
+            programLength,
+            layout.WorldPackPlacement is null ? packedWorldBytes : null).ToList();
+        if (layout.WorldPackPlacement is { } worldPackPlacement)
+        {
+            foreach (var segment in worldPackPlacement.Segments)
+            {
+                AddPhysicalSegments(
+                    segments,
+                    "worldpack:default",
+                    segment.Bank * BankSize + segment.Address - BankedWindowStart,
+                    segment.Length);
+            }
+        }
+        foreach (var placement in layout.ReadOnlyDataPlacements.Values.OrderBy(item => item.Bank).ThenBy(item => item.Address).ThenBy(item => item.Label, StringComparer.Ordinal))
+        {
+            AddPhysicalSegments(segments, $"read-only:{placement.Label}", placement.Bank * BankSize + placement.Address - BankedWindowStart, placement.Data.Length);
+        }
+
+        foreach (var placement in layout.MusicPlacements.Values.OrderBy(item => item.Bank).ThenBy(item => item.Name, StringComparer.Ordinal))
+        {
+            AddPhysicalSegments(segments, $"bgm:{placement.Name}", placement.Bank * BankSize, placement.Data.Length);
+        }
+
+        foreach (var placement in layout.SoundEffectPlacements.Values.OrderBy(item => item.Bank).ThenBy(item => item.Name, StringComparer.Ordinal))
+        {
+            AddPhysicalSegments(segments, $"sfx:{placement.Name}", placement.Bank * BankSize, placement.Data.Length);
+        }
+
+        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments);
+    }
+
+    private static IReadOnlyList<GameBoyRomBuildSegment> BuildInlineProgramSegments(
+        GbBuilder builder,
+        GameBoyVideoProgram program,
+        int programLength,
+        byte[]? inlineWorldPack)
+    {
+        var known = new List<(int Start, int Length, string Owner)>();
+        AddKnownInlineRange(known, builder, TileDataLabel, BuildTileData(program).Length, "read-only:tile-data");
+        AddKnownInlineRange(known, builder, TileMapLabel, program.TileMap.Length, "read-only:tilemap");
+        if (program.UsesWindowHud)
+        {
+            AddKnownInlineRange(known, builder, WindowTileMapLabel, program.WindowTileMap.Length, "read-only:window-tilemap");
+        }
+
+        if (inlineWorldPack is not null)
+        {
+            AddKnownInlineRange(known, builder, WorldPackLabel, inlineWorldPack.Length, "worldpack:default");
+        }
+        else if (program.MapColumnHeight != 0 && builder.TryLabelOffset(MapDataLabel, out var mapStart))
+        {
+            var nextAsset = program.MusicAssetsInLoadOrder
+                .Select(asset => builder.TryLabelOffset(MusicLabel(asset.Name), out var offset) ? offset : int.MaxValue)
+                .Concat(program.SoundEffectAssetsInLoadOrder.Select(asset => builder.TryLabelOffset(SoundEffectLabel(asset.Name), out var offset) ? offset : int.MaxValue))
+                .Append(programLength)
+                .Min();
+            known.Add((mapStart, nextAsset - mapStart, "legacy-world-data:default"));
+        }
+
+        foreach (var asset in program.MusicAssetsInLoadOrder)
+        {
+            AddKnownInlineRange(known, builder, MusicLabel(asset.Name), asset.Data.Length, $"bgm:{asset.Name}");
+        }
+
+        foreach (var asset in program.SoundEffectAssetsInLoadOrder)
+        {
+            AddKnownInlineRange(known, builder, SoundEffectLabel(asset.Name), asset.Data.Length, $"sfx:{asset.Name}");
+        }
+
+        var segments = new List<GameBoyRomBuildSegment>();
+        AddPhysicalSegments(segments, "fixed-bank/header", 0, FixedBankProgramStart);
+        var cursor = 0;
+        foreach (var range in known.OrderBy(item => item.Start).ThenBy(item => item.Owner, StringComparer.Ordinal))
+        {
+            if (range.Start > cursor)
+            {
+                AddPhysicalSegments(segments, "program", FixedBankProgramStart + cursor, range.Start - cursor);
+            }
+
+            AddPhysicalSegments(segments, range.Owner, FixedBankProgramStart + range.Start, range.Length);
+            cursor = checked(range.Start + range.Length);
+        }
+
+        if (cursor < programLength)
+        {
+            AddPhysicalSegments(segments, "program", FixedBankProgramStart + cursor, programLength - cursor);
+        }
+
+        return segments;
+    }
+
+    private static void AddKnownInlineRange(
+        List<(int Start, int Length, string Owner)> ranges,
+        GbBuilder builder,
+        string label,
+        int length,
+        string owner)
+    {
+        if (builder.TryLabelOffset(label, out var offset))
+        {
+            ranges.Add((offset, length, owner));
+        }
+    }
+
+    private static void AddPhysicalSegments(
+        ICollection<GameBoyRomBuildSegment> segments,
+        string owner,
+        int physicalStart,
+        int length)
+    {
+        var remaining = length;
+        var current = physicalStart;
+        while (remaining > 0)
+        {
+            var bank = current / BankSize;
+            var bankOffset = current % BankSize;
+            var partLength = Math.Min(remaining, BankSize - bankOffset);
+            var cpuAddress = checked((ushort)(bank == 0 ? bankOffset : BankedWindowStart + bankOffset));
+            segments.Add(new GameBoyRomBuildSegment(owner, current, partLength, bank, cpuAddress));
+            current += partLength;
+            remaining -= partLength;
+        }
+    }
+
+    private static GameBoyRomBuildReport CreateBuildReport(
+        string selectedProfile,
+        int romSize,
+        IEnumerable<GameBoyRomBuildSegment> segments)
+    {
+        var ordered = segments
+            .OrderBy(segment => segment.PhysicalStart)
+            .ThenBy(segment => segment.Owner, StringComparer.Ordinal)
+            .ToArray();
+        var occupiedBanks = ordered.Select(segment => segment.Bank).Distinct().Order().ToArray();
+        return new GameBoyRomBuildReport(selectedProfile, romSize, ordered, occupiedBanks);
     }
 
     private static int CalculateProgramTailBanks(int programLength)
@@ -184,7 +393,8 @@ internal static class GameBoyRomBuilder
     private static GbBuilder BuildProgram(
         GameBoyVideoProgram program,
         GameBoyRomLayout layout,
-        IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData)
+        IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData,
+        byte[]? packedWorldBytes)
     {
         var builder = new GbBuilder();
         foreach (var placement in layout.ReadOnlyDataPlacements.Values)
@@ -240,7 +450,7 @@ internal static class GameBoyRomBuilder
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
 
         var runtime = new GameBoyRuntimeCompiler(builder, program, layout);
-        var usesMbc1Foundation = layout.ProgramTailBankCount > 0 || layout.UsesBankedReadOnlyData || layout.UsesBankedMusic;
+        var usesMbc1Foundation = layout.ProgramTailBankCount > 0 || layout.UsesBankedReadOnlyData || layout.UsesBankedMusic || layout.UsesBankedWorldPack;
         runtime.EmitProgramBankInitialization(usesMbc1Foundation);
         var usesBankContinuationHelper = layout.ProgramTailBankCount > 0;
         if (usesMbc1Foundation || runtime.UsesReadOnlyDataHelpers || runtime.UsesAudioHelpers || runtime.UsesSubroutineTrampolines)
@@ -284,7 +494,15 @@ internal static class GameBoyRomBuilder
             }
         }
 
-        EmitMapData(builder, program);
+        if (packedWorldBytes is not null && layout.WorldPackPlacement is null)
+        {
+            builder.Label(WorldPackLabel);
+            builder.Emit(packedWorldBytes);
+        }
+        else
+        {
+            EmitMapData(builder, program);
+        }
         if (!layout.UsesBankedMusic)
         {
             EmitAudioData(builder, program);
@@ -356,7 +574,7 @@ internal static class GameBoyRomBuilder
         builder.Emit(0xC9);                         // RET
     }
 
-    private static IReadOnlyList<GameBoyReadOnlyDataBlob> BuildReadOnlyData(GameBoyVideoProgram program)
+    private static IReadOnlyList<GameBoyReadOnlyDataBlob> BuildReadOnlyData(GameBoyVideoProgram program, bool usesPackedWorld)
     {
         var data = new List<GameBoyReadOnlyDataBlob>
         {
@@ -369,7 +587,10 @@ internal static class GameBoyRomBuilder
             data.Add(new GameBoyReadOnlyDataBlob(WindowTileMapLabel, program.WindowTileMap));
         }
 
-        AddMapReadOnlyData(data, program);
+        if (!usesPackedWorld)
+        {
+            AddMapReadOnlyData(data, program);
+        }
         return data;
     }
 
@@ -765,6 +986,108 @@ internal static class GameBoyRomBuilder
     }
 }
 
+internal sealed record GameBoyRomBuildResult(byte[] Rom, GameBoyRomBuildReport Report);
+
+internal sealed record GameBoyRomBuildReport(
+    string SelectedProfile,
+    int RomSize,
+    IReadOnlyList<GameBoyRomBuildSegment> Segments,
+    IReadOnlyList<int> OccupiedBanks);
+
+internal sealed record GameBoyRomBuildSegment(
+    string Owner,
+    int PhysicalStart,
+    int Length,
+    int Bank,
+    ushort CpuAddress);
+
+internal readonly record struct GameBoyFarAddress(byte Bank, ushort Address);
+
+internal sealed record GameBoyWorldPackSegment(int RelativeOffset, byte Bank, ushort Address, int Length);
+
+internal sealed class GameBoyWorldPackPlacement
+{
+    private const int BankSize = 16 * 1024;
+    private const int WindowStart = 0x4000;
+    private const int WindowEnd = 0x8000;
+
+    private GameBoyWorldPackPlacement(
+        byte baseBank,
+        ushort baseAddress,
+        byte[] serializedBytes,
+        IReadOnlyList<GameBoyWorldPackSegment> segments)
+    {
+        BaseBank = baseBank;
+        BaseAddress = baseAddress;
+        SerializedBytes = serializedBytes;
+        Segments = segments;
+    }
+
+    public byte BaseBank { get; }
+
+    public ushort BaseAddress { get; }
+
+    public byte[] SerializedBytes { get; }
+
+    public IReadOnlyList<GameBoyWorldPackSegment> Segments { get; }
+
+    public static GameBoyWorldPackPlacement Create(byte baseBank, ushort baseAddress, byte[] serializedBytes)
+    {
+        ArgumentNullException.ThrowIfNull(serializedBytes);
+        if (baseBank is 0 or >= 32)
+        {
+            throw new InvalidOperationException($"Game Boy WorldPack base bank must be 1..31; received {baseBank}.");
+        }
+
+        if (baseAddress is < WindowStart or >= WindowEnd)
+        {
+            throw new InvalidOperationException($"Game Boy WorldPack base address must be $4000-$7FFF; received ${baseAddress:X4}.");
+        }
+
+        if (serializedBytes.Length == 0)
+        {
+            throw new InvalidOperationException("Game Boy WorldPack placement requires at least one serialized byte.");
+        }
+
+        var final = TranslateOffset(baseBank, baseAddress, serializedBytes.Length - 1);
+        if (final.Bank >= 32)
+        {
+            throw new InvalidOperationException(
+                $"Game Boy WorldPack placement ends in bank {final.Bank}, but the current MBC1 profile supports banks 1..31.");
+        }
+
+        var segments = new List<GameBoyWorldPackSegment>();
+        var relativeOffset = 0;
+        while (relativeOffset < serializedBytes.Length)
+        {
+            var location = TranslateOffset(baseBank, baseAddress, relativeOffset);
+            var length = Math.Min(serializedBytes.Length - relativeOffset, WindowEnd - location.Address);
+            segments.Add(new GameBoyWorldPackSegment(relativeOffset, location.Bank, location.Address, length));
+            relativeOffset += length;
+        }
+
+        return new GameBoyWorldPackPlacement(baseBank, baseAddress, serializedBytes, segments);
+    }
+
+    public GameBoyFarAddress TranslateOffset(int relativeOffset)
+    {
+        if (relativeOffset < 0 || relativeOffset >= SerializedBytes.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(relativeOffset));
+        }
+
+        return TranslateOffset(BaseBank, BaseAddress, relativeOffset);
+    }
+
+    private static GameBoyFarAddress TranslateOffset(byte baseBank, ushort baseAddress, int relativeOffset)
+    {
+        var linear = checked(baseAddress - WindowStart + relativeOffset);
+        return new GameBoyFarAddress(
+            checked((byte)(baseBank + linear / BankSize)),
+            checked((ushort)(WindowStart + linear % BankSize)));
+    }
+}
+
 internal sealed class GameBoyRomLayout
 {
     private const int BankSize = 16 * 1024;
@@ -778,6 +1101,7 @@ internal sealed class GameBoyRomLayout
         int programTailBankCount,
         int romSize,
         byte romSizeCode,
+        GameBoyWorldPackPlacement? worldPackPlacement,
         IReadOnlyDictionary<string, GameBoyReadOnlyDataPlacement> readOnlyDataPlacements,
         IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> musicPlacements,
         IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> soundEffectPlacements)
@@ -786,6 +1110,7 @@ internal sealed class GameBoyRomLayout
         ProgramTailBankCount = programTailBankCount;
         RomSize = romSize;
         RomSizeCode = romSizeCode;
+        WorldPackPlacement = worldPackPlacement;
         ReadOnlyDataPlacements = readOnlyDataPlacements;
         MusicPlacements = musicPlacements;
         SoundEffectPlacements = soundEffectPlacements;
@@ -796,6 +1121,7 @@ internal sealed class GameBoyRomLayout
         programTailBankCount: 0,
         romSize: 32 * 1024,
         romSizeCode: 0x00,
+        worldPackPlacement: null,
         readOnlyDataPlacements: new Dictionary<string, GameBoyReadOnlyDataPlacement>(),
         musicPlacements: new Dictionary<string, GameBoyBankedAudioPlacement>(),
         soundEffectPlacements: new Dictionary<string, GameBoyBankedAudioPlacement>());
@@ -807,6 +1133,10 @@ internal sealed class GameBoyRomLayout
     public int RomSize { get; }
 
     public byte RomSizeCode { get; }
+
+    public GameBoyWorldPackPlacement? WorldPackPlacement { get; }
+
+    public bool UsesBankedWorldPack => WorldPackPlacement is not null;
 
     public bool UsesBankedReadOnlyData => ReadOnlyDataPlacements.Count != 0;
 
@@ -838,6 +1168,7 @@ internal sealed class GameBoyRomLayout
     public static GameBoyRomLayout CreateBankedMusicLayout(
         GameBoyVideoProgram program,
         IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData,
+        byte[]? packedWorldBytes,
         int programTailBankCount = 0,
         bool bankReadOnlyData = false)
     {
@@ -846,6 +1177,17 @@ internal sealed class GameBoyRomLayout
         var soundEffectPlacements = new Dictionary<string, GameBoyBankedAudioPlacement>();
         var nextBank = 1 + programTailBankCount;
         var nextAddress = BankedWindowStart;
+        GameBoyWorldPackPlacement? worldPackPlacement = null;
+        if (packedWorldBytes is not null)
+        {
+            worldPackPlacement = GameBoyWorldPackPlacement.Create(
+                checked((byte)nextBank),
+                checked((ushort)nextAddress),
+                packedWorldBytes);
+            nextBank = worldPackPlacement.Segments[^1].Bank + 1;
+            nextAddress = BankedWindowStart;
+        }
+
         if (bankReadOnlyData)
         {
             foreach (var data in readOnlyData)
@@ -900,6 +1242,7 @@ internal sealed class GameBoyRomLayout
             programTailBankCount: programTailBankCount,
             romSize: bankCount * BankSize,
             romSizeCode: ToRomSizeCode(bankCount),
+            worldPackPlacement: worldPackPlacement,
             readOnlyDataPlacements: readOnlyPlacements,
             musicPlacements: placements,
             soundEffectPlacements: soundEffectPlacements);

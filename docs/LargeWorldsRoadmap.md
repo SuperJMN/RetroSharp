@@ -484,8 +484,9 @@ Recommended execution and merge order:
 
 #### LW-2.2: Place serialized WorldPacks in physical MBC1 banks
 
-- Status: **published as [#297](https://github.com/SuperJMN/RetroSharp/issues/297);
-  open and not started.**
+- Status: **implementation complete through
+  [#297](https://github.com/SuperJMN/RetroSharp/issues/297); issue closure is
+  tracked on GitHub.**
 - Layer: Game Boy target placement/linking.
 - Dependencies: [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296)
   (native blocked-by) and merged `LW-1.4`/`LW-1.5`.
@@ -508,6 +509,31 @@ Recommended execution and merge order:
   - Make final link output report the selected layout and every occupied bank;
     do not treat the map-only CLI report or the 128 KiB capacity probe as bytes
     used or a banking decision.
+- Implemented placement:
+  - `World.Load(...)` retains the exact serialized GB pack beside its historical
+    lowered map. A pack-only final link first tries the bytes inline in the
+    ordinary 32 KiB image, so a fitting world stays ROM-only. Only an actual
+    linked overflow retries as MBC1.
+  - MBC1 packs are placed after executable program-tail banks in explicit
+    continuation segments. A relative offset is translated as
+    `linear = (baseAddress - $4000) + offset`, then
+    `bank = baseBank + linear / $4000` and
+    `address = $4000 + linear % $4000`; serialized bytes and v1 relative
+    offsets are unchanged.
+  - The target-private final build result records the selected profile, padded
+    ROM size, stable physical ranges and owners, CPU-window addresses, and
+    occupied banks. Pack, generated art/tilemap data, code, BGM, and SFX ranges
+    are copied and tested through that report rather than byte-searching.
+  - Packed links emit no legacy expanded map rows, flags, background stream
+    rows, or row-pointer tables. Until `LW-2.3` supplies the production reader,
+    a link whose existing camera/collision lowering still references one of
+    those legacy labels retries the unchanged raw compatibility layout; it does
+    not emit both representations.
+  - Full normalized `stage1` remains exactly 2,550 bytes with 60 chunks, 770
+    stored visual bytes, 312 stored collision bytes, and a 49-byte largest
+    combined stored chunk. A valid synthetic pack proves final-ROM continuation
+    across 16 KiB windows, and data-only MBC1 builds initialize the existing
+    fixed-bank foundation.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyTiledMapImporter.cs`,
   `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, target program/layout records,
   `src/RetroSharp.GameBoy.Tests/FullStage1BaselineTests.cs`, and

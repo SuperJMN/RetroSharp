@@ -4,11 +4,49 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
+using RetroSharp.Sdk;
 using Xunit;
 using Xunit.Abstractions;
 
 public sealed class FullStage1BaselineTests(ITestOutputHelper output)
 {
+    [Fact]
+    public void Full_stage1_canonical_pack_is_embedded_once_with_exact_offsets()
+    {
+        using var workspace = CreateNormalizedFullStage1();
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var canonical = GameBoyTiledMapImporter.CompileWorldPack(
+            mapPath,
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var source = $$"""
+            void Main() {
+                World.Load("{{mapPath.Replace('\\', '/')}}");
+            }
+            """;
+
+        var first = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var second = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var segment = Assert.Single(first.Report.Segments, item => item.Owner == "worldpack:default");
+
+        Assert.Equal(2_550, canonical.SerializedBytes.Length);
+        Assert.Equal(60, canonical.Pack.Chunks.Count);
+        Assert.Equal(48u, canonical.Pack.Descriptor.CollisionProfilesOffset);
+        Assert.Equal(56u, canonical.Pack.Descriptor.TargetExpansionsOffset);
+        Assert.Equal(268u, canonical.Pack.Descriptor.DirectoryOffset);
+        Assert.Equal(1_468u, canonical.Pack.Descriptor.ChunkDataOffset);
+        Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
+        Assert.Equal(312, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(49, canonical.Pack.Chunks.Max(chunk => chunk.Directory.VisualStoredBytes + chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(canonical.SerializedBytes, first.Rom.AsSpan(segment.PhysicalStart, segment.Length).ToArray());
+        Assert.DoesNotContain(first.Report.Segments, item => item.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
+        Assert.Equal(first.Rom, second.Rom);
+        Assert.Equal(first.Report.Segments, second.Report.Segments);
+    }
+
     [Fact]
     public void External_tsj_background_world_map_round_trips_through_game_boy_world_pack()
     {

@@ -18,10 +18,28 @@ public static class GameBoyRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
+        return CompileSourceWithReport(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry).Rom;
+    }
+
+    internal static GameBoyRomBuildResult CompileSourceWithReport(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null,
+        byte[]? packedWorldOverride = null)
+    {
         var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry);
         ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
-        return GameBoyRomBuilder.Build(videoProgram);
+        return GameBoyRomBuilder.BuildWithReport(videoProgram, packedWorldOverride);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
@@ -250,6 +268,8 @@ internal sealed class GameBoyVideoProgram
     public WorldMap2D? WorldMap { get; private set; }
 
     public WorldTileGrid? WorldTileGrid { get; private set; }
+
+    public GameBoyTiledWorldPack? PackedWorld { get; private set; }
 
     public IReadOnlyList<GameBoyCompiledSpriteAsset> SpriteAssetsInLoadOrder => spriteAssetsInLoadOrder;
 
@@ -1046,8 +1066,12 @@ internal sealed class GameBoyVideoProgram
     {
         RequireArity(call, 1);
         var relativePath = StringArg(call, 0);
-        var map = GameBoyTiledMapImporter.Load(ResolveAssetPath(relativePath), FirstGeneratedBackgroundTile + GeneratedBackgroundTileCount);
-        AppendGeneratedBackgroundTileData(map.GeneratedTileData);
+        var packed = GameBoyTiledMapImporter.CompileWorldPack(
+            ResolveAssetPath(relativePath),
+            FirstGeneratedBackgroundTile + GeneratedBackgroundTileCount);
+        PackedWorld = packed;
+        var map = packed.LoweredMap;
+        AppendGeneratedBackgroundTileData(packed.GeneratedTileData);
 
         ApplyBackgroundTiles(map);
         PopulateBackgroundStreamRows(map);
