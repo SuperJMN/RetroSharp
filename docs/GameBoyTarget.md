@@ -303,13 +303,30 @@ collision-result ABI, runner migration, and safe-narrowing diagnostic.
 
 `World.Load(path)` imports a finite orthogonal Tiled JSON map (`.tmj`) at compile time and builds the same `WorldMap2D`, source-map ROM rows, collision flags, generated Game Boy background tiles, and initial Game Boy background tilemap. The importer accepts unencoded JSON array tile-layer data, a required `world` tile layer, an optional `background` tile layer, and external `.tsj` or `.tsx` tilesets with PNG images. Tileset image paths can use the same target-variant convention as sprite PNGs: if a `.tsx` points at `tiles.png`, the Game Boy lowering first looks for `tiles.gb.png`, `tiles.GB.png`, `tiles.gameboy.png`, or `tiles.GameBoy.png` next to it, then falls back to `tiles.png`. Because the Game Boy target has one scrolling background tilemap, these Tiled authoring layers are flattened: `background` is the visual base, non-empty `world` cells overlay it, and empty `world` cells keep the background tile underneath at the same Tiled source coordinate. If `retrosharpWorldY` and `retrosharpStreamY` shift the playable world slice vertically, the background layer is shifted by the same amount before composition so the Tiled layers remain visually aligned. A loaded Tiled world can be taller than the 32-row Game Boy background buffer: startup preloads only the rows that fit the circular tilemap, while the full imported world height remains in ROM row tables for `Camera.SetPosition(0, y)` vertical streaming. The background rows that sit above the streamed world band are also emitted as full-width source-map rows and streamed horizontally by the camera, so background decorations above the playable band scroll with the world across the whole map instead of staying frozen in the initial 32-column window. Collision flags remain independent from that visual composition. Tiled tile sizes must be positive multiples of 8. Source cells are expanded into Game Boy hardware cells instead of being downscaled: for example, a 16x16 Tiled tile becomes a 2x2 block of generated 8x8 Game Boy tiles. Each generated 8x8 tile is quantized to the four DMG color indexes, and repeated generated patterns are deduplicated. GID `0` remains empty. If there is no explicit `collision` tile layer, tile `objectgroup` rectangles in the tileset become `Solid` flags repeated across every generated sub-tile; optional `retrosharpCollision` or `retrosharpFlags` tile/object properties can name or number `Solid`, `Hazard`, and `Platform` flags. A `collision` layer is still accepted for compact direct flag values: `0` empty, `1` solid, `2` hazard, and `4` platform. The map must include integer custom property `retrosharpStreamY`, expressed in generated Game Boy 8x8 tile rows; optional `retrosharpWorldY` and `retrosharpWorldHeight` properties select source Tiled rows used by the streaming world before expansion.
 
-LW-1.4 also exposes an internal inspection build that serializes the same Tiled
-result as `WorldPack` v1. It preserves the historical complete-background then
-world traversal for Game Boy pattern deduplication, while target expansion
-records follow the shared lexicographic visual IDs. Full normalized `stage1`
-uses 2,550 bytes and retains all 82 generated patterns. This payload is not yet
-read by the production Game Boy runtime; `World.Load(...)`, the runner input,
-and tracked ROMs remain on the existing path.
+LW-1.4 also exposes an internal build that serializes the same Tiled result as
+`WorldPack` v1. It preserves the historical complete-background then world
+traversal for Game Boy pattern deduplication, while target expansion records
+follow the shared lexicographic visual IDs. LW-2.2 now carries those exact
+serialized bytes into pack-only final links. A fitting link keeps the pack
+inline in the ordinary 32 KiB ROM-only image; a real linked overflow places it
+after executable program-tail banks in continuation-safe MBC1 `$4000-$7FFF`
+segments. Only the target-private placement translates a pack-relative offset
+to bank/window coordinates; v1 bytes and relative offsets are unchanged.
+
+The packed layout omits the legacy expanded rows, collision flags, background
+stream rows, and row-pointer tables rather than storing both forms. The final
+build result, also target-private, reports the selected profile, ROM size,
+ordered physical owner ranges, CPU-window addresses, and occupied banks. It is
+the final-link source of truth; the map-only CLI report still selects nothing.
+Full normalized `stage1` remains exactly 2,550 bytes (60 chunks, 770 stored
+visual bytes, 312 stored collision bytes, largest combined stored chunk 49)
+and retains all 82 generated patterns.
+
+LW-2.2 does not add the LW-2.3 reader. If current camera/collision lowering
+still references a suppressed legacy map label, the linker retries the
+unchanged raw compatibility layout so existing runner and streaming behavior
+stays intact; that final image contains the raw form instead of a duplicate
+pack. The shared runner input and tracked ROMs remain unchanged.
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form
 `--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to
