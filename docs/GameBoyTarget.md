@@ -228,7 +228,7 @@ Banked cartridges keep two deliberately different target-private bank values. `$
 
 The private byte-reader ABI accepts `A=bank` and `HL=$4000-$7FFF`. Banks `1..31` return the byte in `A`, status `0` in `B`, and clear Z/C. Bank `0` is a miss (`A=0`, `B=1`, Z set, C clear); a bank above `31` or an address outside the switchable window is an error (`A=0`, `B=2`, Z/C set). Success, miss, and error all restore the actual hardware bank and `$C1FA`; `$C11C` is unchanged. The helper itself and every bank write it causes execute from fixed bank 0. This is only the reader/bank-state foundation: no `WorldPack` is placed or decoded yet, and the profile remains the current low-five-bit MBC1 mode with at most 32 physical banks.
 
-The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C19C` (including packed camera slot tags, visible-camera state, counters, and visual-cache metadata), fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
+The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C19D` (including packed camera slot tags, visible-camera state, counters, visual-cache metadata, and the packed-audio tick counter), fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
 
 ### WorldPack fixed-bank reader
 
@@ -285,6 +285,32 @@ zero forbidden-work counts. A fixed-bank wait routine treats only LY 0-135 as
 safe, reserving an eight-scanline guard band before VBlank around every
 sensitive read/write. Cooperative preparation waits service packed audio once
 per real frame, so deferrals and bank-spanning decodes do not slow BGM.
+`$C19D` is a wrapping target-private packed-audio tick counter; it is cleared
+when the packed runtime starts and increments after every real BGM/SFX update.
+Together with the lifecycle and forbidden-work counters at `$C152-$C159` and
+`$C19C`, it lets tests and external debuggers prove frame cadence without
+inferring it from tracker cursors.
+
+LW-2.5 proves this path against the complete 156x20 authored `stage1` through
+a non-destructive test fixture. The fixture copies and normalizes the map,
+tileset, and PNG only in a temporary directory, redirects the composed runner
+source and its 312x40 constants in memory, and leaves the shared runner
+manifest, `World.Load(...)` input, sources, and tracked ROMs unchanged. The
+real runner final link selects the 128 KiB MBC1 profile and contains the exact
+2,550-byte pack, 11,614-byte BGM, 28-byte SFX, and 2,368 resident art bytes with
+no duplicate legacy world rows. A smaller full-stage traversal probe remains
+ROM-only, demonstrating that final-link output, not
+`--world-budget-report`, owns profile selection.
+
+The focused acceptance reconstructs all 60 runtime visual/collision chunks,
+checks the Y=304 / `FFFF` collision ABI, traverses the whole horizontal range
+in both directions plus the vertical range, and observes the 16-bit column-256
+tag, 19/21 write bounds, matching lifecycle counts, safe wrong-tag reversal,
+LY 136-153 guard band, bank restoration, and exactly one packed-audio tick per
+real frame. Set `RETROSHARP_FULL_STAGE1_TRAVERSAL_ROM` or
+`RETROSHARP_FULL_STAGE1_RUNNER_ROM` while running the focused acceptance class
+to emit the corresponding temporary ROM-only or MBC1 fixture for SameBoy or
+GameboyMcp; normal test runs write no artifact.
 
 ### Multiple music themes
 
@@ -380,8 +406,9 @@ and retains all 82 generated patterns.
 
 LW-2.3 routes packed collision queries through the fixed-bank reader, so a
 packed final link no longer needs duplicate legacy collision rows. LW-2.4 adds
-the packed staged camera path described above. The shared runner input and
-tracked ROMs remain unchanged until LW-2.5 proves the full Game Boy payload.
+the packed staged camera path described above. LW-2.5 proves the full Game Boy
+payload non-destructively; the shared runner input and tracked ROMs remain
+unchanged until the joint LW-3.5 migration.
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form
 `--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to

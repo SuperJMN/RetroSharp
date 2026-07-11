@@ -113,7 +113,7 @@ public sealed class GameBoyBankingRoadmapTests
 
         Assert.Equal((ushort)0xC000, GameBoyWramLayout.UserLocals.Start);
         Assert.Equal((ushort)0xC0DF, GameBoyWramLayout.UserLocals.EndInclusive);
-        Assert.Equal((ushort)0xC19C, GameBoyWramLayout.RuntimeState.EndInclusive);
+        Assert.Equal((ushort)0xC19D, GameBoyWramLayout.RuntimeState.EndInclusive);
         Assert.Equal((ushort)0xC210, GameBoyWramLayout.AudioChannel1Shadow.Start);
         Assert.Equal((ushort)0xC214, GameBoyWramLayout.AudioChannel1Shadow.EndInclusive);
         Assert.Equal(GameBoyWramLayout.CurrentWorldPackStagingBytes, current.Length);

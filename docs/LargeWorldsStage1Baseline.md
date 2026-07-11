@@ -131,3 +131,20 @@ selection, or runner-input switch. Collision-result widening later landed in
 LW-1.2, and deterministic inspection packs plus raw/RLE serialization landed in
 LW-1.4. Production staging/runtime readers, mapper selection, and the
 runner-input switch remain separate dependent work.
+
+## LW-2.5 Game Boy follow-up
+
+The Game Boy blockers frozen above are now closed by LW-2.1 through LW-2.5.
+The production packed reader/stager uses the accepted 298-byte current layout,
+keeps bank/directory/decode work outside VBlank, and commits at most one
+19-column or 21-row edge. A non-destructive full-stage fixture now proves the
+complete map and resources on the real final linker: the runner-shaped build
+selects 131,072-byte MBC1, while a smaller full-stage traversal build remains
+32 KiB ROM-only. Both use the exact 2,550-byte pack; neither uses the map-only
+budget report as a profile decision.
+
+The acceptance reconstructs all 60 chunks, checks full visual/collision
+parity and the Y=304 / `FFFF` ABI, crosses column 256 in both directions,
+traverses both axes, and records lifecycle, write-bound, guard-band, bank, and
+audio-tick evidence. It does not change the shared runner input or either
+tracked runner ROM; their joint migration remains LW-3.5.

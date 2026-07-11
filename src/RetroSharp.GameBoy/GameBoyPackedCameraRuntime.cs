@@ -66,6 +66,7 @@ internal static class GameBoyPackedCameraRuntime
     internal const ushort LastObservedLy = 0xC19A;
     internal const ushort LastObservedLyValid = 0xC19B;
     internal const ushort DirectoryWorkInVBlank = 0xC19C;
+    internal const ushort AudioTickCount = 0xC19D;
     internal const int SlotMetadataBytes = 10;
 
     internal const int StateOffset = 0;
