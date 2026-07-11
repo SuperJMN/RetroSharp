@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
+using RetroSharp.Sdk;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -82,6 +83,79 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Full_stage1_canonical_pack_is_embedded_exactly_in_the_auto_selected_final_link()
+    {
+        using var workspace = CreateNormalizedFullStage1();
+        var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
+        var portablePath = mapPath.Replace('\\', '/');
+        var source = $$"""
+                       void Main() {
+                           Sprite.Asset(mario_player, "assets/mario-player.png", 18, 32);
+                           World.Load("{{portablePath}}");
+                           Music.Asset(runner_theme, "assets/music/runner.vgz");
+                           Sfx.Asset(jump_sfx, "assets/sfx/smb-jump.vgm");
+                           Audio.Init();
+                           Music.Play(runner_theme);
+                           Sfx.Play(jump_sfx);
+                           Audio.Update();
+                       }
+                       """;
+        var canonical = NesTiledWorldImporter.CompileWorldPack(mapPath, NesVideoProgram.FirstSpriteTile + 95);
+
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            source,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var rebuilt = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            source,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var segment = Assert.Single(result.Report.Segments, item => item.Owner == "worldpack:default");
+
+        Assert.Equal(2_762, canonical.SerializedBytes.Length);
+        Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
+        Assert.Equal(0, segment.PhysicalBank);
+        Assert.Equal(0, segment.RelativeOffset);
+        Assert.Equal(0x8000, segment.CpuAddress);
+        Assert.Equal(
+            canonical.SerializedBytes,
+            result.Rom.AsSpan(16 + segment.PhysicalStart, segment.Length).ToArray());
+        Assert.Equal(result.Rom, rebuilt.Rom);
+        Assert.Equal(result.Report.Segments, rebuilt.Report.Segments);
+        var collisionPointers = Assert.Single(
+            result.Report.Segments,
+            item => item.Owner == "pinned:world-flag-pointers");
+        var attributes = result.Report.Segments
+            .Where(item => item.Owner.StartsWith("pinned:world-column-attributes:", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(80, collisionPointers.Length);
+        Assert.Equal(780, attributes.Sum(item => item.Length));
+        var pinned = result.Report.Segments.Where(item => item.Window == "R7 pinned $A000-$BFFF").ToArray();
+        Assert.Equal(5_012, pinned.Sum(item => item.Length));
+        Assert.All(
+            attributes.Prepend(collisionPointers),
+            item =>
+            {
+                Assert.Equal("R7 pinned $A000-$BFFF", item.Window);
+                Assert.Equal(1, item.PhysicalBank);
+            });
+        Assert.Equal(5_012, result.Report.PinnedR7Bytes);
+        Assert.Equal(4_128, result.Report.BootR7Bytes);
+        Assert.Equal(3_056, result.Report.ResidentChrBytes);
+        Assert.Equal(2_151, result.Report.FixedPayloadBytes);
+        Assert.Equal(64 * 1_024, result.Report.PrgRomSize);
+        Assert.Equal(16 * 1_024, result.Report.ChrRomSize);
+        Assert.Equal(16 + 64 * 1_024 + 16 * 1_024, result.Rom.Length);
+        Assert.True(result.Report.FixedPayloadBytes <= 16 * 1_024);
+        Assert.True(result.Report.PinnedR7Bytes <= 8 * 1_024);
+        Assert.True(result.Report.BootR7Bytes <= 8 * 1_024);
+        Assert.True(result.Report.ResidentChrBytes <= 8 * 1_024);
+        output.WriteLine(
+            $"NES full stage1 final link: fixed={result.Report.FixedPayloadBytes}, pinned={result.Report.PinnedR7Bytes}, boot={result.Report.BootR7Bytes}, pack={canonical.SerializedBytes.Length}, residentChr={result.Report.ResidentChrBytes}");
+        AssertReportDocuments("NES final section", "2,151", "5,012", "4,128", "0, 3, 4, 5");
+    }
+
+    [Fact]
     public void Full_stage1_nes_baseline_is_frozen()
     {
         using var workspace = CreateNormalizedFullStage1();
@@ -118,18 +192,23 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var fullSource = FullStage1RunnerSource(mapPath);
         var fullPayloadFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(fullSource, RunnerSample.Directory));
+        output.WriteLine($"fullPayloadFailure={fullPayloadFailure.Message}");
         Assert.Equal(
-            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $134C4.",
+            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $15155, beyond reset trailer start $FF80.",
             fullPayloadFailure.Message);
 
         var noAudioFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(WithoutAudio(fullSource), RunnerSample.Directory));
-        Assert.Equal("NES PRG ROM overflow: 41851 bytes emitted, 32762 bytes available.", noAudioFailure.Message);
+        output.WriteLine($"noAudioFailure={noAudioFailure.Message}");
+        Assert.Equal(
+            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $15024, beyond reset trailer start $FF80.",
+            noAudioFailure.Message);
 
         var runtimeProbeFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(FullStage1CameraRuntimeSource(mapPath), RunnerSample.Directory));
+        output.WriteLine($"runtimeProbeFailure={runtimeProbeFailure.Message}");
         Assert.Equal(
-            "NES DPCM sample block from $E980 with 1153 bytes cannot fit in PRG ROM after music data ending at $10A06.",
+            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $12F3E, beyond reset trailer start $FF80.",
             runtimeProbeFailure.Message);
 
         Assert.Equal(32, NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame);

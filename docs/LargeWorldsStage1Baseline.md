@@ -129,8 +129,9 @@ LW-0.1 deliberately added no tracked normalized full map, full-stage1 ROM,
 packed world, staging buffer, collision-result widening, compression, mapper
 selection, or runner-input switch. Collision-result widening later landed in
 LW-1.2, and deterministic inspection packs plus raw/RLE serialization landed in
-LW-1.4. Production staging/runtime readers, mapper selection, and the
-runner-input switch remain separate dependent work.
+LW-1.4. Game Boy production acceptance and NES physical placement/selection
+have since landed; the NES fixed-bank reader/stager and joint runner-input
+switch remain separate dependent work.
 
 ## LW-2.5 Game Boy follow-up
 
@@ -148,3 +149,27 @@ parity and the Y=304 / `FFFF` ABI, crosses column 256 in both directions,
 traverses both axes, and records lifecycle, write-bound, guard-band, bank, and
 audio-tick evidence. It does not change the shared runner input or either
 tracked runner ROM; their joint migration remains LW-3.5.
+
+## LW-3.2 NES placement follow-up
+
+LW-3.2 preserves the raw mapper-0 measurements above as historical baseline
+facts, but the production selector now attempts that exact mapper-0 image first
+and retries MMC3 only after a real PRG/DPCM layout failure. The normalized
+full-`stage1` placement probe includes the 95-tile runner sprite, 90 generated
+background tiles, BGM, SFX, and both DPCM blocks. Its final linker report is:
+
+| NES final section | Used | Capacity |
+| --- | ---: | ---: |
+| Canonical `WorldPack` in R6 bank 0 | 2,762 | 8,192 |
+| Pinned R7 runtime/BGM/SFX in bank 1 | 5,012 | 8,192 |
+| Boot-only palette/nametables in R7 bank 2 | 4,128 | 8,192 |
+| Fixed code/audio runtime/aligned DPCM/vectors in banks 6-7 | 2,151 | 16,384 |
+| Resident static CHR | 3,056 | 8,192 |
+| Physical cartridge | 65,536 PRG + 16,384 CHR | 65,536 PRG + 16,384 CHR |
+
+The separate canonical synthetic acceptance is larger than one 8 KiB window
+and reconstructs byte-for-byte through ordered physical R6 banks `0, 3, 4, 5`.
+Pack-relative offsets and serialized section order are unchanged. The existing
+runner-shaped raw runtime still fails the fixed-region diagnostic because it
+retains legacy rows; replacing those accesses belongs to LW-3.3. LW-3.2 does
+not migrate the runner or regenerate either tracked ROM.

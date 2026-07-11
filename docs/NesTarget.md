@@ -118,15 +118,17 @@ The preferred `Sprite.Draw(...)` spelling is declared by the `RetroSharp.Portabl
 
 `World.Column(...)`, `World.Flags(...)`, and `World.Map(width, streamY, height)` build the active `WorldMap2D` from unified world resources. Logical widths up to 4,096 hardware cells are accepted when the monolithic mapper-0 cartridge still fits. Horizontal-only maps seed the initial two-nametable 64-column buffer, and runtime camera movement streams the next logical source column into the off-screen nametable. When a vertical camera axis is used, `World.Map(...)` seeds the initial four-screen 64x60 surface, keeps all declared rows in ROM row tables, and streams visible rows/columns while preserving the complete source-column word. Target nametable columns remain modulo 64. A `Camera.Init(...)` stream height taller than the four-screen buffer is accepted for tall worlds: the initial buffer clips to the 60-row VRAM surface while the full source height remains available for vertical streaming.
 
-`World.Load(path)` imports a Tiled map through the same target-neutral `RetroSharp.Core.Sdk.Tiled.LogicalTiledMap` the Game Boy target consumes. NES owns its lowering: it resolves target PNG variants for tileset images (`tiles.png` first looks for `tiles.nes.png`/`tiles.NES.png`, then falls back), decodes the selected tileset image, derives a universal background color plus up to four background palette slots from the placed source-tile colors, maps each generated tile to NES palette indexes, encodes them into NES 2bpp planar CHR tiles, writes initial attribute bytes for the loaded nametables, deduplicates tiles, and writes the initial nametable buffer plus a `WorldMap2D`. A vertical camera over a Tiled map taller than the visible 30-row nametable uses the same four-screen path as source-authored `World.Map(...)`: startup uploads the initial 64x60 tile buffer, wrapping narrower Tiled worlds across the remaining columns, and maps taller than that keep all imported rows in ROM for runtime row streaming. Attribute quadrants still follow the NES 16x16 color granularity; when palette slots tie, cells sourced from Tiled `world` beat cells coming from the `background` layer, and vertical ties between `world` cells keep the upper row so foreground objects do not inherit the ground palette below them. Generated background tiles share the pattern table with sprites through the same CHR tile allocator. Wide source columns use word row/column addressing and word attribute-block indexes; dynamically streamed vertical rows still refresh their attribute bytes as palette slot 0 instead of re-deriving Tiled palette provenance at runtime. Mapper-backed storage remains deferred, so a logically valid wide map can still fail the mapper-0 PRG-capacity check. The same `World.Load("level.tmj")` source therefore lowers on both Game Boy and NES when it stays inside those limits.
+`World.Load(path)` imports a Tiled map through the same target-neutral `RetroSharp.Core.Sdk.Tiled.LogicalTiledMap` the Game Boy target consumes. NES owns its lowering: it resolves target PNG variants for tileset images (`tiles.png` first looks for `tiles.nes.png`/`tiles.NES.png`, then falls back), decodes the selected tileset image, derives a universal background color plus up to four background palette slots from the placed source-tile colors, maps each generated tile to NES palette indexes, encodes them into NES 2bpp planar CHR tiles, writes initial attribute bytes for the loaded nametables, deduplicates tiles, and writes the initial nametable buffer plus a `WorldMap2D`. A vertical camera over a Tiled map taller than the visible 30-row nametable uses the same four-screen path as source-authored `World.Map(...)`: startup uploads the initial 64x60 tile buffer, wrapping narrower Tiled worlds across the remaining columns, and maps taller than that keep all imported rows in ROM for runtime row streaming. Attribute quadrants still follow the NES 16x16 color granularity; when palette slots tie, cells sourced from Tiled `world` beat cells coming from the `background` layer, and vertical ties between `world` cells keep the upper row so foreground objects do not inherit the ground palette below them. Generated background tiles share the pattern table with sprites through the same CHR tile allocator. Wide source columns use word row/column addressing and word attribute-block indexes; dynamically streamed vertical rows still refresh their attribute bytes as palette slot 0 instead of re-deriving Tiled palette provenance at runtime. Mapper-backed physical storage and automatic final-link selection now exist, but the fixed-bank pack reader remains deferred to `LW-3.3`; a runner-shaped map that still requires legacy rows therefore reports the exact fixed-region constraint instead of pretending mapper selection solved it.
 
 LW-1.4 also exposes an internal inspection build that serializes the same Tiled
 result as `WorldPack` v1. It retains the weighted palette plan and historical
 first-encounter CHR deduplication, then writes two-byte target expansion cells:
 tile ID followed by palette slot plus the world-layer provenance bit. Full
 normalized `stage1` uses 2,762 bytes and retains all 90 generated CHR patterns.
-This payload is not yet read by the mapper-0 runtime; `World.Load(...)`, the
-runner input, and tracked ROMs remain on the existing path.
+This payload is not read by the mapper-0 runtime. Small mapper-0 images,
+`World.Load(...)` runtime behavior, the runner input, and tracked ROMs remain
+byte-identical on the existing path; a banked final link can now place the
+canonical bytes for the later fixed-bank reader.
 
 LW-1.5 exposes that exact inspection payload through the opt-in CLI form
 `--target nes --world-budget-report <map.tmj>`. The deterministic JSON sums the
@@ -172,12 +174,17 @@ boot data, fixed execution/DPCM, and vectors in explicit banks. `LW-3.1` now
 implements the internal forced MMC3/TVROM linker and fixed-runtime acceptance
 profile: code, helpers, DPCM, handlers, and vectors live at `$C000-$FFFF`, reset
 initializes PRG mode 0, R6/R7 shadows, linear resident CHR, and disabled IRQs,
-and AprNes proves the combined mapper-4/four-screen behavior. Mapper 0 remains
-the byte-identical public default; automatic profile selection, production
-`WorldPack` placement/reading, runtime CHR banking, and the IRQ HUD remain out
-of scope for this foundation. The 8 KiB R6 window is not a whole-pack limit:
-later placement/reader tasks use target-private ordered continuation segments
-while preserving v1 relative offsets. Large Worlds v1 banks data only; callable
+and AprNes proves the combined mapper-4/four-screen behavior. `LW-3.2` adds the
+production mapper-0-first selector and target-private physical data linker:
+ordered R6 world banks are `0, 3, 4, 5`, pinned R7 is bank `1`, boot-only R7 is
+bank `2`, and fixed execution is banks `6, 7`. The normalized full-`stage1`
+placement probe measures 2,762 pack, 5,012 pinned, 4,128 boot, 2,151 fixed
+payload, and 3,056 resident CHR bytes. The 8 KiB R6 window is not a whole-pack
+limit: continuation segments preserve canonical bytes and all v1 relative
+offsets across non-contiguous physical banks. Mapper 0 remains byte-identical
+when its exact historical final link fits; the internal MMC3 profile is chosen
+only after a real mapper-0 PRG/DPCM layout failure. `LW-3.3` reading, runtime
+CHR banking, and the IRQ HUD remain out of scope. Large Worlds v1 banks data only; callable
 code, handlers, DPCM, helpers, and vectors remain in the fixed 16 KiB region,
 and automatic executable-code banking is not implemented by this epic.
 

@@ -1,7 +1,7 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
 Status: **active; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, and NES
-`LW-3.1` are implemented; `LW-3.2` is the next NES task.**
+`LW-3.1` through `LW-3.2` are implemented; `LW-3.3` remains not started.**
 Last updated: 2026-07-12.
 
 This roadmap is the executable plan for levels that exceed the legacy
@@ -49,11 +49,12 @@ Current blockers are independent and must not be conflated:
   32x32 Game Boy background buffer or NES nametable surface.
 - LW-1.1 widens shared camera operands and both targets' logical map-column,
   camera, edge-tag, and row/column streaming state; hardware scroll writes stay
-  bytes. Packed/banked world reads are still absent.
+  bytes. Game Boy packed/banked reads are implemented; NES reads remain
+  deferred to `LW-3.3`.
 - NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR by default. `LW-3.1`
-  adds an internal forced MMC3/TVROM linker/runtime foundation for acceptance,
-  but automatic profile selection and mapper-backed level data remain later
-  tasks.
+  adds the forced MMC3/TVROM foundation and `LW-3.2` adds mapper-0-first
+  selection plus mapper-backed level-data placement. NES production pack reads
+  remain deferred to `LW-3.3`.
 - `Camera.AabbHitTop(...)` now exposes a complete world-pixel word with `-1`
   as no hit; screen-relative hit-top retains its byte-range `255` sentinel.
 - Tiled 16x16 cells are expanded into repeated 8x8 visual and flag cells. The
@@ -782,8 +783,9 @@ Recommended execution and merge order:
 
 #### LW-3.2: Place WorldPack/data sections and select the final NES profile
 
-- Status: **published as [#302](https://github.com/SuperJMN/RetroSharp/issues/302);
-  open and not started.**
+- Status: **implementation complete; canonical/multi-R6 placement, section
+  ownership, diagnostics, and final-link selection are implemented and
+  validated.**
 - Layer: NES physical placement, final linking, and profile diagnostics.
 - Dependencies: [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301)
   (native blocked-by) and merged `LW-1.4`/`LW-1.5`.
@@ -819,6 +821,20 @@ Recommended execution and merge order:
     section layout land.
   - Relocate 64-byte-aligned DPCM from final fixed addresses, keep it below
     `$FFFA`, and emit per-section/window/profile diagnostics.
+- Implemented evidence:
+  - The linker attempts the byte-identical historical mapper-0 image first.
+    A `World.Load(...)` that still fits therefore has no inserted pack bytes;
+    only a real PRG/DPCM layout failure retries the internal MMC3 profile.
+  - MMC3 physical ownership is R6 world banks `0, 3, 4, 5`, pinned R7 bank
+    `1`, boot-only R7 bank `2`, and fixed banks `6, 7`. Pack offsets translate
+    over the ordered R6 list, so the 8 KiB window is not a pack-length cap.
+  - The complete normalized `stage1` placement probe embeds the exact 2,762
+    bytes and remeasures 5,012 pinned-R7 bytes, 4,128 boot-R7 bytes, 2,151
+    fixed payload bytes including aligned DPCM/vectors, and 3,056 resident CHR
+    bytes. Physical PRG is 65,536 bytes and physical CHR is 16,384 bytes.
+  - The existing full runner-shaped raw runtime still reports the fixed-region
+    overflow that requires `LW-3.3`; no NES pack reader, camera integration,
+    runner migration, CHR banking, or IRQ HUD was added here.
 - Candidate files: `src/RetroSharp.NES/NesTiledWorldImporter.cs`,
   `src/RetroSharp.NES/NesRomBuilder.cs`, NES layout records,
   `src/RetroSharp.NES.Tests/FullStage1BaselineTests.cs`, and
@@ -1070,7 +1086,7 @@ debug workflow.
   - [#298 — LW-2.3: implement the fixed-bank WorldPack reader and decoder](https://github.com/SuperJMN/RetroSharp/issues/298)
   - [#299 — LW-2.4: integrate staged edges with Game Boy camera streaming](https://github.com/SuperJMN/RetroSharp/issues/299)
   - [#300 — LW-2.5: prove full stage1 on Game Boy without migrating the shared runner](https://github.com/SuperJMN/RetroSharp/issues/300)
-- Wave 3 native subissues (one implementation-complete; milestone 11):
+- Wave 3 native subissues (two implementation-complete; milestone 11):
   - [#301 — LW-3.1: add the MMC3/TVROM linker and fixed-runtime foundation](https://github.com/SuperJMN/RetroSharp/issues/301)
   - [#302 — LW-3.2: place WorldPack/data sections and select the final NES profile](https://github.com/SuperJMN/RetroSharp/issues/302)
   - [#303 — LW-3.3: implement the fixed-bank NES WorldPack reader](https://github.com/SuperJMN/RetroSharp/issues/303)
@@ -1083,7 +1099,7 @@ debug workflow.
   unrelated gaps remain open and are not duplicated here.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
-recorded above. Game Boy `LW-2.1` through `LW-2.5` and NES `LW-3.1` are
-complete; NES `LW-3.2` is the current entry point. The parent remains the
+recorded above. Game Boy `LW-2.1` through `LW-2.5` and NES `LW-3.1` through
+`LW-3.2` are complete; NES `LW-3.3` remains open and not started. The parent remains the
 integrator surface: implementation agents receive one child issue, not the
 parent or an open-ended request to continue the epic.

@@ -270,12 +270,13 @@ public sealed class NesMusicTests
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var sampleOffset = IndexOfSequence(rom, sample);
         var fixedPhysicalOffset = 16 + 6 * 8 * 1_024;
+        var pinnedR7 = rom.AsSpan(16 + 1 * 8 * 1_024, 8 * 1_024);
 
         Assert.InRange(sampleOffset, fixedPhysicalOffset, 16 + 64 * 1_024 - 7);
         var sampleAddress = 0xC000 + sampleOffset - fixedPhysicalOffset;
         Assert.Equal(0, (sampleAddress - 0xC000) % 64);
         var relocatedAddressRegister = (byte)((sampleAddress - 0xC000) / 64);
-        Assert.True(ContainsSequence(rom.Skip(fixedPhysicalOffset).ToArray(), [0x12, relocatedAddressRegister]));
+        Assert.True(ContainsSequence(pinnedR7.ToArray(), [0x12, relocatedAddressRegister]));
     }
 
     [Fact]

@@ -18,6 +18,24 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
+        return CompileSourceWithReport(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry).Rom;
+    }
+
+    internal static NesRomBuildResult CompileSourceWithReport(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null,
+        byte[]? packedWorldOverride = null)
+    {
         return CompileSourceCore(
             source,
             baseDirectory,
@@ -25,7 +43,8 @@ public static class NesRomCompiler
             sdkLibraryRegistry,
             sdkLibraryImports,
             sdkPluginRegistry,
-            NesCartridgeProfile.Mapper0);
+            forcedCartridgeProfile: null,
+            packedWorldOverride);
     }
 
     internal static byte[] CompileSourceForMmc3TvromTests(
@@ -36,6 +55,24 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
+        return CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry).Rom;
+    }
+
+    internal static NesRomBuildResult CompileSourceForMmc3TvromTestsWithReport(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null,
+        byte[]? packedWorldOverride = null)
+    {
         return CompileSourceCore(
             source,
             baseDirectory,
@@ -43,17 +80,19 @@ public static class NesRomCompiler
             sdkLibraryRegistry,
             sdkLibraryImports,
             sdkPluginRegistry,
-            NesCartridgeProfile.Mmc3TvromForTests);
+            NesCartridgeProfile.Mmc3Tvrom,
+            packedWorldOverride);
     }
 
-    private static byte[] CompileSourceCore(
+    private static NesRomBuildResult CompileSourceCore(
         string source,
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,
         SdkLibraryRegistry? sdkLibraryRegistry,
         IReadOnlyList<string>? sdkLibraryImports,
         SdkPluginRegistry? sdkPluginRegistry,
-        NesCartridgeProfile cartridgeProfile)
+        NesCartridgeProfile? forcedCartridgeProfile,
+        byte[]? packedWorldOverride)
     {
         sdkPluginRegistry ??= SdkPluginRegistry.Empty;
         var targetIntrinsics = NesTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
@@ -77,9 +116,26 @@ public static class NesRomCompiler
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
             baseDirectory);
         var sdkOperations = ValidateSdkOperations(videoProgram);
+        videoProgram.RequiresLegacyWorldData = sdkOperations.Any(RequiresLegacyWorldData);
         var useFourScreenNametables = UsesVerticalCamera(sdkOperations);
-        return NesRomBuilder.Build(videoProgram, useFourScreenNametables, cartridgeProfile);
+        return NesRomBuilder.BuildWithReport(
+            videoProgram,
+            useFourScreenNametables,
+            forcedCartridgeProfile,
+            packedWorldOverride);
     }
+
+    private static bool RequiresLegacyWorldData(Sdk2DOperation operation) => operation is
+        Sdk2DOperation.SetCameraPosition or
+        Sdk2DOperation.ApplyCamera or
+        Sdk2DOperation.StreamMapColumn or
+        Sdk2DOperation.StreamMapRow or
+        Sdk2DOperation.ReadWorldTile or
+        Sdk2DOperation.ReadWorldTileFlags or
+        Sdk2DOperation.CameraAabbTiles or
+        Sdk2DOperation.CameraAabbHitTop or
+        Sdk2DOperation.CameraScreenAabbTiles or
+        Sdk2DOperation.CameraScreenAabbHitTop;
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
         string source,
@@ -334,6 +390,10 @@ internal sealed class NesVideoProgram
     public WorldMap2D? WorldMap { get; private set; }
 
     public WorldTileGrid? WorldTileGrid { get; private set; }
+
+    public NesTiledWorldPack? PackedWorld { get; private set; }
+
+    public bool RequiresLegacyWorldData { get; set; }
 
     public NesColumnAttributeStream? WorldColumnAttributes { get; private set; }
 
@@ -837,7 +897,8 @@ internal sealed class NesVideoProgram
     {
         RequireArity(call, 1);
         var path = ResolveAssetPath(StringArg(call, 0));
-        var world = NesTiledWorldImporter.Load(path, nextSpriteTile);
+        PackedWorld = NesTiledWorldImporter.CompileWorldPack(path, nextSpriteTile);
+        var world = PackedWorld.LoweredWorld;
 
         var generatedCount = world.GeneratedTileData.Length / 16;
         if (nextSpriteTile + generatedCount > 256)
