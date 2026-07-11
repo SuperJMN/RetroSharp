@@ -1,8 +1,8 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **active; Waves 0 and 1 plus Game Boy `LW-2.1` through `LW-2.5`
-are implemented, and Wave 3 is published but not started.**
-Last updated: 2026-07-11.
+Status: **active; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, and NES
+`LW-3.1` are implemented; `LW-3.2` is the next NES task.**
+Last updated: 2026-07-12.
 
 This roadmap is the executable plan for levels that exceed the legacy
 one-byte world addressing and current monolithic ROM-data budgets. It coordinates the
@@ -50,8 +50,10 @@ Current blockers are independent and must not be conflated:
 - LW-1.1 widens shared camera operands and both targets' logical map-column,
   camera, edge-tag, and row/column streaming state; hardware scroll writes stay
   bytes. Packed/banked world reads are still absent.
-- NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR; mapper-backed level
-  data is not implemented.
+- NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR by default. `LW-3.1`
+  adds an internal forced MMC3/TVROM linker/runtime foundation for acceptance,
+  but automatic profile selection and mapper-backed level data remain later
+  tasks.
 - `Camera.AabbHitTop(...)` now exposes a complete world-pixel word with `-1`
   as no hit; screen-relative hit-top retains its byte-range `255` sentinel.
 - Tiled 16x16 cells are expanded into repeated 8x8 visual and flag cells. The
@@ -86,6 +88,11 @@ These constraints apply to every task in the epic:
    byte-identical unless a task declares otherwise.
 8. **No hidden dynamic runtime.** No heap, GC, RTTI, boxing, delegates, closures,
    virtual dispatch, unbounded collections, or runtime asset discovery.
+9. **NES v1 banks data, not executable code.** `WorldPack` and other target
+   data may occupy ordered R6/R7 sections, but every callable instruction,
+   return target, handler, helper, DPCM byte, and vector remains in the fixed
+   `$C000-$FFFF` region. Automatic executable-code banking is a separate future
+   architecture decision.
 
 ## 4. Decision gates
 
@@ -408,9 +415,10 @@ requirement demands it.
 Recommended execution and merge order:
 
 1. Game Boy `LW-2.1` through `LW-2.5` are complete.
-2. Start [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301)
-   from the current `master`; keep the NES chain strictly
-   ordered through `LW-3.2 -> LW-3.3 -> LW-3.4`.
+2. `LW-3.1` is complete. Continue with
+   [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302) from the
+   merged `LW-3.1` foundation; keep the NES chain strictly ordered through
+   `LW-3.3 -> LW-3.4`.
 3. Target-local tasks in different chains may overlap after their own merged
    dependencies. Never run two tasks that edit the same builder/runtime in
    parallel, and do not change `WorldPack` v1 or a public SDK/Core contract to
@@ -730,8 +738,9 @@ Recommended execution and merge order:
 
 #### LW-3.1: Add the MMC3/TVROM linker and fixed-runtime foundation
 
-- Status: **published as [#301](https://github.com/SuperJMN/RetroSharp/issues/301);
-  open and not started.**
+- Status: **implementation complete; the target-private forced profile,
+  fixed-runtime linker foundation, focused tests, and AprNes/NesMcp acceptance
+  are implemented.**
 - Layer: NES target linker/cartridge/runtime foundation and validation.
 - Dependencies: accepted
   [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md) and
@@ -785,6 +794,13 @@ Recommended execution and merge order:
   - Embed the exact 2,762-byte full-`stage1` pack (770 visual, 312 collision,
     60 chunks, maximum current chunk payload 49) and keep the 7,920-byte
     raw-fallback envelope within one 8,192-byte R6 world bank (272 bytes spare).
+  - Treat 8,192 bytes as the size of one R6 CPU window, not as a maximum
+    `WorldPack` length. Place a larger canonical pack unchanged across an
+    ordered list of R6-owned continuation segments; the physical bank ids may
+    be non-contiguous because pinned/boot R7 ownership is independent.
+  - Translate each 32-bit pack-relative offset through that ordered segment
+    layout without inserting serialized padding or rewriting v1 offsets, and
+    report the logical segment-to-physical-bank mapping with its owner/range.
   - Place pinned R7 audio/runtime data within 5,012/8,192 bytes, boot-only R7
     nametable/palette data within 4,128/8,192, and fixed code/audio runtime plus
     aligned DPCM plus six vectors within the accepted 13,639/16,384 estimate;
@@ -810,20 +826,26 @@ Recommended execution and merge order:
 - Acceptance:
   - Extracted PRG bytes reproduce `CompileWorldPack`; every section is
     deterministic, in bounds, non-overlapping, and diagnosed by owner/window.
+  - A canonical synthetic pack larger than 8,192 bytes reconstructs byte for
+    byte after crossing at least one R6 continuation boundary; its relative
+    offsets and section order are unchanged, and no single-window pack-length
+    restriction is introduced.
   - Small final images that fit mapper 0 remain byte-identical mapper 0;
     forced-test mode still proves MMC3, while automatic selection occurs only
     from an honest final-link need.
   - The linker accepts the measured windows or reports the exact PRG, fixed,
     DPCM, CHR, nametable, coordinate, or collision constraint that failed.
-- Validation: exact embedded-pack/deterministic rebuild; mapper-0 golden;
-  forced and automatic profile selection; section overlap/window/DPCM boundary
-  tests; map-only CLI comparison proving `selectedProfile` is not authoritative;
-  full NES tests; `git diff --check`.
+- Validation: exact embedded-pack/deterministic rebuild; synthetic multi-R6
+  continuation/reconstruction; mapper-0 golden; forced and automatic profile
+  selection; section overlap/window/DPCM boundary tests; map-only CLI comparison
+  proving `selectedProfile` is not authoritative; full NES tests;
+  `git diff --check`.
 - Non-goals: no runtime reader, camera integration, CHR banking, IRQ HUD,
   runner migration, or public/Core cartridge fields.
 - Stop conditions: stop if selection masks a non-PRG failure, forces MMC3 when
-  final mapper 0 fits, violates any accepted PRG/CHR/window/DPCM bound, or needs
-  a public mapper/bank option.
+  final mapper 0 fits, constrains every valid pack to one R6 window, rewrites
+  canonical bytes/offsets, violates any accepted PRG/CHR/window/DPCM bound, or
+  needs a public mapper/bank option.
 
 #### LW-3.3: Implement the fixed-bank NES WorldPack reader
 
@@ -840,6 +862,10 @@ Recommended execution and merge order:
     visual/collision slots.
   - Support an ordinary resident PRG source without mapper writes and an MMC3
     R6 source through fixed code; R7 remains pinned for BGM/SFX/runtime data.
+  - Consume the ordered R6 continuation layout from `LW-3.2` and translate
+    every 32-bit pack-relative byte/range through it. Header sections,
+    directory lookup, encoded visual/collision planes, and chunk payloads may
+    cross an 8 KiB physical boundary without changing the canonical pack.
   - Save the actual R6 entry bank LIFO and restore both hardware and software
     shadow on success, miss, bounds/malformed error, nesting, and NMI
     interruption. NMI/IRQ never writes mapper registers or reads R6.
@@ -852,19 +878,26 @@ Recommended execution and merge order:
 - Acceptance:
   - Mapper-0 resident and MMC3 far fixtures decode identical raw/RLE visual and
     collision results; malformed data fails before staging or camera advance.
+  - A synthetic pack larger than 8,192 bytes proves directory lookup plus raw
+    and RLE plane reads on both sides of, and across, an R6 continuation
+    boundary. Physical bank ids need not be contiguous; pack-relative offsets
+    remain the only serialized addresses.
   - Bank logs prove R6 plus shadow restoration on every exit and nested path,
     while R7, audio cadence, fixed code, DPCM, handlers, and vectors remain
     unchanged.
   - RAM use never exceeds the accepted two visual/two collision/two edge
     staging contract or copies the whole world.
 - Validation: shared forced-codec/malformed corpus; resident/far parity;
-  Y-304/no-hit; nested/error/NMI restoration and audio tests; AprNes bank
+  multi-R6 directory/plane/payload boundary fixtures; Y-304/no-hit;
+  nested/error/NMI restoration and audio tests; deterministic raw/RLE decode
+  cycle measurements for the `LW-3.4` latency budget; AprNes bank
   watchpoints/state/timeline probes; full NES tests; `git diff --check`.
 - Non-goals: no PPU edge scheduler, runner migration, runtime CHR banking,
   mapper IRQ/HUD, spawn indexing, or public API change.
-- Stop conditions: stop if stack depth/restoration cannot be proven, any call
-  or return target lands in R6/R7, NMI must write a mapper register, a slot
-  exceeds 594 bytes, whole-level RAM is required, or v1 must change.
+- Stop conditions: stop if stack depth/restoration cannot be proven, a valid
+  v1 pack must be rewritten/padded or limited to one R6 window, any call or
+  return target lands in R6/R7, NMI must write a mapper register, a slot exceeds
+  594 bytes, whole-level RAM is required, or v1 must change.
 
 #### LW-3.4: Integrate staged four-screen NES streaming
 
@@ -892,6 +925,10 @@ Recommended execution and merge order:
   - Keep all R6 selection, directory reads, and raw/RLE decode outside
     VBlank/NMI; keep R7 pinned, mapper IRQ disabled, static resident CHR only,
     and never write `$A000` mirroring.
+  - Instrument request, resident, and commit frames. With worst-case accepted
+    raw/RLE data, an R6 continuation crossing, and BGM/SFX/DPCM active, a valid
+    requested edge must become resident within at most two normal gameplay
+    frames; diagonal staggering must not starve either axis.
   - Cover bidirectional 255/256, chunk/R6-bank boundaries, diagonal movement,
     reversals, missing/malformed input, and active BGM/SFX/DPCM.
 - Candidate files: `src/RetroSharp.NES/NesRomBuilder.cs`, NES camera/runtime
@@ -907,17 +944,22 @@ Recommended execution and merge order:
     and budgets.
   - Instrumentation proves no mapper/decode work in VBlank/NMI and every tile
     and attribute phase stays within its exact bound.
+  - The same instrumentation proves the two-frame request-to-resident limit in
+    worst-case single-axis and diagonal traversal; exceeding it is a failed
+    temporal contract, not a silently acceptable camera deferral.
   - AprNes screen/nametable evidence matches LW-1.4 visual and palette
     provenance across all four screens with uninterrupted audio/DPCM.
 - Validation: focused bidirectional, diagonal, reversal, deferral, phased-row,
-  attribute-provenance, chunk/bank-boundary, and audio tests; AprNes via NesMcp
-  watchpoints/timelines/screens/state; full NES tests; `git diff --check`.
+  attribute-provenance, chunk/bank-boundary, request/resident latency, and audio
+  tests; AprNes via NesMcp watchpoints/timelines/screens/state with frame
+  counters; full NES tests; `git diff --check`.
 - Non-goals: no extra slot/dynamic RAM, runtime CHR banking, `$A000` mirroring,
   mapper IRQ/HUD, runner migration, spawn indexing, or unrelated #247 work.
 - Stop conditions: stop if staging exceeds 594 bytes/two peers, a commit
   exceeds 32 tiles/four 8-tile row phases/9 attributes, art needs runtime CHR
-  residency, mapper/decode work enters VBlank/NMI, or four-screen behavior
-  cannot be proven in AprNes.
+  residency, mapper/decode work enters VBlank/NMI, worst-case preparation cannot
+  meet the two-frame residency bound, or four-screen behavior cannot be proven
+  in AprNes.
 
 #### LW-3.5: Migrate the shared runner and prove joint full-stage1 acceptance
 
@@ -1028,7 +1070,7 @@ debug workflow.
   - [#298 — LW-2.3: implement the fixed-bank WorldPack reader and decoder](https://github.com/SuperJMN/RetroSharp/issues/298)
   - [#299 — LW-2.4: integrate staged edges with Game Boy camera streaming](https://github.com/SuperJMN/RetroSharp/issues/299)
   - [#300 — LW-2.5: prove full stage1 on Game Boy without migrating the shared runner](https://github.com/SuperJMN/RetroSharp/issues/300)
-- Wave 3 native subissues (open, not started, milestone 11):
+- Wave 3 native subissues (one implementation-complete; milestone 11):
   - [#301 — LW-3.1: add the MMC3/TVROM linker and fixed-runtime foundation](https://github.com/SuperJMN/RetroSharp/issues/301)
   - [#302 — LW-3.2: place WorldPack/data sections and select the final NES profile](https://github.com/SuperJMN/RetroSharp/issues/302)
   - [#303 — LW-3.3: implement the fixed-bank NES WorldPack reader](https://github.com/SuperJMN/RetroSharp/issues/303)
@@ -1041,7 +1083,7 @@ debug workflow.
   unrelated gaps remain open and are not duplicated here.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
-recorded above. Game Boy `LW-2.1` through `LW-2.5` are complete; NES `LW-3.1`
-is the current entry point. The parent remains the
+recorded above. Game Boy `LW-2.1` through `LW-2.5` and NES `LW-3.1` are
+complete; NES `LW-3.2` is the current entry point. The parent remains the
 integrator surface: implementation agents receive one child issue, not the
 parent or an open-ended request to continue the epic.

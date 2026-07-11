@@ -18,6 +18,43 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
+        return CompileSourceCore(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry,
+            NesCartridgeProfile.Mapper0);
+    }
+
+    internal static byte[] CompileSourceForMmc3TvromTests(
+        string source,
+        string? baseDirectory = null,
+        SdkLibraryImportMode sdkImportMode = SdkLibraryImportMode.ExplicitOnly,
+        SdkLibraryRegistry? sdkLibraryRegistry = null,
+        IReadOnlyList<string>? sdkLibraryImports = null,
+        SdkPluginRegistry? sdkPluginRegistry = null)
+    {
+        return CompileSourceCore(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry,
+            NesCartridgeProfile.Mmc3TvromForTests);
+    }
+
+    private static byte[] CompileSourceCore(
+        string source,
+        string? baseDirectory,
+        SdkLibraryImportMode sdkImportMode,
+        SdkLibraryRegistry? sdkLibraryRegistry,
+        IReadOnlyList<string>? sdkLibraryImports,
+        SdkPluginRegistry? sdkPluginRegistry,
+        NesCartridgeProfile cartridgeProfile)
+    {
         sdkPluginRegistry ??= SdkPluginRegistry.Empty;
         var targetIntrinsics = NesTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
         var effectiveLibraryRegistry = (sdkLibraryRegistry ?? SdkLibraryRegistry.Default).WithSdkPlugins(sdkPluginRegistry);
@@ -41,7 +78,7 @@ public static class NesRomCompiler
             baseDirectory);
         var sdkOperations = ValidateSdkOperations(videoProgram);
         var useFourScreenNametables = UsesVerticalCamera(sdkOperations);
-        return NesRomBuilder.Build(videoProgram, useFourScreenNametables);
+        return NesRomBuilder.Build(videoProgram, useFourScreenNametables, cartridgeProfile);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(

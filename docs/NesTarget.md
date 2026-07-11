@@ -168,10 +168,18 @@ Large Worlds LW-0.3 selects the future banked NES profile in
 [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md):
 mapper 4 with a TVROM-style 64 KiB PRG, 16 KiB CHR-ROM, and four-screen board
 shape. The measured full-`stage1` sketch keeps `WorldPack`, pinned audio data,
-boot data, fixed execution/DPCM, and vectors in explicit banks. This is an
-accepted architecture contract, not current compiler behavior: mapper 0 stays
-the default whenever the final program fits, and no production mapper reader
-or IRQ HUD is implemented by the ADR.
+boot data, fixed execution/DPCM, and vectors in explicit banks. `LW-3.1` now
+implements the internal forced MMC3/TVROM linker and fixed-runtime acceptance
+profile: code, helpers, DPCM, handlers, and vectors live at `$C000-$FFFF`, reset
+initializes PRG mode 0, R6/R7 shadows, linear resident CHR, and disabled IRQs,
+and AprNes proves the combined mapper-4/four-screen behavior. Mapper 0 remains
+the byte-identical public default; automatic profile selection, production
+`WorldPack` placement/reading, runtime CHR banking, and the IRQ HUD remain out
+of scope for this foundation. The 8 KiB R6 window is not a whole-pack limit:
+later placement/reader tasks use target-private ordered continuation segments
+while preserving v1 relative offsets. Large Worlds v1 banks data only; callable
+code, handlers, DPCM, helpers, and vectors remain in the fixed 16 KiB region,
+and automatic executable-code banking is not implemented by this epic.
 
 `Animation.Clip(name, firstFrame, duration...)` stores a looping frame-duration table whose frame indexes and total duration must fit one byte. `Animation.Frame(name, tick)` is declared by the source package over the `animation_frame` target intrinsic and returns the current frame for that clip. `Sprite.Width(name)` is likewise a source-package helper over the compile-time `sprite_width` target intrinsic and returns the logical sprite width for a declared sprite asset.
 

@@ -5,6 +5,154 @@ using Xunit;
 public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
 {
     [Fact]
+    public void Forced_mmc3_tvrom_link_uses_the_accepted_header_and_physical_sizes()
+    {
+        const string source = """
+                              void Main() {
+                                  return;
+                              }
+                              """;
+
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTests(source);
+
+        Assert.Equal(16 + 64 * 1_024 + 16 * 1_024, rom.Length);
+        Assert.Equal(
+            new byte[]
+            {
+                (byte)'N', (byte)'E', (byte)'S', 0x1A,
+                0x04, 0x02, 0x48, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            },
+            rom[..16]);
+
+        var prg = rom.AsSpan(16, 64 * 1_024);
+        Assert.InRange(ReadWord(prg, prg.Length - 4), 0xE000, 0xFFF9);
+        Assert.Equal(0x78, prg[6 * 8 * 1_024]);
+    }
+
+    [Fact]
+    public void Mmc3_tvrom_layout_models_all_eight_physical_prg_banks()
+    {
+        var layout = NesCartridgeLayout.Create(NesCartridgeProfile.Mmc3TvromForTests, useFourScreenNametables: false);
+
+        Assert.Equal(8, layout.PrgSections.Count);
+        Assert.Equal(NesPrgSectionKind.InitialR6, layout.PrgSections[0].Kind);
+        Assert.Equal(NesPrgSectionKind.PinnedR7, layout.PrgSections[1].Kind);
+        Assert.All(layout.PrgSections.Skip(2).Take(4), section => Assert.Equal(NesPrgSectionKind.ReservedSwitchable, section.Kind));
+        Assert.All(layout.PrgSections.Skip(6), section => Assert.Equal(NesPrgSectionKind.FixedRuntime, section.Kind));
+        Assert.Equal(
+            Enumerable.Range(0, 8).Select(bank => bank * 8 * 1_024),
+            layout.PrgSections.Select(section => section.PhysicalOffset));
+        Assert.All(layout.PrgSections, section => Assert.Equal(8 * 1_024, section.Size));
+    }
+
+    [Fact]
+    public void Forced_mmc3_tvrom_link_bootstraps_fixed_mode_banks_chr_and_disabled_irqs()
+    {
+        const string source = """
+                              void Main() {
+                                  return;
+                              }
+                              """;
+
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTests(source);
+        var prg = rom.AsSpan(16, 64 * 1_024);
+        var fixedRuntime = prg[(6 * 8 * 1_024)..];
+
+        for (var bank = 0; bank < 6; bank++)
+        {
+            var marker = (byte)(0xA0 + bank);
+            Assert.All(prg.Slice(bank * 8 * 1_024, 8 * 1_024).ToArray(), value => Assert.Equal(marker, value));
+        }
+
+        Assert.True(ContainsSequence(fixedRuntime, [0xA9, 0x00, 0x8D, 0x00, 0xE0]), "Reset must disable and acknowledge MMC3 IRQs.");
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 0, value: 0)));
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 1, value: 2)));
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 2, value: 4)));
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 3, value: 5)));
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 4, value: 6)));
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 5, value: 7)));
+        Assert.True(ContainsSequence(fixedRuntime, [.. Mmc3RegisterWrite(register: 6, value: 0), 0x8D, 0x24, 0x03]));
+        Assert.True(ContainsSequence(fixedRuntime, [.. Mmc3RegisterWrite(register: 7, value: 1), 0x8D, 0x25, 0x03]));
+        Assert.False(ContainsSequence(fixedRuntime, [0x8D, 0x00, 0xA0]), "TVROM hardwires four-screen nametables and must not write MMC3 mirroring.");
+
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3BankHelper(register: 6, shadowAddress: 0x0324)));
+        Assert.True(ContainsSequence(fixedRuntime, Mmc3BankHelper(register: 7, shadowAddress: 0x0325)));
+    }
+
+    [Fact]
+    public void Forced_mmc3_tvrom_vectors_target_fixed_reset_and_interrupt_handlers()
+    {
+        const string source = """
+                              void Main() {
+                                  return;
+                              }
+                              """;
+
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTests(source);
+        var prg = rom.AsSpan(16, 64 * 1_024);
+        var nmiVector = ReadWord(prg, prg.Length - 6);
+        var resetVector = ReadWord(prg, prg.Length - 4);
+        var irqVector = ReadWord(prg, prg.Length - 2);
+
+        Assert.InRange(nmiVector, 0xC000, 0xFFF9);
+        Assert.InRange(resetVector, 0xE000, 0xFFF9);
+        Assert.InRange(irqVector, 0xC000, 0xFFF9);
+        Assert.Equal(0x40, ByteAtCpuAddress(prg, nmiVector));
+        Assert.Equal(0x78, ByteAtCpuAddress(prg, resetVector));
+        Assert.Equal(0x40, ByteAtCpuAddress(prg, irqVector));
+    }
+
+    [Fact]
+    public void Generated_mmc3_smoke_contains_four_distinct_nametable_probes()
+    {
+        var leftColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row == 0 ? 1 : row == 30 ? 3 : 0));
+        var rightColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row == 0 ? 2 : row == 30 ? 4 : 0));
+        var source = $$"""
+                       void Main() {
+                           Video.Init();
+                           World.Column(0, {{leftColumn}});
+                           World.Column(32, {{rightColumn}});
+                           World.Map(64, 0, 60);
+                           Camera.Init(64, 0, 60);
+                           u8 y = 0;
+                           while (true) {
+                               Video.WaitVBlank();
+                               Camera.SetPosition(0, y);
+                               Camera.Apply();
+                           }
+                       }
+                       """;
+
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTests(
+            source,
+            sdkLibraryImports: [RetroSharp.Sdk.SdkImportResolver.Portable2D]);
+        var expectedNametables = new byte[4 * 1_024];
+        expectedNametables[0] = 1;
+        expectedNametables[1 * 1_024] = 2;
+        expectedNametables[2 * 1_024] = 3;
+        expectedNametables[3 * 1_024] = 4;
+
+        Assert.True(
+            ContainsSequence(rom.AsSpan(16 + 6 * 8 * 1_024, 16 * 1_024), expectedNametables),
+            "The generated AprNes smoke must upload a distinct probe into each TVROM nametable.");
+    }
+
+    [Fact]
+    public void Mapper_selection_is_not_exposed_as_a_public_source_compiler_argument()
+    {
+        var publicParameters = typeof(RetroSharp.NES.NesRomCompiler)
+            .GetMethods()
+            .Where(method => method.IsPublic)
+            .SelectMany(method => method.GetParameters())
+            .Select(parameter => parameter.Name ?? string.Empty)
+            .ToArray();
+
+        Assert.DoesNotContain(publicParameters, parameter => parameter.Contains("mapper", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(publicParameters, parameter => parameter.Contains("profile", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Full_stage1_layout_selects_the_mmc3_four_screen_profile()
     {
         const int currentNoAudioPrgBytes = 41_907;
@@ -119,7 +267,10 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         var adrPath = RepositoryFile("docs/NesLargeWorldsCartridgeProfile.md", requireExists: false);
         Assert.True(File.Exists(adrPath), "The accepted NES Large Worlds cartridge-profile ADR is missing.");
         var adr = File.ReadAllText(adrPath);
-        Assert.Contains("Status: **accepted for LW-0.3 on 2026-07-10.**", adr, StringComparison.Ordinal);
+        Assert.Contains(
+            "Status: **accepted for LW-0.3 on 2026-07-10; forced linker/runtime foundation",
+            adr,
+            StringComparison.Ordinal);
         Assert.Contains("MMC3/TVROM", adr, StringComparison.Ordinal);
         Assert.Contains("`$8000-$9FFF`", adr, StringComparison.Ordinal);
         Assert.Contains("`$A000-$BFFF`", adr, StringComparison.Ordinal);
@@ -162,6 +313,29 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
     }
 
     private static int CeilingDivide(int value, int divisor) => (value + divisor - 1) / divisor;
+
+    private static ushort ReadWord(ReadOnlySpan<byte> bytes, int offset) =>
+        (ushort)(bytes[offset] | bytes[offset + 1] << 8);
+
+    private static byte ByteAtCpuAddress(ReadOnlySpan<byte> prg, ushort address) =>
+        prg[6 * 8 * 1_024 + address - 0xC000];
+
+    private static byte[] Mmc3RegisterWrite(byte register, byte value) =>
+        [0xA9, register, 0x8D, 0x00, 0x80, 0xA9, value, 0x8D, 0x01, 0x80];
+
+    private static byte[] Mmc3BankHelper(byte register, ushort shadowAddress) =>
+        [
+            0x48,
+            0xA9, register,
+            0x8D, 0x00, 0x80,
+            0x68,
+            0x8D, 0x01, 0x80,
+            0x8D, (byte)(shadowAddress & 0xFF), (byte)(shadowAddress >> 8),
+            0x60,
+        ];
+
+    private static bool ContainsSequence(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> sequence) =>
+        bytes.IndexOf(sequence) >= 0;
 
     private static DpcmPlacement[] PlaceDpcmBlocks(int baseAddress, int startOffset, params int[] blockLengths)
     {

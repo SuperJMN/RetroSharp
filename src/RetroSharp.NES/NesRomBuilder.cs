@@ -9,29 +9,33 @@ namespace RetroSharp.NES;
 
 internal static class NesRomBuilder
 {
-    private const int PrgRomSize = 32 * 1024;
-    private const int ChrRomSize = 8 * 1024;
+    private const ushort Mmc3R6BankShadowAddress = 0x0324;
+    private const ushort Mmc3R7BankShadowAddress = 0x0325;
 
-    public static byte[] Build(NesVideoProgram program, bool useFourScreenNametables)
+    public static byte[] Build(
+        NesVideoProgram program,
+        bool useFourScreenNametables,
+        NesCartridgeProfile cartridgeProfile = NesCartridgeProfile.Mapper0)
     {
-        var prg = BuildPrgRom(program, useFourScreenNametables);
-        var chr = BuildChrRom(program);
+        var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables);
+        var prg = BuildPrgRom(program, layout);
+        var chr = BuildChrRom(program, layout.ChrRomSize);
 
-        var rom = new byte[16 + PrgRomSize + ChrRomSize];
+        var rom = new byte[16 + layout.PrgRomSize + layout.ChrRomSize];
         rom[0] = (byte)'N';
         rom[1] = (byte)'E';
         rom[2] = (byte)'S';
         rom[3] = 0x1A;
-        rom[4] = PrgRomSize / (16 * 1024);
-        rom[5] = 1;
-        rom[6] = (byte)(useFourScreenNametables ? 0x09 : 0x01);
+        rom[4] = (byte)(layout.PrgRomSize / (16 * 1024));
+        rom[5] = (byte)(layout.ChrRomSize / (8 * 1024));
+        rom[6] = layout.HeaderFlags6;
 
         prg.CopyTo(rom, 16);
-        chr.CopyTo(rom, 16 + PrgRomSize);
+        chr.CopyTo(rom, 16 + layout.PrgRomSize);
         return rom;
     }
 
-    private static byte[] BuildPrgRom(NesVideoProgram program, bool useFourScreenNametables)
+    private static byte[] BuildPrgRom(NesVideoProgram program, NesCartridgeLayout layout)
     {
         var longForLoopIds = new HashSet<int>();
         var longWhileLoopIds = new HashSet<int>();
@@ -39,7 +43,7 @@ internal static class NesRomBuilder
         {
             try
             {
-                return BuildPrgRom(program, longForLoopIds, longWhileLoopIds, useFourScreenNametables);
+                return BuildPrgRom(program, longForLoopIds, longWhileLoopIds, layout);
             }
             catch (BranchOutOfRangeException ex)
             {
@@ -62,11 +66,12 @@ internal static class NesRomBuilder
         NesVideoProgram program,
         IReadOnlySet<int> longForLoopIds,
         IReadOnlySet<int> longWhileLoopIds,
-        bool useFourScreenNametables)
+        NesCartridgeLayout layout)
     {
-        var builder = new PrgBuilder();
-        var nameTableUploadByteCount = useFourScreenNametables ? 4096 : 2048;
+        var builder = new PrgBuilder(layout.FixedRuntimeCpuBaseAddress);
+        var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
 
+        builder.Label("fixed_runtime_entry");
         builder.Emit(0x78);                         // SEI
         builder.Emit(0xD8);                         // CLD
         builder.Emit(0xA2, 0x40);                   // LDX #$40
@@ -83,7 +88,7 @@ internal static class NesRomBuilder
         EmitPaletteUpload(builder);
         EmitNameTableUpload(builder, nameTableUploadByteCount);
 
-        var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds, longWhileLoopIds, useFourScreenNametables);
+        var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds, longWhileLoopIds, layout.UseFourScreenNametables);
         runtimeCompiler.EmitInitialization();
 
         builder.Emit(0xA9, 0x00);                   // LDA #$00
@@ -99,31 +104,139 @@ internal static class NesRomBuilder
         builder.JumpAbsolute("forever");
 
         runtimeCompiler.EmitAudioSubroutines();
+        if (layout.EmitMmc3Foundation)
+        {
+            EmitMmc3BankHelpers(builder);
+            EmitMmc3InterruptHandlers(builder);
+        }
 
         builder.Label("palette");
         builder.Emit(program.Palette);
         builder.Label("nametable");
-        builder.Emit(program.NameTable.Take(nameTableUploadByteCount).ToArray());
+        builder.Emit(PadToLength(program.NameTable, nameTableUploadByteCount));
         EmitWorldMapRows(builder, program.WorldMap, program.WorldTileGrid);
         EmitWorldMapRowPointerTables(builder, program.WorldMap);
         EmitPpuRowAddressTables(builder, program.WorldMap);
         EmitWorldMapFlagRows(builder, program.WorldMap);
         EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
         EmitWorldColumnAttributes(builder, program.WorldColumnAttributes);
-        EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder);
-
-        var prg = new byte[PrgRomSize];
-        var code = builder.Build();
-        if (code.Length > PrgRomSize - 6)
+        EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder, layout.FixedTrailerStartAddress);
+        if (layout.EmitMmc3Foundation)
         {
-            throw new InvalidOperationException($"NES PRG ROM overflow: {code.Length} bytes emitted, {PrgRomSize - 6} bytes available.");
+            EmitMmc3ResetTrampoline(builder, layout.FixedTrailerStartAddress);
         }
 
-        code.CopyTo(prg, 0);
-        SetVector(prg, PrgRomSize - 6, PrgBuilder.BaseAddress);
-        SetVector(prg, PrgRomSize - 4, PrgBuilder.BaseAddress);
-        SetVector(prg, PrgRomSize - 2, PrgBuilder.BaseAddress);
+        var prg = new byte[layout.PrgRomSize];
+        if (layout.EmitMmc3Foundation)
+        {
+            SeedMmc3SwitchableBanks(prg, layout.PrgSections);
+        }
+
+        var code = builder.Build();
+        if (code.Length > layout.FixedRuntimeSize - 6)
+        {
+            var message = layout.EmitMmc3Foundation
+                ? $"NES {layout.Name} fixed PRG section overflow: {code.Length} bytes emitted, {layout.FixedRuntimeSize - 6} bytes available."
+                : $"NES PRG ROM overflow: {code.Length} bytes emitted, {layout.FixedRuntimeSize - 6} bytes available.";
+            throw new InvalidOperationException(message);
+        }
+
+        code.CopyTo(prg, layout.FixedRuntimePhysicalOffset);
+        var nmiVector = layout.EmitMmc3Foundation
+            ? builder.AddressOfLabel("mmc3_nmi_handler")
+            : layout.FixedRuntimeCpuBaseAddress;
+        var irqVector = layout.EmitMmc3Foundation
+            ? builder.AddressOfLabel("mmc3_irq_handler")
+            : layout.FixedRuntimeCpuBaseAddress;
+        var resetVector = layout.EmitMmc3Foundation
+            ? builder.AddressOfLabel("mmc3_reset")
+            : layout.FixedRuntimeCpuBaseAddress;
+        SetVector(prg, layout.PrgRomSize - 6, nmiVector);
+        SetVector(prg, layout.PrgRomSize - 4, resetVector);
+        SetVector(prg, layout.PrgRomSize - 2, irqVector);
         return prg;
+    }
+
+    private static void EmitMmc3ResetTrampoline(PrgBuilder builder, ushort address)
+    {
+        builder.PadToAddress(address);
+        builder.Label("mmc3_reset");
+        builder.Emit(0x78);                         // SEI
+        builder.Emit(0xD8);                         // CLD
+        EmitMmc3Bootstrap(builder);
+        builder.JumpAbsolute("fixed_runtime_entry");
+    }
+
+    private static void EmitMmc3Bootstrap(PrgBuilder builder)
+    {
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(0xE000);             // Disable and acknowledge mapper IRQs.
+
+        EmitMmc3RegisterWrite(builder, register: 0, value: 0); // CHR pages 0-1.
+        EmitMmc3RegisterWrite(builder, register: 1, value: 2); // CHR pages 2-3.
+        EmitMmc3RegisterWrite(builder, register: 2, value: 4);
+        EmitMmc3RegisterWrite(builder, register: 3, value: 5);
+        EmitMmc3RegisterWrite(builder, register: 4, value: 6);
+        EmitMmc3RegisterWrite(builder, register: 5, value: 7);
+
+        EmitMmc3RegisterWrite(builder, register: 6, value: 0);
+        builder.StoreAAbsolute(Mmc3R6BankShadowAddress);
+        EmitMmc3RegisterWrite(builder, register: 7, value: 1);
+        builder.StoreAAbsolute(Mmc3R7BankShadowAddress);
+    }
+
+    private static void EmitMmc3RegisterWrite(PrgBuilder builder, byte register, byte value)
+    {
+        // Bit 6 stays clear on every bank-select write, pinning MMC3 PRG mode 0.
+        builder.LoadAImmediate(register);
+        builder.StoreAAbsolute(0x8000);
+        builder.LoadAImmediate(value);
+        builder.StoreAAbsolute(0x8001);
+    }
+
+    private static void EmitMmc3BankHelpers(PrgBuilder builder)
+    {
+        EmitMmc3BankHelper(builder, "mmc3_select_r6", register: 6, Mmc3R6BankShadowAddress);
+        EmitMmc3BankHelper(builder, "mmc3_select_r7", register: 7, Mmc3R7BankShadowAddress);
+    }
+
+    private static void EmitMmc3InterruptHandlers(PrgBuilder builder)
+    {
+        builder.Label("mmc3_nmi_handler");
+        builder.Emit(0x40);                          // RTI; bank-neutral until an NMI runtime is introduced.
+        builder.Label("mmc3_irq_handler");
+        builder.Emit(0x40);                          // RTI; mapper IRQs remain disabled.
+    }
+
+    private static void EmitMmc3BankHelper(PrgBuilder builder, string label, byte register, ushort shadowAddress)
+    {
+        builder.Label(label);
+        builder.PushA();
+        builder.LoadAImmediate(register);
+        builder.StoreAAbsolute(0x8000);
+        builder.PullA();
+        builder.StoreAAbsolute(0x8001);
+        builder.StoreAAbsolute(shadowAddress);
+        builder.Return();
+    }
+
+    private static byte[] PadToLength(IReadOnlyList<byte> bytes, int length)
+    {
+        var result = new byte[length];
+        for (var index = 0; index < Math.Min(bytes.Count, length); index++)
+        {
+            result[index] = bytes[index];
+        }
+
+        return result;
+    }
+
+    private static void SeedMmc3SwitchableBanks(byte[] prg, IReadOnlyList<NesPrgSectionLayout> sections)
+    {
+        foreach (var section in sections.Where(section => section.Kind is not NesPrgSectionKind.FixedRuntime))
+        {
+            prg.AsSpan(section.PhysicalOffset, section.Size).Fill((byte)(0xA0 + section.PhysicalBank));
+        }
     }
 
     private static bool TryForEndLabelId(string label, out int id)
@@ -353,13 +466,14 @@ internal static class NesRomBuilder
     private static void EmitAudioAssets(
         PrgBuilder builder,
         IReadOnlyList<NesCompiledMusicAsset> musicAssets,
-        IReadOnlyList<NesCompiledSoundEffectAsset> soundEffectAssets)
+        IReadOnlyList<NesCompiledSoundEffectAsset> soundEffectAssets,
+        ushort vectorStartAddress)
     {
         // DPCM samples must live in the $C000-$FFF9 window and are placed right after the music data.
         // Sound-effect data is position-independent (walked from a start label at runtime), so it is
         // emitted after the DPCM blocks and does not shrink the DPCM window.
         var musicDataLength = musicAssets.Sum(asset => asset.Data.Length);
-        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + musicDataLength, musicAssets);
+        var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + musicDataLength, musicAssets, vectorStartAddress);
         foreach (var asset in musicAssets)
         {
             var data = PatchDpcmAddressRegisters(asset, dpcmLayout.AddressRegisterMap);
@@ -394,7 +508,8 @@ internal static class NesRomBuilder
 
     private static DpcmSampleLayout BuildDpcmSampleLayout(
         int musicDataEndAddress,
-        IReadOnlyList<NesCompiledMusicAsset> musicAssets)
+        IReadOnlyList<NesCompiledMusicAsset> musicAssets,
+        ushort vectorStartAddress)
     {
         var uniqueBlocks = new List<NesDpcmSampleBlock>();
         foreach (var block in musicAssets.SelectMany(asset => asset.DpcmBlocks))
@@ -425,7 +540,6 @@ internal static class NesRomBuilder
         {
             cursor = AlignToDmcAddress(cursor);
             var endAddress = cursor + block.Data.Length;
-            var vectorStartAddress = PrgBuilder.BaseAddress + PrgRomSize - 6;
             if (cursor < 0xC000 || endAddress > vectorStartAddress)
             {
                 throw new InvalidOperationException(
@@ -538,9 +652,9 @@ internal static class NesRomBuilder
 
     private readonly record struct DpcmSamplePlacement(NesDpcmSampleBlock Block, ushort Address);
 
-    private static byte[] BuildChrRom(NesVideoProgram program)
+    private static byte[] BuildChrRom(NesVideoProgram program, int chrRomSize)
     {
-        var chr = new byte[ChrRomSize];
+        var chr = new byte[chrRomSize];
         WriteSolidTile(chr, 1, 1);
         WriteSolidTile(chr, 2, 2);
         WriteSolidTile(chr, 3, 3);
@@ -6822,7 +6936,7 @@ internal sealed class NesRuntimeCompiler
 
 internal sealed class PrgBuilder
 {
-    public const ushort BaseAddress = 0x8000;
+    private readonly ushort baseAddress;
     private readonly List<byte> bytes = [];
     private readonly Dictionary<string, int> labels = [];
     private readonly List<(int Offset, string Label, int Addend)> absoluteFixups = [];
@@ -6830,7 +6944,12 @@ internal sealed class PrgBuilder
     private readonly List<(int Offset, string Label)> relativeFixups = [];
     private int nextLabelId;
 
-    public int CurrentAddress => BaseAddress + bytes.Count;
+    public PrgBuilder(ushort baseAddress = 0x8000)
+    {
+        this.baseAddress = baseAddress;
+    }
+
+    public int CurrentAddress => baseAddress + bytes.Count;
 
     public void Label(string name) => labels[name] = bytes.Count;
 
@@ -6840,12 +6959,12 @@ internal sealed class PrgBuilder
 
     public void PadToAddress(ushort address)
     {
-        if (address < BaseAddress)
+        if (address < baseAddress)
         {
-            throw new InvalidOperationException($"NES PRG address ${address:X4} is below PRG ROM base ${BaseAddress:X4}.");
+            throw new InvalidOperationException($"NES PRG address ${address:X4} is below PRG ROM base ${baseAddress:X4}.");
         }
 
-        var targetOffset = address - BaseAddress;
+        var targetOffset = address - baseAddress;
         if (targetOffset < bytes.Count)
         {
             throw new InvalidOperationException($"NES PRG address ${address:X4} has already been emitted.");
@@ -7027,7 +7146,7 @@ internal sealed class PrgBuilder
         foreach (var fixup in relativeFixups)
         {
             var target = AddressOf(fixup.Label);
-            var branchFrom = BaseAddress + fixup.Offset + 1;
+            var branchFrom = baseAddress + fixup.Offset + 1;
             var delta = target - branchFrom;
             if (delta is < -128 or > 127)
             {
@@ -7039,6 +7158,8 @@ internal sealed class PrgBuilder
 
         return bytes.ToArray();
     }
+
+    public ushort AddressOfLabel(string label) => checked((ushort)AddressOf(label));
 
     private static byte CheckedByte(int value)
     {
@@ -7061,8 +7182,85 @@ internal sealed class PrgBuilder
             throw new InvalidOperationException($"Unknown NES PRG label '{label}'.");
         }
 
-        return BaseAddress + offset + addend;
+        return baseAddress + offset + addend;
     }
+}
+
+internal enum NesCartridgeProfile
+{
+    Mapper0,
+    Mmc3TvromForTests,
+}
+
+internal enum NesPrgSectionKind
+{
+    InitialR6,
+    PinnedR7,
+    ReservedSwitchable,
+    FixedRuntime,
+}
+
+internal sealed record NesPrgSectionLayout(
+    int PhysicalBank,
+    int PhysicalOffset,
+    int Size,
+    NesPrgSectionKind Kind);
+
+internal sealed record NesCartridgeLayout(
+    string Name,
+    int PrgRomSize,
+    IReadOnlyList<NesPrgSectionLayout> PrgSections,
+    int ChrRomSize,
+    byte HeaderFlags6,
+    bool UseFourScreenNametables,
+    ushort FixedRuntimeCpuBaseAddress,
+    int FixedRuntimePhysicalOffset,
+    int FixedRuntimeSize,
+    ushort FixedTrailerStartAddress,
+    bool EmitMmc3Foundation)
+{
+    public static NesCartridgeLayout Create(NesCartridgeProfile profile, bool useFourScreenNametables) =>
+        profile switch
+        {
+            NesCartridgeProfile.Mapper0 => new NesCartridgeLayout(
+                "mapper-0",
+                PrgRomSize: 32 * 1_024,
+                PrgSections:
+                [
+                    new NesPrgSectionLayout(0, 0, 32 * 1_024, NesPrgSectionKind.FixedRuntime),
+                ],
+                ChrRomSize: 8 * 1_024,
+                HeaderFlags6: (byte)(useFourScreenNametables ? 0x09 : 0x01),
+                UseFourScreenNametables: useFourScreenNametables,
+                FixedRuntimeCpuBaseAddress: 0x8000,
+                FixedRuntimePhysicalOffset: 0,
+                FixedRuntimeSize: 32 * 1_024,
+                FixedTrailerStartAddress: 0xFFFA,
+                EmitMmc3Foundation: false),
+            NesCartridgeProfile.Mmc3TvromForTests => new NesCartridgeLayout(
+                "MMC3/TVROM",
+                PrgRomSize: 64 * 1_024,
+                PrgSections:
+                [
+                    new NesPrgSectionLayout(0, 0 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.InitialR6),
+                    new NesPrgSectionLayout(1, 1 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.PinnedR7),
+                    new NesPrgSectionLayout(2, 2 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
+                    new NesPrgSectionLayout(3, 3 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
+                    new NesPrgSectionLayout(4, 4 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
+                    new NesPrgSectionLayout(5, 5 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
+                    new NesPrgSectionLayout(6, 6 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.FixedRuntime),
+                    new NesPrgSectionLayout(7, 7 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.FixedRuntime),
+                ],
+                ChrRomSize: 16 * 1_024,
+                HeaderFlags6: 0x48,
+                UseFourScreenNametables: true,
+                FixedRuntimeCpuBaseAddress: 0xC000,
+                FixedRuntimePhysicalOffset: 6 * 8 * 1_024,
+                FixedRuntimeSize: 16 * 1_024,
+                FixedTrailerStartAddress: 0xFF80,
+                EmitMmc3Foundation: true),
+            _ => throw new ArgumentOutOfRangeException(nameof(profile), profile, null),
+        };
 }
 
 internal sealed class BranchOutOfRangeException(string label, int delta)
