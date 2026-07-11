@@ -41,6 +41,60 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
         Assert.Equal(312, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
         Assert.Equal(49, canonical.Pack.Chunks.Max(chunk => chunk.Directory.VisualStoredBytes + chunk.Directory.CollisionStoredBytes));
+        var largestChunkIndex = canonical.Pack.Chunks
+            .Select((chunk, index) => (chunk, index))
+            .MaxBy(item => item.chunk.Directory.VisualStoredBytes + item.chunk.Directory.CollisionStoredBytes)
+            .index;
+        var cpu = new GameBoyTestCpu(first.Rom);
+        cpu.SetCurrentRomBank(1);
+        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 1);
+        Assert.Equal(
+            GameBoyWorldPackResult.Success,
+            cpu.RunWorldPackDecode(
+                first.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+                checked((ushort)largestChunkIndex),
+                slot: 0));
+        Assert.Equal(
+            GameBoyWorldPackResult.Success,
+            cpu.RunWorldPackDecode(
+                first.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionDecodeLabel],
+                checked((ushort)largestChunkIndex),
+                slot: 0));
+        Assert.Equal(
+            canonical.Pack.Chunks[largestChunkIndex].VisualIds.Select(id => (byte)id),
+            Enumerable.Range(0xC300, canonical.Pack.Chunks[largestChunkIndex].VisualIds.Count)
+                .Select(address => cpu.Wram((ushort)address)));
+        Assert.Equal(
+            canonical.Pack.Chunks[largestChunkIndex].CollisionProfileIds.Select(id => (byte)id),
+            Enumerable.Range(0xC380, canonical.Pack.Chunks[largestChunkIndex].CollisionProfileIds.Count)
+                .Select(address => cpu.Wram((ushort)address)));
+        foreach (var (hardwareX, hardwareY) in new[]
+                 {
+                     (0, 0),
+                     (255, canonical.Pack.Descriptor.HardwareHeight / 2),
+                     (256, canonical.Pack.Descriptor.HardwareHeight / 2),
+                     (canonical.Pack.Descriptor.HardwareWidth - 1, canonical.Pack.Descriptor.HardwareHeight - 1),
+                 })
+        {
+            var collision = cpu.RunWorldPackCollisionLookup(
+                first.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+                checked((ushort)hardwareX),
+                checked((ushort)hardwareY));
+            Assert.Equal(GameBoyWorldPackResult.Success, collision.Status);
+            Assert.Equal((byte)canonical.Pack.CollisionAt(hardwareX, hardwareY), collision.Value);
+
+            var visual = cpu.RunWorldPackCollisionLookup(
+                first.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel],
+                checked((ushort)hardwareX),
+                checked((ushort)hardwareY));
+            var coordinate = canonical.Pack.Locate(hardwareX, hardwareY);
+            var visualId = canonical.Pack.VisualIdAt(hardwareX, hardwareY);
+            var expansionIndex = checked(
+                (visualId * canonical.Pack.Descriptor.MetatileWidth * canonical.Pack.Descriptor.MetatileHeight
+                 + coordinate.SubcellIndex) * canonical.Pack.Descriptor.TargetCellStride);
+            Assert.Equal(GameBoyWorldPackResult.Success, visual.Status);
+            Assert.Equal(canonical.Pack.TargetExpansions.Span[expansionIndex], visual.Value);
+        }
         Assert.Equal(canonical.SerializedBytes, first.Rom.AsSpan(segment.PhysicalStart, segment.Length).ToArray());
         Assert.DoesNotContain(first.Report.Segments, item => item.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
         Assert.Equal(first.Rom, second.Rom);

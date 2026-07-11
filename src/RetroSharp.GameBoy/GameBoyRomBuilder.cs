@@ -32,6 +32,11 @@ internal static class GameBoyRomBuilder
     internal const string ProgramBankContinuationLabel = "program_bank_continue";
     internal const string Mbc1FarReadByteLabel = "mbc1_far_read_byte";
     internal const string WorldPackLabel = "worldpack_default";
+    internal const string WorldPackValidateLabel = "worldpack_validate";
+    internal const string WorldPackVisualDecodeLabel = "worldpack_decode_visual";
+    internal const string WorldPackVisualLookupLabel = "worldpack_visual_lookup";
+    internal const string WorldPackCollisionDecodeLabel = "worldpack_decode_collision";
+    internal const string WorldPackCollisionLookupLabel = "worldpack_collision_lookup";
 
     private static readonly byte[] NintendoLogo =
     [
@@ -60,9 +65,9 @@ internal static class GameBoyRomBuilder
             program.PackedWorld is not null &&
             IsMissingLegacyWorldLabel(exception.Message))
         {
-            // LW-2.2 places canonical packs but deliberately does not implement the LW-2.3
-            // reader. Runtime world queries therefore retain their byte-identical raw route
-            // until that reader exists; pack-only links never enter this compatibility path.
+            // LW-2.3 owns packed validation and collision/visual lookup, while camera edge
+            // streaming remains LW-2.4. Programs that still need a suppressed legacy visual
+            // row label retain the byte-identical raw compatibility route for now.
             return BuildWithReportCore(program, packedWorldBytes: null);
         }
     }
@@ -70,18 +75,23 @@ internal static class GameBoyRomBuilder
     private static GameBoyRomBuildResult BuildWithReportCore(GameBoyVideoProgram program, byte[]? packedWorldBytes)
     {
         var readOnlyData = BuildReadOnlyData(program, packedWorldBytes is not null);
-        var romOnlyLayout = GameBoyRomLayout.RomOnly;
-        var builder = BuildProgram(program, romOnlyLayout, readOnlyData, packedWorldBytes);
-        var programBytes = builder.Build();
-        if (programBytes.Length <= RomOnlyPayloadLimit)
+        GbBuilder builder;
+        byte[] programBytes;
+        if (packedWorldBytes is null || packedWorldBytes.Length <= ushort.MaxValue)
         {
-            var rom = new byte[RomOnlySize];
-            WriteHeaderSkeleton(rom, CartridgeTypeRomOnly, romSizeCode: 0x00);
-            programBytes.CopyTo(rom, FixedBankProgramStart);
-            WriteHeaderChecksums(rom);
-            return new GameBoyRomBuildResult(
-                rom,
-                BuildRomOnlyReport(builder, program, programBytes.Length, packedWorldBytes));
+            var romOnlyLayout = GameBoyRomLayout.RomOnly;
+            builder = BuildProgram(program, romOnlyLayout, readOnlyData, packedWorldBytes);
+            programBytes = builder.Build();
+            if (programBytes.Length <= RomOnlyPayloadLimit)
+            {
+                var rom = new byte[RomOnlySize];
+                WriteHeaderSkeleton(rom, CartridgeTypeRomOnly, romSizeCode: 0x00);
+                programBytes.CopyTo(rom, FixedBankProgramStart);
+                WriteHeaderChecksums(rom);
+                return new GameBoyRomBuildResult(
+                    rom,
+                    BuildRomOnlyReport(builder, program, programBytes.Length, packedWorldBytes));
+            }
         }
 
         var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes);
@@ -188,7 +198,7 @@ internal static class GameBoyRomBuilder
         byte[]? inlineWorldPack)
     {
         var segments = BuildInlineProgramSegments(builder, program, programLength, inlineWorldPack);
-        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments);
+        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments, BuildFixedSymbols(builder));
     }
 
     private static GameBoyRomBuildReport BuildBankedReport(
@@ -229,7 +239,7 @@ internal static class GameBoyRomBuilder
             AddPhysicalSegments(segments, $"sfx:{placement.Name}", placement.Bank * BankSize, placement.Data.Length);
         }
 
-        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments);
+        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments, BuildFixedSymbols(builder));
     }
 
     private static IReadOnlyList<GameBoyRomBuildSegment> BuildInlineProgramSegments(
@@ -328,14 +338,37 @@ internal static class GameBoyRomBuilder
     private static GameBoyRomBuildReport CreateBuildReport(
         string selectedProfile,
         int romSize,
-        IEnumerable<GameBoyRomBuildSegment> segments)
+        IEnumerable<GameBoyRomBuildSegment> segments,
+        IReadOnlyDictionary<string, ushort> fixedSymbols)
     {
         var ordered = segments
             .OrderBy(segment => segment.PhysicalStart)
             .ThenBy(segment => segment.Owner, StringComparer.Ordinal)
             .ToArray();
         var occupiedBanks = ordered.Select(segment => segment.Bank).Distinct().Order().ToArray();
-        return new GameBoyRomBuildReport(selectedProfile, romSize, ordered, occupiedBanks);
+        return new GameBoyRomBuildReport(selectedProfile, romSize, ordered, occupiedBanks, fixedSymbols);
+    }
+
+    private static IReadOnlyDictionary<string, ushort> BuildFixedSymbols(GbBuilder builder)
+    {
+        var result = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        foreach (var label in new[]
+                 {
+                     Mbc1FarReadByteLabel,
+                     WorldPackValidateLabel,
+                     WorldPackVisualDecodeLabel,
+                     WorldPackVisualLookupLabel,
+                     WorldPackCollisionDecodeLabel,
+                     WorldPackCollisionLookupLabel,
+                 })
+        {
+            if (builder.TryLabelAddress(label, out var address) && address < BankedWindowStart)
+            {
+                result[label] = address;
+            }
+        }
+
+        return result;
     }
 
     private static int CalculateProgramTailBanks(int programLength)
@@ -396,6 +429,7 @@ internal static class GameBoyRomBuilder
         IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData,
         byte[]? packedWorldBytes)
     {
+        var worldPackRuntime = packedWorldBytes is null ? null : GameBoyWorldPackRuntimePlan.Create(packedWorldBytes);
         var builder = new GbBuilder();
         foreach (var placement in layout.ReadOnlyDataPlacements.Values)
         {
@@ -449,16 +483,27 @@ internal static class GameBoyRomBuilder
         builder.Emit(0x3E, (byte)(program.UsesWindowHud ? 0xF7 : 0x97));
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
 
-        var runtime = new GameBoyRuntimeCompiler(builder, program, layout);
+        var runtime = new GameBoyRuntimeCompiler(builder, program, layout, worldPackRuntime is not null);
         var usesMbc1Foundation = layout.ProgramTailBankCount > 0 || layout.UsesBankedReadOnlyData || layout.UsesBankedMusic || layout.UsesBankedWorldPack;
         runtime.EmitProgramBankInitialization(usesMbc1Foundation);
+        if (worldPackRuntime is not null)
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreA(GameBoyWramLayout.WorldPackValidationStateAddress);
+        }
+
         var usesBankContinuationHelper = layout.ProgramTailBankCount > 0;
-        if (usesMbc1Foundation || runtime.UsesReadOnlyDataHelpers || runtime.UsesAudioHelpers || runtime.UsesSubroutineTrampolines)
+        if (usesMbc1Foundation || worldPackRuntime is not null || runtime.UsesReadOnlyDataHelpers || runtime.UsesAudioHelpers || runtime.UsesSubroutineTrampolines)
         {
             builder.JumpAbsolute(ProgramStartLabel);
             if (usesMbc1Foundation)
             {
                 EmitMbc1FarReadByteHelper(builder);
+            }
+
+            if (worldPackRuntime is not null)
+            {
+                GameBoyWorldPackRuntimeEmitter.Emit(builder, worldPackRuntime, layout);
             }
 
             if (usesBankContinuationHelper)
@@ -470,6 +515,19 @@ internal static class GameBoyRomBuilder
             runtime.EmitAudioHelpers();
             runtime.EmitSubroutineTrampolines();
             builder.Label(ProgramStartLabel);
+        }
+
+        if (worldPackRuntime is not null)
+        {
+            var validated = builder.CreateLabel("worldpack_startup_validated");
+            var invalid = builder.CreateLabel("worldpack_startup_invalid");
+            builder.JumpAbsolute(0xCD, WorldPackValidateLabel);
+            builder.LoadAFromB();
+            builder.CompareImmediate((byte)GameBoyWorldPackResult.Success);
+            builder.JumpAbsolute(0xCA, validated);
+            builder.Label(invalid);
+            builder.JumpRelative(0x18, invalid);
+            builder.Label(validated);
         }
 
         runtime.EmitMain(program.MainBlock);
@@ -992,7 +1050,8 @@ internal sealed record GameBoyRomBuildReport(
     string SelectedProfile,
     int RomSize,
     IReadOnlyList<GameBoyRomBuildSegment> Segments,
-    IReadOnlyList<int> OccupiedBanks);
+    IReadOnlyList<int> OccupiedBanks,
+    IReadOnlyDictionary<string, ushort> FixedSymbols);
 
 internal sealed record GameBoyRomBuildSegment(
     string Owner,
@@ -1290,11 +1349,12 @@ internal static class GameBoyWramLayout
     internal const int CurrentWorldPackStagingBytes = 298;
     internal const int MaximumWorldPackStagingBytes = 554;
     internal const ushort ActualVisibleBankAddress = 0xC1FA;
+    internal const ushort WorldPackValidationStateAddress = 0xC1FB;
 
     internal static readonly GameBoyWramRange UserLocals = new("user locals", 0xC000, 0x00E0);
     internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x006D);
-    // Two fixed edge tags (state, axis, direction, 16-bit coordinate) plus actual-visible bank.
-    internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000B);
+    // WorldPack decode scratch, actual-visible bank, and one-time validation state.
+    internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000D);
     internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
     internal static readonly GameBoyWramRange WorldPackStaging = new("WorldPack staging", 0xC300, MaximumWorldPackStagingBytes);
     internal static readonly GameBoyWramRange WramEcho = new("WRAM echo", 0xE000, 0x1E00);
@@ -1465,6 +1525,7 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly GameBoyRomLayout romLayout;
+    private readonly bool usesPackedWorldRuntime;
     private readonly Sdk2DStreamReader sdkOperations;
     private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
@@ -1483,11 +1544,16 @@ internal sealed class GameBoyRuntimeCompiler
     private int? cameraStreamY;
     private int? cameraStreamHeight;
 
-    public GameBoyRuntimeCompiler(GbBuilder builder, GameBoyVideoProgram program, GameBoyRomLayout? romLayout = null)
+    public GameBoyRuntimeCompiler(
+        GbBuilder builder,
+        GameBoyVideoProgram program,
+        GameBoyRomLayout? romLayout = null,
+        bool usesPackedWorldRuntime = false)
     {
         this.builder = builder;
         this.program = program;
         this.romLayout = romLayout ?? GameBoyRomLayout.RomOnly;
+        this.usesPackedWorldRuntime = usesPackedWorldRuntime;
         sdkOperations = Sdk2DStreamReader.ForProgram(program);
         sdkAudioOperations = SdkAudioStreamReader.ForProgram(program);
     }
@@ -7661,6 +7727,15 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
+        if (usesPackedWorldRuntime)
+        {
+            builder.LoadEFromA();
+            builder.LoadDImmediate(0);
+            builder.LoadHl(checked((ushort)row));
+            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            return;
+        }
+
         EmitReadOnlyMapFlagsByteAtSourceColumnInA(checked(row * MapFlagColumnCount()));
     }
 
@@ -7690,6 +7765,16 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitMapFlagsAtSourceColumnInBAndRowInC()
     {
+        if (usesPackedWorldRuntime)
+        {
+            builder.Emit(0x58); // LD E,B
+            builder.LoadDImmediate(0);
+            builder.Emit(0x69); // LD L,C
+            builder.LoadHImmediate(0);
+            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            return;
+        }
+
         if (romLayout.TryReadOnlyDataPlacement(GameBoyRomBuilder.MapFlagDataLabel, out var placement))
         {
             builder.LoadAImmediate(placement.Bank);
@@ -8643,6 +8728,18 @@ internal sealed class GbBuilder
     public bool TryLabelOffset(string label, out int offset)
     {
         return labels.TryGetValue(label, out offset);
+    }
+
+    public bool TryLabelAddress(string label, out ushort address)
+    {
+        if (!labels.ContainsKey(label) && !externalLabels.ContainsKey(label))
+        {
+            address = 0;
+            return false;
+        }
+
+        address = checked((ushort)AddressOf(label));
+        return true;
     }
 
     public void Emit(params byte[] values)
