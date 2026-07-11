@@ -112,7 +112,8 @@ public sealed class GameBoyWorldPackPlacementTests
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             source,
             directory,
-            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: canonical.SerializedBytes);
         var packSegments = result.Report.Segments.Where(item => item.Owner == "worldpack:default").ToArray();
         var bgmSegments = result.Report.Segments.Where(item => item.Owner == "bgm:theme").ToArray();
         var sfxSegments = result.Report.Segments.Where(item => item.Owner == "sfx:jump").ToArray();
@@ -204,7 +205,7 @@ public sealed class GameBoyWorldPackPlacementTests
     }
 
     [Fact]
-    public void World_load_with_pre_edge_scheduler_runtime_references_keeps_the_raw_compatibility_path()
+    public void World_load_with_camera_runtime_references_uses_the_packed_edge_scheduler_path()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         const string source = """
@@ -219,10 +220,13 @@ public sealed class GameBoyWorldPackPlacementTests
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
             source,
             directory,
-            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: GameBoyTiledMapImporter.CompileWorldPack(
+                Path.Combine(directory, "tall.tmj"),
+                GameBoyVideoProgram.FirstGeneratedBackgroundTile).SerializedBytes);
 
-        Assert.Contains(result.Report.Segments, item => item.Owner == "legacy-world-data:default");
-        Assert.DoesNotContain(result.Report.Segments, item => item.Owner == "worldpack:default");
+        Assert.Contains(result.Report.Segments, item => item.Owner == "worldpack:default");
+        Assert.DoesNotContain(result.Report.Segments, item => item.Owner == "legacy-world-data:default");
     }
 
     private static string RepositoryDirectory(string relativePath)
@@ -241,7 +245,7 @@ public sealed class GameBoyWorldPackPlacementTests
                 $"{pair.First.Owner} overlaps {pair.Second.Owner}"));
     }
 
-    private static byte[] CreateSyntheticWorldPack(int chunkColumns = 128)
+    internal static byte[] CreateSyntheticWorldPack(int chunkColumns = 128)
     {
         const int cellsPerChunk = 64;
         var collisionProfilesOffset = (uint)WorldPackDescriptor.V1HeaderBytes;

@@ -129,6 +129,22 @@ internal sealed class GameBoyTestCpu
         }
     }
 
+    public void RunAdditionalFrames(int frames, long maxInstructions = 2_000_000_000)
+    {
+        var target = cycles + ((long)frames * 70224L);
+        var startInstructions = instructions;
+        while (cycles < target)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but only reached {cycles} of {target} cycles.");
+            }
+
+            Step();
+        }
+    }
+
     private byte ReadJoypad()
     {
         var selection = io[0] & 0x30;
@@ -208,6 +224,21 @@ internal sealed class GameBoyTestCpu
     }
 
     public void SetWram(ushort address, byte value) => wram[address - 0xC000] = value;
+
+    public void RunUntilWramEquals(ushort address, byte expected, long maxInstructions = 50_000_000)
+    {
+        var startInstructions = instructions;
+        while (Wram(address) != expected)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but WRAM 0x{address:X4} remained 0x{Wram(address):X2} instead of 0x{expected:X2}.");
+            }
+
+            Step();
+        }
+    }
 
     public void SetCurrentRomBank(byte bank) => romBank = bank;
 
@@ -354,7 +385,9 @@ internal sealed class GameBoyTestCpu
                     instructionPc,
                     value,
                     (byte)romBank,
-                    wram[GameBoyRomBuilder.ActualVisibleBankAddress - 0xC000]));
+                    wram[GameBoyRomBuilder.ActualVisibleBankAddress - 0xC000],
+                    cycles,
+                    (byte)((cycles / 456) % 154)));
                 if (farReadInjections.TryPeek(out var injection) && injection.SelectedBank == romBank)
                 {
                     farReadInjections.Dequeue();
@@ -706,7 +739,13 @@ internal readonly record struct OamWrite(ushort Address, byte Value, long Cycles
 
 internal readonly record struct VramWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled, bool Applied);
 
-internal readonly record struct RomBankWrite(ushort ProgramCounter, byte RequestedBank, byte SelectedBank, byte ShadowBank);
+internal readonly record struct RomBankWrite(
+    ushort ProgramCounter,
+    byte RequestedBank,
+    byte SelectedBank,
+    byte ShadowBank,
+    long Cycles,
+    byte Ly);
 
 internal readonly record struct FarReadResult(byte Data, byte Status, bool Zero, bool Carry);
 
