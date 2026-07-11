@@ -24,7 +24,8 @@ internal sealed record NesTiledWorldPack(
     WorldPack Pack,
     byte[] SerializedBytes,
     byte[] GeneratedTileData,
-    byte[] BackgroundPalette);
+    byte[] BackgroundPalette,
+    NesTiledWorld LoweredWorld);
 
 // NES lowering of an imported Tiled map. It consumes the target-neutral
 // RetroSharp.Core.Sdk.Tiled.LogicalTiledMap (shared with the Game Boy path) and
@@ -74,7 +75,8 @@ internal static class NesTiledWorldImporter
             compiled.Pack,
             compiled.SerializedBytes,
             lowered.GeneratedTileData,
-            lowered.BackgroundPalette);
+            lowered.BackgroundPalette,
+            lowered);
     }
 
     public static NesTiledWorld Load(string path, int firstGeneratedTile)

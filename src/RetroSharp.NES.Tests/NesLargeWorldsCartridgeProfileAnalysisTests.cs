@@ -33,12 +33,13 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
     [Fact]
     public void Mmc3_tvrom_layout_models_all_eight_physical_prg_banks()
     {
-        var layout = NesCartridgeLayout.Create(NesCartridgeProfile.Mmc3TvromForTests, useFourScreenNametables: false);
+        var layout = NesCartridgeLayout.Create(NesCartridgeProfile.Mmc3Tvrom, useFourScreenNametables: false);
 
         Assert.Equal(8, layout.PrgSections.Count);
-        Assert.Equal(NesPrgSectionKind.InitialR6, layout.PrgSections[0].Kind);
+        Assert.Equal(NesPrgSectionKind.WorldR6, layout.PrgSections[0].Kind);
         Assert.Equal(NesPrgSectionKind.PinnedR7, layout.PrgSections[1].Kind);
-        Assert.All(layout.PrgSections.Skip(2).Take(4), section => Assert.Equal(NesPrgSectionKind.ReservedSwitchable, section.Kind));
+        Assert.Equal(NesPrgSectionKind.BootR7, layout.PrgSections[2].Kind);
+        Assert.All(layout.PrgSections.Skip(3).Take(3), section => Assert.Equal(NesPrgSectionKind.WorldR6, section.Kind));
         Assert.All(layout.PrgSections.Skip(6), section => Assert.Equal(NesPrgSectionKind.FixedRuntime, section.Kind));
         Assert.Equal(
             Enumerable.Range(0, 8).Select(bank => bank * 8 * 1_024),
@@ -59,11 +60,14 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         var prg = rom.AsSpan(16, 64 * 1_024);
         var fixedRuntime = prg[(6 * 8 * 1_024)..];
 
-        for (var bank = 0; bank < 6; bank++)
+        foreach (var bank in new[] { 0, 1, 3, 4, 5 })
         {
             var marker = (byte)(0xA0 + bank);
             Assert.All(prg.Slice(bank * 8 * 1_024, 8 * 1_024).ToArray(), value => Assert.Equal(marker, value));
         }
+        Assert.All(
+            prg.Slice(2 * 8 * 1_024 + 4_128, 8 * 1_024 - 4_128).ToArray(),
+            value => Assert.Equal(0xA2, value));
 
         Assert.True(ContainsSequence(fixedRuntime, [0xA9, 0x00, 0x8D, 0x00, 0xE0]), "Reset must disable and acknowledge MMC3 IRQs.");
         Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 0, value: 0)));
@@ -73,6 +77,7 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 4, value: 6)));
         Assert.True(ContainsSequence(fixedRuntime, Mmc3RegisterWrite(register: 5, value: 7)));
         Assert.True(ContainsSequence(fixedRuntime, [.. Mmc3RegisterWrite(register: 6, value: 0), 0x8D, 0x24, 0x03]));
+        Assert.True(ContainsSequence(fixedRuntime, [.. Mmc3RegisterWrite(register: 7, value: 2), 0x8D, 0x25, 0x03]));
         Assert.True(ContainsSequence(fixedRuntime, [.. Mmc3RegisterWrite(register: 7, value: 1), 0x8D, 0x25, 0x03]));
         Assert.False(ContainsSequence(fixedRuntime, [0x8D, 0x00, 0xA0]), "TVROM hardwires four-screen nametables and must not write MMC3 mirroring.");
 
@@ -134,8 +139,8 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         expectedNametables[3 * 1_024] = 4;
 
         Assert.True(
-            ContainsSequence(rom.AsSpan(16 + 6 * 8 * 1_024, 16 * 1_024), expectedNametables),
-            "The generated AprNes smoke must upload a distinct probe into each TVROM nametable.");
+            ContainsSequence(rom.AsSpan(16 + 2 * 8 * 1_024 + 32, 4 * 1_024), expectedNametables),
+            "The generated AprNes smoke must source four distinct TVROM nametables from boot-only R7.");
     }
 
     [Fact]

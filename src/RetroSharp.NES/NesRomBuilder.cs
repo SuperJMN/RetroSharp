@@ -11,14 +11,117 @@ internal static class NesRomBuilder
 {
     private const ushort Mmc3R6BankShadowAddress = 0x0324;
     private const ushort Mmc3R7BankShadowAddress = 0x0325;
+    private const ushort Mmc3BootPaletteAddress = 0xA000;
+    private const ushort Mmc3BootNameTableAddress = 0xA020;
+    private const string WorldPackLabel = "worldpack_default";
 
     public static byte[] Build(
         NesVideoProgram program,
         bool useFourScreenNametables,
         NesCartridgeProfile cartridgeProfile = NesCartridgeProfile.Mapper0)
     {
+        return BuildForProfile(program, useFourScreenNametables, cartridgeProfile, packedWorldBytes: null).Rom;
+    }
+
+    internal static NesRomBuildResult BuildWithReport(
+        NesVideoProgram program,
+        bool useFourScreenNametables,
+        NesCartridgeProfile? forcedCartridgeProfile,
+        byte[]? packedWorldOverride)
+    {
+        var discoveredWorldPack = program.PackedWorld?.SerializedBytes;
+        var selectedWorldPack = packedWorldOverride ?? discoveredWorldPack;
+        if (selectedWorldPack is not null)
+        {
+            var pack = WorldPackSerializer.Deserialize(selectedWorldPack);
+            if (pack.Descriptor.TargetCellStride != 2)
+            {
+                throw new InvalidOperationException(
+                    $"NES WorldPack v1 requires targetCellStride 2; received {pack.Descriptor.TargetCellStride}.");
+            }
+        }
+
+        if (forcedCartridgeProfile is { } forced)
+        {
+            return BuildForProfile(program, useFourScreenNametables, forced, selectedWorldPack);
+        }
+
+        if (packedWorldOverride is null && discoveredWorldPack is not null)
+        {
+            try
+            {
+                // Preserve the exact historical mapper-0 image when it genuinely fits. The
+                // discovered canonical pack becomes a physical section only after that real
+                // final link proves a banked address/capacity need.
+                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, packedWorldBytes: null);
+            }
+            catch (InvalidOperationException exception) when (IsMapper0CapacityConstraint(exception))
+            {
+                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, discoveredWorldPack);
+            }
+        }
+
+        try
+        {
+            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, selectedWorldPack);
+        }
+        catch (InvalidOperationException exception) when (
+            selectedWorldPack is not null &&
+            IsMapper0CapacityConstraint(exception))
+        {
+            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, selectedWorldPack);
+        }
+    }
+
+    private static bool IsMapper0CapacityConstraint(InvalidOperationException exception) =>
+        exception.Data[nameof(NesLinkConstraint)] is NesLinkConstraint.Mapper0Prg or NesLinkConstraint.Mapper0Dpcm;
+
+    private static InvalidOperationException LinkConstraint(NesLinkConstraint constraint, string message)
+    {
+        var exception = new InvalidOperationException(message);
+        exception.Data[nameof(NesLinkConstraint)] = constraint;
+        return exception;
+    }
+
+    private static NesRomBuildResult BuildForProfile(
+        NesVideoProgram program,
+        bool useFourScreenNametables,
+        NesCartridgeProfile cartridgeProfile,
+        byte[]? packedWorldBytes)
+    {
         var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables);
-        var prg = BuildPrgRom(program, layout);
+        var worldPackPlacement = layout.EmitMmc3Foundation && packedWorldBytes is not null
+            ? NesWorldPackPlacement.Create(
+                packedWorldBytes,
+                layout.PrgSections.Where(section => section.Kind is NesPrgSectionKind.WorldR6).ToArray())
+            : null;
+        var includeLegacyWorldData = !layout.EmitMmc3Foundation ||
+                                     packedWorldBytes is null ||
+                                     program.RequiresLegacyWorldData;
+        var prgBuild = BuildPrgRom(
+            program,
+            layout,
+            worldPackPlacement is null ? packedWorldBytes : null,
+            includeLegacyWorldData);
+        var prg = prgBuild.Bytes;
+        if (layout.EmitMmc3Foundation)
+        {
+            var bootSection = layout.PrgSections.Single(section => section.Kind is NesPrgSectionKind.BootR7);
+            program.Palette.CopyTo(prg, bootSection.PhysicalOffset);
+            PadToLength(program.NameTable, 4 * 1_024).CopyTo(prg, bootSection.PhysicalOffset + program.Palette.Length);
+            var pinnedSection = layout.PrgSections.Single(section => section.Kind is NesPrgSectionKind.PinnedR7);
+            prgBuild.PinnedDataBytes.CopyTo(prg, pinnedSection.PhysicalOffset);
+        }
+
+        if (worldPackPlacement is not null)
+        {
+            foreach (var segment in worldPackPlacement.Segments)
+            {
+                worldPackPlacement.SerializedBytes.AsSpan(segment.RelativeOffset, segment.Length).CopyTo(
+                    prg.AsSpan(segment.PhysicalOffset, segment.Length));
+            }
+        }
+
         var chr = BuildChrRom(program, layout.ChrRomSize);
 
         var rom = new byte[16 + layout.PrgRomSize + layout.ChrRomSize];
@@ -32,10 +135,16 @@ internal static class NesRomBuilder
 
         prg.CopyTo(rom, 16);
         chr.CopyTo(rom, 16 + layout.PrgRomSize);
-        return rom;
+        return new NesRomBuildResult(
+            rom,
+            BuildReport(program, layout, prgBuild, packedWorldBytes, worldPackPlacement));
     }
 
-    private static byte[] BuildPrgRom(NesVideoProgram program, NesCartridgeLayout layout)
+    private static NesPrgBuild BuildPrgRom(
+        NesVideoProgram program,
+        NesCartridgeLayout layout,
+        byte[]? inlineWorldPack,
+        bool includeLegacyWorldData)
     {
         var longForLoopIds = new HashSet<int>();
         var longWhileLoopIds = new HashSet<int>();
@@ -43,7 +152,7 @@ internal static class NesRomBuilder
         {
             try
             {
-                return BuildPrgRom(program, longForLoopIds, longWhileLoopIds, layout);
+                return BuildPrgRom(program, longForLoopIds, longWhileLoopIds, layout, inlineWorldPack, includeLegacyWorldData);
             }
             catch (BranchOutOfRangeException ex)
             {
@@ -62,14 +171,20 @@ internal static class NesRomBuilder
         }
     }
 
-    private static byte[] BuildPrgRom(
+    private static NesPrgBuild BuildPrgRom(
         NesVideoProgram program,
         IReadOnlySet<int> longForLoopIds,
         IReadOnlySet<int> longWhileLoopIds,
-        NesCartridgeLayout layout)
+        NesCartridgeLayout layout,
+        byte[]? inlineWorldPack,
+        bool includeLegacyWorldData)
     {
         var builder = new PrgBuilder(layout.FixedRuntimeCpuBaseAddress);
         var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
+        if (layout.EmitMmc3Foundation)
+        {
+            DefinePinnedDataLabels(builder, program);
+        }
 
         builder.Label("fixed_runtime_entry");
         builder.Emit(0x78);                         // SEI
@@ -85,8 +200,13 @@ internal static class NesRomBuilder
 
         EmitWaitVBlank(builder, "vblank1");
         EmitWaitVBlank(builder, "vblank2");
-        EmitPaletteUpload(builder);
-        EmitNameTableUpload(builder, nameTableUploadByteCount);
+        EmitPaletteUpload(builder, layout.EmitMmc3Foundation ? Mmc3BootPaletteAddress : null);
+        EmitNameTableUpload(builder, nameTableUploadByteCount, layout.EmitMmc3Foundation ? Mmc3BootNameTableAddress : null);
+        if (layout.EmitMmc3Foundation)
+        {
+            EmitMmc3RegisterWrite(builder, register: 7, value: 1);
+            builder.StoreAAbsolute(Mmc3R7BankShadowAddress);
+        }
 
         var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds, longWhileLoopIds, layout.UseFourScreenNametables);
         runtimeCompiler.EmitInitialization();
@@ -110,20 +230,72 @@ internal static class NesRomBuilder
             EmitMmc3InterruptHandlers(builder);
         }
 
-        builder.Label("palette");
-        builder.Emit(program.Palette);
-        builder.Label("nametable");
-        builder.Emit(PadToLength(program.NameTable, nameTableUploadByteCount));
-        EmitWorldMapRows(builder, program.WorldMap, program.WorldTileGrid);
-        EmitWorldMapRowPointerTables(builder, program.WorldMap);
-        EmitPpuRowAddressTables(builder, program.WorldMap);
-        EmitWorldMapFlagRows(builder, program.WorldMap);
-        EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
-        EmitWorldColumnAttributes(builder, program.WorldColumnAttributes);
-        EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder, layout.FixedTrailerStartAddress);
+        if (!layout.EmitMmc3Foundation)
+        {
+            builder.Label("palette");
+            builder.Emit(program.Palette);
+            builder.Label("nametable");
+            builder.Emit(PadToLength(program.NameTable, nameTableUploadByteCount));
+        }
+        if (includeLegacyWorldData)
+        {
+            EmitWorldMapRows(builder, program.WorldMap, program.WorldTileGrid);
+            EmitWorldMapRowPointerTables(builder, program.WorldMap);
+            EmitPpuRowAddressTables(builder, program.WorldMap);
+            EmitWorldMapFlagRows(builder, program.WorldMap);
+            if (!layout.EmitMmc3Foundation)
+            {
+                EmitWorldMapFlagRowPointerTables(builder, program.WorldMap);
+                EmitWorldColumnAttributes(builder, program.WorldColumnAttributes);
+            }
+        }
+        if (inlineWorldPack is not null)
+        {
+            builder.Label(WorldPackLabel);
+            builder.Emit(inlineWorldPack);
+        }
+
+        byte[] pinnedDataBytes = [];
+        IReadOnlyList<NesDpcmBuildPlacement> dpcmPlacements = [];
         if (layout.EmitMmc3Foundation)
         {
+            EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress);
+            var dpcmLayout = BuildDpcmSampleLayout(
+                builder.CurrentAddress,
+                program.MusicAssetsInLoadOrder,
+                layout.FixedTrailerStartAddress,
+                fixedProfileName: layout.Name);
+            var pinnedBuilder = new PrgBuilder(0xA000);
+            EmitPinnedRuntimeData(pinnedBuilder, builder, program, includeLegacyWorldData);
+            EmitMusicAssets(pinnedBuilder, program.MusicAssetsInLoadOrder, dpcmLayout.AddressRegisterMap);
+            EmitSoundEffectAssets(pinnedBuilder, program.SoundEffectAssetsInLoadOrder);
+            pinnedDataBytes = pinnedBuilder.Build();
+            if (pinnedDataBytes.Length > 8 * 1_024)
+            {
+                throw new InvalidOperationException(
+                    $"NES MMC3/TVROM pinned R7 section overflow: {pinnedDataBytes.Length} bytes emitted, {8 * 1_024} bytes available.");
+            }
+
+            EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
+            dpcmPlacements = dpcmLayout.Placements
+                .Select(placement => new NesDpcmBuildPlacement(
+                    placement.Block.SourceAddress,
+                    placement.Address,
+                    placement.Block.Data.Length))
+                .ToArray();
+        }
+        else
+        {
+            EmitAudioAssets(builder, program.MusicAssetsInLoadOrder, program.SoundEffectAssetsInLoadOrder, layout.FixedTrailerStartAddress);
+        }
+
+        var fixedPayloadBeforeTrailer = builder.CurrentAddress - layout.FixedRuntimeCpuBaseAddress;
+        var resetTrampolineBytes = 0;
+        if (layout.EmitMmc3Foundation)
+        {
+            EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress);
             EmitMmc3ResetTrampoline(builder, layout.FixedTrailerStartAddress);
+            resetTrampolineBytes = builder.CurrentAddress - layout.FixedTrailerStartAddress;
         }
 
         var prg = new byte[layout.PrgRomSize];
@@ -138,7 +310,9 @@ internal static class NesRomBuilder
             var message = layout.EmitMmc3Foundation
                 ? $"NES {layout.Name} fixed PRG section overflow: {code.Length} bytes emitted, {layout.FixedRuntimeSize - 6} bytes available."
                 : $"NES PRG ROM overflow: {code.Length} bytes emitted, {layout.FixedRuntimeSize - 6} bytes available.";
-            throw new InvalidOperationException(message);
+            throw LinkConstraint(
+                layout.EmitMmc3Foundation ? NesLinkConstraint.FixedPrg : NesLinkConstraint.Mapper0Prg,
+                message);
         }
 
         code.CopyTo(prg, layout.FixedRuntimePhysicalOffset);
@@ -154,7 +328,389 @@ internal static class NesRomBuilder
         SetVector(prg, layout.PrgRomSize - 6, nmiVector);
         SetVector(prg, layout.PrgRomSize - 4, resetVector);
         SetVector(prg, layout.PrgRomSize - 2, irqVector);
-        return prg;
+        int? inlineWorldPackOffset = inlineWorldPack is null
+            ? null
+            : builder.AddressOfLabel(WorldPackLabel) - layout.FixedRuntimeCpuBaseAddress;
+        var fixedPayloadBytes = layout.EmitMmc3Foundation
+            ? checked(fixedPayloadBeforeTrailer + resetTrampolineBytes + 6)
+            : checked(code.Length + 6);
+        return new NesPrgBuild(
+            prg,
+            code.Length,
+            inlineWorldPackOffset,
+            pinnedDataBytes,
+            dpcmPlacements,
+            fixedPayloadBytes);
+    }
+
+    private static void EnsureFixedDataBeforeTrailer(NesCartridgeLayout layout, int currentAddress)
+    {
+        if (currentAddress > layout.FixedTrailerStartAddress)
+        {
+            throw LinkConstraint(
+                NesLinkConstraint.FixedPrg,
+                $"NES {layout.Name} fixed PRG section overflow: runtime/data/DPCM end at ${currentAddress:X4}, beyond reset trailer start ${layout.FixedTrailerStartAddress:X4}.");
+        }
+    }
+
+    private static void DefinePinnedDataLabels(PrgBuilder builder, NesVideoProgram program)
+    {
+        var address = 0xA000;
+        if (program.WorldMap is { } worldMap)
+        {
+            builder.DefineExternalLabel(WorldMapFlagRowPointerLowLabel, checked((ushort)address));
+            address = checked(address + worldMap.Height);
+            builder.DefineExternalLabel(WorldMapFlagRowPointerHighLabel, checked((ushort)address));
+            address = checked(address + worldMap.Height);
+        }
+
+        if (program.WorldColumnAttributes is { } attributes)
+        {
+            for (var row = 0; row < attributes.Rows.Count; row++)
+            {
+                builder.DefineExternalLabel(WorldMapColumnAttributeRowLabel(row), checked((ushort)address));
+                address = checked(address + attributes.Rows[row].BytesByColumnBlock.Length);
+            }
+        }
+
+        foreach (var asset in program.MusicAssetsInLoadOrder)
+        {
+            builder.DefineExternalLabel(MusicDataLabel(asset.Name), checked((ushort)address));
+            address = checked(address + asset.Data.Length);
+        }
+
+        foreach (var asset in program.SoundEffectAssetsInLoadOrder)
+        {
+            builder.DefineExternalLabel(SoundEffectDataLabel(asset.Name), checked((ushort)address));
+            address = checked(address + asset.Data.Length);
+        }
+
+        if (address > 0xC000)
+        {
+            throw new InvalidOperationException(
+                $"NES MMC3/TVROM pinned R7 section overflow: {address - 0xA000} bytes required, {8 * 1_024} bytes available.");
+        }
+    }
+
+    private static void EmitPinnedRuntimeData(
+        PrgBuilder pinnedBuilder,
+        PrgBuilder fixedBuilder,
+        NesVideoProgram program,
+        bool includeLegacyWorldData)
+    {
+        if (program.WorldMap is { } worldMap)
+        {
+            if (includeLegacyWorldData)
+            {
+                for (var row = 0; row < worldMap.Height; row++)
+                {
+                    pinnedBuilder.DefineExternalLabel(
+                        WorldMapFlagRowLabel(row),
+                        fixedBuilder.AddressOfLabel(WorldMapFlagRowLabel(row)));
+                }
+
+                EmitWorldMapFlagRowPointerTables(pinnedBuilder, worldMap);
+            }
+            else
+            {
+                pinnedBuilder.Label(WorldMapFlagRowPointerLowLabel);
+                pinnedBuilder.Emit(new byte[worldMap.Height]);
+                pinnedBuilder.Label(WorldMapFlagRowPointerHighLabel);
+                pinnedBuilder.Emit(new byte[worldMap.Height]);
+            }
+        }
+
+        EmitWorldColumnAttributes(pinnedBuilder, program.WorldColumnAttributes);
+    }
+
+    private static NesRomBuildReport BuildReport(
+        NesVideoProgram program,
+        NesCartridgeLayout layout,
+        NesPrgBuild prgBuild,
+        byte[]? packedWorldBytes,
+        NesWorldPackPlacement? worldPackPlacement)
+    {
+        var segments = new List<NesRomBuildSegment>();
+        if (worldPackPlacement is not null)
+        {
+            foreach (var segment in worldPackPlacement.Segments)
+            {
+                segments.Add(new NesRomBuildSegment(
+                    "worldpack:default",
+                    "R6 $8000-$9FFF",
+                    segment.RelativeOffset,
+                    segment.PhysicalOffset,
+                    segment.Length,
+                    segment.PhysicalBank,
+                    segment.CpuAddress));
+            }
+
+            AddMmc3BootReportSegments(segments, layout);
+            AddMmc3PinnedReportSegments(segments, program, layout);
+            AddFixedReportSegments(segments, layout, prgBuild);
+        }
+        else if (packedWorldBytes is not null && prgBuild.InlineWorldPackOffset is { } inlineOffset)
+        {
+            AddReportSegment(
+                segments,
+                "fixed:before-worldpack",
+                "mapper-0 $8000-$FFFF",
+                relativeOffset: -1,
+                physicalStart: 0,
+                length: inlineOffset,
+                cpuAddress: 0x8000);
+            AddReportSegment(
+                segments,
+                "worldpack:default",
+                "mapper-0 $8000-$FFFF",
+                relativeOffset: 0,
+                physicalStart: inlineOffset,
+                length: packedWorldBytes.Length,
+                cpuAddress: checked((ushort)(0x8000 + inlineOffset)));
+            AddReportSegment(
+                segments,
+                "fixed:after-worldpack",
+                "mapper-0 $8000-$FFFF",
+                relativeOffset: -1,
+                physicalStart: inlineOffset + packedWorldBytes.Length,
+                length: prgBuild.UsedBytes - inlineOffset - packedWorldBytes.Length,
+                cpuAddress: checked((ushort)(0x8000 + inlineOffset + packedWorldBytes.Length)));
+        }
+        else
+        {
+            if (layout.EmitMmc3Foundation)
+            {
+                AddMmc3BootReportSegments(segments, layout);
+                AddMmc3PinnedReportSegments(segments, program, layout);
+            }
+
+            if (layout.EmitMmc3Foundation)
+            {
+                AddFixedReportSegments(segments, layout, prgBuild);
+            }
+            else
+            {
+                AddReportSegment(
+                    segments,
+                    "fixed:runtime-data-dpcm-vectors",
+                    "mapper-0 $8000-$FFFF",
+                    relativeOffset: -1,
+                    layout.FixedRuntimePhysicalOffset,
+                    prgBuild.UsedBytes,
+                    layout.FixedRuntimeCpuBaseAddress);
+            }
+        }
+
+        AddReportSegment(
+            segments,
+            "fixed:vectors",
+            layout.EmitMmc3Foundation ? "fixed $C000-$FFFF" : "mapper-0 $8000-$FFFF",
+            relativeOffset: -1,
+            layout.PrgRomSize - 6,
+            6,
+            0xFFFA);
+        var orderedSegments = segments.OrderBy(segment => segment.PhysicalStart).ToArray();
+        ValidateReportedSegments(layout, orderedSegments);
+        return new NesRomBuildReport(
+            layout.EmitMmc3Foundation ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
+            layout.PrgRomSize,
+            layout.ChrRomSize,
+            prgBuild.FixedPayloadBytes,
+            prgBuild.PinnedDataBytes.Length,
+            layout.EmitMmc3Foundation ? 4_128 : 0,
+            CalculateResidentChrBytes(program),
+            orderedSegments);
+    }
+
+    private static void ValidateReportedSegments(
+        NesCartridgeLayout layout,
+        IReadOnlyList<NesRomBuildSegment> segments)
+    {
+        foreach (var segment in segments)
+        {
+            if (segment.PhysicalStart < 0 || segment.Length <= 0 ||
+                segment.PhysicalStart + segment.Length > layout.PrgRomSize)
+            {
+                throw new InvalidOperationException(
+                    $"NES {layout.Name} section '{segment.Owner}' is outside the {layout.PrgRomSize}-byte PRG image.");
+            }
+        }
+
+        foreach (var pair in segments.Zip(segments.Skip(1)))
+        {
+            if (pair.First.PhysicalStart + pair.First.Length > pair.Second.PhysicalStart)
+            {
+                throw new InvalidOperationException(
+                    $"NES {layout.Name} sections '{pair.First.Owner}' and '{pair.Second.Owner}' overlap in physical PRG.");
+            }
+        }
+    }
+
+    private static int CalculateResidentChrBytes(NesVideoProgram program)
+    {
+        var end = NesVideoProgram.FirstSpriteTile * 16;
+        foreach (var asset in program.SpriteAssetsInLoadOrder)
+        {
+            end = Math.Max(end, asset.FirstTile * 16 + asset.TileData.Length);
+        }
+
+        foreach (var background in program.GeneratedBackgroundTiles)
+        {
+            end = Math.Max(end, background.FirstTile * 16 + background.Data.Length);
+        }
+
+        return end;
+    }
+
+    private static void AddMmc3BootReportSegments(
+        ICollection<NesRomBuildSegment> segments,
+        NesCartridgeLayout layout)
+    {
+        var bootSection = layout.PrgSections.Single(section => section.Kind is NesPrgSectionKind.BootR7);
+        AddReportSegment(
+            segments,
+            "boot:palette",
+            "R7 boot-only $A000-$BFFF",
+            relativeOffset: -1,
+            bootSection.PhysicalOffset,
+            32,
+            Mmc3BootPaletteAddress);
+        AddReportSegment(
+            segments,
+            "boot:nametable",
+            "R7 boot-only $A000-$BFFF",
+            relativeOffset: -1,
+            bootSection.PhysicalOffset + 32,
+            4 * 1_024,
+            Mmc3BootNameTableAddress);
+    }
+
+    private static void AddMmc3PinnedReportSegments(
+        ICollection<NesRomBuildSegment> segments,
+        NesVideoProgram program,
+        NesCartridgeLayout layout)
+    {
+        var pinnedSection = layout.PrgSections.Single(section => section.Kind is NesPrgSectionKind.PinnedR7);
+        var offset = 0;
+        if (program.WorldMap is { } worldMap)
+        {
+            AddReportSegment(
+                segments,
+                "pinned:world-flag-pointers",
+                "R7 pinned $A000-$BFFF",
+                relativeOffset: -1,
+                pinnedSection.PhysicalOffset + offset,
+                2 * worldMap.Height,
+                checked((ushort)(0xA000 + offset)));
+            offset += 2 * worldMap.Height;
+        }
+
+        if (program.WorldColumnAttributes is { } attributes)
+        {
+            for (var row = 0; row < attributes.Rows.Count; row++)
+            {
+                var length = attributes.Rows[row].BytesByColumnBlock.Length;
+                AddReportSegment(
+                    segments,
+                    $"pinned:world-column-attributes:{row}",
+                    "R7 pinned $A000-$BFFF",
+                    relativeOffset: -1,
+                    pinnedSection.PhysicalOffset + offset,
+                    length,
+                    checked((ushort)(0xA000 + offset)));
+                offset += length;
+            }
+        }
+
+        foreach (var asset in program.MusicAssetsInLoadOrder)
+        {
+            AddReportSegment(
+                segments,
+                $"pinned:bgm:{asset.Name}",
+                "R7 pinned $A000-$BFFF",
+                relativeOffset: -1,
+                pinnedSection.PhysicalOffset + offset,
+                asset.Data.Length,
+                checked((ushort)(0xA000 + offset)));
+            offset += asset.Data.Length;
+        }
+
+        foreach (var asset in program.SoundEffectAssetsInLoadOrder)
+        {
+            AddReportSegment(
+                segments,
+                $"pinned:sfx:{asset.Name}",
+                "R7 pinned $A000-$BFFF",
+                relativeOffset: -1,
+                pinnedSection.PhysicalOffset + offset,
+                asset.Data.Length,
+                checked((ushort)(0xA000 + offset)));
+            offset += asset.Data.Length;
+        }
+    }
+
+    private static void AddFixedReportSegments(
+        ICollection<NesRomBuildSegment> segments,
+        NesCartridgeLayout layout,
+        NesPrgBuild prgBuild)
+    {
+        var cursor = layout.FixedRuntimePhysicalOffset;
+        var end = checked(layout.FixedRuntimePhysicalOffset + prgBuild.UsedBytes);
+        var gap = 0;
+        foreach (var dpcm in prgBuild.DpcmPlacements.OrderBy(item => item.CpuAddress))
+        {
+            var physicalStart = checked(layout.FixedRuntimePhysicalOffset + dpcm.CpuAddress - layout.FixedRuntimeCpuBaseAddress);
+            AddReportSegment(
+                segments,
+                $"fixed:runtime-data:{gap++}",
+                "fixed $C000-$FFFF",
+                relativeOffset: -1,
+                cursor,
+                physicalStart - cursor,
+                checked((ushort)(layout.FixedRuntimeCpuBaseAddress + cursor - layout.FixedRuntimePhysicalOffset)));
+            AddReportSegment(
+                segments,
+                $"fixed:dpcm:{dpcm.SourceAddress:X4}",
+                "fixed $C000-$FFF9",
+                relativeOffset: -1,
+                physicalStart,
+                dpcm.Length,
+                dpcm.CpuAddress);
+            cursor = physicalStart + dpcm.Length;
+        }
+
+        AddReportSegment(
+            segments,
+            $"fixed:runtime-data:{gap}",
+            "fixed $C000-$FFFF",
+            relativeOffset: -1,
+            cursor,
+            end - cursor,
+            checked((ushort)(layout.FixedRuntimeCpuBaseAddress + cursor - layout.FixedRuntimePhysicalOffset)));
+    }
+
+    private static void AddReportSegment(
+        ICollection<NesRomBuildSegment> segments,
+        string owner,
+        string window,
+        int relativeOffset,
+        int physicalStart,
+        int length,
+        ushort cpuAddress)
+    {
+        if (length <= 0)
+        {
+            return;
+        }
+
+        segments.Add(new NesRomBuildSegment(
+            owner,
+            window,
+            relativeOffset,
+            physicalStart,
+            length,
+            physicalStart / (8 * 1_024),
+            cpuAddress));
     }
 
     private static void EmitMmc3ResetTrampoline(PrgBuilder builder, ushort address)
@@ -181,7 +737,7 @@ internal static class NesRomBuilder
 
         EmitMmc3RegisterWrite(builder, register: 6, value: 0);
         builder.StoreAAbsolute(Mmc3R6BankShadowAddress);
-        EmitMmc3RegisterWrite(builder, register: 7, value: 1);
+        EmitMmc3RegisterWrite(builder, register: 7, value: 2);
         builder.StoreAAbsolute(Mmc3R7BankShadowAddress);
     }
 
@@ -272,7 +828,7 @@ internal static class NesRomBuilder
         builder.BranchRelative(0x10, label);        // BPL label
     }
 
-    private static void EmitPaletteUpload(PrgBuilder builder)
+    private static void EmitPaletteUpload(PrgBuilder builder, ushort? externalAddress)
     {
         builder.Emit(0xAD, 0x02, 0x20);             // LDA $2002
         builder.Emit(0xA9, 0x3F);                   // LDA #$3F
@@ -281,14 +837,21 @@ internal static class NesRomBuilder
         builder.Emit(0x8D, 0x06, 0x20);             // STA $2006
         builder.Emit(0xA2, 0x00);                   // LDX #$00
         builder.Label("palette_loop");
-        builder.LdaAbsoluteX("palette");
+        if (externalAddress is { } paletteAddress)
+        {
+            builder.LoadAAbsoluteX(paletteAddress);
+        }
+        else
+        {
+            builder.LdaAbsoluteX("palette");
+        }
         builder.Emit(0x8D, 0x07, 0x20);             // STA $2007
         builder.Emit(0xE8);                         // INX
         builder.Emit(0xE0, 0x20);                   // CPX #$20
         builder.BranchRelative(0xD0, "palette_loop"); // BNE palette_loop
     }
 
-    private static void EmitNameTableUpload(PrgBuilder builder, int byteCount)
+    private static void EmitNameTableUpload(PrgBuilder builder, int byteCount, ushort? externalAddress)
     {
         builder.Emit(0xAD, 0x02, 0x20);             // LDA $2002
         builder.Emit(0xA9, 0x20);                   // LDA #$20
@@ -306,7 +869,14 @@ internal static class NesRomBuilder
             builder.Emit(0xA2, 0x00);               // LDX #$00
             var label = $"nametable_loop_{page}";
             builder.Label(label);
-            builder.LdaAbsoluteX("nametable", page * 256);
+            if (externalAddress is { } nameTableAddress)
+            {
+                builder.LoadAAbsoluteX(checked((ushort)(nameTableAddress + page * 256)));
+            }
+            else
+            {
+                builder.LdaAbsoluteX("nametable", page * 256);
+            }
             builder.Emit(0x8D, 0x07, 0x20);         // STA $2007
             builder.Emit(0xE8);                     // INX
             builder.BranchRelative(0xD0, label);    // BNE label
@@ -474,9 +1044,19 @@ internal static class NesRomBuilder
         // emitted after the DPCM blocks and does not shrink the DPCM window.
         var musicDataLength = musicAssets.Sum(asset => asset.Data.Length);
         var dpcmLayout = BuildDpcmSampleLayout(builder.CurrentAddress + musicDataLength, musicAssets, vectorStartAddress);
+        EmitMusicAssets(builder, musicAssets, dpcmLayout.AddressRegisterMap);
+        EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
+        EmitSoundEffectAssets(builder, soundEffectAssets);
+    }
+
+    private static void EmitMusicAssets(
+        PrgBuilder builder,
+        IReadOnlyList<NesCompiledMusicAsset> musicAssets,
+        IReadOnlyDictionary<byte, byte> dpcmAddressRegisterMap)
+    {
         foreach (var asset in musicAssets)
         {
-            var data = PatchDpcmAddressRegisters(asset, dpcmLayout.AddressRegisterMap);
+            var data = PatchDpcmAddressRegisters(asset, dpcmAddressRegisterMap);
             var label = MusicDataLabel(asset.Name);
             builder.Label(label);
             builder.Emit(data[0]);
@@ -496,9 +1076,12 @@ internal static class NesRomBuilder
 
             builder.Emit(0, 0, 0);
         }
+    }
 
-        EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
-
+    private static void EmitSoundEffectAssets(
+        PrgBuilder builder,
+        IReadOnlyList<NesCompiledSoundEffectAsset> soundEffectAssets)
+    {
         foreach (var asset in soundEffectAssets)
         {
             builder.Label(SoundEffectDataLabel(asset.Name));
@@ -507,9 +1090,10 @@ internal static class NesRomBuilder
     }
 
     private static DpcmSampleLayout BuildDpcmSampleLayout(
-        int musicDataEndAddress,
+        int precedingDataEndAddress,
         IReadOnlyList<NesCompiledMusicAsset> musicAssets,
-        ushort vectorStartAddress)
+        ushort vectorStartAddress,
+        string? fixedProfileName = null)
     {
         var uniqueBlocks = new List<NesDpcmSampleBlock>();
         foreach (var block in musicAssets.SelectMany(asset => asset.DpcmBlocks))
@@ -535,15 +1119,19 @@ internal static class NesRomBuilder
 
         var placements = new List<DpcmSamplePlacement>(uniqueBlocks.Count);
         var addressRegisterMap = new Dictionary<byte, byte>();
-        var cursor = AlignToDmcAddress(Math.Max(musicDataEndAddress, 0xC000));
+        var cursor = AlignToDmcAddress(Math.Max(precedingDataEndAddress, 0xC000));
         foreach (var block in uniqueBlocks.OrderByDescending(block => block.Data.Length))
         {
             cursor = AlignToDmcAddress(cursor);
             var endAddress = cursor + block.Data.Length;
             if (cursor < 0xC000 || endAddress > vectorStartAddress)
             {
-                throw new InvalidOperationException(
-                    $"NES DPCM sample block from ${block.SourceAddress:X4} with {block.Data.Length} bytes cannot fit in PRG ROM after music data ending at ${musicDataEndAddress:X4}.");
+                var message = fixedProfileName is null
+                    ? $"NES DPCM sample block from ${block.SourceAddress:X4} with {block.Data.Length} bytes cannot fit in PRG ROM after music data ending at ${precedingDataEndAddress:X4}."
+                    : $"NES {fixedProfileName} DPCM constraint: sample block from ${block.SourceAddress:X4} with {block.Data.Length} bytes cannot fit below ${vectorStartAddress:X4} after fixed runtime/data ending at ${precedingDataEndAddress:X4}.";
+                throw LinkConstraint(
+                    fixedProfileName is null ? NesLinkConstraint.Mapper0Dpcm : NesLinkConstraint.Dpcm,
+                    message);
             }
 
             if ((cursor - 0xC000) % 64 != 0)
@@ -6953,6 +7541,8 @@ internal sealed class PrgBuilder
 
     public void Label(string name) => labels[name] = bytes.Count;
 
+    public void DefineExternalLabel(string name, ushort address) => labels[name] = address - baseAddress;
+
     public string CreateLabel(string prefix) => $"{prefix}_{nextLabelId++}";
 
     public void Emit(params byte[] values) => bytes.AddRange(values);
@@ -7189,16 +7779,55 @@ internal sealed class PrgBuilder
 internal enum NesCartridgeProfile
 {
     Mapper0,
-    Mmc3TvromForTests,
+    Mmc3Tvrom,
 }
 
 internal enum NesPrgSectionKind
 {
-    InitialR6,
+    WorldR6,
     PinnedR7,
-    ReservedSwitchable,
+    BootR7,
     FixedRuntime,
 }
+
+internal enum NesLinkConstraint
+{
+    Mapper0Prg,
+    Mapper0Dpcm,
+    FixedPrg,
+    Dpcm,
+}
+
+internal sealed record NesPrgBuild(
+    byte[] Bytes,
+    int UsedBytes,
+    int? InlineWorldPackOffset,
+    byte[] PinnedDataBytes,
+    IReadOnlyList<NesDpcmBuildPlacement> DpcmPlacements,
+    int FixedPayloadBytes);
+
+internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
+
+internal sealed record NesRomBuildResult(byte[] Rom, NesRomBuildReport Report);
+
+internal sealed record NesRomBuildReport(
+    string SelectedProfile,
+    int PrgRomSize,
+    int ChrRomSize,
+    int FixedPayloadBytes,
+    int PinnedR7Bytes,
+    int BootR7Bytes,
+    int ResidentChrBytes,
+    IReadOnlyList<NesRomBuildSegment> Segments);
+
+internal sealed record NesRomBuildSegment(
+    string Owner,
+    string Window,
+    int RelativeOffset,
+    int PhysicalStart,
+    int Length,
+    int PhysicalBank,
+    ushort CpuAddress);
 
 internal sealed record NesPrgSectionLayout(
     int PhysicalBank,
@@ -7237,17 +7866,17 @@ internal sealed record NesCartridgeLayout(
                 FixedRuntimeSize: 32 * 1_024,
                 FixedTrailerStartAddress: 0xFFFA,
                 EmitMmc3Foundation: false),
-            NesCartridgeProfile.Mmc3TvromForTests => new NesCartridgeLayout(
+            NesCartridgeProfile.Mmc3Tvrom => new NesCartridgeLayout(
                 "MMC3/TVROM",
                 PrgRomSize: 64 * 1_024,
                 PrgSections:
                 [
-                    new NesPrgSectionLayout(0, 0 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.InitialR6),
+                    new NesPrgSectionLayout(0, 0 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.WorldR6),
                     new NesPrgSectionLayout(1, 1 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.PinnedR7),
-                    new NesPrgSectionLayout(2, 2 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
-                    new NesPrgSectionLayout(3, 3 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
-                    new NesPrgSectionLayout(4, 4 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
-                    new NesPrgSectionLayout(5, 5 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.ReservedSwitchable),
+                    new NesPrgSectionLayout(2, 2 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.BootR7),
+                    new NesPrgSectionLayout(3, 3 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.WorldR6),
+                    new NesPrgSectionLayout(4, 4 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.WorldR6),
+                    new NesPrgSectionLayout(5, 5 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.WorldR6),
                     new NesPrgSectionLayout(6, 6 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.FixedRuntime),
                     new NesPrgSectionLayout(7, 7 * 8 * 1_024, 8 * 1_024, NesPrgSectionKind.FixedRuntime),
                 ],

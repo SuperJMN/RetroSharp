@@ -22,7 +22,7 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
 
-The next architecture frontier is Iteration 15: scalable large-world assets and banked streaming. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 have accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` now prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and non-destructive full-`stage1` acceptance. NES `LW-3.1` now proves the target-private MMC3/TVROM forced link, fixed `$C000-$FFFF` runtime/DPCM/vector section, mapper bootstrap, and combined AprNes bank/four-screen behavior without changing mapper-0 output; `LW-3.2` / #302 is the next NES task. The complete task graph lives in `docs/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
+The next architecture frontier is Iteration 15: scalable large-world assets and banked streaming. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 have accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` now prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and non-destructive full-`stage1` acceptance. NES `LW-3.1` proves the target-private MMC3/TVROM fixed-runtime foundation, and `LW-3.2` adds mapper-0-first final-link selection plus canonical ordered multi-R6 `WorldPack`, pinned-R7, boot-R7, fixed-DPCM/vector, and CHR placement without adding the `LW-3.3` reader. The complete task graph lives in `docs/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
 
 The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
 contract as deterministic 8x8 source-metatile chunks with independently
@@ -1675,7 +1675,9 @@ Wave 1 (shared coordinate, collision, packed-world, Tiled, and budget
 foundations) is complete. Game Boy `LW-2.1` through `LW-2.5` are implemented;
 the complete authored `stage1` is accepted on the production packed path without
 changing the shared runner input. NES `LW-3.1` implements the forced
-MMC3/TVROM linker and fixed-runtime foundation; `LW-3.2` / #302 is next. Each
+MMC3/TVROM linker and fixed-runtime foundation; `LW-3.2` implements physical
+data placement and mapper-0-first final-link selection, while `LW-3.3` remains
+not started. Each
 target chain keeps linker/foundation,
 physical placement and selection, production reader, staged streaming, and
 acceptance separate, with the joint runner migration owned only by `LW-3.5` /
@@ -1724,9 +1726,9 @@ Acceptance criteria:
 
 ## First Recommended Implementation Slice
 
-Continue with [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302)
-from the merged `LW-3.1` foundation; keep the NES chain sequential through
-placement, reader, and staging. `LW-2.5` / #300 has proved Game Boy full
+`LW-3.2` / #302 is implemented from the merged `LW-3.1` foundation. Keep
+`LW-3.3` not started until a dedicated implementation run begins, then keep the
+NES chain sequential through reader and staging. `LW-2.5` / #300 has proved Game Boy full
 `stage1` without changing the shared runner input. After both #300 and
 `LW-3.4` / #304 merge, `LW-3.5` / #305 owns the one joint runner-input migration
 and regeneration of both tracked ROMs. The exact native dependencies,

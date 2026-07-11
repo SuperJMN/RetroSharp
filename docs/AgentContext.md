@@ -91,15 +91,26 @@ This document preserves project knowledge that previously lived only in agent me
   `auto`/AprNes, entered through the bank-7 reset trampoline at `$FF80` before
   jumping to the `$C000` runtime, switched R6/R7 across distinct physical banks,
   and exposed independent probes at `$2000/$2400/$2800/$2C00`.
+- LW-3.2 adds the production mapper-0-first selector and physical data linker.
+  A discovered `WorldPack` does not perturb a mapper-0 image that already fits;
+  only a real mapper-0 PRG/DPCM layout failure retries MMC3. MMC3 owns ordered
+  R6 world banks `0, 3, 4, 5`, pinned R7 bank `1`, boot-only R7 bank `2`, and
+  fixed banks `6, 7`. The canonical multi-R6 acceptance pack crosses all four
+  non-contiguous R6 segments byte-for-byte without padding or rewritten v1
+  offsets. The normalized full-`stage1` placement probe embeds 2,762 pack
+  bytes and remeasures 5,012 pinned, 4,128 boot, 2,151 fixed payload, and 3,056
+  resident CHR bytes. The raw runner-shaped path still reports its exact fixed
+  overflow; no `LW-3.3` reader or runner migration is present.
 - Fresh Large Worlds implementation conversations should continue with
-  [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302) and keep the
-  NES target chain sequential. `LW-2.5` / #300 proves full `stage1` on Game Boy
+  [LW-3.3 / #303](https://github.com/SuperJMN/RetroSharp/issues/303) only when a
+  dedicated run is requested, and keep the NES target chain sequential.
+  `LW-2.5` / #300 proves full `stage1` on Game Boy
   through a non-destructive fixture without changing the shared runner input.
   Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
   runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4; Wave 3
   only links the mapper-backed slice from #247 and does not absorb its unrelated
   gaps.
-- The NES 8 KiB R6 window is not a whole-pack size cap. `LW-3.2` must place an
+- The NES 8 KiB R6 window is not a whole-pack size cap. `LW-3.2` places an
   unchanged synthetic `WorldPack` larger than 8 KiB over an explicit ordered
   list of R6-owned continuation segments, whose physical bank ids may be
   non-contiguous because of R7 ownership; `LW-3.3` must read directory and
@@ -349,9 +360,9 @@ Progress (2026-06-14):
 
 Suggested next steps for the next agent, in order:
 1. For the active cross-target scale frontier, read the exact published card in
-   `docs/LargeWorldsRoadmap.md`; begin with
-   [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302), not an
-   open-ended request to continue #275.
+   `docs/LargeWorldsRoadmap.md`; `LW-3.2` / #302 is implemented and
+   [LW-3.3 / #303](https://github.com/SuperJMN/RetroSharp/issues/303) remains
+   not started until a dedicated run is requested.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
    linked ROM/window layout in every placement/selection task.
 3. Keep each GB/NES chain sequential and keep target details out of public

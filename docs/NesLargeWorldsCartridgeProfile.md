@@ -1,12 +1,14 @@
 # ADR: NES Large Worlds v1 cartridge profile
 
 Status: **accepted for LW-0.3 on 2026-07-10; forced linker/runtime foundation
-implemented by LW-3.1 on 2026-07-12.**
+implemented by LW-3.1 and production placement/selection implemented by
+LW-3.2 on 2026-07-12.**
 
 This ADR selects the cartridge architecture for the NES Large Worlds
 linker/runtime. LW-3.1 implements its target-private forced linker and fixed
-runtime foundation for acceptance; production selection and `WorldPack`
-placement/reading remain later tasks. It does not migrate the runner or
+runtime foundation; LW-3.2 implements mapper-0-first selection plus physical
+`WorldPack`, pinned-R7, boot-R7, DPCM/vector, and CHR placement. Production
+pack reading remains `LW-3.3`. This ADR does not migrate the runner or
 implement a HUD.
 
 ## Decision
@@ -187,19 +189,20 @@ The CPU view after initialization is:
 | 0 initially | `$8000-$9FFF` through R6 | Current `WorldPack` bank; switchable later |
 | 1 normally | `$A000-$BFFF` through R7 | 5,012-byte pinned BGM/SFX/runtime data |
 | 2 during boot | `$A000-$BFFF` through R7 | 4,128-byte nametable/palette upload data |
-| 3-5 | R6 or boot-only R7 selections | Unpopulated/reserved in the measured sketch |
+| 3-5 | `$8000-$9FFF` through R6 | Ordered `WorldPack` continuation banks after physical bank 0 |
 | 6 | `$C000-$DFFF` fixed in PRG mode 0 | First physical half of fixed execution/DPCM region |
 | 7 | `$E000-$FFFF` fixed | Second physical half; vectors at `$FFFA-$FFFF` |
 
 Reset enters through bank 7. Before enabling rendering, audio, or NMI, reset
-must set MMC3 PRG mode 0, set R6 to the initial world bank, set R7 to the pinned
-data bank, map the eight CHR-ROM 1 KiB pages linearly, disable/acknowledge mapper
-IRQs through `$E000`, and initialize both software bank shadows.
+sets MMC3 PRG mode 0, maps R6 to the initial world bank, maps R7 to boot bank 2,
+maps the eight CHR-ROM 1 KiB pages linearly, disables/acknowledges mapper IRQs
+through `$E000`, and initializes both software bank shadows. Startup uploads
+palette/nametables and then pins R7 to bank 1 before normal audio/gameplay.
 
 ### World-data continuation policy
 
 The 8 KiB R6 CPU window is not a `WorldPack` length limit. Within the fixed
-64 KiB TVROM v1 capacity, the final linker may place one canonical pack across
+64 KiB TVROM v1 capacity, the final linker places one canonical pack across
 an ordered list of R6-owned 8 KiB continuation segments. R7-pinned or boot data
 may make the physical bank ids non-contiguous, so placement records the exact
 logical-segment-to-physical-bank mapping rather than assuming
@@ -334,7 +337,7 @@ nor part of v1 behavior.
 This ADR does not change existing output. `NesRomBuilder` continues to emit the
 current mapper 0 header and byte layout for existing programs.
 
-When Wave 3 adds selection, it must preserve these rules:
+The LW-3.2 final-link selector preserves these rules:
 
 1. Attempt mapper 0 first whenever the final linked program needs no banked
    address and fits its emitted-code limit, DPCM window, 8 KiB CHR, addressing,
@@ -343,7 +346,7 @@ When Wave 3 adds selection, it must preserve these rules:
 2. Select the MMC3 profile when the final linked program requires a
    switchable `WorldPack` address or exceeds mapper 0 while satisfying every
    accepted MMC3 window. Full `stage1` is the acceptance payload used to prove
-   this selected banked profile, but the future selector must not force MMC3 if
+   this selected banked profile, but the selector does not force MMC3 if
    the completed production image genuinely needs no banking and fits mapper 0.
 3. Do not silently promote a program to MMC3 to hide an unrelated coordinate,
    collision, CHR, palette, or fixed-bank overflow. Emit the responsible
@@ -354,10 +357,13 @@ When Wave 3 adds selection, it must preserve these rules:
 
 The 30,699-byte reconstruction leaves 2,069 bytes in a hypothetical 32 KiB
 image, so the accepted payload is not currently proven to require a mapper.
-That headroom excludes the not-yet-implemented pack reader, bank helpers, and
-widened-coordinate changes. Wave 3 must measure the final link: fit keeps
-mapper 0; an actual capacity/window failure selects this MMC3 profile. This is
-a profile and capacity policy, not a false NROM-overflow claim.
+That headroom excluded the pack reader and later runtime changes. LW-3.2 now
+measures the real link: fit keeps the exact historical mapper-0 bytes; an
+actual PRG/DPCM layout failure retries MMC3 and every MMC3 constraint is then
+reported independently. Its normalized full-`stage1` placement probe measures
+2,762 pack, 5,012 pinned, 4,128 boot, 2,151 fixed payload, and 3,056 resident
+CHR bytes. This is a profile and capacity policy, not a false NROM-overflow
+claim.
 
 ## Behavioral emulator evidence
 
@@ -412,16 +418,15 @@ Production ownership remains split:
   deterministic budget diagnostics.
 - Wave 3 owns the mapper-4 header/linker, fixed-bank runtime, R6 reader,
   restoration tests, DPCM placement, and full `stage1` behavioral acceptance.
-- Later content-residency work owns CHR banking and boot/data relocation when
-  art or startup images exceed the static v1 shape.
+- LW-3.2 owns the static v1 boot/pinned relocation; later content-residency
+  work owns CHR banking or larger replacement policies.
 - The HUD backlog owns IRQ or sprite-HUD behavior independently.
 
 ## Non-goals
 
-The implemented LW-3.1 foundation still does not add or change:
+The implemented LW-3.1/LW-3.2 linker still does not add or change:
 
-- automatic mapper selection, production `WorldPack` placement/reader, or
-  banked camera streaming;
+- production `WorldPack` reading or banked camera streaming;
 - current mapper-0 sample ROM bytes or any public gameplay mapper argument;
 - `WorldPack` bytes, compression, chunking, or staging buffers;
 - 16-bit camera/collision lowering;
@@ -439,6 +444,6 @@ dotnet test src/RetroSharp.NES.Tests/RetroSharp.NES.Tests.csproj -m:1 \
   --filter "FullyQualifiedName~NesLargeWorldsCartridgeProfileAnalysisTests"
 ```
 
-The public production target remains mapper 0 until the final-link selector in
-LW-3.2 has a real banked address or capacity reason to choose MMC3. The forced
-internal profile exists only for linker/runtime acceptance.
+The public production target preserves mapper 0 whenever its exact historical
+link fits. LW-3.2 selects MMC3 only from a real banked address/capacity need;
+the forced internal profile remains available for focused linker acceptance.
