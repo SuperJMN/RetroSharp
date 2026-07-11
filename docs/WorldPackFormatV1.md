@@ -74,6 +74,12 @@ Each target owns:
 - the reader/decompressor implementation and target residency bookkeeping;
 - conversion of a staged logical edge into its bounded VRAM/PPU commit.
 
+A target profile may reject a pack that exceeds its total physical capacity,
+but the size of one CPU-visible ROM window is not itself a v1 pack-length
+limit. When a target declares ordered continuation segments, placement and the
+reader map the unchanged 32-bit pack-relative byte ranges across those segments;
+they do not insert serialized padding or expose physical banks in this format.
+
 `World.Load(...)` remains the public authoring boundary. No chunk, bank, mapper,
 PPU address, MBC register, cartridge window, or target expansion record becomes
 a portable SDK argument. The packed bytes are an internal compiler artifact,

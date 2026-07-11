@@ -237,6 +237,48 @@ public sealed class NesMusicTests
     }
 
     [Fact]
+    public void Forced_mmc3_tvrom_link_keeps_dpcm_aligned_in_the_fixed_prg_region()
+    {
+        var directory = CreateTempDirectory();
+        var sample = Enumerable.Range(0, 17).Select(i => (byte)(0xB0 + i)).ToArray();
+        var dataBlock = new byte[2 + sample.Length];
+        dataBlock[1] = 0xE0;
+        sample.CopyTo(dataBlock, 2);
+        WriteVgmGzipWithDataBlock(
+            Path.Combine(directory, "dmc.nes.vgz"),
+            dataBlockType: 0xC2,
+            dataBlock: dataBlock,
+            command: 0xB4,
+            [0x10, 0x0F],
+            [0x12, 0x80],
+            [0x13, 0x01],
+            [0x15, 0x1F]);
+
+        const string source = """
+                              void Main() {
+                                  Music.Asset(dmc_theme, "dmc.vgz");
+                                  Audio.Init();
+                                  Music.Play(dmc_theme);
+                                  Audio.Update();
+                                  return;
+                              }
+                              """;
+
+        var rom = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTests(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var sampleOffset = IndexOfSequence(rom, sample);
+        var fixedPhysicalOffset = 16 + 6 * 8 * 1_024;
+
+        Assert.InRange(sampleOffset, fixedPhysicalOffset, 16 + 64 * 1_024 - 7);
+        var sampleAddress = 0xC000 + sampleOffset - fixedPhysicalOffset;
+        Assert.Equal(0, (sampleAddress - 0xC000) % 64);
+        var relocatedAddressRegister = (byte)((sampleAddress - 0xC000) / 64);
+        Assert.True(ContainsSequence(rom.Skip(fixedPhysicalOffset).ToArray(), [0x12, relocatedAddressRegister]));
+    }
+
+    [Fact]
     public void Music_play_stop_via_library_helpers_are_byte_identical_nes()
     {
         var directory = CreateTempDirectory();

@@ -32,11 +32,11 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
-  acceptance target. Waves 0/1 are complete; Game Boy `LW-2.1` through `LW-2.5`
-  are implemented, and the remaining Wave 3 cards are published as native
-  subissues: `LW-2.1`..`LW-2.5` are #296-#300 and `LW-3.1`..`LW-3.5` are
-  #301-#305. All belong to milestone 11 under parent #275; do not dispatch the
-  parent as one task.
+  acceptance target. Waves 0/1, Game Boy `LW-2.1` through `LW-2.5`, and NES
+  `LW-3.1` are implemented. The target cards are native subissues:
+  `LW-2.1`..`LW-2.5` are #296-#300 and `LW-3.1`..`LW-3.5` are #301-#305. All
+  belong to milestone 11 under parent #275; do not dispatch the parent as one
+  task.
 - LW-1.3 adds the target-neutral `RetroSharp.Core.Sdk.WorldPack` model: the v1
   header/directory and exact clipped coverage are validated with checked
   relative offsets, collision profiles and decoded IDs stay portable, target
@@ -81,14 +81,32 @@ This document preserves project knowledge that previously lived only in agent me
   target-private `$C19D` packed-audio tick counter. The real runner fixture
   selects 128 KiB MBC1 while a smaller full-stage probe stays ROM-only, so the
   evidence comes from the final link rather than the map-only report.
+- LW-3.1 adds a target-private forced MMC3/TVROM test profile while leaving the
+  public compiler on byte-identical mapper 0 by default. Its section-aware
+  `PrgBuilder` relocates the complete callable/runtime/DPCM/vector image to
+  physical banks 6-7 at `$C000-$FFFF`, emits 64 KiB PRG plus 16 KiB CHR and
+  exact `04 02 48 00` header fields, initializes PRG mode 0, linear resident
+  CHR pages, R6/R7 and their shadows, fixed bank helpers, and disabled mapper
+  IRQs without writing `$A000`. A generated smoke was loaded through NesMcp
+  `auto`/AprNes, entered through the bank-7 reset trampoline at `$FF80` before
+  jumping to the `$C000` runtime, switched R6/R7 across distinct physical banks,
+  and exposed independent probes at `$2000/$2400/$2800/$2C00`.
 - Fresh Large Worlds implementation conversations should continue with
-  [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) and keep the
+  [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302) and keep the
   NES target chain sequential. `LW-2.5` / #300 proves full `stage1` on Game Boy
   through a non-destructive fixture without changing the shared runner input.
   Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
   runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4; Wave 3
   only links the mapper-backed slice from #247 and does not absorb its unrelated
   gaps.
+- The NES 8 KiB R6 window is not a whole-pack size cap. `LW-3.2` must place an
+  unchanged synthetic `WorldPack` larger than 8 KiB over an explicit ordered
+  list of R6-owned continuation segments, whose physical bank ids may be
+  non-contiguous because of R7 ownership; `LW-3.3` must read directory and
+  raw/RLE payload ranges across those boundaries. `LW-3.4` additionally owns a
+  two-gameplay-frame maximum from a valid edge request to residency under an
+  R6 crossing with audio/DPCM active. NES v1 still keeps all executable code in
+  the fixed 16 KiB region; this epic does not implement code banking.
 - The NES four-screen background flicker (#130, stale scroll on streaming frames)
   is fixed and the issue is closed. `dd58910` ("fix: stabilize NES camera streaming")
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
@@ -332,7 +350,7 @@ Progress (2026-06-14):
 Suggested next steps for the next agent, in order:
 1. For the active cross-target scale frontier, read the exact published card in
    `docs/LargeWorldsRoadmap.md`; begin with
-   [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301), not an
+   [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302), not an
    open-ended request to continue #275.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
    linked ROM/window layout in every placement/selection task.

@@ -1,11 +1,13 @@
 # ADR: NES Large Worlds v1 cartridge profile
 
-Status: **accepted for LW-0.3 on 2026-07-10.**
+Status: **accepted for LW-0.3 on 2026-07-10; forced linker/runtime foundation
+implemented by LW-3.1 on 2026-07-12.**
 
-This ADR selects the cartridge architecture that a future NES Large Worlds
-linker/runtime will implement. It does not change `NesRomBuilder`, emit a
-mapper-backed ROM, add a `WorldPack` reader, migrate the runner, or implement a
-HUD.
+This ADR selects the cartridge architecture for the NES Large Worlds
+linker/runtime. LW-3.1 implements its target-private forced linker and fixed
+runtime foundation for acceptance; production selection and `WorldPack`
+placement/reading remain later tasks. It does not migrate the runner or
+implement a HUD.
 
 ## Decision
 
@@ -194,6 +196,23 @@ must set MMC3 PRG mode 0, set R6 to the initial world bank, set R7 to the pinned
 data bank, map the eight CHR-ROM 1 KiB pages linearly, disable/acknowledge mapper
 IRQs through `$E000`, and initialize both software bank shadows.
 
+### World-data continuation policy
+
+The 8 KiB R6 CPU window is not a `WorldPack` length limit. Within the fixed
+64 KiB TVROM v1 capacity, the final linker may place one canonical pack across
+an ordered list of R6-owned 8 KiB continuation segments. R7-pinned or boot data
+may make the physical bank ids non-contiguous, so placement records the exact
+logical-segment-to-physical-bank mapping rather than assuming
+`physicalBank = baseBank + segmentIndex`.
+
+Every serialized offset remains the original 32-bit pack-relative byte offset.
+The target translates `segmentIndex = relativeOffset / 8192` and
+`windowOffset = relativeOffset % 8192` through the linker-owned segment list;
+it does not add padding or rewrite the canonical v1 envelope. A header section,
+directory, encoded plane, or chunk payload may cross a segment boundary. The
+raw 7,920-byte fallback used by the current `stage1` analysis may remain in one
+segment, but it does not establish a general one-window restriction.
+
 The four-screen flag is a board requirement, not merely an emulator preference.
 TVROM supplies 4 KiB of cartridge nametable VRAM; the console's CIRAM is not the
 four-screen store. V1 never writes the MMC3 `$A000` mirroring register. The
@@ -207,6 +226,12 @@ distinct nametables.
 No callable code, return address target, jump table, NMI handler, IRQ handler,
 reset path, vector, DPCM byte, or bank-switch helper may live in R6 or R7. A
 banked window contains data only.
+
+Large Worlds v1 therefore implements **banked world/data placement with a fixed
+executable runtime**. It does not automatically partition or bank executable
+program code. Overflow of the fixed 16 KiB execution/DPCM/vector region remains
+a profile failure and requires a separate future code-banking architecture
+decision rather than silently placing callable code in R6 or R7.
 
 The only runtime-changing window in v1 is R6. Its callable protocol is:
 
@@ -357,9 +382,13 @@ bit 3 to four distinct nametables. The named mapper-4 tests use ordinary
 mapper-4 headers: they prove mapper loading, instruction execution, auto
 routing, and bank selection, **not the combined mapper-4 + four-screen visual
 behavior**. The loader source is authoritative existing capability evidence
-that the combination is representable, but Wave 3 must add a focused
-RetroSharp-generated `0x48` header/bank/four-nametable ROM and run it through
-AprNes before claiming the production linker/runtime complete.
+that the combination is representable. LW-3.1 added the focused
+RetroSharp-generated `0x48` header/bank/four-nametable ROM and ran it through
+NesMcp `auto`/AprNes: reset entered the always-fixed bank 7 at `$FF80`, fixed
+PRG mode 0, and jumped to the runtime at `$C000`; R6 exposed `A0` then `A2`
+after selecting physical bank 2, R7 exposed `A1` then `A3` after selecting bank
+3, and the four nametable probes read `01`, `02`, `03`, and `04` at `$2000`,
+`$2400`, `$2800`, and `$2C00` after startup completed.
 
 ADNES remains the normal mapper-0/MMC1/UxROM backend. This decision does not
 remove it or claim AprNes solves every emulator-accuracy concern.
@@ -389,10 +418,11 @@ Production ownership remains split:
 
 ## Non-goals
 
-This ADR does not implement or change:
+The implemented LW-3.1 foundation still does not add or change:
 
-- a production mapper linker, runtime, or banked reader;
-- `NesRomBuilder` output or current mapper-0 sample ROMs;
+- automatic mapper selection, production `WorldPack` placement/reader, or
+  banked camera streaming;
+- current mapper-0 sample ROM bytes or any public gameplay mapper argument;
 - `WorldPack` bytes, compression, chunking, or staging buffers;
 - 16-bit camera/collision lowering;
 - target palette provenance or generic world collision;
@@ -409,5 +439,6 @@ dotnet test src/RetroSharp.NES.Tests/RetroSharp.NES.Tests.csproj -m:1 \
   --filter "FullyQualifiedName~NesLargeWorldsCartridgeProfileAnalysisTests"
 ```
 
-The production target remains mapper 0 until a later issue implements this
-contract.
+The public production target remains mapper 0 until the final-link selector in
+LW-3.2 has a real banked address or capacity reason to choose MMC3. The forced
+internal profile exists only for linker/runtime acceptance.
