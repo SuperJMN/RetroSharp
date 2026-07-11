@@ -32,7 +32,7 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
-  acceptance target. Waves 0/1 are complete; Game Boy `LW-2.1` through `LW-2.3`
+  acceptance target. Waves 0/1 are complete; Game Boy `LW-2.1` through `LW-2.4`
   are implemented, and the remaining Wave 2/3 cards are published as native
   subissues: `LW-2.1`..`LW-2.5` are #296-#300 and `LW-3.1`..`LW-3.5` are
   #301-#305. All belong to milestone 11 under parent #275; do not dispatch the
@@ -77,10 +77,10 @@ This document preserves project knowledge that previously lived only in agent me
   shared runner input remain unchanged; LW-2.5 / #300 is the next Game Boy
   Large Worlds acceptance slice.
 - Fresh Large Worlds implementation conversations should start with
-  [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296) and
-  [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) in parallel
-  only when both branches start from the same current `master`, then keep each
-  target chain sequential. `LW-2.5` / #300 proves full `stage1` on Game Boy
+  [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300) and
+  [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) independently
+  from the same current `master`, then keep the NES target chain sequential.
+  `LW-2.5` / #300 proves full `stage1` on Game Boy
   through a non-destructive fixture and must not change the shared runner input.
   Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
   runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4; Wave 3
@@ -329,7 +329,7 @@ Progress (2026-06-14):
 Suggested next steps for the next agent, in order:
 1. For the active cross-target scale frontier, read the exact published card in
    `docs/LargeWorldsRoadmap.md`; begin with
-   [LW-2.4 / #299](https://github.com/SuperJMN/RetroSharp/issues/299) and/or
+   [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300) and/or
    [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301), not an
    open-ended request to continue #275.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final

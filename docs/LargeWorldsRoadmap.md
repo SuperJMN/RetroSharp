@@ -1,8 +1,9 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **active; Waves 0 and 1 are complete, and Waves 2 and 3 are published
-as open native subissues but not started.**
-Last updated: 2026-07-10.
+Status: **active; Waves 0 and 1 are complete, Game Boy `LW-2.1` through
+`LW-2.4` are implemented, `LW-2.5` is the next Game Boy gate, and Wave 3 is
+published but not started.**
+Last updated: 2026-07-11.
 
 This roadmap is the executable plan for levels that exceed the legacy
 one-byte world addressing and current monolithic ROM-data budgets. It coordinates the
@@ -392,7 +393,7 @@ tasks follow the dependency graph below.
 - Non-goals: no automatic mapper/bank selection beyond reporting accepted
   requirements.
 
-## 8. Target production waves — published, not started
+## 8. Target production waves — Game Boy acceptance next, NES ready
 
 The CLI `--world-budget-report` is a map-only analysis path: it serializes the
 selected target `WorldPack` and reports map resources without writing or
@@ -407,13 +408,12 @@ requirement demands it.
 
 Recommended execution and merge order:
 
-1. Start [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296)
-   and [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) from
-   the same current `master`; they may proceed in parallel because they own
-   separate target builders and tests.
-2. Keep each target chain strictly ordered:
-   `LW-2.1 -> LW-2.2 -> LW-2.3 -> LW-2.4 -> LW-2.5` and
-   `LW-3.1 -> LW-3.2 -> LW-3.3 -> LW-3.4`.
+1. Game Boy `LW-2.1` through `LW-2.4` are complete. Start
+   [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300) from the
+   current `master` as the non-destructive full-`stage1` Game Boy gate.
+2. Start [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301)
+   independently from the same current `master`; keep the NES chain strictly
+   ordered through `LW-3.2 -> LW-3.3 -> LW-3.4`.
 3. Target-local tasks in different chains may overlap after their own merged
    dependencies. Never run two tasks that edit the same builder/runtime in
    parallel, and do not change `WorldPack` v1 or a public SDK/Core contract to
@@ -680,6 +680,11 @@ Recommended execution and merge order:
     collision.
   - Exercise long bidirectional traversal, chunk/bank boundaries, hardware
     column 255, floor Y 304/no-hit, resets, audio, and visual/collision parity.
+  - Regress the implemented packed scheduler under that full traversal: 16-bit
+    edge tags, request/prepare/resident/commit/release ownership, 19-column /
+    21-row write bounds, zero forbidden bank/directory/decode work in VBlank,
+    the LY 136-153 guard band, safe deferral/reversal, and one BGM tick per
+    real frame.
   - Retain ROM-only byte identity for representative small programs and prove
     final-link selection rather than relying on `--world-budget-report`.
   - Record durable emulator evidence, but do not regenerate or change either
@@ -694,9 +699,13 @@ Recommended execution and merge order:
     and collision across all named boundaries.
   - SameBoy/GameboyMcp evidence proves stable frames, audio cadence, bank
     restoration, and no stale/unstaged edges during a scripted traversal.
+  - Full-stage instrumentation keeps every packed-scheduler invariant from
+    `LW-2.4` intact: matching 16-bit tags, at most 19 column or 21 row writes,
+    zero forbidden VBlank work, and no visible advance before a resident commit.
   - Existing ROM-only golden outputs remain byte-identical.
 - Validation: full-stage compile/final-link report; focused Game Boy tests;
-  scripted external emulator traversal and screen/memory/bank evidence;
+  packed-scheduler counters/guard-band assertions; scripted external emulator
+  traversal and screen/memory/bank/audio evidence;
   `tools/gameboy/generate_sample_roms.py --dry-run`; full solution tests;
   `git diff --check`.
 - Non-goals: no shared runner-input migration, tracked ROM regeneration, NES
@@ -859,6 +868,10 @@ Recommended execution and merge order:
   - Convert packed-path column/row requests into prepare/resident/commit/release
     phases with exact axis/direction/world-edge tags, deferral, reversal, reuse,
     and diagonal staggering.
+  - Use the implemented `LW-2.4` lifecycle and publish-after-resident semantics
+    as a behavioral reference, not a code dependency: keep 16-bit world-edge
+    tags, reject wrong-tag work, preserve committing-slot immutability, and
+    expose no partial camera advance on deferral or reversal.
   - Preserve the current bound of at most 32 column tile writes, or four
     8-tile row phases followed by a separate phase of at most 9 attribute
     writes; a row remains resident until every phase completes.
@@ -877,6 +890,9 @@ Recommended execution and merge order:
   - Camera state advances only when the correctly tagged immutable edge is
     resident; unavailable or malformed data defers movement without a partial
     nametable/attribute commit.
+  - Wrong-axis/direction/world-edge tags and reversals retain the same
+    observable safety contract proven by `LW-2.4`, within NES-owned PPU phases
+    and budgets.
   - Instrumentation proves no mapper/decode work in VBlank/NMI and every tile
     and attribute phase stays within its exact bound.
   - AprNes screen/nametable evidence matches LW-1.4 visual and palette
@@ -958,7 +974,7 @@ Recommended execution and merge order:
 | Address width | 255 -> 256 and 256 -> 255 crossings on both targets |
 | Collision | Hit at world Y 304 plus unambiguous `0xFFFF` no-hit result |
 | GB placement/restoration | Deterministic MBC1 far placement; every exit/nested/audio-active path restores the actual entry bank and shadow |
-| GB runtime budget | 298-byte current / 554-byte maximum staging; bank/decode outside VBlank; at most 21 tile writes in VBlank |
+| GB runtime budget | 298-byte current / 554-byte maximum staging; bank/directory/decode outside VBlank with LY 136-153 guarded; at most 19 column or 21 row writes in VBlank |
 | NES cartridge | Final-link mapper-0-first selection; forced MMC3 header `04 02 48 00`; PRG <=65,536, physical CHR 16,384, resident CHR <=8,192, fixed code/DPCM/vectors <=16,384 |
 | NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; pinned data <=5,012/8,192 R7; boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
 | NES runtime budget | 338-byte current / 594-byte maximum staging; bank/decode outside VBlank/NMI; at most 32 column tiles or four 8-tile row phases, then at most 9 attributes |
@@ -994,7 +1010,7 @@ debug workflow.
   - [#281 — LW-1.3: add the target-neutral WorldPack model](https://github.com/SuperJMN/RetroSharp/issues/281)
   - [#284 — LW-1.4: compile Tiled worlds into deterministic WorldPack chunks](https://github.com/SuperJMN/RetroSharp/issues/284)
   - [#283 — LW-1.5: add deterministic world and cartridge budget diagnostics](https://github.com/SuperJMN/RetroSharp/issues/283)
-- Wave 2 native subissues (open, not started, milestone 11):
+- Wave 2 native subissues (four complete; `LW-2.5` open, milestone 11):
   - [#296 — LW-2.1: add the fixed-bank MBC1 world-read foundation](https://github.com/SuperJMN/RetroSharp/issues/296)
   - [#297 — LW-2.2: place serialized WorldPacks in physical MBC1 banks](https://github.com/SuperJMN/RetroSharp/issues/297)
   - [#298 — LW-2.3: implement the fixed-bank WorldPack reader and decoder](https://github.com/SuperJMN/RetroSharp/issues/298)
@@ -1013,6 +1029,7 @@ debug workflow.
   unrelated gaps remain open and are not duplicated here.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
-recorded above. The parent remains the integrator surface: implementation
-agents receive one child issue, not the parent or an open-ended request to
-continue the epic. Publication did not start any child.
+recorded above. Game Boy `LW-2.1` through `LW-2.4` are complete; `LW-2.5` and
+NES `LW-3.1` are the current independent entry points. The parent remains the
+integrator surface: implementation agents receive one child issue, not the
+parent or an open-ended request to continue the epic.
