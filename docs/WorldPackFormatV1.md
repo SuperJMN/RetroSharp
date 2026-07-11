@@ -3,8 +3,9 @@
 Status: **accepted for LW-0.2 on 2026-07-10; the target-neutral Core model and
 validation are implemented by LW-1.3, and deterministic Tiled packing plus
 GB/NES inspection payloads are implemented by LW-1.4. LW-2.2 places the exact
-Game Boy payload in final ROMs without changing this format; production
-decoding remains LW-2.3.**
+Game Boy payload in final ROMs without changing this format, and LW-2.3 adds
+the production fixed-bank Game Boy validator/reader without changing a byte of
+the v1 envelope. NES production decoding remains a later target task.**
 
 This decision is the implementation contract for LW-1.3 and LW-1.4. It fixes
 the shared logical seam and the target-owned packed payload shape. LW-1.4 now

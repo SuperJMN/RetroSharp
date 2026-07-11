@@ -228,7 +228,34 @@ Banked cartridges keep two deliberately different target-private bank values. `$
 
 The private byte-reader ABI accepts `A=bank` and `HL=$4000-$7FFF`. Banks `1..31` return the byte in `A`, status `0` in `B`, and clear Z/C. Bank `0` is a miss (`A=0`, `B=1`, Z set, C clear); a bank above `31` or an address outside the switchable window is an error (`A=0`, `B=2`, Z/C set). Success, miss, and error all restore the actual hardware bank and `$C1FA`; `$C11C` is unchanged. The helper itself and every bank write it causes execute from fixed bank 0. This is only the reader/bank-state foundation: no `WorldPack` is placed or decoded yet, and the profile remains the current low-five-bit MBC1 mode with at most 32 physical banks.
 
-The target-private WRAM contract is: user locals `$C000-$C0DF`, existing runtime state `$C0E0-$C14C`, fixed world slot/tag plus actual-bank scalar state `$C1F0-$C1FA`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
+The target-private WRAM contract is: user locals `$C000-$C0DF`, existing runtime state `$C0E0-$C14C`, fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
+
+### WorldPack fixed-bank reader
+
+LW-2.3 validates a packed world once during startup, before `Main` can expose
+camera, audio, user locals, or staging slots. The fixed-bank validator compares
+the v1 header, collision profiles, and directory with the host-accepted layout,
+then walks every visual and collision plane without staging it. Raw and
+element-RLE streams must consume their exact stored lengths, reconstruct their
+exact decoded element counts, and keep every one- or two-byte ID in range. A
+malformed result is cached and startup stops; a valid result is cached so
+per-frame lookups do not rescan the complete pack.
+
+The private direct-decode ABI uses `HL=chunkIndex`, `C=slot` and returns status
+in `B`: `0` success, `1` miss, `2` bounds error, or `3` malformed. Coordinate
+lookups use `DE=hardwareX`, `HL=hardwareY`, return the expanded Game Boy tile or
+collision flags in `A`, and return the same status in `B`. All entries, decode
+loops, bank selections, and returns are fixed-bank code. Pack-relative reads
+use the final placement from LW-2.2, continue across `$7FFF->$4000`, and restore
+the actual entry bank and `$C1FA` LIFO; `$C11C` remains program-bank state.
+
+Visual lookup decodes only a visual slot before applying the target expansion;
+collision lookup decodes only a collision slot before applying its collision
+profile. The two visual and two collision slots never overlap. Current one-byte
+IDs use 298 staging bytes including the two 21-byte edge slots; the complete
+two-byte v1 layout uses 554. The reader never materializes the whole level in
+WRAM, and the public WorldPack bytes and complete coordinate/collision ABI are
+unchanged.
 
 ### Multiple music themes
 
@@ -322,11 +349,10 @@ Full normalized `stage1` remains exactly 2,550 bytes (60 chunks, 770 stored
 visual bytes, 312 stored collision bytes, largest combined stored chunk 49)
 and retains all 82 generated patterns.
 
-LW-2.2 does not add the LW-2.3 reader. If current camera/collision lowering
-still references a suppressed legacy map label, the linker retries the
-unchanged raw compatibility layout so existing runner and streaming behavior
-stays intact; that final image contains the raw form instead of a duplicate
-pack. The shared runner input and tracked ROMs remain unchanged.
+LW-2.3 now routes packed collision queries through the fixed-bank reader, so a
+packed final link no longer needs duplicate legacy collision rows. Camera edge
+streaming and visual residency remain LW-2.4; the shared runner input and
+tracked ROMs remain unchanged.
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form
 `--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to

@@ -204,7 +204,7 @@ public sealed class GameBoyWorldPackPlacementTests
     }
 
     [Fact]
-    public void World_load_with_pre_reader_runtime_references_keeps_the_raw_compatibility_path()
+    public void World_load_with_pre_edge_scheduler_runtime_references_keeps_the_raw_compatibility_path()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         const string source = """

@@ -457,7 +457,7 @@ Recommended execution and merge order:
     ABI, saves the actual entry bank on the hardware stack, and restores it
     LIFO on every exit, including nested and interrupt-like re-entry.
   - WRAM is formalized as user `$C000-$C0DF`, runtime `$C0E0-$C14C`, fixed
-    world scalar/tag state `$C1F0-$C1FA`, audio `$C210-$C214`, and staging
+    world scalar/tag/validation state `$C1F0-$C1FC`, audio `$C210-$C214`, and staging
     `$C300-$C529`; both 298/554-byte shapes fit and 555 bytes fail.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, Game Boy
   runtime/layout records in that target project,
@@ -525,10 +525,10 @@ Recommended execution and merge order:
     occupied banks. Pack, generated art/tilemap data, code, BGM, and SFX ranges
     are copied and tested through that report rather than byte-searching.
   - Packed links emit no legacy expanded map rows, flags, background stream
-    rows, or row-pointer tables. Until `LW-2.3` supplies the production reader,
-    a link whose existing camera/collision lowering still references one of
-    those legacy labels retries the unchanged raw compatibility layout; it does
-    not emit both representations.
+    rows, or row-pointer tables. LW-2.2 originally retried the unchanged raw
+    compatibility layout when camera/collision lowering still referenced one
+    of those labels; LW-2.3 replaces the packed collision dependency with the
+    production reader rather than emitting both representations.
   - Full normalized `stage1` remains exactly 2,550 bytes with 60 chunks, 770
     stored visual bytes, 312 stored collision bytes, and a 49-byte largest
     combined stored chunk. A valid synthetic pack proves final-ROM continuation
@@ -556,8 +556,9 @@ Recommended execution and merge order:
 
 #### LW-2.3: Implement the fixed-bank WorldPack reader and decoder
 
-- Status: **published as [#298](https://github.com/SuperJMN/RetroSharp/issues/298);
-  open and not started.**
+- Status: **implementation complete through
+  [#298](https://github.com/SuperJMN/RetroSharp/issues/298); issue closure is
+  tracked on GitHub.**
 - Layer: Game Boy production runtime reader, decode, and collision lowering.
 - Dependencies: [LW-2.2 / #297](https://github.com/SuperJMN/RetroSharp/issues/297)
   (native blocked-by), merged `LW-1.1`, and merged `LW-1.2`.
@@ -577,6 +578,22 @@ Recommended execution and merge order:
     plus 28-byte SFX playback remains active.
   - Preserve the word collision ABI: a floor at world Y 304 returns `30 01` and
     no hit returns `FF FF`.
+- Implemented reader:
+  - Startup validates the exact v1 header, collision profiles, and directory,
+    then semantically walks every raw/RLE visual and collision plane, including
+    decoded ID bounds and exact encoded consumption. A failed validation is
+    cached as malformed and halts before `Main`; successful validation is
+    cached before camera, audio, or user state becomes visible.
+  - Fixed-bank random lookup maps complete hardware coordinates to the clipped
+    8x8 source-metatile directory, decodes only the requested plane, and resolves
+    Game Boy visual expansions or collision profiles independently. The reader
+    accepts v1 metatile axes without imposing a power-of-two format change.
+  - Two visual, two collision, and two edge slots remain disjoint at 298 bytes
+    for current one-byte IDs and 554 bytes for the two-byte maximum. No complete
+    level is copied to WRAM.
+  - Every helper and bank write executes in bank 0. Success, miss, bounds,
+    malformed, cross-window, nested, and interruptible reads restore the actual
+    entry bank plus `$C1FA` LIFO while leaving `$C11C` unchanged.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, target runtime
   state/layout records, `src/RetroSharp.GameBoy.Tests/GameBoyBankingRoadmapTests.cs`,
   `src/RetroSharp.GameBoy.Tests/GameBoyLargeWorldCameraTests.cs`, and

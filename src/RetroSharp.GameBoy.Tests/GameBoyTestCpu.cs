@@ -161,8 +161,8 @@ internal sealed class GameBoyTestCpu
         0xC3 or 0xC2 or 0xCA or 0xD2 or 0xDA => 16,     // JP / JP cc (approx taken)
         0xCD => 24,                                      // CALL nn
         0xC9 => 16,                                      // RET
-        0xC5 or 0xF5 => 16,                              // PUSH BC / PUSH AF
-        0xC1 or 0xF1 => 12,                              // POP BC / POP AF
+        0xC5 or 0xD5 or 0xF5 => 16,                      // PUSH BC / PUSH DE / PUSH AF
+        0xC1 or 0xD1 or 0xF1 => 12,                      // POP BC / POP DE / POP AF
         0xE5 => 16,                                      // PUSH HL
         0xE1 => 12,                                      // POP HL
         0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
@@ -170,7 +170,7 @@ internal sealed class GameBoyTestCpu
         0xC6 or 0xCE or 0xD6 or 0xDE or 0xE6 or 0xF6 or 0xEE or 0xFE => 8, // ALU A,n
         0x0B or 0x03 or 0x13 or 0x1B or 0x23 or 0x2B => 8,        // INC/DEC rr
         0x09 or 0x19 or 0x29 => 8,                       // ADD HL,rr
-        0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x72 or 0x7E => 8, // LD A,(rr)/(HL) loads/stores
+        0x12 or 0x1A or 0x0A or 0x22 or 0x2A or 0x32 or 0x77 or 0x72 or 0x7E => 8, // LD (DE),A / LD A,(rr)/(HL) loads/stores
         0x46 or 0x4E or 0x56 or 0x5E => 8,               // LD r,(HL)
         0xE2 or 0xF2 => 8,                               // LDH (C),A / LDH A,(C)
         0xCB => 8,                                       // CB-prefixed (SWAP/SRL on A)
@@ -232,6 +232,56 @@ internal sealed class GameBoyTestCpu
         while (pc != returnAddress || sp != initialSp);
 
         return new FarReadResult(a, b, (f & FlagZ) != 0, (f & FlagC) != 0);
+    }
+
+    public WorldPackLookupResult RunWorldPackCollisionLookup(
+        ushort entry,
+        ushort hardwareX,
+        ushort hardwareY,
+        long maxInstructions = 5_000_000)
+    {
+        var returnAddress = pc;
+        var initialSp = sp;
+        d = (byte)(hardwareX >> 8);
+        e = (byte)hardwareX;
+        h = (byte)(hardwareY >> 8);
+        l = (byte)hardwareY;
+        PushWord(returnAddress);
+        pc = entry;
+        RunUntilSubroutineReturn(entry, returnAddress, initialSp, maxInstructions);
+        return new WorldPackLookupResult(a, (GameBoyWorldPackResult)b);
+    }
+
+    public GameBoyWorldPackResult RunWorldPackDecode(
+        ushort entry,
+        ushort chunkIndex,
+        byte slot,
+        long maxInstructions = 5_000_000)
+    {
+        var returnAddress = pc;
+        var initialSp = sp;
+        SetHl(chunkIndex);
+        c = slot;
+        PushWord(returnAddress);
+        pc = entry;
+        RunUntilSubroutineReturn(entry, returnAddress, initialSp, maxInstructions);
+        return (GameBoyWorldPackResult)b;
+    }
+
+    private void RunUntilSubroutineReturn(ushort entry, ushort returnAddress, ushort initialSp, long maxInstructions)
+    {
+        var startInstructions = instructions;
+        do
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"Subroutine at 0x{entry:X4} did not return within {maxInstructions} instructions.");
+            }
+
+            Step();
+        }
+        while (pc != returnAddress || sp != initialSp);
     }
 
     public void InjectFarReadAfterSelecting(byte selectedBank, ushort entry, byte bank, ushort address)
@@ -415,6 +465,7 @@ internal sealed class GameBoyTestCpu
             case 0x19: AddHl(De); break;                        // ADD HL,DE
             case 0x29: AddHl(Hl); break;                        // ADD HL,HL
             case 0x1A: a = ReadByte(De); break;                 // LD A,(DE)
+            case 0x12: WriteByte(De, a); break;                 // LD (DE),A
             case 0x0A: a = ReadByte(Bc); break;                 // LD A,(BC)
             case 0x22: WriteByte(Hl, a); SetHl((ushort)(Hl + 1)); break; // LD (HL+),A
             case 0x2A: a = ReadByte(Hl); SetHl((ushort)(Hl + 1)); break; // LD A,(HL+)
@@ -425,11 +476,15 @@ internal sealed class GameBoyTestCpu
             case 0x46: b = ReadByte(Hl); break;                 // LD B,(HL)
             case 0x4E: c = ReadByte(Hl); break;                 // LD C,(HL)
             case 0x54: d = h; break;                            // LD D,H
+            case 0x50: d = b; break;                            // LD D,B
             case 0x56: d = ReadByte(Hl); break;                 // LD D,(HL)
             case 0x5E: e = ReadByte(Hl); break;                 // LD E,(HL)
             case 0x5D: e = l; break;                            // LD E,L
+            case 0x59: e = c; break;                            // LD E,C
             case 0x47: b = a; break;                            // LD B,A
             case 0x43: b = e; break;                            // LD B,E
+            case 0x44: b = h; break;                            // LD B,H
+            case 0x4D: c = l; break;                            // LD C,L
             case 0x4F: c = a; break;                            // LD C,A
             case 0x57: d = a; break;                            // LD D,A
             case 0x5F: e = a; break;                            // LD E,A
@@ -497,6 +552,8 @@ internal sealed class GameBoyTestCpu
             case 0xC9: pc = PopWord(); break;                 // RET
             case 0xC5: PushWord(Bc); break;                    // PUSH BC
             case 0xC1: { var v = PopWord(); b = (byte)(v >> 8); c = (byte)v; break; } // POP BC
+            case 0xD5: PushWord(De); break;                       // PUSH DE
+            case 0xD1: { var v = PopWord(); d = (byte)(v >> 8); e = (byte)v; break; } // POP DE
             case 0xF5: PushWord((ushort)((a << 8) | f)); break; // PUSH AF
             case 0xF1: { var v = PopWord(); a = (byte)(v >> 8); f = (byte)(v & 0xF0); break; } // POP AF
             case 0xE5: PushWord(Hl); break;                     // PUSH HL
@@ -530,9 +587,34 @@ internal sealed class GameBoyTestCpu
                 if (carry != 0) f |= FlagC;
                 break;
             }
+            case 0x3A: d = ShiftRightLogical(d); break; // SRL D
+            case 0x3C: h = ShiftRightLogical(h); break; // SRL H
+            case 0x1B: e = RotateRightThroughCarry(e); break; // RR E
+            case 0x1D: l = RotateRightThroughCarry(l); break; // RR L
             default:
                 throw new NotSupportedException($"Unsupported SM83 CB opcode 0x{opcode:X2}.");
         }
+    }
+
+    private byte ShiftRightLogical(byte value)
+    {
+        var carry = (byte)(value & 0x01);
+        var result = (byte)(value >> 1);
+        f = 0;
+        if (result == 0) f |= FlagZ;
+        if (carry != 0) f |= FlagC;
+        return result;
+    }
+
+    private byte RotateRightThroughCarry(byte value)
+    {
+        var carryIn = (f & FlagC) != 0 ? 0x80 : 0;
+        var carryOut = value & 0x01;
+        var result = (byte)((value >> 1) | carryIn);
+        f = 0;
+        if (result == 0) f |= FlagZ;
+        if (carryOut != 0) f |= FlagC;
+        return result;
     }
 
     private void PushWord(ushort value)
@@ -627,5 +709,7 @@ internal readonly record struct VramWrite(ushort Address, byte Value, long Cycle
 internal readonly record struct RomBankWrite(ushort ProgramCounter, byte RequestedBank, byte SelectedBank, byte ShadowBank);
 
 internal readonly record struct FarReadResult(byte Data, byte Status, bool Zero, bool Carry);
+
+internal readonly record struct WorldPackLookupResult(byte Value, GameBoyWorldPackResult Status);
 
 internal readonly record struct FarReadInjection(byte SelectedBank, ushort Entry, byte Bank, ushort Address);
