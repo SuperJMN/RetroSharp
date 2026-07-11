@@ -1,8 +1,7 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **active; Waves 0 and 1 are complete, Game Boy `LW-2.1` through
-`LW-2.4` are implemented, `LW-2.5` is the next Game Boy gate, and Wave 3 is
-published but not started.**
+Status: **active; Waves 0 and 1 plus Game Boy `LW-2.1` through `LW-2.5`
+are implemented, and Wave 3 is published but not started.**
 Last updated: 2026-07-11.
 
 This roadmap is the executable plan for levels that exceed the legacy
@@ -408,11 +407,9 @@ requirement demands it.
 
 Recommended execution and merge order:
 
-1. Game Boy `LW-2.1` through `LW-2.4` are complete. Start
-   [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300) from the
-   current `master` as the non-destructive full-`stage1` Game Boy gate.
+1. Game Boy `LW-2.1` through `LW-2.5` are complete.
 2. Start [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301)
-   independently from the same current `master`; keep the NES chain strictly
+   from the current `master`; keep the NES chain strictly
    ordered through `LW-3.2 -> LW-3.3 -> LW-3.4`.
 3. Target-local tasks in different chains may overlap after their own merged
    dependencies. Never run two tasks that edit the same builder/runtime in
@@ -665,8 +662,9 @@ Recommended execution and merge order:
 
 #### LW-2.5: Prove full stage1 on Game Boy without migrating the shared runner
 
-- Status: **published as [#300](https://github.com/SuperJMN/RetroSharp/issues/300);
-  open and not started.**
+- Status: **implementation complete through
+  [#300](https://github.com/SuperJMN/RetroSharp/issues/300); issue closure is
+  tracked on GitHub.**
 - Layer: Game Boy behavioral acceptance and compatibility.
 - Dependencies: [LW-2.4 / #299](https://github.com/SuperJMN/RetroSharp/issues/299)
   (native blocked-by).
@@ -689,6 +687,20 @@ Recommended execution and merge order:
     final-link selection rather than relying on `--world-budget-report`.
   - Record durable emulator evidence, but do not regenerate or change either
     tracked shared runner ROM in this task.
+- Implemented acceptance:
+  - A temporary normalized fixture redirects only the composed test source to
+    the complete 156x20 map. The shared runner manifest/source/input and both
+    tracked runner ROMs remain byte-identical.
+  - The real runner final link selects the 128 KiB MBC1 profile with the exact
+    2,550-byte pack, 11,614-byte BGM, 28-byte SFX, and 2,368 art bytes; the
+    smaller traversal probe stays ROM-only, proving final-link selection.
+  - Runtime tests reconstruct all 60 visual/collision chunks, preserve Y=304 /
+    `FFFF`, traverse horizontally in both directions and vertically, and cover
+    column 256, 19/21 writes, lifecycle/tag ownership, deferral/reversal, the
+    guard band, bank restoration, and per-frame audio ticks.
+  - The packed banked emitter no longer appends duplicate legacy rows, and the
+    test CPU implements the `LD E,B` opcode reached by real packed collision
+    gameplay. `$C19D` records packed audio ticks for durable emulator evidence.
 - Candidate files: focused Game Boy full-stage acceptance fixtures/tests,
   `src/RetroSharp.GameBoy.Tests/FullStage1BaselineTests.cs`,
   `src/RetroSharp.GameBoy.Tests/GameBoyLargeWorldCameraTests.cs`, and Game Boy
@@ -1010,7 +1022,7 @@ debug workflow.
   - [#281 — LW-1.3: add the target-neutral WorldPack model](https://github.com/SuperJMN/RetroSharp/issues/281)
   - [#284 — LW-1.4: compile Tiled worlds into deterministic WorldPack chunks](https://github.com/SuperJMN/RetroSharp/issues/284)
   - [#283 — LW-1.5: add deterministic world and cartridge budget diagnostics](https://github.com/SuperJMN/RetroSharp/issues/283)
-- Wave 2 native subissues (four complete; `LW-2.5` open, milestone 11):
+- Wave 2 native subissues (five implementation-complete; milestone 11):
   - [#296 — LW-2.1: add the fixed-bank MBC1 world-read foundation](https://github.com/SuperJMN/RetroSharp/issues/296)
   - [#297 — LW-2.2: place serialized WorldPacks in physical MBC1 banks](https://github.com/SuperJMN/RetroSharp/issues/297)
   - [#298 — LW-2.3: implement the fixed-bank WorldPack reader and decoder](https://github.com/SuperJMN/RetroSharp/issues/298)
@@ -1029,7 +1041,7 @@ debug workflow.
   unrelated gaps remain open and are not duplicated here.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
-recorded above. Game Boy `LW-2.1` through `LW-2.4` are complete; `LW-2.5` and
-NES `LW-3.1` are the current independent entry points. The parent remains the
+recorded above. Game Boy `LW-2.1` through `LW-2.5` are complete; NES `LW-3.1`
+is the current entry point. The parent remains the
 integrator surface: implementation agents receive one child issue, not the
 parent or an open-ended request to continue the epic.

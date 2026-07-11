@@ -573,10 +573,13 @@ internal static class GameBoyRomBuilder
             }
         }
 
-        if (packedWorldBytes is not null && layout.WorldPackPlacement is null)
+        if (packedWorldBytes is not null)
         {
-            builder.Label(WorldPackLabel);
-            builder.Emit(packedWorldBytes);
+            if (layout.WorldPackPlacement is null)
+            {
+                builder.Label(WorldPackLabel);
+                builder.Emit(packedWorldBytes);
+            }
         }
         else
         {
@@ -1383,7 +1386,7 @@ internal static class GameBoyWramLayout
     internal const ushort WorldPackValidationStateAddress = 0xC1FB;
 
     internal static readonly GameBoyWramRange UserLocals = new("user locals", 0xC000, 0x00E0);
-    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x00BD);
+    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x00BE);
     // WorldPack decode scratch, actual-visible bank, and one-time validation state.
     internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000D);
     internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
@@ -1632,6 +1635,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     public void EmitProgramBankInitialization(bool usesMbc1Foundation)
     {
+        if (UsesPackedCameraRuntime)
+        {
+            builder.XorA();
+            builder.StoreA(GameBoyPackedCameraRuntime.AudioTickCount);
+        }
+
         if (!usesMbc1Foundation)
         {
             return;
@@ -1719,6 +1728,9 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(GameBoyPackedCameraRuntime.WaitAudioEnabled);
         builder.StoreA(GameBoyPackedCameraRuntime.WaitAudioTicked);
         EmitUpdateAudio();
+        builder.LoadA(GameBoyPackedCameraRuntime.AudioTickCount);
+        builder.AddAImmediate(1);
+        builder.StoreA(GameBoyPackedCameraRuntime.AudioTickCount);
         if (restoresBank)
         {
             builder.Emit(0xF1); // POP AF

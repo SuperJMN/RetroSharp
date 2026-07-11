@@ -32,8 +32,8 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
-  acceptance target. Waves 0/1 are complete; Game Boy `LW-2.1` through `LW-2.4`
-  are implemented, and the remaining Wave 2/3 cards are published as native
+  acceptance target. Waves 0/1 are complete; Game Boy `LW-2.1` through `LW-2.5`
+  are implemented, and the remaining Wave 3 cards are published as native
   subissues: `LW-2.1`..`LW-2.5` are #296-#300 and `LW-3.1`..`LW-3.5` are
   #301-#305. All belong to milestone 11 under parent #275; do not dispatch the
   parent as one task.
@@ -74,14 +74,17 @@ This document preserves project knowledge that previously lived only in agent me
   Same-axis peers preserve order, diagonal peers are column-first and then
   staggered, reversals release only uncommitted resident work, and audio keeps
   one tick per real frame during preparation stalls. The raw camera path and
-  shared runner input remain unchanged; LW-2.5 / #300 is the next Game Boy
-  Large Worlds acceptance slice.
-- Fresh Large Worlds implementation conversations should start with
-  [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300) and
-  [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) independently
-  from the same current `master`, then keep the NES target chain sequential.
-  `LW-2.5` / #300 proves full `stage1` on Game Boy
-  through a non-destructive fixture and must not change the shared runner input.
+  shared runner input remain unchanged. LW-2.5 adds the non-destructive complete
+  `stage1` acceptance fixture, removes duplicate legacy rows from bank-placed
+  packed links, and proves full traversal, all 60 chunks, collision parity,
+  16-bit tags/lifecycle, guard-band/VBlank counters, bank restoration, and a
+  target-private `$C19D` packed-audio tick counter. The real runner fixture
+  selects 128 KiB MBC1 while a smaller full-stage probe stays ROM-only, so the
+  evidence comes from the final link rather than the map-only report.
+- Fresh Large Worlds implementation conversations should continue with
+  [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) and keep the
+  NES target chain sequential. `LW-2.5` / #300 proves full `stage1` on Game Boy
+  through a non-destructive fixture without changing the shared runner input.
   Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
   runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4; Wave 3
   only links the mapper-backed slice from #247 and does not absorb its unrelated
@@ -329,7 +332,6 @@ Progress (2026-06-14):
 Suggested next steps for the next agent, in order:
 1. For the active cross-target scale frontier, read the exact published card in
    `docs/LargeWorldsRoadmap.md`; begin with
-   [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300) and/or
    [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301), not an
    open-ended request to continue #275.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
@@ -389,7 +391,7 @@ Pipeline shape (two phases, after #105 partial extraction):
   `stage1.playable.tmj` map, expanding to 176x30 hardware tiles. The complete
   156x20 source `stage1` design expands to 312x40 hardware tiles and is retained
   as the explicit Large Worlds acceptance target instead of being silently
-  trimmed by future target work. `LW-2.5` must prove it through a separate
+  trimmed by future target work. `LW-2.5` proves it through a separate
   non-destructive Game Boy fixture; the shared input stays on the playable map
   until `LW-3.5` jointly migrates GB/NES and regenerates both tracked ROMs.
 - Portable/target split (#105 collision resource done): `WorldMap2D` now stores only dimensions and

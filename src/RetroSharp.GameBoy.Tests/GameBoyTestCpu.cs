@@ -31,6 +31,8 @@ internal sealed class GameBoyTestCpu
     private readonly List<OamWrite> oamWrites = [];
     private readonly List<VramWrite> vramWrites = [];
     private readonly List<RomBankWrite> romBankWrites = [];
+    private readonly List<long> audioUpdateCycles = [];
+    private readonly List<AudioUpdateTrace> audioUpdateTrace = [];
     private readonly Queue<FarReadInjection> farReadInjections = [];
     private readonly List<FarReadResult> injectedFarReadResults = [];
 
@@ -46,6 +48,8 @@ internal sealed class GameBoyTestCpu
     public bool EnforceVblankVramWrites;
     public readonly HashSet<string> Held = [];
     public long AudioUpdateCalls;
+    public IReadOnlyList<long> AudioUpdateCycles => audioUpdateCycles;
+    public IReadOnlyList<AudioUpdateTrace> AudioUpdateTrace => audioUpdateTrace;
     public long Cycles => cycles;
 
     public byte CurrentRomBank => (byte)romBank;
@@ -139,6 +143,21 @@ internal sealed class GameBoyTestCpu
             {
                 throw new InvalidOperationException(
                     $"CPU executed {instructions - startInstructions} instructions but only reached {cycles} of {target} cycles.");
+            }
+
+            Step();
+        }
+    }
+
+    public void RunUntilLy(byte expected, long maxInstructions = 50_000_000)
+    {
+        var startInstructions = instructions;
+        while ((byte)((cycles / 456) % 154) != expected)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but LY never reached {expected}.");
             }
 
             Step();
@@ -347,6 +366,8 @@ internal sealed class GameBoyTestCpu
                 return extRam[addr - 0xA000];
             case 0xC0FA:
                 AudioUpdateCalls++;               // MusicActiveAddress: read once per audio.Update()
+                audioUpdateCycles.Add(cycles);
+                audioUpdateTrace.Add(new AudioUpdateTrace(cycles, (byte)((cycles / 456) % 154), instructionPc));
                 return wram[0xC0FA - 0xC000];
             case < 0xE000:
                 return wram[addr - 0xC000];
@@ -513,6 +534,7 @@ internal sealed class GameBoyTestCpu
             case 0x56: d = ReadByte(Hl); break;                 // LD D,(HL)
             case 0x5E: e = ReadByte(Hl); break;                 // LD E,(HL)
             case 0x5D: e = l; break;                            // LD E,L
+            case 0x58: e = b; break;                            // LD E,B
             case 0x59: e = c; break;                            // LD E,C
             case 0x47: b = a; break;                            // LD B,A
             case 0x43: b = e; break;                            // LD B,E
@@ -752,3 +774,5 @@ internal readonly record struct FarReadResult(byte Data, byte Status, bool Zero,
 internal readonly record struct WorldPackLookupResult(byte Value, GameBoyWorldPackResult Status);
 
 internal readonly record struct FarReadInjection(byte SelectedBank, ushort Entry, byte Bank, ushort Address);
+
+internal readonly record struct AudioUpdateTrace(long Cycles, byte Ly, ushort ProgramCounter);
