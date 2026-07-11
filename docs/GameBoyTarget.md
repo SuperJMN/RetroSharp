@@ -18,8 +18,8 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Tile size | 8x8 |
 | Background buffer | 32x32 tiles |
 | Fine scroll | X and Y |
-| Background tile write budget | 21 tile writes per explicit stream edge; the internal camera scheduler has an optimized two-edge same-axis path |
-| Camera stream scheduling | Same-axis camera crossings keep up to two pending edges and commit both during `Camera.Apply()`; diagonal movement uses separate pending column/row slots and drains one axis queue per VBlank |
+| Background tile write budget | 21 tile writes per explicit stream edge; packed commits write one 19-tile column or one 21-tile row per VBlank |
+| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable peer slots, preserve same-axis order across consecutive VBlanks, and drain diagonal peers column-first then staggered |
 | Camera positioning | `Camera.SetPosition(x, y)` walks the camera toward the requested position one pixel at a time, bounded to at most two tile crossings (16 px) per axis per call so a single call per frame reaches runner-scale targets without stale edges |
 | Attribute write budget | 0 per frame on the current DMG target |
 | Hardware sprites | 40 total, 10 per scanline |
@@ -228,7 +228,7 @@ Banked cartridges keep two deliberately different target-private bank values. `$
 
 The private byte-reader ABI accepts `A=bank` and `HL=$4000-$7FFF`. Banks `1..31` return the byte in `A`, status `0` in `B`, and clear Z/C. Bank `0` is a miss (`A=0`, `B=1`, Z set, C clear); a bank above `31` or an address outside the switchable window is an error (`A=0`, `B=2`, Z/C set). Success, miss, and error all restore the actual hardware bank and `$C1FA`; `$C11C` is unchanged. The helper itself and every bank write it causes execute from fixed bank 0. This is only the reader/bank-state foundation: no `WorldPack` is placed or decoded yet, and the profile remains the current low-five-bit MBC1 mode with at most 32 physical banks.
 
-The target-private WRAM contract is: user locals `$C000-$C0DF`, existing runtime state `$C0E0-$C14C`, fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
+The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C19C` (including packed camera slot tags, visible-camera state, counters, and visual-cache metadata), fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
 
 ### WorldPack fixed-bank reader
 
@@ -256,6 +256,35 @@ IDs use 298 staging bytes including the two 21-byte edge slots; the complete
 two-byte v1 layout uses 554. The reader never materializes the whole level in
 WRAM, and the public WorldPack bytes and complete coordinate/collision ABI are
 unchanged.
+
+### WorldPack staged camera edges
+
+LW-2.4 adds a packed-only camera runtime selected by target-private packed
+camera builds. Ordinary camera builds, including the shared runner, continue
+to use the raw compatibility path until the dedicated acceptance/migration
+slices opt them into packed data.
+
+The packed runtime tags two peer edge slots with lifecycle, axis, direction,
+logical world-edge word, circular target, orthogonal start, and payload length.
+`Camera.SetPosition(...)` requests and fully prepares the required 19-tile
+column or 21-tile row outside VBlank. Only a matching immutable `resident` slot
+can enter `committing`; malformed, unavailable, or wrongly tagged data leaves
+the visible camera at the last safe pixel and retries without publishing an
+unstaged edge. A reversal may release an uncommitted resident peer but never a
+committing one.
+
+`Camera.Apply()` performs no directory read, bank switch, or decompression. It
+copies at most one resident payload to VRAM per VBlank, publishes the matching
+camera coordinate only after the copy, and then releases the slot. Two
+same-axis crossings preserve near/far order over consecutive VBlanks. Diagonal
+peers are prepared together, commit the column first, retain the row unchanged,
+and then alternate/stagger later axes. Instrumentation records per-commit VRAM
+writes plus any bank, decode, or directory work observed either in the critical
+section or physically at LY 144-153; acceptance requires 19 or 21 writes and
+zero forbidden-work counts. A fixed-bank wait routine treats only LY 0-135 as
+safe, reserving an eight-scanline guard band before VBlank around every
+sensitive read/write. Cooperative preparation waits service packed audio once
+per real frame, so deferrals and bank-spanning decodes do not slow BGM.
 
 ### Multiple music themes
 
@@ -292,9 +321,9 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `Camera.Init(mapWidth, streamY, streamHeight)` initializes the current world camera. It keeps 16-bit camera X/Y positions in WRAM, tracks sub-tile movement on both axes, tracks the circular Game Boy background map edges for horizontal streaming, tracks top/bottom background and source rows for vertical streaming, and seeds source-map columns from the generated world-map row data. `mapWidth`, `streamY`, and `streamHeight` are compile-time constants. For horizontal-only programs, `streamY + streamHeight` must fit inside the 32-row Game Boy background tilemap. Programs that actually move vertically with `Camera.SetPosition(x, y)` may pass the full loaded source-map height; the runtime clips the initial circular VRAM window to the rows that fit while using the full generated source-row table for later vertical streaming. Call it after declaring the source map and before `Camera.Apply()`, `camera_move_right()`, `camera_move_left()`, or `camera_tile_column_at(...)`.
 
-`Camera.SetPosition(x, y)` is the position-based camera API. `x` and `y` collect as complete little-endian word expressions; byte-backed constants, locals, struct fields, and array elements remain compatible and zero-extend. The Game Boy lowering compares both requested bytes with the current 16-bit camera position, then walks one pixel at a time toward it, up to 16 px per axis per call. A tile-boundary crossing advances logical source cursors and queues the exposed column or row for deferred streaming, which `Camera.Apply()` commits during VBlank. Maps up to 4,096 hardware columns keep screen-left and exposed-edge coordinates as words, including pending edge tags and row/column ROM addressing; circular background slots stay modulo 32. Same-axis movement can queue and commit two exposed edges in one `Camera.Apply()` call. Diagonal programs queue columns and rows separately, then drain one axis queue per VBlank; the column streamer writes the 19 rows that can become visible and the row streamer writes 21 columns from the complete logical source-column word. The second diagonal axis can still appear one frame later at 1px/frame movement. The shared runner uses two `Camera.SetPosition(x, y)` sync calls per frame after updating dead-zone camera state, `samples/gameboy-vscroll/vscroll.rs` exercises Y-only scrolling, and `samples/nes-free-scroll/freescroll.rs` plus `samples/tiled-free-scroll/free-scroll.rs` exercise diagonal X/Y scrolling on Game Boy and NES.
+`Camera.SetPosition(x, y)` is the position-based camera API. `x` and `y` collect as complete little-endian word expressions; byte-backed constants, locals, struct fields, and array elements remain compatible and zero-extend. The Game Boy lowering compares both requested bytes with the current 16-bit camera position, then walks one pixel at a time toward it, up to 16 px per axis per call. A tile-boundary crossing advances logical source cursors and queues the exposed column or row for deferred streaming, which `Camera.Apply()` commits during VBlank. Maps up to 4,096 hardware columns keep screen-left and exposed-edge coordinates as words, including pending edge tags and row/column ROM addressing; circular background slots stay modulo 32. Raw same-axis movement can queue and commit two exposed edges in one `Camera.Apply()` call. The packed scheduler prepares the same two logical peers but commits them in order over consecutive VBlanks. Diagonal programs queue columns and rows separately, then drain one axis queue per VBlank; the column streamer writes the 19 rows that can become visible and the row streamer writes 21 columns from the complete logical source-column word. The second diagonal axis can still appear one frame later at 1px/frame movement. The shared runner uses two `Camera.SetPosition(x, y)` sync calls per frame after updating dead-zone camera state, `samples/gameboy-vscroll/vscroll.rs` exercises Y-only scrolling, and `samples/nes-free-scroll/freescroll.rs` plus `samples/tiled-free-scroll/free-scroll.rs` exercise diagonal X/Y scrolling on Game Boy and NES.
 
-`Camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits queued columns or rows into the background tilemap. It runs at the top of the presentation phase after `Video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `Audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. If the same frame also draws Game Boy sprites, issue `Sprite.Draw(...)` first so direct OAM writes get the earliest VBlank cycles, then call `Camera.Apply()` before gameplay updates. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `Camera.SetPosition(...)` does; a program must call `Camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. When a same-axis `Camera.SetPosition(...)` crosses two tile boundaries in one frame, the backend stores both target/source pairs and commits them in order during the same `Camera.Apply()` VBlank. Diagonal programs keep separate column and row queues and commit only the selected axis queue each VBlank. The row streamer writes the 21 visible columns in screen order and wraps both source and circular background columns as needed. The large per-row streamer is only emitted when the program can scroll vertically, and the diagonal staggered pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
+`Camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits queued columns or rows into the background tilemap. It runs at the top of the presentation phase after `Video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `Audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. If the same frame also draws Game Boy sprites, issue `Sprite.Draw(...)` first so direct OAM writes get the earliest VBlank cycles, then call `Camera.Apply()` before gameplay updates. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `Camera.SetPosition(...)` does; a program must call `Camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. When a raw same-axis `Camera.SetPosition(...)` crosses two tile boundaries in one frame, the backend stores both target/source pairs and commits them in order during the same `Camera.Apply()` VBlank. The packed scheduler instead consumes one immutable peer per VBlank so it never exceeds 21 tile writes. Diagonal programs keep separate column and row queues and commit only the selected axis queue each VBlank. The row streamer writes the 21 visible columns in screen order and wraps both source and circular background columns as needed. The large per-row streamer is only emitted when the program can scroll vertically, and the diagonal staggered pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `Sprite.Asset(...)`.
 
@@ -349,10 +378,10 @@ Full normalized `stage1` remains exactly 2,550 bytes (60 chunks, 770 stored
 visual bytes, 312 stored collision bytes, largest combined stored chunk 49)
 and retains all 82 generated patterns.
 
-LW-2.3 now routes packed collision queries through the fixed-bank reader, so a
-packed final link no longer needs duplicate legacy collision rows. Camera edge
-streaming and visual residency remain LW-2.4; the shared runner input and
-tracked ROMs remain unchanged.
+LW-2.3 routes packed collision queries through the fixed-bank reader, so a
+packed final link no longer needs duplicate legacy collision rows. LW-2.4 adds
+the packed staged camera path described above. The shared runner input and
+tracked ROMs remain unchanged until LW-2.5 proves the full Game Boy payload.
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form
 `--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to

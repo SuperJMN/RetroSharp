@@ -617,8 +617,7 @@ Recommended execution and merge order:
 
 #### LW-2.4: Integrate staged edges with Game Boy camera streaming
 
-- Status: **published as [#299](https://github.com/SuperJMN/RetroSharp/issues/299);
-  open and not started.**
+- Status: **implemented by [#299](https://github.com/SuperJMN/RetroSharp/issues/299).**
 - Layer: Game Boy camera runtime and VBlank integration.
 - Dependencies: [LW-2.3 / #298](https://github.com/SuperJMN/RetroSharp/issues/298)
   (native blocked-by).
@@ -637,6 +636,10 @@ Recommended execution and merge order:
     VBlank phase performs at most 21 tile writes and no bank switch.
   - Keep BGM at one tick per frame throughout stalls, reversals, diagonal
     staging, and consecutive crossings.
+  - The packed scheduler owns two immutable 21-byte peer slots and explicit
+    `requested -> preparing -> resident -> committing -> released` metadata.
+    Same-axis peers drain in crossing order across consecutive VBlanks; the raw
+    compatibility scheduler keeps its existing two-edge single-apply behavior.
 - Candidate files: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`, target camera
   runtime state, `src/RetroSharp.GameBoy.Tests/GameBoyLargeWorldCameraTests.cs`,
   `src/RetroSharp.GameBoy.Tests/GameBoyVerticalScrollAcceptanceTests.cs`, and
@@ -648,7 +651,8 @@ Recommended execution and merge order:
   - Two-edge and diagonal schedules retain their current observable ordering,
     and reversals never mutate a committing slot.
   - Instrumentation proves zero bank/decode work inside VBlank and no commit
-    exceeds 21 tile writes.
+    exceeds 21 tile writes. The implementation also instruments directory work
+    and reserves LY 136-153 as a guard band around sensitive packed reads.
 - Validation: focused bidirectional, two-edge, diagonal, reversal, deferral,
   chunk/bank-boundary, and audio-tempo tests; VRAM inspection in
   `GameBoyTestCpu`; external SameBoy/GameboyMcp visual/timeline acceptance;

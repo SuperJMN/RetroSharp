@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-10.
+Last updated: 2026-07-11.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -66,7 +66,16 @@ This document preserves project knowledge that previously lived only in agent me
   range evidence. LW-2.3 adds the fixed-bank production validator/reader:
   startup validates every raw/RLE plane before `Main`, caches the result, and
   packed collision/visual lookups decode only their own bounded slot while
-  restoring the actual bank shadow LIFO. Camera edge residency remains LW-2.4.
+  restoring the actual bank shadow LIFO. LW-2.4 adds the target-private packed
+  camera scheduler: two immutable peer edge slots move through request,
+  prepare, resident, commit, and release; bank/decode work stays outside
+  VBlank; each VBlank commits at most one 19-tile column or 21-tile row; and
+  malformed/unavailable or wrongly tagged edges defer visible camera advance.
+  Same-axis peers preserve order, diagonal peers are column-first and then
+  staggered, reversals release only uncommitted resident work, and audio keeps
+  one tick per real frame during preparation stalls. The raw camera path and
+  shared runner input remain unchanged; LW-2.5 / #300 is the next Game Boy
+  Large Worlds acceptance slice.
 - Fresh Large Worlds implementation conversations should start with
   [LW-2.1 / #296](https://github.com/SuperJMN/RetroSharp/issues/296) and
   [LW-3.1 / #301](https://github.com/SuperJMN/RetroSharp/issues/301) in parallel

@@ -297,8 +297,10 @@ movement before exposing a crossing:
 
 - For one same-axis crossing, one slot holds that edge.
 - For Game Boy movement that crosses twice on one axis in a frame, the slots
-  hold the near and far edges. `Camera.Apply()` consumes both in crossing order
-  during that VBlank, preserving the already-merged two-edge behavior.
+  hold the near and far edges. The packed scheduler consumes them in crossing
+  order across consecutive VBlanks so each commit stays within the 21-write
+  bound. The separate raw compatibility scheduler retains its already-merged
+  two-edge behavior.
 - For diagonal Game Boy or NES movement, one slot holds the column and the
   other holds the row. The axes drain on staggered VBlanks. Game Boy gives the
   column the first tie priority and then alternates the next axis; the other

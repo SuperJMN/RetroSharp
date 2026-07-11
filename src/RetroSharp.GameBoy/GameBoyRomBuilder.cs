@@ -37,6 +37,9 @@ internal static class GameBoyRomBuilder
     internal const string WorldPackVisualLookupLabel = "worldpack_visual_lookup";
     internal const string WorldPackCollisionDecodeLabel = "worldpack_decode_collision";
     internal const string WorldPackCollisionLookupLabel = "worldpack_collision_lookup";
+    internal const string WorldPackPrepareEdgeLabel = "worldpack_prepare_edge";
+    internal const string WorldPackWaitOutsideVBlankLabel = "worldpack_wait_outside_vblank";
+    internal const string WorldPackWaitAudioTickLabel = "worldpack_wait_audio_tick";
 
     private static readonly byte[] NintendoLogo =
     [
@@ -56,6 +59,16 @@ internal static class GameBoyRomBuilder
     internal static GameBoyRomBuildResult BuildWithReport(GameBoyVideoProgram program, byte[]? packedWorldOverride = null)
     {
         var packedWorldBytes = packedWorldOverride ?? program.PackedWorld?.SerializedBytes;
+        if (packedWorldOverride is null
+            && program.PackedWorld is not null
+            && ProgramUsesCameraStreaming(program))
+        {
+            // LW-2.4 makes the staged packed camera runtime available to target-private fixtures.
+            // Keep ordinary camera programs, including the shared runner, on the unchanged raw
+            // compatibility route until the dedicated acceptance/migration tasks select packed data.
+            return BuildWithReportCore(program, packedWorldBytes: null);
+        }
+
         try
         {
             return BuildWithReportCore(program, packedWorldBytes);
@@ -65,12 +78,14 @@ internal static class GameBoyRomBuilder
             program.PackedWorld is not null &&
             IsMissingLegacyWorldLabel(exception.Message))
         {
-            // LW-2.3 owns packed validation and collision/visual lookup, while camera edge
-            // streaming remains LW-2.4. Programs that still need a suppressed legacy visual
-            // row label retain the byte-identical raw compatibility route for now.
+            // Packed reader-only builds can suppress legacy visual rows that a remaining raw
+            // operation still references. Preserve the established raw compatibility route.
             return BuildWithReportCore(program, packedWorldBytes: null);
         }
     }
+
+    private static bool ProgramUsesCameraStreaming(GameBoyVideoProgram program) =>
+        program.SdkOperations.Any(operation => operation is Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera);
 
     private static GameBoyRomBuildResult BuildWithReportCore(GameBoyVideoProgram program, byte[]? packedWorldBytes)
     {
@@ -483,7 +498,13 @@ internal static class GameBoyRomBuilder
         builder.Emit(0x3E, (byte)(program.UsesWindowHud ? 0xF7 : 0x97));
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
 
-        var runtime = new GameBoyRuntimeCompiler(builder, program, layout, worldPackRuntime is not null);
+        var usesPackedCameraRuntime = worldPackRuntime is not null && ProgramUsesCameraStreaming(program);
+        var runtime = new GameBoyRuntimeCompiler(
+            builder,
+            program,
+            layout,
+            worldPackRuntime?.Layout,
+            usesPackedCameraRuntime);
         var usesMbc1Foundation = layout.ProgramTailBankCount > 0 || layout.UsesBankedReadOnlyData || layout.UsesBankedMusic || layout.UsesBankedWorldPack;
         runtime.EmitProgramBankInitialization(usesMbc1Foundation);
         if (worldPackRuntime is not null)
@@ -503,7 +524,7 @@ internal static class GameBoyRomBuilder
 
             if (worldPackRuntime is not null)
             {
-                GameBoyWorldPackRuntimeEmitter.Emit(builder, worldPackRuntime, layout);
+                GameBoyWorldPackRuntimeEmitter.Emit(builder, worldPackRuntime, layout, usesPackedCameraRuntime);
             }
 
             if (usesBankContinuationHelper)
@@ -744,8 +765,18 @@ internal static class GameBoyRomBuilder
         EmitSelectRomBankFromA(builder);
     }
 
-    internal static void EmitSelectRomBankFromA(GbBuilder builder)
+    internal static void EmitSelectRomBankFromA(GbBuilder builder, bool instrumentPackedCameraCritical = false)
     {
+        if (instrumentPackedCameraCritical)
+        {
+            builder.Emit(0xF5); // PUSH AF; LY polling must not replace the requested bank.
+            GameBoyPackedCameraRuntimeEmitter.EmitWaitOutsideVBlank(builder);
+            builder.Emit(0xF1); // POP AF
+            GameBoyPackedCameraRuntimeEmitter.EmitRecordCriticalWork(
+                builder,
+                GameBoyPackedCameraRuntime.BankWorkInCommit);
+        }
+
         builder.StoreA(ActualVisibleBankAddress);
         builder.StoreA(RomBankSelectAddress);
     }
@@ -1352,7 +1383,7 @@ internal static class GameBoyWramLayout
     internal const ushort WorldPackValidationStateAddress = 0xC1FB;
 
     internal static readonly GameBoyWramRange UserLocals = new("user locals", 0xC000, 0x00E0);
-    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x006D);
+    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x00BD);
     // WorldPack decode scratch, actual-visible bank, and one-time validation state.
     internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000D);
     internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
@@ -1525,7 +1556,8 @@ internal sealed class GameBoyRuntimeCompiler
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly GameBoyRomLayout romLayout;
-    private readonly bool usesPackedWorldRuntime;
+    private readonly GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout;
+    private readonly bool usesPackedCameraRuntime;
     private readonly Sdk2DStreamReader sdkOperations;
     private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
@@ -1548,12 +1580,14 @@ internal sealed class GameBoyRuntimeCompiler
         GbBuilder builder,
         GameBoyVideoProgram program,
         GameBoyRomLayout? romLayout = null,
-        bool usesPackedWorldRuntime = false)
+        GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout = null,
+        bool usesPackedCameraRuntime = false)
     {
         this.builder = builder;
         this.program = program;
         this.romLayout = romLayout ?? GameBoyRomLayout.RomOnly;
-        this.usesPackedWorldRuntime = usesPackedWorldRuntime;
+        this.packedWorldRuntimeLayout = packedWorldRuntimeLayout;
+        this.usesPackedCameraRuntime = usesPackedCameraRuntime;
         sdkOperations = Sdk2DStreamReader.ForProgram(program);
         sdkAudioOperations = SdkAudioStreamReader.ForProgram(program);
     }
@@ -1572,6 +1606,10 @@ internal sealed class GameBoyRuntimeCompiler
     }
 
     public bool UsesSubroutineTrampolines => romLayout.ProgramTailBankCount > 0 && program.SubroutineNames.Count != 0;
+
+    private bool UsesPackedWorldRuntime => packedWorldRuntimeLayout is not null;
+
+    private bool UsesPackedCameraRuntime => usesPackedCameraRuntime;
 
     public bool UsesReadOnlyDataHelpers => romLayout.ReadOnlyDataPlacements.Keys.Any(IsRuntimeReadOnlyDataLabel);
 
@@ -1647,6 +1685,50 @@ internal sealed class GameBoyRuntimeCompiler
         EmitMusicPlayHelpers();
         EmitSoundEffectPlayHelpers();
         EmitAudioUpdateHelper();
+        EmitPackedCameraAudioTickHelper();
+    }
+
+    private void EmitPackedCameraAudioTickHelper()
+    {
+        if (!UsesPackedCameraRuntime)
+        {
+            return;
+        }
+
+        builder.Label(GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+        if (!program.SdkAudioOperations.Any(operation => operation is SdkAudioOperation.UpdateAudio))
+        {
+            builder.Emit(0xC9); // RET; the wait flag remains disabled.
+            return;
+        }
+
+        builder.Emit(0xC5); // PUSH BC
+        builder.Emit(0xD5); // PUSH DE
+        builder.PushHl();
+        var restoresBank = romLayout.ProgramTailBankCount > 0
+                           || romLayout.UsesBankedReadOnlyData
+                           || romLayout.UsesBankedMusic
+                           || romLayout.UsesBankedWorldPack;
+        if (restoresBank)
+        {
+            builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+            builder.Emit(0xF5); // PUSH AF
+        }
+
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyPackedCameraRuntime.WaitAudioEnabled);
+        builder.StoreA(GameBoyPackedCameraRuntime.WaitAudioTicked);
+        EmitUpdateAudio();
+        if (restoresBank)
+        {
+            builder.Emit(0xF1); // POP AF
+            EmitSelectRomBankFromA();
+        }
+
+        builder.PopHl();
+        builder.Emit(0xD1); // POP DE
+        builder.Emit(0xC1); // POP BC
+        builder.Emit(0xC9); // RET
     }
 
     private void EmitMusicPlayHelpers()
@@ -1683,7 +1765,7 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitAudioUpdateHelper()
     {
-        if (!UsesAudioUpdateHelper)
+        if (!UsesAudioUpdateHelper || UsesPackedCameraRuntime)
         {
             return;
         }
@@ -3100,6 +3182,12 @@ internal sealed class GameBoyRuntimeCompiler
         if (operation is SdkAudioOperation.PlaySoundEffect sfx && UsesSoundEffectPlayHelpers)
         {
             builder.JumpAbsolute(0xCD, SoundEffectPlayHelperLabel(sfx.SoundId)); // CALL nn
+            return;
+        }
+
+        if (operation is SdkAudioOperation.UpdateAudio && UsesPackedCameraRuntime)
+        {
+            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
             return;
         }
 
@@ -4704,6 +4792,11 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreA(CameraYLowAddress);
         builder.StoreA(CameraYHighAddress);
         builder.StoreA(CameraFineYAddress);
+        if (UsesPackedCameraRuntime)
+        {
+            EmitInitializePackedCameraRuntime();
+        }
+
         if (ProgramQueuesDiagonalStreaming())
         {
             builder.StoreA(PendingDiagonalColumnKindAddress);
@@ -4840,6 +4933,12 @@ internal sealed class GameBoyRuntimeCompiler
     {
         var config = EnsureCameraConfigured("camera_apply");
 
+        if (UsesPackedCameraRuntime)
+        {
+            EmitApplyPackedCamera(config);
+            return;
+        }
+
         // Drain any column/row queued by last frame's camera move into VRAM now, while we are at the
         // top of the frame inside VBlank. This replaces the per-crossing extra WaitVBlank, so a
         // scrolling frame no longer costs two VBlanks for a single audio update.
@@ -4849,6 +4948,481 @@ internal sealed class GameBoyRuntimeCompiler
         builder.StoreHighRamA(0x43);
         builder.LoadA(CameraYLowAddress);
         builder.StoreHighRamA(0x42);
+    }
+
+    private void EmitApplyPackedCamera(CameraConfig config)
+    {
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            EmitApplyPackedDiagonalCamera(config);
+        }
+        else
+        {
+            var commitRow = builder.CreateLabel("packed_camera_apply_row");
+            var nothingPending = builder.CreateLabel("packed_camera_apply_nothing_pending");
+            var publish = builder.CreateLabel("packed_camera_apply_publish");
+            builder.LoadA(PendingStreamKindAddress);
+            builder.CompareImmediate(PendingStreamNone);
+            builder.JumpAbsolute(0xCA, nothingPending);
+            builder.CompareImmediate(PendingStreamRow);
+            builder.JumpAbsolute(0xCA, commitRow);
+            EmitCopyWord(CameraYLowAddress, CameraYHighAddress, GameBoyPackedCameraRuntime.VisibleCameraYLow, GameBoyPackedCameraRuntime.VisibleCameraYHigh);
+            EmitCommitPackedPendingEdge(
+                GameBoyPackedCameraRuntime.Column,
+                PendingStreamKindAddress,
+                PendingStreamCountAddress,
+                PendingStreamTargetAddress,
+                PendingStreamSourceAddress,
+                PendingStreamSourceHighAddress,
+                PendingStreamSecondTargetAddress,
+                PendingStreamSecondSourceAddress,
+                PendingStreamSecondSourceHighAddress,
+                GameBoyPackedCameraRuntime.PendingDirection,
+                GameBoyPackedCameraRuntime.PendingSecondDirection,
+                GameBoyPackedCameraRuntime.PendingSlot,
+                GameBoyPackedCameraRuntime.PendingSecondSlot,
+                config);
+            builder.JumpAbsolute(publish);
+
+            builder.Label(commitRow);
+            EmitCopyWord(CameraXLowAddress, CameraXHighAddress, GameBoyPackedCameraRuntime.VisibleCameraXLow, GameBoyPackedCameraRuntime.VisibleCameraXHigh);
+            EmitCommitPackedPendingEdge(
+                GameBoyPackedCameraRuntime.Row,
+                PendingStreamKindAddress,
+                PendingStreamCountAddress,
+                PendingStreamTargetAddress,
+                PendingStreamSourceAddress,
+                null,
+                PendingStreamSecondTargetAddress,
+                PendingStreamSecondSourceAddress,
+                null,
+                GameBoyPackedCameraRuntime.PendingDirection,
+                GameBoyPackedCameraRuntime.PendingSecondDirection,
+                GameBoyPackedCameraRuntime.PendingSlot,
+                GameBoyPackedCameraRuntime.PendingSecondSlot,
+                config);
+            builder.JumpAbsolute(publish);
+
+            builder.Label(nothingPending);
+            EmitCopyWord(CameraXLowAddress, CameraXHighAddress, GameBoyPackedCameraRuntime.VisibleCameraXLow, GameBoyPackedCameraRuntime.VisibleCameraXHigh);
+            EmitCopyWord(CameraYLowAddress, CameraYHighAddress, GameBoyPackedCameraRuntime.VisibleCameraYLow, GameBoyPackedCameraRuntime.VisibleCameraYHigh);
+            builder.Label(publish);
+        }
+
+        builder.LoadA(GameBoyPackedCameraRuntime.VisibleCameraXLow);
+        builder.StoreHighRamA(0x43);
+        builder.LoadA(GameBoyPackedCameraRuntime.VisibleCameraYLow);
+        builder.StoreHighRamA(0x42);
+    }
+
+    private void EmitApplyPackedDiagonalCamera(CameraConfig config)
+    {
+        var select = builder.CreateLabel("packed_camera_diagonal_select");
+        var checkRow = builder.CreateLabel("packed_camera_diagonal_check_row");
+        var commitColumn = builder.CreateLabel("packed_camera_diagonal_commit_column");
+        var commitRow = builder.CreateLabel("packed_camera_diagonal_commit_row");
+        var columnVisibilityDone = builder.CreateLabel("packed_camera_diagonal_column_visibility_done");
+        var rowVisibilityDone = builder.CreateLabel("packed_camera_diagonal_row_visibility_done");
+        var done = builder.CreateLabel("packed_camera_diagonal_apply_done");
+
+        builder.LoadA(PendingDiagonalColumnKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xC2, columnVisibilityDone);
+        EmitCopyWord(CameraXLowAddress, CameraXHighAddress, GameBoyPackedCameraRuntime.VisibleCameraXLow, GameBoyPackedCameraRuntime.VisibleCameraXHigh);
+        builder.Label(columnVisibilityDone);
+        builder.LoadA(PendingDiagonalRowKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xC2, rowVisibilityDone);
+        EmitCopyWord(CameraYLowAddress, CameraYHighAddress, GameBoyPackedCameraRuntime.VisibleCameraYLow, GameBoyPackedCameraRuntime.VisibleCameraYHigh);
+        builder.Label(rowVisibilityDone);
+
+        builder.Label(select);
+        builder.LoadA(PendingDiagonalColumnKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, checkRow);
+        builder.LoadA(PendingDiagonalRowKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, commitColumn);
+        builder.LoadA(PendingDiagonalNextStreamKindAddress);
+        builder.CompareImmediate(PendingStreamRow);
+        builder.JumpAbsolute(0xCA, commitRow);
+
+        builder.Label(commitColumn);
+        EmitCommitPackedPendingEdge(
+            GameBoyPackedCameraRuntime.Column,
+            PendingDiagonalColumnKindAddress,
+            PendingDiagonalColumnCountAddress,
+            PendingDiagonalColumnTargetAddress,
+            PendingDiagonalColumnSourceAddress,
+            PendingDiagonalColumnSourceHighAddress,
+            PendingDiagonalColumnSecondTargetAddress,
+            PendingDiagonalColumnSecondSourceAddress,
+            PendingDiagonalColumnSecondSourceHighAddress,
+            GameBoyPackedCameraRuntime.PendingDiagonalColumnDirection,
+            GameBoyPackedCameraRuntime.PendingDiagonalColumnSecondDirection,
+            GameBoyPackedCameraRuntime.PendingDiagonalColumnSlot,
+            GameBoyPackedCameraRuntime.PendingDiagonalColumnSecondSlot,
+            config);
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitSucceeded);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, done);
+        builder.LoadAImmediate(PendingStreamRow);
+        builder.StoreA(PendingDiagonalNextStreamKindAddress);
+        builder.JumpAbsolute(done);
+
+        builder.Label(checkRow);
+        builder.LoadA(PendingDiagonalRowKindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, done);
+
+        builder.Label(commitRow);
+        EmitCommitPackedPendingEdge(
+            GameBoyPackedCameraRuntime.Row,
+            PendingDiagonalRowKindAddress,
+            PendingDiagonalRowCountAddress,
+            PendingDiagonalRowTargetAddress,
+            PendingDiagonalRowSourceAddress,
+            null,
+            PendingDiagonalRowSecondTargetAddress,
+            PendingDiagonalRowSecondSourceAddress,
+            null,
+            GameBoyPackedCameraRuntime.PendingDiagonalRowDirection,
+            GameBoyPackedCameraRuntime.PendingDiagonalRowSecondDirection,
+            GameBoyPackedCameraRuntime.PendingDiagonalRowSlot,
+            GameBoyPackedCameraRuntime.PendingDiagonalRowSecondSlot,
+            config);
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitSucceeded);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, done);
+        builder.LoadAImmediate(PendingStreamColumn);
+        builder.StoreA(PendingDiagonalNextStreamKindAddress);
+        builder.Label(done);
+    }
+
+    private void EmitCommitPackedPendingEdge(
+        byte axis,
+        ushort kindAddress,
+        ushort countAddress,
+        ushort targetAddress,
+        ushort sourceAddress,
+        ushort? sourceHighAddress,
+        ushort secondTargetAddress,
+        ushort secondSourceAddress,
+        ushort? secondSourceHighAddress,
+        ushort directionAddress,
+        ushort secondDirectionAddress,
+        ushort slotAddress,
+        ushort secondSlotAddress,
+        CameraConfig config)
+    {
+        var validateSlot0 = builder.CreateLabel("packed_camera_commit_validate_slot_0");
+        var validateSlot1 = builder.CreateLabel("packed_camera_commit_validate_slot_1");
+        var commit = builder.CreateLabel("packed_camera_commit_edge");
+        var invalid = builder.CreateLabel("packed_camera_commit_invalid");
+        var single = builder.CreateLabel("packed_camera_commit_single");
+        var publishCurrent = builder.CreateLabel("packed_camera_commit_publish_current");
+        var release = builder.CreateLabel("packed_camera_commit_release");
+        var done = builder.CreateLabel("packed_camera_commit_done");
+
+        builder.LoadAImmediate(0);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitSucceeded);
+
+        builder.LoadA(slotAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, validateSlot0);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, validateSlot1);
+        builder.JumpAbsolute(invalid);
+
+        builder.Label(validateSlot0);
+        EmitValidatePackedSlot(
+            GameBoyPackedCameraRuntime.Slot0,
+            packedWorldRuntimeLayout!.EdgeSlots[0],
+            0,
+            axis,
+            targetAddress,
+            sourceAddress,
+            sourceHighAddress,
+            directionAddress,
+            commit,
+            invalid);
+
+        builder.Label(validateSlot1);
+        EmitValidatePackedSlot(
+            GameBoyPackedCameraRuntime.Slot1,
+            packedWorldRuntimeLayout!.EdgeSlots[1],
+            1,
+            axis,
+            targetAddress,
+            sourceAddress,
+            sourceHighAddress,
+            directionAddress,
+            commit,
+            invalid);
+
+        builder.Label(commit);
+        EmitCopyByte(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.LastCommittedWorldEdgeLow);
+        EmitCopyByte(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh, GameBoyPackedCameraRuntime.LastCommittedWorldEdgeHigh);
+        EmitCopyByte(GameBoyPackedCameraRuntime.CommitAxis, GameBoyPackedCameraRuntime.LastCommittedAxis);
+        EmitCopyByte(GameBoyPackedCameraRuntime.CommitDirection, GameBoyPackedCameraRuntime.LastCommittedDirection);
+        EmitSetPackedSelectedSlotState(GameBoyPackedCameraRuntime.Committing);
+        EmitIncrementPackedCounter(GameBoyPackedCameraRuntime.CommitCount);
+        builder.LoadAImmediate(0);
+        builder.StoreA(GameBoyPackedCameraRuntime.LastCommitVramWrites);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyPackedCameraRuntime.CriticalSection);
+        EmitCopyPackedEdgeToVram(axis);
+        builder.LoadAImmediate(0);
+        builder.StoreA(GameBoyPackedCameraRuntime.CriticalSection);
+
+        builder.LoadA(countAddress);
+        builder.CompareImmediate(PendingStreamDouble);
+        builder.JumpAbsolute(0xC2, single);
+        EmitCopyByte(secondTargetAddress, targetAddress);
+        EmitCopyByte(secondSourceAddress, sourceAddress);
+        if (sourceHighAddress is { } firstHigh && secondSourceHighAddress is { } secondHigh)
+        {
+            EmitCopyByte(secondHigh, firstHigh);
+        }
+
+        EmitCopyByte(secondDirectionAddress, directionAddress);
+        EmitCopyByte(secondSlotAddress, slotAddress);
+        builder.LoadAImmediate(PendingStreamSingle);
+        builder.StoreA(countAddress);
+        EmitPublishCommittedCrossing(axis, config);
+        builder.JumpAbsolute(release);
+
+        builder.Label(single);
+        builder.LoadAImmediate(PendingStreamNone);
+        builder.StoreA(kindAddress);
+        builder.StoreA(countAddress);
+        builder.Label(publishCurrent);
+        if (axis == GameBoyPackedCameraRuntime.Column)
+        {
+            EmitCopyWord(CameraXLowAddress, CameraXHighAddress, GameBoyPackedCameraRuntime.VisibleCameraXLow, GameBoyPackedCameraRuntime.VisibleCameraXHigh);
+        }
+        else
+        {
+            EmitCopyWord(CameraYLowAddress, CameraYHighAddress, GameBoyPackedCameraRuntime.VisibleCameraYLow, GameBoyPackedCameraRuntime.VisibleCameraYHigh);
+        }
+
+        builder.JumpAbsolute(release);
+        builder.Label(release);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitSucceeded);
+        EmitSetPackedSelectedSlotState(GameBoyPackedCameraRuntime.Released);
+        EmitIncrementPackedCounter(GameBoyPackedCameraRuntime.ReleaseCount);
+        builder.JumpAbsolute(done);
+        builder.Label(invalid);
+        builder.Label(done);
+    }
+
+    private void EmitValidatePackedSlot(
+        ushort metadata,
+        GameBoyWramRange payload,
+        byte slot,
+        byte expectedAxis,
+        ushort targetAddress,
+        ushort sourceAddress,
+        ushort? sourceHighAddress,
+        ushort directionAddress,
+        string valid,
+        string invalid)
+    {
+        EmitCompareAddressToImmediate(metadata + GameBoyPackedCameraRuntime.StateOffset, GameBoyPackedCameraRuntime.Resident, invalid);
+        EmitCompareAddressToImmediate(metadata + GameBoyPackedCameraRuntime.AxisOffset, expectedAxis, invalid);
+        EmitCompareAddresses(metadata + GameBoyPackedCameraRuntime.DirectionOffset, directionAddress, invalid);
+        EmitCompareAddresses(metadata + GameBoyPackedCameraRuntime.WorldEdgeLowOffset, sourceAddress, invalid);
+        if (sourceHighAddress is { } high)
+        {
+            EmitCompareAddresses(metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset, high, invalid);
+        }
+        else
+        {
+            EmitCompareAddressToImmediate(metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset, 0, invalid);
+        }
+
+        EmitCompareAddresses(metadata + GameBoyPackedCameraRuntime.TargetOffset, targetAddress, invalid);
+        builder.LoadAImmediate(slot);
+        builder.StoreA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.LoadDe(payload.Start);
+        EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.TargetOffset)), GameBoyPackedCameraRuntime.CommitTarget);
+        EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.TargetStartOffset)), GameBoyPackedCameraRuntime.CommitTargetStart);
+        EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.WorldEdgeLowOffset)), GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset)), GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        EmitCopyByte(checked((ushort)(metadata + GameBoyPackedCameraRuntime.DirectionOffset)), GameBoyPackedCameraRuntime.CommitDirection);
+        builder.LoadAImmediate(expectedAxis);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.JumpAbsolute(valid);
+    }
+
+    private void EmitCopyPackedEdgeToVram(byte axis)
+    {
+        var loop = builder.CreateLabel("packed_camera_commit_copy_loop");
+        if (axis == GameBoyPackedCameraRuntime.Column)
+        {
+            builder.LoadA(GameBoyPackedCameraRuntime.CommitTarget);
+            builder.LoadCFromA();
+            EmitBackgroundTileAddressToHl(GameBoyPackedCameraRuntime.CommitTargetStart);
+            builder.Emit(0x06, 19); // LD B,19
+            var noCarry = builder.CreateLabel("packed_camera_column_target_no_carry");
+            var noWrap = builder.CreateLabel("packed_camera_column_target_no_wrap");
+            builder.Label(loop);
+            builder.Emit(0x1A); // LD A,(DE)
+            builder.StoreHlA();
+            builder.Emit(0x13); // INC DE
+            builder.LoadAFromL();
+            builder.AddAImmediate(32);
+            builder.LoadLFromA();
+            builder.JumpAbsolute(0xD2, noCarry);
+            builder.Emit(0x24); // INC H
+            builder.LoadAFromH();
+            builder.CompareImmediate(0x9C);
+            builder.JumpAbsolute(0xC2, noWrap);
+            builder.LoadHImmediate(0x98);
+            builder.Label(noWrap);
+            builder.Label(noCarry);
+            builder.Emit(0x05); // DEC B
+            builder.JumpAbsolute(0xC2, loop);
+            builder.LoadAImmediate(19);
+        }
+        else
+        {
+            builder.LoadA(GameBoyPackedCameraRuntime.CommitTargetStart);
+            builder.LoadCFromA();
+            EmitBackgroundTileAddressToHl(GameBoyPackedCameraRuntime.CommitTarget);
+            builder.Emit(0x06, 21); // LD B,21
+            var wrap = builder.CreateLabel("packed_camera_row_target_wrap");
+            var next = builder.CreateLabel("packed_camera_row_target_next");
+            builder.Label(loop);
+            builder.Emit(0x1A); // LD A,(DE)
+            builder.StoreHlA();
+            builder.Emit(0x13); // INC DE
+            builder.LoadA(GameBoyPackedCameraRuntime.CommitTargetStart);
+            builder.AddAImmediate(1);
+            builder.CompareImmediate(32);
+            builder.JumpAbsolute(0xCA, wrap);
+            builder.StoreA(GameBoyPackedCameraRuntime.CommitTargetStart);
+            builder.LoadAFromL();
+            builder.AddAImmediate(1);
+            builder.LoadLFromA();
+            builder.JumpAbsolute(next);
+            builder.Label(wrap);
+            builder.LoadAImmediate(0);
+            builder.StoreA(GameBoyPackedCameraRuntime.CommitTargetStart);
+            builder.LoadCFromA();
+            EmitBackgroundTileAddressToHl(GameBoyPackedCameraRuntime.CommitTarget);
+            builder.Label(next);
+            builder.Emit(0x05); // DEC B
+            builder.JumpAbsolute(0xC2, loop);
+            builder.LoadAImmediate(21);
+        }
+
+        builder.StoreA(GameBoyPackedCameraRuntime.LastCommitVramWrites);
+    }
+
+    private void EmitPublishCommittedCrossing(byte axis, CameraConfig config)
+    {
+        var negative = builder.CreateLabel("packed_camera_publish_negative_crossing");
+        var shift = builder.CreateLabel("packed_camera_publish_crossing_shift");
+        var done = builder.CreateLabel("packed_camera_publish_crossing_done");
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitDirection);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
+        builder.JumpAbsolute(0xCA, negative);
+        var lookahead = axis == GameBoyPackedCameraRuntime.Column ? 20 : 18;
+        var modulo = axis == GameBoyPackedCameraRuntime.Column ? config.MapWidth : config.SourceHeight;
+        for (var index = 0; index < lookahead; index++)
+        {
+            EmitDecrementWordAddressModulo(
+                GameBoyPackedCameraRuntime.CommitWorldEdgeLow,
+                GameBoyPackedCameraRuntime.CommitWorldEdgeHigh,
+                modulo);
+        }
+
+        builder.JumpAbsolute(shift);
+        builder.Label(negative);
+        builder.Label(shift);
+        for (var index = 0; index < 3; index++)
+        {
+            EmitShiftWordLeft(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        }
+
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitDirection);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
+        builder.JumpAbsolute(0xC2, done);
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        builder.AddAImmediate(7);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        builder.JumpAbsolute(0xD2, done);
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        builder.AddAImmediate(1);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        builder.Label(done);
+        if (axis == GameBoyPackedCameraRuntime.Column)
+        {
+            EmitCopyWord(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh, GameBoyPackedCameraRuntime.VisibleCameraXLow, GameBoyPackedCameraRuntime.VisibleCameraXHigh);
+        }
+        else
+        {
+            EmitCopyWord(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh, GameBoyPackedCameraRuntime.VisibleCameraYLow, GameBoyPackedCameraRuntime.VisibleCameraYHigh);
+        }
+    }
+
+    private void EmitShiftWordLeft(ushort lowAddress, ushort highAddress)
+    {
+        builder.LoadA(highAddress);
+        builder.LoadBFromA();
+        builder.LoadA(lowAddress);
+        builder.AddAFromA();
+        builder.StoreA(lowAddress);
+        builder.LoadAFromB();
+        builder.Emit(0x88); // ADC A,B => high * 2 + carry from low shift
+        builder.StoreA(highAddress);
+    }
+
+    private void EmitSetPackedSelectedSlotState(byte state)
+    {
+        var slot1 = builder.CreateLabel("packed_camera_set_state_slot_1");
+        var done = builder.CreateLabel("packed_camera_set_state_done");
+        builder.LoadA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, slot1);
+        builder.LoadAImmediate(state);
+        builder.StoreA(GameBoyPackedCameraRuntime.Slot0 + GameBoyPackedCameraRuntime.StateOffset);
+        builder.JumpAbsolute(done);
+        builder.Label(slot1);
+        builder.LoadAImmediate(state);
+        builder.StoreA(GameBoyPackedCameraRuntime.Slot1 + GameBoyPackedCameraRuntime.StateOffset);
+        builder.Label(done);
+    }
+
+    private void EmitIncrementPackedCounter(ushort address)
+    {
+        builder.LoadA(address);
+        builder.AddAImmediate(1);
+        builder.StoreA(address);
+    }
+
+    private void EmitCompareAddressToImmediate(int address, byte expected, string mismatch)
+    {
+        builder.LoadA(checked((ushort)address));
+        builder.CompareImmediate(expected);
+        builder.JumpAbsolute(0xC2, mismatch);
+    }
+
+    private void EmitCompareAddresses(int left, ushort right, string mismatch)
+    {
+        builder.LoadA(right);
+        builder.LoadBFromA();
+        builder.LoadA(checked((ushort)left));
+        builder.CompareB();
+        builder.JumpAbsolute(0xC2, mismatch);
+    }
+
+    private void EmitCopyWord(ushort sourceLow, ushort sourceHigh, ushort targetLow, ushort targetHigh)
+    {
+        EmitCopyByte(sourceLow, targetLow);
+        EmitCopyByte(sourceHigh, targetHigh);
     }
 
     private void EmitCommitPendingStream(CameraConfig config)
@@ -5266,6 +5840,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitCameraMoveRightStep(CameraConfig config)
     {
+        if (UsesPackedCameraRuntime)
+        {
+            EmitPackedCameraMoveRightStep(config);
+            return;
+        }
+
         var endLabel = builder.CreateLabel("camera_move_right_end");
 
         EmitIncrement16(CameraXLowAddress, CameraXHighAddress);
@@ -5305,6 +5885,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitCameraMoveLeftStep(CameraConfig config)
     {
+        if (UsesPackedCameraRuntime)
+        {
+            EmitPackedCameraMoveLeftStep(config);
+            return;
+        }
+
         var endLabel = builder.CreateLabel("camera_move_left_end");
 
         EmitDecrement16(CameraXLowAddress, CameraXHighAddress);
@@ -5337,6 +5923,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitCameraMoveDownStep(CameraConfig config)
     {
+        if (UsesPackedCameraRuntime)
+        {
+            EmitPackedCameraMoveDownStep(config);
+            return;
+        }
+
         var endLabel = builder.CreateLabel("camera_move_down_end");
 
         EmitIncrement16(CameraYLowAddress, CameraYHighAddress);
@@ -5360,6 +5952,12 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitCameraMoveUpStep(CameraConfig config)
     {
+        if (UsesPackedCameraRuntime)
+        {
+            EmitPackedCameraMoveUpStep(config);
+            return;
+        }
+
         var endLabel = builder.CreateLabel("camera_move_up_end");
 
         EmitDecrement16(CameraYLowAddress, CameraYHighAddress);
@@ -5378,6 +5976,614 @@ internal sealed class GameBoyRuntimeCompiler
         EmitQueuePendingRow(CameraTopBackgroundRowAddress, CameraTopSourceRowAddress);
 
         builder.Label(endLabel);
+    }
+
+    private void EmitInitializePackedCameraRuntime()
+    {
+        var loop = builder.CreateLabel("packed_camera_state_clear_loop");
+        builder.LoadHl(GameBoyPackedCameraRuntime.VisibleCameraXLow);
+        builder.Emit(0x06, checked((byte)(GameBoyPackedCameraRuntime.LastObservedLyValid - GameBoyPackedCameraRuntime.VisibleCameraXLow + 1))); // LD B,length
+        builder.XorA();
+        builder.Label(loop);
+        builder.Emit(0x22); // LD (HL+),A
+        builder.Emit(0x05); // DEC B
+        builder.JumpRelative(0x20, loop); // JR NZ,loop
+    }
+
+    private void EmitPackedCameraMoveRightStep(CameraConfig config)
+    {
+        var crossing = builder.CreateLabel("packed_camera_move_right_crossing");
+        var advanceCrossing = builder.CreateLabel("packed_camera_move_right_advance_crossing");
+        var end = builder.CreateLabel("packed_camera_move_right_end");
+        builder.LoadA(CameraFineXAddress);
+        builder.CompareImmediate(7);
+        builder.JumpAbsolute(0xCA, crossing);
+        EmitIncrement16(CameraXLowAddress, CameraXHighAddress);
+        builder.LoadA(CameraFineXAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(CameraFineXAddress);
+        builder.JumpAbsolute(end);
+
+        builder.Label(crossing);
+        EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Column, GameBoyPackedCameraRuntime.Negative);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, advanceCrossing);
+        EmitRequestPackedColumn(
+            GameBoyPackedCameraRuntime.Positive,
+            CameraRightSourceColumnAddress,
+            config.MapWidth > byte.MaxValue ? CameraRightSourceColumnHighAddress : null,
+            CameraRightBackgroundColumnAddress);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
+        builder.JumpAbsolute(0xCA, end);
+        EmitQueuePreparedPackedColumn(
+            GameBoyPackedCameraRuntime.Positive,
+            CameraRightBackgroundColumnAddress,
+            CameraRightSourceColumnAddress,
+            config.MapWidth > byte.MaxValue ? CameraRightSourceColumnHighAddress : null);
+        builder.Label(advanceCrossing);
+        EmitIncrement16(CameraXLowAddress, CameraXHighAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraFineXAddress);
+        EmitIncrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
+        EmitIncrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            EmitIncrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
+            EmitIncrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
+            EmitIncrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+        }
+        else
+        {
+            EmitIncrementWordAddressModulo(CameraScreenLeftColumnAddress, CameraScreenLeftColumnHighAddress, config.MapWidth);
+            EmitIncrementWordAddressModulo(CameraRightSourceColumnAddress, CameraRightSourceColumnHighAddress, config.MapWidth);
+            EmitIncrementWordAddressModulo(CameraLeftSourceColumnAddress, CameraLeftSourceColumnHighAddress, config.MapWidth);
+        }
+
+        builder.Label(end);
+    }
+
+    private void EmitPackedCameraMoveLeftStep(CameraConfig config)
+    {
+        var crossing = builder.CreateLabel("packed_camera_move_left_crossing");
+        var advanceCrossing = builder.CreateLabel("packed_camera_move_left_advance_crossing");
+        var end = builder.CreateLabel("packed_camera_move_left_end");
+        builder.LoadA(CameraFineXAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, crossing);
+        EmitDecrement16(CameraXLowAddress, CameraXHighAddress);
+        builder.LoadA(CameraFineXAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(CameraFineXAddress);
+        builder.JumpAbsolute(end);
+
+        builder.Label(crossing);
+        EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Column, GameBoyPackedCameraRuntime.Positive);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, advanceCrossing);
+        EmitRequestPackedColumn(
+            GameBoyPackedCameraRuntime.Negative,
+            CameraLeftSourceColumnAddress,
+            config.MapWidth > byte.MaxValue ? CameraLeftSourceColumnHighAddress : null,
+            CameraLeftBackgroundColumnAddress);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
+        builder.JumpAbsolute(0xCA, end);
+        EmitQueuePreparedPackedColumn(
+            GameBoyPackedCameraRuntime.Negative,
+            CameraLeftBackgroundColumnAddress,
+            CameraLeftSourceColumnAddress,
+            config.MapWidth > byte.MaxValue ? CameraLeftSourceColumnHighAddress : null);
+        builder.Label(advanceCrossing);
+        EmitDecrement16(CameraXLowAddress, CameraXHighAddress);
+        builder.LoadAImmediate(7);
+        builder.StoreA(CameraFineXAddress);
+        EmitDecrementAddressModulo(CameraRightBackgroundColumnAddress, 32);
+        EmitDecrementAddressModulo(CameraLeftBackgroundColumnAddress, 32);
+        if (config.MapWidth <= byte.MaxValue)
+        {
+            EmitDecrementAddressModulo(CameraScreenLeftColumnAddress, config.MapWidth);
+            EmitDecrementAddressModulo(CameraRightSourceColumnAddress, config.MapWidth);
+            EmitDecrementAddressModulo(CameraLeftSourceColumnAddress, config.MapWidth);
+        }
+        else
+        {
+            EmitDecrementWordAddressModulo(CameraScreenLeftColumnAddress, CameraScreenLeftColumnHighAddress, config.MapWidth);
+            EmitDecrementWordAddressModulo(CameraRightSourceColumnAddress, CameraRightSourceColumnHighAddress, config.MapWidth);
+            EmitDecrementWordAddressModulo(CameraLeftSourceColumnAddress, CameraLeftSourceColumnHighAddress, config.MapWidth);
+        }
+
+        builder.Label(end);
+    }
+
+    private void EmitPackedCameraMoveDownStep(CameraConfig config)
+    {
+        var crossing = builder.CreateLabel("packed_camera_move_down_crossing");
+        var cancelledCrossing = builder.CreateLabel("packed_camera_move_down_cancelled_crossing");
+        var advanceCamera = builder.CreateLabel("packed_camera_move_down_advance_camera");
+        var end = builder.CreateLabel("packed_camera_move_down_end");
+        builder.LoadA(CameraFineYAddress);
+        builder.CompareImmediate(7);
+        builder.JumpAbsolute(0xCA, crossing);
+        EmitIncrement16(CameraYLowAddress, CameraYHighAddress);
+        builder.LoadA(CameraFineYAddress);
+        builder.AddAImmediate(1);
+        builder.StoreA(CameraFineYAddress);
+        builder.JumpAbsolute(end);
+
+        builder.Label(crossing);
+        EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Row, GameBoyPackedCameraRuntime.Negative);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, cancelledCrossing);
+        EmitRequestPackedRow(
+            GameBoyPackedCameraRuntime.Positive,
+            CameraBottomSourceRowAddress,
+            CameraBottomBackgroundRowAddress,
+            config,
+            cursorDelta: 1);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
+        builder.JumpAbsolute(0xCA, end);
+        EmitIncrementAddressModulo(CameraTopBackgroundRowAddress, 32);
+        EmitIncrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
+        EmitIncrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
+        EmitIncrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
+        EmitQueuePreparedPackedRow(
+            GameBoyPackedCameraRuntime.Positive,
+            CameraBottomBackgroundRowAddress,
+            CameraBottomSourceRowAddress);
+        builder.JumpAbsolute(advanceCamera);
+
+        builder.Label(cancelledCrossing);
+        EmitIncrementAddressModulo(CameraTopBackgroundRowAddress, 32);
+        EmitIncrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
+        EmitIncrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
+        EmitIncrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
+        builder.Label(advanceCamera);
+        EmitIncrement16(CameraYLowAddress, CameraYHighAddress);
+        builder.LoadAImmediate(0);
+        builder.StoreA(CameraFineYAddress);
+        builder.Label(end);
+    }
+
+    private void EmitPackedCameraMoveUpStep(CameraConfig config)
+    {
+        var crossing = builder.CreateLabel("packed_camera_move_up_crossing");
+        var cancelledCrossing = builder.CreateLabel("packed_camera_move_up_cancelled_crossing");
+        var advanceCamera = builder.CreateLabel("packed_camera_move_up_advance_camera");
+        var end = builder.CreateLabel("packed_camera_move_up_end");
+        builder.LoadA(CameraFineYAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, crossing);
+        EmitDecrement16(CameraYLowAddress, CameraYHighAddress);
+        builder.LoadA(CameraFineYAddress);
+        builder.SubtractAImmediate(1);
+        builder.StoreA(CameraFineYAddress);
+        builder.JumpAbsolute(end);
+
+        builder.Label(crossing);
+        EmitTryCancelPackedReverse(GameBoyPackedCameraRuntime.Row, GameBoyPackedCameraRuntime.Positive);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, cancelledCrossing);
+        EmitRequestPackedRow(
+            GameBoyPackedCameraRuntime.Negative,
+            CameraTopSourceRowAddress,
+            CameraTopBackgroundRowAddress,
+            config,
+            cursorDelta: -1);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.NoSlot);
+        builder.JumpAbsolute(0xCA, end);
+        EmitDecrementAddressModulo(CameraTopBackgroundRowAddress, 32);
+        EmitDecrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
+        EmitDecrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
+        EmitDecrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
+        EmitQueuePreparedPackedRow(
+            GameBoyPackedCameraRuntime.Negative,
+            CameraTopBackgroundRowAddress,
+            CameraTopSourceRowAddress);
+        builder.JumpAbsolute(advanceCamera);
+
+        builder.Label(cancelledCrossing);
+        EmitDecrementAddressModulo(CameraTopBackgroundRowAddress, 32);
+        EmitDecrementAddressModulo(CameraBottomBackgroundRowAddress, 32);
+        EmitDecrementAddressModulo(CameraTopSourceRowAddress, config.SourceHeight);
+        EmitDecrementAddressModulo(CameraBottomSourceRowAddress, config.SourceHeight);
+        builder.Label(advanceCamera);
+        EmitDecrement16(CameraYLowAddress, CameraYHighAddress);
+        builder.LoadAImmediate(7);
+        builder.StoreA(CameraFineYAddress);
+        builder.Label(end);
+    }
+
+    private void EmitTryCancelPackedReverse(byte axis, byte pendingDirection)
+    {
+        var diagonal = ProgramQueuesDiagonalStreaming();
+        var kindAddress = axis == GameBoyPackedCameraRuntime.Column
+            ? diagonal ? PendingDiagonalColumnKindAddress : PendingStreamKindAddress
+            : diagonal ? PendingDiagonalRowKindAddress : PendingStreamKindAddress;
+        var countAddress = axis == GameBoyPackedCameraRuntime.Column
+            ? diagonal ? PendingDiagonalColumnCountAddress : PendingStreamCountAddress
+            : diagonal ? PendingDiagonalRowCountAddress : PendingStreamCountAddress;
+        var firstDirectionAddress = axis == GameBoyPackedCameraRuntime.Column
+            ? diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalColumnDirection : GameBoyPackedCameraRuntime.PendingDirection
+            : diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalRowDirection : GameBoyPackedCameraRuntime.PendingDirection;
+        var secondDirectionAddress = axis == GameBoyPackedCameraRuntime.Column
+            ? diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalColumnSecondDirection : GameBoyPackedCameraRuntime.PendingSecondDirection
+            : diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalRowSecondDirection : GameBoyPackedCameraRuntime.PendingSecondDirection;
+        var firstSlotAddress = axis == GameBoyPackedCameraRuntime.Column
+            ? diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalColumnSlot : GameBoyPackedCameraRuntime.PendingSlot
+            : diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalRowSlot : GameBoyPackedCameraRuntime.PendingSlot;
+        var secondSlotAddress = axis == GameBoyPackedCameraRuntime.Column
+            ? diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalColumnSecondSlot : GameBoyPackedCameraRuntime.PendingSecondSlot
+            : diagonal ? GameBoyPackedCameraRuntime.PendingDiagonalRowSecondSlot : GameBoyPackedCameraRuntime.PendingSecondSlot;
+
+        var checkFirst = builder.CreateLabel("packed_camera_reverse_check_first");
+        var cancelFirst = builder.CreateLabel("packed_camera_reverse_cancel_first");
+        var cancelSecond = builder.CreateLabel("packed_camera_reverse_cancel_second");
+        var cancelledFirst = builder.CreateLabel("packed_camera_reverse_cancelled_first");
+        var cancelledSecond = builder.CreateLabel("packed_camera_reverse_cancelled_second");
+        var notCancelled = builder.CreateLabel("packed_camera_reverse_not_cancelled");
+        var done = builder.CreateLabel("packed_camera_reverse_done");
+
+        builder.LoadA(kindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xCA, notCancelled);
+        builder.LoadA(countAddress);
+        builder.CompareImmediate(PendingStreamDouble);
+        builder.JumpAbsolute(0xC2, checkFirst);
+        builder.LoadA(secondDirectionAddress);
+        builder.CompareImmediate(pendingDirection);
+        builder.JumpAbsolute(0xCA, cancelSecond);
+        builder.JumpAbsolute(notCancelled);
+
+        builder.Label(checkFirst);
+        builder.LoadA(firstDirectionAddress);
+        builder.CompareImmediate(pendingDirection);
+        builder.JumpAbsolute(0xCA, cancelFirst);
+        builder.JumpAbsolute(notCancelled);
+
+        builder.Label(cancelSecond);
+        EmitReleasePackedQueuedSlot(secondSlotAddress, cancelledSecond, notCancelled);
+        builder.Label(cancelledSecond);
+        builder.LoadAImmediate(PendingStreamSingle);
+        builder.StoreA(countAddress);
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(done);
+
+        builder.Label(cancelFirst);
+        EmitReleasePackedQueuedSlot(firstSlotAddress, cancelledFirst, notCancelled);
+        builder.Label(cancelledFirst);
+        builder.LoadAImmediate(PendingStreamNone);
+        builder.StoreA(kindAddress);
+        builder.StoreA(countAddress);
+        builder.LoadAImmediate(1);
+        builder.JumpAbsolute(done);
+
+        builder.Label(notCancelled);
+        builder.LoadAImmediate(0);
+        builder.Label(done);
+    }
+
+    private void EmitReleasePackedQueuedSlot(ushort slotAddress, string released, string notReleased)
+    {
+        var slot0 = builder.CreateLabel("packed_camera_reverse_release_slot_0");
+        var slot1 = builder.CreateLabel("packed_camera_reverse_release_slot_1");
+        builder.LoadA(slotAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, slot0);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, slot1);
+        builder.JumpAbsolute(notReleased);
+
+        builder.Label(slot0);
+        EmitReleasePackedSlotIfMutable(GameBoyPackedCameraRuntime.Slot0, 0, released, notReleased);
+        builder.Label(slot1);
+        EmitReleasePackedSlotIfMutable(GameBoyPackedCameraRuntime.Slot1, 1, released, notReleased);
+    }
+
+    private void EmitReleasePackedSlotIfMutable(ushort metadata, byte slot, string released, string notReleased)
+    {
+        builder.LoadA(checked((ushort)(metadata + GameBoyPackedCameraRuntime.StateOffset)));
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.Committing);
+        builder.JumpAbsolute(0xCA, notReleased);
+        builder.CompareImmediate(GameBoyPackedCameraRuntime.Resident);
+        builder.JumpAbsolute(0xC2, notReleased);
+        builder.LoadAImmediate(slot);
+        builder.StoreA(GameBoyPackedCameraRuntime.SelectedSlot);
+        EmitSetPackedSelectedSlotState(GameBoyPackedCameraRuntime.Released);
+        EmitIncrementPackedCounter(GameBoyPackedCameraRuntime.ReleaseCount);
+        builder.JumpAbsolute(released);
+    }
+
+    private void EmitRequestPackedColumn(
+        byte direction,
+        ushort sourceLow,
+        ushort? sourceHigh,
+        ushort targetColumn)
+    {
+        builder.LoadAImmediate(GameBoyPackedCameraRuntime.Column);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.LoadAImmediate(direction);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitDirection);
+        EmitCopyWordOrZeroHigh(sourceLow, sourceHigh, GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        EmitCopyByte(targetColumn, GameBoyPackedCameraRuntime.CommitTarget);
+        EmitCopyByte(CameraTopBackgroundRowAddress, GameBoyPackedCameraRuntime.CommitTargetStart);
+        EmitCopyWordOrZeroHigh(CameraTopSourceRowAddress, null, GameBoyPackedCameraRuntime.IteratorLow, GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.StoreA(GameBoyPackedCameraRuntime.PreparedSlot);
+    }
+
+    private void EmitRequestPackedRow(
+        byte direction,
+        ushort sourceRow,
+        ushort targetRow,
+        CameraConfig config,
+        int cursorDelta)
+    {
+        builder.LoadAImmediate(GameBoyPackedCameraRuntime.Row);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.LoadAImmediate(direction);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitDirection);
+        EmitStoreAddressWithDeltaModulo(sourceRow, config.SourceHeight, cursorDelta, GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        builder.LoadAImmediate(0);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        EmitStoreAddressWithDeltaModulo(targetRow, 32, cursorDelta, GameBoyPackedCameraRuntime.CommitTarget);
+        var targetReady = builder.CreateLabel("packed_camera_row_target_start_ready");
+        builder.LoadA(CameraLeftBackgroundColumnAddress);
+        builder.AddAImmediate(1);
+        builder.CompareImmediate(32);
+        builder.JumpAbsolute(0xDA, targetReady);
+        builder.SubtractAImmediate(32);
+        builder.Label(targetReady);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitTargetStart);
+        EmitCopyWordOrZeroHigh(
+            CameraScreenLeftColumnAddress,
+            config.MapWidth > byte.MaxValue ? CameraScreenLeftColumnHighAddress : null,
+            GameBoyPackedCameraRuntime.IteratorLow,
+            GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
+        builder.StoreA(GameBoyPackedCameraRuntime.PreparedSlot);
+    }
+
+    private void EmitStoreAddressWithDeltaModulo(ushort source, int modulo, int delta, ushort target)
+    {
+        var adjusted = builder.CreateLabel("packed_camera_cursor_delta_adjusted");
+        builder.LoadA(source);
+        if (delta > 0)
+        {
+            builder.AddAImmediate(1);
+            builder.CompareImmediate(modulo);
+            builder.JumpAbsolute(0xC2, adjusted);
+            builder.LoadAImmediate(0);
+        }
+        else
+        {
+            builder.CompareImmediate(0);
+            var decrement = builder.CreateLabel("packed_camera_cursor_delta_decrement");
+            builder.JumpAbsolute(0xC2, decrement);
+            builder.LoadAImmediate(modulo - 1);
+            builder.JumpAbsolute(adjusted);
+            builder.Label(decrement);
+            builder.SubtractAImmediate(1);
+        }
+
+        builder.Label(adjusted);
+        builder.StoreA(target);
+    }
+
+    private void EmitQueuePreparedPackedColumn(
+        byte direction,
+        ushort target,
+        ushort source,
+        ushort? sourceHigh)
+    {
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            EmitQueuePreparedPackedStaggeredStream(
+                PendingDiagonalColumnKindAddress,
+                PendingDiagonalColumnCountAddress,
+                PendingDiagonalColumnTargetAddress,
+                PendingDiagonalColumnSourceAddress,
+                PendingDiagonalColumnSecondTargetAddress,
+                PendingDiagonalColumnSecondSourceAddress,
+                PendingDiagonalColumnSourceHighAddress,
+                PendingDiagonalColumnSecondSourceHighAddress,
+                GameBoyPackedCameraRuntime.PendingDiagonalColumnDirection,
+                GameBoyPackedCameraRuntime.PendingDiagonalColumnSecondDirection,
+                GameBoyPackedCameraRuntime.PendingDiagonalColumnSlot,
+                GameBoyPackedCameraRuntime.PendingDiagonalColumnSecondSlot,
+                direction,
+                target,
+                source,
+                sourceHigh);
+            return;
+        }
+
+        EmitQueuePreparedPackedStream(
+            PendingStreamKindAddress,
+            PendingStreamCountAddress,
+            PendingStreamColumn,
+            PendingStreamTargetAddress,
+            PendingStreamSourceAddress,
+            PendingStreamSecondTargetAddress,
+            PendingStreamSecondSourceAddress,
+            PendingStreamSourceHighAddress,
+            PendingStreamSecondSourceHighAddress,
+            GameBoyPackedCameraRuntime.PendingDirection,
+            GameBoyPackedCameraRuntime.PendingSecondDirection,
+            GameBoyPackedCameraRuntime.PendingSlot,
+            GameBoyPackedCameraRuntime.PendingSecondSlot,
+            direction,
+            target,
+            source,
+            sourceHigh);
+    }
+
+    private void EmitQueuePreparedPackedRow(byte direction, ushort target, ushort source)
+    {
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            EmitQueuePreparedPackedStaggeredStream(
+                PendingDiagonalRowKindAddress,
+                PendingDiagonalRowCountAddress,
+                PendingDiagonalRowTargetAddress,
+                PendingDiagonalRowSourceAddress,
+                PendingDiagonalRowSecondTargetAddress,
+                PendingDiagonalRowSecondSourceAddress,
+                null,
+                null,
+                GameBoyPackedCameraRuntime.PendingDiagonalRowDirection,
+                GameBoyPackedCameraRuntime.PendingDiagonalRowSecondDirection,
+                GameBoyPackedCameraRuntime.PendingDiagonalRowSlot,
+                GameBoyPackedCameraRuntime.PendingDiagonalRowSecondSlot,
+                direction,
+                target,
+                source,
+                null);
+            return;
+        }
+
+        EmitQueuePreparedPackedStream(
+            PendingStreamKindAddress,
+            PendingStreamCountAddress,
+            PendingStreamRow,
+            PendingStreamTargetAddress,
+            PendingStreamSourceAddress,
+            PendingStreamSecondTargetAddress,
+            PendingStreamSecondSourceAddress,
+            null,
+            null,
+            GameBoyPackedCameraRuntime.PendingDirection,
+            GameBoyPackedCameraRuntime.PendingSecondDirection,
+            GameBoyPackedCameraRuntime.PendingSlot,
+            GameBoyPackedCameraRuntime.PendingSecondSlot,
+            direction,
+            target,
+            source,
+            null);
+    }
+
+    private void EmitQueuePreparedPackedStream(
+        ushort kindAddress,
+        ushort countAddress,
+        byte kind,
+        ushort targetAddress,
+        ushort sourceAddress,
+        ushort secondTargetAddress,
+        ushort secondSourceAddress,
+        ushort? sourceHighTarget,
+        ushort? secondSourceHighTarget,
+        ushort directionAddress,
+        ushort secondDirectionAddress,
+        ushort slotAddress,
+        ushort secondSlotAddress,
+        byte direction,
+        ushort target,
+        ushort source,
+        ushort? sourceHigh)
+    {
+        var second = builder.CreateLabel("packed_camera_queue_second");
+        var done = builder.CreateLabel("packed_camera_queue_done");
+        builder.LoadA(kindAddress);
+        builder.CompareImmediate(PendingStreamNone);
+        builder.JumpAbsolute(0xC2, second);
+        EmitStorePackedQueueEntry(targetAddress, sourceAddress, sourceHighTarget, directionAddress, slotAddress, direction, target, source, sourceHigh);
+        builder.LoadAImmediate(kind);
+        builder.StoreA(kindAddress);
+        builder.LoadAImmediate(PendingStreamSingle);
+        builder.StoreA(countAddress);
+        builder.JumpAbsolute(done);
+        builder.Label(second);
+        EmitStorePackedQueueEntry(secondTargetAddress, secondSourceAddress, secondSourceHighTarget, secondDirectionAddress, secondSlotAddress, direction, target, source, sourceHigh);
+        builder.LoadAImmediate(PendingStreamDouble);
+        builder.StoreA(countAddress);
+        builder.Label(done);
+    }
+
+    private void EmitQueuePreparedPackedStaggeredStream(
+        ushort kindAddress,
+        ushort countAddress,
+        ushort targetAddress,
+        ushort sourceAddress,
+        ushort secondTargetAddress,
+        ushort secondSourceAddress,
+        ushort? sourceHighTarget,
+        ushort? secondSourceHighTarget,
+        ushort directionAddress,
+        ushort secondDirectionAddress,
+        ushort slotAddress,
+        ushort secondSlotAddress,
+        byte direction,
+        ushort target,
+        ushort source,
+        ushort? sourceHigh)
+    {
+        EmitQueuePreparedPackedStream(
+            kindAddress,
+            countAddress,
+            PendingStreamQueued,
+            targetAddress,
+            sourceAddress,
+            secondTargetAddress,
+            secondSourceAddress,
+            sourceHighTarget,
+            secondSourceHighTarget,
+            directionAddress,
+            secondDirectionAddress,
+            slotAddress,
+            secondSlotAddress,
+            direction,
+            target,
+            source,
+            sourceHigh);
+    }
+
+    private void EmitStorePackedQueueEntry(
+        ushort targetAddress,
+        ushort sourceAddress,
+        ushort? sourceHighTarget,
+        ushort directionAddress,
+        ushort slotAddress,
+        byte direction,
+        ushort target,
+        ushort source,
+        ushort? sourceHigh)
+    {
+        EmitCopyByte(target, targetAddress);
+        EmitCopyByte(source, sourceAddress);
+        if (sourceHighTarget is { } highTarget)
+        {
+            if (sourceHigh is { } highSource)
+            {
+                EmitCopyByte(highSource, highTarget);
+            }
+            else
+            {
+                builder.LoadAImmediate(0);
+                builder.StoreA(highTarget);
+            }
+        }
+
+        builder.LoadAImmediate(direction);
+        builder.StoreA(directionAddress);
+        EmitCopyByte(GameBoyPackedCameraRuntime.PreparedSlot, slotAddress);
+    }
+
+    private void EmitCopyWordOrZeroHigh(ushort sourceLow, ushort? sourceHigh, ushort targetLow, ushort targetHigh)
+    {
+        EmitCopyByte(sourceLow, targetLow);
+        if (sourceHigh is { } high)
+        {
+            EmitCopyByte(high, targetHigh);
+        }
+        else
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreA(targetHigh);
+        }
+    }
+
+    private void EmitCopyByte(ushort source, ushort target)
+    {
+        builder.LoadA(source);
+        builder.StoreA(target);
     }
 
     private void EmitMapStreamColumnFromAddresses(ushort targetColumnAddress, ushort sourceColumnAddress, int y, int height)
@@ -7727,7 +8933,7 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
-        if (usesPackedWorldRuntime)
+        if (UsesPackedWorldRuntime)
         {
             builder.LoadEFromA();
             builder.LoadDImmediate(0);
@@ -7765,7 +8971,7 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitMapFlagsAtSourceColumnInBAndRowInC()
     {
-        if (usesPackedWorldRuntime)
+        if (UsesPackedWorldRuntime)
         {
             builder.Emit(0x58); // LD E,B
             builder.LoadDImmediate(0);
