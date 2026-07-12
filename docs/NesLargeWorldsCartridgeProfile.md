@@ -1,15 +1,15 @@
 # ADR: NES Large Worlds v1 cartridge profile
 
 Status: **accepted for LW-0.3 on 2026-07-10; forced linker/runtime foundation
-implemented by LW-3.1 and production placement/selection implemented by
-LW-3.2 on 2026-07-12.**
+implemented by LW-3.1, production placement/selection implemented by LW-3.2,
+and the production fixed-bank reader implemented by LW-3.3 on 2026-07-12.**
 
 This ADR selects the cartridge architecture for the NES Large Worlds
 linker/runtime. LW-3.1 implements its target-private forced linker and fixed
 runtime foundation; LW-3.2 implements mapper-0-first selection plus physical
-`WorldPack`, pinned-R7, boot-R7, DPCM/vector, and CHR placement. Production
-pack reading remains `LW-3.3`. This ADR does not migrate the runner or
-implement a HUD.
+`WorldPack`, pinned-R7, boot-R7, DPCM/vector, and CHR placement. LW-3.3 adds
+production resident/far pack reading without changing that placement. This ADR
+does not migrate the runner or implement a HUD.
 
 ## Decision
 
@@ -360,10 +360,11 @@ image, so the accepted payload is not currently proven to require a mapper.
 That headroom excluded the pack reader and later runtime changes. LW-3.2 now
 measures the real link: fit keeps the exact historical mapper-0 bytes; an
 actual PRG/DPCM layout failure retries MMC3 and every MMC3 constraint is then
-reported independently. Its normalized full-`stage1` placement probe measures
-2,762 pack, 5,012 pinned, 4,128 boot, 2,151 fixed payload, and 3,056 resident
-CHR bytes. This is a profile and capacity policy, not a false NROM-overflow
-claim.
+reported independently. The LW-3.2 placement-only probe measured 2,151 fixed
+bytes; with the LW-3.3 reader linked, the normalized full-`stage1` probe now
+measures 2,762 pack, 5,012 pinned, 4,128 boot, 4,327 fixed payload, and 3,056
+resident CHR bytes. This is a profile and capacity policy, not a false
+NROM-overflow claim.
 
 ## Behavioral emulator evidence
 

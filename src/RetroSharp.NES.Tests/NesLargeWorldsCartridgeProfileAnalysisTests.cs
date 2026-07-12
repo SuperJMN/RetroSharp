@@ -334,8 +334,8 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
             0xA9, register,
             0x8D, 0x00, 0x80,
             0x68,
-            0x8D, 0x01, 0x80,
             0x8D, (byte)(shadowAddress & 0xFF), (byte)(shadowAddress >> 8),
+            0x8D, 0x01, 0x80,
             0x60,
         ];
 

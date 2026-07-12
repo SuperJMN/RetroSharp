@@ -142,7 +142,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(5_012, result.Report.PinnedR7Bytes);
         Assert.Equal(4_128, result.Report.BootR7Bytes);
         Assert.Equal(3_056, result.Report.ResidentChrBytes);
-        Assert.Equal(2_151, result.Report.FixedPayloadBytes);
+        Assert.Equal(4_327, result.Report.FixedPayloadBytes);
         Assert.Equal(64 * 1_024, result.Report.PrgRomSize);
         Assert.Equal(16 * 1_024, result.Report.ChrRomSize);
         Assert.Equal(16 + 64 * 1_024 + 16 * 1_024, result.Rom.Length);
@@ -152,7 +152,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.True(result.Report.ResidentChrBytes <= 8 * 1_024);
         output.WriteLine(
             $"NES full stage1 final link: fixed={result.Report.FixedPayloadBytes}, pinned={result.Report.PinnedR7Bytes}, boot={result.Report.BootR7Bytes}, pack={canonical.SerializedBytes.Length}, residentChr={result.Report.ResidentChrBytes}");
-        AssertReportDocuments("NES final section", "2,151", "5,012", "4,128", "0, 3, 4, 5");
+        AssertReportDocuments("NES final section", "4,327", "5,012", "4,128", "0, 3, 4, 5");
     }
 
     [Fact]
@@ -194,21 +194,21 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             () => NesRomCompiler.CompileSource(fullSource, RunnerSample.Directory));
         output.WriteLine($"fullPayloadFailure={fullPayloadFailure.Message}");
         Assert.Equal(
-            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $15155, beyond reset trailer start $FF80.",
+            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $159EE, beyond reset trailer start $FF80.",
             fullPayloadFailure.Message);
 
         var noAudioFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(WithoutAudio(fullSource), RunnerSample.Directory));
         output.WriteLine($"noAudioFailure={noAudioFailure.Message}");
         Assert.Equal(
-            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $15024, beyond reset trailer start $FF80.",
+            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $158BD, beyond reset trailer start $FF80.",
             noAudioFailure.Message);
 
         var runtimeProbeFailure = Assert.Throws<InvalidOperationException>(
             () => NesRomCompiler.CompileSource(FullStage1CameraRuntimeSource(mapPath), RunnerSample.Directory));
         output.WriteLine($"runtimeProbeFailure={runtimeProbeFailure.Message}");
         Assert.Equal(
-            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $12F3E, beyond reset trailer start $FF80.",
+            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $137D7, beyond reset trailer start $FF80.",
             runtimeProbeFailure.Message);
 
         Assert.Equal(32, NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame);

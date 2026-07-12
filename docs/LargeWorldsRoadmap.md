@@ -1,7 +1,7 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
 Status: **active; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, and NES
-`LW-3.1` through `LW-3.2` are implemented; `LW-3.3` remains not started.**
+`LW-3.1` through `LW-3.3` are implemented; `LW-3.4` is next.**
 Last updated: 2026-07-12.
 
 This roadmap is the executable plan for levels that exceed the legacy
@@ -49,12 +49,12 @@ Current blockers are independent and must not be conflated:
   32x32 Game Boy background buffer or NES nametable surface.
 - LW-1.1 widens shared camera operands and both targets' logical map-column,
   camera, edge-tag, and row/column streaming state; hardware scroll writes stay
-  bytes. Game Boy packed/banked reads are implemented; NES reads remain
-  deferred to `LW-3.3`.
+  bytes. Game Boy and NES packed/banked readers are implemented; staged NES
+  camera scheduling remains deferred to `LW-3.4`.
 - NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR by default. `LW-3.1`
   adds the forced MMC3/TVROM foundation and `LW-3.2` adds mapper-0-first
-  selection plus mapper-backed level-data placement. NES production pack reads
-  remain deferred to `LW-3.3`.
+  selection plus mapper-backed level-data placement, and `LW-3.3` adds the
+  fixed-bank production pack reader without migrating the runner.
 - `Camera.AabbHitTop(...)` now exposes a complete world-pixel word with `-1`
   as no hit; screen-relative hit-top retains its byte-range `255` sentinel.
 - Tiled 16x16 cells are expanded into repeated 8x8 visual and flag cells. The
@@ -866,7 +866,7 @@ Recommended execution and merge order:
 #### LW-3.3: Implement the fixed-bank NES WorldPack reader
 
 - Status: **published as [#303](https://github.com/SuperJMN/RetroSharp/issues/303);
-  open and not started.**
+  implementation complete; issue closure is tracked on GitHub.**
 - Layer: NES fixed runtime reader, decode, collision, and bank restoration.
 - Dependencies: [LW-3.2 / #302](https://github.com/SuperJMN/RetroSharp/issues/302)
   (native blocked-by) and merged `LW-1.2`.
@@ -887,6 +887,32 @@ Recommended execution and merge order:
     interruption. NMI/IRQ never writes mapper registers or reads R6.
   - Prove 338 bytes for current one-byte IDs and 594 bytes at the v1 maximum;
     preserve world Y 304 and `0xFFFF` no-hit behavior.
+- Implemented evidence:
+  - `NesWorldPackRuntime` validates canonical metadata before publishing a
+    slot, reads resident mapper-0 bytes without mapper writes, and translates
+    32-bit pack-relative offsets through ordered physical R6 banks `0, 3, 4,
+    5` from fixed code.
+  - Shared raw/element-RLE decoders fill two independent visual and collision
+    slot pairs; visual lookup returns the NES tile plus palette/provenance byte,
+    while collision lookup resolves the selected profile/subcell byte.
+  - Actual 6502 execution tests cover directory and plane ranges on both sides
+    of an 8 KiB continuation, two-byte IDs, malformed payloads, miss/bounds,
+    nested reads, and an NMI injected after R6 selection. Every path restores
+    hardware R6 and `$0324`; R7 and the fixed handlers are untouched.
+  - The exact payload buffers remain 338 bytes for one-byte IDs and 594 bytes
+    for two-byte IDs. The normalized full-`stage1` final-link probe now measures
+    4,327 fixed bytes (2,176 reader bytes over the LW-3.2 placement-only probe),
+    5,012 pinned R7 bytes, 4,128 boot R7 bytes, and 3,056 resident CHR bytes.
+  - Deterministic decoder measurements, with validation already cached, are
+    15,883 raw / 7,488 RLE cycles resident and 27,198 raw / 9,193 RLE cycles
+    through R6; `LW-3.4` owns the later scheduling budget and PPU commits.
+  - A generated 81,936-byte mapper-4 probe (`a68a7bb26d37c274c981c6e5f7c90394580cb7e4ded89bb8e6c526eb50f3123b`)
+    completes in AprNes at frame 167 / cycle 4,998,679 with validation `01`,
+    visual/collision statuses `00/00`, tile/metadata/collision `14/04/00`, R6
+    restored to entry bank `00`, and pinned R7 `01`. A write watchpoint over
+    `$8000-$8001` remains quiet for the following 120 frames while APU writers
+    continue across `$4000-$4017`; a further deterministic 60-frame input
+    timeline preserves the same bank and result markers.
 - Candidate files: `src/RetroSharp.NES/NesRomBuilder.cs`, NES runtime/layout
   records, `src/RetroSharp.NES.Tests/NesWorldLoadTests.cs`,
   `src/RetroSharp.NES.Tests/NesLargeWorldCameraTests.cs`, and
@@ -1100,6 +1126,6 @@ debug workflow.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
 recorded above. Game Boy `LW-2.1` through `LW-2.5` and NES `LW-3.1` through
-`LW-3.2` are complete; NES `LW-3.3` remains open and not started. The parent remains the
+`LW-3.3` are complete; NES `LW-3.4` is next after #303 merges. The parent remains the
 integrator surface: implementation agents receive one child issue, not the
 parent or an open-ended request to continue the epic.

@@ -86,7 +86,7 @@ coordinate failure.
 | 2 | `collision-abi` | **Passes after LW-1.2.** The floor returns `30 01` and no hit returns `FF FF`. | **Passes after LW-1.2.** The same complete word result is returned through the NES ABI. |
 | 3 | `rom-capacity` | **Capacity probe passes, runtime acceptance does not.** Both the unchanged runner payload with redirected `World.Load` and the real 312x40 camera-dimension probe emit a 131,072-byte MBC1 ROM with full map, collision, BGM, and SFX. | **Blocked.** Even after removing audio only for decomposition, code plus full visual/collision data emits 41,851 bytes against 32,762 available PRG bytes. With full audio restored, the `$E980` DPCM block (1,153 bytes) cannot be placed after earlier data ending at `$134C4`. |
 | 4 | `tile-patterns` | **Passes.** 6 reserved + 82 background + 60 sprite tiles use 148 of 256 indexes. | **Passes.** 6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3,056 of 8,192 CHR bytes. |
-| 5 | `ram-staging` | **Contract accepted; production path still missing.** The `WorldPack` ADR fixes bounded chunk/edge staging, but no target runtime reader or staging implementation consumes it yet. | **Contract accepted; production path still missing.** The same bounded staging contract exists, but mapper 0 has no mapper-backed world reader or staging implementation. |
+| 5 | `ram-staging` | **Implemented.** The production reader uses the accepted bounded chunk/edge staging contract. | **Reader implemented after LW-3.3.** Resident mapper-0 and continued R6 sources share the accepted 338/594-byte bounded staging layout; PPU edge scheduling remains LW-3.4. |
 | 6 | `vblank` | **Current edge work is bounded.** Visible column and row commits fit the 21-tile write budget; future lookup/decompression still has to happen outside VBlank. | **Current phase work is bounded.** Limits are 32 tile writes and 9 attribute writes; row streaming remains split into bounded phases. |
 
 The 131,072-byte Game Boy result is intentionally called a *capacity probe*.
@@ -163,7 +163,7 @@ background tiles, BGM, SFX, and both DPCM blocks. Its final linker report is:
 | Canonical `WorldPack` in R6 bank 0 | 2,762 | 8,192 |
 | Pinned R7 runtime/BGM/SFX in bank 1 | 5,012 | 8,192 |
 | Boot-only palette/nametables in R7 bank 2 | 4,128 | 8,192 |
-| Fixed code/audio runtime/aligned DPCM/vectors in banks 6-7 | 2,151 | 16,384 |
+| Fixed code/audio runtime/WorldPack reader/aligned DPCM/vectors in banks 6-7 | 4,327 | 16,384 |
 | Resident static CHR | 3,056 | 8,192 |
 | Physical cartridge | 65,536 PRG + 16,384 CHR | 65,536 PRG + 16,384 CHR |
 
@@ -171,5 +171,5 @@ The separate canonical synthetic acceptance is larger than one 8 KiB window
 and reconstructs byte-for-byte through ordered physical R6 banks `0, 3, 4, 5`.
 Pack-relative offsets and serialized section order are unchanged. The existing
 runner-shaped raw runtime still fails the fixed-region diagnostic because it
-retains legacy rows; replacing those accesses belongs to LW-3.3. LW-3.2 does
-not migrate the runner or regenerate either tracked ROM.
+retains legacy rows. LW-3.3 adds the reader but deliberately does not migrate
+the camera/runner path; that scheduling work belongs to LW-3.4/LW-3.5.
