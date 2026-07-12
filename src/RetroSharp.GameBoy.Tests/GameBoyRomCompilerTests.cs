@@ -2705,6 +2705,48 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
+    public void Let_word_inference_matches_explicit_storage_and_lowering_on_game_boy()
+    {
+        const string declarations = """
+                                    const i16 FootOffset = 31;
+                                    const u16 DistanceStep = 4u16;
+                                    struct State { i16 y; i16 hit; u16 distance; u8 frame; }
+                                    """;
+        const string setup = """
+                              Video.Init();
+                              State state;
+                              state.y = 273;
+                              state.hit = -1;
+                              state.distance = 300u16;
+                              state.frame = 7;
+                              """;
+        var inferredSource = $$"""
+                               {{declarations}}
+                               void Main() {
+                                   {{setup}}
+                                   let footWorldY = state.y + FootOffset;
+                                   let noHit = state.hit;
+                                   let farDistance = state.distance + DistanceStep;
+                                   let nextFrame = state.frame + 1;
+                               }
+                               """;
+        var explicitSource = $$"""
+                               {{declarations}}
+                               void Main() {
+                                   {{setup}}
+                                   i16 footWorldY = state.y + FootOffset;
+                                   i16 noHit = state.hit;
+                                   u16 farDistance = state.distance + DistanceStep;
+                                   u8 nextFrame = state.frame + 1;
+                               }
+                               """;
+
+        Assert.Equal(
+            GameBoyRomCompiler.CompileSource(explicitSource),
+            GameBoyRomCompiler.CompileSource(inferredSource));
+    }
+
+    [Fact]
     public void Compiles_struct_initializer_like_explicit_member_assignments()
     {
         const string explicitSource = """

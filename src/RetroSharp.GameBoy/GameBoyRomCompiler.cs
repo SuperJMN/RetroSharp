@@ -86,6 +86,7 @@ public static class GameBoyRomCompiler
         SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
+        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(

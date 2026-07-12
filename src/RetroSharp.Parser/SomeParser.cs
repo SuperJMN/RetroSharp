@@ -497,7 +497,11 @@ public class SomeParser
     private DeclarationSyntax ParseLetDeclaration(LetDeclarationContext letDeclaration)
     {
         var expression = ParseExpression(letDeclaration.expression());
-        var type = TryInferLiteralSuffixType(expression, out var suffixType) ? suffixType : "u8";
+        var type = TryInferLiteralSuffixType(expression, out var suffixType)
+            ? suffixType
+            : IsLiteralExpression(expression)
+                ? "u8"
+                : LetTypeInference.UnresolvedTypeName;
         return new DeclarationSyntax(
             type,
             letDeclaration.IDENTIFIER().GetText(),
@@ -522,6 +526,16 @@ public class SomeParser
                 type = "u8";
                 return false;
         }
+    }
+
+    private static bool IsLiteralExpression(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            ConstantSyntax => true,
+            UnaryExpressionSyntax { OperatorSymbol: "-" or "+", Operand: var operand } => IsLiteralExpression(operand),
+            _ => false,
+        };
     }
 
     private StatementSyntax ParseReturn(ReturnStatementContext returnStatement)

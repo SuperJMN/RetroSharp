@@ -198,10 +198,33 @@ public class SemanticAnalysisTests
     }
 
     [Fact]
-    public void Let_initializer_symbol_type_must_match_default_type()
+    public void Let_infers_word_fields_and_arithmetic_without_widening_byte_expressions()
     {
-        Errors("const Big = 300u16; void Main(){ let value = Big; }")
-            .Should().ContainMatch("*Initializer type 'u16'*declared type 'u8'*");
+        const string input = """
+                             const i16 FootOffset = 31;
+                             const u16 DistanceStep = 4u16;
+                             struct State { i16 y; i16 hit; u16 distance; u8 frame; }
+                             void Main() {
+                                 State state;
+                                 let footWorldY = state.y + FootOffset;
+                                 let noHit = state.hit;
+                                 let farDistance = state.distance + DistanceStep;
+                                 let nextFrame = state.frame + 1;
+                                 i16 expectedFoot = footWorldY;
+                                 i16 expectedNoHit = noHit;
+                                 u16 expectedDistance = farDistance;
+                                 u8 expectedFrame = nextFrame;
+                             }
+                             """;
+
+        Errors(input).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Let_reports_deterministic_diagnostic_for_ambiguous_word_signedness()
+    {
+        Errors("void Main(){ i16 signedValue = 1; u16 unsignedValue = 2u16; let mixed = signedValue + unsignedValue; }")
+            .Should().Contain("Cannot infer type of let 'mixed': expression mixes i16 and u16 word values; add an explicit cast.");
     }
 
     [Fact]

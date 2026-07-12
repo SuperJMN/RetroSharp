@@ -1392,6 +1392,20 @@ public class ParserTests
     }
 
     [Fact]
+    public void Non_literal_let_resolves_its_static_word_type()
+    {
+        var result = new SomeParser().Parse("void Main(){ i16 worldY = 273; let footWorldY = worldY + 31; }");
+
+        result.Should().Succeed();
+        var inference = LetTypeInference.Resolve(result.Value);
+        inference.Errors.Should().BeEmpty();
+        var function = Assert.Single(inference.Program.Functions);
+        var declaration = Assert.IsType<DeclarationSyntax>(function.Block.Statements[1]);
+        declaration.Type.Should().Be("i16");
+        declaration.IsImmutable.Should().BeTrue();
+    }
+
+    [Fact]
     public void Top_level_let_binding_is_rejected()
     {
         new SomeParser().Parse("let speed = 2; void Main(){}")

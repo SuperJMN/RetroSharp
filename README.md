@@ -67,7 +67,17 @@ Right now, RetroSharp can compile simple programs with:
 - Byte-backed bitwise `&`, `|`, and `^`, plus folded constant `~` masks, in the current cartridge targets
 - Explicit casts such as `(u8)expr` as validated zero-cost expression markers in the current cartridge targets
 - Canonical fixed-width types (`u8`, `i8`, `u16`, `i16`, `bool`) plus source aliases where the current target accepts them
+- Immutable `let` locals with compile-time width inference: `i16`/`u16` fields, locals, helper results, and arithmetic keep two-byte storage; expressions proven byte-valued keep one byte
 - Public gameplay code stays at the SDK/resource level; raw buffers, hardware addresses, pointer member access, and `ptr<T>` APIs remain reserved for internal SDK/backend addressability policy
+
+`let` never narrows a statically word-valued expression. A width suffix on a
+single literal remains authoritative, and an unsuffixed literal keeps the
+existing `u8` default. For non-literal expressions, an unambiguous `i16` or
+`u16` operand makes the result use that same word type; otherwise a proven
+byte-valued expression remains byte-backed. Mixing signed and unsigned word
+values, or using an expression whose scalar type cannot be proven, is a
+compile-time error; an explicit cast disambiguates the declaration. This rule
+changes storage selection only and adds no runtime type metadata or dispatch.
 
 Example program:
 ```csharp
