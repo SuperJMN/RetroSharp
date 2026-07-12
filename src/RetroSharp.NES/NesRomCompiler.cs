@@ -113,6 +113,7 @@ public static class NesRomCompiler
         SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
+        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
@@ -174,6 +175,7 @@ public static class NesRomCompiler
         SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
+        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
         return Sdk2DOperationCollector.Collect(
@@ -207,6 +209,7 @@ public static class NesRomCompiler
         SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
+        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
         ValidateFunctionContracts(loweredProgram);
         var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES", videoProgram.TargetIntrinsics, videoProgram.ResourceDeclarations);

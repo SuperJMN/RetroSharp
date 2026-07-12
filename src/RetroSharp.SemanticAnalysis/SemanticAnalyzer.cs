@@ -11,6 +11,8 @@ public class SemanticAnalyzer
     {
         node = TypeAliasResolver.Resolve(node);
         node = StaticClassLowerer.LowerStaticCalls(node, DeclaredStaticMethodIndex.Build(node));
+        var letInference = LetTypeInference.Resolve(node);
+        node = letInference.Program;
         var types = BuildTypeTable(node.Enums, node.Structs);
         var structFieldTypeErrors = StructFieldReservedTypeErrors(node.Structs).ToList();
         var constantsResult = DeclareConstants(node.Constants, scope, types);
@@ -26,7 +28,7 @@ public class SemanticAnalyzer
 
         return new AnalyzeResult<SemanticNode>(new ProgramNode(functions)
         {
-            Errors = constantsResult.Errors.Concat(structFieldTypeErrors)
+            Errors = letInference.Errors.Concat(constantsResult.Errors).Concat(structFieldTypeErrors)
         }, scope);
     }
 

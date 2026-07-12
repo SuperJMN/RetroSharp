@@ -78,6 +78,7 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - Top-level `enum` declarations with qualified members folded into literal expressions
 - User helper calls inline with parameter substitution, including named arguments, default parameter values, helpers whose body is exactly one `return expr;`, or expression-bodied helpers written as `Ret name(args) => expr;` used as value expressions; there is no runtime call/return overhead for the current cartridge target path
 - Local scalar variables declared as `i8`, `u8`, `i16`, `u16`, `bool`, or a declared enum type; `i16`/`u16` reserve little-endian two-byte cells
+- Immutable `let` locals whose statically resolved initializer type selects the same fixed byte or word storage before Game Boy lowering
 - Plain local `struct` declarations whose fields are scalar types, with named and shorthand initializer lists
 - Fixed-size local arrays of scalar types with initializer lists, optional initializer-inferred lengths, and constant or runtime index reads/writes, for example `u8 values[4] = [1, 2]` or `u16 values[] = [300u16]`
 - Fixed-size local arrays of plain structs whose fields are scalar types, with constant or runtime field reads/writes such as `actors[i].x`
@@ -105,6 +106,15 @@ Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-
 - `true` and `false`
 
 Numeric and enum locals use fixed-width WRAM storage: `u8`, `i8`, `bool`, and enums reserve one byte; `u16` and `i16` reserve two adjacent little-endian bytes. Type aliases are normalized to their underlying type before Game Boy lowering, so `type Pixel = i16;` has the same two-byte runtime shape as `i16`. Top-level constants, block-local constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members are substituted before ROM lowering and do not reserve WRAM.
+
+`let` width inference runs before WRAM allocation. A suffixed literal keeps its
+declared suffix and an unsuffixed literal keeps the historical `u8` default.
+For non-literal initializers, `i16`/`u16` locals, struct or restricted-class
+fields, helper results, and arithmetic propagate the same unambiguous word
+type; expressions with no word-valued operand retain one-byte storage. An
+expression that mixes `i16` and `u16`, or whose scalar type cannot be proven,
+fails deterministically and requires an explicit cast. The inferred source and
+the equivalent explicit declaration emit identical Game Boy bytes.
 
 `sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive types and the reserved internal `sizeof(ptr<T>)` pointer-size marker; and the sum of field sizes for plain structs. `ptr<T>` is not a public storage, signature, field, or cast type in gameplay source. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. Plain local structs and struct arrays are flattened to adjacent WRAM byte slots using mixed-width field offsets. For example, `struct Actor { u16 worldX; u8 y; }` has stride 3, `actors[0].worldX` occupies low/high bytes at offsets 0/1, and `actors[0].y` is offset 2.
 
