@@ -1,7 +1,7 @@
 # Game Boy Runner Debugging Workflow
 
 Status: operational debugging guide.
-Last updated: 2026-07-02.
+Last updated: 2026-07-12.
 
 Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src` and enables physical project namespaces, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
@@ -131,6 +131,7 @@ Use this table to avoid fixing the wrong layer:
 | Player walks into a pipe and snaps onto its top | Horizontal movement is missing or bypassing a lower-body wall probe; block camera motion before vertical landing resolution can reinterpret the side overlap as floor. |
 | Player passes up through a solid block / lands on top from below | Missing ceiling response and/or a landing search window that reaches above the feet. Add a head probe (`Camera.AabbTiles(...)` above the head while rising) that bounces the actor down, and keep the landing search window feet-relative so descent cannot magnetise the actor up onto a block it just hit. |
 | Player snaps to platform while rising | Landing should be gated by descent, for example `player.velocityY > 0` (signed `i8`; positive means falling). |
+| Player reaches a floor below world Y 255 but falls through it and later resets | Check the storage type of every derived world-Y probe. Non-literal `let` currently falls back to `u8`; declare values such as `footWorldY`, ceiling probes, and wall-probe Y as `i16` before passing them to `Camera.AabbTiles(...)` or `Camera.AabbHitTop(...)`. |
 | Player teleports from top to ground | Byte-backed Y wrap; clamp before collision/reset checks. |
 | D-pad triggers A/B behavior on hardware | `JOYP` row settling in backend input lowering. |
 | Mirrored sprite shifts sideways | Logical sprite width vs padded hardware width in flip math. |
@@ -152,6 +153,9 @@ Prefer the smallest layer that explains the first failing diagnostic:
 Do not move gameplay behavior into the language layer. Do not add portable SDK behavior without a target capability check. Keep transitional APIs working unless the roadmap explicitly removes them.
 
 ## Test The Fix
+
+The exact regenerated GB/NES landing and jump evidence for issue #319 is
+recorded in [`RunnerLandingAcceptance.md`](RunnerLandingAcceptance.md).
 
 Use focused tests first, then broader validation:
 

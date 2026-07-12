@@ -59,7 +59,7 @@ inline void SimulatePlayer(PlayerState player, CameraState view, FrameState fram
     frame.Begin();
     player.ApplyGravity();
 
-    let footWorldY = player.y + Player.FootOffset;
+    i16 footWorldY = player.y + Player.FootOffset;
     let screenX = view.ScreenX(player);
 
     frame.ResolveSolidLanding(player, screenX, footWorldY);
@@ -70,7 +70,7 @@ inline void SimulatePlayer(PlayerState player, CameraState view, FrameState fram
     view.FollowPlayer(player);
     player.HandleJumpInput();
 
-    let movementFootWorldY = player.y + Player.FootOffset;
+    i16 movementFootWorldY = player.y + Player.FootOffset;
     view.HandleHorizontalInput(player, movementFootWorldY);
     view.ApplyPosition();
     player.UpdateRunAnimation(view);
