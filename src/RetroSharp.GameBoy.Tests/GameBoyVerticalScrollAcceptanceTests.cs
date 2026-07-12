@@ -414,24 +414,29 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             CycleAccurateLy = true,
         };
 
-        cpu.RunFrames(2);
+        for (var startupFrame = 0; startupFrame < 240 && cpu.Oam(0xFE01) == 0; startupFrame++)
+        {
+            cpu.RunAdditionalFrames(1);
+        }
+
+        Assert.NotEqual(0, cpu.Oam(0xFE01));
         var earlySpriteX = cpu.Oam(0xFE01);
         var earlySpriteY = cpu.Oam(0xFE00);
 
-        cpu.RunFrames(12);
+        cpu.RunAdditionalFrames(10);
         Assert.Equal(0, cpu.IoRegister(0xFF43)); // SCX
         Assert.Equal(0, cpu.IoRegister(0xFF42)); // SCY
         Assert.True(cpu.Oam(0xFE01) > earlySpriteX, "The player point should move on screen while still inside the horizontal dead-zone.");
         Assert.True(cpu.Oam(0xFE00) > earlySpriteY, "The player point should move on screen while still inside the vertical dead-zone.");
 
-        cpu.RunFrames(55);
+        cpu.RunAdditionalFrames(43);
         var followedX = cpu.IoRegister(0xFF43);
         var followedY = cpu.IoRegister(0xFF42);
         Assert.InRange(followedX, (byte)1, (byte)64);
         Assert.InRange(followedY, (byte)1, (byte)64);
         Assert.Equal(followedX, followedY);
 
-        cpu.RunFrames(56);
+        cpu.RunAdditionalFrames(1);
         Assert.Equal((byte)(followedX + 1), cpu.IoRegister(0xFF43));
         Assert.Equal((byte)(followedY + 1), cpu.IoRegister(0xFF42));
     }

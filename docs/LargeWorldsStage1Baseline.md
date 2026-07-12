@@ -1,12 +1,13 @@
 # Full `stage1` baseline (LW-0.1)
 
-Status: **frozen on 2026-07-10 and refreshed after LW-1.5 by the focused GB/NES baseline, WorldPack parity tests, and opt-in CLI report.**
+Status: **historical baseline, fully resolved by LW-3.5 on 2026-07-12.**
 
-This report records why the complete authored runner `stage1` cannot run on the
-current Game Boy or NES paths. It began as measurement and acceptance evidence;
-the later ADRs now fix the packed-world format, staging geometry, and coordinate
-ABI. The report still does not choose Game Boy banking policy or a NES mapper,
-and the inspectable LW-1.4 packs are not connected to production readers.
+This report preserves the constraints that originally prevented complete
+`stage1` from running. The final production paths now consume the exact LW-1.4
+packs: the tracked Game Boy runner is a 131,072-byte MBC1 ROM and the tracked
+NES runner is an 81,936-byte MMC3/four-screen ROM with full BGM, SFX, DPCM,
+collision, and 2-axis streaming. The ordered failures below remain historical
+evidence for the decisions that resolved them.
 
 Run the deterministic report from the repository root:
 
@@ -30,13 +31,11 @@ dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.cspro
   samples/tiled-free-scroll/free-scroll.tmj
 ```
 
-Use `--target nes` for the NES payload. The full authored `stage1.tmj` remains
-an authoring acceptance asset rather than the runner input: it does not carry
-the importer-facing layer name and whole-world properties. The focused CLI
-acceptance tests therefore copy it to a temporary directory, non-destructively
-normalize that temporary JSON, run each target report twice, and remove the
-copy. They freeze identical JSON plus exact 770 visual and 312 collision stored
-bytes for both targets; no tracked map or ROM is modified.
+Use `--target nes` for the NES payload. `stage1.tmj` now carries the
+importer-facing `world` layer and whole-world properties and is the shared
+runner input. Historical baseline fixtures may still normalize a temporary
+copy so earlier measurements stay reproducible. They freeze identical JSON
+plus exact 770 visual and 312 collision stored bytes for both targets.
 
 ## Acceptance payload
 
@@ -63,9 +62,8 @@ bytes for both targets; no tracked map or ROM is modified.
 These are canonical header + profiles + target expansions + directory +
 per-plane raw/RLE bytes. Two fresh compilations are byte-identical, and decoded
 tiles, collision flags, target pattern data, NES palette slots, and NES
-world/background provenance match the current raw importers. The numbers are
-packing evidence only; `World.Load(...)` continues to use the existing raw
-production path.
+world/background provenance match the raw importers. `World.Load(...)` now
+places and reads these packs in production on both targets.
 
 Collision is derived from the `stage1.tsx` tile object groups and expanded with
 the visual map, so the reported 12,480 flag bytes cover the whole authored
@@ -84,18 +82,24 @@ coordinate failure.
 | ---: | --- | --- | --- |
 | 1 | `address-width` | **Passes after LW-1.1.** The 312 hardware columns and word camera/source-edge positions compile without truncation. | **Passes after LW-1.1.** The 312 hardware columns reach the existing PRG-capacity failure without camera/source-column truncation. |
 | 2 | `collision-abi` | **Passes after LW-1.2.** The floor returns `30 01` and no hit returns `FF FF`. | **Passes after LW-1.2.** The same complete word result is returned through the NES ABI. |
-| 3 | `rom-capacity` | **Capacity probe passes, runtime acceptance does not.** Both the unchanged runner payload with redirected `World.Load` and the real 312x40 camera-dimension probe emit a 131,072-byte MBC1 ROM with full map, collision, BGM, and SFX. | **Blocked.** Even after removing audio only for decomposition, code plus full visual/collision data emits 41,851 bytes against 32,762 available PRG bytes. With full audio restored, the `$E980` DPCM block (1,153 bytes) cannot be placed after earlier data ending at `$134C4`. |
+| 3 | `rom-capacity` | **Resolved by LW-2.1 through LW-2.5.** The production runner emits a 131,072-byte MBC1 ROM with the complete pack, collision, BGM, and SFX. | **Resolved by LW-3.1 through LW-3.5.** Honest final-link selection emits the complete runner as an 81,936-byte MMC3/four-screen ROM with BGM, SFX, and both DPCM blocks. |
 | 4 | `tile-patterns` | **Passes.** 6 reserved + 82 background + 60 sprite tiles use 148 of 256 indexes. | **Passes.** 6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3,056 of 8,192 CHR bytes. |
-| 5 | `ram-staging` | **Implemented.** The production reader uses the accepted bounded chunk/edge staging contract. | **Reader implemented after LW-3.3.** Resident mapper-0 and continued R6 sources share the accepted 338/594-byte bounded staging layout; PPU edge scheduling remains LW-3.4. |
-| 6 | `vblank` | **Current edge work is bounded.** Visible column and row commits fit the 21-tile write budget; future lookup/decompression still has to happen outside VBlank. | **Current phase work is bounded.** Limits are 32 tile writes and 9 attribute writes; row streaming remains split into bounded phases. |
+| 5 | `ram-staging` | **Implemented.** The production reader uses the accepted bounded chunk/edge staging contract. | **Implemented.** Resident mapper-0 and continued R6 sources share the accepted 338/594-byte bounded staging layout and two immutable edge peers. |
+| 6 | `vblank` | **Implemented and bounded.** Lookup/decompression stays outside VBlank; visible commits use at most 19 column or 21 row writes. | **Implemented and bounded.** Lookup/decompression stays outside NMI; limits are 32 tile writes and 9 attribute writes, with row streaming split into bounded phases. |
 
-The 131,072-byte Game Boy result is intentionally called a *capacity probe*.
-One probe keeps `Level.Width = 176` and the current runner runtime constants so
-the builder can expose cartridge usage independently. A second probe uses the
-real 312x40 dimensions and proves the LW-1.1 address-width path. Neither is
-evidence that the complete level is playable today: collision widening is now
-complete through LW-1.2, while packing and a production runtime reader remain
-separate work.
+The frozen NES mapper-0 decomposition still records the original capacity
+failure: code plus full visual/collision data used 41,851 bytes against 32,762
+available PRG bytes. With audio restored, the `$E980` DPCM block could not
+follow data ending at `$134C4`; the earlier address-width probe ended at
+`$10A06`. The MMC3 production result above resolves those historical failures
+without deleting their measurements.
+
+The original 131,072-byte Game Boy result was intentionally called a *capacity
+probe*. One historical probe kept `Level.Width = 176` so the builder could
+expose cartridge usage independently; a second used the real 312x40 dimensions
+to prove the LW-1.1 address-width path. Those measurements are no longer the
+playability claim: the tracked runner and the LW-3.5 production acceptance now
+provide that evidence.
 
 The focused NES LW-1.1 runtime probe keeps the complete 312x40 map, target BGM
 and SFX, a 312-cell camera width, and a word camera request of 1,888 pixels. It
@@ -129,9 +133,9 @@ LW-0.1 deliberately added no tracked normalized full map, full-stage1 ROM,
 packed world, staging buffer, collision-result widening, compression, mapper
 selection, or runner-input switch. Collision-result widening later landed in
 LW-1.2, and deterministic inspection packs plus raw/RLE serialization landed in
-LW-1.4. Game Boy production acceptance and NES physical placement/selection
-have since landed; the NES fixed-bank reader/stager and joint runner-input
-switch remain separate dependent work.
+LW-1.4. Game Boy production acceptance, NES placement/selection/reader/stager,
+and the joint runner-input switch have all since landed. This protected-artifact
+list describes the historical LW-0.1 slice only.
 
 ## LW-2.5 Game Boy follow-up
 
@@ -147,8 +151,9 @@ budget report as a profile decision.
 The acceptance reconstructs all 60 chunks, checks full visual/collision
 parity and the Y=304 / `FFFF` ABI, crosses column 256 in both directions,
 traverses both axes, and records lifecycle, write-bound, guard-band, bank, and
-audio-tick evidence. It does not change the shared runner input or either
-tracked runner ROM; their joint migration remains LW-3.5.
+audio-tick evidence. That LW-2.5 slice did not change the shared runner input
+or either tracked ROM; LW-3.5 has now performed their joint migration and
+deliberate regeneration.
 
 ## LW-3.2 NES placement follow-up
 

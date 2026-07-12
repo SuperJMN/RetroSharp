@@ -61,11 +61,11 @@ internal static class GameBoyRomBuilder
         var packedWorldBytes = packedWorldOverride ?? program.PackedWorld?.SerializedBytes;
         if (packedWorldOverride is null
             && program.PackedWorld is not null
-            && ProgramUsesCameraStreaming(program))
+            && ProgramUsesCameraStreaming(program)
+            && !RequiresPackedCamera(program.PackedWorld.Pack.Descriptor))
         {
-            // LW-2.4 makes the staged packed camera runtime available to target-private fixtures.
-            // Keep ordinary camera programs, including the shared runner, on the unchanged raw
-            // compatibility route until the dedicated acceptance/migration tasks select packed data.
+            // Keep camera programs whose map still fits the legacy byte/32-row limits on the raw
+            // compatibility route. Wide or tall worlds bypass this branch and select packed staging.
             return BuildWithReportCore(program, packedWorldBytes: null);
         }
 
@@ -86,6 +86,9 @@ internal static class GameBoyRomBuilder
 
     private static bool ProgramUsesCameraStreaming(GameBoyVideoProgram program) =>
         program.SdkOperations.Any(operation => operation is Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera);
+
+    private static bool RequiresPackedCamera(WorldPackDescriptor descriptor) =>
+        descriptor.HardwareWidth > byte.MaxValue || descriptor.HardwareHeight > 32;
 
     private static GameBoyRomBuildResult BuildWithReportCore(GameBoyVideoProgram program, byte[]? packedWorldBytes)
     {
@@ -4571,6 +4574,19 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException("Game Boy sprite_draw calls exceed the 40 hardware sprite OAM limit.");
         }
 
+        // A large metasprite already consumes the full DMG VBlank OAM budget. On a frame that
+        // publishes a packed edge, retain its previous OAM entries and refresh them next frame;
+        // small sprites still fit beside the bounded camera commit and draw normally.
+        var skipDraw = UsesPackedCameraRuntime && asset.Pieces.Count > 4
+            ? builder.CreateLabel("sprite_draw_skip_after_packed_commit")
+            : null;
+        if (skipDraw is not null)
+        {
+            builder.LoadA(GameBoyPackedCameraRuntime.CommitSucceeded);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xC2, skipDraw); // JP NZ,skipDraw
+        }
+
         nextHardwareSprite += asset.Pieces.Count;
         for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
         {
@@ -4589,6 +4605,11 @@ internal sealed class GameBoyRuntimeCompiler
             builder.StoreA((ushort)(oamAddress + 2));
 
             EmitSpriteDrawAttributes(operation.FlipX, operation.PaletteSlot, (ushort)(oamAddress + 3));
+        }
+
+        if (skipDraw is not null)
+        {
+            builder.Label(skipDraw);
         }
     }
 
@@ -4765,7 +4786,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         cameraMapWidth = mapWidth;
         cameraStreamY = y;
-        cameraStreamHeight = height;
+        cameraStreamHeight = requestedHeight;
 
         builder.LoadAImmediate(0);
         builder.StoreA(CameraXLowAddress);
@@ -4964,6 +4985,8 @@ internal sealed class GameBoyRuntimeCompiler
 
     private void EmitApplyPackedCamera(CameraConfig config)
     {
+        builder.LoadAImmediate(0);
+        builder.StoreA(GameBoyPackedCameraRuntime.CommitSucceeded);
         if (ProgramQueuesDiagonalStreaming())
         {
             EmitApplyPackedDiagonalCamera(config);
@@ -5308,25 +5331,19 @@ internal sealed class GameBoyRuntimeCompiler
             var next = builder.CreateLabel("packed_camera_row_target_next");
             builder.Label(loop);
             builder.Emit(0x1A); // LD A,(DE)
-            builder.StoreHlA();
+            builder.Emit(0x22); // LD (HL+),A
             builder.Emit(0x13); // INC DE
-            builder.LoadA(GameBoyPackedCameraRuntime.CommitTargetStart);
-            builder.AddAImmediate(1);
+            builder.Emit(0x0C); // INC C
+            builder.Emit(0x79); // LD A,C
             builder.CompareImmediate(32);
-            builder.JumpAbsolute(0xCA, wrap);
-            builder.StoreA(GameBoyPackedCameraRuntime.CommitTargetStart);
-            builder.LoadAFromL();
-            builder.AddAImmediate(1);
-            builder.LoadLFromA();
-            builder.JumpAbsolute(next);
+            builder.JumpRelative(0x28, wrap); // JR Z,wrap
+            builder.JumpRelative(0x18, next); // JR next
             builder.Label(wrap);
-            builder.LoadAImmediate(0);
-            builder.StoreA(GameBoyPackedCameraRuntime.CommitTargetStart);
-            builder.LoadCFromA();
+            builder.Emit(0x0E, 0x00); // LD C,0
             EmitBackgroundTileAddressToHl(GameBoyPackedCameraRuntime.CommitTarget);
             builder.Label(next);
             builder.Emit(0x05); // DEC B
-            builder.JumpAbsolute(0xC2, loop);
+            builder.JumpRelative(0x20, loop); // JR NZ,loop
             builder.LoadAImmediate(21);
         }
 
@@ -5336,60 +5353,65 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitPublishCommittedCrossing(byte axis, CameraConfig config)
     {
         var negative = builder.CreateLabel("packed_camera_publish_negative_crossing");
-        var shift = builder.CreateLabel("packed_camera_publish_crossing_shift");
-        var done = builder.CreateLabel("packed_camera_publish_crossing_done");
+        var store = builder.CreateLabel("packed_camera_publish_crossing_store");
+        var visibleLow = axis == GameBoyPackedCameraRuntime.Column
+            ? GameBoyPackedCameraRuntime.VisibleCameraXLow
+            : GameBoyPackedCameraRuntime.VisibleCameraYLow;
+        var visibleHigh = axis == GameBoyPackedCameraRuntime.Column
+            ? GameBoyPackedCameraRuntime.VisibleCameraXHigh
+            : GameBoyPackedCameraRuntime.VisibleCameraYHigh;
+
         builder.LoadA(GameBoyPackedCameraRuntime.CommitDirection);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
         builder.JumpAbsolute(0xCA, negative);
+        EmitLoadCommitWorldEdgeToHl();
         var lookahead = axis == GameBoyPackedCameraRuntime.Column ? 20 : 18;
         var modulo = axis == GameBoyPackedCameraRuntime.Column ? config.MapWidth : config.SourceHeight;
-        for (var index = 0; index < lookahead; index++)
-        {
-            EmitDecrementWordAddressModulo(
-                GameBoyPackedCameraRuntime.CommitWorldEdgeLow,
-                GameBoyPackedCameraRuntime.CommitWorldEdgeHigh,
-                modulo);
-        }
-
-        builder.JumpAbsolute(shift);
-        builder.Label(negative);
-        builder.Label(shift);
+        EmitSubtractHlModuloConstant(lookahead, modulo);
         for (var index = 0; index < 3; index++)
         {
-            EmitShiftWordLeft(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+            builder.Emit(0x29); // ADD HL,HL
         }
 
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitDirection);
-        builder.CompareImmediate(GameBoyPackedCameraRuntime.Negative);
-        builder.JumpAbsolute(0xC2, done);
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
-        builder.AddAImmediate(7);
-        builder.StoreA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
-        builder.JumpAbsolute(0xD2, done);
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
-        builder.AddAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
-        builder.Label(done);
-        if (axis == GameBoyPackedCameraRuntime.Column)
+        builder.JumpAbsolute(store);
+        builder.Label(negative);
+        EmitLoadCommitWorldEdgeToHl();
+        for (var index = 0; index < 3; index++)
         {
-            EmitCopyWord(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh, GameBoyPackedCameraRuntime.VisibleCameraXLow, GameBoyPackedCameraRuntime.VisibleCameraXHigh);
+            builder.Emit(0x29); // ADD HL,HL
         }
-        else
-        {
-            EmitCopyWord(GameBoyPackedCameraRuntime.CommitWorldEdgeLow, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh, GameBoyPackedCameraRuntime.VisibleCameraYLow, GameBoyPackedCameraRuntime.VisibleCameraYHigh);
-        }
+
+        builder.LoadBc(7);
+        builder.AddHlBc();
+        builder.Label(store);
+        builder.LoadAFromL();
+        builder.StoreA(visibleLow);
+        builder.LoadAFromH();
+        builder.StoreA(visibleHigh);
     }
 
-    private void EmitShiftWordLeft(ushort lowAddress, ushort highAddress)
+    private void EmitLoadCommitWorldEdgeToHl()
     {
-        builder.LoadA(highAddress);
-        builder.LoadBFromA();
-        builder.LoadA(lowAddress);
-        builder.AddAFromA();
-        builder.StoreA(lowAddress);
-        builder.LoadAFromB();
-        builder.Emit(0x88); // ADC A,B => high * 2 + carry from low shift
-        builder.StoreA(highAddress);
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        builder.LoadLFromA();
+        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        builder.LoadHFromA();
+    }
+
+    private void EmitSubtractHlModuloConstant(int value, int modulo)
+    {
+        var noWrap = builder.CreateLabel("subtract_word_modulo_no_wrap");
+
+        builder.LoadAFromL();
+        builder.SubtractAImmediate(value & 0xFF);
+        builder.LoadLFromA();
+        builder.LoadAFromH();
+        builder.SbcAImmediate((value >> 8) & 0xFF);
+        builder.LoadHFromA();
+        builder.JumpAbsolute(0xD2, noWrap); // JP NC,noWrap
+        builder.LoadBc(checked((ushort)modulo));
+        builder.AddHlBc();
+        builder.Label(noWrap);
     }
 
     private void EmitSetPackedSelectedSlotState(byte state)

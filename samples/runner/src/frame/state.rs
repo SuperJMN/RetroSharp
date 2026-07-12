@@ -60,6 +60,5 @@ inline void PresentFrame(PlayerState player, CameraState view)
 {
     let screenX = view.ScreenX(player);
     let screenY = view.ScreenY(player);
-    Video.WaitVBlank();
     Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);
 }

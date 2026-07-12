@@ -6114,11 +6114,11 @@ public class GameBoyRomCompilerTests
         var source = RunnerSample.FlattenedSource();
 
         Assert.Contains("static class Level", source);
-        Assert.Contains("Width = 176", source);
-        Assert.Contains("Height = 30", source);
-        Assert.Contains("StreamHeight = 30", source);
+        Assert.Contains("Width = 312", source);
+        Assert.Contains("Height = 40", source);
+        Assert.Contains("StreamHeight = 40", source);
         Assert.DoesNotContain("SignedVelocityWrap", source);
-        Assert.Contains("PixelWidth = 1408", source);
+        Assert.Contains("PixelWidth = 2496", source);
         Assert.Contains("static class Player", source);
         Assert.Contains("StartX = 72", source);
         Assert.Contains("class PlayerState", source);
@@ -6127,7 +6127,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("PlayerState player;", source);
         Assert.Contains("player.Reset(view);", source);
         Assert.Contains("player.ApplyGravity();", source);
-        Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
         Assert.Contains("LoadWorld();", source);
         Assert.Contains("Sprite.Draw(mario_player, screenX, screenY", source);
         Assert.DoesNotContain("const WorldWidth", source);
@@ -6244,12 +6244,13 @@ public class GameBoyRomCompilerTests
 
         var program = CompileVideoProgram(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
-        Assert.NotEqual(0, program.TileMap[26 * 32]);
-        Assert.NotEqual(0, program.TileMap[24 * 32 + 16]);
-        Assert.NotEqual(0, program.TileMap[28 * 32 + 4]);
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(30, 20));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(4, 28));
-        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 4));
+        var worldTiles = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
+        Assert.NotEqual(0, worldTiles.TileIdAt(0, 36));
+        Assert.NotEqual(0, worldTiles.TileIdAt(16, 34));
+        Assert.NotEqual(0, worldTiles.TileIdAt(4, 38));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(30, 30));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(4, 38));
+        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 14));
     }
 
     [Fact]
@@ -6265,13 +6266,13 @@ public class GameBoyRomCompilerTests
         var gravity = source.IndexOf("player.ApplyGravity();", StringComparison.Ordinal);
         var audioUpdate = source.IndexOf("Audio.Update();", StringComparison.Ordinal);
         var cameraApply = source.IndexOf("Camera.Apply();", StringComparison.Ordinal);
-        var draw = source.IndexOf("Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);", StringComparison.Ordinal);
+        var present = source.IndexOf("PresentFrame(player, view);", StringComparison.Ordinal);
 
         Assert.True(vblankStart >= 0);
-        Assert.True(draw > vblankStart, "Runner should draw the active state immediately after entering VBlank.");
-        Assert.True(cameraApply > draw, "Runner should write OAM before camera streaming consumes VBlank time.");
-        Assert.True(audioUpdate > cameraApply, "Runner should tick music after timing-sensitive OAM and camera presentation work.");
-        Assert.True(inputPoll > draw, "Runner should finish sprite presentation before input and gameplay updates consume VBlank time.");
+        Assert.True(cameraApply > vblankStart, "Runner should commit a resident packed edge at the start of VBlank.");
+        Assert.True(present > cameraApply, "Runner should preserve the previous large metasprite only on packed-edge commit frames, then refresh it after other applies.");
+        Assert.True(audioUpdate > present, "Runner should tick music after timing-sensitive camera and OAM presentation work.");
+        Assert.True(inputPoll > present, "Runner should finish sprite presentation before input and gameplay updates consume VBlank time.");
         Assert.True(gravity > inputPoll, "Runner should update gameplay after the VBlank presentation block.");
     }
 
@@ -7609,7 +7610,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("let footWorldY = player.y + Player.FootOffset;", source);
         Assert.Contains("bool resetRequested;", source);
 
-        Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
@@ -7655,16 +7656,16 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("void DrawBackground()", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
         Assert.Contains("void LoadWorld()", source);
-        Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", source);
-        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.playable.tmj")));
+        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
+        Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.tmj")));
         Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.tsx")));
         Assert.True(File.Exists(RepositoryFile("samples/runner/assets/maps/stage1.png")));
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
         Assert.DoesNotContain("World.Column(", source);
-        Assert.Contains("Height = 30", source);
-        Assert.Contains("StreamHeight = 30", source);
+        Assert.Contains("Height = 40", source);
+        Assert.Contains("StreamHeight = 40", source);
 
         Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);", source);
         Assert.True(
@@ -7713,16 +7714,14 @@ public class GameBoyRomCompilerTests
         var program = CompileVideoProgram(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
 
-        Assert.Equal(176, worldMap.Width);
-        Assert.Equal(30, worldMap.Height);
-        Assert.NotEqual(0, program.TileMap[26 * 32]);
-        Assert.NotEqual(0, program.TileMap[28 * 32 + 8]);
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 28));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 28));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 28));
-        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(0, 4));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(40, 20));
-        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 4));
+        Assert.Equal(312, worldMap.Width);
+        Assert.Equal(40, worldMap.Height);
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 38));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 38));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 38));
+        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(0, 14));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(40, 30));
+        Assert.Equal(WorldTileFlags.Empty, worldMap.FlagsAt(16, 14));
 
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
@@ -7731,33 +7730,33 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_runner_uses_stage1_wide_tiled_map_for_horizontal_scroll()
     {
-        var mapPath = RepositoryFile("samples/runner/assets/maps/stage1.playable.tmj");
+        var mapPath = RepositoryFile("samples/runner/assets/maps/stage1.tmj");
         var source = RunnerSample.FlattenedSource();
         var map = LogicalTiledMapImporter.Load(mapPath);
 
-        Assert.Equal(88, map.Geometry.SourceWidth);
-        Assert.Equal(15, map.Geometry.SourceHeight);
+        Assert.Equal(156, map.Geometry.SourceWidth);
+        Assert.Equal(20, map.Geometry.SourceHeight);
         Assert.Equal(0, map.Geometry.WorldY);
-        Assert.Equal(15, map.Geometry.WorldHeight);
+        Assert.Equal(20, map.Geometry.WorldHeight);
         Assert.Equal(0, map.Geometry.StreamY);
-        Assert.Equal(176, map.Geometry.Width);
-        Assert.Equal(30, map.Geometry.Height);
+        Assert.Equal(312, map.Geometry.Width);
+        Assert.Equal(40, map.Geometry.Height);
         Assert.Equal(0, map.Geometry.BackgroundOffsetY);
 
-        Assert.Contains("Width = 176", source);
-        Assert.Contains("Height = 30", source);
-        Assert.Contains("StreamHeight = 30", source);
-        Assert.Contains("PixelWidth = 1408", source);
+        Assert.Contains("Width = 312", source);
+        Assert.Contains("Height = 40", source);
+        Assert.Contains("StreamHeight = 40", source);
+        Assert.Contains("PixelWidth = 2496", source);
         Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.StreamHeight);", source);
 
         var program = CompileVideoProgram(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var worldMap = Assert.IsType<WorldMap2D>(program.WorldMap);
-        Assert.Equal(176, worldMap.Width);
-        Assert.Equal(30, worldMap.Height);
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 28));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 28));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 28));
-        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(40, 20));
+        Assert.Equal(312, worldMap.Width);
+        Assert.Equal(40, worldMap.Height);
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(0, 38));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(32, 38));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(8, 38));
+        Assert.Equal(WorldTileFlags.Solid, worldMap.FlagsAt(40, 30));
     }
 
     [Fact]
@@ -7782,14 +7781,14 @@ public class GameBoyRomCompilerTests
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("StartY = 193", source);
+        Assert.Contains("StartY = 273", source);
         Assert.Contains("FootOffset = 31", source);
         Assert.DoesNotContain("TopWrapY", source);
         Assert.Contains("y = Player.StartY;", source);
         Assert.Equal(1, CountOccurrences(source, "y = Player.StartY;"));
         Assert.Equal(1, CountOccurrences(source, "player.Land(footTile - Player.FootOffset);"));
         Assert.DoesNotContain("player.y = 77;", source);
-        Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", source);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("World.Flags(", source);
         Assert.DoesNotContain("World.Map(", source);
@@ -7870,9 +7869,9 @@ public class GameBoyRomCompilerTests
 
     private static void AssertRunnerMbc1Rom(byte[] rom)
     {
-        Assert.Equal(65536, rom.Length);
+        Assert.Equal(131072, rom.Length);
         Assert.Equal(0x01, rom[0x0147]);
-        Assert.Equal(0x01, rom[0x0148]);
+        Assert.Equal(0x02, rom[0x0148]);
     }
 
     private static string WriteSpriteAsset(string fileName, string json)

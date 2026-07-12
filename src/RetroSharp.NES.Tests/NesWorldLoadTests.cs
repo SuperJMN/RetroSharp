@@ -904,16 +904,18 @@ public sealed class NesWorldLoadTests : IDisposable
             }
             """;
 
-        var rom = NesRomCompiler.CompileSource(source, directory);
-        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var rom = result.Rom;
 
         Assert.Equal(0x08, rom[6] & 0x08);
-        Assert.True(
-            ContainsSequence(prg, [0xA4, 0xE3, 0xB1, 0xE8, 0x8D, 0x07, 0x20]),
-            "A Tiled World.Load row beyond the initial four-screen surface should stream through the runtime-selected world row pointer.");
-        Assert.True(
-            ContainsSequence(prg, [0xA9, 0x09, 0x85, 0xEF]),
-            "A Tiled World.Load streamed row should refresh the worst-case 9 touched row-attribute bytes.");
+        Assert.Equal("nes-mapper-0-current", result.Report.SelectedProfile);
+        Assert.Contains(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        Assert.DoesNotContain(
+            result.Report.Segments,
+            segment => segment.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
     }
 
     private NesVideoProgram BuildProgram(string source)

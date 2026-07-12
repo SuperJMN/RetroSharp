@@ -22,7 +22,7 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
 
-The next architecture frontier is Iteration 15: scalable large-world assets and banked streaming. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 have accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` now prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and non-destructive full-`stage1` acceptance. NES `LW-3.1` proves the target-private MMC3/TVROM fixed-runtime foundation, `LW-3.2` adds mapper-0-first final-link selection plus canonical ordered multi-R6 placement, and `LW-3.3` adds the fixed-bank `WorldPack` reader, decode/lookup slots, and exact R6 restoration. The complete task graph lives in `docs/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
+Iteration 15, scalable large-world assets and banked streaming, is complete through joint acceptance. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and full-`stage1` acceptance. NES `LW-3.1` through `LW-3.4` prove the target-private MMC3/TVROM fixed-runtime foundation, mapper-0-first final-link selection, canonical ordered multi-R6 placement, the fixed-bank `WorldPack` reader, exact R6 restoration, and bounded four-screen streaming. `LW-3.5` migrated the shared runner and regenerated both tracked ROMs from the complete map. The complete task graph lives in `docs/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
 
 The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
 contract as deterministic 8x8 source-metatile chunks with independently
@@ -1672,17 +1672,14 @@ TVROM-style NES cartridge profile. The cartridge decision is specified in
 [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md); it
 does not change current mapper-0 output and keeps the later IRQ HUD separate.
 Wave 1 (shared coordinate, collision, packed-world, Tiled, and budget
-foundations) is complete. Game Boy `LW-2.1` through `LW-2.5` are implemented;
-the complete authored `stage1` is accepted on the production packed path without
-changing the shared runner input. NES `LW-3.1` implements the forced
-MMC3/TVROM linker and fixed-runtime foundation; `LW-3.2` implements physical
-data placement and mapper-0-first final-link selection; and `LW-3.3` implements
-the fixed-bank reader, bounded decode slots, collision/visual lookup, and exact
-R6 restoration. `LW-3.4` is next. Each
-target chain keeps linker/foundation,
-physical placement and selection, production reader, staged streaming, and
-acceptance separate, with the joint runner migration owned only by `LW-3.5` /
-#305 after `LW-2.5` / #300 and `LW-3.4` / #304.
+foundations) is complete. Game Boy `LW-2.1` through `LW-2.5` implement the MBC1
+foundation, placement, reader, staged streaming, and full-stage acceptance.
+NES `LW-3.1` through `LW-3.4` implement the MMC3/TVROM foundation, honest
+profile selection, fixed-bank reader/restoration, and bounded four-screen
+streaming. `LW-3.5` completes the graph by migrating the shared runner to
+complete `stage1.tmj` and jointly validating/regenerating both targets. Each
+target chain retains its layer boundaries; Wave 4 residency, IRQ HUD, #244, and
+unrelated #247 gaps remain separate.
 
 Purpose: allow `World.Load(...)` content to grow beyond the current one-byte
 hardware-tile-column and monolithic ROM-data limits without exposing banking or mapper
@@ -1725,20 +1722,19 @@ Acceptance criteria:
 - The final epic acceptance preserves the complete authored map, BGM, collision,
   and target capability diagnostics without sample-specific degradation.
 
-## First Recommended Implementation Slice
+## Large Worlds completion checkpoint
 
-`LW-3.3` / #303 is implemented from the merged placement foundation. Keep
-`LW-3.4` blocked until #303 merges, then keep the NES chain sequential through
-staged streaming. `LW-2.5` / #300 has proved Game Boy full
-`stage1` without changing the shared runner input. After both #300 and
-`LW-3.4` / #304 merge, `LW-3.5` / #305 owns the one joint runner-input migration
-and regeneration of both tracked ROMs. The exact native dependencies,
-thresholds, stop conditions, and validation backends are in
-`docs/LargeWorldsRoadmap.md`.
+`LW-3.5` / #305 completes the sequential Wave 2/3 graph. The shared runner now
+loads complete `stage1.tmj`, both tracked ROMs are generated from that one
+manifest, and focused plus emulator-backed acceptance covers the original
+addressing, collision, storage, mapper, banking, streaming, visual, and audio
+ceilings. Wave 4 residency, #244 spawn indexing, IRQ HUD, and unrelated #247
+gaps remain separate work; the exact completed graph and retained boundaries
+are in `docs/LargeWorldsRoadmap.md`.
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It currently loads the derived horizontal `stage1.playable.tmj` map (88x15 source cells, expanding to 176x30 hardware cells) while preserving the complete 156x20-cell `stage1.tmj` design as the Large Worlds acceptance target. It declares per-target VGM/VGZ background music through the portable audio calls, while the portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`. Vertical and diagonal scroll remain proven separately by the focused Tiled/free-scroll samples so unsupported camera modes are not hidden behind runner-specific degradation.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmj` (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, and NES DPCM retained. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
 
 The final cross-target sample should prove:
 

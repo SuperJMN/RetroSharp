@@ -158,7 +158,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void Full_stage1_nes_baseline_is_frozen()
+    public void Full_stage1_nes_runner_now_satisfies_the_frozen_resource_baseline()
     {
         using var workspace = CreateNormalizedFullStage1();
         var mapPath = Path.Combine(workspace.Path, "stage1.full-baseline.tmj");
@@ -192,19 +192,39 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(26, sfx.Data.Length);
 
         var fullSource = FullStage1RunnerSource(mapPath);
-        var fullPayloadFailure = Assert.Throws<InvalidOperationException>(
-            () => NesRomCompiler.CompileSource(fullSource, RunnerSample.Directory));
-        output.WriteLine($"fullPayloadFailure={fullPayloadFailure.Message}");
-        Assert.Equal(
-            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $15BF7, beyond reset trailer start $FF80.",
-            fullPayloadFailure.Message);
+        var fullPayload = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            fullSource,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var rebuiltFullPayload = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            fullSource,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var noAudio = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            WithoutAudio(fullSource),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
-        var noAudioFailure = Assert.Throws<InvalidOperationException>(
-            () => NesRomCompiler.CompileSource(WithoutAudio(fullSource), RunnerSample.Directory));
-        output.WriteLine($"noAudioFailure={noAudioFailure.Message}");
+        Assert.Equal("nes-mmc3-tvrom-v1", fullPayload.Report.SelectedProfile);
+        Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, fullPayload.Rom[4..8]);
+        Assert.Equal(81_936, fullPayload.Rom.Length);
+        Assert.Equal(fullPayload.Rom, rebuiltFullPayload.Rom);
+        Assert.Equal(fullPayload.Report.Segments, rebuiltFullPayload.Report.Segments);
         Assert.Equal(
-            "NES MMC3/TVROM fixed PRG section overflow: runtime/data/DPCM end at $15AC6, beyond reset trailer start $FF80.",
-            noAudioFailure.Message);
+            2_762,
+            fullPayload.Report.Segments.Where(item => item.Owner == "worldpack:default").Sum(item => item.Length));
+        Assert.Contains(fullPayload.Report.Segments, item => item.Owner == "pinned:bgm:runner_theme");
+        Assert.Contains(fullPayload.Report.Segments, item => item.Owner == "pinned:sfx:jump_sfx");
+        Assert.Contains(fullPayload.Report.Segments, item => item.Owner.StartsWith("fixed:dpcm:", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            fullPayload.Report.Segments,
+            item => item.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
+        Assert.Equal("nes-mmc3-tvrom-v1", noAudio.Report.SelectedProfile);
+        Assert.DoesNotContain(
+            noAudio.Report.Segments,
+            item => item.Owner.StartsWith("pinned:bgm:", StringComparison.Ordinal)
+                    || item.Owner.StartsWith("pinned:sfx:", StringComparison.Ordinal)
+                    || item.Owner.StartsWith("fixed:dpcm:", StringComparison.Ordinal));
 
         var runtimeProbe = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             FullStage1CameraRuntimeSource(mapPath),
@@ -235,6 +255,25 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             runtimeProbe.Report.FixedSymbols.OrderBy(item => item.Key),
             rebuiltRuntimeProbe.Report.FixedSymbols.OrderBy(item => item.Key));
         WriteExternalRomIfRequested("RETROSHARP_NES_LW34_PROBE_ROM", runtimeProbe.Rom);
+
+        var traversalProbe = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            FullStage1TraversalSource(mapPath),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        Assert.Equal("nes-mmc3-tvrom-v1", traversalProbe.Report.SelectedProfile);
+        Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, traversalProbe.Rom[4..8]);
+        Assert.Contains(traversalProbe.Report.Segments, item => item.Owner == "worldpack:default");
+        WriteExternalRomIfRequested("RETROSHARP_NES_FULL_STAGE1_TRAVERSAL_ROM", traversalProbe.Rom);
+
+        var collisionProbe = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            FullStage1CollisionSource(mapPath),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        Assert.Equal("nes-mapper-0-current", collisionProbe.Report.SelectedProfile);
+        Assert.DoesNotContain(
+            collisionProbe.Report.Segments,
+            item => item.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
+        WriteExternalRomIfRequested("RETROSHARP_NES_FULL_STAGE1_COLLISION_ROM", collisionProbe.Rom);
 
         Assert.Equal(32, NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame);
         Assert.Equal(9, NesTarget.Capabilities.MaxAttributeWritesPerFrame);
@@ -269,10 +308,10 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             {
                 new { id = "address-width", status = "passes", detail = "312 hardware columns reach the existing PRG-capacity failure without camera/source-column truncation" },
                 new { id = "collision-abi", status = "passes-after-lw-1.2", detail = "world hit-top returns 304 as 30 01 and no hit as FF FF" },
-                new { id = "rom-capacity", status = "blocked", detail = "41851 bytes without audio exceed 32762 bytes; full audio then conflicts with DPCM placement at E980" },
+                new { id = "rom-capacity", status = "passes-after-lw-3.5", detail = "automatic MMC3 selection links the full runner with BGM, SFX, and both DPCM blocks" },
                 new { id = "tile-patterns", status = "passes", detail = "6 reserved + 95 sprite + 90 background tiles use 191 of 256 indexes and 3056 of 8192 CHR bytes" },
-                new { id = "ram-staging", status = "blocked", detail = "mapper-0 has no mapper-backed large-world staging path" },
-                new { id = "vblank", status = "bounded-current-phase", detail = "current limits are 32 tile writes and 9 attribute writes per phase" },
+                new { id = "ram-staging", status = "passes-after-lw-3.5", detail = "the packed scheduler stages outside NMI and commits bounded rows or columns" },
+                new { id = "vblank", status = "passes-after-lw-3.5", detail = "current limits are 32 tile writes and 9 attribute writes per phase" },
             },
         };
 
@@ -284,7 +323,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     {
         var portablePath = mapPath.Replace('\\', '/');
         return RunnerSample.CompiledSource().Replace(
-            "assets/maps/stage1.playable.tmj",
+            "assets/maps/stage1.tmj",
             portablePath,
             StringComparison.Ordinal);
     }
@@ -309,6 +348,48 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
                          Video.WaitVBlank();
                          Camera.Apply();
                          Audio.Update();
+                     }
+                 }
+                 """;
+    }
+
+    private static string FullStage1TraversalSource(string mapPath)
+    {
+        var portablePath = mapPath.Replace('\\', '/');
+        return $$"""
+                 void Main() {
+                     Video.Init();
+                     World.Load("{{portablePath}}");
+                     Camera.Init(312, 0, 40);
+                     i16 targetX = 0;
+                     while (true) {
+                         Video.WaitVBlank();
+                         Camera.Apply();
+                         Input.Poll();
+                         if (Input.IsDown(Button.Right)) {
+                             targetX = 2336;
+                         }
+                         if (Input.IsDown(Button.Left)) {
+                             targetX = 0;
+                         }
+                         Camera.SetPosition(targetX, 80);
+                     }
+                 }
+                 """;
+    }
+
+    private static string FullStage1CollisionSource(string mapPath)
+    {
+        var portablePath = mapPath.Replace('\\', '/');
+        return $$"""
+                 void Main() {
+                     Video.Init();
+                     World.Load("{{portablePath}}");
+                     Camera.Init(312, 0, 30);
+                     i16 hitTop = Camera.AabbHitTop(0, 300, 8, 12, 1);
+                     i16 noHit = Camera.AabbHitTop(0, 300, 8, 12, 4);
+                     while (true) {
+                         Video.WaitVBlank();
                      }
                  }
                  """;
