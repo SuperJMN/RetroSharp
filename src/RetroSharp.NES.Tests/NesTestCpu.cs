@@ -159,7 +159,9 @@ internal sealed class NesTestCpu
             case 0xA5: LoadA(Read(Read(pc++))); cycles += 3; break;
             case 0xA9: LoadA(Read(pc++)); cycles += 2; break;
             case 0xAA: LoadX(a); cycles += 2; break;
+            case 0xAC: LoadY(Read(ReadWordAndAdvance())); cycles += 4; break;
             case 0xAD: LoadA(Read(ReadWordAndAdvance())); cycles += 4; break;
+            case 0xAE: LoadX(Read(ReadWordAndAdvance())); cycles += 4; break;
             case 0xB0: Branch(carry); break;
             case 0xB1:
                 {
@@ -192,6 +194,8 @@ internal sealed class NesTestCpu
                     cycles += 6;
                     break;
                 }
+            case 0xE5: Subtract(Read(Read(pc++))); cycles += 3; break;
+            case 0xE9: Subtract(Read(pc++)); cycles += 2; break;
             case 0xF0: Branch(zero); break;
             default: throw new InvalidOperationException($"Unsupported NES test opcode ${opcode:X2} at ${(ushort)(pc - 1):X4}.");
         }
@@ -386,6 +390,13 @@ internal sealed class NesTestCpu
     {
         var result = a + value + (carry ? 1 : 0);
         carry = result > byte.MaxValue;
+        LoadA((byte)result);
+    }
+
+    private void Subtract(byte value)
+    {
+        var result = a - value - (carry ? 0 : 1);
+        carry = result >= 0;
         LoadA((byte)result);
     }
 

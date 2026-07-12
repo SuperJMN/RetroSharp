@@ -102,9 +102,17 @@ This document preserves project knowledge that previously lived only in agent me
   fixed payload, while pinned/boot/CHR remain 5,012/4,128/3,056. The raw
   runner-shaped path still reports its exact fixed overflow; no runner
   migration is present.
+- LW-3.4 adds the NES packed-camera scheduler: two immutable peer edges carry
+  16-bit tags through request/prepare/resident/commit/release; preparation and
+  raw/RLE/R6 work stays outside VBlank; visible camera state publishes only
+  after the matching edge; columns commit at most 32 tiles plus 9 attributes;
+  and rows retain their slot for four 8-tile phases plus one attribute phase.
+  The normalized full-stage camera probe links and traverses in AprNes with
+  BGM/SFX/DPCM active, while the shared runner input and tracked ROMs remain
+  unchanged.
 - Fresh Large Worlds implementation conversations should continue with
-  [LW-3.4 / #304](https://github.com/SuperJMN/RetroSharp/issues/304) only after
-  #303 is merged, and keep the NES target chain sequential.
+  [LW-3.5 / #305](https://github.com/SuperJMN/RetroSharp/issues/305) only after
+  #304 is merged, and keep the NES target chain sequential.
   `LW-2.5` / #300 proves full `stage1` on Game Boy
   through a non-destructive fixture without changing the shared runner input.
   Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
@@ -361,9 +369,9 @@ Progress (2026-06-14):
 
 Suggested next steps for the next agent, in order:
 1. For the active cross-target scale frontier, read the exact published card in
-   `docs/LargeWorldsRoadmap.md`; `LW-3.3` / #303 is implemented and
-   [LW-3.4 / #304](https://github.com/SuperJMN/RetroSharp/issues/304) is the next
-   NES entry only after #303 is merged.
+   `docs/LargeWorldsRoadmap.md`; `LW-3.4` / #304 is implemented and
+   [LW-3.5 / #305](https://github.com/SuperJMN/RetroSharp/issues/305) is the next
+   NES entry only after #304 is merged.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
    linked ROM/window layout in every placement/selection task.
 3. Keep each GB/NES chain sequential and keep target details out of public
@@ -414,9 +422,9 @@ Pipeline shape (two phases, after #105 partial extraction):
   source-column cursors support `1..4096`, byte-backed callers zero-extend, and
   hardware scroll writes remain bytes. This does not add packed/banked world
   storage or widen collision hits.
-- NES limitations: four-screen free scroll uses a 64x60 nametable buffer, and runtime-streamed row attributes currently refresh
-  as palette slot 0 rather than carrying full Tiled palette provenance. Mapper-backed scale and HUD
-  IRQs are still deferred to NF-10.
+- NES limitations: four-screen free scroll uses a 64x60 nametable buffer.
+  Packed runtime-streamed columns/rows now carry LW-1.4 palette provenance;
+  runtime CHR banking and HUD IRQs remain deferred.
 - The shared runner currently uses a horizontal camera over the 88x15 source
   `stage1.playable.tmj` map, expanding to 176x30 hardware tiles. The complete
   156x20 source `stage1` design expands to 312x40 hardware tiles and is retained

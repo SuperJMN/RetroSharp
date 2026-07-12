@@ -486,7 +486,7 @@ public sealed class NesWorldPackReaderTests
         var farRaw = MeasureDecodeCycles(far: true, repeated: false);
         var farRle = MeasureDecodeCycles(far: true, repeated: true);
 
-        Assert.Equal((15_883L, 7_488L, 27_198L, 9_193L), (residentRaw, residentRle, farRaw, farRle));
+        Assert.Equal((15_903L, 7_508L, 18_064L, 7_933L), (residentRaw, residentRle, farRaw, farRle));
         Assert.True(residentRle < residentRaw);
         Assert.True(farRle < farRaw);
     }

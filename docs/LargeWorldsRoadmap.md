@@ -1,7 +1,8 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
 Status: **active; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, and NES
-`LW-3.1` through `LW-3.3` are implemented; `LW-3.4` is next.**
+`LW-3.1` through `LW-3.4` are implemented; `LW-3.5` is next after both target
+chains are complete.**
 Last updated: 2026-07-12.
 
 This roadmap is the executable plan for levels that exceed the legacy
@@ -49,8 +50,8 @@ Current blockers are independent and must not be conflated:
   32x32 Game Boy background buffer or NES nametable surface.
 - LW-1.1 widens shared camera operands and both targets' logical map-column,
   camera, edge-tag, and row/column streaming state; hardware scroll writes stay
-  bytes. Game Boy and NES packed/banked readers are implemented; staged NES
-  camera scheduling remains deferred to `LW-3.4`.
+  bytes. Game Boy and NES packed/banked readers and staged camera schedulers are
+  implemented.
 - NES still emits mapper 0 with 32 KiB PRG and 8 KiB CHR by default. `LW-3.1`
   adds the forced MMC3/TVROM foundation and `LW-3.2` adds mapper-0-first
   selection plus mapper-backed level-data placement, and `LW-3.3` adds the
@@ -943,8 +944,9 @@ Recommended execution and merge order:
 
 #### LW-3.4: Integrate staged four-screen NES streaming
 
-- Status: **published as [#304](https://github.com/SuperJMN/RetroSharp/issues/304);
-  open and not started.**
+- Status: **implementation complete through
+  [#304](https://github.com/SuperJMN/RetroSharp/issues/304); issue closure is
+  tracked on GitHub.**
 - Layer: NES camera runtime, staging scheduler, and PPU/NMI integration.
 - Dependencies: [LW-3.3 / #303](https://github.com/SuperJMN/RetroSharp/issues/303)
   (native blocked-by).
@@ -973,6 +975,29 @@ Recommended execution and merge order:
     frames; diagonal staggering must not starve either axis.
   - Cover bidirectional 255/256, chunk/R6-bank boundaries, diagonal movement,
     reversals, missing/malformed input, and active BGM/SFX/DPCM.
+- Implemented runtime:
+  - Two target-private 41-byte edge payloads keep immutable peer metadata and
+    16-bit axis/direction/world-edge/orthogonal tags through
+    request/prepare/resident/commit/release. Pending column and row descriptors
+    are independent, correctly tagged resident peers alternate without axis
+    starvation, and reversals release only uncommitted resident work.
+  - Preparation performs validation, R6 selection, directory access, raw direct
+    lookup or bounded RLE decode, tile expansion, and LW-1.4 attribute planning
+    before VBlank. Target expansion and palette/provenance lookup tables remain
+    pinned in R7; camera-only packed links omit duplicate legacy map data.
+  - Visible camera coordinates publish only after the matching pending axis
+    clears. A column commits at most 32 tile bytes plus at most 9 attributes; a
+    row remains committing across four 8-tile phases and one attribute phase.
+    The critical section records any R6, directory, or decode work as a contract
+    violation.
+  - The normalized full-`stage1` camera probe links as mapper 4 / TVROM with an
+    8,871-byte fixed payload, 5,656 pinned R7 bytes, 4,128 boot R7 bytes, and
+    1,536 resident CHR bytes. The unchanged full runner payload still overflows
+    and remains owned solely by `LW-3.5`.
+  - AprNes/NesMcp traversed 236 packed edges to visible X 1888 with matching
+    lifecycle counts, no pending axis, zero R6/directory/decode work in commit,
+    a final 30-tile/8-attribute phase, four distinct nametable hashes, BGM/SFX
+    plus DPCM register writes, and no `$A000` mirroring write.
 - Candidate files: `src/RetroSharp.NES/NesRomBuilder.cs`, NES camera/runtime
   state, `src/RetroSharp.NES.Tests/NesLargeWorldCameraTests.cs`,
   `src/RetroSharp.NES.Tests/NesRomCompilerTests.cs`, and
@@ -1126,6 +1151,6 @@ debug workflow.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
 recorded above. Game Boy `LW-2.1` through `LW-2.5` and NES `LW-3.1` through
-`LW-3.3` are complete; NES `LW-3.4` is next after #303 merges. The parent remains the
+`LW-3.4` are complete; `LW-3.5` is next after both target chains. The parent remains the
 integrator surface: implementation agents receive one child issue, not the
 parent or an open-ended request to continue the epic.
