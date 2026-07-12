@@ -328,7 +328,21 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
     private static byte[] Mmc3RegisterWrite(byte register, byte value) =>
         [0xA9, register, 0x8D, 0x00, 0x80, 0xA9, value, 0x8D, 0x01, 0x80];
 
-    private static byte[] Mmc3BankHelper(byte register, ushort shadowAddress) =>
+    private static byte[] Mmc3BankHelper(byte register, ushort shadowAddress) => register == 6
+        ?
+        [
+            0x48,
+            0xAD, 0x80, 0x03,
+            0xF0, 0x03,
+            0xEE, 0x75, 0x03,
+            0xA9, register,
+            0x8D, 0x00, 0x80,
+            0x68,
+            0x8D, (byte)(shadowAddress & 0xFF), (byte)(shadowAddress >> 8),
+            0x8D, 0x01, 0x80,
+            0x60,
+        ]
+        :
         [
             0x48,
             0xA9, register,

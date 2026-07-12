@@ -121,7 +121,11 @@ public static class NesRomCompiler
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
             baseDirectory);
         var sdkOperations = ValidateSdkOperations(videoProgram);
-        videoProgram.RequiresLegacyWorldData = sdkOperations.Any(RequiresLegacyWorldData);
+        videoProgram.UsesCameraRuntime = sdkOperations.Any(operation => operation is
+            Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera);
+        videoProgram.RequiresLegacyWorldData = sdkOperations.Any(operation =>
+            RequiresLegacyWorldData(operation) && operation is not (
+                Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera));
         var useFourScreenNametables = UsesVerticalCamera(sdkOperations);
         return NesRomBuilder.BuildWithReport(
             videoProgram,
@@ -400,6 +404,8 @@ internal sealed class NesVideoProgram
     public NesTiledWorldPack? PackedWorld { get; private set; }
 
     public bool RequiresLegacyWorldData { get; set; }
+
+    public bool UsesCameraRuntime { get; set; }
 
     public NesColumnAttributeStream? WorldColumnAttributes { get; private set; }
 
