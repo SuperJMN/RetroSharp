@@ -115,6 +115,16 @@ This document preserves project knowledge that previously lived only in agent me
   proves the final GB/NES production paths together. Issue #244 stays in Wave
   4; Wave 3 only links the mapper-backed slice from #247 and does not absorb
   its unrelated gaps.
+- RPH-3 / #321 restores NES complete-stage cadence without source speed
+  changes. The canonical runtime uses O(1) pinned plane descriptors, a two-slot
+  collision cache plus exact-cell memo, and six visual slots prewarmed for the
+  next two viewport columns; total staging remains the accepted 594 bytes. A
+  fixed bank-neutral NMI publishes hardware-frame/pending counters only, while
+  `Video.WaitVBlank()` keeps camera commit, directories, decoders, mapper work,
+  input, audio, and gameplay in mainline code. Paired input snapshots reject
+  DPCM-corrupted controller reads. AprNes measures 120 hardware frames = 120
+  gameplay/input ticks = 120 audio ticks and 150 source-model X pixels; see
+  `docs/NesRunnerCadenceAcceptance.md`.
 - The NES 8 KiB R6 window is not a whole-pack size cap. `LW-3.2` places an
   unchanged synthetic `WorldPack` larger than 8 KiB over an explicit ordered
   list of R6-owned continuation segments, whose physical bank ids may be

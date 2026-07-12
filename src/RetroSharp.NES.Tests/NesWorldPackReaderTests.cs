@@ -3,8 +3,9 @@ namespace RetroSharp.NES.Tests;
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
 using Xunit;
+using Xunit.Abstractions;
 
-public sealed class NesWorldPackReaderTests
+public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData(1, 1, 338)]
@@ -287,6 +288,261 @@ public sealed class NesWorldPackReaderTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Raw_collision_lookup_reads_the_requested_id_without_materializing_a_chunk(bool far)
+    {
+        var fixture = CreateSingleChunkFixture(repeated: false);
+        var result = far
+            ? RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+                "void Main() { }",
+                packedWorldOverride: fixture.SerializedBytes)
+            : RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+                "void Main() { }",
+                packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        if (far)
+        {
+            cpu.SetR6Bank(5);
+            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        }
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+        cpu.SetWorldPackCoordinates(3, 4);
+
+        var lookup = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        output.WriteLine($"raw collision lookup far={far}: {lookup.Cycles} cycles");
+
+        Assert.Equal((byte)NesWorldPackResult.Success, lookup.A);
+        Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision));
+        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionSlot0State));
+        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionSlot1State));
+        Assert.Equal(0, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        if (far)
+        {
+            Assert.Equal(5, cpu.CurrentR6Bank);
+            Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Repeated_rle_collision_lookup_reuses_the_resident_chunk(bool far)
+    {
+        var fixture = CreateSingleChunkFixture(repeated: true);
+        var result = far
+            ? RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+                "void Main() { }",
+                packedWorldOverride: fixture.SerializedBytes)
+            : RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+                "void Main() { }",
+                packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        if (far)
+        {
+            cpu.SetR6Bank(5);
+            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        }
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+        cpu.SetWorldPackCoordinates(1, 1);
+        var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        cpu.SetWorldPackCoordinates(6, 6);
+
+        var repeated = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        output.WriteLine($"RLE collision lookup far={far}: first={first.Cycles}, cached={repeated.Cycles} cycles");
+
+        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, repeated.A);
+        Assert.True(
+            repeated.Cycles * 4 < first.Cycles,
+            $"A resident RLE collision lookup must avoid another plane decode; first={first.Cycles}, repeated={repeated.Cycles} cycles.");
+        Assert.Equal(1, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+    }
+
+    [Fact]
+    public void Bidirectional_rle_collision_crossing_reuses_both_bounded_slots()
+    {
+        var fixture = CreateBoundaryFixture(chunkColumns: 3, firstVisualRaw: false);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            "void Main() { }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+
+        cpu.SetWorldPackCoordinates(0, 0);
+        var firstChunk = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        cpu.SetWorldPackCoordinates(8, 0);
+        var secondChunk = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        cpu.SetWorldPackCoordinates(0, 0);
+        var backToFirst = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        output.WriteLine(
+            $"RLE boundary lookup: first={firstChunk.Cycles}, crossing={secondChunk.Cycles}, cached-return={backToFirst.Cycles} cycles");
+
+        Assert.Equal((byte)NesWorldPackResult.Success, firstChunk.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, secondChunk.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, backToFirst.A);
+        Assert.True(
+            backToFirst.Cycles * 4 < secondChunk.Cycles,
+            $"Returning across a chunk boundary must reuse the peer slot; second={secondChunk.Cycles}, return={backToFirst.Cycles} cycles.");
+        Assert.Equal(2, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(5, cpu.CurrentR6Bank);
+        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+    }
+
+    [Fact]
+    public void Complete_stage1_cached_collision_hit_fits_the_runner_cadence_budget()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            "void Main() { }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+        cpu.SetWorldPackCoordinates(9, 38);
+        var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        cpu.SetWorldPackCoordinates(10, 38);
+
+        var cached = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+        var repeatedCell = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
+
+        output.WriteLine($"complete stage1 collision lookup: first={first.Cycles}, cached={cached.Cycles} cycles");
+        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, cached.A);
+        Assert.True(
+            first.Cycles <= 5_000,
+            $"Entering a complete-stage collision chunk must use O(1) descriptor work plus bounded RLE decode, measured {first.Cycles} cycles.");
+        Assert.True(
+            cached.Cycles <= 375,
+            $"The complete-stage runner performs about twelve resident collision subqueries per tick; cached hits must cost at most 375 cycles, measured {cached.Cycles}.");
+        Assert.True(
+            repeatedCell.Cycles <= 120,
+            $"A repeated collision cell must leave frame slack for staged camera work; measured {repeatedCell.Cycles} cycles.");
+        Assert.Equal(1, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(5, cpu.CurrentR6Bank);
+        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+    }
+
+    [Fact]
+    public void Complete_stage1_cached_visual_hit_fits_a_single_frame_edge_prepare_budget()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            "void Main() { }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+        cpu.SetWorldPackCoordinates(9, 20);
+        var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
+        cpu.SetWorldPackCoordinates(10, 20);
+
+        var cached = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
+
+        output.WriteLine($"complete stage1 visual lookup: first={first.Cycles}, cached={cached.Cycles} cycles");
+        Assert.Equal((byte)NesWorldPackResult.Success, first.A);
+        Assert.Equal((byte)NesWorldPackResult.Success, cached.A);
+        Assert.True(
+            first.Cycles <= 7_500,
+            $"Entering a complete-stage visual chunk must use O(1) descriptor work plus bounded RLE decode, measured {first.Cycles} cycles.");
+        Assert.True(
+            cached.Cycles <= 400,
+            $"A 32-cell complete-stage edge must prepare within one gameplay frame; cached visual hits must cost at most 400 cycles, measured {cached.Cycles}.");
+        Assert.Equal(5, cpu.CurrentR6Bank);
+        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+    }
+
+    [Fact]
+    public void Complete_stage1_prewarms_both_horizontal_sets_of_viewport_chunks_in_bounded_ram()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var plan = NesWorldPackRuntimePlan.Create(fixture.SerializedBytes);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            "void Main() { }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
+
+        var prewarm = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel]);
+
+        foreach (var x in new ushort[] { 32, 48 })
+        {
+            foreach (var y in new ushort[] { 0, 16, 32 })
+            {
+                cpu.SetWorldPackCoordinates(x, y);
+                var lookup = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
+                Assert.Equal((byte)NesWorldPackResult.Success, lookup.A);
+            }
+        }
+
+        Assert.Equal(6, plan.Layout.VisualSlots.Count);
+        Assert.Equal(594, plan.Layout.TotalBytes);
+        Assert.True(plan.Layout.TotalBytes <= 594);
+        Assert.Equal((byte)NesWorldPackResult.Success, prewarm.A);
+        Assert.Equal(6, cpu.Ram(NesWorldPackRuntimeAbi.VisualDecodeCount));
+        Assert.Equal(5, cpu.CurrentR6Bank);
+        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+    }
+
+    [Fact]
+    public void Generic_runtime_initialization_clears_undefined_power_on_cache_tags()
+    {
+        var fixture = CreateSingleChunkFixture(repeated: true);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            "void Main() { }",
+            packedWorldOverride: fixture.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        foreach (var address in new[]
+                 {
+                     NesWorldPackRuntimeAbi.VisualCache0Valid,
+                     NesWorldPackRuntimeAbi.VisualCache1Valid,
+                     NesWorldPackRuntimeAbi.CollisionCache0Valid,
+                     NesWorldPackRuntimeAbi.CollisionCache1Valid,
+                 })
+        {
+            cpu.SetRam(address, 0xA5);
+        }
+
+        var initialized = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel]);
+
+        Assert.Equal((byte)NesWorldPackResult.Success, initialized.A);
+        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.VisualCache0Valid));
+        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.VisualCache1Valid));
+        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionCache0Valid));
+        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionCache1Valid));
+    }
+
+    [Fact]
+    public void Fast_coordinate_layout_rejects_aliasing_and_non_power_of_two_final_chunks()
+    {
+        var fixture = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(RepositoryDirectory("samples/runner"), "assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var descriptor = fixture.Pack.Descriptor;
+
+        Assert.True(NesWorldPackRuntimePlan.SupportsFastCoordinateLayout(descriptor, fixture.Pack.Chunks.Count));
+        Assert.False(NesWorldPackRuntimePlan.SupportsFastCoordinateLayout(descriptor, 256));
+        foreach (var width in new[] { 309, 310, 314, 316, 318 })
+        {
+            Assert.False(NesWorldPackRuntimePlan.SupportsFastCoordinateLayout(
+                descriptor with { HardwareWidth = width },
+                fixture.Pack.Chunks.Count));
+        }
+    }
+
+    [Theory]
     [InlineData(404, 0, WorldPackCodec.Raw)]
     [InlineData(407, 406, WorldPackCodec.ElementRle)]
     public void Multi_r6_directory_and_planes_cross_boundaries_without_serialized_padding(
@@ -486,7 +742,7 @@ public sealed class NesWorldPackReaderTests
         var farRaw = MeasureDecodeCycles(far: true, repeated: false);
         var farRle = MeasureDecodeCycles(far: true, repeated: true);
 
-        Assert.Equal((15_903L, 7_508L, 18_064L, 7_933L), (residentRaw, residentRle, farRaw, farRle));
+        Assert.Equal((15_904L, 7_509L, 18_065L, 7_934L), (residentRaw, residentRle, farRaw, farRle));
         Assert.True(residentRle < residentRaw);
         Assert.True(farRle < farRaw);
     }
@@ -634,6 +890,9 @@ public sealed class NesWorldPackReaderTests
 
     private static byte[] ReadSlot(NesTestCpu cpu, NesRamRange slot) =>
         Enumerable.Range(slot.Start, slot.Length).Select(address => cpu.Ram((ushort)address)).ToArray();
+
+    private static ushort ReadWord(NesTestCpu cpu, ushort lowAddress) =>
+        (ushort)(cpu.Ram(lowAddress) | cpu.Ram(checked((ushort)(lowAddress + 1))) << 8);
 
     private static string RepositoryDirectory(string relativePath)
     {

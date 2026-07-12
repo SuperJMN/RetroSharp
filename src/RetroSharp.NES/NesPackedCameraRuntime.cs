@@ -33,6 +33,7 @@ internal static class NesPackedCameraRuntime
     internal const ushort RowPhase = 0x038A;
     internal const ushort CommitTargetStart = 0x038B;
     internal const ushort NextAxis = 0x038C;
+    internal const ushort FramePending = 0x038F;
 
     internal const ushort Slot0 = 0x0390;
     internal const ushort Slot1 = 0x03A0;
@@ -644,7 +645,6 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesPackedCameraRuntime.Iterator);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.SlotIndex);
-
         builder.LoadAAbsolute(NesPackedCameraRuntime.CommitAxis);
         builder.CompareImmediate(NesPackedCameraRuntime.Column);
         builder.JumpIf(0xF0, column);

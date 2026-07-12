@@ -159,6 +159,48 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
+    public void Complete_stage1_resident_column_prepare_fits_one_ntsc_frame()
+    {
+        var directory = RepositoryDirectory("samples/runner");
+        var packed = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(directory, "assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            RunnerSample.CompiledSource(),
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: packed.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        Assert.Equal(
+            (byte)NesWorldPackResult.Success,
+            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+        Assert.Equal(
+            (byte)NesWorldPackResult.Success,
+            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel], 5_000_000).A);
+        cpu.SetRam(CommitAxis, Column);
+        cpu.SetRam(CommitDirection, Positive);
+        cpu.SetRam(CommitWorldEdgeLow, 32);
+        cpu.SetRam(CommitTarget, 0);
+        cpu.SetRam(CommitOrthogonalLow, 0);
+        cpu.SetRam(CommitOrthogonalHigh, 0);
+        cpu.SetRam(CommitPayloadLength, 32);
+
+        var prepare = cpu.RunRoutine(
+            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+            maxInstructions: 5_000_000);
+
+        Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
+        Assert.True(
+            prepare.Cycles <= 13_000,
+            $"A resident complete-stage column must finish within one NTSC frame; measured {prepare.Cycles} cycles.");
+        Assert.Equal(1, cpu.Ram(RequestCount));
+        Assert.Equal(1, cpu.Ram(PrepareCount));
+        Assert.Equal(6, cpu.Ram(NesWorldPackRuntimeAbi.VisualDecodeCount));
+    }
+
+    [Fact]
     public void Packed_row_prepare_uses_the_same_peer_lifecycle_with_complete_world_coordinates()
     {
         var serialized = CreatePaletteSyntheticWorldPack();

@@ -154,6 +154,7 @@ internal sealed class NesTestCpu
                     cycles += 6;
                     break;
                 }
+            case 0x99: Write((ushort)(ReadWordAndAdvance() + y), a); cycles += 5; break;
             case 0xA0: LoadY(Read(pc++)); cycles += 2; break;
             case 0xA2: LoadX(Read(pc++)); cycles += 2; break;
             case 0xA5: LoadA(Read(Read(pc++))); cycles += 3; break;
@@ -173,6 +174,7 @@ internal sealed class NesTestCpu
                 }
             case 0xBD: LoadA(Read((ushort)(ReadWordAndAdvance() + x))); cycles += 4; break;
             case 0xC9: Compare(a, Read(pc++)); cycles += 2; break;
+            case 0xC8: LoadY((byte)(y + 1)); cycles += 2; break;
             case 0xCA: LoadX((byte)(x - 1)); cycles += 2; break;
             case 0xCD: Compare(a, Read(ReadWordAndAdvance())); cycles += 4; break;
             case 0xCE:

@@ -992,7 +992,7 @@ Recommended execution and merge order:
     The critical section records any R6, directory, or decode work as a contract
     violation.
   - The normalized full-`stage1` camera probe links as mapper 4 / TVROM with an
-    8,871-byte fixed payload, 5,656 pinned R7 bytes, 4,128 boot R7 bytes, and
+    8,935-byte fixed payload, 6,204 pinned R7 bytes, 4,128 boot R7 bytes, and
     1,536 resident CHR bytes. The unchanged full runner payload still overflows
     and remains owned solely by `LW-3.5`.
   - AprNes/NesMcp traversed 236 packed edges to visible X 1888 with matching
@@ -1098,8 +1098,8 @@ Recommended execution and merge order:
 | GB placement/restoration | Deterministic MBC1 far placement; every exit/nested/audio-active path restores the actual entry bank and shadow |
 | GB runtime budget | 298-byte current / 554-byte maximum staging; bank/directory/decode outside VBlank with LY 136-153 guarded; at most 19 column or 21 row writes in VBlank |
 | NES cartridge | Final-link mapper-0-first selection; forced MMC3 header `04 02 48 00`; PRG <=65,536, physical CHR 16,384, resident CHR <=8,192, fixed code/DPCM/vectors <=16,384 |
-| NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; packed-camera pinned data <=5,656/8,192 R7 (5,012-byte LW-3.2 placement baseline); boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
-| NES runtime budget | 338-byte current / 594-byte maximum staging; bank/decode outside VBlank/NMI; at most 32 column tiles or four 8-tile row phases, then at most 9 attributes |
+| NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; packed-camera pinned data <=6,204/8,192 R7 (5,012-byte LW-3.2 placement baseline); boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
+| NES runtime budget | 594-byte canonical staging (six visual, two collision, two edge slots); bank/directory/decode outside VBlank/NMI; fixed NMI only accounts hardware/pending frames; at most 32 column tiles or four 8-tile row phases, then at most 9 attributes |
 | Behavioral backends | Game Boy interrupt/restoration/visual traversal in SameBoy/GameboyMcp; generated mapper-4 + four-screen `0x48` ROM in AprNes through NesMcp `auto` |
 | Visual/audio parity | Decoded and visible tiles/collision match LW-1.4; GB BGM/SFX and NES BGM/SFX/DPCM remain complete and frame-correct |
 | Small-ROM stability | Representative ROM-only GB and mapper-0 NES outputs remain byte-identical |
