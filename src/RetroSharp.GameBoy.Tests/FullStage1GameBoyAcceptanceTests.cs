@@ -276,6 +276,7 @@ public sealed class FullStage1GameBoyAcceptanceTests
         }
 
         var collisionProbe = fixture.CompileCollisionProbe();
+        WriteExternalRomIfRequested("RETROSHARP_FULL_STAGE1_COLLISION_ROM", collisionProbe.Rom);
         var collisionCpu = new GameBoyTestCpu(collisionProbe.Rom);
         collisionCpu.RunUntilWramEquals(WorldPackValidationState, 1, 500_000_000);
         collisionCpu.RunAdditionalFrames(20);
@@ -283,6 +284,9 @@ public sealed class FullStage1GameBoyAcceptanceTests
         Assert.Equal(
             new byte[] { 0x30, 0x01, 0xFF, 0xFF },
             Enumerable.Range(0xC000, 4).Select(address => collisionCpu.Wram((ushort)address)).ToArray());
+        Assert.Equal(
+            new byte[] { 0x49, 0x00, 0x28, 0x01, 0x00, 0x00, 0x48, 0x00, 0x2D, 0x01, 0x30, 0x01 },
+            Enumerable.Range(0xC004, 12).Select(address => collisionCpu.Wram((ushort)address)).ToArray());
         Assert.DoesNotContain(
             collisionProbe.Report.Segments,
             segment => segment.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
@@ -470,6 +474,12 @@ public sealed class FullStage1GameBoyAcceptanceTests
                     Camera.Init(312, 0, 30);
                     i16 hitTop = Camera.AabbHitTop(0, 300, 8, 12, 1);
                     i16 noHit = Camera.AabbHitTop(0, 300, 8, 12, 4);
+                    i16 wallScreenX = 73;
+                    i16 wallProbeY = 296;
+                    i16 wallHit = Camera.AabbTiles(wallScreenX, wallProbeY, 18, 8, 1);
+                    i16 landingScreenX = 72;
+                    i16 landingProbeY = 301;
+                    i16 landingHitTop = Camera.AabbHitTop(landingScreenX, landingProbeY, 18, 12, 1);
                     while (true) {
                         Video.WaitVBlank();
                     }

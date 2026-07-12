@@ -576,6 +576,7 @@ internal sealed class GameBoyTestCpu
             case 0x14: d = Inc(d); break;                       // INC D
             case 0x1C: e = Inc(e); break;                       // INC E
             case 0x24: h = Inc(h); break;                       // INC H
+            case 0x2C: l = Inc(l); break;                       // INC L
             case 0x3C: a = Inc(a); break;                       // INC A
             case 0xA0: a = And(b); break;                       // AND B
             case 0xA1: a = And(c); break;                       // AND C

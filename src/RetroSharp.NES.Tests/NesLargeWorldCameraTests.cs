@@ -679,6 +679,39 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
+    public void Wide_packed_camera_walk_keeps_the_requested_high_byte_outside_worldpack_scratch()
+    {
+        var serialized = NesWorldPackPlacementTests.CreateSyntheticWorldPack();
+        const string source = """
+            void Main() {
+                World.Column(0, 0, 1, 0, 1, 0, 1, 0, 1);
+                World.Map(312, 0, 8);
+                Camera.Init(312, 0, 8);
+                i16 target = 0;
+                Camera.SetPosition(target, 0);
+                Camera.Apply();
+            }
+            """;
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: serialized);
+
+        Assert.True(
+            result.Rom.AsSpan().IndexOf(new byte[] { 0x8D, 0x0C, 0x03 }) >= 0,
+            "The 16-bit walk target high byte must be stored in stable absolute state, not WorldPack's $E9 pointer scratch.");
+        Assert.True(
+            result.Rom.AsSpan().IndexOf(new byte[] { 0xCD, 0x0C, 0x03 }) >= 0,
+            "Every page-crossing comparison must reload the stable walk target high byte after packed preparation.");
+        Assert.True(
+            result.Rom.AsSpan().IndexOf(new byte[] { 0xA5, 0xE0, 0x8D, 0xCB, 0x03 }) >= 0,
+            "A completed column commit must publish the latest safe fine-scroll position, not the older edge snapshot.");
+        Assert.True(
+            result.Rom.AsSpan().IndexOf(new byte[] { 0xAD, 0xD0, 0x03, 0x8D, 0xCB, 0x03 }) < 0,
+            "The committed column publisher must not restore the stale position captured at the tile boundary.");
+    }
+
+    [Fact]
     public void Packed_attribute_plan_reproduces_lw_1_4_palette_and_provenance_tie_breaks()
     {
         var metadata = new byte[]
@@ -747,7 +780,7 @@ public sealed class NesLargeWorldCameraTests
         var prg = Prg(NesRomCompiler.CompileSource(WideCameraSource(1888)));
 
         Assert.True(ContainsSequence(prg, [0xA9, 0x60, 0x85, 0x00, 0xA9, 0x07, 0x85, 0x01]));
-        Assert.True(ContainsSequence(prg, [0xAD, 0x18, 0x03, 0xC5, 0xE9]));
+        Assert.True(ContainsSequence(prg, [0xAD, 0x18, 0x03, 0xCD, 0x0C, 0x03]));
         Assert.True(ContainsSequence(prg, [0xAD, 0x1A, 0x03, 0x8D, 0x1E, 0x03]));
         Assert.True(ContainsSequence(prg, [0xAD, 0x1E, 0x03, 0x8D, 0x21, 0x03]));
         Assert.True(ContainsSequence(prg, [0x6D, 0x1E, 0x03, 0x85, 0xE9, 0xA0, 0x00, 0xB1, 0xE8]));

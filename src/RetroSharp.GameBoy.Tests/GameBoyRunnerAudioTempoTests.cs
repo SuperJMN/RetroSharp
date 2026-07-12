@@ -12,6 +12,35 @@ using Xunit;
 public sealed class GameBoyRunnerAudioTempoTests
 {
     [Fact]
+    public void Shared_runner_discovers_the_exact_complete_stage1_pack_and_mbc1_link()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var mapPath = Path.Combine(runnerDirectory, "assets", "maps", "stage1.tmj");
+        var packed = GameBoyTiledMapImporter.CompileWorldPack(
+            mapPath,
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            runnerDirectory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+
+        Assert.Equal(312, packed.Pack.Descriptor.HardwareWidth);
+        Assert.Equal(40, packed.Pack.Descriptor.HardwareHeight);
+        Assert.Equal(60, packed.Pack.Chunks.Count);
+        Assert.Equal(770, packed.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
+        Assert.Equal(312, packed.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(2_550, packed.SerializedBytes.Length);
+        Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
+        Assert.Equal(131_072, result.Rom.Length);
+        Assert.Equal(
+            packed.SerializedBytes.Length,
+            result.Report.Segments.Where(segment => segment.Owner == "worldpack:default").Sum(segment => segment.Length));
+        Assert.DoesNotContain(
+            result.Report.Segments,
+            segment => segment.Owner.StartsWith("legacy-world-data", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Music_tempo_stays_locked_to_frames_while_the_camera_scrolls()
     {
         // Audio.Update() must advance the music exactly once per real frame whether or not the
@@ -22,18 +51,26 @@ public sealed class GameBoyRunnerAudioTempoTests
         var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
-        const int frames = 1200;
+        const int startupFrames = 300;
+        const int measuredFrames = 900;
 
         var idle = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        idle.RunFrames(frames);
+        idle.RunFrames(startupFrames);
+        var idleTicksAtStart = idle.AudioUpdateCalls;
+        idle.RunAdditionalFrames(measuredFrames);
 
         var walking = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         walking.Held.Add("right");
-        walking.RunFrames(frames);
+        walking.RunFrames(startupFrames);
+        var walkingTicksAtStart = walking.AudioUpdateCalls;
+        walking.RunAdditionalFrames(measuredFrames);
 
-        var idleTicksPerFrame = idle.AudioUpdateCalls / (double)frames;
-        var walkingTicksPerFrame = walking.AudioUpdateCalls / (double)frames;
+        var idleTicksPerFrame = (idle.AudioUpdateCalls - idleTicksAtStart) / (double)measuredFrames;
+        var walkingTicksPerFrame = (walking.AudioUpdateCalls - walkingTicksAtStart) / (double)measuredFrames;
 
+        Assert.True(
+            idleTicksPerFrame >= 0.99,
+            $"Music must advance once per real frame while idle: idle={idleTicksPerFrame:0.000} ticks/frame.");
         // The walking tempo must match the idle tempo (one audio tick per frame) within a small
         // tolerance. The pre-fix runner dropped to ~0.96, far outside this band.
         Assert.True(
@@ -69,26 +106,43 @@ public sealed class GameBoyRunnerAudioTempoTests
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        cpu.RunFrames(130);
-        var idleScx = cpu.IoRegister(0xFF43);
-        var idleScy = cpu.IoRegister(0xFF42);
+        RunUntilWordEquals(cpu, 0xC14F, 176, maxFrames: 400);
+        var idleWorldX = cpu.Wram(0xC14D) | cpu.Wram(0xC14E) << 8;
+        var idleWorldY = cpu.Wram(0xC14F) | cpu.Wram(0xC150) << 8;
 
         cpu.Held.Add("right");
         cpu.Held.Add("b");
-        cpu.RunFrames(148);
-        cpu.Held.Add("a");
-        cpu.RunFrames(170);
-        cpu.Held.Remove("a");
-        cpu.RunFrames(185);
-        var scxAfterFirstRun = cpu.IoRegister(0xFF43);
-        cpu.Held.Add("a");
-        cpu.RunFrames(250);
-        var scxAfterSecondRun = cpu.IoRegister(0xFF43);
+        for (var jump = 0; jump < 9; jump++)
+        {
+            RunJumpCycle(cpu);
+        }
 
-        Assert.Equal(0, idleScx);
-        Assert.Equal(96, idleScy);
-        Assert.True(scxAfterFirstRun > idleScx, "Runner should start scrolling right after Mario leaves the horizontal dead-zone.");
-        Assert.True(scxAfterSecondRun > scxAfterFirstRun, "Runner camera should continue following right input through the next ramp jump.");
+        var worldXAfterFirstRun = cpu.Wram(0xC14D) | cpu.Wram(0xC14E) << 8;
+        for (var jump = 0; jump < 2; jump++)
+        {
+            RunJumpCycle(cpu);
+        }
+
+        var worldXAfterSecondRun = cpu.Wram(0xC14D) | cpu.Wram(0xC14E) << 8;
+
+        Assert.Equal(0, idleWorldX);
+        Assert.Equal(176, idleWorldY);
+        Assert.True(
+            worldXAfterFirstRun > idleWorldX,
+            $"Runner should start scrolling right after Mario leaves the horizontal dead-zone: idle={idleWorldX}, first={worldXAfterFirstRun}, "
+            + $"requested={cpu.Wram(0xC0E0) | cpu.Wram(0xC0E1) << 8}, sprite=({cpu.Oam(0xFE01)},{cpu.Oam(0xFE00)}).");
+        Assert.True(
+            worldXAfterSecondRun > worldXAfterFirstRun,
+            $"Runner camera should continue following right input through the next ramp jump: first={worldXAfterFirstRun}, second={worldXAfterSecondRun}.");
+
+        static void RunJumpCycle(GameBoyTestCpu cpu)
+        {
+            cpu.Held.Add("a");
+            cpu.RunAdditionalFrames(22);
+            cpu.Held.Remove("a");
+            cpu.RunAdditionalFrames(18);
+        }
+
     }
 
     [Fact]
@@ -167,8 +221,8 @@ public sealed class GameBoyRunnerAudioTempoTests
         {
             var scx = cpu.IoRegister(0xFF43);
             var scy = cpu.IoRegister(0xFF42);
-            var cameraX = cpu.Wram(0xC0E0) | cpu.Wram(0xC0E1) << 8;
-            var cameraY = cpu.Wram(0xC0E8) | cpu.Wram(0xC0E9) << 8;
+            var cameraX = cpu.Wram(0xC14D) | cpu.Wram(0xC14E) << 8;
+            var cameraY = cpu.Wram(0xC14F) | cpu.Wram(0xC150) << 8;
             var firstBufferColumn = scx / 8;
             var firstBufferRow = scy / 8;
             var mismatches = new List<string>();
@@ -216,6 +270,37 @@ public sealed class GameBoyRunnerAudioTempoTests
                 + $"pending={cpu.Wram(0xC119)}/{cpu.Wram(0xC11A)}/{cpu.Wram(0xC11B)} "
                 + $"diagCol={cpu.Wram(0xC11F)}/{cpu.Wram(0xC120)}/{cpu.Wram(0xC121)} "
                 + $"diagRow={cpu.Wram(0xC122)}/{cpu.Wram(0xC123)}/{cpu.Wram(0xC124)}";
+        }
+    }
+
+    [Fact]
+    public void Runner_first_packed_row_payload_matches_its_complete_stage1_metadata()
+    {
+        var runnerDirectory = LocateRunnerDirectory();
+        var source = RunnerSample.CompiledSource();
+        var program = CompileVideoProgram(source, runnerDirectory);
+        var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
+        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory));
+
+        cpu.RunFrames(130);
+
+        AssertPayload(0xC170, 0xC400);
+        AssertPayload(0xC17A, 0xC415);
+
+        void AssertPayload(ushort metadata, ushort payload)
+        {
+            Assert.Equal(2, cpu.Wram((ushort)(metadata + 1)));
+            var worldRow = cpu.Wram((ushort)(metadata + 3)) | cpu.Wram((ushort)(metadata + 4)) << 8;
+            var sourceColumn = cpu.Wram((ushort)(metadata + 7)) | cpu.Wram((ushort)(metadata + 8)) << 8;
+            var payloadLength = cpu.Wram((ushort)(metadata + 9));
+            var expected = Enumerable.Range(0, payloadLength)
+                .Select(offset => (byte)worldTileGrid.TileIdAt((sourceColumn + offset) % worldTileGrid.Width, worldRow))
+                .ToArray();
+            var actual = Enumerable.Range(0, payloadLength)
+                .Select(offset => cpu.Wram((ushort)(payload + offset)))
+                .ToArray();
+
+            Assert.Equal(expected, actual);
         }
     }
 
@@ -283,29 +368,16 @@ public sealed class GameBoyRunnerAudioTempoTests
     }
 
     [Fact]
-    public void Runner_streams_background_tilemap_only_during_vblank_while_climbing()
+    public void Runner_initial_full_stage1_row_commits_write_tilemap_only_during_vblank()
     {
         var runnerDirectory = LocateRunnerDirectory();
         var source = RunnerSample.CompiledSource();
         var rom = GameBoyRomCompiler.CompileSource(source, runnerDirectory);
 
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        var frame = 0;
-
-        Run(cpu, ref frame, 130);
-        var startupWrites = cpu.VramWrites.Count;
-
-        Run(cpu, ref frame, 18, "right", "b");
-        Run(cpu, ref frame, 22, "right", "b", "a");
-        Run(cpu, ref frame, 15, "right", "b");
-        Run(cpu, ref frame, 30, "right", "b");
-        Run(cpu, ref frame, 35, "right", "b", "a");
-        Run(cpu, ref frame, 30, "right", "b");
-        Run(cpu, ref frame, 35, "right", "b", "a");
-        Run(cpu, ref frame, 30, "right", "b");
+        cpu.RunFrames(130);
 
         var runtimeTilemapWrites = cpu.VramWrites
-            .Skip(startupWrites)
             .Where(write => write is { Address: >= 0x9800 and < 0x9C00, LcdEnabled: true })
             .ToArray();
         var unsafeWrites = runtimeTilemapWrites
@@ -316,20 +388,8 @@ public sealed class GameBoyRunnerAudioTempoTests
         Assert.NotEmpty(runtimeTilemapWrites);
         Assert.True(
             unsafeWrites.Length == 0,
-            "Runner wrote streamed background tiles after VBlank ended while climbing: "
+            "Runner wrote full-stage background rows after VBlank ended: "
             + string.Join(", ", unsafeWrites.Select(write => $"0x{write.Address:X4}=0x{write.Value:X2} LY={write.Ly} cycles={write.Cycles}")));
-
-        static void Run(GameBoyTestCpu cpu, ref int frame, int frames, params string[] held)
-        {
-            cpu.Held.Clear();
-            foreach (var button in held)
-            {
-                cpu.Held.Add(button);
-            }
-
-            frame += frames;
-            cpu.RunFrames(frame);
-        }
     }
 
     private static byte[] CompileCameraProgram(string columns, bool move)
@@ -367,6 +427,22 @@ public sealed class GameBoyRunnerAudioTempoTests
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
         var lowered = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
+    }
+
+    private static void RunUntilWordEquals(GameBoyTestCpu cpu, ushort lowAddress, ushort expected, int maxFrames)
+    {
+        for (var frame = 0; frame < maxFrames; frame++)
+        {
+            var actual = cpu.Wram(lowAddress) | cpu.Wram((ushort)(lowAddress + 1)) << 8;
+            if (actual == expected)
+            {
+                return;
+            }
+
+            cpu.RunAdditionalFrames(1);
+        }
+
+        Assert.Fail($"WRAM word 0x{lowAddress:X4} did not reach {expected} within {maxFrames} frames.");
     }
 
     private static string LocateRunnerDirectory()

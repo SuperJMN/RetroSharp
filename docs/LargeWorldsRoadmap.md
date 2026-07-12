@@ -1,8 +1,7 @@
 # Large Worlds Roadmap (banked map content for Game Boy and NES)
 
-Status: **active; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, and NES
-`LW-3.1` through `LW-3.4` are implemented; `LW-3.5` is next after both target
-chains are complete.**
+Status: **complete; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, NES
+`LW-3.1` through `LW-3.4`, and joint acceptance `LW-3.5` are implemented.**
 Last updated: 2026-07-12.
 
 This roadmap is the executable plan for levels that exceed the legacy
@@ -27,11 +26,13 @@ The first acceptance target is the complete authored runner `stage1` level:
 - small programs continue to emit ROM-only Game Boy or mapper-0 NES output
   when they fit.
 
-The current derived `stage1.playable.tmj` remains the stable shared runner input
-through `LW-2.5`; only joint acceptance task `LW-3.5`, after both target paths
-are ready, may switch it to the complete map and regenerate both tracked ROMs.
-No task may silently trim the level, stub audio, discard collision, or lower an
-unsupported path as a no-op merely to make the ROM fit.
+`LW-3.5` migrated the shared runner from the historical derived
+`stage1.playable.tmj` input to the complete map and regenerated both tracked
+ROMs from one manifest. No target trims the level, stubs audio, discards
+collision, or lowers the packed path as a no-op merely to make the ROM fit.
+The consolidated artifact hashes, probe commands, and SameBoy/AprNes MCP
+observations are recorded in
+[`docs/LargeWorldsStage1Checkpoint.md`](LargeWorldsStage1Checkpoint.md).
 
 ## 2. Baseline and root constraints
 
@@ -58,9 +59,9 @@ Current blockers are independent and must not be conflated:
   fixed-bank production pack reader without migrating the runner.
 - `Camera.AabbHitTop(...)` now exposes a complete world-pixel word with `-1`
   as no hit; screen-relative hit-top retains its byte-range `255` sentinel.
-- Tiled 16x16 cells are expanded into repeated 8x8 visual and flag cells. The
-  tile patterns are deduplicated, but the world grid itself is not packed as
-  metatiles or chunks.
+- Tiled 16x16 cells expand into target-owned 8x8 visuals and collision cells;
+  production `WorldPack` payloads preserve them as 60 random-access chunks
+  instead of retaining the legacy 24,960-byte raw grid.
 - Wide-map actor activation still scans all authored spawns each frame; GitHub
   issue #244 owns that adjacent runtime-cost problem.
 
@@ -1030,8 +1031,8 @@ Recommended execution and merge order:
 
 #### LW-3.5: Migrate the shared runner and prove joint full-stage1 acceptance
 
-- Status: **published as [#305](https://github.com/SuperJMN/RetroSharp/issues/305);
-  open and not started.**
+- Status: **complete; [#305](https://github.com/SuperJMN/RetroSharp/issues/305)
+  migrated and jointly validated the shared runner.**
 - Layer: cross-target acceptance, shared sample integration, and tracked
   artifacts.
 - Dependencies: [LW-2.5 / #300](https://github.com/SuperJMN/RetroSharp/issues/300)
@@ -1097,12 +1098,12 @@ Recommended execution and merge order:
 | GB placement/restoration | Deterministic MBC1 far placement; every exit/nested/audio-active path restores the actual entry bank and shadow |
 | GB runtime budget | 298-byte current / 554-byte maximum staging; bank/directory/decode outside VBlank with LY 136-153 guarded; at most 19 column or 21 row writes in VBlank |
 | NES cartridge | Final-link mapper-0-first selection; forced MMC3 header `04 02 48 00`; PRG <=65,536, physical CHR 16,384, resident CHR <=8,192, fixed code/DPCM/vectors <=16,384 |
-| NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; pinned data <=5,012/8,192 R7; boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
+| NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; packed-camera pinned data <=5,656/8,192 R7 (5,012-byte LW-3.2 placement baseline); boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
 | NES runtime budget | 338-byte current / 594-byte maximum staging; bank/decode outside VBlank/NMI; at most 32 column tiles or four 8-tile row phases, then at most 9 attributes |
 | Behavioral backends | Game Boy interrupt/restoration/visual traversal in SameBoy/GameboyMcp; generated mapper-4 + four-screen `0x48` ROM in AprNes through NesMcp `auto` |
 | Visual/audio parity | Decoded and visible tiles/collision match LW-1.4; GB BGM/SFX and NES BGM/SFX/DPCM remain complete and frame-correct |
 | Small-ROM stability | Representative ROM-only GB and mapper-0 NES outputs remain byte-identical |
-| Final shared acceptance | `LW-2.5` proves GB without changing the runner input; `LW-3.5` then migrates complete `stage1` jointly and regenerates both tracked ROMs with no trimming or target no-ops |
+| Final shared acceptance | The shared manifest loads complete `stage1`; tracked GB/NES ROMs are regenerated together with no trimming or target no-ops |
 
 Durable closeout commands remain:
 
@@ -1137,7 +1138,7 @@ debug workflow.
   - [#298 — LW-2.3: implement the fixed-bank WorldPack reader and decoder](https://github.com/SuperJMN/RetroSharp/issues/298)
   - [#299 — LW-2.4: integrate staged edges with Game Boy camera streaming](https://github.com/SuperJMN/RetroSharp/issues/299)
   - [#300 — LW-2.5: prove full stage1 on Game Boy without migrating the shared runner](https://github.com/SuperJMN/RetroSharp/issues/300)
-- Wave 3 native subissues (two implementation-complete; milestone 11):
+- Wave 3 native subissues (all implementation-complete; milestone 11):
   - [#301 — LW-3.1: add the MMC3/TVROM linker and fixed-runtime foundation](https://github.com/SuperJMN/RetroSharp/issues/301)
   - [#302 — LW-3.2: place WorldPack/data sections and select the final NES profile](https://github.com/SuperJMN/RetroSharp/issues/302)
   - [#303 — LW-3.3: implement the fixed-bank NES WorldPack reader](https://github.com/SuperJMN/RetroSharp/issues/303)
@@ -1150,7 +1151,6 @@ debug workflow.
   unrelated gaps remain open and are not duplicated here.
 
 All ten Wave 2/3 issues are native subissues of #275 with the dependency graph
-recorded above. Game Boy `LW-2.1` through `LW-2.5` and NES `LW-3.1` through
-`LW-3.4` are complete; `LW-3.5` is next after both target chains. The parent remains the
-integrator surface: implementation agents receive one child issue, not the
-parent or an open-ended request to continue the epic.
+recorded above. Game Boy `LW-2.1` through `LW-2.5`, NES `LW-3.1` through
+`LW-3.4`, and joint `LW-3.5` are complete. The parent remains the integrator
+history for the completed Large Worlds execution chain.

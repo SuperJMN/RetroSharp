@@ -49,6 +49,9 @@ internal static class NesRomBuilder
     {
         var discoveredWorldPack = program.PackedWorld?.SerializedBytes;
         var selectedWorldPack = packedWorldOverride ?? discoveredWorldPack;
+        var requiresPackedCamera = program.UsesCameraRuntime &&
+                                   program.PackedWorld?.LoweredWorld.Height >
+                                   NesTarget.Capabilities.MaxBackgroundTileWritesPerFrame;
         if (worldPackProbe is not null && selectedWorldPack is null)
         {
             throw new InvalidOperationException("NES WorldPack probe requires a packed world override.");
@@ -68,7 +71,7 @@ internal static class NesRomBuilder
             return BuildForProfile(program, useFourScreenNametables, forced, selectedWorldPack, worldPackProbe);
         }
 
-        if (packedWorldOverride is null && discoveredWorldPack is not null)
+        if (packedWorldOverride is null && discoveredWorldPack is not null && !requiresPackedCamera)
         {
             try
             {
@@ -82,6 +85,11 @@ internal static class NesRomBuilder
                 return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, discoveredWorldPack, worldPackProbe);
             }
         }
+
+        // A tall discovered world can exceed the raw one-VBlank column shape while
+        // remaining valid through the bounded packed camera scheduler. In that case,
+        // attempt mapper 0 with the canonical pack first; mapper selection still
+        // escalates only if that real packed final link exceeds mapper-0 capacity.
 
         try
         {
@@ -273,7 +281,8 @@ internal static class NesRomBuilder
             longForLoopIds,
             longWhileLoopIds,
             layout.UseFourScreenNametables,
-            usePackedCamera: worldPackRuntime is not null && program.UsesCameraRuntime);
+            usePackedCamera: worldPackRuntime is not null && program.UsesCameraRuntime,
+            useDirectOamWrites: layout.EmitMmc3Foundation && worldPackRuntime is not null && program.UsesCameraRuntime);
         runtimeCompiler.EmitInitialization();
         if (worldPackRuntime is not null)
         {
@@ -296,7 +305,7 @@ internal static class NesRomBuilder
         builder.Label("forever");
         builder.JumpAbsolute("forever");
 
-        runtimeCompiler.EmitAudioSubroutines();
+        runtimeCompiler.EmitReferencedSubroutines();
         if (worldPackRuntime is not null)
         {
             NesWorldPackRuntimeEmitter.Emit(
@@ -1513,6 +1522,10 @@ internal sealed class NesRuntimeCompiler
     private const ushort CameraScrollAppliedAddress = 0x0309;
     private const ushort CameraWalkTargetAddress = 0x030A;
     private const ushort CameraWalkStepsAddress = 0x030B;
+    // The packed WorldPack runtime owns zero-page $E8/$E9 as a transient pointer while preparing an
+    // edge. Keep both bytes of a multi-frame camera walk target in stable absolute state so a tile
+    // crossing cannot replace the requested high byte with the edge-buffer pointer high byte.
+    private const ushort CameraWalkTargetHighAddress = 0x030C;
     // Camera movement walks the camera toward the requested position one pixel at a time, feeding
     // single-pixel steps to the tracking/streaming routines. A single walk never crosses more than one
     // tile boundary (8 px), matching the per-frame streaming budget (one queued column/row drained by
@@ -1599,15 +1612,23 @@ internal sealed class NesRuntimeCompiler
     private readonly IReadOnlySet<int> longWhileLoopIds;
     private readonly bool useFourScreenNametables;
     private readonly bool usePackedCamera;
+    private readonly bool useDirectOamWrites;
     private byte nextVariableAddress = FirstVariableAddress;
     private int nextForLoopId;
     private int nextWhileLoopId;
     private int nextHardwareSprite;
     private int nextInlineVariableScopeId;
     private bool apuBodySubroutineReferenced;
+    private bool packedCollisionAtScratchSubroutineReferenced;
+    private bool packedCollisionFlagsSubroutineReferenced;
+    private bool packedWideSourceColumnSubroutineReferenced;
+    private int packedWideSourceColumnMapWidth;
     private NesCameraConfig? cameraConfig;
 
     private const string ApuBodySubroutineLabel = "nes_apu_body";
+    private const string PackedCollisionAtScratchSubroutineLabel = "nes_packed_collision_at_scratch";
+    private const string PackedCollisionFlagsSubroutineLabel = "nes_packed_collision_flags";
+    private const string PackedWideSourceColumnSubroutineLabel = "nes_packed_wide_source_column";
 
     public NesRuntimeCompiler(
         PrgBuilder builder,
@@ -1615,7 +1636,8 @@ internal sealed class NesRuntimeCompiler
         IReadOnlySet<int>? longForLoopIds = null,
         IReadOnlySet<int>? longWhileLoopIds = null,
         bool useFourScreenNametables = false,
-        bool usePackedCamera = false)
+        bool usePackedCamera = false,
+        bool useDirectOamWrites = false)
     {
         this.builder = builder;
         this.program = program;
@@ -1623,6 +1645,7 @@ internal sealed class NesRuntimeCompiler
         this.longWhileLoopIds = longWhileLoopIds ?? new HashSet<int>();
         this.useFourScreenNametables = useFourScreenNametables;
         this.usePackedCamera = usePackedCamera;
+        this.useDirectOamWrites = useDirectOamWrites;
     }
 
     public void EmitInitialization()
@@ -1694,6 +1717,19 @@ internal sealed class NesRuntimeCompiler
     private void EmitOamShadowClear()
     {
         var clearLabel = builder.CreateLabel("oam_clear");
+
+        if (useDirectOamWrites)
+        {
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(0x2003);
+            builder.LoadAImmediate(0xFF);
+            builder.LoadXImmediate(0);
+            builder.Label(clearLabel);
+            builder.StoreAAbsolute(0x2004);
+            builder.IncrementX();
+            builder.BranchRelative(0xD0, clearLabel); // BNE clearLabel
+            return;
+        }
 
         builder.LoadAImmediate(0xFF);
         builder.LoadXImmediate(0);
@@ -4042,16 +4078,31 @@ internal sealed class NesRuntimeCompiler
         apuBodySubroutineReferenced = true;
     }
 
-    // Shared APU trace body player. Reads [count, (registerOffset, value) * count] at MusicBodyPointer
-    // and writes each command to $40xx. Emitted once and called (JSR) by both the music and SFX
-    // engines so the sequencer body loop is not duplicated. Returns with Y = 1 + 2 * count.
-    public void EmitAudioSubroutines()
+    public void EmitReferencedSubroutines()
     {
-        if (!apuBodySubroutineReferenced)
+        if (apuBodySubroutineReferenced)
         {
-            return;
+            EmitApuBodySubroutine();
         }
 
+        if (packedWideSourceColumnSubroutineReferenced)
+        {
+            EmitPackedWideSourceColumnSubroutine();
+        }
+
+        if (packedCollisionAtScratchSubroutineReferenced)
+        {
+            EmitPackedCollisionAtScratchSubroutine();
+        }
+
+        if (packedCollisionFlagsSubroutineReferenced)
+        {
+            EmitPackedCollisionFlagsSubroutine();
+        }
+    }
+
+    private void EmitApuBodySubroutine()
+    {
         var muteSfxChannel = program.SoundEffectAssetsInLoadOrder.Count > 0;
         var commandLoopLabel = builder.CreateLabel("nes_apu_body_loop");
         var afterBodyLabel = builder.CreateLabel("nes_apu_body_after");
@@ -4501,7 +4552,7 @@ internal sealed class NesRuntimeCompiler
         EmitSdkWordExpressionToA(requestedPosition, highByte: false);
         builder.StoreAAbsolute(CameraWalkTargetAddress);
         EmitSdkWordExpressionToA(requestedPosition, highByte: true);
-        builder.StoreAZeroPage(ExpressionScratchAddress);
+        builder.StoreAAbsolute(CameraWalkTargetHighAddress);
         builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
         builder.StoreAAbsolute(CameraWalkStepsAddress);
 
@@ -4516,7 +4567,7 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(CameraWalkStepsAddress);
 
         EmitCurrentHighToA();
-        builder.CompareZeroPage(ExpressionScratchAddress);
+        builder.CompareAbsolute(CameraWalkTargetHighAddress);
         builder.BranchRelative(0x90, stepForwardLabel); // BCC: current high < target high
         builder.BranchRelative(0xD0, stepBackwardLabel); // BNE: current high > target high
         builder.LoadAZeroPage(currentLowAddress);
@@ -5463,12 +5514,7 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(NesPackedCameraRuntime.VisibleCameraTileRow);
     }
 
-    private void EmitPublishCommittedPackedCameraAxis(
-        byte axis,
-        ushort pending,
-        ushort visibleLow,
-        ushort visibleHigh,
-        ushort visibleTile)
+    private void EmitPublishCommittedPackedCameraAxis(byte axis)
     {
         var doneLabel = builder.CreateLabel("nes_packed_camera_publish_done");
         builder.LoadAAbsolute(PendingCameraStreamFlagsAddress);
@@ -5477,12 +5523,18 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAAbsolute(NesPackedCameraRuntime.PendingAxes);
         builder.AndImmediate(axis);
         builder.BranchRelative(0xD0, doneLabel); // BNE doneLabel: commit is incomplete
-        builder.LoadAAbsolute(checked((ushort)(pending + NesPackedCameraRuntime.StateOffset)));
-        builder.StoreAAbsolute(visibleLow);
-        builder.LoadAAbsolute(checked((ushort)(pending + NesPackedCameraRuntime.CommitPhaseOffset)));
-        builder.StoreAAbsolute(visibleHigh);
-        builder.LoadAAbsolute(checked((ushort)(pending + NesPackedCameraRuntime.PayloadCursorOffset)));
-        builder.StoreAAbsolute(visibleTile);
+        // Preparation can yield across frames and the bounded walk can advance farther inside the
+        // newly resident tile before the pending camera commit drains it. Publish that latest safe fine-scroll
+        // position; restoring the older edge snapshot leaves the visible camera stranded up to seven
+        // pixels behind once the requested position has already been reached.
+        if (axis == NesPackedCameraRuntime.Column)
+        {
+            EmitPublishVisibleCameraX();
+        }
+        else
+        {
+            EmitPublishVisibleCameraY();
+        }
         builder.Label(doneLabel);
     }
 
@@ -5911,18 +5963,8 @@ internal sealed class NesRuntimeCompiler
             builder.LoadAAbsolute(NesPackedCameraRuntime.PendingAxes);
             builder.StoreAAbsolute(PendingCameraStreamFlagsAddress);
             builder.CallSubroutine(NesRomBuilder.WorldPackCommitEdgeLabel);
-            EmitPublishCommittedPackedCameraAxis(
-                NesPackedCameraRuntime.Column,
-                NesPackedCameraRuntime.PendingColumn,
-                NesPackedCameraRuntime.VisibleCameraXLow,
-                NesPackedCameraRuntime.VisibleCameraXHigh,
-                NesPackedCameraRuntime.VisibleCameraTileColumn);
-            EmitPublishCommittedPackedCameraAxis(
-                NesPackedCameraRuntime.Row,
-                NesPackedCameraRuntime.PendingRow,
-                NesPackedCameraRuntime.VisibleCameraYLow,
-                NesPackedCameraRuntime.VisibleCameraYHigh,
-                NesPackedCameraRuntime.VisibleCameraTileRow);
+            EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Column);
+            EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Row);
             return;
         }
 
@@ -6916,12 +6958,31 @@ internal sealed class NesRuntimeCompiler
 
     private void EmitMapFlagsAtSourceColumnInA(int row)
     {
+        if (usePackedCamera)
+        {
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+            EmitClearPackedWorldXHighForByteWidth();
+            builder.LoadAImmediate(row & 0xFF);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareYLow);
+            builder.LoadAImmediate((row >> 8) & 0xFF);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareYHigh);
+            EmitPackedWorldCollisionLookup();
+            return;
+        }
+
         builder.TransferAToX();
         builder.LdaAbsoluteX(NesRomBuilder.WorldMapFlagRowLabel(row));
     }
 
     private void EmitMapFlagsAtScratchColumnAndRow()
     {
+        if (usePackedCamera)
+        {
+            packedCollisionAtScratchSubroutineReferenced = true;
+            builder.CallSubroutine(PackedCollisionAtScratchSubroutineLabel);
+            return;
+        }
+
         builder.LoadXZeroPage(CollisionRowScratchAddress);
         builder.LdaAbsoluteX(NesRomBuilder.WorldMapFlagRowPointerLowLabel);
         builder.StoreAZeroPage(RuntimeIndexScratchAddress);
@@ -6929,6 +6990,53 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAZeroPage(ExpressionScratchAddress);
         builder.LoadYZeroPage(CollisionColumnScratchAddress);
         builder.LoadAIndirectY(RuntimeIndexScratchAddress);
+    }
+
+    private void EmitPackedCollisionAtScratchSubroutine()
+    {
+        builder.Label(PackedCollisionAtScratchSubroutineLabel);
+        builder.LoadAZeroPage(CollisionColumnScratchAddress);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+        EmitClearPackedWorldXHighForByteWidth();
+        builder.LoadAZeroPage(CollisionRowScratchAddress);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareYLow);
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareYHigh);
+        EmitPackedWorldCollisionLookup();
+        builder.Return();
+    }
+
+    private void EmitClearPackedWorldXHighForByteWidth()
+    {
+        if (cameraConfig is not { MapWidth: <= byte.MaxValue })
+        {
+            return;
+        }
+
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXHigh);
+    }
+
+    private void EmitPackedWorldCollisionLookup()
+    {
+        packedCollisionFlagsSubroutineReferenced = true;
+        builder.CallSubroutine(PackedCollisionFlagsSubroutineLabel);
+    }
+
+    private void EmitPackedCollisionFlagsSubroutine()
+    {
+        var success = builder.CreateLabel("nes_packed_collision_success");
+        var done = builder.CreateLabel("nes_packed_collision_done");
+        builder.Label(PackedCollisionFlagsSubroutineLabel);
+        builder.CallSubroutine(NesRomBuilder.WorldPackCollisionLookupLabel);
+        builder.CompareImmediate((byte)NesWorldPackResult.Success);
+        builder.BranchRelative(0xF0, success);
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(done);
+        builder.Label(success);
+        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.ResultCollision);
+        builder.Label(done);
+        builder.Return();
     }
 
     private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
@@ -6947,6 +7055,12 @@ internal sealed class NesRuntimeCompiler
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.ShiftRightA();
+        if (mapWidth > byte.MaxValue)
+        {
+            EmitAddCameraTileColumnToWideOffsetInA(mapWidth);
+            return;
+        }
+
         builder.ClearCarry();
         builder.AddZeroPage(CameraTileColumnAddress);
 
@@ -6985,6 +7099,12 @@ internal sealed class NesRuntimeCompiler
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.ShiftRightA();
+        if (mapWidth > byte.MaxValue)
+        {
+            EmitAddCameraTileColumnToWideOffsetInA(mapWidth);
+            return;
+        }
+
         builder.ClearCarry();
         builder.AddZeroPage(CameraTileColumnAddress);
 
@@ -6995,6 +7115,56 @@ internal sealed class NesRuntimeCompiler
         builder.SubtractImmediate(mapWidth);
         builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitAddCameraTileColumnToWideOffsetInA(int mapWidth)
+    {
+        if (packedWideSourceColumnSubroutineReferenced && packedWideSourceColumnMapWidth != mapWidth)
+        {
+            throw new InvalidOperationException(
+                $"NES packed camera cannot share source-column lowering for map widths {packedWideSourceColumnMapWidth} and {mapWidth}.");
+        }
+
+        packedWideSourceColumnSubroutineReferenced = true;
+        packedWideSourceColumnMapWidth = mapWidth;
+        builder.CallSubroutine(PackedWideSourceColumnSubroutineLabel);
+    }
+
+    private void EmitPackedWideSourceColumnSubroutine()
+    {
+        var mapWidth = packedWideSourceColumnMapWidth;
+        var subtract = builder.CreateLabel("camera_pixel_column_wide_subtract");
+        var done = builder.CreateLabel("camera_pixel_column_wide_end");
+
+        builder.Label(PackedWideSourceColumnSubroutineLabel);
+        builder.StoreAZeroPage(CollisionColumnScratchAddress);
+        builder.LoadAZeroPage(CameraTileColumnAddress);
+        builder.ClearCarry();
+        builder.AddZeroPage(CollisionColumnScratchAddress);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+        builder.LoadAAbsolute(CameraTileColumnHighAddress);
+        builder.AddImmediate(0);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXHigh);
+
+        builder.CompareImmediate((mapWidth >> 8) & 0xFF);
+        builder.BranchRelative(0x90, done); // BCC done: high < modulo high
+        builder.BranchRelative(0xD0, subtract); // BNE subtract: high > modulo high
+        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+        builder.CompareImmediate(mapWidth & 0xFF);
+        builder.BranchRelative(0x90, done); // BCC done: low < modulo low
+
+        builder.Label(subtract);
+        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+        builder.SetCarry();
+        builder.SubtractImmediate(mapWidth & 0xFF);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.HardwareXHigh);
+        builder.SubtractImmediate((mapWidth >> 8) & 0xFF);
+        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXHigh);
+
+        builder.Label(done);
+        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.HardwareXLow);
+        builder.Return();
     }
 
     private static void ValidateConstantCameraAabbSpan(SdkByteExpression screenX, int width, int screenWidth, string callName)
@@ -7249,6 +7419,12 @@ internal sealed class NesRuntimeCompiler
         }
 
         nextHardwareSprite += asset.Pieces.Count;
+        if (useDirectOamWrites)
+        {
+            builder.LoadAImmediate(firstHardwareSprite * 4);
+            builder.StoreAAbsolute(0x2003);
+        }
+
         for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
         {
             var piece = asset.Pieces[pieceIndex];
@@ -7257,21 +7433,24 @@ internal sealed class NesRuntimeCompiler
             EmitSpriteDrawY(operation.Y, piece.YOffset, oamAddress);
 
             EmitSpriteTile(operation.Frame, asset, piece.TileOffset);
-            builder.StoreAAbsolute((ushort)(oamAddress + 1));
+            EmitStoreOamByte((ushort)(oamAddress + 1));
 
             EmitSpriteDrawAttributes(operation.FlipX, physicalPaletteSlot + piece.PaletteSlotOffset, (ushort)(oamAddress + 2));
 
             EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 3));
         }
 
-        EmitOamDma();
+        if (!useDirectOamWrites)
+        {
+            EmitOamDma();
+        }
     }
 
     private void EmitSpriteDrawY(SdkByteExpression yExpression, int offset, ushort oamAddress)
     {
         EmitSdkByteExpressionToA(yExpression);
         EmitAddSignedImmediate(offset - 1 - BottomOverscanInset());
-        builder.StoreAAbsolute(oamAddress);
+        EmitStoreOamByte(oamAddress);
     }
 
     private void EmitSpriteTile(SdkByteExpression frameExpression, NesCompiledSpriteAsset asset, int pieceTileOffset)
@@ -7326,7 +7505,7 @@ internal sealed class NesRuntimeCompiler
     {
         EmitSdkByteExpressionToA(xExpression);
         EmitAddSignedImmediate(offset);
-        builder.StoreAAbsolute(oamAddress);
+        EmitStoreOamByte(oamAddress);
     }
 
     private void EmitSpriteDrawAttributes(SdkByteExpression? flipXExpression, int paletteSlot, ushort oamAddress)
@@ -7334,14 +7513,14 @@ internal sealed class NesRuntimeCompiler
         if (flipXExpression is null || (TrySdkConst(flipXExpression, out var constant) && constant == 0))
         {
             builder.LoadAImmediate(paletteSlot);
-            builder.StoreAAbsolute(oamAddress);
+            EmitStoreOamByte(oamAddress);
             return;
         }
 
         if (TrySdkConst(flipXExpression, out _))
         {
             builder.LoadAImmediate(paletteSlot | 0x40);
-            builder.StoreAAbsolute(oamAddress);
+            EmitStoreOamByte(oamAddress);
             return;
         }
 
@@ -7359,7 +7538,12 @@ internal sealed class NesRuntimeCompiler
         builder.LoadAImmediate(paletteSlot);
 
         builder.Label(storeLabel);
-        builder.StoreAAbsolute(oamAddress);
+        EmitStoreOamByte(oamAddress);
+    }
+
+    private void EmitStoreOamByte(ushort shadowAddress)
+    {
+        builder.StoreAAbsolute(useDirectOamWrites ? (ushort)0x2004 : shadowAddress);
     }
 
     private void EmitMultiplyAByConstant(int factor)

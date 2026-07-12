@@ -22,7 +22,7 @@ void SetupAudio()
 
 void LoadWorld()
 {
-    World.Load("assets/maps/stage1.playable.tmj");
+    World.Load("assets/maps/stage1.tmj");
 }
 
 void Main()
@@ -42,9 +42,11 @@ void Main()
 
     while (true)
     {
-        // Present the frame simulated last tick, then service audio and latch input.
-        PresentFrame(player, view);
+        // Commit the prepared camera edge at the start of VBlank, then present
+        // the frame simulated last tick before servicing audio and input.
+        Video.WaitVBlank();
         Camera.Apply();
+        PresentFrame(player, view);
         Audio.Update();
         Input.Poll();
 

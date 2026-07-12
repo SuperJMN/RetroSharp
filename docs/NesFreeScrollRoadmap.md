@@ -1,7 +1,7 @@
 # NES Free Scroll Roadmap (free 2-axis camera scrolling)
 
-Status: **implemented through NF-9 on branch `feature/nes-free-scroll`; NF-10
-remains a separate epic.** This is the hard NES milestone: pixel-level,
+Status: **implemented through NF-9; NF-10 mapper-backed large-level work is
+complete through Large Worlds v1, while IRQ HUD remains separate.** This is the hard NES milestone: pixel-level,
 artifact-free scrolling in **both** axes simultaneously (8-direction / diagonal),
 the kind Super Mario Land 2 does on Game Boy and games like Gauntlet do on NES.
 
@@ -343,9 +343,10 @@ requirement.
 - Files: `samples/nes-free-scroll/`, `samples/tiled-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
-  - [x] Golden-byte tests for the four-screen header, scroll-register writes,
-    explicit row streaming, runtime row streaming, attribute refresh, and the
-    shared runner using its current horizontal `stage1.playable` path.
+  - [x] The historical NF-9 golden-byte tests covered the four-screen header,
+    scroll-register writes, explicit/runtime row streaming, attribute refresh,
+    and the then-horizontal `stage1.playable` runner path. LW-3.5 now owns the
+    complete packed runner acceptance.
   - [x] MCP behavioral acceptance: diagonal `run_input_timeline`, `dump_tilemap`,
     and `read_ppu_state` assert both axes move and the four nametables stay
     distinct.
@@ -356,20 +357,23 @@ requirement.
 
 ---
 
-## Phase NF-10 — Follow-on: mapper-backed large levels + HUD (separate epic)
+## Phase NF-10 — Mapper-backed large levels complete; HUD remains separate
 
-Not in this branch. For levels larger than 512x480, or a stable HUD split:
+Large Worlds v1 now covers levels beyond the four-screen resident surface. A
+stable IRQ HUD remains a distinct follow-up:
 
 - Large Worlds LW-0.3 has selected the mapper 4 / TVROM-style four-screen
   profile in
   [`NesLargeWorldsCartridgeProfile.md`](NesLargeWorldsCartridgeProfile.md).
-  Production header/linker/runtime work remains a later issue.
+  Its production header, linker, reader, and packed camera runtime are complete.
 - NesMcp `auto` now routes mapper 4 to AprNes. Existing tests prove mapper-4
   loading, instruction stepping, auto routing, and bank changes; the production
-  slice still owes one combined mapper-4 + four-screen behavioral probe.
+  combined mapper-4 + four-screen behavior is proven by the tracked runner and
+  the AprNes checkpoint in `LargeWorldsStage1Checkpoint.md`.
 - Keep mapper-backed level reads separate from a scanline IRQ HUD. MMC3 IRQs
   remain disabled until a HUD issue supplies its own timing and acceptance.
-- Stream content beyond the 2x2 grid as the camera moves across a large level.
+- Packed camera staging streams content beyond the 2x2 grid as the camera moves
+  across the complete large level.
 
 ---
 
@@ -380,10 +384,11 @@ Not in this branch. For levels larger than 512x480, or a stable HUD split:
   through the four-screen `nes_debug` MCP, not just compile level.
 - Levels up to 512x480 work with no runtime streaming (NF-3). Larger
   source-authored worlds stream columns/rows with the staggered one-edge-per-
-  VBlank policy; NF-10 remains only for mapper-backed scale, banking, and HUD IRQs.
+  VBlank policy; Large Worlds v1 adds mapper-backed scale and banking, while
+  HUD IRQs remain separate.
 - Horizontal-only NES programs stay on the horizontal camera path. The shared
-  runner currently uses that path over `stage1.playable`; the focused vertical
-  and diagonal samples continue to own four-screen acceptance coverage.
+  runner now uses packed four-screen streaming over complete `stage1.tmj`;
+  the focused vertical and diagonal samples remain isolation coverage.
 - The validator accepts NES free scroll only behind the working four-screen
   implementation and still rejects over-budget or non-four-screen requests with a
   clear diagnostic.

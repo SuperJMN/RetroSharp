@@ -342,18 +342,19 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.False(Directory.Exists(Path.Combine(RepositoryRoot(), "samples/runner/maps")));
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.gb.vgz")));
         Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/music/runner.nes.vgz")));
-        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/stage1.playable.tmj")));
+        Assert.True(File.Exists(Path.Combine(RepositoryRoot(), "samples/runner/assets/maps/stage1.tmj")));
         var mainSource = File.ReadAllText(RepositoryFile("samples/runner/src/main.rs"));
         Assert.DoesNotContain("import Runner.Framework;", mainSource, StringComparison.Ordinal);
         Assert.Contains("""Music.Asset(runner_theme, "assets/music/runner.vgz");""", mainSource, StringComparison.Ordinal);
-        Assert.Contains("""World.Load("assets/maps/stage1.playable.tmj");""", mainSource, StringComparison.Ordinal);
+        Assert.Contains("""World.Load("assets/maps/stage1.tmj");""", mainSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("stage1.playable.tmj", mainSource, StringComparison.Ordinal);
 
         var outputPath = Path.Combine(workspace.Path, "runner.gb");
         var result = RunCli("--target", "gb", "--out", outputPath, projectPath);
 
         Assert.Equal(0, result.ExitCode);
         Assert.True(File.Exists(outputPath), result.CombinedOutput);
-        Assert.Equal(65536, new FileInfo(outputPath).Length);
+        Assert.Equal(131072, new FileInfo(outputPath).Length);
     }
 
     [Fact]
@@ -1198,8 +1199,9 @@ public sealed class CrossTargetCliAcceptanceTests
     {
         return target switch
         {
-            "gb" when samplePath == "samples/runner/runner.retrosharp.json" => 65536,
+            "gb" when samplePath == "samples/runner/runner.retrosharp.json" => 131072,
             "gb" => 32768,
+            "nes" when samplePath == "samples/runner/runner.retrosharp.json" => 81936,
             "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
         };

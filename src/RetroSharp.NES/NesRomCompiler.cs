@@ -125,7 +125,12 @@ public static class NesRomCompiler
             Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera);
         videoProgram.RequiresLegacyWorldData = sdkOperations.Any(operation =>
             RequiresLegacyWorldData(operation) && operation is not (
-                Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera));
+                Sdk2DOperation.SetCameraPosition or
+                Sdk2DOperation.ApplyCamera or
+                Sdk2DOperation.CameraAabbTiles or
+                Sdk2DOperation.CameraAabbHitTop or
+                Sdk2DOperation.CameraScreenAabbTiles or
+                Sdk2DOperation.CameraScreenAabbHitTop));
         var useFourScreenNametables = UsesVerticalCamera(sdkOperations);
         return NesRomBuilder.BuildWithReport(
             videoProgram,

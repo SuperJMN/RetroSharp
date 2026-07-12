@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-11.
+Last updated: 2026-07-12.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -32,8 +32,8 @@ This document preserves project knowledge that previously lived only in agent me
   IRQ HUD remain separate in `docs/NesFreeScrollRoadmap.md`.
 - The Large Worlds epic now has a dedicated execution source in
   `docs/LargeWorldsRoadmap.md`. It treats the full runner `stage1` design as the
-  acceptance target. Waves 0/1, Game Boy `LW-2.1` through `LW-2.5`, and NES
-  `LW-3.1` are implemented. The target cards are native subissues:
+  acceptance target. Waves 0/1, Game Boy `LW-2.1` through `LW-2.5`, NES
+  `LW-3.1` through `LW-3.4`, and joint `LW-3.5` are implemented. The target cards are native subissues:
   `LW-2.1`..`LW-2.5` are #296-#300 and `LW-3.1`..`LW-3.5` are #301-#305. All
   belong to milestone 11 under parent #275; do not dispatch the parent as one
   task.
@@ -110,15 +110,11 @@ This document preserves project knowledge that previously lived only in agent me
   The normalized full-stage camera probe links and traverses in AprNes with
   BGM/SFX/DPCM active, while the shared runner input and tracked ROMs remain
   unchanged.
-- Fresh Large Worlds implementation conversations should continue with
-  [LW-3.5 / #305](https://github.com/SuperJMN/RetroSharp/issues/305) only after
-  #304 is merged, and keep the NES target chain sequential.
-  `LW-2.5` / #300 proves full `stage1` on Game Boy
-  through a non-destructive fixture without changing the shared runner input.
-  Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
-  runner and regenerates both tracked ROMs. Issue #244 stays in Wave 4; Wave 3
-  only links the mapper-backed slice from #247 and does not absorb its unrelated
-  gaps.
+- `LW-3.5` / #305 is the completed joint acceptance slice: it migrates the
+  shared runner to complete `stage1.tmj`, regenerates both tracked ROMs, and
+  proves the final GB/NES production paths together. Issue #244 stays in Wave
+  4; Wave 3 only links the mapper-backed slice from #247 and does not absorb
+  its unrelated gaps.
 - The NES 8 KiB R6 window is not a whole-pack size cap. `LW-3.2` places an
   unchanged synthetic `WorldPack` larger than 8 KiB over an explicit ordered
   list of R6-owned continuation segments, whose physical bank ids may be
@@ -367,16 +363,14 @@ Progress (2026-06-14):
   are non-blocking robustness/scale items: AF-5.9 decide one-shot versus reactivation spawn policy
   and AF-5.10 reduce O(spawns)/frame activation scans.
 
-Suggested next steps for the next agent, in order:
-1. For the active cross-target scale frontier, read the exact published card in
-   `docs/LargeWorldsRoadmap.md`; `LW-3.4` / #304 is implemented and
-   [LW-3.5 / #305](https://github.com/SuperJMN/RetroSharp/issues/305) is the next
-   NES entry only after #304 is merged.
+Suggested next steps for the next agent:
+1. Treat Large Worlds Waves 0–3 as complete and read
+   `docs/LargeWorldsRoadmap.md` before changing the accepted pack, staging, or
+   cartridge contracts.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
-   linked ROM/window layout in every placement/selection task.
-3. Keep each GB/NES chain sequential and keep target details out of public
-   SDK/Core. Do not migrate the shared runner before `LW-3.5`; HUD/AR-10,
-   broader #247 gaps, and #244 spawn-scan cost remain independently scoped.
+   linked ROM/window layout in every future placement/selection task.
+3. Keep HUD/AR-10, broader #247 gaps, #244 spawn-scan cost, Wave 4 art
+   residency, and executable-code banking independently scoped.
 
 ## Game Boy Runner Lessons
 
@@ -395,12 +389,10 @@ Suggested next steps for the next agent, in order:
 
 ## Tiled Map Pipeline
 
-The runner loads `samples/runner/assets/maps/stage1.playable.tmj`, derived from
-the complete editable `samples/runner/assets/maps/stage1.tmj` design and
-`stage1.tsx` tileset by `tools/runner/build_stage1_playable_map.py`. The complete
-156x20 source map is the Large Worlds acceptance payload; the current 88x15
-derived map remains the stable runtime input until a target acceptance task
-switches it deliberately.
+The runner loads complete `samples/runner/assets/maps/stage1.tmj` directly with
+the `stage1.tsx` tileset. Its 156x20 source cells expand to 312x40 hardware
+tiles and enter the target-owned packed runtimes. The older
+`stage1.playable.tmj` crop and its build tool remain historical fixtures only.
 
 Pipeline shape (two phases, after #105 partial extraction):
 
@@ -425,13 +417,9 @@ Pipeline shape (two phases, after #105 partial extraction):
 - NES limitations: four-screen free scroll uses a 64x60 nametable buffer.
   Packed runtime-streamed columns/rows now carry LW-1.4 palette provenance;
   runtime CHR banking and HUD IRQs remain deferred.
-- The shared runner currently uses a horizontal camera over the 88x15 source
-  `stage1.playable.tmj` map, expanding to 176x30 hardware tiles. The complete
-  156x20 source `stage1` design expands to 312x40 hardware tiles and is retained
-  as the explicit Large Worlds acceptance target instead of being silently
-  trimmed by future target work. `LW-2.5` proves it through a separate
-  non-destructive Game Boy fixture; the shared input stays on the playable map
-  until `LW-3.5` jointly migrates GB/NES and regenerates both tracked ROMs.
+- The shared runner uses a 2-axis camera over complete `stage1.tmj`. `LW-3.5`
+  jointly migrated GB/NES, regenerated both tracked ROMs, and retained exact
+  full-map visuals, collision, target audio, and mapper/bank restoration.
 - Portable/target split (#105 collision resource done): `WorldMap2D` now stores only dimensions and
   per-tile `WorldTileFlags` (portable collision); already-lowered target background tile numbers live
   in a separate `WorldTileGrid` owned by each target. Per-pixel layer flattening stays per target
@@ -454,7 +442,7 @@ Important current behavior:
 - Collision remains independent from visual composition.
 - Tileset `objectgroup` rectangles become solid flags when there is no explicit collision layer.
 
-When `samples/runner/src/*.rs`, `stage1.playable.tmj`, `stage1.tmj`, the tileset,
+When `samples/runner/src/*.rs`, `stage1.tmj`, the tileset,
 or GB/NES asset lowering changes, rebuild the tracked runner ROMs with
 `tools/gameboy/generate_sample_roms.py`.
 

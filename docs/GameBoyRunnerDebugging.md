@@ -142,7 +142,7 @@ Use this table to avoid fixing the wrong layer:
 Prefer the smallest layer that explains the first failing diagnostic:
 
 - Source gameplay policy: `samples/runner/src/main.rs` plus the helper/state files in `samples/runner/src`.
-- Runtime map data: `samples/runner/assets/maps/stage1.playable.tmj`; complete editable design and tileset: `samples/runner/assets/maps/stage1.tmj`, `stage1.tmx`, and `stage1.tsx`.
+- Runtime map data: complete `samples/runner/assets/maps/stage1.tmj`; editable Tiled source and tileset: `stage1.tmx` and `stage1.tsx`. The older `stage1.playable.tmj` crop is no longer the runner input.
 - Tiled import: `src/RetroSharp.GameBoy/GameBoyTiledMapImporter.cs`.
 - Game Boy ROM lowering/runtime: `src/RetroSharp.GameBoy/GameBoyRomCompiler.cs` and nearby target code.
 - CLI/sample tooling: `src/RetroSharp.Cli/Program.cs` and `tools/gameboy/`.

@@ -21,10 +21,50 @@ public sealed class NesRunnerAcceptanceTests
         var source = RunnerSample.CompiledSource();
         var rom = NesRomCompiler.CompileSource(source, RunnerSample.Directory);
 
-        Assert.Equal(40976, rom.Length);
+        Assert.Equal(81936, rom.Length);
         Assert.Equal((byte)'N', rom[0]);
         Assert.Equal((byte)'E', rom[1]);
         Assert.Equal((byte)'S', rom[2]);
+    }
+
+    [Fact]
+    public void Nes_full_stage1_runner_uses_the_packed_camera_before_honest_profile_selection()
+    {
+        var source = RunnerSample.CompiledSource();
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            source,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var forced = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var canonical = NesTiledWorldImporter.CompileWorldPack(
+            RepositoryFile("samples/runner/assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+
+        Assert.Equal(312, canonical.Pack.Descriptor.HardwareWidth);
+        Assert.Equal(40, canonical.Pack.Descriptor.HardwareHeight);
+        Assert.Equal(60, canonical.Pack.Chunks.Count);
+        Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
+        Assert.Equal(312, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(2_762, canonical.SerializedBytes.Length);
+        Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
+        Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, result.Rom[4..8]);
+        Assert.Contains(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        Assert.Equal(
+            canonical.SerializedBytes.Length,
+            result.Report.Segments.Where(segment => segment.Owner == "worldpack:default").Sum(segment => segment.Length));
+        Assert.Equal("nes-mmc3-tvrom-v1", forced.Report.SelectedProfile);
+        Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, forced.Rom[4..8]);
+        Assert.Equal(result.Rom, forced.Rom);
+        Assert.Equal(result.Report.Segments, forced.Report.Segments);
+        Assert.False(
+            ContainsSequence(forced.Rom, [0xA9, 0x02, 0x8D, 0x14, 0x40]),
+            "MMC3 must avoid AprNes' corrupt page-$02 OAM DMA path.");
+        Assert.True(
+            ContainsSequence(forced.Rom, [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA9, 0xFF, 0xA2, 0x00, 0x8D, 0x04, 0x20]),
+            "MMC3 should clear OAM sequentially through $2003/$2004 before rendering starts.");
     }
 
     [Fact]
@@ -44,17 +84,15 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
-    public void Nes_runner_shifts_render_up_one_tile_row_so_the_ground_clears_bottom_overscan()
+    public void Nes_full_stage1_runner_uses_vertical_scroll_without_the_fixed_height_overscan_inset()
     {
-        // The runner world is exactly screen tall (30 rows) and its ground reaches the bottom visible
-        // row, so the NES render is shifted up one tile row to keep the full ground inside the safe
-        // area: the camera scroll restore adds 8 px of vertical scroll (CLC; ADC #$08; STA $2005) and
-        // sprites are offset by the same amount. Vertically scrolling worlds must not get this inset.
+        // The complete stage1 is taller than the screen. It must use the vertical camera path instead
+        // of the fixed-height runner's historical 8 px bottom-overscan inset.
         var runnerRom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         byte[] verticalScrollInset = [0x18, 0x69, 0x08, 0x8D, 0x05, 0x20];
-        Assert.True(
+        Assert.False(
             ContainsSequence(runnerRom, verticalScrollInset),
-            "Runner NES ROM should apply the 8 px bottom-overscan vertical inset.");
+            "The full-stage runner must keep vertical camera framing without the fixed-height inset.");
 
         var scrollingSamplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
         var scrollingSource = File.ReadAllText(scrollingSamplePath);

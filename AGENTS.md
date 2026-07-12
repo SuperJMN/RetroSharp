@@ -87,7 +87,7 @@ Avoid broad formatting-only churn. Whole-solution `dotnet format RetroSharp.sln 
 - NES and Game Boy both use per-target VGM/VGZ runner music variants via `assets/music/runner.vgz`; do not treat NES audio calls as no-ops.
 - Use `docs/GameBoyRunnerDebugging.md` when reproducing or isolating runner bugs.
 - `docs/GameBoyTarget.md` is the source of truth for the current Game Boy subset and runner milestones.
-- The runner currently uses `World.Load(...)` over the derived `samples/runner/assets/maps/stage1.playable.tmj` and `stage1.tsx`. The complete `stage1.tmj` design is the Large Worlds acceptance payload; do not replace the playable input until the corresponding target task asks for it.
+- The runner uses `World.Load(...)` over complete `samples/runner/assets/maps/stage1.tmj` and `stage1.tsx`. The older `stage1.playable.tmj` crop is a historical/smaller fixture only; do not substitute it for joint runner acceptance.
 - Game Boy has one scrolling background tilemap. Tiled `background` and `world` authoring layers are flattened at compile time: background is the visual base, non-empty world cells overlay it, and empty world cells keep the background tile under them.
 - Collision is independent from visual composition. Tileset `objectgroup` rectangles or explicit collision data produce world flags.
 - `Input.Poll()` (PascalCase `Input.Poll()`) is the tick boundary. Use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` with `Button.*` enum members, plus `Sprite.Width`. The direct `button_pressed` read, snake_case `button_*`/`sprite_width` calls, and bare lowercase button identifiers are not public source APIs.
