@@ -255,11 +255,12 @@ stack makes bounded nested helper calls restore correctly. RetroSharp does not
 support recursion; a future implementation still has to include the saved bank
 byte in its normal stack-depth analysis.
 
-NMI and IRQ vectors and handlers are fixed. The v1 NMI may use fixed code and
-the pinned R7 audio data, but it must not read the R6 world window, write
-`$8000/$8001`, or change either bank shadow. It is therefore safe for NMI to
-interrupt between the R6 select and restore operations. Mapper IRQ remains
-disabled and its fixed handler is bank-neutral. If a later HUD or CHR-residency
+NMI and IRQ vectors and handlers are fixed. The current NMI only increments the
+hardware-frame and pending-frame counters; it does not read the R6 world
+window, write `$8000/$8001`, touch PPU/audio payloads, or change either bank
+shadow. It is therefore safe for NMI to interrupt between the R6 select and
+restore operations. Mapper IRQ remains disabled and its fixed handler is
+bank-neutral. If a later HUD or CHR-residency
 feature needs mapper writes from an interrupt, that issue must define
 serialization and extend the restoration tests before enabling the writes.
 

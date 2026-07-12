@@ -103,10 +103,18 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.InRange(nmiVector, 0xC000, 0xFFF9);
         Assert.InRange(resetVector, 0xE000, 0xFFF9);
         Assert.InRange(irqVector, 0xC000, 0xFFF9);
-        Assert.Equal(0x40, ByteAtCpuAddress(prg, nmiVector));
+        Assert.Equal(0x48, ByteAtCpuAddress(prg, nmiVector));
+        Assert.True(ContainsSequence(prg, IncrementWordSequence(NesPackedCameraRuntime.FrameCounterLow)));
         Assert.Equal(0x78, ByteAtCpuAddress(prg, resetVector));
         Assert.Equal(0x40, ByteAtCpuAddress(prg, irqVector));
     }
+
+    private static byte[] IncrementWordSequence(ushort lowAddress) =>
+    [
+        0xEE, (byte)lowAddress, (byte)(lowAddress >> 8),
+        0xD0, 0x03,
+        0xEE, (byte)(lowAddress + 1), (byte)((lowAddress + 1) >> 8),
+    ];
 
     [Fact]
     public void Generated_mmc3_smoke_contains_four_distinct_nametable_probes()

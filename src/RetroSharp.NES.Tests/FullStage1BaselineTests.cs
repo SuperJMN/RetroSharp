@@ -131,9 +131,9 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var runtimeIndex = Assert.Single(
             result.Report.Segments,
             item => item.Owner == "pinned:worldpack-runtime-index");
-        Assert.Equal(1_504, runtimeIndex.Length);
+        Assert.Equal(2_052, runtimeIndex.Length);
         var pinned = result.Report.Segments.Where(item => item.Window == "R7 pinned $A000-$BFFF").ToArray();
-        Assert.Equal(5_656, pinned.Sum(item => item.Length));
+        Assert.Equal(6_204, pinned.Sum(item => item.Length));
         Assert.All(
             pinned,
             item =>
@@ -141,10 +141,10 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
                 Assert.Equal("R7 pinned $A000-$BFFF", item.Window);
                 Assert.Equal(1, item.PhysicalBank);
             });
-        Assert.Equal(5_656, result.Report.PinnedR7Bytes);
+        Assert.Equal(6_204, result.Report.PinnedR7Bytes);
         Assert.Equal(4_128, result.Report.BootR7Bytes);
         Assert.Equal(3_056, result.Report.ResidentChrBytes);
-        Assert.Equal(4_839, result.Report.FixedPayloadBytes);
+        Assert.Equal(4_903, result.Report.FixedPayloadBytes);
         Assert.Equal(64 * 1_024, result.Report.PrgRomSize);
         Assert.Equal(16 * 1_024, result.Report.ChrRomSize);
         Assert.Equal(16 + 64 * 1_024 + 16 * 1_024, result.Rom.Length);
@@ -246,8 +246,8 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.DoesNotContain(
             runtimeProbe.Report.Segments,
             item => item.Owner.StartsWith("pinned:world-column-attributes:", StringComparison.Ordinal));
-        Assert.Equal(8_871, runtimeProbe.Report.FixedPayloadBytes);
-        Assert.Equal(5_656, runtimeProbe.Report.PinnedR7Bytes);
+        Assert.Equal(8_935, runtimeProbe.Report.FixedPayloadBytes);
+        Assert.Equal(6_204, runtimeProbe.Report.PinnedR7Bytes);
         Assert.Equal(1_536, runtimeProbe.Report.ResidentChrBytes);
         Assert.Equal(runtimeProbe.Rom, rebuiltRuntimeProbe.Rom);
         Assert.Equal(runtimeProbe.Report.Segments, rebuiltRuntimeProbe.Report.Segments);

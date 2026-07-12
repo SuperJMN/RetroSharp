@@ -9,6 +9,11 @@ using Xunit;
 
 public sealed class NesRunnerAcceptanceTests
 {
+    private const ushort PlayerWorldXLow = 0x0000;
+    private const ushort PlayerWorldXHigh = 0x0001;
+    private const ushort RequestedCameraXLow = 0x00E0;
+    private const ushort RequestedCameraXHigh = 0x0318;
+
     [Fact]
     public void Nes_runner_uses_the_shared_runner_source()
     {
@@ -68,6 +73,26 @@ public sealed class NesRunnerAcceptanceTests
     }
 
     [Fact]
+    public void Nes_full_stage1_runner_cadence_harness_exposes_frame_tick_decode_progress_camera_and_audio_measurements()
+    {
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+
+        Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
+        Assert.True(ContainsSequence(result.Rom, IncrementWordSequence(NesPackedCameraRuntime.FrameCounterLow)));
+        Assert.True(ContainsSequence(result.Rom, IncrementWordSequence(NesWorldPackRuntimeAbi.CollisionDecodeCountLow)));
+        Assert.True(ContainsSequence(result.Rom, IncrementByteSequence(NesWorldPackRuntimeAbi.GameplayTickCount)));
+        Assert.True(ContainsSequence(result.Rom, IncrementByteSequence(NesWorldPackRuntimeAbi.AudioTickCount)));
+        Assert.True(
+            ContainsSequence(result.Rom, [0xA2, 0x03, 0xA9, 0x01, 0x8D, 0x16, 0x40]),
+            "The packed runner must retry paired controller snapshots so DPCM DMA cannot create phantom direction input.");
+
+        WriteCadenceHarnessIfRequested(result);
+    }
+
+    [Fact]
     public void Nes_runner_uses_dead_zone_2d_camera_path()
     {
         var runnerDirectory = RunnerSample.Directory;
@@ -123,6 +148,63 @@ public sealed class NesRunnerAcceptanceTests
         }
 
         return false;
+    }
+
+    private static byte[] IncrementWordSequence(ushort lowAddress) =>
+    [
+        0xEE, (byte)lowAddress, (byte)(lowAddress >> 8),
+        0xD0, 0x03,
+        0xEE, (byte)(lowAddress + 1), (byte)((lowAddress + 1) >> 8),
+    ];
+
+    private static byte[] IncrementByteSequence(ushort address) =>
+        [0xEE, (byte)address, (byte)(address >> 8)];
+
+    private static void WriteCadenceHarnessIfRequested(NesRomBuildResult result)
+    {
+        var outputPath = Environment.GetEnvironmentVariable("RETROSHARP_NES_RUNNER_CADENCE_ROM");
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            return;
+        }
+
+        var fullPath = Path.GetFullPath(outputPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllBytes(fullPath, result.Rom);
+        var manifest = new
+        {
+            scenario = new
+            {
+                settleFrames = 500,
+                buttons = new[] { "RIGHT" },
+                measuredFrames = 120,
+                expectedGameplayTicks = 120,
+                expectedAudioTicks = 120,
+                expectedPlayerProgress = 150,
+                maximumRequestToVisibleFrames = 2,
+            },
+            measurements = new
+            {
+                playerWorldX = new[] { PlayerWorldXLow, PlayerWorldXHigh },
+                requestedCameraX = new[] { RequestedCameraXLow, RequestedCameraXHigh },
+                visibleCameraX = new[] { NesPackedCameraRuntime.VisibleCameraXLow, NesPackedCameraRuntime.VisibleCameraXHigh },
+                hardwareFrames = new[] { NesPackedCameraRuntime.FrameCounterLow, NesPackedCameraRuntime.FrameCounterHigh },
+                gameplayTicksModulo256 = NesWorldPackRuntimeAbi.GameplayTickCount,
+                collisionDecodes = new[] { NesWorldPackRuntimeAbi.CollisionDecodeCountLow, NesWorldPackRuntimeAbi.CollisionDecodeCountHigh },
+                audioTicksModulo256 = NesWorldPackRuntimeAbi.AudioTickCount,
+                r6Shadow = NesRomBuilder.Mmc3R6BankShadowAddress,
+                bankWorkInCommit = NesPackedCameraRuntime.BankWorkInCommit,
+                directoryWorkInCommit = NesPackedCameraRuntime.DirectoryWorkInCommit,
+                decodeWorkInCommit = NesPackedCameraRuntime.DecodeWorkInCommit,
+                criticalSection = NesPackedCameraRuntime.CriticalSection,
+                lastTileWrites = NesPackedCameraRuntime.LastTileWrites,
+                lastAttributeWrites = NesPackedCameraRuntime.LastAttributeWrites,
+            },
+            fixedSymbols = result.Report.FixedSymbols,
+        };
+        File.WriteAllText(
+            Path.ChangeExtension(fullPath, ".cadence.json"),
+            System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 
     [Fact]
