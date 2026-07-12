@@ -226,7 +226,7 @@ class CameraState
 
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)
     {
-        let wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
+        i16 wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
         Pixel desiredDirection = Direction.None;
         if (Input.IsDown(Button.Right))
         {

@@ -108,6 +108,14 @@ while its `I16` word form is `0x0000..0x00F8`/`0x00FF`. Packs whose pixel extent
 exceeds 32768 are diagnosed by this first runtime envelope even though
 `WorldPack` v1 can serialize larger unsigned cell counts.
 
+Until non-literal `let` inference is hardened, source code must declare derived
+world-coordinate intermediates explicitly as `i16` when they can exceed 255.
+For example, use `i16 footWorldY = player.y + Player.FootOffset;` before passing
+the value through landing, ceiling, or movement collision probes. Both targets
+preserve that word storage through `Camera.AabbTiles(...)` and
+`Camera.AabbHitTop(...)`; an inferred byte local is intentionally zero-extended
+and cannot recover a discarded high byte.
+
 For Tiled maps, external tilesets keep the PNG path saved by Tiled as the editable baseline. During target lowering, that PNG path follows the target-variant convention used by sprite assets: `tiles.png` can resolve to `tiles.gb.png`/`tiles.GameBoy.png` on Game Boy or `tiles.nes.png`/`tiles.NES.png` on NES, falling back to `tiles.png` when no variant exists. The current NES lowering derives a universal background color, up to four background palette slots, and the initial attribute table from the selected tileset PNG's placed map tiles; runtime-streamed rows refresh touched attributes as palette slot 0 until richer Tiled palette provenance is carried into the streaming path.
 
 ### Logical palettes

@@ -38,7 +38,7 @@ class FrameState
     {
         if (player.velocityY < 0)
         {
-            let headProbeY = footWorldY - CollisionProbe.CeilingProbeTopOffset;
+            i16 headProbeY = footWorldY - CollisionProbe.CeilingProbeTopOffset;
             if (Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid) != 0)
             {
                 player.BounceDown();
