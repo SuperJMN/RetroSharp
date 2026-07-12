@@ -9,28 +9,45 @@ namespace RetroSharp.NES;
 
 internal static class NesRomBuilder
 {
-    private const ushort Mmc3R6BankShadowAddress = 0x0324;
-    private const ushort Mmc3R7BankShadowAddress = 0x0325;
+    internal const ushort Mmc3R6BankShadowAddress = 0x0324;
+    internal const ushort Mmc3R7BankShadowAddress = 0x0325;
     private const ushort Mmc3BootPaletteAddress = 0xA000;
     private const ushort Mmc3BootNameTableAddress = 0xA020;
-    private const string WorldPackLabel = "worldpack_default";
+    internal const string WorldPackLabel = "worldpack_default";
+    internal const string WorldPackValidateLabel = "worldpack_validate";
+    internal const string WorldPackVisualDecodeLabel = "worldpack_decode_visual";
+    internal const string WorldPackVisualLookupLabel = "worldpack_visual_lookup";
+    internal const string WorldPackCollisionDecodeLabel = "worldpack_decode_collision";
+    internal const string WorldPackCollisionLookupLabel = "worldpack_collision_lookup";
+    internal const string WorldPackReadByteLabel = "worldpack_read_byte";
+    internal const string WorldPackProbeLabel = "worldpack_probe";
 
     public static byte[] Build(
         NesVideoProgram program,
         bool useFourScreenNametables,
         NesCartridgeProfile cartridgeProfile = NesCartridgeProfile.Mapper0)
     {
-        return BuildForProfile(program, useFourScreenNametables, cartridgeProfile, packedWorldBytes: null).Rom;
+        return BuildForProfile(
+            program,
+            useFourScreenNametables,
+            cartridgeProfile,
+            packedWorldBytes: null,
+            worldPackProbe: null).Rom;
     }
 
     internal static NesRomBuildResult BuildWithReport(
         NesVideoProgram program,
         bool useFourScreenNametables,
         NesCartridgeProfile? forcedCartridgeProfile,
-        byte[]? packedWorldOverride)
+        byte[]? packedWorldOverride,
+        NesWorldPackProbe? worldPackProbe)
     {
         var discoveredWorldPack = program.PackedWorld?.SerializedBytes;
         var selectedWorldPack = packedWorldOverride ?? discoveredWorldPack;
+        if (worldPackProbe is not null && selectedWorldPack is null)
+        {
+            throw new InvalidOperationException("NES WorldPack probe requires a packed world override.");
+        }
         if (selectedWorldPack is not null)
         {
             var pack = WorldPackSerializer.Deserialize(selectedWorldPack);
@@ -43,7 +60,7 @@ internal static class NesRomBuilder
 
         if (forcedCartridgeProfile is { } forced)
         {
-            return BuildForProfile(program, useFourScreenNametables, forced, selectedWorldPack);
+            return BuildForProfile(program, useFourScreenNametables, forced, selectedWorldPack, worldPackProbe);
         }
 
         if (packedWorldOverride is null && discoveredWorldPack is not null)
@@ -53,23 +70,23 @@ internal static class NesRomBuilder
                 // Preserve the exact historical mapper-0 image when it genuinely fits. The
                 // discovered canonical pack becomes a physical section only after that real
                 // final link proves a banked address/capacity need.
-                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, packedWorldBytes: null);
+                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, packedWorldBytes: null, worldPackProbe: null);
             }
             catch (InvalidOperationException exception) when (IsMapper0CapacityConstraint(exception))
             {
-                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, discoveredWorldPack);
+                return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, discoveredWorldPack, worldPackProbe);
             }
         }
 
         try
         {
-            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, selectedWorldPack);
+            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mapper0, selectedWorldPack, worldPackProbe);
         }
         catch (InvalidOperationException exception) when (
             selectedWorldPack is not null &&
             IsMapper0CapacityConstraint(exception))
         {
-            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, selectedWorldPack);
+            return BuildForProfile(program, useFourScreenNametables, NesCartridgeProfile.Mmc3Tvrom, selectedWorldPack, worldPackProbe);
         }
     }
 
@@ -87,9 +104,13 @@ internal static class NesRomBuilder
         NesVideoProgram program,
         bool useFourScreenNametables,
         NesCartridgeProfile cartridgeProfile,
-        byte[]? packedWorldBytes)
+        byte[]? packedWorldBytes,
+        NesWorldPackProbe? worldPackProbe)
     {
         var layout = NesCartridgeLayout.Create(cartridgeProfile, useFourScreenNametables);
+        var worldPackRuntime = packedWorldBytes is null
+            ? null
+            : NesWorldPackRuntimePlan.Create(packedWorldBytes);
         var worldPackPlacement = layout.EmitMmc3Foundation && packedWorldBytes is not null
             ? NesWorldPackPlacement.Create(
                 packedWorldBytes,
@@ -101,6 +122,9 @@ internal static class NesRomBuilder
         var prgBuild = BuildPrgRom(
             program,
             layout,
+            worldPackRuntime,
+            worldPackPlacement,
+            worldPackProbe,
             worldPackPlacement is null ? packedWorldBytes : null,
             includeLegacyWorldData);
         var prg = prgBuild.Bytes;
@@ -143,6 +167,9 @@ internal static class NesRomBuilder
     private static NesPrgBuild BuildPrgRom(
         NesVideoProgram program,
         NesCartridgeLayout layout,
+        NesWorldPackRuntimePlan? worldPackRuntime,
+        NesWorldPackPlacement? worldPackPlacement,
+        NesWorldPackProbe? worldPackProbe,
         byte[]? inlineWorldPack,
         bool includeLegacyWorldData)
     {
@@ -152,7 +179,16 @@ internal static class NesRomBuilder
         {
             try
             {
-                return BuildPrgRom(program, longForLoopIds, longWhileLoopIds, layout, inlineWorldPack, includeLegacyWorldData);
+                return BuildPrgRom(
+                    program,
+                    longForLoopIds,
+                    longWhileLoopIds,
+                    layout,
+                    worldPackRuntime,
+                    worldPackPlacement,
+                    worldPackProbe,
+                    inlineWorldPack,
+                    includeLegacyWorldData);
             }
             catch (BranchOutOfRangeException ex)
             {
@@ -176,6 +212,9 @@ internal static class NesRomBuilder
         IReadOnlySet<int> longForLoopIds,
         IReadOnlySet<int> longWhileLoopIds,
         NesCartridgeLayout layout,
+        NesWorldPackRuntimePlan? worldPackRuntime,
+        NesWorldPackPlacement? worldPackPlacement,
+        NesWorldPackProbe? worldPackProbe,
         byte[]? inlineWorldPack,
         bool includeLegacyWorldData)
     {
@@ -210,6 +249,14 @@ internal static class NesRomBuilder
 
         var runtimeCompiler = new NesRuntimeCompiler(builder, program, longForLoopIds, longWhileLoopIds, layout.UseFourScreenNametables);
         runtimeCompiler.EmitInitialization();
+        if (worldPackRuntime is not null)
+        {
+            builder.CallSubroutine(WorldPackValidateLabel);
+            if (worldPackProbe is not null)
+            {
+                builder.CallSubroutine(WorldPackProbeLabel);
+            }
+        }
 
         builder.Emit(0xA9, 0x00);                   // LDA #$00
         builder.Emit(0x8D, 0x05, 0x20);             // STA $2005
@@ -224,6 +271,10 @@ internal static class NesRomBuilder
         builder.JumpAbsolute("forever");
 
         runtimeCompiler.EmitAudioSubroutines();
+        if (worldPackRuntime is not null)
+        {
+            NesWorldPackRuntimeEmitter.Emit(builder, worldPackRuntime, worldPackPlacement, worldPackProbe);
+        }
         if (layout.EmitMmc3Foundation)
         {
             EmitMmc3BankHelpers(builder);
@@ -334,13 +385,29 @@ internal static class NesRomBuilder
         var fixedPayloadBytes = layout.EmitMmc3Foundation
             ? checked(fixedPayloadBeforeTrailer + resetTrampolineBytes + 6)
             : checked(code.Length + 6);
+        var fixedSymbols = worldPackRuntime is null
+            ? new Dictionary<string, ushort>()
+            : new Dictionary<string, ushort>
+            {
+                [WorldPackValidateLabel] = builder.AddressOfLabel(WorldPackValidateLabel),
+                [WorldPackVisualDecodeLabel] = builder.AddressOfLabel(WorldPackVisualDecodeLabel),
+                [WorldPackVisualLookupLabel] = builder.AddressOfLabel(WorldPackVisualLookupLabel),
+                [WorldPackCollisionDecodeLabel] = builder.AddressOfLabel(WorldPackCollisionDecodeLabel),
+                [WorldPackCollisionLookupLabel] = builder.AddressOfLabel(WorldPackCollisionLookupLabel),
+                [WorldPackReadByteLabel] = builder.AddressOfLabel(WorldPackReadByteLabel),
+            };
+        if (worldPackProbe is not null)
+        {
+            fixedSymbols[WorldPackProbeLabel] = builder.AddressOfLabel(WorldPackProbeLabel);
+        }
         return new NesPrgBuild(
             prg,
             code.Length,
             inlineWorldPackOffset,
             pinnedDataBytes,
             dpcmPlacements,
-            fixedPayloadBytes);
+            fixedPayloadBytes,
+            fixedSymbols);
     }
 
     private static void EnsureFixedDataBeforeTrailer(NesCartridgeLayout layout, int currentAddress)
@@ -519,7 +586,8 @@ internal static class NesRomBuilder
             prgBuild.PinnedDataBytes.Length,
             layout.EmitMmc3Foundation ? 4_128 : 0,
             CalculateResidentChrBytes(program),
-            orderedSegments);
+            orderedSegments,
+            prgBuild.FixedSymbols);
     }
 
     private static void ValidateReportedSegments(
@@ -771,8 +839,8 @@ internal static class NesRomBuilder
         builder.LoadAImmediate(register);
         builder.StoreAAbsolute(0x8000);
         builder.PullA();
-        builder.StoreAAbsolute(0x8001);
         builder.StoreAAbsolute(shadowAddress);
+        builder.StoreAAbsolute(0x8001);
         builder.Return();
     }
 
@@ -7638,7 +7706,11 @@ internal sealed class PrgBuilder
 
     public void OrZeroPage(byte address) => Emit(0x05, address);
 
+    public void OrAbsolute(ushort address) => Emit(0x0D, Low(address), High(address));
+
     public void XorImmediate(int value) => Emit(0x49, CheckedByte(value));
+
+    public void XorAbsolute(ushort address) => Emit(0x4D, Low(address), High(address));
 
     public void XorZeroPage(byte address) => Emit(0x45, address);
 
@@ -7674,6 +7746,8 @@ internal sealed class PrgBuilder
 
     public void IncrementZeroPage(byte address) => Emit(0xE6, address);
 
+    public void IncrementAbsolute(ushort address) => Emit(0xEE, Low(address), High(address));
+
     public void IncrementX() => Emit(0xE8);
 
     public void DecrementX() => Emit(0xCA);
@@ -7691,6 +7765,10 @@ internal sealed class PrgBuilder
     public void ShiftLeftA() => Emit(0x0A);
 
     public void ShiftRightA() => Emit(0x4A);
+
+    public void ShiftRightAbsolute(ushort address) => Emit(0x4E, Low(address), High(address));
+
+    public void RotateRightAbsolute(ushort address) => Emit(0x6E, Low(address), High(address));
 
     public void LdaAbsoluteX(string label, int addend = 0)
     {
@@ -7716,6 +7794,20 @@ internal sealed class PrgBuilder
     {
         Emit(opcode, 0x00);
         relativeFixups.Add((bytes.Count - 1, label));
+    }
+
+    public void JumpIf(byte branchOpcode, string label)
+    {
+        var inverse = branchOpcode switch
+        {
+            0x90 => 0xB0, // BCC -> BCS
+            0xB0 => 0x90, // BCS -> BCC
+            0xD0 => 0xF0, // BNE -> BEQ
+            0xF0 => 0xD0, // BEQ -> BNE
+            _ => throw new ArgumentOutOfRangeException(nameof(branchOpcode), branchOpcode, "Unsupported 6502 condition branch."),
+        };
+        Emit((byte)inverse, 0x03); // Skip the following absolute JMP when the condition is false.
+        JumpAbsolute(label);
     }
 
     public byte[] Build()
@@ -7804,7 +7896,8 @@ internal sealed record NesPrgBuild(
     int? InlineWorldPackOffset,
     byte[] PinnedDataBytes,
     IReadOnlyList<NesDpcmBuildPlacement> DpcmPlacements,
-    int FixedPayloadBytes);
+    int FixedPayloadBytes,
+    IReadOnlyDictionary<string, ushort> FixedSymbols);
 
 internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
 
@@ -7818,7 +7911,8 @@ internal sealed record NesRomBuildReport(
     int PinnedR7Bytes,
     int BootR7Bytes,
     int ResidentChrBytes,
-    IReadOnlyList<NesRomBuildSegment> Segments);
+    IReadOnlyList<NesRomBuildSegment> Segments,
+    IReadOnlyDictionary<string, ushort> FixedSymbols);
 
 internal sealed record NesRomBuildSegment(
     string Owner,

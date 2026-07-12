@@ -98,12 +98,13 @@ This document preserves project knowledge that previously lived only in agent me
   fixed banks `6, 7`. The canonical multi-R6 acceptance pack crosses all four
   non-contiguous R6 segments byte-for-byte without padding or rewritten v1
   offsets. The normalized full-`stage1` placement probe embeds 2,762 pack
-  bytes and remeasures 5,012 pinned, 4,128 boot, 2,151 fixed payload, and 3,056
-  resident CHR bytes. The raw runner-shaped path still reports its exact fixed
-  overflow; no `LW-3.3` reader or runner migration is present.
+  bytes. LW-3.3 adds 2,176 bytes of fixed reader/runtime for a current 4,327
+  fixed payload, while pinned/boot/CHR remain 5,012/4,128/3,056. The raw
+  runner-shaped path still reports its exact fixed overflow; no runner
+  migration is present.
 - Fresh Large Worlds implementation conversations should continue with
-  [LW-3.3 / #303](https://github.com/SuperJMN/RetroSharp/issues/303) only when a
-  dedicated run is requested, and keep the NES target chain sequential.
+  [LW-3.4 / #304](https://github.com/SuperJMN/RetroSharp/issues/304) only after
+  #303 is merged, and keep the NES target chain sequential.
   `LW-2.5` / #300 proves full `stage1` on Game Boy
   through a non-destructive fixture without changing the shared runner input.
   Only `LW-3.5` / #305, after #300 and `LW-3.4` / #304, migrates the shared
@@ -360,9 +361,9 @@ Progress (2026-06-14):
 
 Suggested next steps for the next agent, in order:
 1. For the active cross-target scale frontier, read the exact published card in
-   `docs/LargeWorldsRoadmap.md`; `LW-3.2` / #302 is implemented and
-   [LW-3.3 / #303](https://github.com/SuperJMN/RetroSharp/issues/303) remains
-   not started until a dedicated run is requested.
+   `docs/LargeWorldsRoadmap.md`; `LW-3.3` / #303 is implemented and
+   [LW-3.4 / #304](https://github.com/SuperJMN/RetroSharp/issues/304) is the next
+   NES entry only after #303 is merged.
 2. Treat `--world-budget-report` as map-only evidence and remeasure the final
    linked ROM/window layout in every placement/selection task.
 3. Keep each GB/NES chain sequential and keep target details out of public

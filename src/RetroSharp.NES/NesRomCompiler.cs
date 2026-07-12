@@ -34,7 +34,8 @@ public static class NesRomCompiler
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null,
-        byte[]? packedWorldOverride = null)
+        byte[]? packedWorldOverride = null,
+        NesWorldPackProbe? worldPackProbe = null)
     {
         return CompileSourceCore(
             source,
@@ -44,7 +45,8 @@ public static class NesRomCompiler
             sdkLibraryImports,
             sdkPluginRegistry,
             forcedCartridgeProfile: null,
-            packedWorldOverride);
+            packedWorldOverride,
+            worldPackProbe);
     }
 
     internal static byte[] CompileSourceForMmc3TvromTests(
@@ -71,7 +73,8 @@ public static class NesRomCompiler
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null,
-        byte[]? packedWorldOverride = null)
+        byte[]? packedWorldOverride = null,
+        NesWorldPackProbe? worldPackProbe = null)
     {
         return CompileSourceCore(
             source,
@@ -81,7 +84,8 @@ public static class NesRomCompiler
             sdkLibraryImports,
             sdkPluginRegistry,
             NesCartridgeProfile.Mmc3Tvrom,
-            packedWorldOverride);
+            packedWorldOverride,
+            worldPackProbe);
     }
 
     private static NesRomBuildResult CompileSourceCore(
@@ -92,7 +96,8 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports,
         SdkPluginRegistry? sdkPluginRegistry,
         NesCartridgeProfile? forcedCartridgeProfile,
-        byte[]? packedWorldOverride)
+        byte[]? packedWorldOverride,
+        NesWorldPackProbe? worldPackProbe)
     {
         sdkPluginRegistry ??= SdkPluginRegistry.Empty;
         var targetIntrinsics = NesTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
@@ -122,7 +127,8 @@ public static class NesRomCompiler
             videoProgram,
             useFourScreenNametables,
             forcedCartridgeProfile,
-            packedWorldOverride);
+            packedWorldOverride,
+            worldPackProbe);
     }
 
     private static bool RequiresLegacyWorldData(Sdk2DOperation operation) => operation is

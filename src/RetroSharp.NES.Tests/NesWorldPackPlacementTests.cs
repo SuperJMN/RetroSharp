@@ -196,7 +196,7 @@ public sealed class NesWorldPackPlacementTests
         Assert.Equal(new[] { 129, 1_153 }, dpcm.Select(segment => segment.Length).Order().ToArray());
     }
 
-    private static byte[] CreateSyntheticWorldPack(int chunkColumns = 208)
+    internal static byte[] CreateSyntheticWorldPack(int chunkColumns = 208)
     {
         const int cellsPerChunk = 64;
         var collisionProfilesOffset = (uint)WorldPackDescriptor.V1HeaderBytes;
