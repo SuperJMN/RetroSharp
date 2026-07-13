@@ -1,0 +1,45 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-vscroll-gb-functional",
+  "sampleId": "tiled-vscroll",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 70,
+  "inputs": [],
+  "checkpoints": [
+    {
+      "id": "packed-camera-at-frame-90",
+      "frame": 90,
+      "expectedSignals": {
+        "sourceCameraY": 87,
+        "visibleCameraY": 86,
+        "scy": 86,
+        "worldPackValidationState": 1
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": false,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": false
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A DMG physical frame is 70224 cycles. Packed preparation may consume one frame, but residency, commit, and visibility must complete within that frame without unsafe retained writes.",
+    "productionTraceRationale": "The 90-frame GameboyMcp trace in docs/GameBoyPackedCameraCadenceAcceptance.md measured 87 source ticks, visible Y 86, and one-frame cold-edge publication on the exact tracked production ROM."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

@@ -21,8 +21,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
     <ProjectReference Include="..\RetroSharp.FunctionalAcceptance\RetroSharp.FunctionalAcceptance.csproj" />
-    <ProjectReference Include="..\RetroSharp.GameBoy\RetroSharp.GameBoy.csproj" />
   </ItemGroup>
 </Project>

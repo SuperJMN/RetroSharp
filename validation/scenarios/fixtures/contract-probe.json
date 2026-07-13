@@ -1,0 +1,53 @@
+{
+  "$schema": "../functional-scenario.schema.json",
+  "id": "contract-probe-gb",
+  "sampleId": "contract-probe",
+  "target": "gb",
+  "warmUpFrames": 2,
+  "observationFrames": 4,
+  "inputs": [
+    {
+      "id": "move-right",
+      "startFrame": 3,
+      "durationFrames": 2,
+      "buttons": ["right"],
+      "responseSignal": "playerX"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "moved",
+      "frame": 6,
+      "expectedSignals": {
+        "playerX": 2
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": true,
+    "cameraLifecycle": true,
+    "background": false,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": true,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "The contract probe models one gameplay and audio service tick per physical video frame; one isolated missed tick is tolerated, but sustained loss is not.",
+    "productionTraceRationale": "These fixture-only limits exercise the report boundary and degraded probes; canonical sample scenarios must replace them with reviewed production-ROM traces."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.90,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 2,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 3,
+    "maximumUnplannedAudioGapFrames": 1,
+    "maximumAudioDriftTicks": 1
+  }
+}

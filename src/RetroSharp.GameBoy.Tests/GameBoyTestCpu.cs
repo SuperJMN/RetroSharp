@@ -54,6 +54,8 @@ internal sealed class GameBoyTestCpu
     public IReadOnlyList<AudioUpdateTrace> AudioUpdateTrace => audioUpdateTrace;
     public long Cycles => cycles;
 
+    public int ResetCount { get; private set; }
+
     public byte CurrentRomBank => (byte)romBank;
 
     public byte Vram(ushort address) => vram[address - 0x8000];
@@ -491,6 +493,11 @@ internal sealed class GameBoyTestCpu
 
     private void Step()
     {
+        if (instructions > 0 && pc == 0x0100)
+        {
+            ResetCount++;
+        }
+
         instructions++;
         instructionPc = pc;
         var opcode = NextByte();
