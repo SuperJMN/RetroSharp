@@ -12,6 +12,8 @@ using System.Collections.Generic;
 /// </summary>
 internal sealed class GameBoyTestCpu
 {
+    internal const long DmgCyclesPerFrame = 70_224;
+
     private const int BankSize = 0x4000;
     private const byte FlagZ = 0x80;
     private const byte FlagN = 0x40;
@@ -120,7 +122,7 @@ internal sealed class GameBoyTestCpu
     /// </summary>
     public void RunFrames(int frames, long maxInstructions = 2_000_000_000)
     {
-        var target = (long)frames * 70224L;
+        var target = frames * DmgCyclesPerFrame;
         while (cycles < target)
         {
             if (instructions >= maxInstructions)
@@ -135,7 +137,7 @@ internal sealed class GameBoyTestCpu
 
     public void RunAdditionalFrames(int frames, long maxInstructions = 2_000_000_000)
     {
-        var target = cycles + ((long)frames * 70224L);
+        var target = cycles + (frames * DmgCyclesPerFrame);
         var startInstructions = instructions;
         while (cycles < target)
         {
@@ -193,14 +195,14 @@ internal sealed class GameBoyTestCpu
         0x36 => 12,                                      // LD (HL),n
         0xE0 or 0xF0 => 12,                             // LDH (n),A / LDH A,(n)
         0xEA or 0xFA => 16,                             // LD (nn),A / LD A,(nn)
-        0xC3 or 0xC2 or 0xCA or 0xD2 or 0xDA => 16,     // JP / JP cc (approx taken)
+        0xC3 or 0xC2 or 0xCA or 0xD2 or 0xDA => 16,     // JP / taken JP cc; Step subtracts 4 when not taken
         0xCD => 24,                                      // CALL nn
         0xC9 => 16,                                      // RET
         0xC5 or 0xD5 or 0xF5 => 16,                      // PUSH BC / PUSH DE / PUSH AF
         0xC1 or 0xD1 or 0xF1 => 12,                      // POP BC / POP DE / POP AF
         0xE5 => 16,                                      // PUSH HL
         0xE1 => 12,                                      // POP HL
-        0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / JR cc (approx taken)
+        0x18 or 0x20 or 0x28 or 0x30 or 0x38 => 12,     // JR / taken JR cc; Step subtracts 4 when not taken
         0x16 or 0x26 or 0x2E or 0x06 or 0x0E or 0x1E or 0x3E => 8, // LD r,n
         0xC6 or 0xCE or 0xD6 or 0xDE or 0xE6 or 0xF6 or 0xEE or 0xFE => 8, // ALU A,n
         0x0B or 0x03 or 0x13 or 0x1B or 0x23 or 0x2B => 8,        // INC/DEC rr
@@ -557,6 +559,8 @@ internal sealed class GameBoyTestCpu
             case 0x7D: a = l; break;                            // LD A,L
             case 0x80: a = Add(a, b); break;                    // ADD A,B
             case 0x81: a = Add(a, c); break;                    // ADD A,C
+            case 0x82: a = Add(a, d); break;                    // ADD A,D
+            case 0x83: a = Add(a, e); break;                    // ADD A,E
             case 0x87: a = Add(a, a); break;                    // ADD A,A
             case 0xC6: a = Add(a, NextByte()); break;           // ADD A,n
             case 0x88: a = Add(a, b, CarryIn()); break;         // ADC A,B
@@ -593,6 +597,7 @@ internal sealed class GameBoyTestCpu
             case 0xB9: Sub(a, c); break;                        // CP C
             case 0xFE: Sub(a, NextByte()); break;               // CP n
             case 0x2F: a = (byte)~a; f |= FlagN | FlagH; break; // CPL
+            case 0x07: a = RotateLeftCircular(a); break;        // RLCA
             case 0xE0: WriteByte((ushort)(0xFF00 + NextByte()), a); break; // LDH (n),A
             case 0xF0: a = ReadByte((ushort)(0xFF00 + NextByte())); break; // LDH A,(n)
             case 0xE2: WriteByte((ushort)(0xFF00 + c), a); break;          // LDH (C),A
@@ -600,10 +605,10 @@ internal sealed class GameBoyTestCpu
             case 0xEA: WriteByte(NextWord(), a); break;         // LD (nn),A
             case 0xFA: a = ReadByte(NextWord()); break;         // LD A,(nn)
             case 0xC3: pc = NextWord(); break;                  // JP nn
-            case 0xC2: { var t = NextWord(); if ((f & FlagZ) == 0) pc = t; break; } // JP NZ,nn
-            case 0xCA: { var t = NextWord(); if ((f & FlagZ) != 0) pc = t; break; } // JP Z,nn
-            case 0xD2: { var t = NextWord(); if ((f & FlagC) == 0) pc = t; break; } // JP NC,nn
-            case 0xDA: { var t = NextWord(); if ((f & FlagC) != 0) pc = t; break; } // JP C,nn
+            case 0xC2: { var t = NextWord(); if ((f & FlagZ) == 0) pc = t; else cycles -= 4; break; } // JP NZ,nn
+            case 0xCA: { var t = NextWord(); if ((f & FlagZ) != 0) pc = t; else cycles -= 4; break; } // JP Z,nn
+            case 0xD2: { var t = NextWord(); if ((f & FlagC) == 0) pc = t; else cycles -= 4; break; } // JP NC,nn
+            case 0xDA: { var t = NextWord(); if ((f & FlagC) != 0) pc = t; else cycles -= 4; break; } // JP C,nn
             case 0xCD: { var t = NextWord(); PushWord(pc); pc = t; break; } // CALL nn
             case 0xC9: pc = PopWord(); break;                 // RET
             case 0xC5: PushWord(Bc); break;                    // PUSH BC
@@ -615,10 +620,10 @@ internal sealed class GameBoyTestCpu
             case 0xE5: PushWord(Hl); break;                     // PUSH HL
             case 0xE1: SetHl(PopWord()); break;                 // POP HL
             case 0x18: { var off = (sbyte)NextByte(); pc = (ushort)(pc + off); break; } // JR e
-            case 0x20: { var off = (sbyte)NextByte(); if ((f & FlagZ) == 0) pc = (ushort)(pc + off); break; } // JR NZ,e
-            case 0x28: { var off = (sbyte)NextByte(); if ((f & FlagZ) != 0) pc = (ushort)(pc + off); break; } // JR Z,e
-            case 0x30: { var off = (sbyte)NextByte(); if ((f & FlagC) == 0) pc = (ushort)(pc + off); break; } // JR NC,e
-            case 0x38: { var off = (sbyte)NextByte(); if ((f & FlagC) != 0) pc = (ushort)(pc + off); break; } // JR C,e
+            case 0x20: { var off = (sbyte)NextByte(); if ((f & FlagZ) == 0) pc = (ushort)(pc + off); else cycles -= 4; break; } // JR NZ,e
+            case 0x28: { var off = (sbyte)NextByte(); if ((f & FlagZ) != 0) pc = (ushort)(pc + off); else cycles -= 4; break; } // JR Z,e
+            case 0x30: { var off = (sbyte)NextByte(); if ((f & FlagC) == 0) pc = (ushort)(pc + off); else cycles -= 4; break; } // JR NC,e
+            case 0x38: { var off = (sbyte)NextByte(); if ((f & FlagC) != 0) pc = (ushort)(pc + off); else cycles -= 4; break; } // JR C,e
             case 0xCB: StepCb(NextByte()); break;
             case 0x37: f = (byte)((f & FlagZ) | FlagC); break; // SCF
             default:
@@ -746,6 +751,14 @@ internal sealed class GameBoyTestCpu
         a ^= y;
         f = a == 0 ? FlagZ : (byte)0;
         return a;
+    }
+
+    private byte RotateLeftCircular(byte value)
+    {
+        var carry = (value & 0x80) != 0;
+        var result = (byte)((value << 1) | (carry ? 1 : 0));
+        f = carry ? FlagC : (byte)0;
+        return result;
     }
 
     private void AddHl(ushort value)

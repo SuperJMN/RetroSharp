@@ -255,6 +255,142 @@ public sealed class GameBoyWorldPackReaderTests
     }
 
     [Fact]
+    public void Whole_pack_validation_rejects_compensating_mutations_that_preserve_the_legacy_word_sum()
+    {
+        var fixture = CreateSingleChunkFixture(repeated: true);
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            "void Main() { }",
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: fixture.SerializedBytes);
+        var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        var rom = result.Rom.ToArray();
+        var packStart = packSegment.PhysicalStart;
+        var malformedOffset = checked((int)fixture.Pack.Chunks[0].Directory.CollisionOffset);
+        var malformedWordOffset = malformedOffset & ~1;
+        var originalMalformedWord = ReadWord(rom, packStart + malformedWordOffset);
+        rom[packStart + malformedOffset] = 0xFF;
+        var malformedWord = ReadWord(rom, packStart + malformedWordOffset);
+        var delta = unchecked((ushort)(malformedWord - originalMalformedWord));
+
+        const int compensationWordOffset = 4;
+        var originalCompensationWord = ReadWord(rom, packStart + compensationWordOffset);
+        WriteWord(
+            rom,
+            packStart + compensationWordOffset,
+            unchecked((ushort)(originalCompensationWord - delta)));
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        cpu.RunFrames(20);
+
+        Assert.Equal(2, cpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+
+        static ushort ReadWord(byte[] bytes, int offset) =>
+            (ushort)(bytes[offset] | (bytes[offset + 1] << 8));
+
+        static void WriteWord(byte[] bytes, int offset, ushort value)
+        {
+            bytes[offset] = (byte)value;
+            bytes[offset + 1] = (byte)(value >> 8);
+        }
+    }
+
+    [Fact]
+    public void Whole_pack_validation_rejects_same_lane_compensation_across_header_fields()
+    {
+        var fixture = CreateSingleChunkFixture(repeated: true);
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            "void Main() { }",
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: fixture.SerializedBytes);
+        var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        var rom = result.Rom.ToArray();
+
+        rom[packSegment.PhysicalStart + 5] ^= 0x80; // Invalid minor version.
+        rom[packSegment.PhysicalStart + 9] ^= 0x80; // Invalid 0x8028 hardware width.
+
+        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+        cpu.RunFrames(20);
+
+        Assert.Equal(2, cpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+    }
+
+    [Fact]
+    public void Staged_raw_decode_rejects_compensated_invalid_ids_before_cache_publication()
+    {
+        var directory = RepositoryDirectory("samples/tiled-vscroll");
+        var canonical = GameBoyTiledMapImporter.CompileWorldPack(
+            Path.Combine(directory, "vscroll.tmj"),
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        Assert.Equal(1, canonical.Pack.Descriptor.VisualIdBytes);
+        var rawChunkIndex = Enumerable.Range(0, canonical.Pack.Chunks.Count)
+            .First(index => canonical.Pack.Chunks[index].Directory.VisualCodec == WorldPackCodec.Raw);
+        var rawChunk = canonical.Pack.Chunks[rawChunkIndex];
+        var originalFingerprint = Fingerprint(canonical.SerializedBytes);
+        (int First, int Second)? compensation = null;
+        for (var firstCell = 1; firstCell < rawChunk.VisualIds.Count && compensation is null; firstCell++)
+        {
+            for (var secondCell = firstCell + 1; secondCell < rawChunk.VisualIds.Count; secondCell++)
+            {
+                var first = checked((int)rawChunk.Directory.VisualOffset + firstCell);
+                var second = checked((int)rawChunk.Directory.VisualOffset + secondCell);
+                if ((canonical.SerializedBytes[first] ^ 0x80) < canonical.Pack.Descriptor.VisualMetatileCount
+                    || (canonical.SerializedBytes[second] ^ 0x80) < canonical.Pack.Descriptor.VisualMetatileCount)
+                {
+                    continue;
+                }
+
+                var mutated = canonical.SerializedBytes.ToArray();
+                mutated[first] ^= 0x80;
+                mutated[second] ^= 0x80;
+                if (Fingerprint(mutated).SequenceEqual(originalFingerprint))
+                {
+                    compensation = (first, second);
+                    break;
+                }
+            }
+        }
+
+        Assert.True(compensation.HasValue, "Expected a same-lane payload compensation in a raw visual chunk.");
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            File.ReadAllText(Path.Combine(directory, "vscroll.rs")),
+            directory);
+        var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        var rom = result.Rom.ToArray();
+        rom[packSegment.PhysicalStart + compensation.Value.First] ^= 0x80;
+        rom[packSegment.PhysicalStart + compensation.Value.Second] ^= 0x80;
+
+        var chunkX = rawChunkIndex % canonical.Pack.Descriptor.ChunkColumns;
+        var chunkY = rawChunkIndex / canonical.Pack.Descriptor.ChunkColumns;
+        var hardwareX = checked((ushort)(chunkX * WorldPackDescriptor.V1ChunkWidth * canonical.Pack.Descriptor.MetatileWidth));
+        var hardwareY = checked((ushort)(chunkY * WorldPackDescriptor.V1ChunkHeight * canonical.Pack.Descriptor.MetatileHeight));
+
+        var cpu = new GameBoyTestCpu(rom);
+        var lookup = cpu.RunWorldPackCollisionLookup(
+            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualLookupLabel],
+            hardwareX,
+            hardwareY);
+
+        Assert.Equal(1, cpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+        Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
+        Assert.Equal(0, cpu.Wram(GameBoyPackedCameraRuntime.VisualCacheValid));
+
+        static byte[] Fingerprint(ReadOnlySpan<byte> bytes)
+        {
+            byte[] lanes = [0x3D, 0xA7, 0x5B, 0xC1];
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                var lane = index & 3;
+                var sum = unchecked((byte)(lanes[lane] + bytes[index]));
+                lanes[lane] = (index >> 2 & 3) == lane
+                    ? (byte)((sum << 1) | (sum >> 7))
+                    : sum;
+            }
+
+            return lanes;
+        }
+    }
+
+    [Fact]
     public void Validation_rejects_a_malformed_unrequested_plane_before_any_slot_becomes_visible()
     {
         var fixture = CreateSingleChunkFixture(repeated: true);
