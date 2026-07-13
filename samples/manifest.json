@@ -1,12 +1,14 @@
 {
   "samples": [
     {
+      "id": "cross-target-camera",
       "path": "samples/cross-target-camera/camera.rs",
       "readme": "samples/cross-target-camera/README.md",
       "layer": "portable-sdk",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "source-library-package",
       "path": "samples/source-library-package/source-library.retrosharp.json",
       "readme": "samples/source-library-package/README.md",
       "layer": "portable-sdk",
@@ -14,130 +16,144 @@
       "libraryPaths": ["samples/source-library-package/lib"]
     },
     {
+      "id": "actor-framework",
       "path": "samples/actor-framework/actors.rs",
       "readme": "samples/actor-framework/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
-      "path": "samples/gameboy-drawing/drawing.rs",
-      "readme": "samples/gameboy-drawing/README.md",
+      "id": "static-drawing",
+      "path": "samples/static-drawing/drawing.rs",
+      "readme": "samples/static-drawing/README.md",
       "layer": "target-intrinsic",
-      "targets": ["gb"]
+      "targets": ["gb", "nes"]
     },
     {
-      "path": "samples/gameboy-hud/hud.rs",
-      "readme": "samples/gameboy-hud/README.md",
+      "id": "window-hud",
+      "path": "samples/window-hud/hud.rs",
+      "readme": "samples/window-hud/README.md",
       "layer": "target-capability-spike",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-music/music-switch.rs",
-      "readme": "samples/gameboy-music/README.md",
+      "id": "music-switch",
+      "path": "samples/music-switch/music-switch.rs",
+      "readme": "samples/music-switch/README.md",
       "layer": "target-capability-spike",
       "targets": ["gb"]
     },
     {
-      "path": "samples/gameboy-vscroll/vscroll.rs",
-      "readme": "samples/gameboy-vscroll/README.md",
+      "id": "source-vscroll",
+      "path": "samples/source-vscroll/vscroll.rs",
+      "readme": "samples/source-vscroll/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "tiled-tall",
       "path": "samples/tiled-tall/tall.rs",
       "readme": "samples/tiled-tall/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "tiled-vscroll",
       "path": "samples/tiled-vscroll/vscroll.rs",
       "readme": "samples/tiled-vscroll/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "tiled-diagonal",
       "path": "samples/tiled-diagonal/diag.rs",
       "readme": "samples/tiled-diagonal/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "tiled-free-scroll",
       "path": "samples/tiled-free-scroll/free-scroll.rs",
       "readme": "samples/tiled-free-scroll/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "deadzone-follow",
       "path": "samples/deadzone-follow/deadzone.rs",
       "readme": "samples/deadzone-follow/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
-      "path": "samples/nes-free-scroll/freescroll.rs",
-      "readme": "samples/nes-free-scroll/README.md",
+      "id": "source-free-scroll",
+      "path": "samples/source-free-scroll/freescroll.rs",
+      "readme": "samples/source-free-scroll/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "runner",
       "path": "samples/runner/runner.retrosharp.json",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "runner-projectile",
       "path": "samples/runner-projectile/runner-projectile.retrosharp.json",
       "readme": "samples/runner-projectile/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "shots-simple",
       "path": "samples/shots-simple/shots-simple.retrosharp.json",
       "readme": "samples/shots-simple/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "shots-bouncy",
       "path": "samples/shots-bouncy/shots-bouncy.retrosharp.json",
       "readme": "samples/shots-bouncy/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
+      "id": "runner-diagnostic-static-background",
       "path": "samples/runner/diagnostics/00-static-background.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "runner-diagnostic-world-platforms",
       "path": "samples/runner/diagnostics/01-world-platforms.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "runner-diagnostic-flat-ground-camera",
       "path": "samples/runner/diagnostics/02-flat-ground-camera.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "runner-diagnostic-player-camera",
       "path": "samples/runner/diagnostics/02-player-camera.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
+      "id": "runner-diagnostic-enemy-sprites",
       "path": "samples/runner/diagnostics/03-enemy-sprites.rs",
       "readme": "samples/runner/diagnostics/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
-    },
-    {
-      "path": "samples/nes-drawing/drawing.rs",
-      "readme": "samples/nes-drawing/README.md",
-      "layer": "target-intrinsic",
-      "targets": ["nes"]
     }
   ]
 }

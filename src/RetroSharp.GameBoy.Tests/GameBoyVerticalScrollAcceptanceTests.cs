@@ -23,7 +23,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     [Fact]
     public void Game_boy_vertical_scroll_sample_compiles_collects_vertical_camera_and_streams_fresh_rows()
     {
-        var samplePath = RepositoryFile("samples/gameboy-vscroll/vscroll.rs");
+        var samplePath = RepositoryFile("samples/source-vscroll/vscroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate vertical scroll sample directory.");
         var source = File.ReadAllText(samplePath);
@@ -226,7 +226,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     [Fact]
     public void Game_boy_free_scroll_sample_streams_fresh_columns_and_rows_with_staggered_diagonal_commit()
     {
-        var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
+        var samplePath = RepositoryFile("samples/source-free-scroll/freescroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate free scroll sample directory.");
         var source = File.ReadAllText(samplePath);

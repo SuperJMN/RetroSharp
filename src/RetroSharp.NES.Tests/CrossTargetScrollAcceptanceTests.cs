@@ -107,7 +107,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     [Fact]
     public void Free_scroll_sample_lowers_diagonal_camera_on_game_boy_and_nes()
     {
-        var samplePath = RepositoryFile("samples/nes-free-scroll/freescroll.rs");
+        var samplePath = RepositoryFile("samples/source-free-scroll/freescroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath);
         var source = File.ReadAllText(samplePath);
 

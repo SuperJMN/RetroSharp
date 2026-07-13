@@ -65,7 +65,7 @@ builds the real sample through automatic selection and freezes its mapper,
 WorldPack, header, vector, reset, IRQ, and handler semantics.
 
 `Mapper0_without_a_packed_camera_retains_simple_vectors_and_its_tracked_golden`
-keeps all three vectors at `$8000` for `samples/nes-drawing/drawing.rs` and
+keeps all three vectors at `$8000` for `samples/static-drawing/drawing.rs` and
 compares the production output byte-for-byte with the tracked ROM (SHA-256
 `3115f01722a5b8ec08ffb44c9d0be340de3e8a7cebd045f2f13b30156a452aac`).
 The existing forced/automatic MMC3, four-screen streaming, bank restoration,

@@ -1,4 +1,4 @@
-# Game Boy Runner Diagnostics
+# Runner Diagnostics
 
 Sample Layer: `target-acceptance`
 

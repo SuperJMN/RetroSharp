@@ -1,4 +1,4 @@
-# Game Boy Vertical Scroll Sample
+# Source Vertical Scroll Sample
 
 Sample Layer: `target-acceptance`
 

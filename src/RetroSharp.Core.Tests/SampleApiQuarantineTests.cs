@@ -43,6 +43,41 @@ public sealed class SampleApiQuarantineTests
     }
 
     [Fact]
+    public void Sample_manifest_uses_unique_neutral_stable_identities()
+    {
+        var samples = LoadManifest().Samples;
+
+        Assert.All(samples, sample => Assert.False(string.IsNullOrWhiteSpace(sample.Id)));
+        Assert.Equal(samples.Length, samples.Select(sample => sample.Id).Distinct(StringComparer.Ordinal).Count());
+
+        foreach (var sample in samples)
+        {
+            Assert.False(
+                HasHardwareAffix(sample.Id),
+                $"Sample identity '{sample.Id}' must describe the feature, not the target.");
+
+            var pathParts = sample.Path.Split('/');
+            Assert.True(pathParts.Length >= 3, $"Sample path '{sample.Path}' must include a canonical sample directory.");
+            Assert.False(
+                HasHardwareAffix(pathParts[1]),
+                $"Sample directory '{pathParts[1]}' must describe the feature, not the target.");
+        }
+    }
+
+    [Fact]
+    public void Static_drawing_is_one_canonical_cross_target_sample()
+    {
+        var sample = Assert.Single(LoadManifest().Samples, sample => sample.Id == "static-drawing");
+
+        Assert.Equal("samples/static-drawing/drawing.rs", sample.Path);
+        Assert.Equal("samples/static-drawing/README.md", sample.Readme);
+        Assert.Equal("target-intrinsic", sample.Layer);
+        Assert.Equal(new[] { "gb", "nes" }, sample.Targets);
+        Assert.False(Directory.Exists(RepositoryPathOrMissing("samples/gameboy-drawing")));
+        Assert.False(Directory.Exists(RepositoryPathOrMissing("samples/nes-drawing")));
+    }
+
+    [Fact]
     public void Portable_samples_do_not_use_transitional_or_target_intrinsic_calls()
     {
         var manifest = LoadManifest();
@@ -107,6 +142,23 @@ public sealed class SampleApiQuarantineTests
             var readme = File.ReadAllText(RepositoryFile(sample.Readme));
 
             Assert.Contains($"Sample Layer: `{sample.Layer}`", readme, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Sample_readmes_use_feature_named_display_titles()
+    {
+        var readmes = LoadManifest().Samples
+            .Select(sample => sample.Readme)
+            .Distinct(StringComparer.Ordinal);
+
+        foreach (var readmePath in readmes)
+        {
+            var title = File.ReadLines(RepositoryFile(readmePath)).First().TrimStart('#', ' ');
+
+            Assert.False(
+                HasHardwareAffix(title),
+                $"Sample display title '{title}' must describe the feature, not the target.");
         }
     }
 
@@ -213,6 +265,16 @@ public sealed class SampleApiQuarantineTests
             || fileName.EndsWith(".retrosharp.json", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool HasHardwareAffix(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant().Replace('-', ' ');
+        string[] hardwareAffixes = ["gb", "gameboy", "game boy", "nes"];
+        return hardwareAffixes.Any(name =>
+            normalized == name ||
+            normalized.StartsWith(name + " ", StringComparison.Ordinal) ||
+            normalized.EndsWith(" " + name, StringComparison.Ordinal));
+    }
+
     private static string RepositoryFile(string relativePath)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -258,6 +320,11 @@ public sealed class SampleApiQuarantineTests
         return path;
     }
 
+    private static string RepositoryPathOrMissing(string relativePath)
+    {
+        return Path.Combine(RepositoryRoot(), relativePath);
+    }
+
     private static string RelativePath(string absolutePath)
     {
         var root = RepositoryRoot();
@@ -288,7 +355,7 @@ public sealed class SampleApiQuarantineTests
 
     private sealed record SampleManifest(SampleManifestEntry[] Samples);
 
-    private sealed record SampleManifestEntry(string Path, string Readme, string Layer, string[] Targets, string[]? LibraryPaths = null);
+    private sealed record SampleManifestEntry(string Id, string Path, string Readme, string Layer, string[] Targets, string[]? LibraryPaths = null);
 
     private sealed record SampleLibraryManifest(string[] Sources);
 

@@ -262,7 +262,7 @@ public sealed class CrossTargetCliAcceptanceTests
                 var extension = target == "nes" ? ".nes" : ".gb";
                 var output = Path.Combine(
                     workspace.Path,
-                    Path.GetFileNameWithoutExtension(sample.Path).Replace('.', '-') + "-" + target + extension);
+                    sample.Id + "-" + target + extension);
                 var args = new List<string>
                 {
                     "--target",
@@ -279,7 +279,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
                 Assert.Equal(0, result.ExitCode);
                 Assert.True(File.Exists(output), result.CombinedOutput);
-                Assert.Equal(ExpectedRomSize(sample.Path, target), new FileInfo(output).Length);
+                Assert.Equal(ExpectedRomSize(sample.Id, target), new FileInfo(output).Length);
             }
         }
     }
@@ -290,8 +290,9 @@ public sealed class CrossTargetCliAcceptanceTests
         var result = RunProcess("python3", RepositoryFile("tools/gameboy/generate_sample_roms.py"), "--dry-run");
 
         Assert.Equal(0, result.ExitCode);
-        Assert.Contains("samples/gameboy-drawing/drawing.rs", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.Contains("samples/gameboy-drawing/drawing.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/static-drawing/drawing.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/static-drawing/drawing.gb", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.Contains("samples/static-drawing/drawing.nes", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("samples/runner/runner.retrosharp.json", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("--out samples/runner/bin/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.Contains("--target nes", result.CombinedOutput, StringComparison.Ordinal);
@@ -302,7 +303,7 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.DoesNotContain("--out samples/runner/runner.gb", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("--out samples/runner/runner.nes", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("--lib-path samples/runner/lib", result.CombinedOutput, StringComparison.Ordinal);
-        Assert.DoesNotContain("samples/gameboy-hud/hud.rs", result.CombinedOutput, StringComparison.Ordinal);
+        Assert.DoesNotContain("samples/window-hud/hud.rs", result.CombinedOutput, StringComparison.Ordinal);
         Assert.DoesNotContain("samples/runner/diagnostics/00-static-background.rs", result.CombinedOutput, StringComparison.Ordinal);
     }
 
@@ -1195,13 +1196,13 @@ public sealed class CrossTargetCliAcceptanceTests
         return ExpectedRomSize(string.Empty, target);
     }
 
-    private static int ExpectedRomSize(string samplePath, string target)
+    private static int ExpectedRomSize(string sampleId, string target)
     {
         return target switch
         {
-            "gb" when samplePath == "samples/runner/runner.retrosharp.json" => 131072,
+            "gb" when sampleId == "runner" => 131072,
             "gb" => 32768,
-            "nes" when samplePath == "samples/runner/runner.retrosharp.json" => 81936,
+            "nes" when sampleId == "runner" => 81936,
             "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
         };
@@ -1290,7 +1291,7 @@ public sealed class CrossTargetCliAcceptanceTests
 
     private sealed record SampleManifest(SampleEntry[] Samples);
 
-    private sealed record SampleEntry(string Path, string[] Targets, string[]? LibraryPaths = null);
+    private sealed record SampleEntry(string Id, string Path, string[] Targets, string[]? LibraryPaths = null);
 
     private sealed class TemporaryDirectory(string path) : IDisposable
     {

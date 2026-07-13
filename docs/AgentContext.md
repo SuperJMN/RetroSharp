@@ -53,11 +53,11 @@ This document preserves project knowledge that previously lived only in agent me
   `Video.WaitVBlank()` discard stale coalesced state before waiting for a fresh
   NMI/VBlank edge. RetroArch automation is shared with the power-on harness
   and guards persistent `retroarch.cfg` plus `FCEUmm.opt` by hash.
-- The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
+- The Game Boy vertical camera path is now proven by `samples/source-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
   `Camera.SetPosition` can walk up to two same-axis tile crossings per frame and
   commit both exposed edges during `Camera.Apply()`. Game Boy diagonal camera
-  movement is proven by `samples/nes-free-scroll/freescroll.rs` and
+  movement is proven by `samples/source-free-scroll/freescroll.rs` and
   `samples/tiled-free-scroll/free-scroll.rs` with staggered column/row commits.
   NES has a four-screen free-scroll path with preloaded 64x60
   movement, Tiled diagonal coverage inside that surface, horizontal column streaming
@@ -534,8 +534,8 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
-  --out samples/gameboy-drawing/drawing.gb \
-  samples/gameboy-drawing/drawing.rs
+  --out samples/static-drawing/drawing.gb \
+  samples/static-drawing/drawing.rs
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target nes \

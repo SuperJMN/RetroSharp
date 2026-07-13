@@ -23,8 +23,8 @@ Common commands
 - Run the CLI (compile a source file and print IL and Z80 assembly)
   - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- path/to/source.rs
 - Build sample cartridges
-  - NES: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/nes-drawing/drawing.nes samples/nes-drawing/drawing.rs
-  - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/gameboy-drawing/drawing.gb samples/gameboy-drawing/drawing.rs
+  - NES: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/static-drawing/drawing.nes samples/static-drawing/drawing.rs
+  - Game Boy static drawing: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/static-drawing/drawing.gb samples/static-drawing/drawing.rs
   - Game Boy runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/runner/bin/runner.gb samples/runner/runner.retrosharp.json
   - NES runtime runner: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/bin/runner.nes samples/runner/runner.retrosharp.json
   - Game Boy actor framework: dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/actor-framework/actors.gb samples/actor-framework/actors.rs
