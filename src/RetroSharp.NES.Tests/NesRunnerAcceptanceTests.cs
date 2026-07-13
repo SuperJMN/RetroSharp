@@ -92,6 +92,65 @@ public sealed class NesRunnerAcceptanceTests
         WriteCadenceHarnessIfRequested(result);
     }
 
+    [Theory]
+    [InlineData((byte)0x00)]
+    [InlineData((byte)0xFF)]
+    [InlineData((byte)0xA5)]
+    public void Nes_runner_boot_initializes_only_packed_camera_owned_ram_for_every_power_on_pattern(byte powerOnValue)
+    {
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var ram = Enumerable.Repeat(powerOnValue, 0x800).ToArray();
+        var runtimeStateLength = NesWorldPackRuntimeAbi.CollisionCellResult - NesWorldPackRuntimeAbi.ValidationState + 1;
+        var runtimeStateClearLoop = new byte[]
+        {
+            0xA2, 0x00,
+            0x9D, (byte)(NesWorldPackRuntimeAbi.ValidationState & 0xFF), (byte)(NesWorldPackRuntimeAbi.ValidationState >> 8),
+            0xE8,
+            0xE0, checked((byte)runtimeStateLength),
+            0xD0, 0xF8,
+        };
+        Assert.True(
+            ContainsSequence(result.Rom, runtimeStateClearLoop),
+            "Packed-camera boot must clear exactly the WorldPack/camera runtime-owned $0326..$03FF control and scratch block.");
+        Array.Fill(ram, (byte)0, NesWorldPackRuntimeAbi.ValidationState, runtimeStateLength);
+
+        var stagingClearLoops = new[]
+        {
+            new byte[] { 0xA2, 0x00, 0x9D, 0x00, 0x04, 0x9D, 0x00, 0x05, 0xE8, 0xD0, 0xF7 },
+            new byte[] { 0xA2, 0x00, 0x9D, 0x00, 0x06, 0xE8, 0xE0, 0x52, 0xD0, 0xF8 },
+        };
+        Assert.All(
+            stagingClearLoops,
+            clearLoop => Assert.True(
+                ContainsSequence(result.Rom, clearLoop),
+                "Packed-camera boot must clear every byte of its 594-byte visual/collision/edge staging layout."));
+        Array.Fill(ram, (byte)0, 0x0400, 594);
+
+        var noSlotInitialization = new byte[]
+        {
+            0xA9, NesPackedCameraRuntime.NoSlot,
+            0x8D, (byte)(NesPackedCameraRuntime.SelectedSlot & 0xFF), (byte)(NesPackedCameraRuntime.SelectedSlot >> 8),
+        };
+        Assert.True(
+            ContainsSequence(result.Rom, noSlotInitialization),
+            "Packed-camera boot must give SelectedSlot the explicit NoSlot sentinel.");
+        ram[NesPackedCameraRuntime.SelectedSlot] = NesPackedCameraRuntime.NoSlot;
+
+        Assert.All(
+            Enumerable.Range(NesWorldPackRuntimeAbi.ValidationState, runtimeStateLength),
+            address =>
+            {
+                var expected = address == NesPackedCameraRuntime.SelectedSlot ? NesPackedCameraRuntime.NoSlot : (byte)0;
+                Assert.Equal(expected, ram[address]);
+            });
+        Assert.All(ram[0x0400..0x0652], value => Assert.Equal((byte)0, value));
+        Assert.Equal(powerOnValue, ram[0x0325]);
+        Assert.Equal(powerOnValue, ram[0x0652]);
+    }
+
     [Fact]
     public void Nes_runner_uses_dead_zone_2d_camera_path()
     {

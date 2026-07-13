@@ -465,7 +465,7 @@ internal static class NesWorldPackRuntimeEmitter
         EmitValidation(builder, plan);
         EmitPlaneDecoders(builder, plan, placement);
         EmitLookups(builder, plan);
-        EmitRuntimeInitialization(builder, plan.UsesFastLookup);
+        EmitRuntimeInitialization(builder, plan);
         if (probe is not null)
         {
             EmitProbe(builder, probe);
@@ -553,10 +553,11 @@ internal static class NesWorldPackRuntimeEmitter
 
     private static bool UsesFastCollisionLookup(NesWorldPackRuntimePlan plan) => plan.UsesFastLookup;
 
-    private static void EmitRuntimeInitialization(PrgBuilder builder, bool prewarmVisualCache)
+    private static void EmitRuntimeInitialization(PrgBuilder builder, NesWorldPackRuntimePlan plan)
     {
         builder.Label(NesRomBuilder.WorldPackInitializeLabel);
         builder.LoadAImmediate(0);
+        EmitClearStaging(builder, plan.Layout);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.VisualCache0Valid);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.VisualCache1Valid);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.VisualCache0ChunkLow);
@@ -570,7 +571,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.CollisionCellYTag);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareXHigh);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareYHigh);
-        if (!prewarmVisualCache)
+        if (!plan.UsesFastLookup)
         {
             builder.LoadAImmediate((byte)NesWorldPackResult.Success);
             builder.Return();
@@ -610,6 +611,49 @@ internal static class NesWorldPackRuntimeEmitter
 
         builder.LoadAImmediate((byte)NesWorldPackResult.Success);
         builder.Return();
+    }
+
+    private static void EmitClearStaging(PrgBuilder builder, NesWorldPackRuntimeLayout layout)
+    {
+        var start = layout.VisualSlots[0].Start;
+        var remaining = layout.TotalBytes;
+        while (remaining >= 512)
+        {
+            var loop = builder.CreateLabel("worldpack_staging_clear_pair");
+            builder.LoadXImmediate(0);
+            builder.Label(loop);
+            builder.StoreAAbsoluteX(start);
+            builder.StoreAAbsoluteX(checked((ushort)(start + 256)));
+            builder.IncrementX();
+            builder.BranchRelative(0xD0, loop); // BNE loop
+            start = checked((ushort)(start + 512));
+            remaining -= 512;
+        }
+
+        while (remaining >= 256)
+        {
+            var loop = builder.CreateLabel("worldpack_staging_clear_page");
+            builder.LoadXImmediate(0);
+            builder.Label(loop);
+            builder.StoreAAbsoluteX(start);
+            builder.IncrementX();
+            builder.BranchRelative(0xD0, loop); // BNE loop
+            start = checked((ushort)(start + 256));
+            remaining -= 256;
+        }
+
+        if (remaining == 0)
+        {
+            return;
+        }
+
+        var tailLoop = builder.CreateLabel("worldpack_staging_clear_tail");
+        builder.LoadXImmediate(0);
+        builder.Label(tailLoop);
+        builder.StoreAAbsoluteX(start);
+        builder.IncrementX();
+        builder.CompareXImmediate(remaining);
+        builder.BranchRelative(0xD0, tailLoop); // BNE tailLoop
     }
 
     internal static int PinnedLookupDataLength(NesWorldPackRuntimePlan plan)

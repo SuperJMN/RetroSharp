@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-12.
+Last updated: 2026-07-13.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -19,6 +19,12 @@ This document preserves project knowledge that previously lived only in agent me
 - The current closeout validation expectation is `git diff --check` and
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
+- RPH-3.1 / #326 makes the NES packed runner independent of CPU RAM power-on
+  policy. Startup clears only the exact `$0326..$03FF` WorldPack/camera control
+  block and `$0400..$0651` 594-byte staging layout, then assigns `NoSlot`.
+  `tools/nes/verify_runner_power_on_ram.py` proves `$00`, `$FF`, and a
+  deterministic nonzero pattern through FCEUmm `(SVN) 3a84a6f`; AprNes/NesMcp
+  retains the same 120-frame `15/15/15/15/15` scheduler lifecycle evidence.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
   `Camera.SetPosition` can walk up to two same-axis tile crossings per frame and
