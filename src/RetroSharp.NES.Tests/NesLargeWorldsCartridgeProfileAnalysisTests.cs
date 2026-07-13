@@ -109,6 +109,51 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.Equal(0x40, ByteAtCpuAddress(prg, irqVector));
     }
 
+    [Fact]
+    public void Automatic_mapper0_tiled_vscroll_vectors_nmi_to_the_fixed_frame_signal_handler()
+    {
+        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            File.ReadAllText(samplePath),
+            Path.GetDirectoryName(samplePath));
+        var prg = result.Rom.AsSpan(16, result.Report.PrgRomSize);
+        var nmiVector = ReadWord(prg, prg.Length - 6);
+        var resetVector = ReadWord(prg, prg.Length - 4);
+        var irqVector = ReadWord(prg, prg.Length - 2);
+
+        Assert.Equal("nes-mapper-0-current", result.Report.SelectedProfile);
+        Assert.Equal(new byte[] { 0x02, 0x01, 0x09, 0x00 }, result.Rom[4..8]);
+        Assert.Contains(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        Assert.InRange(nmiVector, 0x8000, 0xFFF9);
+        Assert.NotEqual(resetVector, nmiVector);
+        Assert.Equal(0x8000, resetVector);
+        Assert.Equal(resetVector, irqVector);
+        Assert.Equal(0x48, prg[nmiVector - 0x8000]);
+        Assert.Equal(0x78, prg[resetVector - 0x8000]);
+        Assert.True(ContainsSequence(prg, IncrementWordSequence(NesPackedCameraRuntime.FrameCounterLow)));
+    }
+
+    [Fact]
+    public void Mapper0_without_a_packed_camera_retains_simple_vectors_and_its_tracked_golden()
+    {
+        var samplePath = RepositoryFile("samples/nes-drawing/drawing.rs");
+        var goldenPath = RepositoryFile("samples/nes-drawing/drawing.nes");
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            File.ReadAllText(samplePath),
+            Path.GetDirectoryName(samplePath));
+        var prg = result.Rom.AsSpan(16, result.Report.PrgRomSize);
+        var nmiVector = ReadWord(prg, prg.Length - 6);
+        var resetVector = ReadWord(prg, prg.Length - 4);
+        var irqVector = ReadWord(prg, prg.Length - 2);
+
+        Assert.Equal("nes-mapper-0-current", result.Report.SelectedProfile);
+        Assert.DoesNotContain(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        Assert.Equal(0x8000, resetVector);
+        Assert.Equal(resetVector, nmiVector);
+        Assert.Equal(resetVector, irqVector);
+        Assert.Equal(File.ReadAllBytes(goldenPath), result.Rom);
+    }
+
     private static byte[] IncrementWordSequence(ushort lowAddress) =>
     [
         0xEE, (byte)lowAddress, (byte)(lowAddress >> 8),
