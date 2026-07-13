@@ -361,18 +361,19 @@ public sealed class NesLargeWorldCameraTests
             Enumerable.Range(32, 8).Select(index => cpu.Ram((ushort)(runtime.Layout.EdgeSlots[0].Start + index))),
             ppuDataWrites.Skip(32).Select(write => write.Value));
         Assert.Equal(new byte[] { 0x84, 0x80 }, cpu.PpuWrites.Where(write => write.Register == 0x2000).Select(write => write.Value));
-        Assert.Equal(2, cpu.PpuStatusReadCycles.Count);
+        Assert.Single(cpu.PpuStatusReadCycles);
         Assert.All(ppuDataWrites, write => Assert.NotNull(write.VramAddress));
         Assert.True(
-            commit.Cycles <= 2_273,
-            $"The complete packed column commit must fit in one NTSC VBlank; measured {commit.Cycles} CPU cycles " +
+            commit.Cycles <= 2_136,
+            $"The complete packed column commit must leave the runner's observed VBlank-entry/call-path margin; " +
+            $"measured {commit.Cycles} CPU cycles " +
             $"with PPUDATA writes spanning relative cycles " +
             $"{ppuDataWrites[0].Cycle - commitStartCycles}..{ppuDataWrites[^1].Cycle - commitStartCycles} " +
             $"(last tile {ppuDataWrites[31].Cycle - commitStartCycles}, first attribute {ppuDataWrites[32].Cycle - commitStartCycles}).");
     }
 
     [Fact]
-    public void Packed_wait_frame_rechecks_the_hardware_vblank_after_a_late_frame_signal()
+    public void Packed_wait_frame_discards_a_stale_signal_before_waiting_for_the_next_nmi()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         var packed = NesTiledWorldImporter.CompileWorldPack(
@@ -397,8 +398,13 @@ public sealed class NesLargeWorldCameraTests
         Assert.True(
             ContainsSequence(
                 result.Rom,
-                [0xAD, 0x8F, 0x03, 0xF0, 0xFB, 0xCE, 0x8F, 0x03, 0x2C, 0x02, 0x20, 0x10, 0xFB]),
-            "A coalesced NMI signal can be observed after VBlank; packed WaitFrame must poll PPUSTATUS before entering its PPU commit.");
+                [
+                    0xA9, 0x00, 0x8D, 0x8F, 0x03,
+                    0xAD, 0x8F, 0x03, 0xF0, 0xFB,
+                    0xCE, 0x8F, 0x03,
+                    0x2C, 0x02, 0x20, 0x10, 0xFB,
+                ]),
+            "Packed WaitFrame must discard a coalesced signal before waiting for a fresh NMI/VBlank edge.");
     }
 
     [Fact]
@@ -504,6 +510,7 @@ public sealed class NesLargeWorldCameraTests
     public void Diagonal_peers_select_the_column_first_and_retain_the_resident_row_immutable()
     {
         var serialized = NesWorldPackPlacementTests.CreateSyntheticWorldPack();
+        var runtime = NesWorldPackRuntimePlan.Create(serialized);
         const string source = """
             void Main() {
                 World.Column(0, 0, 1, 0, 1, 0, 1, 0, 1);
@@ -546,6 +553,12 @@ public sealed class NesLargeWorldCameraTests
         var retainedColumn = Enumerable.Range(0, NesPackedCameraRuntime.SlotMetadataBytes)
             .Select(offset => cpu.Ram((ushort)(NesPackedCameraRuntime.Slot0 + offset)))
             .ToArray();
+        var shortColumnAttributes = new byte[] { 0xD1, 0xD2 };
+        for (var index = 0; index < shortColumnAttributes.Length; index++)
+        {
+            cpu.SetRam((ushort)(runtime.Layout.EdgeSlots[0].Start + 8 + index), (byte)(0xE1 + index));
+            cpu.SetRam((ushort)(runtime.Layout.EdgeSlots[0].Start + 32 + index), shortColumnAttributes[index]);
+        }
         cpu.SetRam(CommitAxis, Column);
         cpu.SetRam(CommitDirection, Positive);
         cpu.SetRam(CommitWorldEdgeLow, 6);
@@ -570,6 +583,9 @@ public sealed class NesLargeWorldCameraTests
         Assert.Equal((byte)NesWorldPackResult.Success, firstCommit.A);
         Assert.Equal(Released, cpu.Ram(Slot0State));
         Assert.Equal(Resident, cpu.Ram(Slot1State));
+        Assert.Equal(
+            shortColumnAttributes,
+            cpu.PpuWrites.Where(write => write.Register == 0x2007).Skip(8).Select(write => write.Value));
         Assert.Equal(retainedRow, Enumerable.Range(0, NesPackedCameraRuntime.SlotMetadataBytes)
             .Select(offset => cpu.Ram((ushort)(NesPackedCameraRuntime.Slot1 + offset)))
             .ToArray());
