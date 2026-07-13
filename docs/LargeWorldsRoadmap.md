@@ -992,7 +992,7 @@ Recommended execution and merge order:
     The critical section records any R6, directory, or decode work as a contract
     violation.
   - The normalized full-`stage1` camera probe links as mapper 4 / TVROM with an
-    8,935-byte fixed payload, 6,204 pinned R7 bytes, 4,128 boot R7 bytes, and
+    8,999-byte fixed payload, 6,204 pinned R7 bytes, 4,128 boot R7 bytes, and
     1,536 resident CHR bytes. The unchanged full runner payload still overflows
     and remains owned solely by `LW-3.5`.
   - AprNes/NesMcp traversed 236 packed edges to visible X 1888 with matching

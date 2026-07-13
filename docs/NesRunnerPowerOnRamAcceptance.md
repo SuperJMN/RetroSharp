@@ -44,18 +44,17 @@ RetroArch config with saves disabled and all output paths isolated. The tested
 core SHA-256 was
 `2896e04ccf43ba7a46458c10214fdce906f83833e5aa69b2d1ae185d595216fb`.
 After the #327 VBlank/column-commit correction, the regenerated runner SHA-256
-is `0b9ab90d814dbacc11fb30511237ac2b69994d5074b93b7886ce8964a861ef06`.
+is `014a3495b31e9ca6be41ef6f22a676d33b1e3eeac9219ad43a723201d8c2c773`.
 
 | CPU RAM pattern | Hardware / gameplay / audio deltas | Player X | Requested / visible X | Lifecycle deltas | First byte after staging |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `$00` | `120/119/119` | `72 -> 220` | `124 / 124` | `15/15/15/15/15` | `$00` |
-| `$FF` | `120/120/120` | `72 -> 222` | `126 / 126` | `15/15/15/15/15` | `$FF` |
+| `$FF` | `120/119/119` | `72 -> 220` | `124 / 124` | `15/15/15/15/15` | `$FF` |
 | deterministic nonzero | `120/119/119` | `72 -> 220` | `124 / 124` | `15/15/15/15/15` | `$0D` |
 
-All three runs produced exactly 120 hardware frames. A paused frontend may
-sample immediately before or after the first hardware-VBlank recheck, so the
-bounded gameplay delta is 119 or 120; audio always matches gameplay exactly
-and player displacement is 148 or 150 pixels accordingly. Every run kept
+All three runs produced exactly 120 hardware frames and 119 gameplay/audio
+ticks after the fresh-NMI `WaitVBlank` synchronization; player displacement
+was 148 pixels in every fill model. Every run kept
 player Y at the authored floor `273`; ended with released/empty edge slots;
 performed zero bank, directory, or decode work inside commit; and kept the last
 commit at 32 tile plus 8 attribute writes. The nonzero pattern is
