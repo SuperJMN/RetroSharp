@@ -154,7 +154,7 @@ tile-index limit remain separately named values. The report's
 `selectedProfile` is null: it does not change mapper-0 output, select mapper 4,
 or wire a pack reader into production.
 
-`Camera.Init(mapWidth, streamY, streamHeight)` enables the camera path for the current world map. `Camera.SetPosition(x, y)` consumes complete little-endian word operands and walks toward them by at most one tile crossing (≤8 px) per axis per call. Packed builds keep requested/logical coordinates separate from visible coordinates: fine movement publishes immediately only when it needs no new edge, while a tile crossing publishes after its correctly tagged resident edge completes. The fixed, bank-neutral NMI increments only a 16-bit hardware-frame counter and sets a saturated pending-frame byte; `Video.WaitVBlank()` consumes that signal, commits at most one bounded phase in mainline code, and restores scroll from visible state. Request, resident, and commit stamps plus tile/attribute and forbidden-work counters make the two-frame preparation and zero-bank/directory/decode-in-commit contracts directly testable. The measured complete-stage cadence and boundary evidence is recorded in [`NesRunnerCadenceAcceptance.md`](NesRunnerCadenceAcceptance.md).
+`Camera.Init(mapWidth, streamY, streamHeight)` enables the camera path for the current world map. `Camera.SetPosition(x, y)` consumes complete little-endian word operands and walks toward them by at most one tile crossing (≤8 px) per axis per call. Packed builds keep requested/logical coordinates separate from visible coordinates: fine movement publishes immediately only when it needs no new edge, while a tile crossing publishes after its correctly tagged resident edge completes. The fixed, bank-neutral NMI increments only a 16-bit hardware-frame counter and sets a saturated pending-frame byte. `Video.WaitVBlank()` consumes that coalesced signal, then rechecks the hardware `$2002` VBlank bit before committing at most one bounded phase in mainline code and restoring scroll from visible state; a late main loop cannot reuse a stale NMI signal during active rendering. Request, resident, and commit stamps plus tile/attribute and forbidden-work counters make the two-frame preparation and zero-bank/directory/decode-in-commit contracts directly testable. The measured complete-stage cadence and boundary evidence is recorded in [`NesRunnerCadenceAcceptance.md`](NesRunnerCadenceAcceptance.md), and the exact AprNes/FCEUmm/Nestopia four-screen differential is recorded in [`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md).
 
 `Camera.AabbTiles(screenX, worldY, width, height, flags)` and `Camera.AabbHitTop(screenX, worldY, width, height, flags)` query collision flags from the active world map using the current absolute camera tile, camera fine X, and a screen-space AABB whose Y is supplied as a complete world-pixel word. Byte-backed Y values zero-extend. World hit-top returns the aligned world top through `A:X` (`A` low, `X` high), or `FF FF` for no hit. A byte world-hit destination is accepted only when the active world is at most 32 hardware rows; taller worlds require an `i16` destination and `-1` sentinel. `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space X/Y bytes and add the camera X/Y state inside the backend. These forms support both the runner's projected player X and actor-framework world X/Y projections on the four-screen camera path. All four are declared by the `RetroSharp.Portable2D` source package as inline helpers over role-bearing target intrinsics. Generic world-space `World.TileFlagsAt(...)` and `collision_aabb_tiles(...)` remain unsupported on NES.
 
@@ -200,6 +200,12 @@ Runtime CHR banking and the IRQ HUD remain out of scope. Large Worlds v1 banks d
 code, handlers, DPCM, helpers, and vectors remain in the fixed 16 KiB region,
 and automatic executable-code banking is not implemented by this epic.
 
+The final packed-camera runtime probe currently measures 8,999 fixed bytes and
+6,204 pinned R7 bytes after the bounded column-commit and hardware-VBlank
+corrections. It remains within the same `nes-mmc3-tvrom-v1` layout; the mapper,
+bank ownership, PRG/CHR capacity, and automatic profile-selection rules are
+unchanged.
+
 `Animation.Clip(name, firstFrame, duration...)` stores a looping frame-duration table whose frame indexes and total duration must fit one byte. `Animation.Frame(name, tick)` is declared by the source package over the `animation_frame` target intrinsic and returns the current frame for that clip. `Sprite.Width(name)` is likewise a source-package helper over the compile-time `sprite_width` target intrinsic and returns the logical sprite width for a declared sprite asset.
 
 ## HUD Decision
@@ -221,6 +227,14 @@ control block and the exact 594-byte `$0400..$0651` staging layout, assigns the
 and the first byte after staging outside those clears. FCEUmm `$00`/`$FF` plus
 a deterministic nonzero pattern and AprNes lifecycle evidence are recorded in
 [`NesRunnerPowerOnRamAcceptance.md`](NesRunnerPowerOnRamAcceptance.md).
+
+NES packed-camera visual correctness is also differential rather than
+screenshot-only. The tracked runner is driven right beyond camera X 300, jumped
+against authored collision, and driven left through X 256 in AprNes, FCEUmm,
+and Nestopia. Acceptance compares all four physical nametables plus exact
+visible tile IDs and attribute palette selectors, lifecycle and forbidden-work
+counters, PPU state, framebuffers, and collision cells. See
+[`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md).
 
 `samples/actor-framework/actors.rs` is the focused Game Boy/NES acceptance sample for the actor framework. It uses `Actors.Pool`, `Enemies.Def`, Tiled object-layer spawn data, runtime camera-window activation, `enemies.Update()`, `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and `enemies.Draw()` over the same source. The framework lowers before NES target emission to fixed `Actor` arrays with split X/Y world coordinates, generated spawn helpers plus `used[]`, direct kind branches, camera-relative 2-axis collision, and ordinary `Sprite.Draw(...)` calls.
 

@@ -25,6 +25,17 @@ This document preserves project knowledge that previously lived only in agent me
   `tools/nes/verify_runner_power_on_ram.py` proves `$00`, `$FF`, and a
   deterministic nonzero pattern through FCEUmm `(SVN) 3a84a6f`; AprNes/NesMcp
   retains the same 120-frame `15/15/15/15/15` scheduler lifecycle evidence.
+- RPH-3.2 / #327 restores deterministic MMC3/four-screen runner streaming in
+  FCEUmm without changing gameplay, map content, mapper selection, or collision.
+  `tools/nes/verify_runner_visual_parity.py` is the single end-to-end harness:
+  it drives the tracked ROM right beyond camera X 300, jumps, and returns left
+  through X 256 in AprNes/NesMcp, isolated RetroArch/FCEUmm, and Nestopia. It
+  compares all four physical nametables, exact visible tile IDs plus attribute
+  palette selectors, authored collision, PPU/lifecycle state, and framebuffers.
+  The fix bounds the 32-tile/8-attribute column commit to 2172 CPU cycles and
+  makes packed `Video.WaitVBlank()` recheck hardware VBlank after consuming the
+  coalesced NMI signal. RetroArch automation is shared with the power-on harness
+  and guards persistent `retroarch.cfg` plus `FCEUmm.opt` by hash.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
   `Camera.SetPosition` can walk up to two same-axis tile crossings per frame and

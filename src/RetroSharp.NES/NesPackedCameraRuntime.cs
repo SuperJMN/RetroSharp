@@ -148,10 +148,13 @@ internal static class NesPackedCameraRuntimeEmitter
         var row = builder.CreateLabel("nes_packed_commit_row");
         var slot1Payload = builder.CreateLabel("nes_packed_commit_slot_1_payload");
         var payloadReady = builder.CreateLabel("nes_packed_commit_payload_ready");
+        var columnSegment = builder.CreateLabel("nes_packed_commit_column_segment");
+        var columnTopSegment = builder.CreateLabel("nes_packed_commit_column_top_segment");
+        var columnSegmentReady = builder.CreateLabel("nes_packed_commit_column_segment_ready");
         var loop = builder.CreateLabel("nes_packed_commit_column_loop");
-        var leftNameTable = builder.CreateLabel("nes_packed_commit_left_nt");
-        var highReady = builder.CreateLabel("nes_packed_commit_high_ready");
-        var cursorReady = builder.CreateLabel("nes_packed_commit_cursor_ready");
+        var columnSetTopTarget = builder.CreateLabel("nes_packed_commit_column_set_top_target");
+        var columnStoreTarget = builder.CreateLabel("nes_packed_commit_column_store_target");
+        var columnTilesDone = builder.CreateLabel("nes_packed_commit_column_tiles_done");
         var columnAttributes = builder.CreateLabel("nes_packed_commit_column_attributes");
         var columnAttributeLoop = builder.CreateLabel("nes_packed_commit_column_attribute_loop");
         var columnRelease = builder.CreateLabel("nes_packed_commit_column_release");
@@ -181,10 +184,6 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Committing);
         builder.LoadAImmediate(1);
         builder.StoreAAbsolute(NesPackedCameraRuntime.CriticalSection);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.LastTileWrites);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.LastAttributeWrites);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.Iterator);
         builder.LoadAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
         builder.StoreAAbsolute(NesPackedCameraRuntime.TargetCursor);
 
@@ -197,54 +196,64 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitStoreDestination(builder, plan.Layout.EdgeSlots[1]);
 
         builder.Label(payloadReady);
-        builder.Label(loop);
-        builder.LoadXAbsolute(NesPackedCameraRuntime.TargetCursor);
-        builder.LdaAbsoluteX(NesRomBuilder.PpuRowAddressHighLabel);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.Status);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.CommitTarget);
-        builder.CompareImmediate(32);
-        builder.JumpIf(0x90, leftNameTable);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.Status);
-        builder.ClearCarry();
-        builder.AddImmediate(4);
-        builder.JumpAbsolute(highReady);
-        builder.Label(leftNameTable);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.Status);
-        builder.Label(highReady);
-        builder.StoreAAbsolute(0x2006);
-
-        builder.LoadAAbsolute(NesPackedCameraRuntime.CommitTarget);
-        builder.AndImmediate(0x1F);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.AddressColumn);
-        builder.LoadXAbsolute(NesPackedCameraRuntime.TargetCursor);
-        builder.LdaAbsoluteX(NesRomBuilder.PpuRowAddressLowLabel);
-        builder.ClearCarry();
-        builder.AddAbsolute(NesPackedCameraRuntime.AddressColumn);
-        builder.StoreAAbsolute(0x2006);
-
         builder.LoadAAbsolute(NesPackedCameraRuntime.DestinationLow);
         builder.StoreAZeroPage(PointerLow);
         builder.LoadAAbsolute(NesPackedCameraRuntime.DestinationHigh);
         builder.StoreAZeroPage(PointerHigh);
-        builder.LoadYAbsolute(NesPackedCameraRuntime.Iterator);
+        builder.LoadAAbsolute(0x2002); // Reset the shared PPUSCROLL/PPUADDR write latch.
+        builder.LoadAImmediate(0x84);  // NMI enabled, PPUDATA increments vertically by 32.
+        builder.StoreAAbsolute(0x2000);
+        builder.LoadYImmediate(0);
+        builder.LoadXAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
+        builder.StoreXAbsolute(NesPackedCameraRuntime.Iterator);
+
+        builder.Label(columnSegment);
+        builder.LoadAAbsolute(NesPackedCameraRuntime.TargetCursor);
+        builder.CompareImmediate(30);
+        builder.JumpIf(0x90, columnTopSegment);
+        builder.SetCarry();
+        builder.SubtractImmediate(30);
+        builder.Label(columnTopSegment);
+        builder.XorImmediate(0xFF);
+        builder.ClearCarry();
+        builder.AddImmediate(31);
+        builder.Label(columnSegmentReady);
+        builder.StoreAAbsolute(NesPackedCameraRuntime.PhaseRemaining);
+        EmitSetPpuTileAddress(
+            builder,
+            NesPackedCameraRuntime.TargetCursor,
+            NesPackedCameraRuntime.CommitTarget,
+            "nes_packed_column_tile");
+        builder.LoadXAbsolute(NesPackedCameraRuntime.Iterator);
+
+        builder.Label(loop);
         builder.LoadAIndirectY(PointerLow);
         builder.StoreAAbsolute(0x2007);
-        builder.IncrementAbsolute(NesPackedCameraRuntime.LastTileWrites);
-        builder.IncrementAbsolute(NesPackedCameraRuntime.Iterator);
-        builder.IncrementAbsolute(NesPackedCameraRuntime.TargetCursor);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.TargetCursor);
-        builder.CompareImmediate(60);
-        builder.JumpIf(0xD0, cursorReady);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.TargetCursor);
-        builder.Label(cursorReady);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.Iterator);
-        builder.CompareAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
+        builder.IncrementY();
+        builder.DecrementX();
+        builder.JumpIf(0xF0, columnTilesDone);
+        builder.DecrementAbsolute(NesPackedCameraRuntime.PhaseRemaining);
         builder.JumpIf(0xD0, loop);
+        builder.StoreXAbsolute(NesPackedCameraRuntime.Iterator);
+        builder.LoadAAbsolute(NesPackedCameraRuntime.TargetCursor);
+        builder.CompareImmediate(30);
+        builder.JumpIf(0x90, columnSetTopTarget);
+        builder.LoadAImmediate(0);
+        builder.JumpAbsolute(columnStoreTarget);
+        builder.Label(columnSetTopTarget);
+        builder.LoadAImmediate(30);
+        builder.Label(columnStoreTarget);
+        builder.StoreAAbsolute(NesPackedCameraRuntime.TargetCursor);
+        builder.JumpAbsolute(columnSegment);
+
+        builder.Label(columnTilesDone);
+        EmitCopy(builder, NesPackedCameraRuntime.CommitPayloadLength, NesPackedCameraRuntime.LastTileWrites);
 
         builder.Label(columnAttributes);
-        builder.LoadAImmediate(32);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.Iterator);
+        builder.LoadAAbsolute(0x2002); // Attribute addresses start from a known write-latch phase.
+        builder.LoadAImmediate(0x80);  // Restore horizontal PPUDATA increment before sparse attributes.
+        builder.StoreAAbsolute(0x2000);
+        builder.LoadYImmediate(32);
         builder.LoadAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
         builder.AndImmediate(0x03);
         builder.ClearCarry();
@@ -253,6 +262,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.StoreAAbsolute(NesPackedCameraRuntime.PhaseRemaining);
+        builder.StoreAAbsolute(NesPackedCameraRuntime.LastAttributeWrites);
         builder.LoadAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
         builder.AndImmediate(0xFC);
         builder.StoreAAbsolute(NesPackedCameraRuntime.TargetCursor);
@@ -260,14 +270,19 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.ShiftRightA();
         builder.ShiftRightA();
         builder.AndImmediate(0x0F);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.AttributeBlock);
+        builder.PushA();
+        builder.AndImmediate(0x07);
+        builder.StoreAAbsolute(NesPackedCameraRuntime.AddressColumn);
+        builder.PullA();
+        builder.AndImmediate(0x08);
+        builder.ShiftRightA();
+        builder.StoreAAbsolute(NesPackedCameraRuntime.Status);
 
         builder.Label(columnAttributeLoop);
         EmitSetPpuAttributeAddressForColumn(builder);
-        EmitLoadPayloadByte(builder);
+        builder.LoadAIndirectY(PointerLow);
         builder.StoreAAbsolute(0x2007);
-        builder.IncrementAbsolute(NesPackedCameraRuntime.LastAttributeWrites);
-        builder.IncrementAbsolute(NesPackedCameraRuntime.Iterator);
+        builder.IncrementY();
         builder.LoadAAbsolute(NesPackedCameraRuntime.TargetCursor);
         builder.ClearCarry();
         builder.AddImmediate(4);
@@ -1136,26 +1151,11 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitSetPpuAttributeAddressForColumn(PrgBuilder builder)
     {
-        var leftNameTable = builder.CreateLabel("nes_packed_column_attr_left_nt");
-        var highReady = builder.CreateLabel("nes_packed_column_attr_high_ready");
         builder.LoadXAbsolute(NesPackedCameraRuntime.TargetCursor);
         builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressHighLabel);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.Status);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeBlock);
-        builder.CompareImmediate(8);
-        builder.JumpIf(0x90, leftNameTable);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.Status);
         builder.ClearCarry();
-        builder.AddImmediate(4);
-        builder.JumpAbsolute(highReady);
-        builder.Label(leftNameTable);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.Status);
-        builder.Label(highReady);
+        builder.AddAbsolute(NesPackedCameraRuntime.Status);
         builder.StoreAAbsolute(0x2006);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeBlock);
-        builder.AndImmediate(0x07);
-        builder.StoreAAbsolute(NesPackedCameraRuntime.AddressColumn);
-        builder.LoadXAbsolute(NesPackedCameraRuntime.TargetCursor);
         builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressLowLabel);
         builder.ClearCarry();
         builder.AddAbsolute(NesPackedCameraRuntime.AddressColumn);
