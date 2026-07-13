@@ -587,11 +587,16 @@ Recommended execution and merge order:
   - Preserve the word collision ABI: a floor at world Y 304 returns `30 01` and
     no hit returns `FF FF`.
 - Implemented reader:
-  - Startup validates the exact v1 header, collision profiles, and directory,
-    then semantically walks every raw/RLE visual and collision plane, including
-    decoded ID bounds and exact encoded consumption. A failed validation is
-    cached as malformed and halts before `Main`; successful validation is
-    cached before camera, audio, or user state becomes visible.
+  - The compiler semantically validates the exact v1 header, collision
+    profiles, directory, raw/RLE planes, decoded ID bounds, and encoded
+    consumption before linking. At runtime, startup compares the v1 header
+    byte-for-byte and fingerprints every linked WorldPack byte with the
+    position-sensitive 32-bit check introduced by #332. Staged RLE rechecks
+    stored consumption, packet fit, and IDs; staged raw decoding validates
+    every ID before cache publication and checks it again before visual
+    expansion or collision-profile lookup. A failed validation is
+    cached as malformed and halts before `Main`, while successful validation
+    is cached before camera, audio, or user state becomes visible.
   - Fixed-bank random lookup maps complete hardware coordinates to the clipped
     8x8 source-metatile directory, decodes only the requested plane, and resolves
     Game Boy visual expansions or collision profiles independently. The reader
@@ -626,6 +631,12 @@ Recommended execution and merge order:
 #### LW-2.4: Integrate staged edges with Game Boy camera streaming
 
 - Status: **implemented by [#299](https://github.com/SuperJMN/RetroSharp/issues/299).**
+- Cadence follow-up: [#332](https://github.com/SuperJMN/RetroSharp/issues/332)
+  keeps the production packed route, validates the complete pack before LCD
+  enable, reuses edge lookup/decode/bank state, and bounds each measured cold,
+  chunk-boundary, or bank-sensitive request-to-resident transition to one DMG
+  frame. SameBoy evidence is recorded in
+  [`GameBoyPackedCameraCadenceAcceptance.md`](GameBoyPackedCameraCadenceAcceptance.md).
 - Layer: Game Boy camera runtime and VBlank integration.
 - Dependencies: [LW-2.3 / #298](https://github.com/SuperJMN/RetroSharp/issues/298)
   (native blocked-by).

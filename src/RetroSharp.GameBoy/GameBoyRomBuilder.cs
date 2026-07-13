@@ -35,6 +35,9 @@ internal static class GameBoyRomBuilder
     internal const string WorldPackValidateLabel = "worldpack_validate";
     internal const string WorldPackVisualDecodeLabel = "worldpack_decode_visual";
     internal const string WorldPackVisualLookupLabel = "worldpack_visual_lookup";
+    internal const string WorldPackVisualEdgeLookupLabel = "worldpack_visual_edge_lookup";
+    internal const string WorldPackVisualEdgeContinueLabel = "worldpack_visual_edge_continue";
+    internal const string WorldPackVisualEdgeExpansionLabel = "worldpack_visual_edge_expansion";
     internal const string WorldPackCollisionDecodeLabel = "worldpack_decode_collision";
     internal const string WorldPackCollisionLookupLabel = "worldpack_collision_lookup";
     internal const string WorldPackPrepareEdgeLabel = "worldpack_prepare_edge";
@@ -498,8 +501,12 @@ internal static class GameBoyRomBuilder
 
         EmitClearOam(builder, "clear_oam");
 
-        builder.Emit(0x3E, (byte)(program.UsesWindowHud ? 0xF7 : 0x97));
-        builder.Emit(0xE0, 0x40);                   // LDH ($40),A
+        var lcdControl = (byte)(program.UsesWindowHud ? 0xF7 : 0x97);
+        if (worldPackRuntime is null)
+        {
+            builder.Emit(0x3E, lcdControl);
+            builder.Emit(0xE0, 0x40);               // LDH ($40),A
+        }
 
         var usesPackedCameraRuntime = worldPackRuntime is not null && ProgramUsesCameraStreaming(program);
         var runtime = new GameBoyRuntimeCompiler(
@@ -552,6 +559,8 @@ internal static class GameBoyRomBuilder
             builder.Label(invalid);
             builder.JumpRelative(0x18, invalid);
             builder.Label(validated);
+            builder.Emit(0x3E, lcdControl);
+            builder.Emit(0xE0, 0x40);               // LDH ($40),A after packed validation.
         }
 
         runtime.EmitMain(program.MainBlock);
@@ -776,11 +785,10 @@ internal static class GameBoyRomBuilder
         if (instrumentPackedCameraCritical)
         {
             builder.Emit(0xF5); // PUSH AF; LY polling must not replace the requested bank.
-            GameBoyPackedCameraRuntimeEmitter.EmitWaitOutsideVBlank(builder);
-            builder.Emit(0xF1); // POP AF
-            GameBoyPackedCameraRuntimeEmitter.EmitRecordCriticalWork(
+            GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
                 builder,
                 GameBoyPackedCameraRuntime.BankWorkInCommit);
+            builder.Emit(0xF1); // POP AF
         }
 
         builder.StoreA(ActualVisibleBankAddress);
@@ -1389,7 +1397,7 @@ internal static class GameBoyWramLayout
     internal const ushort WorldPackValidationStateAddress = 0xC1FB;
 
     internal static readonly GameBoyWramRange UserLocals = new("user locals", 0xC000, 0x00E0);
-    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x00BE);
+    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x00CC);
     // WorldPack decode scratch, actual-visible bank, and one-time validation state.
     internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000D);
     internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
@@ -6016,7 +6024,7 @@ internal sealed class GameBoyRuntimeCompiler
     {
         var loop = builder.CreateLabel("packed_camera_state_clear_loop");
         builder.LoadHl(GameBoyPackedCameraRuntime.VisibleCameraXLow);
-        builder.Emit(0x06, checked((byte)(GameBoyPackedCameraRuntime.LastObservedLyValid - GameBoyPackedCameraRuntime.VisibleCameraXLow + 1))); // LD B,length
+        builder.Emit(0x06, checked((byte)(GameBoyPackedCameraRuntime.EdgeExpansionBank - GameBoyPackedCameraRuntime.VisibleCameraXLow + 1))); // LD B,length
         builder.XorA();
         builder.Label(loop);
         builder.Emit(0x22); // LD (HL+),A

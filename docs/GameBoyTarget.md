@@ -361,6 +361,24 @@ Themes can mix formats (for example a `.gbapu` trace and a `.uge` tracker song),
 
 `Camera.Apply()` writes the camera X low byte to `SCX` and the camera Y low byte to `SCY`, and commits queued columns or rows into the background tilemap. It runs at the top of the presentation phase after `Video.WaitVBlank()`, so the streaming happens inside VBlank without a second VBlank wait: a scrolling frame now costs a single VBlank, which keeps `Audio.Update()` locked to the real frame rate and stops background music from slowing down while the camera scrolls. The shared runner calls `Camera.Apply()` immediately after the wait and then issues `Sprite.Draw(...)`; on a packed-edge commit frame the backend retains the prior OAM entries and refreshes them on the next frame so VRAM and OAM work stay inside the same VBlank budget. `camera_move_right()` and `camera_move_left()` move the world camera horizontally by one pixel and queue streaming the same way `Camera.SetPosition(...)` does; a program must call `Camera.Apply()` every frame for the queued columns/rows to reach VRAM. When horizontal movement crosses an 8 px tile boundary, the next visible source map column is committed into the 19 background rows that can appear on screen, using the current top source row and top circular background row. The same column commit also streams the visible background rows above the world band from the imported `background` layer, so floating decorations such as Mario `?` blocks scroll with the world instead of freezing and repeating every 32 tiles. When a raw same-axis `Camera.SetPosition(...)` crosses two tile boundaries in one frame, the backend stores both target/source pairs and commits them in order during the same `Camera.Apply()` VBlank. The packed scheduler instead consumes one immutable peer per VBlank so it never exceeds 21 tile writes. Diagonal programs keep separate column and row queues and commit only the selected axis queue each VBlank. The row streamer writes the 21 visible columns in screen order and wraps both source and circular background columns as needed. The large per-row streamer is only emitted when the program can scroll vertically, and the diagonal staggered pending queue is only emitted when the program can scroll diagonally; horizontal-only programs stay compact. `camera_tile_column_at(screenColumn)` returns the source-map column currently visible at a screen tile column, wrapped by the configured map width.
 
+Packed startup compares the complete v1 header byte-for-byte, validates a
+position-sensitive 32-bit rolling fingerprint over the complete linked
+WorldPack before enabling the LCD, and caches success or malformed state. The
+preflight rejects compensating mutations that preserved the former 16-bit word
+sum. Staged RLE additionally enforces stored-length consumption, packet fit,
+and ID bounds; staged raw decoding validates every ID before cache publication,
+with a defensive range check again at visual expansion or collision-profile
+lookup. A malformed payload therefore cannot become visible even if it
+collides with the lightweight fingerprint. A 16-byte runtime-directory
+entry permits shift-only addressing. Consecutive tiles on an exposed edge
+reuse decoded chunk/cell coordinates, metatile expansion addresses, and one
+restorable bank session.
+This keeps cold and chunk/bank-boundary edge preparation within one physical
+DMG frame while leaving request, residency, commit, release, and visible
+hardware publication as separate observable events. See
+[`GameBoyPackedCameraCadenceAcceptance.md`](GameBoyPackedCameraCadenceAcceptance.md)
+for the #332 baseline/master/final measurements.
+
 `camera_span_tile_at(screenX, widthPx, row)` checks every source-map tile column covered by a horizontal pixel span and returns the first non-zero tile id, or `0` when the span is empty. `camera_span_has_tile(screenX, widthPx, row, tile)` returns `1` when any covered source-map tile matches `tile`, or `0` otherwise. `camera_span_has_flags(screenX, widthPx, row, flags)` checks the generated collision flag table for any matching flag bit and returns `1` or `0`. `screenX`, `widthPx`, `row`, `tile`, and `flags` are compile-time values in this prototype; `widthPx` can use `Sprite.Width(name)` so collision follows the logical width declared by `Sprite.Asset(...)`.
 
 `Camera.AabbTiles(screenX, worldY, width, height, flags)` returns `1` when an on-screen AABB overlaps generated world flags at the current camera position. The X coordinate is screen-relative and is combined with the camera's current source column and fine scroll, so it remains aligned with the visible Tiled map when the camera has scrolled beyond the byte range available to source locals. `screenX` remains byte-range; `worldY` is a complete word expression and byte-backed values zero-extend. `width`, `height`, and `flags` are compile-time values, and `width` can use `Sprite.Width(name)`. Zero width, zero height, or a zero flag mask returns `0`.
@@ -416,7 +434,8 @@ and retains all 82 generated patterns.
 
 LW-2.3 routes packed collision queries through the fixed-bank reader, so a
 packed final link no longer needs duplicate legacy collision rows. LW-2.4 adds
-the packed staged camera path described above. LW-2.5 proved the full Game Boy
+the packed staged camera path described above; #332 later bounds its production
+edge preparation to one physical frame without selecting the raw route. LW-2.5 proved the full Game Boy
 payload non-destructively; LW-3.5 then migrated the shared runner input and
 regenerated both tracked ROMs.
 

@@ -19,6 +19,13 @@ This document preserves project knowledge that previously lived only in agent me
 - The current closeout validation expectation is `git diff --check` and
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
+- RPH-3.4 / #332 restores Game Boy packed-camera cadence without falling back
+  to legacy raw rows. `samples/tiled-vscroll/vscroll.rs` reaches source tick 87
+  and `SCY=86` after 90 SameBoy frames (baseline 88/87, broken master 11/10),
+  completes ten balanced staged lifecycles, and keeps forbidden VBlank
+  bank/decode/directory counters at zero. The first cold edge becomes resident
+  in 63,248 cycles; automated coverage bounds fourteen cold/chunk/bank edges
+  to one 70,224-cycle frame. See `docs/GameBoyPackedCameraCadenceAcceptance.md`.
 - RPH-3.3 / #331 gives automatically selected mapper-0 packed-camera images
   the same fixed, mapper-neutral frame-signal NMI handler used by MMC3 while
   retaining mapper-0 reset/IRQ semantics and automatic profile selection.

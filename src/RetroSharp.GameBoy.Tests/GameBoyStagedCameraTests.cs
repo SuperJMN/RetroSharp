@@ -505,6 +505,10 @@ public sealed class GameBoyStagedCameraTests
         var bankWritesBeforeCrossings = cpu.RomBankWrites.Count;
         cpu.Held.Add("right");
 
+        cpu.RunUntilWramEquals(RequestCount, 1, 500_000_000);
+        var requestedAtCycles = cpu.Cycles;
+        cpu.RunUntilWramEquals(ResidentCount, 1, 500_000_000);
+        Assert.InRange(cpu.Cycles - requestedAtCycles, 0, GameBoyTestCpu.DmgCyclesPerFrame);
         cpu.RunUntilWramEquals(ReleaseCount, 1, 500_000_000);
 
         Assert.Equal(Column, cpu.Wram(LastCommittedAxis));
@@ -519,6 +523,10 @@ public sealed class GameBoyStagedCameraTests
         cpu.SetWram(VisibleCameraXLow, 0x08);
         cpu.SetWram(VisibleCameraXHigh, 0x08);
         cpu.Held.Add("left");
+        cpu.RunUntilWramEquals(RequestCount, 2, 500_000_000);
+        requestedAtCycles = cpu.Cycles;
+        cpu.RunUntilWramEquals(ResidentCount, 2, 500_000_000);
+        Assert.InRange(cpu.Cycles - requestedAtCycles, 0, GameBoyTestCpu.DmgCyclesPerFrame);
         cpu.RunUntilWramEquals(ReleaseCount, 2, 500_000_000);
 
         Assert.Equal(Negative, cpu.Wram(LastCommittedDirection));

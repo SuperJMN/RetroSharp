@@ -67,6 +67,20 @@ internal static class GameBoyPackedCameraRuntime
     internal const ushort LastObservedLyValid = 0xC19B;
     internal const ushort DirectoryWorkInVBlank = 0xC19C;
     internal const ushort AudioTickCount = 0xC19D;
+    internal const ushort EdgePreparationBankSession = 0xC19E;
+    internal const ushort EdgeSubcellX = 0xC19F;
+    internal const ushort EdgeSubcellY = 0xC1A0;
+    internal const ushort EdgeLocalX = 0xC1A1;
+    internal const ushort EdgeLocalY = 0xC1A2;
+    internal const ushort EdgeValidWidth = 0xC1A3;
+    internal const ushort EdgeValidHeight = 0xC1A4;
+    internal const ushort EdgeReuseReady = 0xC1A5;
+    internal const ushort EdgeVisualSlot = 0xC1A6;
+    internal const ushort EdgeCellIndex = 0xC1A7;
+    internal const ushort EdgeSameMetatile = 0xC1A8;
+    internal const ushort EdgeExpansionAddressLow = 0xC1A9;
+    internal const ushort EdgeExpansionAddressHigh = 0xC1AA;
+    internal const ushort EdgeExpansionBank = 0xC1AB;
     internal const int SlotMetadataBytes = 10;
 
     internal const int StateOffset = 0;
@@ -108,9 +122,16 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitOutsideVBlankLabel);
     }
 
+    internal static void EmitGuardCriticalWork(GbBuilder builder, ushort counterAddress)
+    {
+        EmitWaitOutsideVBlank(builder);
+        EmitRecordCriticalWork(builder, counterAddress);
+    }
+
     internal static void EmitWaitOutsideVBlankRoutine(GbBuilder builder)
     {
-        const byte safeActiveScanlineEnd = 136;
+        const byte safeActiveScanlineEnd = 128;
+        var lcdDisabled = builder.CreateLabel("packed_world_lcd_disabled");
         var firstObservation = builder.CreateLabel("packed_world_first_ly_observation");
         var wrapped = builder.CreateLabel("packed_world_ly_wrapped");
         var wrappedWithoutAudio = builder.CreateLabel("packed_world_wrap_without_audio");
@@ -121,6 +142,11 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         var audioAlreadyTicked = builder.CreateLabel("packed_world_audio_already_ticked");
         var safeActive = builder.CreateLabel("packed_world_safe_active");
         builder.Label(GameBoyRomBuilder.WorldPackWaitOutsideVBlankLabel);
+        builder.Emit(0xF5); // PUSH AF; the guard is transparent to callers when LCD timing is inactive.
+        builder.LoadHighRamA(0x40); // LCDC
+        builder.AndImmediate(0x80);
+        builder.JumpAbsolute(0xCA, lcdDisabled);
+        builder.Emit(0xF1); // POP AF
         builder.Emit(0xC5); // PUSH BC; callers may own byte/element counters in BC.
         builder.LoadHighRamA(0x44); // LY
         builder.StoreA(GameBoyPackedCameraRuntime.CurrentLy);
@@ -184,6 +210,9 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.LoadAImmediate(0);
         builder.StoreA(GameBoyPackedCameraRuntime.WaitAudioTicked);
         builder.Emit(0xC1); // POP BC
+        builder.Emit(0xC9); // RET
+        builder.Label(lcdDisabled);
+        builder.Emit(0xF1); // POP AF
         builder.Emit(0xC9); // RET
     }
 
