@@ -7,6 +7,17 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- CSL-3 / #338 binds eight exact production-source GB/NES ROM scenarios to the
+  shared #337 functional runner: static drawing, bidirectional cross-target
+  camera, GB source vertical scroll, GB/NES source free scroll, and GB Window
+  HUD. The deterministic test machines retain every authored visible tile and
+  palette (including NES attribute selection plus all four colors),
+  source/requested/visible camera state, exact ticks, reset-vector re-entry, and
+  cycle-positioned VRAM/PPU/OAM writes. The NES clock uses integer PPU dots and
+  rendering-dependent odd-frame skip rather than a rounded CPU frame constant.
+  GameboyMcp/NesMcp checkpoints on the
+  same emitted bytes independently cover the moving samples and both wrap
+  boundaries. See `docs/SimpleSampleFunctionalAcceptance.md`.
 - Code baseline immediately before the AF-4.3 documentation closeout:
   `f0398452fd0e3b93d4d77e6aeac5749dbf1322ed`.
 - Recent change: `feat(actors): generated-name guards and codegen robustness`.

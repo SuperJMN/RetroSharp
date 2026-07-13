@@ -216,7 +216,7 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 
 ## Cross-Target Sample
 
-`samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses unified world data, tick input, horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`.
+`samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses a 48-column repeating authored world, tick input, bounded bidirectional horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`. Its exact mapper-0 ROM is part of the deterministic functional acceptance matrix in [`SimpleSampleFunctionalAcceptance.md`](SimpleSampleFunctionalAcceptance.md).
 
 `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES acceptance project for the runner path. It lists `src/main.rs` plus local helper/state code from `samples/runner/src`, and uses the complete 156x20-cell `stage1.tmj` map (312x40 hardware tiles), 2-axis camera movement, camera-relative collision helpers, runtime animation, jump/reset logic, `assets/music/runner.vgz`, and `assets/mario-player.png` for both targets. NES resolves its target variants, preserves both DPCM blocks, stages packed rows/columns outside NMI, commits through all four nametables, and automatically selects `nes-mmc3-tvrom-v1` for the final runner image.
 

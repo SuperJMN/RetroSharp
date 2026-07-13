@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RetroSharp.Core\RetroSharp.Core.csproj" />
+    <ProjectReference Include="..\RetroSharp.FunctionalAcceptance\RetroSharp.FunctionalAcceptance.csproj" />
     <ProjectReference Include="..\RetroSharp.GameBoy\RetroSharp.GameBoy.csproj" />
     <ProjectReference Include="..\RetroSharp.NES\RetroSharp.NES.csproj" />
     <ProjectReference Include="..\RetroSharp.Sdk.Plugins.Platformer2D\RetroSharp.Sdk.Plugins.Platformer2D.csproj" />

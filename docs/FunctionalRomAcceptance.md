@@ -1,6 +1,7 @@
 # Functional ROM Acceptance
 
-Status: implemented shared contract for CSL-2 / #337.
+Status: implemented shared contract for CSL-2 / #337, with the first canonical
+static/source-camera rung bound by CSL-3 / #338.
 
 This document defines the functional acceptance boundary for canonical RetroSharp sample ROMs. Compilation and final-state checks remain useful, but they cannot prove sustained gameplay cadence, transient visual integrity, legal video writes, or correct camera publication. Functional acceptance runs the exact emitted ROM and evaluates every retained observation through one target-neutral contract.
 
@@ -52,6 +53,7 @@ Warm-up affects timing only. The runner captures frame zero, executes every phys
 - Authored-silent audio frames declared by the scenario do not count as starvation. The adapter cannot label a stalled frame as silence. Active frames check the longest zero-service streak and absolute cumulative drift from one service tick per active frame.
 - Input latency starts on the first frame of an input span and ends on the first change of its declared response signal.
 - Camera latency starts when a new request sequence appears and ends when the same sequence becomes resident or visible. Requested, resident, committed, and visible sequence counts remain separate in the report.
+- If the final observation-window request is still in flight, the runner drains only the declared request-to-resident/request-to-visible budget. Drain frames receive no input, cannot improve gameplay or integrity measurements, and are counted separately in `totalPhysicalFrames`; they exist only so a legal final request can prove its bounded completion.
 
 Every timing result records the observed value, reviewed limit, comparison, remaining headroom, and pass/fail result. The report records warm-up, observation, and total executed physical frames separately, so a stable ratio cannot hide a longer startup. Limits must be calibrated from the known-good pre-Large-Worlds commit `95f166886713ff3b88bc1e17c03ef0ffe93d649a`, hardware timing, and production-path traces. Relaxing a budget is a source review change; the runner has no baseline-learning mode.
 
@@ -76,16 +78,26 @@ Both JSON and text reports retain every observation-window frame after validatio
 
 `GameBoyFunctionalRomAdapter` and `NesFunctionalRomAdapter` share `IFunctionalRomMachineFactory` and `IFunctionalRomMachine`. A machine receives the exact ROM bytes, captures frame zero, applies the runner's held-input set for each requested physical frame, and returns one actual `FunctionalFrameObservation` with the matching frame number and monotonic cumulative counters. Visual scenarios also supply a separate `IFunctionalFrameOracle`, normally derived from authored map and sprite intent rather than emulator memory.
 
-The adapters deliberately do not duplicate an emulator:
+The adapters deliberately do not introduce target-specific acceptance rules:
 
 - Fast Game Boy scenarios wrap the existing production-ROM `GameBoyTestCpu` instrumentation.
-- RetroSharp has no in-process NES CPU today; NES production scenarios wrap NesMcp/AprNes through the machine factory and declare `nes-mcp` as their execution source.
+- Fast mapper-0 NES scenarios wrap the deterministic production-ROM execution path in `NesTestCpu`, including reset-vector re-entry detection, CPU execution, an integer PPU-dot clock with rendering-dependent odd-frame skip, controller reads, nametable/attribute/palette/OAM state, scroll state, and cycle-positioned PPU/OAM writes.
 - `GameboyMcp` and `NesMcp` transports implement the same machine interface, so they feed the shared runner rather than introducing target-specific acceptance logic.
 - External-emulator launch scripts may provide transport, but the shared .NET runner remains the behavioral oracle and report producer.
 
 Concrete sample adapters and scenarios are added by the ladder rung that owns the sample. CSL-2 establishes the contract and deliberately does not migrate all samples.
 
 The first binding proof is `FunctionalProductionRomAcceptanceTests`: it loads `validation/scenarios/tiled-vscroll.gb.json`, passes the exact tracked `samples/tiled-vscroll/vscroll.gb` bytes through `GameBoyFunctionalRomAdapter`, and drives the existing cycle-accurate `GameBoyTestCpu`. That scenario enables only the observations this seam can prove reliably (gameplay cadence, resets, and request/resident/commit/visible camera state). It does not claim bank or PPU write-timing coverage; later sample rungs must enable those features only through instrumentation that can actually observe them.
+
+CSL-3 binds eight canonical sample/target scenarios to exact production source
+and emitted ROM bytes: static drawing on GB/NES, the shared input-driven camera
+on GB/NES, source-authored vertical scrolling on GB, source-authored free
+scroll on GB/NES, and the Game Boy Window HUD. These bindings enable authored
+background and palette checks on every retained frame, exact gameplay-tick
+checks for every animated sample, request/resident/commit/visible camera
+deadlines, and legal video/OAM write timing. See
+[`SimpleSampleFunctionalAcceptance.md`](SimpleSampleFunctionalAcceptance.md)
+for the matrix, reviewed budgets, hashes, MCP checkpoints, and focused command.
 
 ## CI tiers
 

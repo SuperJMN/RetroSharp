@@ -1,0 +1,40 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "static-drawing-nes-functional",
+  "sampleId": "static-drawing",
+  "target": "nes",
+  "warmUpFrames": 4,
+  "observationFrames": 60,
+  "inputs": [],
+  "checkpoints": [
+    {
+      "id": "scene-retained",
+      "frame": 64,
+      "expectedSignals": {
+        "displayEnabled": 1
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": false,
+    "audioService": false,
+    "cameraLifecycle": false,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "NES nametable and palette setup occurs with rendering disabled; no PPUDATA write is legal during the retained visible scene.",
+    "productionTraceRationale": "The production drawing source and tracked NROM retain the authored face and platform after the two startup VBlanks without further PPU mutation."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0,
+    "maximumConsecutiveMissedGameplayTicks": 0
+  }
+}

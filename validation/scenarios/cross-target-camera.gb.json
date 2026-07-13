@@ -1,0 +1,59 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "cross-target-camera-gb-functional",
+  "sampleId": "cross-target-camera",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 161,
+  "inputs": [
+    {
+      "id": "move-right",
+      "startFrame": 21,
+      "durationFrames": 80,
+      "buttons": ["right"],
+      "responseSignal": "sourceCameraX"
+    },
+    {
+      "id": "move-left",
+      "startFrame": 101,
+      "durationFrames": 81,
+      "buttons": ["left"],
+      "responseSignal": "sourceCameraX"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "returned-to-origin",
+      "frame": 181,
+      "expectedSignals": {
+        "sourceCameraX": 0,
+        "visibleCameraX": 0
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A 70224-cycle DMG frame permits one source tick and one VBlank camera commit; raw edges must be retained by the next visible frame.",
+    "productionTraceRationale": "The production portable camera ROM polls input once per frame, advances for 80 RIGHT ticks, and returns to X=0 over 81 LEFT ticks without skipping a retained background frame."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.98,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}
