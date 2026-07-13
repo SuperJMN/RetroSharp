@@ -1,0 +1,42 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "window-hud-gb-functional",
+  "sampleId": "window-hud",
+  "target": "gb",
+  "warmUpFrames": 8,
+  "observationFrames": 60,
+  "inputs": [],
+  "checkpoints": [
+    {
+      "id": "stable-window-separation",
+      "frame": 68,
+      "expectedSignals": {
+        "windowEnabled": 1,
+        "windowX": 7,
+        "windowY": 0
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": false,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "The DMG Window uses its independent $9C00 tilemap at WX=7/WY=0; startup writes occur with LCD disabled and the retained HUD remains separate from background scroll state.",
+    "productionTraceRationale": "The exact production HUD ROM keeps Icon/One/Two/Three in window cells 0..3 for every retained frame while its WaitVBlank loop advances at physical-frame cadence."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.98,
+    "maximumConsecutiveMissedGameplayTicks": 1
+  }
+}

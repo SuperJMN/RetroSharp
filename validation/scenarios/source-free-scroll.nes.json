@@ -1,0 +1,39 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "source-free-scroll-nes-functional",
+  "sampleId": "source-free-scroll",
+  "target": "nes",
+  "warmUpFrames": 20,
+  "observationFrames": 600,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "maximum-requested", "frame": 282, "expectedSignals": { "sourceCameraX": 248, "sourceCameraY": 248 } },
+    { "id": "maximum-visible", "frame": 283, "expectedSignals": { "visibleCameraX": 248, "visibleCameraY": 248 } },
+    { "id": "origin-requested", "frame": 562, "expectedSignals": { "sourceCameraX": 0, "sourceCameraY": 0 } },
+    { "id": "origin-visible", "frame": 563, "expectedSignals": { "visibleCameraX": 0, "visibleCameraY": 0 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "The bounded 64x60 source world is preloaded into four-screen VRAM; camera publication must remain one source tick per NTSC frame with no visible-time PPUDATA mutation.",
+    "productionTraceRationale": "AprNes executes the exact four-screen production NROM through both diagonal directions and the X/Y=248 reversals while all four retained nametables stay authored."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.98,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

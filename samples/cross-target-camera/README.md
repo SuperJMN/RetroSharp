@@ -2,9 +2,13 @@
 
 Sample Layer: `portable-sdk`
 
-This sample is the first small portability acceptance case for the 2D SDK surface. The same `camera.rs` source builds for Game Boy and NES by using shared world data, tick input, horizontal camera positioning, and logical sprite drawing.
+This sample is the first small portability acceptance case for the 2D SDK surface. The same `camera.rs` source builds for Game Boy and NES by using shared world data, tick input, bounded RIGHT/LEFT horizontal camera positioning, and logical sprite drawing.
 
-The source also exercises the current language surface shared by both cartridge targets: enum-backed constant groups such as `Level.Width` and `Marker.ScreenX`, immutable `let` values inside the frame loop, SDK dot-calls, `while (true)`, and byte-backed locals for portable sprite draw frame and flip operands.
+The 48-column source surface covers the complete 32-column NES viewport plus
+the authored 80-pixel traversal; its eight-column visual motif repeats without
+depending on a target-specific short-map fill policy.
+
+The source also exercises the current language surface shared by both cartridge targets: enum-backed constant groups such as `Level.Width` and `Marker.ScreenX`, SDK dot-calls, `while (true)`, compound mutation, and byte-backed locals for portable camera state plus sprite draw frame and flip operands. Camera work is prepared before the frame boundary, then `Camera.Apply()` runs immediately after `Video.WaitVBlank()` so retained VRAM/PPU work stays in the legal presentation window.
 
 Build the Game Boy ROM:
 

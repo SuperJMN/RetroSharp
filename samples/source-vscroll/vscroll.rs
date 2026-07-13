@@ -5,7 +5,6 @@ static class Level
     const i16 Width = 2;
     const i16 StreamY = 0;
     const i16 SourceHeight = 24;
-    const i16 VisibleHeight = 18;
 }
 
 static class Scroll
@@ -27,15 +26,15 @@ void Main()
         4, 3, 2, 1, 5, 4, 3, 2);
 
     World.Map(Level.Width, Level.StreamY, Level.SourceHeight);
-    Camera.Init(Level.Width, Level.StreamY, Level.VisibleHeight);
+    Camera.Init(Level.Width, Level.StreamY, Level.SourceHeight);
 
     u8 cameraY = 0;
     u8 direction = 1;
 
     while (true)
     {
-        Video.WaitVBlank();
         Camera.SetPosition(0, cameraY);
+        Video.WaitVBlank();
         Camera.Apply();
 
         if (direction == 1)

@@ -1,0 +1,39 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "source-free-scroll-gb-functional",
+  "sampleId": "source-free-scroll",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 600,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "maximum-requested", "frame": 280, "expectedSignals": { "sourceCameraX": 248, "sourceCameraY": 248 } },
+    { "id": "maximum-visible", "frame": 282, "expectedSignals": { "visibleCameraX": 248, "visibleCameraY": 248 } },
+    { "id": "origin-requested", "frame": 560, "expectedSignals": { "sourceCameraX": 0, "sourceCameraY": 0 } },
+    { "id": "origin-visible", "frame": 561, "expectedSignals": { "visibleCameraX": 0, "visibleCameraY": 0 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Diagonal raw scrolling may stagger a row and column over consecutive VBlanks, but the source loop still has one 70224-cycle tick per physical frame and no visible-time VRAM writes.",
+    "productionTraceRationale": "The exact production ROM traverses both axes through X/Y=248 and reverses, covering wrapped row and column slots while retaining the authored sparse 64x60 map."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.98,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

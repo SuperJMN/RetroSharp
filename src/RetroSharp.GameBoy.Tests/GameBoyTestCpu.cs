@@ -43,6 +43,7 @@ internal sealed class GameBoyTestCpu
     private int romBank = 1;
     private long instructions;
     private long cycles;
+    private byte? previousLyRead;
 
     // Opt-in instrumentation for timing investigations. Defaults preserve existing behavior:
     // CycleAccurateLy off => LY driven by instruction count; empty Held => no buttons pressed.
@@ -53,6 +54,8 @@ internal sealed class GameBoyTestCpu
     public IReadOnlyList<long> AudioUpdateCycles => audioUpdateCycles;
     public IReadOnlyList<AudioUpdateTrace> AudioUpdateTrace => audioUpdateTrace;
     public long Cycles => cycles;
+
+    public long VBlankWaitCompletions { get; private set; }
 
     public int ResetCount { get; private set; }
 
@@ -382,9 +385,7 @@ internal sealed class GameBoyTestCpu
             case < 0xFF00:
                 return 0;
             case 0xFF44:
-                return CycleAccurateLy
-                    ? (byte)((cycles / 456) % 154) // real DMG timing: 456 cycles/scanline, 154 lines
-                    : (byte)(instructions % 154);  // instruction-driven LY so WaitVBlank loops terminate
+                return ReadLy();
             case 0xFF00:
                 return ReadJoypad();
             case < 0xFF80:
@@ -394,6 +395,20 @@ internal sealed class GameBoyTestCpu
             default:
                 return 0;
         }
+    }
+
+    private byte ReadLy()
+    {
+        var ly = CycleAccurateLy
+            ? (byte)((cycles / 456) % 154) // real DMG timing: 456 cycles/scanline, 154 lines
+            : (byte)(instructions % 154);  // instruction-driven LY so WaitVBlank loops terminate
+        if (previousLyRead is < 144 && ly >= 144)
+        {
+            VBlankWaitCompletions++;
+        }
+
+        previousLyRead = ly;
+        return ly;
     }
 
     private void WriteByte(ushort addr, byte value)

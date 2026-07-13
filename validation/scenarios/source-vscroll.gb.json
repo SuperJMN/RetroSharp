@@ -1,0 +1,39 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "source-vscroll-gb-functional",
+  "sampleId": "source-vscroll",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 260,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "maximum-requested", "frame": 121, "expectedSignals": { "sourceCameraY": 120 } },
+    { "id": "maximum-visible", "frame": 122, "expectedSignals": { "visibleCameraY": 120 } },
+    { "id": "origin-requested", "frame": 243, "expectedSignals": { "sourceCameraY": 0 } },
+    { "id": "origin-visible", "frame": 244, "expectedSignals": { "visibleCameraY": 0 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A DMG source row commit writes 21 tiles during VBlank and must not add a second frame wait; one movement tick per physical frame remains the legal cadence.",
+    "productionTraceRationale": "The production source-vscroll ROM traverses Y=0..120 and back, including every 8-pixel row boundary, while its retained 21x19 projection stays authored."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.98,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

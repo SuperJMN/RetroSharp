@@ -33,20 +33,34 @@ public static class FunctionalScenarioRunner
                 $"Scenario '{scenario.Id}' for target {scenario.Target.StableId()} requires an independent visual oracle.");
         }
 
-        var lastFrame = checked(scenario.WarmUpFrames + scenario.ObservationFrames);
-        var frames = new FunctionalFrameObservation[lastFrame + 1];
+        var lastObservationFrame = checked(scenario.WarmUpFrames + scenario.ObservationFrames);
+        var frames = new List<FunctionalFrameObservation>(lastObservationFrame + 2);
         using (var machine = adapter.CreateMachine(rom.Bytes)
                ?? throw new InvalidOperationException("The functional adapter returned no ROM machine."))
         {
-            frames[0] = machine.ObserveInitial();
+            frames.Add(machine.ObserveInitial());
             ValidateObservationFrame(frames[0], 0, null);
-            for (var frame = 1; frame <= lastFrame; frame++)
+            for (var frame = 1; frame <= lastObservationFrame; frame++)
             {
                 var held = scenario.Inputs
                     .Where(input => frame >= input.StartFrame && frame < input.StartFrame + input.DurationFrames)
                     .SelectMany(input => input.Buttons)
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
-                frames[frame] = machine.AdvanceFrame(frame, held);
+                frames.Add(machine.AdvanceFrame(frame, held));
+                ValidateObservationFrame(frames[frame], frame, frames[frame - 1]);
+            }
+
+            var maximumDrainFrames = scenario.ExpectedFeatures.CameraLifecycle
+                ? Math.Max(
+                    scenario.Budgets.MaximumRequestToResidentFrames ?? 0,
+                    scenario.Budgets.MaximumRequestToVisibleFrames ?? 0)
+                : 0;
+            for (var drain = 0;
+                 drain < maximumDrainFrames && HasIncompleteCameraRequest(scenario, frames, lastObservationFrame);
+                 drain++)
+            {
+                var frame = frames.Count;
+                frames.Add(machine.AdvanceFrame(frame, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
                 ValidateObservationFrame(frames[frame], frame, frames[frame - 1]);
             }
         }
@@ -61,12 +75,24 @@ public static class FunctionalScenarioRunner
             adapter.ExecutionSource,
             rom.SourcePath,
             Convert.ToHexString(SHA256.HashData(rom.Bytes)).ToLowerInvariant(),
-            new FunctionalFrameWindow(scenario.WarmUpFrames, scenario.ObservationFrames, lastFrame),
+            new FunctionalFrameWindow(scenario.WarmUpFrames, scenario.ObservationFrames, frames.Count - 1),
             summary,
             timingChecks.All(check => check.Passed) && integrity.Failures.Count == 0,
             timingChecks,
             integrity.Failures,
             integrity.Evidence);
+    }
+
+    private static bool HasIncompleteCameraRequest(
+        FunctionalScenario scenario,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int lastObservationFrame)
+    {
+        var requests = RequestedSequences(frames, scenario.WarmUpFrames, lastObservationFrame);
+        return requests.Any(request =>
+            !HasCameraStage(request, frames, frames.Count - 1, observation => observation.ResidentSequence) ||
+            !HasCameraStage(request, frames, frames.Count - 1, observation => observation.CommittedSequence) ||
+            !HasCameraStage(request, frames, frames.Count - 1, observation => observation.VisibleSequence));
     }
 
     private static IReadOnlyList<FunctionalTimingCheck> EvaluateTiming(
@@ -135,15 +161,16 @@ public static class FunctionalScenarioRunner
         if (scenario.ExpectedFeatures.CameraLifecycle)
         {
             var requests = RequestedSequences(frames, start, end);
+            var stageEnd = frames.Count - 1;
             if (scenario.Budgets.MaximumRequestToResidentFrames is { } residentLimit)
             {
-                var observed = MaximumCameraLatency(requests, frames, end, observation => observation.ResidentSequence);
+                var observed = MaximumCameraLatency(requests, frames, stageEnd, observation => observation.ResidentSequence);
                 checks.Add(MaximumCheck("request-to-resident", observed, residentLimit));
             }
 
             if (scenario.Budgets.MaximumRequestToVisibleFrames is { } visibleLimit)
             {
-                var observed = MaximumCameraLatency(requests, frames, end, observation => observation.VisibleSequence);
+                var observed = MaximumCameraLatency(requests, frames, stageEnd, observation => observation.VisibleSequence);
                 checks.Add(MaximumCheck("request-to-visible", observed, visibleLimit));
             }
         }
@@ -281,7 +308,7 @@ public static class FunctionalScenarioRunner
 
         if (scenario.ExpectedFeatures.CameraLifecycle)
         {
-            ValidateCameraLifecycle(frames, start - 1, end, failures);
+            ValidateCameraLifecycle(frames, start - 1, end, frames.Count - 1, failures);
         }
 
         foreach (var checkpoint in scenario.Checkpoints)
@@ -426,6 +453,7 @@ public static class FunctionalScenarioRunner
         IReadOnlyList<FunctionalFrameObservation> frames,
         int start,
         int end,
+        int stageEnd,
         ICollection<FunctionalIntegrityFailure> failures)
     {
         var requests = RequestedSequences(frames, start, end);
@@ -437,9 +465,9 @@ public static class FunctionalScenarioRunner
 
         foreach (var request in requests)
         {
-            RequireCameraStage(request, frames, end, observation => observation.ResidentSequence, "camera-not-resident", failures);
-            RequireCameraStage(request, frames, end, observation => observation.CommittedSequence, "camera-not-committed", failures);
-            RequireCameraStage(request, frames, end, observation => observation.VisibleSequence, "camera-not-visible", failures);
+            RequireCameraStage(request, frames, stageEnd, observation => observation.ResidentSequence, "camera-not-resident", failures);
+            RequireCameraStage(request, frames, stageEnd, observation => observation.CommittedSequence, "camera-not-committed", failures);
+            RequireCameraStage(request, frames, stageEnd, observation => observation.VisibleSequence, "camera-not-visible", failures);
         }
 
         var knownRequests = requests.Select(request => request.Sequence).ToHashSet();
@@ -489,15 +517,29 @@ public static class FunctionalScenarioRunner
         string failureCode,
         ICollection<FunctionalIntegrityFailure> failures)
     {
+        if (HasCameraStage(request, frames, end, stage))
+        {
+            return;
+        }
+
+        failures.Add(new(failureCode, request.Frame, $"Camera request sequence {request.Sequence} did not complete this stage."));
+    }
+
+    private static bool HasCameraStage(
+        (long Sequence, int Frame) request,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int end,
+        Func<FunctionalCameraLifecycleObservation, long?> stage)
+    {
         for (var frame = request.Frame; frame <= end; frame++)
         {
             if (frames[frame].Camera is { } camera && stage(camera) == request.Sequence)
             {
-                return;
+                return true;
             }
         }
 
-        failures.Add(new(failureCode, request.Frame, $"Camera request sequence {request.Sequence} did not complete this stage."));
+        return false;
     }
 
     private static Dictionary<string, T> ToUniqueDictionary<T>(
@@ -525,11 +567,12 @@ public static class FunctionalScenarioRunner
         IReadOnlyList<FunctionalIntegrityFailure> failures)
     {
         var start = scenario.WarmUpFrames;
+        var end = start + scenario.ObservationFrames;
         var window = frames.Skip(start + 1).Take(scenario.ObservationFrames).ToArray();
         var camera = window.Where(frame => frame.Camera is not null).Select(frame => frame.Camera!).ToArray();
         return new FunctionalObservationSummary(
-            frames[^1].GameplayTicks - frames[start].GameplayTicks,
-            frames[^1].AudioServiceTicks - frames[start].AudioServiceTicks,
+            frames[end].GameplayTicks - frames[start].GameplayTicks,
+            frames[end].AudioServiceTicks - frames[start].AudioServiceTicks,
             window.Max(frame => frame.ResetCount),
             camera.Select(item => item.RequestedSequence).Where(item => item is not null).Distinct().Count(),
             camera.Select(item => item.ResidentSequence).Where(item => item is not null).Distinct().Count(),

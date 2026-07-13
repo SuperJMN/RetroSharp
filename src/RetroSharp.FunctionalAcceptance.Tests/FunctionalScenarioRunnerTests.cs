@@ -64,6 +64,41 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Csl3_scenarios_cover_every_declared_static_and_source_camera_target()
+    {
+        var expected = new[]
+        {
+            ("static-drawing.gb.json", "static-drawing", FunctionalTarget.GameBoy, false, false),
+            ("static-drawing.nes.json", "static-drawing", FunctionalTarget.Nes, false, false),
+            ("cross-target-camera.gb.json", "cross-target-camera", FunctionalTarget.GameBoy, true, true),
+            ("cross-target-camera.nes.json", "cross-target-camera", FunctionalTarget.Nes, true, true),
+            ("source-vscroll.gb.json", "source-vscroll", FunctionalTarget.GameBoy, true, true),
+            ("source-free-scroll.gb.json", "source-free-scroll", FunctionalTarget.GameBoy, true, true),
+            ("source-free-scroll.nes.json", "source-free-scroll", FunctionalTarget.Nes, true, true),
+            ("window-hud.gb.json", "window-hud", FunctionalTarget.GameBoy, true, false),
+        };
+
+        foreach (var (file, sampleId, target, gameplay, camera) in expected)
+        {
+            var scenario = FunctionalScenarioLoader.Load(RepositoryFile($"validation/scenarios/{file}"));
+
+            Assert.Equal(sampleId, scenario.SampleId);
+            Assert.Equal(target, scenario.Target);
+            Assert.Equal("95f166886713ff3b88bc1e17c03ef0ffe93d649a", scenario.BudgetEvidence.BaselineCommit);
+            Assert.Equal(gameplay, scenario.ExpectedFeatures.GameplayTicks);
+            Assert.Equal(camera, scenario.ExpectedFeatures.CameraLifecycle);
+            Assert.True(scenario.ExpectedFeatures.Background);
+            Assert.True(scenario.ExpectedFeatures.SafeVideoWrites);
+            Assert.False(scenario.ExpectedFeatures.AudioService);
+            Assert.False(scenario.ExpectedFeatures.SpriteOam);
+            Assert.False(scenario.ExpectedFeatures.BankRestoration);
+            Assert.True(scenario.ObservationFrames >= 30);
+            Assert.False(string.IsNullOrWhiteSpace(scenario.BudgetEvidence.HardwareTimingRationale));
+            Assert.False(string.IsNullOrWhiteSpace(scenario.BudgetEvidence.ProductionTraceRationale));
+        }
+    }
+
+    [Fact]
     public void Scenario_loader_rejects_unknown_contract_fields()
     {
         var source = File.ReadAllText(RepositoryFile("validation/scenarios/fixtures/contract-probe.json"));
@@ -280,6 +315,38 @@ public sealed class FunctionalScenarioRunnerTests
         Assert.Equal(1, Assert.Single(report.TimingChecks, check => check.Metric == "input-to-state").Observed);
         Assert.Equal(1, Assert.Single(report.TimingChecks, check => check.Metric == "request-to-resident").Observed);
         Assert.Equal(3, Assert.Single(report.TimingChecks, check => check.Metric == "request-to-visible").Observed);
+    }
+
+    [Fact]
+    public void Final_camera_request_drains_only_within_its_declared_latency_budget()
+    {
+        var scenario = LifecycleScenario() with
+        {
+            ObservationFrames = 2,
+            Inputs = [new("move-right", 1, 1, ["right"], "playerX")],
+            Checkpoints = [new("moved", 2, Signals(("playerX", 1)))],
+            Budgets = new(
+                MinimumGameplayTickRatio: 1,
+                MaximumConsecutiveMissedGameplayTicks: 0,
+                MaximumInputToStateFrames: 1,
+                MaximumRequestToResidentFrames: 1,
+                MaximumRequestToVisibleFrames: 2),
+        };
+        var observations = new[]
+        {
+            Frame(0, gameplayTicks: 0, signals: Signals(("playerX", 0)), camera: Camera()),
+            Frame(1, gameplayTicks: 1, signals: Signals(("playerX", 1)), camera: Camera(requested: 10)),
+            Frame(2, gameplayTicks: 2, signals: Signals(("playerX", 1)), camera: Camera(requested: 10, resident: 10, committed: 10)),
+            Frame(3, gameplayTicks: 3, signals: Signals(("playerX", 1)), camera: Camera(requested: 10, resident: 10, committed: 10, visible: 10)),
+        };
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations));
+
+        Assert.True(report.Passed, report.ToHumanReadable());
+        Assert.Equal(3, report.FrameWindow.TotalPhysicalFrames);
+        Assert.Equal(2, report.FrameEvidence.Count);
+        Assert.Equal(2, report.Summary.GameplayTicks);
+        Assert.Equal(2, Assert.Single(report.TimingChecks, check => check.Metric == "request-to-visible").Observed);
     }
 
     [Fact]

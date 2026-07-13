@@ -4985,6 +4985,27 @@ internal sealed class GameBoyRuntimeCompiler
         // scrolling frame no longer costs two VBlanks for a single audio update.
         EmitCommitPendingStream(config);
 
+        if (ProgramQueuesDiagonalStreaming())
+        {
+            // A simultaneous diagonal crossing drains one axis per VBlank. Keep both hardware
+            // coordinates on the last fully resident viewport until the other edge is committed;
+            // publishing both logical coordinates here would expose the still-pending edge for
+            // one retained frame (most visibly when moving up/left).
+            var done = builder.CreateLabel("camera_apply_diagonal_done");
+            builder.LoadA(PendingDiagonalColumnKindAddress);
+            builder.CompareImmediate(PendingStreamNone);
+            builder.JumpAbsolute(0xC2, done); // JP NZ,done
+            builder.LoadA(PendingDiagonalRowKindAddress);
+            builder.CompareImmediate(PendingStreamNone);
+            builder.JumpAbsolute(0xC2, done); // JP NZ,done
+            builder.LoadA(CameraXLowAddress);
+            builder.StoreHighRamA(0x43);
+            builder.LoadA(CameraYLowAddress);
+            builder.StoreHighRamA(0x42);
+            builder.Label(done);
+            return;
+        }
+
         builder.LoadA(CameraXLowAddress);
         builder.StoreHighRamA(0x43);
         builder.LoadA(CameraYLowAddress);
@@ -6859,6 +6880,15 @@ internal sealed class GameBoyRuntimeCompiler
 
         builder.AddHlDe();
         EmitLoadDeFromHl();
+        if (mapWidth <= byte.MaxValue)
+        {
+            // B is no longer needed as the logical source column once DE points at the first
+            // tile. Keep the number of tiles until the source-row wrap instead. This removes
+            // the per-tile LD/CP pair from the VBlank-critical row streamer.
+            builder.LoadAImmediate(mapWidth);
+            builder.SubtractB();
+            builder.LoadBFromA();
+        }
 
         builder.LoadA(CameraStreamTargetColumnScratchAddress);
         builder.LoadCFromA();
@@ -6890,11 +6920,9 @@ internal sealed class GameBoyRuntimeCompiler
         builder.Emit(0x13); // INC DE
         if (mapWidth <= byte.MaxValue)
         {
-            builder.Emit(0x04); // INC B
-            builder.LoadAFromB();
-            builder.CompareImmediate(mapWidth);
-            builder.JumpAbsolute(0xC2, sourceReadyLabel); // JP NZ,sourceReadyLabel
-            builder.Emit(0x06, 0x00); // LD B,0
+            builder.Emit(0x05); // DEC B
+            builder.JumpRelative(0x20, sourceReadyLabel); // JR NZ,sourceReadyLabel
+            builder.Emit(0x06, checked((byte)mapWidth)); // LD B,mapWidth
             EmitLoadSourceRowPointerToDe();
         }
         else

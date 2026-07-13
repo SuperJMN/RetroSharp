@@ -465,8 +465,9 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         var source = FastCameraSource(mapWidth, mapHeight, stepPixels: 16, vertical: true);
         var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source)) { CycleAccurateLy = true };
 
-        // Run past Camera.Init and several scroll steps; the edge gap is invariant under scrolling.
-        cpu.RunFrames(20);
+        // Stop on a completed camera publication instead of at an arbitrary cycle that can bisect
+        // the consecutive top/bottom cursor updates in Camera.SetPosition.
+        cpu.RunUntilIoRegisterWrites(0xFF42, 20, 2_000_000_000);
 
         const int topBackgroundRow = 0xC0EB;
         const int bottomBackgroundRow = 0xC0EC;
@@ -702,8 +703,7 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     {
         return source
             .Replace("cameraX += stepX;", "cameraX = 0;", StringComparison.Ordinal)
-            .Replace("cameraY += stepY;", "cameraY = 0;", StringComparison.Ordinal)
-            .Replace("Camera.SetPosition(cameraX, cameraY);", "Camera.SetPosition(0, 0);", StringComparison.Ordinal);
+            .Replace("cameraY += stepY;", "cameraY = 0;", StringComparison.Ordinal);
     }
 
     private static string StationaryTallTiledSource(string source)
