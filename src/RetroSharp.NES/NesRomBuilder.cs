@@ -3817,6 +3817,10 @@ internal sealed class NesRuntimeCompiler
             builder.LoadAAbsolute(NesPackedCameraRuntime.FramePending);
             builder.BranchRelative(0xF0, pending);
             builder.DecrementAbsolute(NesPackedCameraRuntime.FramePending);
+            var hardwareVBlank = builder.CreateLabel("nes_packed_hardware_vblank");
+            builder.Label(hardwareVBlank);
+            builder.Emit(0x2C, 0x02, 0x20);        // BIT $2002
+            builder.BranchRelative(0x10, hardwareVBlank); // BPL hardwareVBlank
             if (applyPendingCameraScroll)
             {
                 EmitApplyPendingCameraScrollAtVBlank();
@@ -8576,6 +8580,8 @@ internal sealed class PrgBuilder
     public void StoreAIndirectY(byte address) => Emit(0x91, address);
 
     public void StoreYAbsolute(ushort address) => Emit(0x8C, Low(address), High(address));
+
+    public void StoreXAbsolute(ushort address) => Emit(0x8E, Low(address), High(address));
 
     public void LoadYAbsolute(ushort address) => Emit(0xAC, Low(address), High(address));
 

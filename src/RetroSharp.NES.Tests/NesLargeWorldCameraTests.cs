@@ -296,6 +296,7 @@ public sealed class NesLargeWorldCameraTests
         var packed = NesTiledWorldImporter.CompileWorldPack(
             Path.Combine(directory, "tall.tmj"),
             NesVideoProgram.FirstSpriteTile);
+        var runtime = NesWorldPackRuntimePlan.Create(packed.SerializedBytes);
         const string source = """
             void Main() {
                 World.Load("tall.tmj");
@@ -325,6 +326,7 @@ public sealed class NesLargeWorldCameraTests
             maxInstructions: 5_000_000);
         Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
         var bankWritesBeforeCommit = cpu.R6BankWrites.Count;
+        var commitStartCycles = cpu.Cycles;
 
         var commit = cpu.RunRoutine(result.Report.FixedSymbols["worldpack_commit_edge"]);
 
@@ -339,6 +341,64 @@ public sealed class NesLargeWorldCameraTests
         Assert.Equal(0, cpu.Ram(DirectoryWorkInCommit));
         Assert.Equal(0, cpu.Ram(DecodeWorkInCommit));
         Assert.Equal(bankWritesBeforeCommit, cpu.R6BankWrites.Count);
+
+        var ppuDataWrites = cpu.PpuWrites.Where(write => write.Register == 0x2007).ToArray();
+        var expectedTileAddresses = Enumerable.Range(0, 30)
+            .Select(row => (ushort)(0x2000 + row * 32 + 21))
+            .Concat(Enumerable.Range(0, 2).Select(row => (ushort)(0x2800 + row * 32 + 21)))
+            .ToArray();
+        Assert.Equal(expectedTileAddresses.Select(address => (ushort?)address), ppuDataWrites.Take(32).Select(write => write.VramAddress));
+        Assert.Equal(
+            Enumerable.Range(0, 32).Select(index => cpu.Ram((ushort)(runtime.Layout.EdgeSlots[0].Start + index))),
+            ppuDataWrites.Take(32).Select(write => write.Value));
+        var expectedAttributeAddresses = Enumerable.Range(0, 8)
+            .Select(row => (ushort)(0x23C5 + row * 8))
+            .ToArray();
+        Assert.Equal(
+            expectedAttributeAddresses.Select(address => (ushort?)address),
+            ppuDataWrites.Skip(32).Select(write => write.VramAddress));
+        Assert.Equal(
+            Enumerable.Range(32, 8).Select(index => cpu.Ram((ushort)(runtime.Layout.EdgeSlots[0].Start + index))),
+            ppuDataWrites.Skip(32).Select(write => write.Value));
+        Assert.Equal(new byte[] { 0x84, 0x80 }, cpu.PpuWrites.Where(write => write.Register == 0x2000).Select(write => write.Value));
+        Assert.Equal(2, cpu.PpuStatusReadCycles.Count);
+        Assert.All(ppuDataWrites, write => Assert.NotNull(write.VramAddress));
+        Assert.True(
+            commit.Cycles <= 2_273,
+            $"The complete packed column commit must fit in one NTSC VBlank; measured {commit.Cycles} CPU cycles " +
+            $"with PPUDATA writes spanning relative cycles " +
+            $"{ppuDataWrites[0].Cycle - commitStartCycles}..{ppuDataWrites[^1].Cycle - commitStartCycles} " +
+            $"(last tile {ppuDataWrites[31].Cycle - commitStartCycles}, first attribute {ppuDataWrites[32].Cycle - commitStartCycles}).");
+    }
+
+    [Fact]
+    public void Packed_wait_frame_rechecks_the_hardware_vblank_after_a_late_frame_signal()
+    {
+        var directory = RepositoryDirectory("samples/tiled-tall");
+        var packed = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(directory, "tall.tmj"),
+            NesVideoProgram.FirstSpriteTile);
+        const string source = """
+            void Main() {
+                World.Load("tall.tmj");
+                Camera.Init(16, 0, 40);
+                while (true) {
+                    Video.WaitVBlank();
+                    Camera.Apply();
+                }
+            }
+            """;
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: packed.SerializedBytes);
+
+        Assert.True(
+            ContainsSequence(
+                result.Rom,
+                [0xAD, 0x8F, 0x03, 0xF0, 0xFB, 0xCE, 0x8F, 0x03, 0x2C, 0x02, 0x20, 0x10, 0xFB]),
+            "A coalesced NMI signal can be observed after VBlank; packed WaitFrame must poll PPUSTATUS before entering its PPU commit.");
     }
 
     [Fact]

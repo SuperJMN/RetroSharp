@@ -30,7 +30,8 @@ remain under their existing owners.
 ## FCEUmm matrix
 
 The checked-in harness drives RetroArch through its network control and remote
-RetroPad interfaces:
+RetroPad interfaces, using the same isolated RetroArch session as the visual
+parity harness:
 
 ```bash
 tools/nes/verify_runner_power_on_ram.py
@@ -38,28 +39,35 @@ tools/nes/verify_runner_power_on_ram.py
 
 It requires FCEUmm `(SVN) 3a84a6f`, fills all 2 KiB of CPU RAM, resets the real
 tracked runner, settles 500 frames, then advances exactly 120 paused frontend
-frames while holding only RIGHT. The tested core SHA-256 was
+frames while holding only RIGHT. The shared session uses a complete disposable
+RetroArch config with saves disabled and all output paths isolated. The tested
+core SHA-256 was
 `2896e04ccf43ba7a46458c10214fdce906f83833e5aa69b2d1ae185d595216fb`.
-The regenerated runner SHA-256 was
-`92284841df6411130a88c1fd85f6c4bda723c11013701506248eb86efb0aac49`.
+After the #327 VBlank/column-commit correction, the regenerated runner SHA-256
+is `0b9ab90d814dbacc11fb30511237ac2b69994d5074b93b7886ce8964a861ef06`.
 
-| CPU RAM pattern | Player X | Requested / visible X | Lifecycle deltas | First byte after staging |
-| --- | ---: | ---: | ---: | ---: |
-| `$00` | `72 -> 222` | `126 / 126` | `15/15/15/15/15` | `$00` |
-| `$FF` | `72 -> 222` | `126 / 126` | `15/15/15/15/15` | `$FF` |
-| deterministic nonzero | `72 -> 222` | `126 / 126` | `15/15/15/15/15` | `$0D` |
+| CPU RAM pattern | Hardware / gameplay / audio deltas | Player X | Requested / visible X | Lifecycle deltas | First byte after staging |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `$00` | `120/119/119` | `72 -> 220` | `124 / 124` | `15/15/15/15/15` | `$00` |
+| `$FF` | `120/120/120` | `72 -> 222` | `126 / 126` | `15/15/15/15/15` | `$FF` |
+| deterministic nonzero | `120/119/119` | `72 -> 220` | `124 / 124` | `15/15/15/15/15` | `$0D` |
 
-All three runs produced 120 hardware frames, gameplay ticks, and audio ticks;
-kept player Y at the authored floor `273`; ended with released/empty edge
-slots; performed zero bank, directory, or decode work inside commit; and kept
-the last commit at 32 tile plus 8 attribute writes. The nonzero pattern is
+All three runs produced exactly 120 hardware frames. A paused frontend may
+sample immediately before or after the first hardware-VBlank recheck, so the
+bounded gameplay delta is 119 or 120; audio always matches gameplay exactly
+and player displacement is 148 or 150 pixels accordingly. Every run kept
+player Y at the authored floor `273`; ended with released/empty edge slots;
+performed zero bank, directory, or decode work inside commit; and kept the last
+commit at 32 tile plus 8 attribute writes. The nonzero pattern is
 address-dependent and reproducible; its first byte outside staging is `$0D`,
 which proves the initializer stops at `$0651`.
 
 ## AprNes through NesMcp
 
-NesMcp `auto` routed the same ROM to AprNes as mapper 4. After 500 idle frames
-and 120 RIGHT frames it produced the equivalent lifecycle evidence:
+The original #326 capture used runner SHA-256
+`92284841df6411130a88c1fd85f6c4bda723c11013701506248eb86efb0aac49`.
+NesMcp `auto` routed that ROM to AprNes as mapper 4. After 500 idle frames and
+120 RIGHT frames it produced the equivalent initialization evidence:
 
 - player X `72 -> 222`, player Y `273 -> 273`;
 - requested/visible camera X `126 / 126`;
@@ -68,6 +76,11 @@ and 120 RIGHT frames it produced the equivalent lifecycle evidence:
 - R6/R7 shadows `0/1`, zero forbidden commit work, zero critical-section state,
   and a final 32-tile/8-attribute commit;
 - PPUCTRL `$80`, PPUMASK `$18`, four-screen rendering enabled.
+
+The current tracked ROM's AprNes behavior, including right/left crossings,
+jump/collision, exact physical nametables, and lifecycle convergence with
+FCEUmm and Nestopia, is recorded in
+[`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md).
 
 ## Validation
 

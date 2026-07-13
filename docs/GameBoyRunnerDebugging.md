@@ -1,7 +1,7 @@
 # Game Boy Runner Debugging Workflow
 
 Status: operational debugging guide.
-Last updated: 2026-07-12.
+Last updated: 2026-07-13.
 
 Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src` and enables physical project namespaces, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
@@ -79,6 +79,24 @@ flatpak run --command=retroarch org.libretro.RetroArch \
 ```
 
 Use original DMG hardware reports as backend evidence, not as sample quirks. Input bugs that reproduce only on hardware can still be target-runtime bugs, especially around `JOYP` row settling.
+
+### NES four-screen differential
+
+When the shared runner fails only on NES, use the tracked NES ROM and the
+single three-emulator acceptance instead of inferring correctness from RGB
+occupancy or synthetic screenshots:
+
+```bash
+python3 tools/nes/verify_runner_visual_parity.py
+```
+
+It drives Right beyond camera X 300, exercises jump/collision, then returns
+Left through X 256 in AprNes/NesMcp, isolated RetroArch/FCEUmm, and Nestopia.
+The comparison includes framebuffer captures, lifecycle and PPU evidence, all
+four physical nametables, exact visible tile IDs and attribute palette
+selectors, and authored collision cells. See
+[`NesRunnerVisualParityAcceptance.md`](NesRunnerVisualParityAcceptance.md) for
+the accepted hashes, red reproduction, runtime invariants, and artifact layout.
 
 ## Diagnostic Ladder
 

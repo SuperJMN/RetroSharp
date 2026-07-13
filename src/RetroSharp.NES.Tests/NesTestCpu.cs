@@ -4,12 +4,17 @@ using RetroSharp.NES;
 
 internal readonly record struct NesRoutineResult(byte A, byte X, byte Y, bool Carry, long Cycles);
 
+internal readonly record struct NesPpuWrite(ushort Register, byte Value, ushort? VramAddress, long Cycle);
+
 internal sealed class NesTestCpu
 {
     private readonly byte[] prg;
     private readonly byte[] ram = new byte[0x800];
     private readonly int mapper;
     private byte selectedRegister;
+    private byte ppuControl;
+    private ushort ppuAddress;
+    private bool ppuWriteToggle;
     private byte a;
     private byte x;
     private byte y;
@@ -39,7 +44,13 @@ internal sealed class NesTestCpu
 
     public List<NesRoutineResult> NestedReadResults { get; } = [];
 
+    public List<NesPpuWrite> PpuWrites { get; } = [];
+
+    public List<long> PpuStatusReadCycles { get; } = [];
+
     public int NmiCount { get; private set; }
+
+    public long Cycles => cycles;
 
     public void SetR6Bank(byte bank) => CurrentR6Bank = bank;
 
@@ -145,6 +156,7 @@ internal sealed class NesTestCpu
                 }
             case 0x85: Write(Read(pc++), a); cycles += 3; break;
             case 0x8D: Write(ReadWordAndAdvance(), a); cycles += 4; break;
+            case 0x8E: Write(ReadWordAndAdvance(), x); cycles += 4; break;
             case 0x90: Branch(!carry); break;
             case 0x91:
                 {
@@ -155,6 +167,7 @@ internal sealed class NesTestCpu
                     break;
                 }
             case 0x99: Write((ushort)(ReadWordAndAdvance() + y), a); cycles += 5; break;
+            case 0x98: LoadA(y); cycles += 2; break;
             case 0x9D: Write((ushort)(ReadWordAndAdvance() + x), a); cycles += 5; break;
             case 0xA0: LoadY(Read(pc++)); cycles += 2; break;
             case 0xA2: LoadX(Read(pc++)); cycles += 2; break;
@@ -213,6 +226,18 @@ internal sealed class NesTestCpu
             return ram[address & 0x07FF];
         }
 
+        if (address < 0x4000)
+        {
+            var register = (ushort)(0x2000 | (address & 0x07));
+            if (register == 0x2002)
+            {
+                ppuWriteToggle = false;
+                PpuStatusReadCycles.Add(cycles);
+            }
+
+            return 0;
+        }
+
         if (address < 0x8000)
         {
             return 0;
@@ -241,6 +266,12 @@ internal sealed class NesTestCpu
             return;
         }
 
+        if (address < 0x4000)
+        {
+            WritePpuRegister((ushort)(0x2000 | (address & 0x07)), value);
+            return;
+        }
+
         if (address == 0x8000)
         {
             selectedRegister = (byte)(value & 0x07);
@@ -261,6 +292,41 @@ internal sealed class NesTestCpu
         else if (selectedRegister == 7)
         {
             CurrentR7Bank = value;
+        }
+    }
+
+    private void WritePpuRegister(ushort register, byte value)
+    {
+        switch (register)
+        {
+            case 0x2000:
+                ppuControl = value;
+                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles));
+                break;
+            case 0x2005:
+                ppuWriteToggle = !ppuWriteToggle;
+                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles));
+                break;
+            case 0x2006:
+                if (!ppuWriteToggle)
+                {
+                    ppuAddress = (ushort)((ppuAddress & 0x00FF) | (value & 0x3F) << 8);
+                }
+                else
+                {
+                    ppuAddress = (ushort)((ppuAddress & 0x3F00) | value);
+                }
+
+                ppuWriteToggle = !ppuWriteToggle;
+                PpuWrites.Add(new NesPpuWrite(register, value, ppuWriteToggle ? null : ppuAddress, cycles));
+                break;
+            case 0x2007:
+                PpuWrites.Add(new NesPpuWrite(register, value, ppuAddress, cycles));
+                ppuAddress = (ushort)((ppuAddress + ((ppuControl & 0x04) != 0 ? 32 : 1)) & 0x3FFF);
+                break;
+            default:
+                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles));
+                break;
         }
     }
 
