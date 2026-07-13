@@ -129,6 +129,22 @@ def build_retroarch_command(
     ]
 
 
+def snapshot_screenshot_files(directory: Path) -> dict[Path, tuple[int, int]]:
+    return {
+        path: (path.stat().st_mtime_ns, path.stat().st_size)
+        for path in directory.iterdir()
+        if path.suffix.lower() in (".png", ".bmp")
+    }
+
+
+def changed_screenshot_files(
+    directory: Path,
+    before: dict[Path, tuple[int, int]],
+) -> list[Path]:
+    current = snapshot_screenshot_files(directory)
+    return [path for path, version in current.items() if before.get(path) != version]
+
+
 def build_retroarch_config(
     work_directory: Path,
     command_port: int,
@@ -432,18 +448,14 @@ class RetroArchNetworkSession:
 
     def capture_screen(self) -> Image.Image:
         screenshot_directory = self.work_directory / "screenshots"
-        before = set(screenshot_directory.iterdir())
+        before = snapshot_screenshot_files(screenshot_directory)
         self.action("SCREENSHOT")
 
         created: list[Path] = []
 
         def screenshot_created() -> bool:
             nonlocal created
-            created = [
-                path
-                for path in screenshot_directory.iterdir()
-                if path not in before and path.suffix.lower() in (".png", ".bmp")
-            ]
+            created = changed_screenshot_files(screenshot_directory, before)
             if not created:
                 return False
             newest = max(created, key=lambda path: path.stat().st_mtime_ns)

@@ -250,9 +250,14 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitCopy(builder, NesPackedCameraRuntime.CommitPayloadLength, NesPackedCameraRuntime.LastTileWrites);
 
         builder.Label(columnAttributes);
-        builder.LoadAAbsolute(0x2002); // Attribute addresses start from a known write-latch phase.
+        // Each tile PPUADDR pair leaves the shared PPUSCROLL/PPUADDR latch in its
+        // first-write phase, so the attribute stream can continue without a
+        // second PPUSTATUS read. Keeping that four-cycle VBlank margin is what
+        // prevents the final attribute byte from reaching the pre-render line.
         builder.LoadAImmediate(0x80);  // Restore horizontal PPUDATA increment before sparse attributes.
         builder.StoreAAbsolute(0x2000);
+        // Attributes are staged at a fixed +32 offset even when a short world
+        // column streams fewer than 32 tile rows.
         builder.LoadYImmediate(32);
         builder.LoadAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
         builder.AndImmediate(0x03);
@@ -293,7 +298,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(columnRelease);
         builder.StoreAAbsolute(NesPackedCameraRuntime.TargetCursor);
         builder.DecrementAbsolute(NesPackedCameraRuntime.PhaseRemaining);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.PhaseRemaining);
+        // DEC already publishes the zero flag used by the loop branch.
         builder.JumpIf(0xD0, columnAttributeLoop);
 
         EmitCopyFrameToSelectedMetadata(builder, resident: false, commit: true);

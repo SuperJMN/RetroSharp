@@ -3812,6 +3812,12 @@ internal sealed class NesRuntimeCompiler
     {
         if (usePackedCamera)
         {
+            // FramePending is a coalesced edge notification, not proof that a
+            // complete VBlank budget remains. Discard any stale notification
+            // before waiting so a late main loop cannot start a packed commit
+            // partway through the current VBlank.
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesPackedCameraRuntime.FramePending);
             var pending = builder.CreateLabel("nes_packed_frame_pending");
             builder.Label(pending);
             builder.LoadAAbsolute(NesPackedCameraRuntime.FramePending);

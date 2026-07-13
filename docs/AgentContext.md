@@ -32,9 +32,12 @@ This document preserves project knowledge that previously lived only in agent me
   through X 256 in AprNes/NesMcp, isolated RetroArch/FCEUmm, and Nestopia. It
   compares all four physical nametables, exact visible tile IDs plus attribute
   palette selectors, authored collision, PPU/lifecycle state, and framebuffers.
-  The fix bounds the 32-tile/8-attribute column commit to 2172 CPU cycles and
-  makes packed `Video.WaitVBlank()` recheck hardware VBlank after consuming the
-  coalesced NMI signal. RetroArch automation is shared with the power-on harness
+  The final transient acceptance retains all 47 commit-centered five-frame
+  windows in AprNes/Nes.Mcp 0.0.7, FCEUmm, and Nestopia, plus five complete PPU
+  traces with zero PPUDATA writes outside VBlank. The fix bounds the
+  32-tile/8-attribute column commit to 2136 CPU cycles and makes packed
+  `Video.WaitVBlank()` discard stale coalesced state before waiting for a fresh
+  NMI/VBlank edge. RetroArch automation is shared with the power-on harness
   and guards persistent `retroarch.cfg` plus `FCEUmm.opt` by hash.
 - The Game Boy vertical camera path is now proven by `samples/gameboy-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
