@@ -12,6 +12,7 @@
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
 - [docs/LargeWorldsRoadmap.md](docs/LargeWorldsRoadmap.md): executable full-stage1 plan for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
+- [docs/FunctionalRomAcceptance.md](docs/FunctionalRomAcceptance.md): shared exact-ROM scenario schema, timing budgets, strict transient integrity, GB/NES adapters, and CI tiers.
 - [docs/NesLargeWorldsCartridgeProfile.md](docs/NesLargeWorldsCartridgeProfile.md): accepted LW-0.3 mapper-4/TVROM NES profile, measured stage1 bank layout, restoration invariant, mapper-0 policy, and emulator evidence.
 - [docs/WorldCoordinateCollisionContract.md](docs/WorldCoordinateCollisionContract.md): accepted LW-0.4 little-endian i16 coordinate, hit/no-hit, compatibility, and GB/NES lowering contract.
 - [docs/Portable2DSdkV1.md](docs/Portable2DSdkV1.md): current portable 2D SDK reference.
@@ -31,6 +32,7 @@
 ## Core Source Paths
 - [src/RetroSharp.Cli/Program.cs](src/RetroSharp.Cli/Program.cs): CLI option parsing and target dispatch.
 - [src/RetroSharp.Core/](src/RetroSharp.Core/): shared compiler/SDK concepts.
+- [src/RetroSharp.FunctionalAcceptance/](src/RetroSharp.FunctionalAcceptance/): target-neutral functional ROM scenario runner, observation contract, and deterministic reports.
 - [src/RetroSharp.GameBoy/](src/RetroSharp.GameBoy/): direct Game Boy ROM compiler and runtime lowering.
 - [src/RetroSharp.NES/](src/RetroSharp.NES/): direct NES ROM compiler and runtime lowering.
 - [src/RetroSharp.Parser/](src/RetroSharp.Parser/): parser.
@@ -40,6 +42,7 @@
 - [samples/runner/runner.retrosharp.json](samples/runner/runner.retrosharp.json): shared Game Boy/NES target-acceptance runner project that lists [samples/runner/src/main.rs](samples/runner/src/main.rs) plus helper/state code under [samples/runner/src/](samples/runner/src/) and uses per-target VGM/VGZ background music.
 - [samples/runner/assets/maps/runner.tmj](samples/runner/assets/maps/runner.tmj): editable Tiled runner map.
 - [tools/gameboy/generate_sample_roms.py](tools/gameboy/generate_sample_roms.py): tracked sample ROM regeneration script.
+- [validation/scenarios/functional-scenario.schema.json](validation/scenarios/functional-scenario.schema.json): checked-in canonical functional scenario schema.
 
 ## Reliable Commands
 ```bash

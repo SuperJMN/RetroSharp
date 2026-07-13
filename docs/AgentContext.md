@@ -196,6 +196,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | What does NES support today? | `docs/NesTarget.md` |
 | How do we debug with the runner as the GB test app? | `docs/GameBoyRunnerDebugging.md` |
 | Which samples are portable evidence? | `samples/README.md` and `samples/manifest.json` |
+| How do canonical ROM scenarios measure cadence and transient integrity? | `docs/FunctionalRomAcceptance.md` |
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
 | How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |
 | How do we implement free 2-axis scroll on NES? | `docs/NesFreeScrollRoadmap.md` |

@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://retrosharp.dev/schemas/functional-scenario.schema.json",
+  "title": "RetroSharp functional ROM scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "sampleId",
+    "target",
+    "warmUpFrames",
+    "observationFrames",
+    "inputs",
+    "checkpoints",
+    "expectedFeatures",
+    "audio",
+    "budgetEvidence",
+    "budgets"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sampleId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target": {
+      "enum": ["gb", "nes"]
+    },
+    "warmUpFrames": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "observationFrames": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/inputSpan"
+      }
+    },
+    "checkpoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/checkpoint"
+      }
+    },
+    "expectedFeatures": {
+      "$ref": "#/$defs/expectedFeatures"
+    },
+    "audio": {
+      "$ref": "#/$defs/audio"
+    },
+    "budgetEvidence": {
+      "$ref": "#/$defs/budgetEvidence"
+    },
+    "budgets": {
+      "$ref": "#/$defs/budgets"
+    }
+  },
+  "$defs": {
+    "inputSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "startFrame", "durationFrames", "buttons"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startFrame": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "buttons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "responseSignal": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "frame", "expectedSignals"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expectedSignals": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      }
+    },
+    "expectedFeatures": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gameplayTicks",
+        "audioService",
+        "cameraLifecycle",
+        "background",
+        "spriteOam",
+        "bankRestoration",
+        "safeVideoWrites"
+      ],
+      "properties": {
+        "gameplayTicks": { "type": "boolean" },
+        "audioService": { "type": "boolean" },
+        "cameraLifecycle": { "type": "boolean" },
+        "background": { "type": "boolean" },
+        "spriteOam": { "type": "boolean" },
+        "bankRestoration": { "type": "boolean" },
+        "safeVideoWrites": { "type": "boolean" }
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serviceExpectedByDefault", "authoredSilence"],
+      "properties": {
+        "serviceExpectedByDefault": { "type": "boolean" },
+        "authoredSilence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/frameSpan" }
+        }
+      }
+    },
+    "frameSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startFrame", "durationFrames"],
+      "properties": {
+        "startFrame": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "budgetEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baselineCommit", "hardwareTimingRationale", "productionTraceRationale"],
+      "properties": {
+        "baselineCommit": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{40}$"
+        },
+        "hardwareTimingRationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "productionTraceRationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimumGameplayTickRatio",
+        "maximumConsecutiveMissedGameplayTicks"
+      ],
+      "properties": {
+        "minimumGameplayTickRatio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maximumConsecutiveMissedGameplayTicks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximumInputToStateFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximumRequestToResidentFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximumRequestToVisibleFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximumUnplannedAudioGapFrames": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maximumAudioDriftTicks": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "expectedFeatures": {
+            "properties": {
+              "audioService": { "const": true }
+            },
+            "required": ["audioService"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "budgets": {
+            "required": [
+              "maximumUnplannedAudioGapFrames",
+              "maximumAudioDriftTicks"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "expectedFeatures": {
+            "properties": {
+              "cameraLifecycle": { "const": true }
+            },
+            "required": ["cameraLifecycle"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "budgets": {
+            "anyOf": [
+              { "required": ["maximumRequestToResidentFrames"] },
+              { "required": ["maximumRequestToVisibleFrames"] }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}
