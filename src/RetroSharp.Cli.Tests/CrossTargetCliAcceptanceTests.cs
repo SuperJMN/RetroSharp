@@ -162,62 +162,25 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Equal(256, chrDiagnostic.GetProperty("limit").GetProperty("tileIndexes").GetInt32());
     }
 
+    // Build + ROM-size coverage for this sample lives in Cli_builds_every_manifest_sample_for_declared_targets.
+    // This test only guards the sample's source shape, so it needs no compilation.
     [Fact]
-    public void Cli_builds_portable_sample_for_game_boy_and_nes_under_temp_directory()
+    public void Actor_framework_sample_keeps_expected_source_shape()
     {
-        using var workspace = TemporaryWorkspace();
-        var sample = RepositoryFile("samples/cross-target-camera/camera.rs");
-
-        var gameBoyRom = Path.Combine(workspace.Path, "cross-target.gb");
-        var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);
-
-        Assert.Equal(0, gameBoy.ExitCode);
-        Assert.True(File.Exists(gameBoyRom), gameBoy.CombinedOutput);
-        Assert.Equal(32768, new FileInfo(gameBoyRom).Length);
-        Assert.Contains("Wrote Game Boy ROM:", gameBoy.CombinedOutput, StringComparison.Ordinal);
-
-        var nesRom = Path.Combine(workspace.Path, "cross-target.nes");
-        var nes = RunCli("--target", "nes", "--out", nesRom, sample);
-
-        Assert.Equal(0, nes.ExitCode);
-        Assert.True(File.Exists(nesRom), nes.CombinedOutput);
-        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesRom).Length);
-        Assert.Contains("Wrote NES ROM:", nes.CombinedOutput, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Cli_builds_actor_framework_sample_for_game_boy_and_nes_under_temp_directory()
-    {
-        using var workspace = TemporaryWorkspace();
-        var sample = RepositoryFile("samples/actor-framework/actors.rs");
-        var source = File.ReadAllText(sample);
+        var source = File.ReadAllText(RepositoryFile("samples/actor-framework/actors.rs"));
 
         Assert.Contains("""World.Load("actors.tmj");""", source);
         Assert.Contains("""Actors.SpawnLayer(enemies, "actors.tmj", "actors");""", source);
         Assert.Contains("""Camera.SetPosition(cameraX, 0);""", source);
         Assert.DoesNotContain("enemies[0].kind", source);
-
-        var gameBoyRom = Path.Combine(workspace.Path, "actors.gb");
-        var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);
-
-        Assert.Equal(0, gameBoy.ExitCode);
-        Assert.True(File.Exists(gameBoyRom), gameBoy.CombinedOutput);
-        Assert.Equal(32768, new FileInfo(gameBoyRom).Length);
-
-        var nesRom = Path.Combine(workspace.Path, "actors.nes");
-        var nes = RunCli("--target", "nes", "--out", nesRom, sample);
-
-        Assert.Equal(0, nes.ExitCode);
-        Assert.True(File.Exists(nesRom), nes.CombinedOutput);
-        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesRom).Length);
     }
 
+    // Build + ROM-size coverage for this sample lives in Cli_builds_every_manifest_sample_for_declared_targets.
+    // This test only guards the sample's source and manifest shape, so it needs no compilation.
     [Fact]
-    public void Cli_builds_runner_projectile_sample_for_game_boy_and_nes_under_temp_directory()
+    public void Runner_projectile_sample_keeps_expected_source_and_manifest_shape()
     {
-        using var workspace = TemporaryWorkspace();
         const string projectRelativePath = "samples/runner-projectile/runner-projectile.retrosharp.json";
-        var sample = RepositoryFile(projectRelativePath);
         var source = File.ReadAllText(RepositoryFile("samples/runner-projectile/src/main.rs"));
         var manifest = LoadManifest();
         var manifestEntry = Assert.Single(manifest.Samples, entry => entry.Path == projectRelativePath);
@@ -233,20 +196,6 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains("""shots.TouchTiles(0, 1);""", source, StringComparison.Ordinal);
         Assert.Contains("""Input.WasPressed(Button.B)""", source, StringComparison.Ordinal);
         Assert.Contains("""shots.Request(MarioFireball""", source, StringComparison.Ordinal);
-
-        var gameBoyRom = Path.Combine(workspace.Path, "runner-projectile.gb");
-        var gameBoy = RunCli("--target", "gb", "--out", gameBoyRom, sample);
-
-        Assert.Equal(0, gameBoy.ExitCode);
-        Assert.True(File.Exists(gameBoyRom), gameBoy.CombinedOutput);
-        Assert.Equal(32768, new FileInfo(gameBoyRom).Length);
-
-        var nesRom = Path.Combine(workspace.Path, "runner-projectile.nes");
-        var nes = RunCli("--target", "nes", "--out", nesRom, sample);
-
-        Assert.Equal(0, nes.ExitCode);
-        Assert.True(File.Exists(nesRom), nes.CombinedOutput);
-        Assert.Equal(ExpectedRomSize("nes"), new FileInfo(nesRom).Length);
     }
 
     [Fact]
@@ -280,6 +229,8 @@ public sealed class CrossTargetCliAcceptanceTests
                 Assert.Equal(0, result.ExitCode);
                 Assert.True(File.Exists(output), result.CombinedOutput);
                 Assert.Equal(ExpectedRomSize(sample.Id, target), new FileInfo(output).Length);
+                var banner = target == "nes" ? "Wrote NES ROM:" : "Wrote Game Boy ROM:";
+                Assert.Contains(banner, result.CombinedOutput, StringComparison.Ordinal);
             }
         }
     }
@@ -1101,13 +1052,10 @@ public sealed class CrossTargetCliAcceptanceTests
 
     private static CliResult RunCli(params string[] args)
     {
-        var processArgs = new List<string>
-        {
-            CliAssembly(),
-        };
-        processArgs.AddRange(args);
-
-        return RunProcess("dotnet", processArgs.ToArray());
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exitCode = RetroSharp.Cli.CliRunner.Run(args, stdout, stderr);
+        return new CliResult(exitCode, stdout.ToString(), stderr.ToString());
     }
 
     private static CliResult RunProcess(string fileName, params string[] args)
@@ -1251,20 +1199,6 @@ public sealed class CrossTargetCliAcceptanceTests
               }
               """);
         File.WriteAllText(Path.Combine(packageDirectory, sourceName), source);
-    }
-
-    private static string CliAssembly()
-    {
-        var configuration = TestConfiguration();
-        return RepositoryFile($"src/RetroSharp.Cli/bin/{configuration}/net10.0/RetroSharp.Cli.dll");
-    }
-
-    private static string TestConfiguration()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        var configurationDirectory = directory.Parent;
-        return configurationDirectory?.Name
-            ?? throw new InvalidOperationException($"Could not infer test configuration from '{AppContext.BaseDirectory}'.");
     }
 
     private static string RepositoryRoot()

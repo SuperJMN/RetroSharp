@@ -1,6 +1,5 @@
 namespace RetroSharp.Cli.Tests;
 
-using System.Diagnostics;
 using Xunit;
 
 public sealed class GbsCliTests
@@ -127,41 +126,10 @@ public sealed class GbsCliTests
 
     private static CliResult RunCli(params string[] args)
     {
-        var processArgs = new List<string>
-        {
-            CliAssembly(),
-        };
-        processArgs.AddRange(args);
-
-        return RunProcess("dotnet", processArgs.ToArray());
-    }
-
-    private static CliResult RunProcess(string fileName, params string[] args)
-    {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo(fileName)
-        {
-            WorkingDirectory = RepositoryRoot(),
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-
-        foreach (var arg in args)
-        {
-            process.StartInfo.ArgumentList.Add(arg);
-        }
-
-        process.Start();
-        var stdout = process.StandardOutput.ReadToEndAsync();
-        var stderr = process.StandardError.ReadToEndAsync();
-
-        if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException($"{fileName} command timed out: {string.Join(" ", args)}");
-        }
-
-        return new CliResult(process.ExitCode, stdout.GetAwaiter().GetResult(), stderr.GetAwaiter().GetResult());
+        var stdout = new StringWriter();
+        var stderr = new StringWriter();
+        var exitCode = RetroSharp.Cli.CliRunner.Run(args, stdout, stderr);
+        return new CliResult(exitCode, stdout.ToString(), stderr.ToString());
     }
 
     private static TemporaryDirectory TemporaryWorkspace()
@@ -214,20 +182,6 @@ public sealed class GbsCliTests
     {
         bytes[offset] = (byte)(value & 0xFF);
         bytes[offset + 1] = (byte)(value >> 8);
-    }
-
-    private static string CliAssembly()
-    {
-        var configuration = TestConfiguration();
-        return RepositoryFile($"src/RetroSharp.Cli/bin/{configuration}/net10.0/RetroSharp.Cli.dll");
-    }
-
-    private static string TestConfiguration()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        var configurationDirectory = directory.Parent;
-        return configurationDirectory?.Name
-            ?? throw new InvalidOperationException($"Could not infer test configuration from '{AppContext.BaseDirectory}'.");
     }
 
     private static string RepositoryRoot()
