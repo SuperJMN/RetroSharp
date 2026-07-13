@@ -662,7 +662,7 @@ Acceptance criteria:
 
 Purpose: add vertical scroll as a first-class camera capability.
 
-Status: Game Boy vertical scroll is now exercised by `samples/gameboy-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. Game Boy diagonal movement is exercised by `samples/nes-free-scroll/freescroll.rs` for source-authored columns, `samples/tiled-diagonal/diag.rs` for a 40x40 Tiled `World.Load(...)` map, and `samples/tiled-free-scroll/free-scroll.rs` for the cross-target Tiled diagonal path; the target declares staggered camera stream draining, queues pending columns and rows independently for diagonal movement, and commits one diagonal-axis queue per VBlank. Same-axis Game Boy camera movement can now queue two exposed edges and commit both during `Camera.Apply()`, so runner-scale scroll targets no longer hit the old one-tile-per-frame ceiling. The row and column streamers cover the visible 20x18 screen plus fine-scroll exposure, while sharing emitted loops so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path: it emits the iNES four-screen bit, uploads the initial four nametables at startup, tracks X/Y source camera state, writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled, accepts tall Tiled `World.Load(...)` maps on the four-screen vertical path, accepts diagonal Tiled maps that fit the four-screen 64x60 surface, streams horizontal columns for worlds wider than the buffer, and streams vertical rows plus zero-palette attribute refreshes for source-authored or imported worlds taller than the buffer. Mapper-backed scale, banking, and IRQ HUD remain in NF-10; see `docs/NesFreeScrollRoadmap.md`.
+Status: Game Boy vertical scroll is now exercised by `samples/source-vscroll/vscroll.rs` and an acceptance test that runs the ROM path far enough to observe fresh row streaming in VRAM. Game Boy diagonal movement is exercised by `samples/source-free-scroll/freescroll.rs` for source-authored columns, `samples/tiled-diagonal/diag.rs` for a 40x40 Tiled `World.Load(...)` map, and `samples/tiled-free-scroll/free-scroll.rs` for the cross-target Tiled diagonal path; the target declares staggered camera stream draining, queues pending columns and rows independently for diagonal movement, and commits one diagonal-axis queue per VBlank. Same-axis Game Boy camera movement can now queue two exposed edges and commit both during `Camera.Apply()`, so runner-scale scroll targets no longer hit the old one-tile-per-frame ceiling. The row and column streamers cover the visible 20x18 screen plus fine-scroll exposure, while sharing emitted loops so taller vertical maps do not force unsupported direct control flow across MBC1 program banks. NES now has an emulator-validated four-screen free-scroll path: it emits the iNES four-screen bit, uploads the initial four nametables at startup, tracks X/Y source camera state, writes `$2000`/`$2005` with the 240-row coarse-Y wrap handled, accepts tall Tiled `World.Load(...)` maps on the four-screen vertical path, accepts diagonal Tiled maps that fit the four-screen 64x60 surface, streams horizontal columns for worlds wider than the buffer, and streams vertical rows plus zero-palette attribute refreshes for source-authored or imported worlds taller than the buffer. Mapper-backed scale, banking, and IRQ HUD remain in NF-10; see `docs/NesFreeScrollRoadmap.md`.
 
 Tasks:
 
@@ -671,7 +671,7 @@ Tasks:
 - Support column and row streaming when moving diagonally. Game Boy and NES both use capability-declared staggered one-axis-queue-per-VBlank policies for diagonal streamed edges; Game Boy also supports two same-axis camera edges in one frame.
 - Add budget checks for tile writes per frame.
 - Add capability checks for targets that support only X, only Y, or XY scroll.
-- Add a Game Boy vertical-scroll sample or runner section that exercises Y movement. Done in `samples/gameboy-vscroll/vscroll.rs`.
+- Add a Game Boy vertical-scroll sample or runner section that exercises Y movement. Done in `samples/source-vscroll/vscroll.rs`.
 
 Acceptance criteria:
 
@@ -1356,7 +1356,7 @@ Verification:
 
 - [x] Cross-target portable sample builds for Game Boy and NES.
 - [x] Game Boy runner sample builds after migration.
-- [x] Game Boy drawing, HUD, runner diagnostics, and NES drawing samples build after migration.
+- [x] The shared static-drawing identity, Window HUD, and runner diagnostics build after migration while retaining the original Game Boy and NES drawing projections.
 
 ### Iteration 12: Post-V1 Zero-Cost High-Level Language Surface
 

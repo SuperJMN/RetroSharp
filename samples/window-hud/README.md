@@ -1,4 +1,4 @@
-# Game Boy Window HUD Sample
+# Window HUD Sample
 
 Sample Layer: `target-capability-spike`
 

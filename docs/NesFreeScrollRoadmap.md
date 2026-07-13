@@ -98,7 +98,7 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
   `CameraMovementStreamsBackground = false` for preloaded camera movement.
 - `Sdk2DOperation.StreamMapRow` lowers on NES for explicit source-authored row
   spans and is also used by the shared capability/budget model.
-- `samples/nes-free-scroll/freescroll.rs` remains the source-authored NES four-screen
+- `samples/source-free-scroll/freescroll.rs` remains the source-authored NES four-screen
   behavioral proof and now also builds for Game Boy, where the same diagonal source
   exercises the GB staggered one-axis-queue-per-VBlank streaming policy. `samples/tiled-free-scroll/free-scroll.rs`
   is the matching Tiled `World.Load(...)` diagonal proof inside the 64x60 four-screen surface.
@@ -214,7 +214,7 @@ This is the fast, low-risk milestone: prove genuine diagonal scroll with no
 runtime VRAM streaming.
 
 - Layer: NES target + sample + validation.
-- Files: `samples/nes-free-scroll/freescroll.rs`, `samples/manifest.json`,
+- Files: `samples/source-free-scroll/freescroll.rs`, `samples/manifest.json`,
   `samples/README.md`, NES acceptance tests.
 - Steps:
   - [x] Author a level that fits entirely in the 512x480 four-screen surface.
@@ -340,7 +340,7 @@ requirement.
 ## Phase NF-9 — Acceptance: sample + tests + cross-check
 
 - Layer: samples + validation + docs.
-- Files: `samples/nes-free-scroll/`, `samples/tiled-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
+- Files: `samples/source-free-scroll/`, `samples/tiled-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
   - [x] The historical NF-9 golden-byte tests covered the four-screen header,
@@ -379,7 +379,7 @@ stable IRQ HUD remains a distinct follow-up:
 
 ## Acceptance criteria (free-scroll milestone)
 
-- `samples/nes-free-scroll/freescroll.rs` and `samples/tiled-free-scroll/free-scroll.rs`
+- `samples/source-free-scroll/freescroll.rs` and `samples/tiled-free-scroll/free-scroll.rs`
   scroll **diagonally** (both axes at once) with no corner artifacts, proven behaviorally
   through the four-screen `nes_debug` MCP, not just compile level.
 - Levels up to 512x480 work with no runtime streaming (NF-3). Larger

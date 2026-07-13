@@ -1660,7 +1660,7 @@ public class NesRomCompilerTests
     [Fact]
     public void Nes_drawing_sample_compiles_with_helper_functions()
     {
-        var source = File.ReadAllText(RepositoryFile("samples/nes-drawing/drawing.rs"));
+        var source = File.ReadAllText(RepositoryFile("samples/static-drawing/drawing.rs"));
 
         Assert.Contains("void DrawFace()", source);
 

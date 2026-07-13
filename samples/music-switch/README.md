@@ -1,4 +1,4 @@
-# Game Boy Multiple Music Themes Sample
+# Music Switch Sample
 
 Sample Layer: `target-capability-spike`
 

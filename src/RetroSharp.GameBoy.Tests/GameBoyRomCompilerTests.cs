@@ -1661,7 +1661,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_drawing_sample_compiles_with_helper_functions()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-drawing/drawing.rs");
+        var sourcePath = RepositoryFile("samples/static-drawing/drawing.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("void DrawFace()", source);
@@ -1713,7 +1713,7 @@ public class GameBoyRomCompilerTests
     [Fact]
     public void GameBoy_hud_sample_compiles_with_window_hud()
     {
-        var sourcePath = RepositoryFile("samples/gameboy-hud/hud.rs");
+        var sourcePath = RepositoryFile("samples/window-hud/hud.rs");
         var source = File.ReadAllText(sourcePath);
 
         Assert.Contains("Hud.SetTile(window", source);

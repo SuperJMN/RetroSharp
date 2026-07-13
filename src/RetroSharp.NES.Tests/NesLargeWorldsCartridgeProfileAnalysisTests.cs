@@ -136,8 +136,8 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
     [Fact]
     public void Mapper0_without_a_packed_camera_retains_simple_vectors_and_its_tracked_golden()
     {
-        var samplePath = RepositoryFile("samples/nes-drawing/drawing.rs");
-        var goldenPath = RepositoryFile("samples/nes-drawing/drawing.nes");
+        var samplePath = RepositoryFile("samples/static-drawing/drawing.rs");
+        var goldenPath = RepositoryFile("samples/static-drawing/drawing.nes");
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             File.ReadAllText(samplePath),
             Path.GetDirectoryName(samplePath));

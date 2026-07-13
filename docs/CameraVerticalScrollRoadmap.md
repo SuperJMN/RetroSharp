@@ -14,9 +14,9 @@ current supported subset per target.
 
 - **Do NOT start from scratch on Game Boy.** Vertical scroll is already
   implemented at the codegen level and is internally consistent. The VS-1..VS-5
-  slice proved it with `samples/gameboy-vscroll/vscroll.rs`, ROM/VRAM acceptance,
+  slice proved it with `samples/source-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix. The diagonal Strategy A slice is also proven
-  by `samples/nes-free-scroll/freescroll.rs`, `samples/tiled-diagonal/diag.rs`,
+  by `samples/source-free-scroll/freescroll.rs`, `samples/tiled-diagonal/diag.rs`,
 	  and `samples/tiled-free-scroll/free-scroll.rs` on Game Boy: diagonal movement
 	  queues columns and rows independently and drains one axis queue per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
@@ -51,7 +51,7 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   - Up/down move steps + pending-row queue: `:3172-3214`.
   - Row streamer reads the world by source row: `:3261-3296`.
   - `CameraConfig.SourceHeight = program.MapColumnHeight`: `:5244-5247`.
-- `samples/gameboy-vscroll/vscroll.rs` moves Y by one pixel per frame over a
+- `samples/source-vscroll/vscroll.rs` moves Y by one pixel per frame over a
   24-row source-authored map, scrolls down and back up, and builds as a Game Boy ROM.
   `samples/tiled-tall/tall.rs` proves the same vertical row streamer over a 16x40
   Tiled `World.Load(...)` map whose full height is kept in the imported world rows.
@@ -66,7 +66,7 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
   operation carries a variable Y axis, runs the emitted ROM, and observes fresh
   row data in VRAM after the 32-row background buffer wraps.
-- `samples/nes-free-scroll/freescroll.rs` moves X and Y by one pixel per frame
+- `samples/source-free-scroll/freescroll.rs` moves X and Y by one pixel per frame
   over a 64x60 source map and builds as both Game Boy and NES. The Game Boy
   acceptance test runs the emitted ROM and observes both fresh wrapped columns
   and fresh wrapped rows after diagonal movement.
@@ -125,7 +125,7 @@ The CLI has no `--help`; verify options from `src/RetroSharp.Cli/Program.cs`.
 ### VS-1: Add a Game Boy vertical-scroll acceptance sample
 
 - Layer: samples + validation.
-- Files: new `samples/gameboy-vscroll/vscroll.rs` (target-intrinsic or
+- Files: new `samples/source-vscroll/vscroll.rs` (target-intrinsic or
   target-acceptance), `samples/manifest.json`, `samples/README.md`.
 - Steps:
   - [x] Author a minimal source that calls `Camera.Init(...)` over a world that

@@ -1,4 +1,4 @@
-# Tall Tiled Game Boy Scroll Sample
+# Tall Tiled Scroll Sample
 
 Sample Layer: `target-acceptance`
 
