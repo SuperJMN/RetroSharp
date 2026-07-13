@@ -214,6 +214,14 @@ Split-scroll HUD needs a timed scroll-change path that the current NES spike doe
 
 `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES acceptance project for the runner path. It lists `src/main.rs` plus local helper/state code from `samples/runner/src`, and uses the complete 156x20-cell `stage1.tmj` map (312x40 hardware tiles), 2-axis camera movement, camera-relative collision helpers, runtime animation, jump/reset logic, `assets/music/runner.vgz`, and `assets/mario-player.png` for both targets. NES resolves its target variants, preserves both DPCM blocks, stages packed rows/columns outside NMI, commits through all four nametables, and automatically selects `nes-mmc3-tvrom-v1` for the final runner image.
 
+NES packed-camera correctness is independent of unspecified CPU RAM power-on
+contents. Reset initializes the exact WorldPack/camera-owned `$0326..$03FF`
+control block and the exact 594-byte `$0400..$0651` staging layout, assigns the
+`NoSlot` sentinel explicitly, and leaves mapper shadows, OAM, audio, game state,
+and the first byte after staging outside those clears. FCEUmm `$00`/`$FF` plus
+a deterministic nonzero pattern and AprNes lifecycle evidence are recorded in
+[`NesRunnerPowerOnRamAcceptance.md`](NesRunnerPowerOnRamAcceptance.md).
+
 `samples/actor-framework/actors.rs` is the focused Game Boy/NES acceptance sample for the actor framework. It uses `Actors.Pool`, `Enemies.Def`, Tiled object-layer spawn data, runtime camera-window activation, `enemies.Update()`, `enemies.TouchTiles(...)`, `enemies.LandOnTiles(...)`, and `enemies.Draw()` over the same source. The framework lowers before NES target emission to fixed `Actor` arrays with split X/Y world coordinates, generated spawn helpers plus `used[]`, direct kind branches, camera-relative 2-axis collision, and ordinary `Sprite.Draw(...)` calls.
 
 The cross-target sample intentionally avoids raw target calls such as `Sprite.Set(...)`, `Scroll.Set(...)`, `Tilemap.Set(...)`, `Tilemap.Fill(...)`, `tilemap_fill_column(...)`, `map_stream_column(...)`, `Palette.Set(...)`, and `ObjectPalette.Set(...)`. It does not exercise generic world-space collision queries or HUD APIs. Runner-specific coverage now exercises the complete packed `stage1` path with real target audio; focused free-scroll samples remain useful isolation fixtures for diagonal and four-screen behavior.

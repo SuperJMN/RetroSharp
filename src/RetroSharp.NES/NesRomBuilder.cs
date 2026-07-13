@@ -1691,9 +1691,13 @@ internal sealed class NesRuntimeCompiler
         builder.StoreAAbsolute(CameraScrollAppliedAddress);
         if (usePackedCamera)
         {
-            builder.StoreAAbsolute(NesPackedCameraRuntime.FrameCounterLow);
-            builder.StoreAAbsolute(NesPackedCameraRuntime.FrameCounterHigh);
-            builder.StoreAAbsolute(NesPackedCameraRuntime.FramePending);
+            // The packed WorldPack and camera runtimes exclusively own $0326..$03FF.
+            // Clear that exact control/scratch block before validation can read it;
+            // mapper shadows end at $0325 and staging begins at $0400.
+            EmitClearAbsoluteRange(
+                NesWorldPackRuntimeAbi.ValidationState,
+                NesWorldPackRuntimeAbi.CollisionCellResult,
+                "nes_packed_runtime_state_clear");
         }
         if (useFourScreenNametables)
         {
@@ -1704,6 +1708,23 @@ internal sealed class NesRuntimeCompiler
             builder.StoreAZeroPage(CameraSourceRowAddress);
             builder.StoreAZeroPage(CameraStreamRemainingAddress);
         }
+        if (usePackedCamera)
+        {
+            builder.LoadAImmediate(NesPackedCameraRuntime.NoSlot);
+            builder.StoreAAbsolute(NesPackedCameraRuntime.SelectedSlot);
+        }
+    }
+
+    private void EmitClearAbsoluteRange(ushort start, ushort endInclusive, string labelName)
+    {
+        var length = endInclusive - start + 1;
+        var loop = builder.CreateLabel(labelName);
+        builder.LoadXImmediate(0);
+        builder.Label(loop);
+        builder.StoreAAbsoluteX(start);
+        builder.IncrementX();
+        builder.CompareXImmediate(length);
+        builder.BranchRelative(0xD0, loop); // BNE loop
     }
 
     private void EmitInputStateInitialization()

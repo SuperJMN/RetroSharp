@@ -155,6 +155,7 @@ internal sealed class NesTestCpu
                     break;
                 }
             case 0x99: Write((ushort)(ReadWordAndAdvance() + y), a); cycles += 5; break;
+            case 0x9D: Write((ushort)(ReadWordAndAdvance() + x), a); cycles += 5; break;
             case 0xA0: LoadY(Read(pc++)); cycles += 2; break;
             case 0xA2: LoadX(Read(pc++)); cycles += 2; break;
             case 0xA5: LoadA(Read(Read(pc++))); cycles += 3; break;
@@ -187,6 +188,8 @@ internal sealed class NesTestCpu
                     break;
                 }
             case 0xD0: Branch(!zero); break;
+            case 0xE0: Compare(x, Read(pc++)); cycles += 2; break;
+            case 0xE8: LoadX((byte)(x + 1)); cycles += 2; break;
             case 0xEE:
                 {
                     var address = ReadWordAndAdvance();
