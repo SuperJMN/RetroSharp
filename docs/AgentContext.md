@@ -19,6 +19,13 @@ This document preserves project knowledge that previously lived only in agent me
 - The current closeout validation expectation is `git diff --check` and
   `dotnet test RetroSharp.sln -m:1`, with tracked sample ROMs left
   byte-identical for docs-only work.
+- RPH-3.3 / #331 gives automatically selected mapper-0 packed-camera images
+  the same fixed, mapper-neutral frame-signal NMI handler used by MMC3 while
+  retaining mapper-0 reset/IRQ semantics and automatic profile selection.
+  `samples/tiled-vscroll/vscroll.rs` remains mapper 0; AprNes/NesMcp measured
+  an exact 90-frame NMI delta after startup with `PPUCTRL=$80`, `PPUMASK=$1E`,
+  active rendering, source/visible camera progress, and 11 later tile edges.
+  See `docs/NesMapper0PackedCameraAcceptance.md`.
 - RPH-3.1 / #326 makes the NES packed runner independent of CPU RAM power-on
   policy. Startup clears only the exact `$0326..$03FF` WorldPack/camera control
   block and `$0400..$0651` 594-byte staging layout, then assigns `NoSlot`.
