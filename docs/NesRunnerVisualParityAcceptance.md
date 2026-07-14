@@ -178,9 +178,10 @@ The NES lowering now enforces these concrete invariants:
   budget. Bank selection, WorldPack directory lookup, and raw/RLE decode remain
   outside the commit.
 
-The frozen complete-stage runtime probe is 8,935 fixed bytes after preserving
-the vertical attribute stride and specializing prepared 2x2 column traversal;
-pinned R7 remains 6,204 bytes. It still selects
+The frozen complete-stage runtime probe is 8,999 fixed bytes after preserving
+the vertical attribute stride, specializing prepared 2x2 column traversal, and
+selecting the physical 30-row attribute table for columns; pinned R7 is 7,306
+bytes. It still selects
 the same `nes-mmc3-tvrom-v1` profile and retains the same ROM size, mapper
 header, resident CHR budget, and bank ownership.
 

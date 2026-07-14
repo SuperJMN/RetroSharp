@@ -5,7 +5,9 @@ static class Level
     const i16 Width = 312;
     const i16 StreamY = 0;
     const i16 StreamHeight = 40;
-    const i16 MaxCameraX = 2240;
+    // Keep the focused non-zero-Y canary short enough to exercise both
+    // directions inside its 420-frame functional window.
+    const i16 MaxCameraX = 96;
     const u8 BottomAlignmentTicks = 64;
 }
 

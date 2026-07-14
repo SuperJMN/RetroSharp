@@ -251,7 +251,8 @@ internal static class NesRomBuilder
                 pinnedDataStart = NesWorldPackRuntimeEmitter.DefinePinnedLookupLabels(
                     builder,
                     worldPackRuntime,
-                    pinnedDataStart);
+                    pinnedDataStart,
+                    usePackedCamera);
             }
 
             DefinePinnedDataLabels(builder, program, pinnedDataStart, includeLegacyWorldData);
@@ -382,7 +383,8 @@ internal static class NesRomBuilder
                 builder,
                 program,
                 includeLegacyWorldData,
-                worldPackRuntime);
+                worldPackRuntime,
+                usePackedCamera);
             EmitMusicAssets(pinnedBuilder, program.MusicAssetsInLoadOrder, dpcmLayout.AddressRegisterMap);
             EmitSoundEffectAssets(pinnedBuilder, program.SoundEffectAssetsInLoadOrder);
             pinnedDataBytes = pinnedBuilder.Build();
@@ -543,11 +545,12 @@ internal static class NesRomBuilder
         PrgBuilder fixedBuilder,
         NesVideoProgram program,
         bool includeLegacyWorldData,
-        NesWorldPackRuntimePlan? worldPackRuntime)
+        NesWorldPackRuntimePlan? worldPackRuntime,
+        bool usePackedCamera)
     {
         if (worldPackRuntime is not null)
         {
-            NesWorldPackRuntimeEmitter.EmitPinnedLookupData(pinnedBuilder, worldPackRuntime);
+            NesWorldPackRuntimeEmitter.EmitPinnedLookupData(pinnedBuilder, worldPackRuntime, usePackedCamera);
         }
 
         if (includeLegacyWorldData && program.WorldMap is { } worldMap)
@@ -744,7 +747,7 @@ internal static class NesRomBuilder
         if (packedWorldBytes is not null)
         {
             var runtime = NesWorldPackRuntimePlan.Create(packedWorldBytes);
-            var length = NesWorldPackRuntimeEmitter.PinnedLookupDataLength(runtime);
+            var length = NesWorldPackRuntimeEmitter.PinnedLookupDataLength(runtime, program.UsesCameraRuntime);
             AddReportSegment(
                 segments,
                 "pinned:worldpack-runtime-index",

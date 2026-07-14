@@ -987,6 +987,13 @@ internal static class NesPackedCameraRuntimeEmitter
         {
             builder.LoadXAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockXLow + index)));
             builder.LoadAAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockYLow + index)));
+            if (index == 1)
+            {
+                // CMP established carry on the column path. SBC by the two's
+                // complement adds the page-aligned column-table displacement
+                // without spending scarce fixed-bank bytes on a second add.
+                builder.SubtractImmediate(0x100 - (plan.Attributes.ColumnOffset >> 8));
+            }
             builder.StoreAAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockXLow + index)));
             builder.StoreXAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockYLow + index)));
         }

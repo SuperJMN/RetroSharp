@@ -130,7 +130,12 @@ internal sealed record NesWorldPackPlaneRuntimeDescriptor(
     ushort IdCount,
     WorldPackCodec Codec);
 
-internal sealed record NesWorldPackAttributePlan(int Columns, int Rows, byte[] Bytes)
+internal sealed record NesWorldPackAttributePlan(
+    int Columns,
+    int Rows,
+    byte[] Bytes,
+    int ColumnOffset,
+    byte[] ColumnBytes)
 {
     private readonly record struct PaletteCell(int Slot, bool IsWorldLayer);
 
@@ -167,7 +172,40 @@ internal sealed record NesWorldPackAttributePlan(int Columns, int Rows, byte[] B
             }
         }
 
-        return new NesWorldPackAttributePlan(columns, rows, bytes);
+        var completeNameTables = pack.Descriptor.HardwareHeight / 30;
+        var remainingRows = pack.Descriptor.HardwareHeight % 30;
+        var physicalRows = completeNameTables * 8 + (remainingRows + 3) / 4;
+        var columnBytes = new byte[checked(columns * physicalRows)];
+        for (var physicalRow = 0; physicalRow < physicalRows; physicalRow++)
+        {
+            var nameTableRow = physicalRow % 8;
+            var sourceTop = physicalRow / 8 * 30 + nameTableRow * 4;
+            for (var blockX = 0; blockX < columns; blockX++)
+            {
+                var value = 0;
+                for (var quadrantY = 0; quadrantY < 2; quadrantY++)
+                {
+                    for (var quadrantX = 0; quadrantX < 2; quadrantX++)
+                    {
+                        // The eighth attribute row in a nametable has only two
+                        // hardware tile rows. Its lower quadrants must not pull
+                        // palette provenance from the next physical nametable.
+                        var slot = nameTableRow == 7 && quadrantY == 1
+                            ? 0
+                            : MostCommonPaletteSlot(
+                                pack,
+                                blockX * 4 + quadrantX * 2,
+                                sourceTop + quadrantY * 2);
+                        value |= slot << ((quadrantY * 2 + quadrantX) * 2);
+                    }
+                }
+
+                columnBytes[physicalRow * columns + blockX] = checked((byte)value);
+            }
+        }
+
+        var columnOffset = (bytes.Length + byte.MaxValue) / 256 * 256;
+        return new NesWorldPackAttributePlan(columns, rows, bytes, columnOffset, columnBytes);
     }
 
     private static int MostCommonPaletteSlot(WorldPack pack, int baseX, int baseY)
@@ -476,11 +514,15 @@ internal static class NesWorldPackRuntimeEmitter
         }
         if (placement is null)
         {
-            EmitPinnedLookupData(builder, plan);
+            EmitPinnedLookupData(builder, plan, enableStagedCamera);
         }
     }
 
-    internal static int DefinePinnedLookupLabels(PrgBuilder builder, NesWorldPackRuntimePlan plan, int startAddress)
+    internal static int DefinePinnedLookupLabels(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        int startAddress,
+        bool includeColumnAttributes)
     {
         var address = startAddress;
         builder.DefineExternalLabel(TargetExpansionsLabel, checked((ushort)address));
@@ -519,7 +561,7 @@ internal static class NesWorldPackRuntimeEmitter
             address += plan.CollisionProfileBytes.Length;
         }
         builder.DefineExternalLabel(NesRomBuilder.WorldPackAttributesLabel, checked((ushort)address));
-        address += plan.Attributes.Bytes.Length;
+        address += AttributeDataLength(plan, includeColumnAttributes);
 
         return address;
     }
@@ -656,7 +698,7 @@ internal static class NesWorldPackRuntimeEmitter
         builder.BranchRelative(0xD0, tailLoop); // BNE tailLoop
     }
 
-    internal static int PinnedLookupDataLength(NesWorldPackRuntimePlan plan)
+    internal static int PinnedLookupDataLength(NesWorldPackRuntimePlan plan, bool includeColumnAttributes)
     {
         if (UsesFastCollisionLookup(plan))
         {
@@ -664,7 +706,7 @@ internal static class NesWorldPackRuntimeEmitter
                 plan.TargetExpansionBytes.Length
                 + plan.Pack.Chunks.Count * 14
                 + plan.CollisionProfileBytes.Length
-                + plan.Attributes.Bytes.Length);
+                + AttributeDataLength(plan, includeColumnAttributes));
         }
 
         var collisionTableCount = HasRawCollisionPlanes(plan) ? 4 : 0;
@@ -677,10 +719,13 @@ internal static class NesWorldPackRuntimeEmitter
             plan.TargetExpansionBytes.Length
             + plan.Pack.Chunks.Count * (5 + collisionTableCount)
             + (UsesFastCollisionLookup(plan) ? plan.CollisionProfileBytes.Length : 0)
-            + plan.Attributes.Bytes.Length);
+            + AttributeDataLength(plan, includeColumnAttributes));
     }
 
-    internal static void EmitPinnedLookupData(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    internal static void EmitPinnedLookupData(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        bool includeColumnAttributes)
     {
         builder.Label(TargetExpansionsLabel);
         builder.Emit(plan.TargetExpansionBytes);
@@ -719,6 +764,18 @@ internal static class NesWorldPackRuntimeEmitter
         }
         builder.Label(NesRomBuilder.WorldPackAttributesLabel);
         builder.Emit(plan.Attributes.Bytes);
+        if (includeColumnAttributes)
+        {
+            builder.Emit(new byte[plan.Attributes.ColumnOffset - plan.Attributes.Bytes.Length]);
+            builder.Emit(plan.Attributes.ColumnBytes);
+        }
+    }
+
+    private static int AttributeDataLength(NesWorldPackRuntimePlan plan, bool includeColumnAttributes)
+    {
+        return includeColumnAttributes
+            ? plan.Attributes.ColumnOffset + plan.Attributes.ColumnBytes.Length
+            : plan.Attributes.Bytes.Length;
     }
 
     private static byte[] FastPlaneDescriptorBytes(IReadOnlyList<NesWorldPackPlaneRuntimeDescriptor> planes)

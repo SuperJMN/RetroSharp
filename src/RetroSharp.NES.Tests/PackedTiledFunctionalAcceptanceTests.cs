@@ -29,6 +29,79 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         { "deadzone-follow", "samples/deadzone-follow/deadzone.rs", "samples/deadzone-follow/deadzone.tmj", "samples/deadzone-follow/deadzone.nes", "validation/scenarios/deadzone-follow.nes.json" },
     };
 
+    [Fact]
+    public void Exact_runner_background_survives_a_short_right_then_left_return_at_nonzero_y()
+    {
+        var trackedRomPath = RepositoryFile("samples/runner/bin/runner.nes");
+        var trackedRom = File.ReadAllBytes(trackedRomPath);
+        var regeneratedRom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        Assert.Equal(trackedRom, regeneratedRom);
+
+        var map = NesTiledWorldImporter.Load(
+            RepositoryFile("samples/runner/assets/maps/stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var scenario = new FunctionalScenario(
+            "runner-nes-nonzero-y-return",
+            "runner",
+            FunctionalTarget.Nes,
+            WarmUpFrames: 500,
+            ObservationFrames: 240,
+            Inputs:
+            [
+                new FunctionalInputSpan("right", 501, 110, ["RIGHT"]),
+                new FunctionalInputSpan("left", 611, 120, ["LEFT"]),
+            ],
+            Checkpoints:
+            [
+                new FunctionalCheckpoint(
+                    "bottom-aligned-start",
+                    500,
+                    new Dictionary<string, long> { ["visibleCameraY"] = 80 }),
+            ],
+            ExpectedFeatures: new(
+                GameplayTicks: true,
+                AudioService: false,
+                CameraLifecycle: true,
+                Background: true,
+                SpriteOam: false,
+                BankRestoration: true,
+                SafeVideoWrites: false),
+            Audio: new(ServiceExpectedByDefault: false, AuthoredSilence: []),
+            BudgetEvidence: new(
+                "fb992fed16d11b3f3b1fb2dadefc07cfbd0fbb72",
+                "The exact mapper-4 runner advances one physical NES frame per gameplay tick outside bounded packed-column commits.",
+                "The production runner map, camera Y=80, and exact RIGHT-then-LEFT input path retain every visible tile and attribute palette against the authored Tiled oracle."),
+            Budgets: new(
+                MinimumGameplayTickRatio: 0.95,
+                MaximumConsecutiveMissedGameplayTicks: 4,
+                MaximumRequestToResidentFrames: 1,
+                MaximumRequestToVisibleFrames: 2));
+        var factory = new PackedNesMachineFactory();
+        var adapter = new NesFunctionalRomAdapter(
+            factory,
+            new FunctionalAdapterCapabilities(
+                GameplayTicks: true,
+                InputTimeline: true,
+                CameraLifecycle: true,
+                Background: true,
+                BankRestoration: true));
+
+        var report = FunctionalScenarioRunner.Run(
+            scenario,
+            new FunctionalRomArtifact("samples/runner/bin/runner.nes", trackedRom),
+            adapter,
+            new AuthoredTiledBackgroundOracle(map, factory));
+
+        var trajectory = factory.VisibleCameraByFrame
+            .OrderBy(item => item.Key)
+            .Select(item => item.Value.X)
+            .ToArray();
+        Assert.True(trajectory.Max() >= 100, "The regression path must move the camera at least 100 pixels right.");
+        var rightmost = Array.IndexOf(trajectory, trajectory.Max());
+        Assert.Contains(0, trajectory[(rightmost + 1)..]);
+        Assert.True(report.Passed, Diagnostic(report));
+    }
+
     [Theory]
     [MemberData(nameof(ProductionSamples))]
     public void Exact_production_rom_passes_packed_tiled_functional_acceptance(
@@ -39,6 +112,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         string scenarioRelativePath)
     {
         var isHorizontalScrollCanary = sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal);
+        var usesBottomOverscanInset = sampleId is "tiled-hscroll-short" or "tiled-hscroll-full";
         var sourcePath = RepositoryFile(sourceRelativePath);
         var sourceDirectory = Path.GetDirectoryName(sourcePath)
             ?? throw new InvalidOperationException($"Could not locate '{sourceRelativePath}'.");
@@ -86,7 +160,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         Assert.Equal(0, report.Summary.UnsafeVideoWrites);
         Assert.Equal(0, report.Summary.UnsafeOamWrites);
         Assert.Equal(0, report.Summary.BackgroundMismatches);
-        if (isHorizontalScrollCanary)
+        if (usesBottomOverscanInset)
         {
             var firstCheckpointFrame = scenario.Checkpoints.Min(checkpoint => checkpoint.Frame);
             var appliedScrollY = factory.AppliedScrollYByFrame
@@ -119,11 +193,29 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             Assert.All(
                 factory.VisibleCameraByFrame.Where(item => item.Key > cadenceStart),
                 item => Assert.Equal(80, item.Value.Y));
+
+            var visibleTrajectory = factory.VisibleCameraByFrame
+                .Where(item => item.Key > cadenceStart)
+                .OrderBy(item => item.Key)
+                .Select(item => item.Value.X)
+                .ToArray();
+            var reversalIndex = Array.IndexOf(visibleTrajectory, 96);
+            Assert.True(reversalIndex >= 0, "The non-zero-Y canary must reach its right reversal edge.");
+            Assert.Contains(0, visibleTrajectory[(reversalIndex + 1)..]);
+
+            var cadenceDeltas = appliedScrollCadence
+                .Zip(appliedScrollCadence.Skip(1))
+                .Select(pair => (byte)(pair.Second.X - pair.First.X))
+                .ToArray();
+            Assert.Contains((byte)1, cadenceDeltas);
+            Assert.Contains(byte.MaxValue, cadenceDeltas);
             foreach (var (previous, current) in appliedScrollCadence.Zip(appliedScrollCadence.Skip(1)))
             {
                 Assert.True(
-                    current.X == (byte)(previous.X + 1),
-                    $"Successive applied PPUSCROLL X writes must advance exactly one pixel after framing; "
+                    current.X == previous.X ||
+                    current.X == (byte)(previous.X + 1) ||
+                    current.X == (byte)(previous.X - 1),
+                    $"Successive applied PPUSCROLL X writes must move by at most one pixel after framing; "
                     + $"frame {previous.Frame} was {previous.X}, frame {current.Frame} was {current.X}.");
             }
         }
