@@ -1,0 +1,45 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-vscroll-gb-cadence-smoke",
+  "sampleId": "tiled-vscroll",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 70,
+  "inputs": [],
+  "checkpoints": [
+    {
+      "id": "packed-camera-at-frame-90",
+      "frame": 90,
+      "expectedSignals": {
+        "sourceCameraY": 88,
+        "visibleCameraY": 87,
+        "scy": 87,
+        "worldPackValidationState": 1
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": false,
+    "spriteOam": false,
+    "bankRestoration": false,
+    "safeVideoWrites": false
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A DMG physical frame is 70224 cycles. Packed preparation may consume one frame, but residency, commit, and visibility must complete within that frame without unsafe retained writes.",
+    "productionTraceRationale": "The focused 90-frame smoke retains the original #332 source and visible-camera checkpoint while #339 owns the longer production integrity matrix."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

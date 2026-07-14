@@ -97,7 +97,7 @@ public sealed class GameBoyBankingRoadmapTests
     }
 
     [Fact]
-    public void World_pack_staging_reserves_298_and_554_byte_shapes_without_overlap()
+    public void World_pack_staging_reserves_362_byte_packed_camera_and_554_byte_maximum_shapes_without_overlap()
     {
         var current = GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.CurrentWorldPackStagingBytes);
         var maximum = GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.MaximumWorldPackStagingBytes);
@@ -113,7 +113,7 @@ public sealed class GameBoyBankingRoadmapTests
 
         Assert.Equal((ushort)0xC000, GameBoyWramLayout.UserLocals.Start);
         Assert.Equal((ushort)0xC0DF, GameBoyWramLayout.UserLocals.EndInclusive);
-        Assert.Equal((ushort)0xC1AB, GameBoyWramLayout.RuntimeState.EndInclusive);
+        Assert.Equal((ushort)0xC1EA, GameBoyWramLayout.RuntimeState.EndInclusive);
         Assert.Equal((ushort)0xC210, GameBoyWramLayout.AudioChannel1Shadow.Start);
         Assert.Equal((ushort)0xC214, GameBoyWramLayout.AudioChannel1Shadow.EndInclusive);
         Assert.Equal(GameBoyWramLayout.CurrentWorldPackStagingBytes, current.Length);

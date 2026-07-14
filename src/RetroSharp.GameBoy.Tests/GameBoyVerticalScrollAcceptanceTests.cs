@@ -525,6 +525,21 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.InRange(followedY, (byte)1, (byte)64);
         Assert.Equal(followedX, followedY);
 
+        // Move to the final fine-scroll pixel before a diagonal tile crossing.
+        // Within a tile both axes may publish together; the edge boundary is the
+        // point that must serialize its column and row payloads across VBlanks.
+        for (var alignmentFrame = 0;
+             alignmentFrame < 8 && (cpu.IoRegister(0xFF43) & 0x07) != 0x07;
+             alignmentFrame++)
+        {
+            cpu.RunAdditionalFrames(1);
+        }
+
+        followedX = cpu.IoRegister(0xFF43);
+        followedY = cpu.IoRegister(0xFF42);
+        Assert.Equal(0x07, followedX & 0x07);
+        Assert.Equal(followedX, followedY);
+
         const int maximumLeadingAxisPublicationFrames = 4;
         for (var publicationFrame = 0;
              publicationFrame < maximumLeadingAxisPublicationFrames
@@ -541,11 +556,19 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         Assert.True(cpu.IoRegister(0xFF43) > followedX, $"The leading column should publish within the bounded preparation window. {leadingAxisDiagnostics}");
         Assert.Equal(followedY, cpu.IoRegister(0xFF42));
 
-        cpu.RunAdditionalFrames(1);
+        const int maximumTrailingAxisPublicationFrames = 4;
+        for (var publicationFrame = 0;
+             publicationFrame < maximumTrailingAxisPublicationFrames
+             && cpu.IoRegister(0xFF42) <= followedY;
+             publicationFrame++)
+        {
+            cpu.RunAdditionalFrames(1);
+        }
+
         var trailingAxisDiagnostics = $"SCX={cpu.IoRegister(0xFF43)} SCY={cpu.IoRegister(0xFF42)} "
             + $"lifecycle={cpu.Wram(RequestCount)}/{cpu.Wram(PrepareCount)}/{cpu.Wram(ResidentCount)}/"
             + $"{cpu.Wram(CommitCount)}/{cpu.Wram(ReleaseCount)}";
-        Assert.True(cpu.IoRegister(0xFF42) > followedY, $"The staggered row should publish exactly one physical frame after the column. {trailingAxisDiagnostics}");
+        Assert.True(cpu.IoRegister(0xFF42) > followedY, $"The staggered row should publish within the bounded serialized preparation window. {trailingAxisDiagnostics}");
         Assert.Equal(cpu.IoRegister(0xFF43), cpu.IoRegister(0xFF42));
         Assert.Equal(cpu.Wram(CommitCount), cpu.Wram(ReleaseCount));
     }

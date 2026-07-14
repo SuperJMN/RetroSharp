@@ -1,0 +1,34 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-free-scroll-gb-functional",
+  "sampleId": "tiled-free-scroll",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 360,
+  "inputs": [],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A DMG frame is 70224 cycles. Diagonal packed preparation is serialized by axis, each resident edge remains immutable, and every VBlank commits at most one 19-tile column or 21-tile row.",
+    "productionTraceRationale": "The retained red gate rejected the regressed roughly 74-of-90 production cadence. The longer exact-ROM window crosses row and column chunk groups plus circular background wrap without accepting that slowdown."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

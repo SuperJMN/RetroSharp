@@ -61,6 +61,8 @@ internal sealed class GameBoyTestCpu
 
     public byte CurrentRomBank => (byte)romBank;
 
+    public long SourceWaitCompletions { get; private set; }
+
     public byte Vram(ushort address) => vram[address - 0x8000];
 
     public byte Wram(ushort address) => wram[address - 0xC000];
@@ -520,6 +522,7 @@ internal sealed class GameBoyTestCpu
         switch (opcode)
         {
             case 0x00: break;                                   // NOP
+            case 0x40: SourceWaitCompletions++; break;          // LD B,B; compiler source-tick marker
             case 0xF3: break;                                   // DI (no interrupts modeled)
             case 0x01: { var v = NextWord(); b = (byte)(v >> 8); c = (byte)v; break; } // LD BC,nn
             case 0x11: { var v = NextWord(); d = (byte)(v >> 8); e = (byte)v; break; } // LD DE,nn

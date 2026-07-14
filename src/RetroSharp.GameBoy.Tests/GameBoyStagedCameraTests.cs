@@ -204,7 +204,7 @@ public sealed class GameBoyStagedCameraTests
     }
 
     [Fact]
-    public void Diagonal_staging_keeps_column_and_row_peers_then_commits_column_first_and_row_second()
+    public void Diagonal_staging_serializes_preparation_then_commits_column_first_and_row_second()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         const string source = """
@@ -229,27 +229,24 @@ public sealed class GameBoyStagedCameraTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(Slot1State, Resident);
-        Assert.Equal(Column, cpu.Wram(Slot0Axis));
-        Assert.Equal(Row, cpu.Wram(Slot1Axis));
+        cpu.RunUntilWramEquals(WorldPackValidationState, 1);
         var writesBeforeColumn = cpu.VramWrites.Count;
 
         cpu.RunUntilWramEquals(ReleaseCount, 1);
 
         Assert.Equal(Column, cpu.Wram(LastCommittedAxis));
         Assert.Equal(Released, cpu.Wram(Slot0State));
-        Assert.Equal(Resident, cpu.Wram(Slot1State));
         Assert.Equal(8, cpu.Wram(VisibleCameraXLow));
-        Assert.Equal(0, cpu.Wram(0xC14F));
+        Assert.Equal(7, cpu.Wram(0xC14F));
         Assert.Equal(19, cpu.VramWrites.Count - writesBeforeColumn);
         var writesBeforeRow = cpu.VramWrites.Count;
 
         cpu.RunUntilWramEquals(ReleaseCount, 2);
 
         Assert.Equal(Row, cpu.Wram(LastCommittedAxis));
-        Assert.Equal(Released, cpu.Wram(Slot1State));
         Assert.Equal(8, cpu.Wram(0xC14F));
         Assert.Equal(21, cpu.VramWrites.Count - writesBeforeRow);
+        Assert.Equal(2, cpu.Wram(ResidentCount));
         Assert.Equal(0, cpu.Wram(BankWorkInCommit));
         Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
         Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));

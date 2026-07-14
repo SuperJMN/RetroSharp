@@ -10,6 +10,28 @@ using Xunit;
 
 public sealed class GameBoyWorldPackReaderTests
 {
+    [Fact]
+    public void One_byte_runtime_uses_two_visual_slots_by_default_three_for_packed_camera_and_six_for_diagonal_camera()
+    {
+        var canonical = GameBoyTiledMapImporter.CompileWorldPack(
+            Path.Combine(RepositoryDirectory("samples/tiled-free-scroll"), "free-scroll.tmj"),
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+
+        var direct = GameBoyWorldPackRuntimePlan.Create(canonical.SerializedBytes);
+        var packed = GameBoyWorldPackRuntimePlan.Create(canonical.SerializedBytes, enablePackedCameraCache: true);
+        var diagonal = GameBoyWorldPackRuntimePlan.Create(
+            canonical.SerializedBytes,
+            enablePackedCameraCache: true,
+            enableDiagonalVisualCache: true);
+
+        Assert.Equal(2, direct.Layout.VisualSlots.Count);
+        Assert.Equal(298, direct.Layout.TotalBytes);
+        Assert.Equal(3, packed.Layout.VisualSlots.Count);
+        Assert.Equal(362, packed.Layout.TotalBytes);
+        Assert.Equal(6, diagonal.Layout.VisualSlots.Count);
+        Assert.Equal(554, diagonal.Layout.TotalBytes);
+    }
+
     [Theory]
     [InlineData(1, 1, 298, 0xC300, 0xC340, 0xC380, 0xC3C0, 0xC400, 0xC415)]
     [InlineData(2, 2, 554, 0xC300, 0xC380, 0xC400, 0xC480, 0xC500, 0xC515)]

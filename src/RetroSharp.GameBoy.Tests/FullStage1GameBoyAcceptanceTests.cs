@@ -76,7 +76,16 @@ public sealed class FullStage1GameBoyAcceptanceTests
 
         cpu.RunFrames(180);
         Assert.Equal(1, cpu.Wram(WorldPackValidationState));
-        Assert.Equal("gb-rom-only-current", compiled.Report.SelectedProfile);
+        var generatedProgramBytes = compiled.Report.Segments
+            .Where(segment => segment.Owner == "program")
+            .Sum(segment => segment.Length);
+        Assert.True(
+            compiled.Report.SelectedProfile == "gb-rom-only-current",
+            $"Traversal probe selected {compiled.Report.SelectedProfile}; generated program segments total {generatedProgramBytes} bytes. "
+            + string.Join(", ", compiled.Report.Segments
+                .GroupBy(segment => segment.Owner)
+                .OrderBy(group => group.Key, StringComparer.Ordinal)
+                .Select(group => $"{group.Key}={group.Sum(segment => segment.Length)}")));
         Assert.Equal(0, compiled.Rom[0x147]);
         var counterDeltas = new List<byte>(120);
         var previousCounter = cpu.Wram(AudioTickCount);
@@ -402,6 +411,7 @@ public sealed class FullStage1GameBoyAcceptanceTests
                     Camera.Init(312, 0, 30);
                     i16 targetX = 0;
                     i16 targetY = 0;
+                    u8 vertical = 0;
                     while (true) {
                         Video.WaitVBlank();
                         Camera.Apply();
@@ -415,14 +425,20 @@ public sealed class FullStage1GameBoyAcceptanceTests
                         }
                         if (Input.IsDown(Button.Down)) {
                             targetY = 80;
+                            vertical = 1;
                         }
                         if (Input.IsDown(Button.Up)) {
                             targetY = 0;
+                            vertical = 1;
                         }
                         if (Input.WasPressed(Button.A)) {
                             Sfx.Play(jump_sfx);
                         }
-                        Camera.SetPosition(targetX, targetY);
+                        if (vertical != 0) {
+                            Camera.SetPosition(0, targetY);
+                        } else {
+                            Camera.SetPosition(targetX, 0);
+                        }
                     }
                 }
                 """;

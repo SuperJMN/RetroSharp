@@ -1,0 +1,31 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "deadzone-follow-nes-functional",
+  "sampleId": "deadzone-follow",
+  "target": "nes",
+  "warmUpFrames": 20,
+  "observationFrames": 400,
+  "inputs": [],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Dead-zone following requests at most one pixel per axis per gameplay tick; packed preparation stays outside NMI and each serialized edge publication is bounded by VBlank.",
+    "productionTraceRationale": "The 400-frame exact production traversal crosses both dead-zone boundaries, reverses both directions, draws the marker, and retains the authored 64x60 Tiled background."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 4,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

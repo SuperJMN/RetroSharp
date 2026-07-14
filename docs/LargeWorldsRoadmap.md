@@ -637,6 +637,13 @@ Recommended execution and merge order:
   chunk-boundary, or bank-sensitive request-to-resident transition to one DMG
   frame. SameBoy evidence is recorded in
   [`GameBoyPackedCameraCadenceAcceptance.md`](GameBoyPackedCameraCadenceAcceptance.md).
+- Production functional follow-up:
+  [#339](https://github.com/SuperJMN/RetroSharp/issues/339) binds the exact
+  tracked vertical, diagonal, free-scroll, and dead-zone GB/NES cartridges to
+  the shared runner. Game Boy uses three standard or six diagonal visual cache
+  slots, serializes diagonal preparation, and retains zero forbidden VBlank
+  work; NES also proves derived Tiled palette aliases. See
+  [`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md).
 - Layer: Game Boy camera runtime and VBlank integration.
 - Dependencies: [LW-2.3 / #298](https://github.com/SuperJMN/RetroSharp/issues/298)
   (native blocked-by).
@@ -1107,7 +1114,7 @@ Recommended execution and merge order:
 | Address width | 255 -> 256 and 256 -> 255 crossings on both targets |
 | Collision | Hit at world Y 304 plus unambiguous `0xFFFF` no-hit result |
 | GB placement/restoration | Deterministic MBC1 far placement; every exit/nested/audio-active path restores the actual entry bank and shadow |
-| GB runtime budget | 298-byte current / 554-byte maximum staging; bank/directory/decode outside VBlank with LY 136-153 guarded; at most 19 column or 21 row writes in VBlank |
+| GB runtime budget | 298-byte direct reader / 362-byte standard packed camera / 554-byte diagonal and v1 maximum staging; bank/directory/decode outside VBlank with LY 136-153 guarded; at most 19 column or 21 row writes in VBlank |
 | NES cartridge | Final-link mapper-0-first selection; forced MMC3 header `04 02 48 00`; PRG <=65,536, physical CHR 16,384, resident CHR <=8,192, fixed code/DPCM/vectors <=16,384 |
 | NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; packed-camera pinned data <=6,204/8,192 R7 (5,012-byte LW-3.2 placement baseline); boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
 | NES runtime budget | 594-byte canonical staging (six visual, two collision, two edge slots); bank/directory/decode outside VBlank/NMI; fixed NMI only accounts hardware/pending frames; at most 32 column tiles or four 8-tile row phases, then at most 9 attributes |

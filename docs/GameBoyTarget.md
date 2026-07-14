@@ -19,7 +19,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Background buffer | 32x32 tiles |
 | Fine scroll | X and Y |
 | Background tile write budget | 21 tile writes per explicit stream edge; packed commits write one 19-tile column or one 21-tile row per VBlank |
-| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable peer slots, preserve same-axis order across consecutive VBlanks, and drain diagonal peers column-first then staggered |
+| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable edge slots, preserve same-axis order across consecutive VBlanks, and serialize diagonal preparation column-first then staggered |
 | Camera positioning | `Camera.SetPosition(x, y)` walks the camera toward the requested position one pixel at a time, bounded to at most two tile crossings (16 px) per axis per call so a single call per frame reaches runner-scale targets without stale edges |
 | Attribute write budget | 0 per frame on the current DMG target |
 | Hardware sprites | 40 total, 10 per scanline |
@@ -238,7 +238,7 @@ Banked cartridges keep two deliberately different target-private bank values. `$
 
 The private byte-reader ABI accepts `A=bank` and `HL=$4000-$7FFF`. Banks `1..31` return the byte in `A`, status `0` in `B`, and clear Z/C. Bank `0` is a miss (`A=0`, `B=1`, Z set, C clear); a bank above `31` or an address outside the switchable window is an error (`A=0`, `B=2`, Z/C set). Success, miss, and error all restore the actual hardware bank and `$C1FA`; `$C11C` is unchanged. The helper itself and every bank write it causes execute from fixed bank 0. This is only the reader/bank-state foundation: no `WorldPack` is placed or decoded yet, and the profile remains the current low-five-bit MBC1 mode with at most 32 physical banks.
 
-The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C19D` (including packed camera slot tags, visible-camera state, counters, visual-cache metadata, and the packed-audio tick counter), fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. The staging reservation proves both the current 298-byte one-byte-ID shape and the complete 554-byte v1 maximum; a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
+The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C1EA` (including packed camera slot tags, visible-camera state, counters, visual-cache metadata, diagonal arbitration, and the packed-audio tick counter), fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. A direct one-byte-ID reader uses the original two visual slots and 298 bytes; the standard packed camera uses three visual slots and 362 bytes; a diagonal packed camera uses six visual slots and the complete 554-byte v1 maximum. Two-byte IDs also require the 554-byte maximum, and a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
 
 ### WorldPack fixed-bank reader
 
@@ -261,11 +261,13 @@ the actual entry bank and `$C1FA` LIFO; `$C11C` remains program-bank state.
 
 Visual lookup decodes only a visual slot before applying the target expansion;
 collision lookup decodes only a collision slot before applying its collision
-profile. The two visual and two collision slots never overlap. Current one-byte
-IDs use 298 staging bytes including the two 21-byte edge slots; the complete
-two-byte v1 layout uses 554. The reader never materializes the whole level in
-WRAM, and the public WorldPack bytes and complete coordinate/collision ABI are
-unchanged.
+profile. Visual, collision, and edge slots never overlap. A direct one-byte-ID
+reader uses two visual slots and 298 staging bytes including the two 21-byte
+edge slots. The packed camera raises that to three visual slots and 362 bytes,
+or six visual slots and 554 bytes when diagonal streaming is emitted. The
+complete two-byte v1 layout also uses 554. The reader never materializes the
+whole level in WRAM, and the public WorldPack bytes and complete
+coordinate/collision ABI are unchanged.
 
 ### WorldPack staged camera edges
 
@@ -277,7 +279,9 @@ limits and therefore uses packed staging.
 The packed runtime tags two peer edge slots with lifecycle, axis, direction,
 logical world-edge word, circular target, orthogonal start, and payload length.
 `Camera.SetPosition(...)` requests and fully prepares the required 19-tile
-column or 21-tile row outside VBlank. Only a matching immutable `resident` slot
+column or 21-tile row outside VBlank. A diagonal source call prepares at most
+one axis, column-first for the initial pair and alternating thereafter; the
+other request resumes cooperatively on a later source call. Only a matching immutable `resident` slot
 can enter `committing`; malformed, unavailable, or wrongly tagged data leaves
 the visible camera at the last safe pixel and retries without publishing an
 unstaged edge. A reversal may release an uncommitted resident peer but never a
@@ -287,15 +291,19 @@ committing one.
 copies at most one resident payload to VRAM per VBlank, publishes the matching
 camera coordinate only after the copy, and then releases the slot. Two
 same-axis crossings preserve near/far order over consecutive VBlanks. Diagonal
-peers are prepared together, commit the column first, retain the row unchanged,
-and then alternate/stagger later axes. Instrumentation records per-commit VRAM
+peers are prepared serially, commit the column first, retain the row request,
+and then alternate/stagger later axes. Three standard or six diagonal visual
+cache slots retain the working row/column groups so reverse and crossing paths
+do not repeatedly decode the same chunks. Instrumentation records per-commit VRAM
 writes plus any bank, decode, or directory work observed either in the critical
 section or physically at LY 144-153; acceptance requires 19 or 21 writes and
 zero forbidden-work counts. A fixed-bank wait routine treats only LY 0-135 as
 safe, reserving an eight-scanline guard band before VBlank around every
 sensitive read/write. Cooperative preparation waits service packed audio once
 per real frame, so deferrals and bank-spanning decodes do not slow BGM.
-`$C19D` is a wrapping target-private packed-audio tick counter; it is cleared
+Raw and RLE decode checkpoints wait out VBlank before continuing; separate
+counters at `$C1E9-$C1EA` distinguish directory work in commit from decode
+work physically observed in VBlank. `$C19D` is a wrapping target-private packed-audio tick counter; it is cleared
 when the packed runtime starts and increments after every real BGM/SFX update.
 Together with the lifecycle and forbidden-work counters at `$C152-$C159` and
 `$C19C`, it lets tests and external debuggers prove frame cadence without
@@ -437,7 +445,9 @@ packed final link no longer needs duplicate legacy collision rows. LW-2.4 adds
 the packed staged camera path described above; #332 later bounds its production
 edge preparation to one physical frame without selecting the raw route. LW-2.5 proved the full Game Boy
 payload non-destructively; LW-3.5 then migrated the shared runner input and
-regenerated both tracked ROMs.
+regenerated both tracked ROMs. RPH-3.5 / #339 extends that proof to the exact
+eight-row packed Tiled functional matrix in
+[`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md).
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form
 `--target gb --world-budget-report <map.tmj>`. It emits deterministic JSON to

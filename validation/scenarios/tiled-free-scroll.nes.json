@@ -1,10 +1,10 @@
 {
   "$schema": "functional-scenario.schema.json",
-  "id": "tiled-vscroll-gb-functional",
-  "sampleId": "tiled-vscroll",
-  "target": "gb",
+  "id": "tiled-free-scroll-nes-functional",
+  "sampleId": "tiled-free-scroll",
+  "target": "nes",
   "warmUpFrames": 20,
-  "observationFrames": 600,
+  "observationFrames": 360,
   "inputs": [],
   "checkpoints": [],
   "expectedFeatures": {
@@ -22,8 +22,8 @@
   },
   "budgetEvidence": {
     "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
-    "hardwareTimingRationale": "DMG provides 70224 cycles per frame and one immutable packed row commits within the 21-write VBlank ceiling; preparation and publication may each lag by at most one physical frame.",
-    "productionTraceRationale": "The autonomous 600-frame production traversal covers upward movement, the authored hold, reversal, row-buffer wrap, and later chunk groups while retaining at least 95 percent gameplay cadence."
+    "hardwareTimingRationale": "The NTSC four-screen path serializes diagonal edge commits, prepares packed data outside NMI, and keeps every bounded row or column publication within VBlank.",
+    "productionTraceRationale": "The 360-frame exact production traversal covers diagonal movement, row and column boundaries, nametable wrap, packed chunk changes, and the 16-bit reverse-safe source counter while retaining at least 95 percent gameplay cadence."
   },
   "budgets": {
     "minimumGameplayTickRatio": 0.95,

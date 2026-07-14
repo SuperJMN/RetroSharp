@@ -280,12 +280,17 @@ public sealed class GameBoyRunnerAudioTempoTests
         var source = RunnerSample.CompiledSource();
         var program = CompileVideoProgram(source, runnerDirectory);
         var worldTileGrid = Assert.IsType<WorldTileGrid>(program.WorldTileGrid);
+        var packedWorld = Assert.IsType<GameBoyTiledWorldPack>(program.PackedWorld);
+        var runtime = GameBoyWorldPackRuntimePlan.Create(
+            packedWorld.SerializedBytes,
+            enablePackedCameraCache: true,
+            enableDiagonalVisualCache: true);
         var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source, runnerDirectory));
 
         cpu.RunFrames(130);
 
-        AssertPayload(0xC170, 0xC400);
-        AssertPayload(0xC17A, 0xC415);
+        AssertPayload(0xC170, runtime.Layout.EdgeSlots[0].Start);
+        AssertPayload(0xC17A, runtime.Layout.EdgeSlots[1].Start);
 
         void AssertPayload(ushort metadata, ushort payload)
         {

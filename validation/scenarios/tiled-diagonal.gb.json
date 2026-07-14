@@ -1,0 +1,31 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-diagonal-gb-functional",
+  "sampleId": "tiled-diagonal",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 360,
+  "inputs": [],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Serialized diagonal preparation keeps each request outside VBlank and each staggered commit within the target's 19-column or 21-row write ceiling.",
+    "productionTraceRationale": "The production loop reaches the authored diagonal maximum, reverses through both axes, and revisits prior chunk groups without a same-edge decode cascade."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}
