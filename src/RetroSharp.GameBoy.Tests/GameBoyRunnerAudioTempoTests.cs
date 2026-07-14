@@ -28,8 +28,8 @@ public sealed class GameBoyRunnerAudioTempoTests
         Assert.Equal(40, packed.Pack.Descriptor.HardwareHeight);
         Assert.Equal(60, packed.Pack.Chunks.Count);
         Assert.Equal(770, packed.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
-        Assert.Equal(312, packed.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
-        Assert.Equal(2_550, packed.SerializedBytes.Length);
+        Assert.Equal(326, packed.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(2_568, packed.SerializedBytes.Length);
         Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
         Assert.Equal(131_072, result.Rom.Length);
         Assert.Equal(

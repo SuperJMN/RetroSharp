@@ -2,6 +2,10 @@
 
 Status: **historical baseline, fully resolved by LW-3.5 on 2026-07-12.**
 
+The 2026-07-14 runner content revision adds 56 `Platform` cells. Current
+production pack measurements are recorded in `WorldPackFormatV1.md`; the
+numbers below intentionally preserve the pre-platform Large Worlds baseline.
+
 This report preserves the constraints that originally prevented complete
 `stage1` from running. The final production paths now consume the exact LW-1.4
 packs: the tracked Game Boy runner is a 131,072-byte MBC1 ROM and the tracked

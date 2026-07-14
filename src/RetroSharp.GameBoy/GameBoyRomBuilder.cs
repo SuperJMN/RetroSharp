@@ -1538,6 +1538,7 @@ internal sealed class GameBoyRuntimeCompiler
     private const ushort PendingDiagonalRowTargetAddress = 0xC123;    // background row index
     private const ushort PendingDiagonalRowSourceAddress = 0xC124;    // source-map row index
     private const ushort CameraScreenTileFlagsColumnAddress = 0xC125;
+    private const ushort CameraScreenTileFlagsColumnHighAddress = 0xC126;
     private const ushort PendingDiagonalNextStreamKindAddress = 0xC127;
     private const ushort CameraStreamSourceRowScratchAddress = 0xC128;
     private const ushort CameraStreamSourceColumnScratchAddress = 0xC12A;
@@ -8837,7 +8838,7 @@ internal sealed class GameBoyRuntimeCompiler
             }
 
             EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
-            EmitMapFlagsAtSourceColumnInA(row);
+            EmitCameraMapFlagsAtSourceColumnInA(row, config.MapWidth);
             return;
         }
 
@@ -8848,7 +8849,7 @@ internal sealed class GameBoyRuntimeCompiler
 
         EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
         builder.LoadBFromA();
-        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        EmitCameraMapFlagsAtSourceColumnInBAndRowInC(config.MapWidth);
         builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
@@ -8871,7 +8872,7 @@ internal sealed class GameBoyRuntimeCompiler
             }
 
             EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
-            EmitMapFlagsAtSourceColumnInA(row);
+            EmitCameraMapFlagsAtSourceColumnInA(row, config.MapWidth);
             return;
         }
 
@@ -8881,7 +8882,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadCFromA();
         EmitCameraPixelToSourceColumn(screenPixelX, config.MapWidth);
         builder.LoadBFromA();
-        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        EmitCameraMapFlagsAtSourceColumnInBAndRowInC(config.MapWidth);
         builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
@@ -8910,7 +8911,7 @@ internal sealed class GameBoyRuntimeCompiler
             }
 
             EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
-            EmitMapFlagsAtSourceColumnInA(row);
+            EmitCameraMapFlagsAtSourceColumnInA(row, config.MapWidth);
             return;
         }
 
@@ -8920,7 +8921,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadCFromA();
         EmitCameraPixelToSourceColumn(screenPixelX, screenPixelXOffset, config.MapWidth);
         builder.LoadBFromA();
-        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        EmitCameraMapFlagsAtSourceColumnInBAndRowInC(config.MapWidth);
         builder.JumpAbsolute(endLabel);
 
         builder.Label(outOfBoundsLabel);
@@ -8934,7 +8935,7 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadBFromA();
         builder.LoadA(WordScratchHighAddress);
         builder.LoadCFromA();
-        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        EmitCameraMapFlagsAtSourceColumnInBAndRowInC(config.MapWidth);
     }
 
     private void EmitCameraScreenTileFlagsAt(
@@ -8955,15 +8956,12 @@ internal sealed class GameBoyRuntimeCompiler
         builder.LoadCFromA();
         builder.LoadA(CameraScreenTileFlagsColumnAddress);
         builder.LoadBFromA();
-        EmitMapFlagsAtSourceColumnInBAndRowInC();
+        EmitCameraMapFlagsAtSourceColumnInBAndRowInC(config.MapWidth);
         builder.Label(endLabel);
     }
 
     private void EmitCameraPixelToSourceColumn(int screenPixelX, int mapWidth)
     {
-        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
-        var endLabel = builder.CreateLabel("camera_pixel_column_end");
-
         builder.LoadA(CameraFineXAddress);
         if (screenPixelX != 0)
         {
@@ -8973,6 +8971,14 @@ internal sealed class GameBoyRuntimeCompiler
         builder.ShiftRightLogicalA();
         builder.ShiftRightLogicalA();
         builder.ShiftRightLogicalA();
+        if (mapWidth > byte.MaxValue)
+        {
+            EmitAddCameraTileOffsetToWideSourceColumn(mapWidth);
+            return;
+        }
+
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
         builder.LoadBFromA();
         builder.LoadA(CameraScreenLeftColumnAddress);
         builder.AddAFromB();
@@ -8993,9 +8999,6 @@ internal sealed class GameBoyRuntimeCompiler
             return;
         }
 
-        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
-        var endLabel = builder.CreateLabel("camera_pixel_column_end");
-
         EmitSdkByteExpressionToA(screenPixelX);
         if (screenPixelXOffset != 0)
         {
@@ -9008,6 +9011,14 @@ internal sealed class GameBoyRuntimeCompiler
         builder.ShiftRightLogicalA();
         builder.ShiftRightLogicalA();
         builder.ShiftRightLogicalA();
+        if (mapWidth > byte.MaxValue)
+        {
+            EmitAddCameraTileOffsetToWideSourceColumn(mapWidth);
+            return;
+        }
+
+        var wrapLabel = builder.CreateLabel("camera_pixel_column_wrap");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
         builder.LoadBFromA();
         builder.LoadA(CameraScreenLeftColumnAddress);
         builder.AddAFromB();
@@ -9018,6 +9029,40 @@ internal sealed class GameBoyRuntimeCompiler
         builder.SubtractAImmediate(mapWidth);
         builder.JumpAbsolute(wrapLabel);
         builder.Label(endLabel);
+    }
+
+    private void EmitAddCameraTileOffsetToWideSourceColumn(int mapWidth)
+    {
+        var subtractWidthLabel = builder.CreateLabel("camera_pixel_column_subtract_width");
+        var endLabel = builder.CreateLabel("camera_pixel_column_end");
+        var widthLow = (byte)mapWidth;
+        var widthHigh = checked((byte)(mapWidth >> 8));
+
+        builder.LoadBFromA();
+        builder.LoadA(CameraScreenLeftColumnAddress);
+        builder.AddAFromB();
+        builder.StoreA(CameraScreenTileFlagsColumnAddress);
+        builder.LoadA(CameraScreenLeftColumnHighAddress);
+        builder.Emit(0xCE, 0x00); // ADC A,0: include carry from the low-byte addition
+        builder.StoreA(CameraScreenTileFlagsColumnHighAddress);
+
+        builder.CompareImmediate(widthHigh);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+        builder.JumpAbsolute(0xC2, subtractWidthLabel); // JP NZ,subtractWidthLabel
+        builder.LoadA(CameraScreenTileFlagsColumnAddress);
+        builder.CompareImmediate(widthLow);
+        builder.JumpAbsolute(0xDA, endLabel); // JP C,endLabel
+
+        builder.Label(subtractWidthLabel);
+        builder.LoadA(CameraScreenTileFlagsColumnAddress);
+        builder.SubtractAImmediate(widthLow);
+        builder.StoreA(CameraScreenTileFlagsColumnAddress);
+        builder.LoadA(CameraScreenTileFlagsColumnHighAddress);
+        builder.Emit(0xDE, widthHigh); // SBC A,widthHigh: include borrow from the low byte
+        builder.StoreA(CameraScreenTileFlagsColumnHighAddress);
+
+        builder.Label(endLabel);
+        builder.LoadA(CameraScreenTileFlagsColumnAddress);
     }
 
     private void EmitCameraPixelToSourceRow(SdkByteExpression screenPixelY, int screenPixelYOffset, int mapHeight)
@@ -9309,6 +9354,37 @@ internal sealed class GameBoyRuntimeCompiler
     private void EmitMapTileAtSourceColumnInA(int row)
     {
         EmitReadOnlyMapByteAtSourceColumnInA(GameBoyRomBuilder.MapRowLabel(row));
+    }
+
+    private void EmitCameraMapFlagsAtSourceColumnInA(int row, int mapWidth)
+    {
+        if (UsesPackedWorldRuntime && mapWidth > byte.MaxValue)
+        {
+            builder.LoadEFromA();
+            builder.LoadA(CameraScreenTileFlagsColumnHighAddress);
+            builder.LoadDFromA();
+            builder.LoadHl(checked((ushort)row));
+            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            return;
+        }
+
+        EmitMapFlagsAtSourceColumnInA(row);
+    }
+
+    private void EmitCameraMapFlagsAtSourceColumnInBAndRowInC(int mapWidth)
+    {
+        if (UsesPackedWorldRuntime && mapWidth > byte.MaxValue)
+        {
+            builder.Emit(0x58); // LD E,B
+            builder.LoadA(CameraScreenTileFlagsColumnHighAddress);
+            builder.LoadDFromA();
+            builder.Emit(0x69); // LD L,C
+            builder.LoadHImmediate(0);
+            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackCollisionLookupLabel);
+            return;
+        }
+
+        EmitMapFlagsAtSourceColumnInBAndRowInC();
     }
 
     private void EmitMapFlagsAtSourceColumnInA(int row)

@@ -32,14 +32,14 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var segment = Assert.Single(first.Report.Segments, item => item.Owner == "worldpack:default");
 
-        Assert.Equal(2_550, canonical.SerializedBytes.Length);
+        Assert.Equal(2_568, canonical.SerializedBytes.Length);
         Assert.Equal(60, canonical.Pack.Chunks.Count);
         Assert.Equal(48u, canonical.Pack.Descriptor.CollisionProfilesOffset);
-        Assert.Equal(56u, canonical.Pack.Descriptor.TargetExpansionsOffset);
-        Assert.Equal(268u, canonical.Pack.Descriptor.DirectoryOffset);
-        Assert.Equal(1_468u, canonical.Pack.Descriptor.ChunkDataOffset);
+        Assert.Equal(60u, canonical.Pack.Descriptor.TargetExpansionsOffset);
+        Assert.Equal(272u, canonical.Pack.Descriptor.DirectoryOffset);
+        Assert.Equal(1_472u, canonical.Pack.Descriptor.ChunkDataOffset);
         Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
-        Assert.Equal(312, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(326, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
         Assert.Equal(49, canonical.Pack.Chunks.Max(chunk => chunk.Directory.VisualStoredBytes + chunk.Directory.CollisionStoredBytes));
         var largestChunkIndex = canonical.Pack.Chunks
             .Select((chunk, index) => (chunk, index))
@@ -135,10 +135,10 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var decodedCollision = decoded.ToWorldMap2D();
 
         Assert.Equal(53, first.Pack.Descriptor.VisualMetatileCount);
-        Assert.Equal(2, first.Pack.Descriptor.CollisionProfileCount);
+        Assert.Equal(3, first.Pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, first.Pack.Chunks.Count);
-        Assert.Equal(2_550, first.SerializedBytes.Length);
-        Assert.True(first.SerializedBytes.Length <= 7_708, $"GB WorldPack used {first.SerializedBytes.Length} bytes.");
+        Assert.Equal(2_568, first.SerializedBytes.Length);
+        Assert.True(first.SerializedBytes.Length <= 7_712, $"GB WorldPack used {first.SerializedBytes.Length} bytes.");
         Assert.Equal(first.SerializedBytes, second.SerializedBytes);
         Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);
         Assert.Equal(raw.GeneratedTileData, second.GeneratedTileData);
@@ -173,6 +173,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(12_480, world.WorldTileIds.Length);
         Assert.Equal(12_480, world.WorldFlags.Length);
         Assert.Equal(788, world.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
+        Assert.Equal(56, world.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
         Assert.Equal(WorldTileFlags.Solid, world.WorldFlags[38 * world.Width]);
         Assert.Equal(82, world.GeneratedTileData.Length / 16);
         Assert.Equal(1_312, world.GeneratedTileData.Length);
@@ -202,7 +203,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             target = "gb",
             sourceCells = new { width = 156, height = 20, tilePixels = 16 },
             hardwareTiles = new { width = world.Width, height = world.Height, cells = world.WorldTileIds.Length },
-            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, floorY = 304, noHit = -1 },
+            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, platformCells = 56, platformTopY = 272, floorY = 304, noHit = -1 },
             resources = new
             {
                 visualBytes = world.WorldTileIds.Length,

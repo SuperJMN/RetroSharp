@@ -152,9 +152,9 @@ class CameraState
         }
     }
 
-    inline void MoveRightOnePixel(PlayerState player, Pixel wallProbeY)
+    inline void MoveRightOnePixel(PlayerState player, Pixel wallProbeY, Pixel collisionCameraX)
     {
-        let screenX = ScreenX(player);
+        let screenX = player.x - collisionCameraX;
         let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;
         if (Camera.AabbTiles(rightProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0)
         {
@@ -171,9 +171,9 @@ class CameraState
         }
     }
 
-    inline void MoveLeftOnePixel(PlayerState player, Pixel wallProbeY)
+    inline void MoveLeftOnePixel(PlayerState player, Pixel wallProbeY, Pixel collisionCameraX)
     {
-        let screenX = ScreenX(player);
+        let screenX = player.x - collisionCameraX;
         let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;
         if (Camera.AabbTiles(leftProbeX, wallProbeY, Sprite.Width(mario_player), CollisionProbe.WallProbeHeight, CollisionFlag.Solid) == 0)
         {
@@ -193,18 +193,18 @@ class CameraState
         }
     }
 
-    void ApplyMotionStep(PlayerState player, Pixel wallProbeY)
+    void ApplyMotionStep(PlayerState player, Pixel wallProbeY, Pixel collisionCameraX)
     {
         if (movementRemainder >= MotionSpeed.Subpixel)
         {
             movementRemainder -= MotionSpeed.Subpixel;
             if (direction == Direction.Right)
             {
-                MoveRightOnePixel(player, wallProbeY);
+                MoveRightOnePixel(player, wallProbeY, collisionCameraX);
             }
             if (direction == Direction.Left)
             {
-                MoveLeftOnePixel(player, wallProbeY);
+                MoveLeftOnePixel(player, wallProbeY, collisionCameraX);
             }
         }
     }
@@ -212,13 +212,15 @@ class CameraState
     inline void ApplyMotion(PlayerState player, Pixel wallProbeY)
     {
         moving = false;
+        // Camera.AabbTiles still sees the runtime camera from tick start until ApplyPosition.
+        let collisionCameraX = x;
         if (speed != 0)
         {
             movementRemainder += speed;
             u8 steps = 0;
             while (steps < MotionSpeed.MaxSteps)
             {
-                ApplyMotionStep(player, wallProbeY);
+                ApplyMotionStep(player, wallProbeY, collisionCameraX);
                 steps++;
             }
         }

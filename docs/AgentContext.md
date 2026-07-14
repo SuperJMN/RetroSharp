@@ -12,7 +12,7 @@ This document preserves project knowledge that previously lived only in agent me
   camera Y, the 30-row seam otherwise swaps the upper/lower palette quadrants
   while leaving tile IDs correct. The runtime keeps the global table for row
   commits and emits a page-aligned physical table for columns; the complete
-  `stage1` probe now measures a 3,154-byte runtime index, 7,306 pinned R7 bytes,
+  `stage1` probe now measures a 3,158-byte runtime index, 7,310 pinned R7 bytes,
   and 8,999 fixed bytes. The exact runner regression holds RIGHT to visible X
   100 and returns LEFT to X 0 at Y 80. FCEUmm reproduced that path with zero
   visible tile/palette mismatches. See
@@ -56,6 +56,17 @@ This document preserves project knowledge that previously lived only in agent me
   boundaries. See `docs/SimpleSampleFunctionalAcceptance.md`.
 - Code baseline immediately before the AF-4.3 documentation closeout:
   `f0398452fd0e3b93d4d77e6aeac5749dbf1322ed`.
+- 2026-07-14 runner update: `stage1.tsx` tile 30 marks the existing green
+  ledges as `Platform` (56 expanded cells). Shared source lands through
+  `Solid | Platform` only while non-rising and only from above; unsupported
+  grounded actors fall after walking off, while walls/ceilings remain `Solid`.
+  Two-pixel run ticks keep their collision projection anchored to the camera X
+  at tick start, so the second B-speed substep cannot repeat the first world
+  column and enter the first solid staircase by one pixel on either target.
+  The production packs are now GB 2,568 / NES 2,780 bytes
+  (770 visual + 326 collision). Real ROM tests also cover the Game Boy packed
+  camera collision query at a source column whose `camera + screen` sum exceeds
+  255, preserving the complete source-column word instead of truncating it.
 - Recent change: `feat(actors): generated-name guards and codegen robustness`.
 - The actor framework first scrolling platformer slice is landed on
   `feature/actor-framework`: `samples/actor-framework/actors.rs` builds for Game

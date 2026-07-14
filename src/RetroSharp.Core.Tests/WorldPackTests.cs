@@ -215,7 +215,7 @@ public sealed class WorldPackTests
         Assert.Equal(2, logical.Geometry.TileScaleX);
         Assert.Equal(2, logical.Geometry.TileScaleY);
         Assert.Equal(53, plan.VisualMetatiles.Count);
-        Assert.Equal(2, plan.CollisionProfiles.Count);
+        Assert.Equal(3, plan.CollisionProfiles.Count);
         Assert.Equal(312, pack.Descriptor.HardwareWidth);
         Assert.Equal(40, pack.Descriptor.HardwareHeight);
         Assert.Equal(156, pack.SourceWidth);
@@ -223,9 +223,9 @@ public sealed class WorldPackTests
         Assert.Equal(20, pack.Descriptor.ChunkColumns);
         Assert.Equal(3, pack.Descriptor.ChunkRows);
         Assert.Equal(53, pack.Descriptor.VisualMetatileCount);
-        Assert.Equal(2, pack.Descriptor.CollisionProfileCount);
+        Assert.Equal(3, pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, pack.Chunks.Count);
-        Assert.True(pack.Descriptor.PackLength <= 7_708u);
+        Assert.True(pack.Descriptor.PackLength <= 7_712u);
 
         uint nextOffset = pack.Descriptor.ChunkDataOffset;
         for (var chunkY = 0; chunkY < pack.Descriptor.ChunkRows; chunkY++)
@@ -252,7 +252,9 @@ public sealed class WorldPackTests
         var legacyCollision = pack.ToWorldMap2D();
         Assert.Equal(12_480, legacyCollision.TileCount);
         Assert.Equal(788, logical.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
+        Assert.Equal(56, logical.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
         Assert.Equal(788, CountFlags(legacyCollision, WorldTileFlags.Solid));
+        Assert.Equal(56, CountFlags(legacyCollision, WorldTileFlags.Platform));
         Assert.Equal(WorldTileFlags.Solid, legacyCollision.FlagsAt(0, 38));
 
         var legacyTiles = pack.ToWorldTileGrid(cell => cell.Span[0]);

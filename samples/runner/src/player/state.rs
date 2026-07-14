@@ -28,16 +28,18 @@ class PlayerState
 
     inline void ApplyGravity()
     {
-        gravityTick++;
-        if (gravityTick >= Jump.GravityFrames)
+        if (!grounded)
         {
-            gravityTick = 0;
-            velocityY += 1;
-        }
-        if (velocityY != 0)
-        {
-            grounded = false;
-            y += velocityY;
+            gravityTick++;
+            if (gravityTick >= Jump.GravityFrames)
+            {
+                gravityTick = 0;
+                velocityY += 1;
+            }
+            if (velocityY != 0)
+            {
+                y += velocityY;
+            }
         }
     }
 

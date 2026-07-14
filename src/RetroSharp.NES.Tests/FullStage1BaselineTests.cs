@@ -53,11 +53,11 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var decodedCollision = decoded.ToWorldMap2D();
 
         Assert.Equal(53, first.Pack.Descriptor.VisualMetatileCount);
-        Assert.Equal(2, first.Pack.Descriptor.CollisionProfileCount);
+        Assert.Equal(3, first.Pack.Descriptor.CollisionProfileCount);
         Assert.Equal(60, first.Pack.Chunks.Count);
         Assert.Equal(2, first.Pack.Descriptor.TargetCellStride);
-        Assert.Equal(2_762, first.SerializedBytes.Length);
-        Assert.True(first.SerializedBytes.Length <= 7_920, $"NES WorldPack used {first.SerializedBytes.Length} bytes.");
+        Assert.Equal(2_780, first.SerializedBytes.Length);
+        Assert.True(first.SerializedBytes.Length <= 7_924, $"NES WorldPack used {first.SerializedBytes.Length} bytes.");
         Assert.Equal(first.SerializedBytes, second.SerializedBytes);
         Assert.Equal(raw.GeneratedTileData, first.GeneratedTileData);
         Assert.Equal(raw.BackgroundPalette, first.BackgroundPalette);
@@ -112,7 +112,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var segment = Assert.Single(result.Report.Segments, item => item.Owner == "worldpack:default");
 
-        Assert.Equal(2_762, canonical.SerializedBytes.Length);
+        Assert.Equal(2_780, canonical.SerializedBytes.Length);
         Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
         Assert.Equal(0, segment.PhysicalBank);
         Assert.Equal(0, segment.RelativeOffset);
@@ -131,9 +131,9 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         var runtimeIndex = Assert.Single(
             result.Report.Segments,
             item => item.Owner == "pinned:worldpack-runtime-index");
-        Assert.Equal(2_052, runtimeIndex.Length);
+        Assert.Equal(2_056, runtimeIndex.Length);
         var pinned = result.Report.Segments.Where(item => item.Window == "R7 pinned $A000-$BFFF").ToArray();
-        Assert.Equal(6_204, pinned.Sum(item => item.Length));
+        Assert.Equal(6_208, pinned.Sum(item => item.Length));
         Assert.All(
             pinned,
             item =>
@@ -141,7 +141,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
                 Assert.Equal("R7 pinned $A000-$BFFF", item.Window);
                 Assert.Equal(1, item.PhysicalBank);
             });
-        Assert.Equal(6_204, result.Report.PinnedR7Bytes);
+        Assert.Equal(6_208, result.Report.PinnedR7Bytes);
         Assert.Equal(4_128, result.Report.BootR7Bytes);
         Assert.Equal(3_056, result.Report.ResidentChrBytes);
         Assert.Equal(4_903, result.Report.FixedPayloadBytes);
@@ -181,6 +181,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(12_480, world.WorldTileIds.Length);
         Assert.Equal(12_480, world.WorldFlags.Length);
         Assert.Equal(788, world.WorldFlags.Count(flags => flags == WorldTileFlags.Solid));
+        Assert.Equal(56, world.WorldFlags.Count(flags => flags == WorldTileFlags.Platform));
         Assert.Equal(WorldTileFlags.Solid, world.WorldFlags[38 * world.Width]);
         Assert.Equal(90, world.GeneratedTileData.Length / 16);
         Assert.Equal(1_440, world.GeneratedTileData.Length);
@@ -211,7 +212,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(fullPayload.Rom, rebuiltFullPayload.Rom);
         Assert.Equal(fullPayload.Report.Segments, rebuiltFullPayload.Report.Segments);
         Assert.Equal(
-            2_762,
+            2_780,
             fullPayload.Report.Segments.Where(item => item.Owner == "worldpack:default").Sum(item => item.Length));
         Assert.Contains(fullPayload.Report.Segments, item => item.Owner == "pinned:bgm:runner_theme");
         Assert.Contains(fullPayload.Report.Segments, item => item.Owner == "pinned:sfx:jump_sfx");
@@ -247,7 +248,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             runtimeProbe.Report.Segments,
             item => item.Owner.StartsWith("pinned:world-column-attributes:", StringComparison.Ordinal));
         Assert.Equal(8_999, runtimeProbe.Report.FixedPayloadBytes);
-        Assert.Equal(7_306, runtimeProbe.Report.PinnedR7Bytes);
+        Assert.Equal(7_310, runtimeProbe.Report.PinnedR7Bytes);
         Assert.Equal(1_536, runtimeProbe.Report.ResidentChrBytes);
         Assert.Equal(runtimeProbe.Rom, rebuiltRuntimeProbe.Rom);
         Assert.Equal(runtimeProbe.Report.Segments, rebuiltRuntimeProbe.Report.Segments);
@@ -289,7 +290,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             target = "nes",
             sourceCells = new { width = 156, height = 20, tilePixels = 16 },
             hardwareTiles = new { width = world.Width, height = world.Height, cells = world.WorldTileIds.Length },
-            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, floorY = 304, noHit = -1 },
+            collision = new { bytes = world.WorldFlags.Length, solidCells = 788, platformCells = 56, platformTopY = 272, floorY = 304, noHit = -1 },
             resources = new
             {
                 visualBytes = world.WorldTileIds.Length,

@@ -1734,7 +1734,7 @@ are in `docs/LargeWorldsRoadmap.md`.
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmj` (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, and NES DPCM retained. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmj` (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, NES DPCM retained, and one-way ledges authored with the existing `Platform` flag. The landing response remains portable source policy: `Solid | Platform` for non-rising feet/support, `Solid` for walls/ceilings, an approach-from-above check before snapping, and grounded-state release when support disappears. No new language feature, SDK call, target intrinsic, managed object, or runtime dispatch is needed. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
 
 The final cross-target sample should prove:
 

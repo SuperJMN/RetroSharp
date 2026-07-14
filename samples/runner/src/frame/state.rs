@@ -11,14 +11,18 @@ class FrameState
         resetRequested = false;
     }
 
-    inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY)
+    inline void ResolveLanding(PlayerState player, Pixel screenX, Pixel previousFootWorldY, Pixel footWorldY)
     {
-        if (player.velocityY > 0)
+        if (player.velocityY >= 0)
         {
-            i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);
-            if (footTile != CollisionProbe.NoTileHit)
+            i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Landable);
+            if (footTile >= 0 && previousFootWorldY <= footTile && footWorldY >= footTile)
             {
                 player.Land(footTile - Player.FootOffset);
+            }
+            else
+            {
+                player.grounded = false;
             }
         }
     }

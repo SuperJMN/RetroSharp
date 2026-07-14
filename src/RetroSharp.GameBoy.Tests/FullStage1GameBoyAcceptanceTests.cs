@@ -41,11 +41,11 @@ public sealed class FullStage1GameBoyAcceptanceTests
 
         Assert.Equal(312, pack.Pack.Descriptor.HardwareWidth);
         Assert.Equal(40, pack.Pack.Descriptor.HardwareHeight);
-        Assert.Equal(2_550, pack.SerializedBytes.Length);
+        Assert.Equal(2_568, pack.SerializedBytes.Length);
         Assert.Equal("gb-simple-mbc1-current", compiled.Report.SelectedProfile);
         Assert.Equal(1, compiled.Rom[0x147]);
         Assert.Equal(131_072, compiled.Rom.Length);
-        Assert.Equal(2_550, compiled.Report.Segments
+        Assert.Equal(2_568, compiled.Report.Segments
             .Where(segment => segment.Owner == "worldpack:default")
             .Sum(segment => segment.Length));
         Assert.Equal(11_614, compiled.Report.Segments

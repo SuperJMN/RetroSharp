@@ -27,7 +27,7 @@ public sealed class WorldPackFormatAnalysisTests
 
         Assert.Equal(3_120, sourceCells);
         Assert.Equal(53, visualMetatiles);
-        Assert.Equal(2, collisionProfiles);
+        Assert.Equal(3, collisionProfiles);
         Assert.Equal(60, chunkCount);
 
         const int headerBytes = 48;
@@ -51,9 +51,9 @@ public sealed class WorldPackFormatAnalysisTests
                            + collisionPlaneBytes;
 
         Assert.Equal(1_200, directoryBytes);
-        Assert.Equal(8, collisionProfileBytes);
-        Assert.Equal(7_708, gameBoyPackBytes);
-        Assert.Equal(7_920, nesPackBytes);
+        Assert.Equal(12, collisionProfileBytes);
+        Assert.Equal(7_712, gameBoyPackBytes);
+        Assert.Equal(7_924, nesPackBytes);
 
         const int patternBytes = 16;
         var gameBoyPatternBytes = (6 + 82 + 60) * patternBytes;
@@ -63,10 +63,10 @@ public sealed class WorldPackFormatAnalysisTests
         var nesKnownCombinedBytes = nesKnownPrgBytes + nesChrBytes;
 
         Assert.Equal(2_368, gameBoyPatternBytes);
-        Assert.Equal(21_718, gameBoyKnownPayloadBytes);
-        Assert.Equal(13_354, nesKnownPrgBytes);
+        Assert.Equal(21_722, gameBoyKnownPayloadBytes);
+        Assert.Equal(13_358, nesKnownPrgBytes);
         Assert.Equal(3_056, nesChrBytes);
-        Assert.Equal(16_410, nesKnownCombinedBytes);
+        Assert.Equal(16_414, nesKnownCombinedBytes);
 
         var fourByEight = AnalyzeChunkChoice(geometry, chunkWidth: 4, chunkHeight: 8);
         var eightByFour = AnalyzeChunkChoice(geometry, chunkWidth: 8, chunkHeight: 4);
@@ -87,13 +87,13 @@ public sealed class WorldPackFormatAnalysisTests
         Assert.Equal(594, decodedChunkSlotsForOneByteIds * 2 + 2 * (32 + 9));
 
         var adr = File.ReadAllText(RepositoryFile("docs/WorldPackFormatV1.md"));
-        Assert.Contains("7,708", adr, StringComparison.Ordinal);
-        Assert.Contains("7,920", adr, StringComparison.Ordinal);
+        Assert.Contains("7,712", adr, StringComparison.Ordinal);
+        Assert.Contains("7,924", adr, StringComparison.Ordinal);
         Assert.Contains("298 bytes", adr, StringComparison.Ordinal);
         Assert.Contains("338 bytes", adr, StringComparison.Ordinal);
-        Assert.Contains("21,718", adr, StringComparison.Ordinal);
-        Assert.Contains("13,354", adr, StringComparison.Ordinal);
-        Assert.Contains("16,410", adr, StringComparison.Ordinal);
+        Assert.Contains("21,722", adr, StringComparison.Ordinal);
+        Assert.Contains("13,358", adr, StringComparison.Ordinal);
+        Assert.Contains("16,414", adr, StringComparison.Ordinal);
     }
 
     private static HashSet<string> CollisionProfiles(LogicalTiledMap logical)

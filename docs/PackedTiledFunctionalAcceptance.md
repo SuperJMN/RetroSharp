@@ -224,7 +224,12 @@ the traversed upper tables had no copy ten rows early. The captured framebuffer
 consequently had one floor at the bottom of the viewport, with `PPUCTRL=$81`,
 `PPUMASK=$1E`, and rendering enabled.
 
-The regenerated exact tracked runner ROM has SHA-256
+This external checkpoint predates the 2026-07-14 one-way-platform content
+revision. Its hash and observations intentionally remain bound to the cartridge
+that was inspected; the current tracked runner hash and new landing evidence
+are recorded in `RunnerLandingAcceptance.md`.
+
+The regenerated exact tracked runner ROM at that checkpoint had SHA-256
 `87ccbe4332a7763d1aebf3f8cc86bba0e74f339a7a6da0f74e125374b5477df6`.
 An isolated RetroArch/FCEUmm `(SVN) 3a84a6f` run reproduced the reported input:
 after 500 idle frames it moved from visible `(0,80)` to `(101,80)` in 101 RIGHT

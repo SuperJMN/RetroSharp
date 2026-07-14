@@ -57,12 +57,13 @@ void Main()
 inline void SimulatePlayer(PlayerState player, CameraState view, FrameState frame)
 {
     frame.Begin();
+    i16 previousFootWorldY = player.y + Player.FootOffset;
     player.ApplyGravity();
 
     i16 footWorldY = player.y + Player.FootOffset;
     let screenX = view.ScreenX(player);
 
-    frame.ResolveSolidLanding(player, screenX, footWorldY);
+    frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);
     frame.ResolveCeilingHit(player, screenX, footWorldY);
     frame.ResolveFall(player);
     frame.ResolveReset(player, view);
