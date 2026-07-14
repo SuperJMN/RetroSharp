@@ -5811,10 +5811,10 @@ internal sealed class NesRuntimeCompiler
             builder.LoadAZeroPage(CameraTargetColumnAddress);
             builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTarget);
             builder.LoadAImmediate(config.StreamY);
-            builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
             if (config.UseFourScreenNametables)
             {
                 builder.LoadAZeroPage(CameraTileRowAddress);
+                builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
                 builder.StoreAAbsolute(NesPackedCameraRuntime.CommitOrthogonalLow);
                 if (config.MapHeight > byte.MaxValue)
                 {
@@ -5827,12 +5827,13 @@ internal sealed class NesRuntimeCompiler
             }
             else
             {
+                builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesPackedCameraRuntime.CommitOrthogonalLow);
             }
 
             builder.StoreAAbsolute(NesPackedCameraRuntime.CommitOrthogonalHigh);
-            builder.LoadAImmediate(Math.Min(32, config.StreamHeight));
+            builder.LoadAImmediate(Math.Min(NesTarget.Capabilities.ScreenTiles.Height, config.StreamHeight));
             builder.StoreAAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
             builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
             builder.CompareImmediate((byte)NesWorldPackResult.Success);

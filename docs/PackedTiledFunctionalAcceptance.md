@@ -33,6 +33,8 @@ physical frames.
 | `tiled-hscroll-short` NES | `a5c353c8ebda111cf3bbbb52a60e10f8d7346583a033bfb09f29e7f0b2f5fde9` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-full` GB | `d5baa0effd76548832a2e7c4fbaab17ca378fe1b3436aada18dd2f00984ebebb` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-full` NES | `9ad5b7023ac1f4c539ec728a810d087b0917133e293f05ea34f391b5cb2ad264` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-offset` GB | `2df705902c94ae8c6f00c8868efd11cf83ba436e17f029898ff1b098e3f876f9` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-offset` NES | `d6195be5c69f0f87b94278ad8b9be4babb42191b56573a813e4c0a43ac8f303d` | 420 | 419 / 420 (0.998) | 1 | 0 / 2 | 0 |
 | `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
 | `tiled-vscroll` NES | `4f7a524e25584576866e87f1069f4922d1c07873ee344ceaec7964c717451869` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
 | `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
@@ -114,6 +116,17 @@ least 0.994. Game Boy output remains unchanged; the NES ROM hashes change only
 because the target-owned safe-area inset now keys off the effective camera
 window rather than the complete backing-map height.
 
+The `tiled-hscroll-offset` rung keeps the same full collision-free fixture but
+uses a 40-row camera window, settling at visible Y 176 on Game Boy and Y 80 on
+NES before horizontal movement. NES packed columns now use the current coarse
+camera row for both their authored source and physical nametable destination,
+and commit only the 30 hardware rows that can be visible. This prevents the
+incoming floor from being projected ten rows too high while keeping the
+column within eight touched attribute blocks and the accepted two-frame
+visibility budget. The NES checkpoint is physical frame 104, after the
+sample's declared 64-gameplay-tick framing delay; frame 40 is still inside
+cartridge preload/framing and is not a valid bottom-aligned checkpoint.
+
 ## External emulator checkpoints
 
 The exact tracked `tiled-free-scroll` cartridges were also inspected outside
@@ -156,6 +169,20 @@ physical frame 150, NesMcp/AprNes reported `PPUCTRL=$80`, `PPUMASK=$1E`, and
 screen Y `216..231`; the wrapped Y `232..239` strip was a single uniform sky
 palette index. Cropping the bottom eight overscan lines therefore retains the
 complete floor instead of removing its lower half.
+
+The regenerated exact tracked runner ROM for the nonzero-Y horizontal fix has
+SHA-256
+`8d81c7633533a60b03f52f4e414ea671d50da088ca900b1484b272cca5640c91`.
+NesMcp routed it to AprNes as mapper 4. After 500 idle frames and 270 RIGHT
+frames, requested camera state was `(311,38)` and visible camera state was
+`(311,80)`. Request, prepare, resident, commit, and release were all 38; the
+last commit wrote the 30 visible tile rows and eight attribute bytes, with zero
+bank, directory, or decode work in commit. The four physical nametable dump
+placed the authored `$B5/$B8` floor only in rows 8/9 of the lower nametables,
+which are world rows 38/39 at the fixed 80-pixel Y origin; the traversed upper
+tables had no copy ten rows early. The captured framebuffer consequently had
+one floor at the bottom of the viewport, with `PPUCTRL=$81`, `PPUMASK=$1E`,
+and rendering enabled.
 
 These external snapshots prove real-emulator traversal and direction change;
 the longer in-process windows remain stricter because they compare every
