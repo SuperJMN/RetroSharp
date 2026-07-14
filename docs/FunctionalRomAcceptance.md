@@ -111,6 +111,13 @@ trajectory inside those windows. See
 [`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md) for
 the exact hashes, measured budgets, and external emulator checkpoints.
 
+The horizontal #335 slice extends that packed matrix to twelve rows with two
+stable sample identities on both targets: a collision-free 64x20-cell crop and
+the complete collision-free 156x20-cell `stage1`. These scenarios remove
+player/input/audio/collision behavior, advance the camera one pixel per source
+tick, and retain exact authored tile and palette checks across chunk, circular
+background, and X=256 boundaries.
+
 ## CI tiers
 
 1. Ordinary PR CI runs deterministic in-process scenarios and the contract probes.

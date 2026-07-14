@@ -201,6 +201,74 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
+    public void Complete_stage1_horizontal_column_prepare_preserves_tiles_and_vertical_attribute_stride()
+    {
+        var directory = RepositoryDirectory("samples/tiled-hscroll");
+        var packed = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(directory, "stage1-full.tmj"),
+            NesVideoProgram.FirstSpriteTile);
+        var runtime = NesWorldPackRuntimePlan.Create(packed.SerializedBytes);
+        const string source = """
+            void Main() {
+                World.Load("stage1-full.tmj");
+                Camera.Init(312, 0, 30);
+                Camera.SetPosition(8, 0);
+                while (true) {
+                    Video.WaitVBlank();
+                    Camera.Apply();
+                }
+            }
+            """;
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: packed.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        cpu.SetR6Bank(5);
+        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        Assert.Equal(
+            (byte)NesWorldPackResult.Success,
+            cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], 5_000_000).A);
+        cpu.SetRam(CommitAxis, Column);
+        cpu.SetRam(CommitDirection, Positive);
+        cpu.SetRam(CommitWorldEdgeLow, 53);
+        cpu.SetRam(CommitTarget, 53);
+        cpu.SetRam(CommitOrthogonalLow, 0);
+        cpu.SetRam(CommitPayloadLength, 30);
+
+        var prepare = cpu.RunRoutine(
+            result.Report.FixedSymbols[NesRomBuilder.WorldPackPrepareEdgeLabel],
+            maxInstructions: 5_000_000);
+
+        Assert.Equal((byte)NesWorldPackResult.Success, prepare.A);
+        var edge = runtime.Layout.EdgeSlots[0];
+        var metatileCells = packed.Pack.Descriptor.MetatileWidth * packed.Pack.Descriptor.MetatileHeight;
+        var tileMismatches = new List<string>();
+        for (var y = 0; y < 30; y++)
+        {
+            var coordinate = packed.Pack.Locate(53, y);
+            var visualId = packed.Pack.VisualIdAt(53, y);
+            var expansion = (visualId * metatileCells + coordinate.SubcellIndex) * 2;
+            var expected = packed.Pack.TargetExpansions.Span[expansion];
+            var actual = cpu.Ram((ushort)(edge.Start + y));
+            if (expected != actual)
+            {
+                tileMismatches.Add($"row {y}: expected {expected}, observed {actual}");
+            }
+        }
+
+        Assert.True(
+            tileMismatches.Count == 0,
+            $"stage1 column 53 tile mismatches: {string.Join("; ", tileMismatches)}.");
+
+        var attributeColumn = 53 / 4;
+        Assert.Equal(
+            Enumerable.Range(0, 8).Select(row => runtime.Attributes.Bytes[row * runtime.Attributes.Columns + attributeColumn]),
+            Enumerable.Range(0, 8).Select(index => cpu.Ram((ushort)(edge.Start + 32 + index))));
+    }
+
+    [Fact]
     public void Packed_row_prepare_uses_the_same_peer_lifecycle_with_complete_world_coordinates()
     {
         var serialized = CreatePaletteSyntheticWorldPack();

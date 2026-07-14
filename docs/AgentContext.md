@@ -7,6 +7,19 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- The horizontal #335 slice adds `tiled-hscroll-short` and
+  `tiled-hscroll-full` as collision-free Game Boy/NES target-acceptance
+  samples. Their 64x20 and 156x20 fixtures preserve every horizontal column of
+  the short/full `stage1` variants, move the bottom 15 authored rows into the
+  30-hardware-row camera window, and retain five empty staging rows below it.
+  The camera settles at Y 96 on Game Boy and Y 0 on NES for 64 ticks before X
+  movement. Their four exact-ROM scenarios keep at least a 0.994 gameplay ratio
+  with two-frame-or-better camera visibility, zero authored tile/palette
+  mismatches, and zero unsafe video writes. The NES fixes retain prepared-column
+  subcell/row-stride state, walk X through 256 with a stable high byte, support
+  fast power-of-two chunk-column layouts, and keep the authored palette oracle
+  in world coordinates after nametable wrap. See
+  `samples/tiled-hscroll/` and `docs/PackedTiledFunctionalAcceptance.md`.
 - RPH-3.5 / #339 binds eight exact packed Tiled production scenarios to the
   shared functional runner: `tiled-tall` GB, `tiled-vscroll` GB/NES,
   `tiled-diagonal` GB, `tiled-free-scroll` GB/NES, and `deadzone-follow`

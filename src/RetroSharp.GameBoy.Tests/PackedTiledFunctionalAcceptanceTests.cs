@@ -23,6 +23,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
     public static TheoryData<string, string, string, string, string> ProductionSamples => new()
     {
         { "tiled-tall", "samples/tiled-tall/tall.rs", "samples/tiled-tall/tall.tmj", "samples/tiled-tall/tall.gb", "validation/scenarios/tiled-tall.gb.json" },
+        { "tiled-hscroll-short", "samples/tiled-hscroll/hscroll-short.rs", "samples/tiled-hscroll/stage1-short.tmj", "samples/tiled-hscroll/hscroll-short.gb", "validation/scenarios/tiled-hscroll-short.gb.json" },
+        { "tiled-hscroll-full", "samples/tiled-hscroll/hscroll-full.rs", "samples/tiled-hscroll/stage1-full.tmj", "samples/tiled-hscroll/hscroll-full.gb", "validation/scenarios/tiled-hscroll-full.gb.json" },
         { "tiled-vscroll", "samples/tiled-vscroll/vscroll.rs", "samples/tiled-vscroll/vscroll.tmj", "samples/tiled-vscroll/vscroll.gb", "validation/scenarios/tiled-vscroll.gb.json" },
         { "tiled-diagonal", "samples/tiled-diagonal/diag.rs", "samples/tiled-diagonal/diag.tmj", "samples/tiled-diagonal/diag.gb", "validation/scenarios/tiled-diagonal.gb.json" },
         { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.gb", "validation/scenarios/tiled-free-scroll.gb.json" },
@@ -46,6 +48,11 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         Assert.Equal(trackedRom, regeneratedRom);
 
         var map = GameBoyTiledMapImporter.Load(RepositoryFile(mapRelativePath));
+        if (sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal))
+        {
+            Assert.All(map.WorldFlags, flags => Assert.Equal(0, (int)flags));
+        }
+
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         Assert.Equal(sampleId, scenario.SampleId);
         var factory = new PackedGameBoyMachineFactory();

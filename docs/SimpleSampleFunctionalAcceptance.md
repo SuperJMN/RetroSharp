@@ -63,7 +63,7 @@ an assumed shared startup offset.
 | NES `cross-target-camera`: `944b912359a0773e12842f012ef7d10fda06fb3c28b10a6871b5ee0cdabef2eb` | NesMcp observes source X 80 after the right span, then source/fine X 0 after the left span, with both background and sprite rendering enabled. |
 | GB `source-vscroll`: `a387ca90e44822dd4511e1b4724ba3a0149be90de976836a5b68a9ddfd456804` | SameBoy observes source Y/`SCY` progress through 119/118 and then the wrap back through source 0, `SCY=1`, and `SCY=0` one frame later. |
 | GB `source-free-scroll`: `de916a85396374d404adfc564263e6bb84b5703b424b915da5018b437ddd0913` | Source X/Y reach 248 together; hardware `SCX/SCY` reach 247 then 248 within the two-frame bound. The return reaches source 0 and visible 0 together within the same bound. |
-| NES `source-free-scroll`: `7e0214231f4647d58b58936e21d4554819c0a167ba2d02be2594a2353bfa04d2` | Source X/Y reach 248 with nametable select 2 and fine X 7, then return through source 0 to nametable 0/fine X 0. Rendering stays enabled over all four-screen transitions. |
+| NES `source-free-scroll`: `45fae408c33bc28dd487ad8eeb1f463fdf9ae488e3af3245d9dfb02acc56044f` | Source X/Y reach 248 with nametable select 2 and fine X 7, then return through source 0 to nametable 0/fine X 0. Rendering stays enabled over all four-screen transitions. |
 
 Tracked static artifacts remain deterministic as well: GB
 `f8cbb5e6ff33c96c923277e0054d480f3444000187d65a64e262e4d0d0bd4afe`

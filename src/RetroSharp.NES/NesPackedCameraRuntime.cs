@@ -702,7 +702,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(rowLoop);
 
         builder.Label(columnAdvance);
-        EmitAdvancePreparedColumnCoordinate(builder, plan.Pack.Descriptor);
+        EmitAdvancePreparedColumnCoordinate(builder, plan.Pack.Descriptor, plan.UsesFastLookup);
         builder.Label(columnLookup);
         builder.CallSubroutine(NesRomBuilder.WorldPackVisualLookupPreparedLabel);
         builder.JumpAbsolute(store);
@@ -844,7 +844,10 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.HardwareYHigh);
     }
 
-    private static void EmitAdvancePreparedColumnCoordinate(PrgBuilder builder, RetroSharp.Core.Sdk.WorldPackDescriptor descriptor)
+    private static void EmitAdvancePreparedColumnCoordinate(
+        PrgBuilder builder,
+        RetroSharp.Core.Sdk.WorldPackDescriptor descriptor,
+        bool usesFastLookup)
     {
         var hardwareYReady = builder.CreateLabel("nes_packed_column_hardware_y_ready");
         var sameMetatile = builder.CreateLabel("nes_packed_column_same_metatile");
@@ -856,15 +859,31 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.IncrementAbsolute(NesWorldPackRuntimeAbi.HardwareYHigh);
         builder.Label(hardwareYReady);
 
-        builder.IncrementAbsolute(NesWorldPackRuntimeAbi.SubcellY);
-        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.SubcellY);
-        builder.CompareImmediate(descriptor.MetatileHeight);
-        builder.JumpIf(0x90, sameMetatile);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.SubcellY);
-        EmitCopy(builder, NesWorldPackRuntimeAbi.SubcellX, NesWorldPackRuntimeAbi.SubcellIndexLow);
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.SubcellIndexHigh);
+        if (usesFastLookup)
+        {
+            // Fast coordinates are always 2x2. An odd destination row remains in the
+            // current metatile; an even row starts the next one. Preserve the fixed
+            // X subcell directly from the current packed subcell index so the common
+            // lookup path does not have to materialize SubcellX/SubcellY.
+            builder.LoadAAbsolute(NesWorldPackRuntimeAbi.HardwareYLow);
+            builder.AndImmediate(1);
+            builder.JumpIf(0xD0, sameMetatile);
+            builder.LoadAAbsolute(NesWorldPackRuntimeAbi.SubcellIndexLow);
+            builder.AndImmediate(1);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.SubcellIndexLow);
+        }
+        else
+        {
+            builder.IncrementAbsolute(NesWorldPackRuntimeAbi.SubcellY);
+            builder.LoadAAbsolute(NesWorldPackRuntimeAbi.SubcellY);
+            builder.CompareImmediate(descriptor.MetatileHeight);
+            builder.JumpIf(0x90, sameMetatile);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.SubcellY);
+            EmitCopy(builder, NesWorldPackRuntimeAbi.SubcellX, NesWorldPackRuntimeAbi.SubcellIndexLow);
+            builder.LoadAImmediate(0);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.SubcellIndexHigh);
+        }
         builder.IncrementAbsolute(NesWorldPackRuntimeAbi.MetatileYLow);
         var metatileReady = builder.CreateLabel("nes_packed_column_metatile_y_ready");
         builder.JumpIf(0xD0, metatileReady);
@@ -893,10 +912,31 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(done);
 
         builder.Label(sameChunk);
-        builder.ClearCarry();
-        builder.LoadAAbsolute(NesWorldPackRuntimeAbi.CellIndex);
-        builder.AddAbsolute(NesWorldPackRuntimeAbi.ValidWidth);
-        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.CellIndex);
+        if (usesFastLookup)
+        {
+            var regularWidth = builder.CreateLabel("nes_packed_column_regular_chunk_width");
+            var sourceWidth = descriptor.HardwareWidth / descriptor.MetatileWidth;
+            var lastWidth = sourceWidth - ((descriptor.ChunkColumns - 1) * 8);
+
+            builder.LoadYImmediate(8);
+            builder.LoadAAbsolute(NesWorldPackRuntimeAbi.ChunkXLow);
+            builder.CompareImmediate(descriptor.ChunkColumns - 1);
+            builder.BranchRelative(0xD0, regularWidth);
+            builder.LoadYImmediate(lastWidth);
+            builder.Label(regularWidth);
+            builder.TransferYToA();
+            builder.ClearCarry();
+            builder.AddAbsolute(NesWorldPackRuntimeAbi.CellIndex);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.CellIndex);
+        }
+        else
+        {
+            builder.ClearCarry();
+            builder.LoadAAbsolute(NesWorldPackRuntimeAbi.CellIndex);
+            builder.AddAbsolute(NesWorldPackRuntimeAbi.ValidWidth);
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.CellIndex);
+        }
+
         builder.JumpAbsolute(done);
 
         builder.Label(sameMetatile);
@@ -912,13 +952,13 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitPrepareAttributes(PrgBuilder builder, NesWorldPackRuntimePlan plan)
     {
-        var column = builder.CreateLabel("nes_packed_attrs_column");
         var coordinatesReady = builder.CreateLabel("nes_packed_attrs_coordinates_ready");
         var multiplyLoop = builder.CreateLabel("nes_packed_attrs_multiply_loop");
         var multiplyDone = builder.CreateLabel("nes_packed_attrs_multiply_done");
         var decrementLow = builder.CreateLabel("nes_packed_attrs_decrement_low");
         var copyLoop = builder.CreateLabel("nes_packed_attrs_copy_loop");
-        var sourceReady = builder.CreateLabel("nes_packed_attrs_source_ready");
+        var incrementColumn = builder.CreateLabel("nes_packed_attrs_increment_column");
+        var incrementDone = builder.CreateLabel("nes_packed_attrs_increment_done");
         var indexReady = builder.CreateLabel("nes_packed_attrs_index_ready");
 
         EmitAlignedOrthogonalBlock(builder, NesPackedCameraRuntime.AttributeBlockXLow);
@@ -929,16 +969,13 @@ internal static class NesPackedCameraRuntimeEmitter
             shifts: 2);
         builder.LoadAAbsolute(NesPackedCameraRuntime.CommitAxis);
         builder.CompareImmediate(NesPackedCameraRuntime.Column);
-        builder.JumpIf(0xD0, coordinatesReady);
-        builder.Label(column);
+        builder.BranchRelative(0xD0, coordinatesReady);
         for (var index = 0; index < 2; index++)
         {
-            builder.LoadAAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockXLow + index)));
-            builder.StoreAAbsolute(checked((ushort)(NesPackedCameraRuntime.Status + index)));
+            builder.LoadXAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockXLow + index)));
             builder.LoadAAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockYLow + index)));
             builder.StoreAAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockXLow + index)));
-            builder.LoadAAbsolute(checked((ushort)(NesPackedCameraRuntime.Status + index)));
-            builder.StoreAAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockYLow + index)));
+            builder.StoreXAbsolute(checked((ushort)(NesPackedCameraRuntime.AttributeBlockYLow + index)));
         }
 
         builder.Label(coordinatesReady);
@@ -948,7 +985,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(multiplyLoop);
         builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeBlockYLow);
         builder.OrAbsolute(NesPackedCameraRuntime.AttributeBlockYHigh);
-        builder.JumpIf(0xF0, multiplyDone);
+        builder.BranchRelative(0xF0, multiplyDone);
         builder.ClearCarry();
         builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeIndexLow);
         builder.AddImmediate(plan.Attributes.Columns & 0xFF);
@@ -957,7 +994,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.AddImmediate((plan.Attributes.Columns >> 8) & 0xFF);
         builder.StoreAAbsolute(NesPackedCameraRuntime.AttributeIndexHigh);
         builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeBlockYLow);
-        builder.JumpIf(0xD0, decrementLow);
+        builder.BranchRelative(0xD0, decrementLow);
         builder.DecrementAbsolute(NesPackedCameraRuntime.AttributeBlockYHigh);
         builder.Label(decrementLow);
         builder.DecrementAbsolute(NesPackedCameraRuntime.AttributeBlockYLow);
@@ -994,13 +1031,33 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAAbsolute(NesPackedCameraRuntime.Status);
         builder.StoreAIndirectY(PointerLow);
         builder.IncrementAbsolute(NesPackedCameraRuntime.Iterator);
+        builder.LoadAAbsolute(NesPackedCameraRuntime.CommitAxis);
+        builder.CompareImmediate(NesPackedCameraRuntime.Column);
+        builder.BranchRelative(0xF0, incrementColumn);
         builder.IncrementAbsolute(NesPackedCameraRuntime.AttributeIndexLow);
-        builder.JumpIf(0xD0, indexReady);
+        builder.BranchRelative(0xD0, indexReady);
         builder.IncrementAbsolute(NesPackedCameraRuntime.AttributeIndexHigh);
+        builder.JumpAbsolute(incrementDone);
+        builder.Label(incrementColumn);
+        builder.ClearCarry();
+        builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeIndexLow);
+        builder.AddImmediate(plan.Attributes.Columns & 0xFF);
+        builder.StoreAAbsolute(NesPackedCameraRuntime.AttributeIndexLow);
+        if (plan.Attributes.Columns <= byte.MaxValue)
+        {
+            builder.BranchRelative(0x90, incrementDone);
+            builder.IncrementAbsolute(NesPackedCameraRuntime.AttributeIndexHigh);
+        }
+        else
+        {
+            builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeIndexHigh);
+            builder.AddImmediate((plan.Attributes.Columns >> 8) & 0xFF);
+            builder.StoreAAbsolute(NesPackedCameraRuntime.AttributeIndexHigh);
+        }
+        builder.Label(incrementDone);
         builder.Label(indexReady);
         builder.DecrementAbsolute(NesPackedCameraRuntime.AttributeCount);
-        builder.LoadAAbsolute(NesPackedCameraRuntime.AttributeCount);
-        builder.JumpIf(0xD0, copyLoop);
+        builder.BranchRelative(0xD0, copyLoop);
     }
 
     private static void EmitAlignedOrthogonalBlock(PrgBuilder builder, ushort destinationLow)
