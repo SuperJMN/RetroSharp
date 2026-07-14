@@ -1,0 +1,41 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-hscroll-full-nes-functional",
+  "sampleId": "tiled-hscroll-full",
+  "target": "nes",
+  "warmUpFrames": 40,
+  "observationFrames": 2584,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 0 } },
+    { "id": "first-horizontal-chunk-window", "frame": 184, "expectedSignals": { "visibleCameraX": 79 } },
+    { "id": "circular-buffer-wrap-window", "frame": 304, "expectedSignals": { "visibleCameraX": 199 } },
+    { "id": "later-horizontal-chunk-window", "frame": 424, "expectedSignals": { "visibleCameraX": 319 } },
+    { "id": "near-right-edge", "frame": 2362, "expectedSignals": { "visibleCameraX": 2237 } },
+    { "id": "return-after-reversal", "frame": 2550, "expectedSignals": { "visibleCameraX": 2049 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "NTSC NES provides one physical frame per gameplay tick, while one bounded packed column and its attributes is prepared outside the display-critical phase and committed within its video-write budget.",
+    "productionTraceRationale": "The 2584-frame exact-ROM window first aligns the camera to the bottom, then reaches X=2240, reverses, and returns after traversing the complete stage1 row, including chunk, bank, and circular nametable boundaries. A 0.99 floor rejects sustained slowdown; the two-frame visibility ceiling covers the scheduler's isolated release-and-replace transition at reversal while the missed-tick streak remains capped at one."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

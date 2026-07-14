@@ -1,0 +1,41 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-hscroll-short-gb-functional",
+  "sampleId": "tiled-hscroll-short",
+  "target": "gb",
+  "warmUpFrames": 40,
+  "observationFrames": 1024,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 96 } },
+    { "id": "first-horizontal-chunk-window", "frame": 185, "expectedSignals": { "visibleCameraX": 116 } },
+    { "id": "circular-buffer-wrap-window", "frame": 305, "expectedSignals": { "visibleCameraX": 236 } },
+    { "id": "later-horizontal-chunk-window", "frame": 425, "expectedSignals": { "visibleCameraX": 356 } },
+    { "id": "near-right-edge", "frame": 839, "expectedSignals": { "visibleCameraX": 767 } },
+    { "id": "return-after-reversal", "frame": 968, "expectedSignals": { "visibleCameraX": 638 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "DMG provides one physical frame per gameplay tick, while one 19-tile packed column is prepared outside the display-critical phase and committed within its video-write budget.",
+    "productionTraceRationale": "The 1024-frame exact-ROM window first aligns the camera to the bottom, then reaches X=768, reverses, and returns across every packed chunk and circular background column. A 0.99 floor rejects sustained slowdown while allowing only isolated startup-independent scheduling variance."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-hscroll-full-gb-functional",
+  "sampleId": "tiled-hscroll-full",
+  "target": "gb",
+  "warmUpFrames": 40,
+  "observationFrames": 2584,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 96 } },
+    { "id": "first-horizontal-chunk-window", "frame": 185, "expectedSignals": { "visibleCameraX": 115 } },
+    { "id": "circular-buffer-wrap-window", "frame": 305, "expectedSignals": { "visibleCameraX": 235 } },
+    { "id": "later-horizontal-chunk-window", "frame": 425, "expectedSignals": { "visibleCameraX": 355 } },
+    { "id": "near-right-edge", "frame": 2316, "expectedSignals": { "visibleCameraX": 2235 } },
+    { "id": "return-after-reversal", "frame": 2553, "expectedSignals": { "visibleCameraX": 1998 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "DMG provides one physical frame per gameplay tick, while one 19-tile packed column is prepared outside the display-critical phase and committed within its video-write budget.",
+    "productionTraceRationale": "The 2584-frame exact-ROM window first aligns the camera to the bottom, then reaches X=2240, reverses, and returns after traversing the complete stage1 row, including chunk, bank, and circular background boundaries. A 0.99 floor rejects sustained slowdown while allowing only isolated startup-independent scheduling variance."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

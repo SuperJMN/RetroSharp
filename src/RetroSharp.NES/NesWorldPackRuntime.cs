@@ -320,7 +320,7 @@ internal sealed record NesWorldPackRuntimePlan(
     internal static bool SupportsFastCoordinateLayout(WorldPackDescriptor descriptor, int chunkCount) =>
         descriptor.MetatileWidth == 2
         && descriptor.MetatileHeight == 2
-        && descriptor.ChunkColumns == 20
+        && (descriptor.ChunkColumns == 20 || IsPowerOfTwo(descriptor.ChunkColumns))
         && descriptor.HardwareWidth <= 320
         && descriptor.HardwareHeight <= byte.MaxValue
         && descriptor.VisualIdBytes == 1
@@ -1779,13 +1779,27 @@ internal static class NesWorldPackRuntimeEmitter
         }
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.ChunkYLow);
 
-        builder.ShiftLeftA();
-        builder.ShiftLeftA();
-        builder.StoreAAbsolute(NesWorldPackRuntimeAbi.MathResultLow);
-        builder.ShiftLeftA();
-        builder.ShiftLeftA();
-        builder.ClearCarry();
-        builder.AddAbsolute(NesWorldPackRuntimeAbi.MathResultLow);
+        if ((descriptor.ChunkColumns & (descriptor.ChunkColumns - 1)) == 0)
+        {
+            for (var factor = 1; factor < descriptor.ChunkColumns; factor <<= 1)
+            {
+                builder.ShiftLeftA();
+            }
+
+            builder.ClearCarry();
+        }
+        else
+        {
+            // The complete stage1 layout has 20 chunk columns: y * 20 = y * 16 + y * 4.
+            builder.ShiftLeftA();
+            builder.ShiftLeftA();
+            builder.StoreAAbsolute(NesWorldPackRuntimeAbi.MathResultLow);
+            builder.ShiftLeftA();
+            builder.ShiftLeftA();
+            builder.ClearCarry();
+            builder.AddAbsolute(NesWorldPackRuntimeAbi.MathResultLow);
+        }
+
         builder.AddAbsolute(NesWorldPackRuntimeAbi.ChunkXLow);
         builder.StoreAAbsolute(NesWorldPackRuntimeAbi.ChunkIndexLow);
         builder.LoadAImmediate(0);
@@ -1796,7 +1810,7 @@ internal static class NesWorldPackRuntimeEmitter
         var lastWidth = sourceWidth - ((descriptor.ChunkColumns - 1) * 8);
         builder.LoadAAbsolute(NesWorldPackRuntimeAbi.ChunkXLow);
         builder.CompareImmediate(descriptor.ChunkColumns - 1);
-        builder.JumpIf(0xD0, regularWidth);
+        builder.BranchRelative(0xD0, regularWidth);
         builder.LoadAAbsolute(NesWorldPackRuntimeAbi.LocalY);
         for (var factor = 1; factor < lastWidth; factor <<= 1)
         {

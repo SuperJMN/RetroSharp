@@ -58,6 +58,20 @@
       "targets": ["gb"]
     },
     {
+      "id": "tiled-hscroll-short",
+      "path": "samples/tiled-hscroll/hscroll-short.rs",
+      "readme": "samples/tiled-hscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
+      "id": "tiled-hscroll-full",
+      "path": "samples/tiled-hscroll/hscroll-full.rs",
+      "readme": "samples/tiled-hscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "id": "tiled-vscroll",
       "path": "samples/tiled-vscroll/vscroll.rs",
       "readme": "samples/tiled-vscroll/README.md",

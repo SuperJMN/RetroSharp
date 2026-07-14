@@ -1,6 +1,7 @@
 # Packed Tiled Functional Acceptance
 
-Status: accepted by RPH-3.5 / #339 on 2026-07-14.
+Status: accepted by RPH-3.5 / #339 and extended with the horizontal #335
+canaries on 2026-07-14.
 
 This is the production-path acceptance boundary for the packed Tiled camera
 samples. It binds the exact checked-in source, exact tracked cartridge bytes,
@@ -19,20 +20,26 @@ edge.
 
 Every row recompiles the checked-in source, requires byte equality with the
 tracked ROM, then executes those tracked bytes through the target test CPU.
-Gameplay ratios and miss streaks are measured only after the 20-frame warm-up.
+Gameplay ratios and miss streaks are measured only after warm-up. The standard
+warm-up is 20 frames. Horizontal canaries use an explicit bottom-framing phase
+before X movement and use a 40-frame measurement warm-up.
 Camera latency is the maximum request-to-resident/request-to-visible delay in
 physical frames.
 
 | Scenario | SHA-256 | Window | Gameplay | Longest miss | Camera latency | Integrity failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `tiled-tall` GB | `9c8b6432c8231831f0a5018f2c8f128b66702245719b52886c665dcdc4317afa` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-short` GB | `e51ecdb8e969c8989d920a9ec5cfb6fc604176d3c5547355dde25a332275da27` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-short` NES | `96524134f7e2680b5e860d727638c71e82274ffe56a9f829261e511027c64f4c` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-full` GB | `d5baa0effd76548832a2e7c4fbaab17ca378fe1b3436aada18dd2f00984ebebb` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-full` NES | `cae9efa7ad02a9fd1d369605fa7b51126a3f9c893f46a9e2c4d0c0b8fcdc1a95` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
-| `tiled-vscroll` NES | `6d723a734c8192802e636e03dab659385a9514097fa31b7fd7af2f4ea8f2351b` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
+| `tiled-vscroll` NES | `4f7a524e25584576866e87f1069f4922d1c07873ee344ceaec7964c717451869` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
 | `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` GB | `60948ac30f49cbd1f1814a552f74b1c7346612eeadf6095c308e1b9da8b0983c` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` NES | `297675f54f334c0b328f7500fd209c2ea66b4487c8267b2e67502b8c78cedd4e` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
+| `tiled-free-scroll` NES | `9e763f297da2cb46fc1971105872f5364d9b272c88db433c4c05e79c5b53f487` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
 | `deadzone-follow` GB | `3db43f7a1b23c8f84c4865ee332eec904d8a9bb033a1b887d74c6807b84dc8b3` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
-| `deadzone-follow` NES | `3e659cf9794f713060942063ecd3c353f5c338b2c31cf9f9230f24a30d7c1ef6` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
+| `deadzone-follow` NES | `6e8816629b2cd25ab11ae44465414cfd62da35620eedf2dc9817ba514ea90425` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
 The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400
 source waits after the same warm-up. Its production packed gate therefore
@@ -81,6 +88,28 @@ color to all four sprite-side aliases. The free-scroll source also uses signed
 camera coordinates with explicit map bounds, so the production run advances,
 reverses, and returns without wrapping its source coordinates.
 
+The #335 horizontal canaries isolate packed column streaming from gameplay.
+Their local tileset deliberately removes collision object groups, and the
+functional tests assert that every imported world flag is empty. Both fixtures
+preserve their complete horizontal content, move the bottom 15 authored rows
+into the 30-hardware-row camera window, and keep five empty staging rows below
+it. `Camera.VerticalScrollMax()` therefore presents the dense bottom of the
+scene at visible Y 96 on Game Boy and Y 0 on NES. X stays zero for 64 ticks
+before horizontal acceptance begins. The short crop crosses the 8-bit camera
+boundary and circular nametable boundary before reversing at visible X 768;
+the full row traverses every chunk and bank window of all 156 `stage1` columns
+before reversing at visible X 2240.
+Adding those rows fixed NES fast prepared-column subcell/row-stride state,
+vertical attribute-table traversal, the requested camera high byte at X=256,
+and fast coordinate multiplication for power-of-two chunk-column counts. The
+NES authored-palette oracle keeps world coordinates after physical
+nametable wrap. All four exact ROMs retain zero tile/palette mismatches and
+zero unsafe video writes across the complete 1024/2584-frame traversal and
+return windows. Camera visibility remains bounded to two frames, the gameplay
+miss streak remains at most one frame, and the steady-state ratio remains at
+least 0.994. The bottom-framing adjustment is sample-only; it does not change
+either target runtime.
+
 ## External emulator checkpoints
 
 The exact tracked `tiled-free-scroll` cartridges were also inspected outside
@@ -102,6 +131,23 @@ the in-process runner.
 The emulator checkpoints corroborate the exact-ROM tests; the authored map
 oracle and cycle-positioned transient integrity checks remain the acceptance
 authority.
+
+The bottom-aligned full canary was additionally traversed and reversed from
+its exact tracked cartridges on 2026-07-14:
+
+- GameboyMcp/SameBoy: visible state moved from `(X=2232,Y=96)` at physical
+  frame 2320 to `(X=2032,Y=96)` at frame 2520 after the X 2240 reversal. A
+  sampled lower strip retained three DMG shades and 16 distinct row hashes;
+  the critical bank/decode counters remained zero.
+- NesMcp/AprNes: visible state moved from `(X=2230,Y=0)` at physical frame
+  2370 to `(X=2032,Y=0)` at frame 2570 after the X 2240 reversal. Rendering
+  remained enabled with `PPUCTRL=$80` and `PPUMASK=$1E`; a sampled lower strip
+  retained three palette indexes and eight distinct repeated-pattern row
+  hashes. The critical bank/directory/decode counters remained zero.
+
+These external snapshots prove real-emulator traversal and direction change;
+the longer in-process windows remain stricter because they compare every
+retained transient frame against authored tile and palette provenance.
 
 ## Focused validation
 

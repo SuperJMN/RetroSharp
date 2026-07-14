@@ -20,6 +20,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
     public static TheoryData<string, string, string, string, string> ProductionSamples => new()
     {
+        { "tiled-hscroll-short", "samples/tiled-hscroll/hscroll-short.rs", "samples/tiled-hscroll/stage1-short.tmj", "samples/tiled-hscroll/hscroll-short.nes", "validation/scenarios/tiled-hscroll-short.nes.json" },
+        { "tiled-hscroll-full", "samples/tiled-hscroll/hscroll-full.rs", "samples/tiled-hscroll/stage1-full.tmj", "samples/tiled-hscroll/hscroll-full.nes", "validation/scenarios/tiled-hscroll-full.nes.json" },
         { "tiled-vscroll", "samples/tiled-vscroll/vscroll.rs", "samples/tiled-vscroll/vscroll.tmj", "samples/tiled-vscroll/vscroll.nes", "validation/scenarios/tiled-vscroll.nes.json" },
         { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.nes", "validation/scenarios/tiled-free-scroll.nes.json" },
         { "deadzone-follow", "samples/deadzone-follow/deadzone.rs", "samples/deadzone-follow/deadzone.tmj", "samples/deadzone-follow/deadzone.nes", "validation/scenarios/deadzone-follow.nes.json" },
@@ -42,8 +44,13 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         Assert.Equal(trackedRom, regeneratedRom);
 
         var map = NesTiledWorldImporter.Load(RepositoryFile(mapRelativePath), NesVideoProgram.FirstSpriteTile);
-        Assert.InRange(map.Width, 1, 64);
+        Assert.True(map.Width > 0);
         Assert.InRange(map.Height, 1, 60);
+        if (sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal))
+        {
+            Assert.All(map.WorldFlags, flags => Assert.Equal(0, (int)flags));
+        }
+
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         Assert.Equal(sampleId, scenario.SampleId);
         var factory = new PackedNesMachineFactory();
@@ -358,10 +365,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         private int AuthoredPaletteSlot(int x, int y)
         {
-            var physicalX = Mod(x, 64);
-            var physicalY = Mod(y, 60);
-            var baseX = physicalX & ~1;
-            var baseY = physicalY & ~1;
+            var baseX = x & ~1;
+            var baseY = y & ~1;
             Span<int> counts = stackalloc int[4];
             Span<int> worldCounts = stackalloc int[4];
             Span<int> upperWorldCounts = stackalloc int[4];

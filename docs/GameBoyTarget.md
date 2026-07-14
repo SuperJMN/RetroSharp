@@ -448,8 +448,9 @@ packed final link no longer needs duplicate legacy collision rows. LW-2.4 adds
 the packed staged camera path described above; #332 later bounds its production
 edge preparation to one physical frame without selecting the raw route. LW-2.5 proved the full Game Boy
 payload non-destructively; LW-3.5 then migrated the shared runner input and
-regenerated both tracked ROMs. RPH-3.5 / #339 extends that proof to the exact
-eight-row packed Tiled functional matrix in
+regenerated both tracked ROMs. RPH-3.5 / #339 established the exact eight-row
+packed Tiled functional matrix; the horizontal #335 slice extends it to twelve
+with collision-free short/full `stage1` canaries on Game Boy and NES in
 [`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md).
 
 LW-1.5 exposes that same inspection payload through the explicit CLI form

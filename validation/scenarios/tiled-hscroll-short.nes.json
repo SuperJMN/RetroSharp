@@ -1,0 +1,41 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-hscroll-short-nes-functional",
+  "sampleId": "tiled-hscroll-short",
+  "target": "nes",
+  "warmUpFrames": 40,
+  "observationFrames": 1024,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 0 } },
+    { "id": "first-horizontal-chunk-window", "frame": 185, "expectedSignals": { "visibleCameraX": 102 } },
+    { "id": "circular-buffer-wrap-window", "frame": 305, "expectedSignals": { "visibleCameraX": 222 } },
+    { "id": "later-horizontal-chunk-window", "frame": 426, "expectedSignals": { "visibleCameraX": 342 } },
+    { "id": "right-edge-reversal", "frame": 857, "expectedSignals": { "visibleCameraX": 768 } },
+    { "id": "return-after-reversal", "frame": 970, "expectedSignals": { "visibleCameraX": 656 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "NTSC NES provides one physical frame per gameplay tick, while one bounded packed column and its attributes is prepared outside the display-critical phase and committed within its video-write budget.",
+    "productionTraceRationale": "The 1024-frame exact-ROM window first aligns the camera to the bottom, then reaches X=768, reverses, and returns across every packed chunk and circular background column. A 0.99 floor rejects sustained slowdown; the two-frame visibility ceiling covers the scheduler's isolated release-and-replace transition at reversal while the missed-tick streak remains capped at one."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 2
+  }
+}
