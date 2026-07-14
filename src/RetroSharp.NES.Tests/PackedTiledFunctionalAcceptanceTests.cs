@@ -96,6 +96,37 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             Assert.All(appliedScrollY, item => Assert.Equal(ExpectedBottomOverscanInsetPixels, item.Y));
         }
 
+        if (sampleId == "tiled-hscroll-offset")
+        {
+            var observedPpuSpaces = report.FrameEvidence
+                .SelectMany(evidence => evidence.Observed.VideoWrites ?? [])
+                .Select(write => write.Space)
+                .ToHashSet(StringComparer.Ordinal);
+            Assert.Contains("nes-ppu-$2000", observedPpuSpaces);
+            Assert.Contains("nes-ppu-$2005", observedPpuSpaces);
+            Assert.Contains("nes-ppu-$2006", observedPpuSpaces);
+            Assert.Contains("nes-ppu-$2007", observedPpuSpaces);
+
+            var cadenceStart = Assert.Single(scenario.Checkpoints).Frame;
+            var appliedScrollCadence = factory.AppliedScrollXByFrame
+                // The checkpoint frame establishes the starting scroll; the
+                // following physical frames are the held-right cadence.
+                .Where(item => item.Frame > cadenceStart)
+                .ToArray();
+            Assert.True(
+                appliedScrollCadence.Length > 32,
+                "Cadence coverage must cross at least one streamed tile boundary.");
+            Assert.All(
+                factory.VisibleCameraByFrame.Where(item => item.Key > cadenceStart),
+                item => Assert.Equal(80, item.Value.Y));
+            foreach (var (previous, current) in appliedScrollCadence.Zip(appliedScrollCadence.Skip(1)))
+            {
+                Assert.True(
+                    current.X == (byte)(previous.X + 1),
+                    $"Successive applied PPUSCROLL X writes must advance exactly one pixel after framing; "
+                    + $"frame {previous.Frame} was {previous.X}, frame {current.Frame} was {current.X}.");
+            }
+        }
         Assert.All(
             report.FrameEvidence,
             evidence =>
@@ -149,6 +180,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         public List<(int Frame, int Y)> AppliedScrollYByFrame { get; } = [];
 
+        public List<(int Frame, int X)> AppliedScrollXByFrame { get; } = [];
+
         public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
         {
             LoadedRom = exactRom.ToArray();
@@ -156,6 +189,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 LoadedRom,
                 VisibleCameraByFrame,
                 AppliedScrollYByFrame,
+                AppliedScrollXByFrame,
                 resetCount => ResetCount = resetCount);
         }
     }
@@ -164,6 +198,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         byte[] exactRom,
         IDictionary<int, (int X, int Y)> visibleCameraByFrame,
         ICollection<(int Frame, int Y)> appliedScrollYByFrame,
+        ICollection<(int Frame, int X)> appliedScrollXByFrame,
         Action<int> publishResetCount) : IFunctionalRomMachine
     {
         private readonly NesTestCpu cpu = new(exactRom);
@@ -174,6 +209,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private readonly Dictionary<(int X, int Y), long> requestSequenceByPosition = [];
         private long cameraRequestSequence;
         private long visibleSequence;
+        private bool nextScrollWriteIsX = true;
+
         public FunctionalFrameObservation ObserveInitial()
         {
             cpu.RunFrames(0);
@@ -207,8 +244,20 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 .ToArray();
             appliedScrollYByFrame.Add((frame, cpu.ScrollY));
 
+            foreach (var write in rawPpuWrites.Where(write => write.Register == 0x2005))
+            {
+                if (nextScrollWriteIsX)
+                {
+                    appliedScrollXByFrame.Add((frame, write.Value));
+                }
+
+                nextScrollWriteIsX = !nextScrollWriteIsX;
+            }
+
             var videoWrites = rawPpuWrites
-                .Where(write => write.Register == 0x2007)
+                // Track the complete background-raster transaction: control,
+                // scroll, address, and data. OAM has its own timing stream.
+                .Where(write => write.Register is 0x2000 or 0x2005 or 0x2006 or 0x2007)
                 .Select(VideoWrite)
                 .ToArray();
             var oamWrites = cpu.OamWrites.Skip(processedOamWrites).Select(OamWrite).ToArray();
@@ -326,8 +375,10 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         {
             var timing = Timing(write.Cycle, write.RenderingEnabled);
             return new FunctionalVideoWriteObservation(
-                "nes-ppudata",
+                $"nes-ppu-${write.Register:X4}",
                 write.VramAddress ?? write.Register,
+                // Requiring physical VBlank excludes the complete pre-render
+                // line, leaving its 341 PPU dots as margin before scanline 0.
                 !write.RenderingEnabled || timing.Phase == "vblank",
                 timing);
         }

@@ -4904,6 +4904,7 @@ internal sealed class NesRuntimeCompiler
         var storeOnlyLabel = builder.CreateLabel("nes_camera_store_only");
         var storeAndStreamRightLabel = builder.CreateLabel("nes_camera_store_stream_right");
         var storeAndStreamLeftLabel = builder.CreateLabel("nes_camera_store_stream_left");
+        var publishPackedLabel = builder.CreateLabel("nes_packed_camera_publish_x");
         var endLabel = builder.CreateLabel("nes_camera_stream_end");
 
         builder.LoadAZeroPage(CameraNewXAddress);
@@ -4973,13 +4974,17 @@ internal sealed class NesRuntimeCompiler
                 EmitDecrementCameraPixel(CameraXAddress, CameraXHighAddress, usesWordCameraX);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(queued);
+                builder.JumpAbsolute(publishPackedLabel);
             }
         }
         else if (usePackedCamera)
         {
-            EmitPublishVisibleCameraX();
+            builder.JumpAbsolute(publishPackedLabel);
         }
-        builder.JumpAbsolute(endLabel);
+        if (!usePackedCamera)
+        {
+            builder.JumpAbsolute(endLabel);
+        }
 
         builder.Label(storeAndStreamLeftLabel);
         builder.LoadAZeroPage(CameraNewXAddress);
@@ -4999,19 +5004,24 @@ internal sealed class NesRuntimeCompiler
                 EmitIncrementCameraPixel(CameraXAddress, CameraXHighAddress, usesWordCameraX);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(queued);
+                builder.JumpAbsolute(publishPackedLabel);
             }
         }
         else if (usePackedCamera)
         {
-            EmitPublishVisibleCameraX();
+            builder.JumpAbsolute(publishPackedLabel);
         }
-        builder.JumpAbsolute(endLabel);
+        if (!usePackedCamera)
+        {
+            builder.JumpAbsolute(endLabel);
+        }
 
         builder.Label(storeOnlyLabel);
         builder.LoadAZeroPage(CameraNewXAddress);
         builder.StoreAZeroPage(CameraXAddress);
         if (usePackedCamera)
         {
+            builder.Label(publishPackedLabel);
             EmitPublishVisibleCameraX();
         }
         builder.Label(endLabel);

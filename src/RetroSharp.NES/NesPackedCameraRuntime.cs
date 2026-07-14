@@ -104,6 +104,7 @@ internal static class NesPackedCameraRuntime
 
 internal static class NesPackedCameraRuntimeEmitter
 {
+    private const byte PayloadIndexScratch = 0xE4;
     private const byte PointerLow = 0xE8;
     private const byte PointerHigh = 0xE9;
 
@@ -204,8 +205,6 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAImmediate(0x84);  // NMI enabled, PPUDATA increments vertically by 32.
         builder.StoreAAbsolute(0x2000);
         builder.LoadYImmediate(0);
-        builder.LoadXAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
-        builder.StoreXAbsolute(NesPackedCameraRuntime.Iterator);
 
         builder.Label(columnSegment);
         builder.LoadAAbsolute(NesPackedCameraRuntime.TargetCursor);
@@ -224,17 +223,31 @@ internal static class NesPackedCameraRuntimeEmitter
             NesPackedCameraRuntime.TargetCursor,
             NesPackedCameraRuntime.CommitTarget,
             "nes_packed_column_tile");
-        builder.LoadXAbsolute(NesPackedCameraRuntime.Iterator);
+        // Keep the hot PPUDATA loop to one indirect load, one store, and the
+        // two register increments. The old per-tile absolute DEC made a full
+        // column too slow for the real NMI-to-pre-render window. Select the
+        // shorter of the remaining payload and this physical nametable segment
+        // once, then account for the payload at the segment boundary.
+        builder.StoreYZeroPage(PayloadIndexScratch);
+        builder.LoadAAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
+        builder.SetCarry();
+        builder.SubtractZeroPage(PayloadIndexScratch);
+        var columnSegmentCountReady = builder.CreateLabel("nes_packed_commit_column_segment_count_ready");
+        builder.CompareAbsolute(NesPackedCameraRuntime.PhaseRemaining);
+        builder.JumpIf(0x90, columnSegmentCountReady);
+        builder.LoadAAbsolute(NesPackedCameraRuntime.PhaseRemaining);
+        builder.Label(columnSegmentCountReady);
+        builder.TransferAToX();
 
         builder.Label(loop);
         builder.LoadAIndirectY(PointerLow);
         builder.StoreAAbsolute(0x2007);
         builder.IncrementY();
         builder.DecrementX();
-        builder.JumpIf(0xF0, columnTilesDone);
-        builder.DecrementAbsolute(NesPackedCameraRuntime.PhaseRemaining);
         builder.JumpIf(0xD0, loop);
-        builder.StoreXAbsolute(NesPackedCameraRuntime.Iterator);
+        builder.TransferYToA();
+        builder.CompareAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
+        builder.JumpIf(0xF0, columnTilesDone);
         builder.LoadAAbsolute(NesPackedCameraRuntime.TargetCursor);
         builder.CompareImmediate(30);
         builder.JumpIf(0x90, columnSetTopTarget);

@@ -30,18 +30,18 @@ physical frames.
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `tiled-tall` GB | `9c8b6432c8231831f0a5018f2c8f128b66702245719b52886c665dcdc4317afa` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-short` GB | `e51ecdb8e969c8989d920a9ec5cfb6fc604176d3c5547355dde25a332275da27` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-short` NES | `a5c353c8ebda111cf3bbbb52a60e10f8d7346583a033bfb09f29e7f0b2f5fde9` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-short` NES | `e560c78bccda7963d3728ad720645471ea1a3e003065182c1e14f114d3060929` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-full` GB | `d5baa0effd76548832a2e7c4fbaab17ca378fe1b3436aada18dd2f00984ebebb` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-full` NES | `9ad5b7023ac1f4c539ec728a810d087b0917133e293f05ea34f391b5cb2ad264` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-full` NES | `eebe9be28ed3e5283d24774ac9328a07a83bed3f1fab3a59742296bac0a16d62` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-offset` GB | `2df705902c94ae8c6f00c8868efd11cf83ba436e17f029898ff1b098e3f876f9` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-offset` NES | `d6195be5c69f0f87b94278ad8b9be4babb42191b56573a813e4c0a43ac8f303d` | 420 | 419 / 420 (0.998) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-offset` NES | `aaf7fa3a9db6de50c55e0f9683ac651c01d347fc5de2833d24dd4de3ed740752` | 420 | 419 / 420 (0.998) | 1 | 0 / 2 | 0 |
 | `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
-| `tiled-vscroll` NES | `4f7a524e25584576866e87f1069f4922d1c07873ee344ceaec7964c717451869` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
+| `tiled-vscroll` NES | `bca383ca88379215da054b35793b322cd6ccf92783501ef527de7239f5098992` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
 | `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` GB | `60948ac30f49cbd1f1814a552f74b1c7346612eeadf6095c308e1b9da8b0983c` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` NES | `9e763f297da2cb46fc1971105872f5364d9b272c88db433c4c05e79c5b53f487` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
+| `tiled-free-scroll` NES | `f8d842cae94e2a43eff2719a3a4af8da0cca8ff078e83212c2b1d3e25a59dffd` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
 | `deadzone-follow` GB | `3db43f7a1b23c8f84c4865ee332eec904d8a9bb033a1b887d74c6807b84dc8b3` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
-| `deadzone-follow` NES | `6e8816629b2cd25ab11ae44465414cfd62da35620eedf2dc9817ba514ea90425` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
+| `deadzone-follow` NES | `90cf002e477aa5cd6c61bd370a56d274aef7a98a780fe9ba72dcdb69d749859d` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
 The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400
 source waits after the same warm-up. Its production packed gate therefore
@@ -127,6 +127,35 @@ visibility budget. The NES checkpoint is physical frame 104, after the
 sample's declared 64-gameplay-tick framing delay; frame 40 is still inside
 cartridge preload/framing and is not a valid bottom-aligned checkpoint.
 
+The timing gate retains the complete background-raster transaction, not only
+`$2007`: `$2000`, `$2005`, `$2006`, and `$2007` writes must all occur during
+physical VBlank. The pre-render line is deliberately excluded, leaving its
+complete 341 PPU dots as margin before visible scanline 0. On the red ROM, the
+first AprNes column began at scanline 245 dot 259, its final attribute reached
+scanline 260 dot 108, and the final control/scroll restore landed at visible
+scanline 0 dots 31/54/159. The in-process regression consequently reported 211
+unsafe raster writes instead of accepting the coherent VRAM bytes alone.
+
+The packed column writer now chooses a physical nametable segment once and
+uses X as its tight tile counter, rather than doing absolute-RAM bookkeeping
+for every tile. Tiles and all eight attributes remain one coherent commit. On
+the regenerated exact ROM, AprNes retained all 66 selected PPU events without
+truncation: the final attribute completed at scanline 258 dot 151 and the final
+`$2000/$2005/$2005` restore completed at scanline 260 dots 74/97/202. No PPU
+write enters pre-render or the visible raster.
+
+Successful packed horizontal requests now publish the boundary pixel
+immediately. A rightward crossing still uses the resident half of the 64-column
+circular nametable; its prepared lookahead column first becomes visible one
+pixel later, after the following VBlank has committed it. A leftward crossing
+re-enters the retained trailing half while its prepared column is refreshed.
+The exact-ROM regression retains the first value from every `$2005/$2005`
+restore pair and requires successive X values to advance by one modulo 256
+across more than 32 frames. AprNes likewise observed X values
+`1,2,3,4,5,6,7,8,9,10,11` on physical frames 106 through 116; the first
+streamed request occurred on frame 113 and committed on frame 114 without a
+held or skipped scroll value.
+
 ## External emulator checkpoints
 
 The exact tracked `tiled-free-scroll` cartridges were also inspected outside
@@ -172,7 +201,7 @@ complete floor instead of removing its lower half.
 
 The regenerated exact tracked runner ROM for the nonzero-Y horizontal fix has
 SHA-256
-`8d81c7633533a60b03f52f4e414ea671d50da088ca900b1484b272cca5640c91`.
+`86abfd051017217e50c494e32f89bdb2a457ac55df5fe7bea4f5d9071021f4c2`.
 NesMcp routed it to AprNes as mapper 4. After 500 idle frames and 270 RIGHT
 frames, requested camera state was `(311,38)` and visible camera state was
 `(311,80)`. Request, prepare, resident, commit, and release were all 38; the
