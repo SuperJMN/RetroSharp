@@ -187,10 +187,11 @@ and AprNes proves the combined mapper-4/four-screen behavior. `LW-3.2` adds the
 production mapper-0-first selector and target-private physical data linker:
 ordered R6 world banks are `0, 3, 4, 5`, pinned R7 is bank `1`, boot-only R7 is
 bank `2`, and fixed execution is banks `6, 7`. The normalized full-`stage1`
-placement probe measures 2,762 pack, 5,012 pinned, 4,128 boot, 4,327 fixed
-payload including the LW-3.3 reader, and 3,056 resident CHR bytes. The later
-packed-camera profile uses a 2,052-byte runtime index and measures 6,204
-pinned bytes, still inside the same 8 KiB R7 window. The 8 KiB R6 window is not a whole-pack
+placement baseline measures 2,762 pack, 5,012 pinned, 4,128 boot, 4,327 fixed
+payload including the LW-3.3 reader, and 3,056 resident CHR bytes. The current
+packed-camera profile uses a 3,154-byte runtime index and measures 7,306 pinned
+bytes after adding physical-nametable-aligned column attributes, still inside
+the same 8 KiB R7 window. The 8 KiB R6 window is not a whole-pack
 limit: continuation segments preserve canonical bytes and all v1 relative
 offsets across non-contiguous physical banks. Mapper 0 remains byte-identical
 when its exact historical final link fits; the internal MMC3 profile is chosen
@@ -200,11 +201,11 @@ Runtime CHR banking and the IRQ HUD remain out of scope. Large Worlds v1 banks d
 code, handlers, DPCM, helpers, and vectors remain in the fixed 16 KiB region,
 and automatic executable-code banking is not implemented by this epic.
 
-The final packed-camera runtime probe currently measures 8,935 fixed bytes and
-6,204 pinned R7 bytes after the bounded column-commit and hardware-VBlank
-corrections. It remains within the same `nes-mmc3-tvrom-v1` layout; the mapper,
-bank ownership, PRG/CHR capacity, and automatic profile-selection rules are
-unchanged.
+The final packed-camera runtime probe currently measures 8,999 fixed bytes and
+7,306 pinned R7 bytes after the bounded column-commit, hardware-VBlank, and
+physical 30-row attribute-seam corrections. It remains within the same
+`nes-mmc3-tvrom-v1` layout; the mapper, bank ownership, PRG/CHR capacity, and
+automatic profile-selection rules are unchanged.
 
 `Animation.Clip(name, firstFrame, duration...)` stores a looping frame-duration table whose frame indexes and total duration must fit one byte. `Animation.Frame(name, tick)` is declared by the source package over the `animation_frame` target intrinsic and returns the current frame for that clip. `Sprite.Width(name)` is likewise a source-package helper over the compile-time `sprite_width` target intrinsic and returns the logical sprite width for a declared sprite asset.
 

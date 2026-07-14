@@ -25,6 +25,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         { "tiled-tall", "samples/tiled-tall/tall.rs", "samples/tiled-tall/tall.tmj", "samples/tiled-tall/tall.gb", "validation/scenarios/tiled-tall.gb.json" },
         { "tiled-hscroll-short", "samples/tiled-hscroll/hscroll-short.rs", "samples/tiled-hscroll/stage1-short.tmj", "samples/tiled-hscroll/hscroll-short.gb", "validation/scenarios/tiled-hscroll-short.gb.json" },
         { "tiled-hscroll-full", "samples/tiled-hscroll/hscroll-full.rs", "samples/tiled-hscroll/stage1-full.tmj", "samples/tiled-hscroll/hscroll-full.gb", "validation/scenarios/tiled-hscroll-full.gb.json" },
+        { "tiled-hscroll-offset", "samples/tiled-hscroll/hscroll-offset.rs", "samples/tiled-hscroll/stage1-full.tmj", "samples/tiled-hscroll/hscroll-offset.gb", "validation/scenarios/tiled-hscroll-offset.gb.json" },
         { "tiled-vscroll", "samples/tiled-vscroll/vscroll.rs", "samples/tiled-vscroll/vscroll.tmj", "samples/tiled-vscroll/vscroll.gb", "validation/scenarios/tiled-vscroll.gb.json" },
         { "tiled-diagonal", "samples/tiled-diagonal/diag.rs", "samples/tiled-diagonal/diag.tmj", "samples/tiled-diagonal/diag.gb", "validation/scenarios/tiled-diagonal.gb.json" },
         { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.gb", "validation/scenarios/tiled-free-scroll.gb.json" },

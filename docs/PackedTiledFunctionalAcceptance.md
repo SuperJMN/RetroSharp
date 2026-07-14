@@ -30,16 +30,18 @@ physical frames.
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `tiled-tall` GB | `9c8b6432c8231831f0a5018f2c8f128b66702245719b52886c665dcdc4317afa` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-short` GB | `e51ecdb8e969c8989d920a9ec5cfb6fc604176d3c5547355dde25a332275da27` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-short` NES | `a5c353c8ebda111cf3bbbb52a60e10f8d7346583a033bfb09f29e7f0b2f5fde9` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-short` NES | `8b11c98cef004d26542a944a3aedb1d2d4cad699b7a44ed02dbcb16eaeed728a` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-full` GB | `d5baa0effd76548832a2e7c4fbaab17ca378fe1b3436aada18dd2f00984ebebb` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-full` NES | `9ad5b7023ac1f4c539ec728a810d087b0917133e293f05ea34f391b5cb2ad264` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-full` NES | `72591693ba0e5347dd356f679e3544e25f47741399b1b4e87e3d42344548381c` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-offset` GB | `dd5ba1c1fc41c2f3ce0267f188230883464b603a70922efd7595c1b9087643b0` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-offset` NES | `a69e0b6a85e11990cf5933cc8d71f8a649db7a8ad7e1d420b9b5e19f9282cabc` | 420 | 418 / 420 (0.995) | 1 | 0 / 1 | 0 |
 | `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
-| `tiled-vscroll` NES | `4f7a524e25584576866e87f1069f4922d1c07873ee344ceaec7964c717451869` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
+| `tiled-vscroll` NES | `9738cd74d6ecae7a25afd7e6072ab8d2d950e0ccfb4509f2a67976f0bc2b9644` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
 | `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` GB | `60948ac30f49cbd1f1814a552f74b1c7346612eeadf6095c308e1b9da8b0983c` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` NES | `9e763f297da2cb46fc1971105872f5364d9b272c88db433c4c05e79c5b53f487` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
+| `tiled-free-scroll` NES | `3c96e6936f096805088fa73836b5c2861200aa270361e1fa6555e861be3a1d11` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
 | `deadzone-follow` GB | `3db43f7a1b23c8f84c4865ee332eec904d8a9bb033a1b887d74c6807b84dc8b3` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
-| `deadzone-follow` NES | `6e8816629b2cd25ab11ae44465414cfd62da35620eedf2dc9817ba514ea90425` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
+| `deadzone-follow` NES | `5b722e19e47ff638a6239ffc805e2f516c1620b034733dd8d540d93ca95c5ccd` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
 The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400
 source waits after the same warm-up. Its production packed gate therefore
@@ -114,6 +116,60 @@ least 0.994. Game Boy output remains unchanged; the NES ROM hashes change only
 because the target-owned safe-area inset now keys off the effective camera
 window rather than the complete backing-map height.
 
+The `tiled-hscroll-offset` rung keeps the same full collision-free fixture but
+uses a 40-row camera window, settling at visible Y 176 on Game Boy and Y 80 on
+NES before horizontal movement. Its focused X limit is 96, so the 420-frame
+window now covers both directions and a return to X 0. NES packed columns use
+the current coarse camera row for both their authored source and physical
+nametable destination, and commit only the 30 hardware rows that can be
+visible. This prevents the incoming floor from being projected ten rows too
+high while keeping the column within eight touched attribute blocks and the
+accepted two-frame visibility budget. The NES checkpoint is physical frame
+104, after the sample's declared 64-gameplay-tick framing delay; frame 40 is
+still inside cartridge preload/framing and is not a valid bottom-aligned
+checkpoint.
+
+The runner return path exposed a second nonzero-Y defect in attribute
+provenance. NES nametables wrap every 30 tile rows, while portable authored
+palette blocks are grouped every four rows. Since 30 is not divisible by four,
+copying the global block table into the lower physical nametable changed
+attribute bytes `$2BC8/$2BC9` from the required `$50` to `$05`: tile identities
+remained correct, but the upper and lower palette quadrants swapped. The packed
+runtime now emits a page-aligned, physical-nametable column table in addition
+to the global row table. The eighth attribute row zeroes its nonexistent lower
+quadrants instead of borrowing provenance from the next nametable. The Y=0
+`tiled-hscroll-short` path never crosses this vertical seam, which is why it did
+not reproduce the runner corruption.
+
+The timing gate retains the complete background-raster transaction, not only
+`$2007`: `$2000`, `$2005`, `$2006`, and `$2007` writes must all occur during
+physical VBlank. The pre-render line is deliberately excluded, leaving its
+complete 341 PPU dots as margin before visible scanline 0. On the red ROM, the
+first AprNes column began at scanline 245 dot 259, its final attribute reached
+scanline 260 dot 108, and the final control/scroll restore landed at visible
+scanline 0 dots 31/54/159. The in-process regression consequently reported 211
+unsafe raster writes instead of accepting the coherent VRAM bytes alone.
+
+The packed column writer now chooses a physical nametable segment once and
+uses X as its tight tile counter, rather than doing absolute-RAM bookkeeping
+for every tile. Tiles and all eight attributes remain one coherent commit. On
+the regenerated exact ROM, AprNes retained all 66 selected PPU events without
+truncation: the final attribute completed at scanline 258 dot 151 and the final
+`$2000/$2005/$2005` restore completed at scanline 260 dots 74/97/202. No PPU
+write enters pre-render or the visible raster.
+
+Successful packed horizontal requests now publish the boundary pixel
+immediately. A rightward crossing still uses the resident half of the 64-column
+circular nametable; its prepared lookahead column first becomes visible one
+pixel later, after the following VBlank has committed it. A leftward crossing
+re-enters the retained trailing half while its prepared column is refreshed.
+The exact-ROM regression retains the first value from every `$2005/$2005`
+restore pair and requires successive X values to advance by one modulo 256
+across more than 32 frames. AprNes likewise observed X values
+`1,2,3,4,5,6,7,8,9,10,11` on physical frames 106 through 116; the first
+streamed request occurred on frame 113 and committed on frame 114 without a
+held or skipped scroll value.
+
 ## External emulator checkpoints
 
 The exact tracked `tiled-free-scroll` cartridges were also inspected outside
@@ -156,6 +212,29 @@ physical frame 150, NesMcp/AprNes reported `PPUCTRL=$80`, `PPUMASK=$1E`, and
 screen Y `216..231`; the wrapped Y `232..239` strip was a single uniform sky
 palette index. Cropping the bottom eight overscan lines therefore retains the
 complete floor instead of removing its lower half.
+
+A longer NesMcp checkpoint routed the runner to AprNes as mapper 4. After 500
+idle frames and 270 RIGHT frames, requested camera state was `(311,38)` and
+visible camera state was `(311,80)`. Request, prepare, resident, commit, and
+release were all 38; the last commit wrote the 30 visible tile rows and eight
+attribute bytes, with zero bank, directory, or decode work in commit. The four
+physical nametable dump placed the authored `$B5/$B8` floor only in rows 8/9 of
+the lower nametables, which are world rows 38/39 at the fixed 80-pixel Y origin;
+the traversed upper tables had no copy ten rows early. The captured framebuffer
+consequently had one floor at the bottom of the viewport, with `PPUCTRL=$81`,
+`PPUMASK=$1E`, and rendering enabled.
+
+The regenerated exact tracked runner ROM has SHA-256
+`87ccbe4332a7763d1aebf3f8cc86bba0e74f339a7a6da0f74e125374b5477df6`.
+An isolated RetroArch/FCEUmm `(SVN) 3a84a6f` run reproduced the reported input:
+after 500 idle frames it moved from visible `(0,80)` to `(101,80)` in 101 RIGHT
+frames and returned to `(0,80)` in 108 LEFT frames. All 957 visible tile and
+attribute-palette cells matched the initial authored view. Request, prepare,
+resident, commit, and release were all 24; the last commit wrote 30 tiles and
+eight attributes with zero bank, directory, or decode work in commit. The
+persistent RetroArch and FCEUmm configuration hashes were unchanged. Before
+the correction, the same path retained identical tiles but reported 32
+palette-only mismatches in the lower viewport.
 
 These external snapshots prove real-emulator traversal and direction change;
 the longer in-process windows remain stricter because they compare every

@@ -111,12 +111,13 @@ trajectory inside those windows. See
 [`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md) for
 the exact hashes, measured budgets, and external emulator checkpoints.
 
-The horizontal #335 slice extends that packed matrix to twelve rows with two
-stable sample identities on both targets: a collision-free 64x20-cell crop and
-the complete collision-free 156x20-cell `stage1`. These scenarios remove
-player/input/audio/collision behavior, advance the camera one pixel per source
-tick, and retain exact authored tile and palette checks across chunk, circular
-background, and X=256 boundaries.
+The horizontal #335 slice extends that packed matrix with three stable sample
+identities on both targets: a collision-free 64x20-cell crop, the complete
+collision-free 156x20-cell `stage1`, and a focused non-zero-vertical-offset
+variant of the complete fixture. These scenarios remove player, input, audio,
+collision queries, and sprites while retaining exact authored tile and palette
+checks across chunk, circular background, and X=256 boundaries. The offset
+variant is the golden rung between zero-Y horizontal scrolling and the runner.
 
 ## CI tiers
 

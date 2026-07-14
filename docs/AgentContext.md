@@ -7,6 +7,16 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- NES packed column attributes must follow physical 30-tile-row nametable
+  provenance, not only the portable four-row authored grouping. At nonzero
+  camera Y, the 30-row seam otherwise swaps the upper/lower palette quadrants
+  while leaving tile IDs correct. The runtime keeps the global table for row
+  commits and emits a page-aligned physical table for columns; the complete
+  `stage1` probe now measures a 3,154-byte runtime index, 7,306 pinned R7 bytes,
+  and 8,999 fixed bytes. The exact runner regression holds RIGHT to visible X
+  100 and returns LEFT to X 0 at Y 80. FCEUmm reproduced that path with zero
+  visible tile/palette mismatches. See
+  `docs/PackedTiledFunctionalAcceptance.md`.
 - The horizontal #335 slice adds `tiled-hscroll-short` and
   `tiled-hscroll-full` as collision-free Game Boy/NES target-acceptance
   samples. Their 64x20 and 156x20 fixtures preserve every horizontal column of

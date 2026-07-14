@@ -251,7 +251,8 @@ internal static class NesRomBuilder
                 pinnedDataStart = NesWorldPackRuntimeEmitter.DefinePinnedLookupLabels(
                     builder,
                     worldPackRuntime,
-                    pinnedDataStart);
+                    pinnedDataStart,
+                    usePackedCamera);
             }
 
             DefinePinnedDataLabels(builder, program, pinnedDataStart, includeLegacyWorldData);
@@ -382,7 +383,8 @@ internal static class NesRomBuilder
                 builder,
                 program,
                 includeLegacyWorldData,
-                worldPackRuntime);
+                worldPackRuntime,
+                usePackedCamera);
             EmitMusicAssets(pinnedBuilder, program.MusicAssetsInLoadOrder, dpcmLayout.AddressRegisterMap);
             EmitSoundEffectAssets(pinnedBuilder, program.SoundEffectAssetsInLoadOrder);
             pinnedDataBytes = pinnedBuilder.Build();
@@ -543,11 +545,12 @@ internal static class NesRomBuilder
         PrgBuilder fixedBuilder,
         NesVideoProgram program,
         bool includeLegacyWorldData,
-        NesWorldPackRuntimePlan? worldPackRuntime)
+        NesWorldPackRuntimePlan? worldPackRuntime,
+        bool usePackedCamera)
     {
         if (worldPackRuntime is not null)
         {
-            NesWorldPackRuntimeEmitter.EmitPinnedLookupData(pinnedBuilder, worldPackRuntime);
+            NesWorldPackRuntimeEmitter.EmitPinnedLookupData(pinnedBuilder, worldPackRuntime, usePackedCamera);
         }
 
         if (includeLegacyWorldData && program.WorldMap is { } worldMap)
@@ -744,7 +747,7 @@ internal static class NesRomBuilder
         if (packedWorldBytes is not null)
         {
             var runtime = NesWorldPackRuntimePlan.Create(packedWorldBytes);
-            var length = NesWorldPackRuntimeEmitter.PinnedLookupDataLength(runtime);
+            var length = NesWorldPackRuntimeEmitter.PinnedLookupDataLength(runtime, program.UsesCameraRuntime);
             AddReportSegment(
                 segments,
                 "pinned:worldpack-runtime-index",
@@ -4904,6 +4907,7 @@ internal sealed class NesRuntimeCompiler
         var storeOnlyLabel = builder.CreateLabel("nes_camera_store_only");
         var storeAndStreamRightLabel = builder.CreateLabel("nes_camera_store_stream_right");
         var storeAndStreamLeftLabel = builder.CreateLabel("nes_camera_store_stream_left");
+        var publishPackedLabel = builder.CreateLabel("nes_packed_camera_publish_x");
         var endLabel = builder.CreateLabel("nes_camera_stream_end");
 
         builder.LoadAZeroPage(CameraNewXAddress);
@@ -4973,13 +4977,17 @@ internal sealed class NesRuntimeCompiler
                 EmitDecrementCameraPixel(CameraXAddress, CameraXHighAddress, usesWordCameraX);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(queued);
+                builder.JumpAbsolute(publishPackedLabel);
             }
         }
         else if (usePackedCamera)
         {
-            EmitPublishVisibleCameraX();
+            builder.JumpAbsolute(publishPackedLabel);
         }
-        builder.JumpAbsolute(endLabel);
+        if (!usePackedCamera)
+        {
+            builder.JumpAbsolute(endLabel);
+        }
 
         builder.Label(storeAndStreamLeftLabel);
         builder.LoadAZeroPage(CameraNewXAddress);
@@ -4999,19 +5007,24 @@ internal sealed class NesRuntimeCompiler
                 EmitIncrementCameraPixel(CameraXAddress, CameraXHighAddress, usesWordCameraX);
                 builder.JumpAbsolute(endLabel);
                 builder.Label(queued);
+                builder.JumpAbsolute(publishPackedLabel);
             }
         }
         else if (usePackedCamera)
         {
-            EmitPublishVisibleCameraX();
+            builder.JumpAbsolute(publishPackedLabel);
         }
-        builder.JumpAbsolute(endLabel);
+        if (!usePackedCamera)
+        {
+            builder.JumpAbsolute(endLabel);
+        }
 
         builder.Label(storeOnlyLabel);
         builder.LoadAZeroPage(CameraNewXAddress);
         builder.StoreAZeroPage(CameraXAddress);
         if (usePackedCamera)
         {
+            builder.Label(publishPackedLabel);
             EmitPublishVisibleCameraX();
         }
         builder.Label(endLabel);
@@ -5811,10 +5824,10 @@ internal sealed class NesRuntimeCompiler
             builder.LoadAZeroPage(CameraTargetColumnAddress);
             builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTarget);
             builder.LoadAImmediate(config.StreamY);
-            builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
             if (config.UseFourScreenNametables)
             {
                 builder.LoadAZeroPage(CameraTileRowAddress);
+                builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
                 builder.StoreAAbsolute(NesPackedCameraRuntime.CommitOrthogonalLow);
                 if (config.MapHeight > byte.MaxValue)
                 {
@@ -5827,12 +5840,13 @@ internal sealed class NesRuntimeCompiler
             }
             else
             {
+                builder.StoreAAbsolute(NesPackedCameraRuntime.CommitTargetStart);
                 builder.LoadAImmediate(0);
                 builder.StoreAAbsolute(NesPackedCameraRuntime.CommitOrthogonalLow);
             }
 
             builder.StoreAAbsolute(NesPackedCameraRuntime.CommitOrthogonalHigh);
-            builder.LoadAImmediate(Math.Min(32, config.StreamHeight));
+            builder.LoadAImmediate(Math.Min(NesTarget.Capabilities.ScreenTiles.Height, config.StreamHeight));
             builder.StoreAAbsolute(NesPackedCameraRuntime.CommitPayloadLength);
             builder.CallSubroutine(NesRomBuilder.WorldPackPrepareEdgeLabel);
             builder.CompareImmediate((byte)NesWorldPackResult.Success);

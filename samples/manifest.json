@@ -72,6 +72,13 @@
       "targets": ["gb", "nes"]
     },
     {
+      "id": "tiled-hscroll-offset",
+      "path": "samples/tiled-hscroll/hscroll-offset.rs",
+      "readme": "samples/tiled-hscroll/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "id": "tiled-vscroll",
       "path": "samples/tiled-vscroll/vscroll.rs",
       "readme": "samples/tiled-vscroll/README.md",

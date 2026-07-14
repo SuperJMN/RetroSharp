@@ -1,0 +1,36 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-hscroll-offset-nes-functional",
+  "sampleId": "tiled-hscroll-offset",
+  "target": "nes",
+  "warmUpFrames": 40,
+  "observationFrames": 420,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "bottom-aligned-start", "frame": 104, "expectedSignals": { "visibleCameraY": 80 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "NTSC NES provides one physical frame per gameplay tick, while bounded packed-column work at a non-zero vertical camera offset must remain safely staged across NMI windows.",
+    "productionTraceRationale": "The exact production source removes input, sprites, audio, collision, and gameplay while retaining the full collision-free stage1 visual fixture, the accepted one-pixel cadence, and the runner-shaped Y=80 camera offset. The bottom-aligned checkpoint is physical frame 104, after the declared 64-gameplay-tick framing delay; frame 40 is still inside cartridge preload/framing. The focused X=96 limit makes the retained window cover rightward streaming, reversal, and return, exposing both the ten-tile vertical misprojection and physical 30-row attribute-seam corruption without any adjacent gameplay subsystem."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-hscroll-offset-gb-functional",
+  "sampleId": "tiled-hscroll-offset",
+  "target": "gb",
+  "warmUpFrames": 40,
+  "observationFrames": 420,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 176 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "DMG provides one physical frame per gameplay tick, while one packed column at a non-zero vertical camera offset remains prepared and committed within its video-write budget.",
+    "productionTraceRationale": "The exact production source removes input, sprites, audio, collision, and gameplay while retaining the full collision-free stage1 visual fixture, the accepted one-pixel cadence, and the runner-shaped non-zero vertical camera offset. The focused X=96 limit makes the retained window cover rightward streaming, reversal, and return while comparing every visible tile and palette against authored Tiled data."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.99,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}
