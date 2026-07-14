@@ -27,14 +27,13 @@ static class DeadZone
 
 static class CollisionProbe
 {
-    const i16 LandingSearchTopOffset = 4;
-    const i16 LandingSearchHeight = 12;
+    const i16 LandingSearchTopOffset = 3;
+    const i16 LandingSearchHeight = 9;
     const i16 LeftWallProbeOffset = 1;
     const i16 RightWallProbeOffset = 1;
     const i16 WallProbeHeight = 8;
     const i16 CeilingProbeTopOffset = 28;
     const i16 CeilingProbeHeight = 4;
-    const i16 NoTileHit = -1;
 }
 
 static class Jump
@@ -72,4 +71,6 @@ enum CollisionFlag
 {
     None = 0,
     Solid = 1,
+    Platform = 4,
+    Landable = 5,
 }

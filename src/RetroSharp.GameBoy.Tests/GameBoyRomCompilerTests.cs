@@ -5859,9 +5859,9 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("view.CaptureScreen(player);", source);
         Assert.Contains("Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);", source);
 
-        Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
+        Assert.Contains("frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);", source);
         Assert.Contains("frame.ResolveCeilingHit(player, screenX, footWorldY);", source);
-        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Landable);", source);
         Assert.Contains("Camera.AabbTiles(screenX, headProbeY, Sprite.Width(mario_player), CollisionProbe.CeilingProbeHeight, CollisionFlag.Solid)", source);
         Assert.Contains("let rightProbeX = screenX + CollisionProbe.RightWallProbeOffset;", source);
         Assert.Contains("let leftProbeX = screenX - CollisionProbe.LeftWallProbeOffset;", source);
@@ -6188,14 +6188,14 @@ public class GameBoyRomCompilerTests
         Assert.Contains("inline void PresentFrame(PlayerState player, CameraState view)", source);
         Assert.Contains("inline void HandleJumpInput()", source);
         Assert.Contains("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", source);
-        Assert.Contains("inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
+        Assert.Contains("inline void ResolveLanding(PlayerState player, Pixel screenX, Pixel previousFootWorldY, Pixel footWorldY)", source);
         Assert.Contains("inline void ResolveFall(PlayerState player)", source);
         Assert.Contains("inline void ResolveReset(PlayerState player, CameraState view)", source);
         Assert.Contains("inline void UpdateRunAnimation(CameraState view)", source);
         Assert.Contains("PresentFrame(player, view);", source);
         Assert.Contains("frame.Begin();", source);
         Assert.DoesNotContain("view.CaptureScreen(player);", source);
-        Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
+        Assert.Contains("frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);", source);
         Assert.Contains("frame.ResolveFall(player);", source);
         Assert.Contains("frame.ResolveReset(player, view);", source);
         Assert.Contains("player.HandleJumpInput();", source);
@@ -6280,7 +6280,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("view.screenX", source);
         Assert.Contains("Player.FootOffset", source);
         Assert.Contains("CollisionProbe.LandingSearchHeight", source);
-        Assert.Contains("CollisionProbe.NoTileHit", source);
+        Assert.Contains("CollisionFlag.Landable", source);
         Assert.DoesNotContain("EnemyState", source);
         Assert.DoesNotContain("hitFlashTicks", source);
 
@@ -7452,7 +7452,7 @@ public class GameBoyRomCompilerTests
         var ceilingBlock = source[ceilingStart..ceilingEnd];
         Assert.Contains("player.velocityY < 0", ceilingBlock);
 
-        var landingCall = source.IndexOf("frame.ResolveSolidLanding(player, screenX, footWorldY);", StringComparison.Ordinal);
+        var landingCall = source.IndexOf("frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);", StringComparison.Ordinal);
         var ceilingCall = source.IndexOf("frame.ResolveCeilingHit(player, screenX, footWorldY);", StringComparison.Ordinal);
         var jumpInputCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
         Assert.True(ceilingCall > landingCall, "Ceiling resolution should run after solid landing resolution.");
@@ -7467,19 +7467,24 @@ public class GameBoyRomCompilerTests
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("LandingSearchTopOffset = 4", source);
-        Assert.Contains("LandingSearchHeight = 12", source);
-        Assert.Contains("NoTileHit = -1", source);
-        Assert.Contains("inline void ResolveSolidLanding(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
+        Assert.Contains("LandingSearchTopOffset = 3", source);
+        Assert.Contains("LandingSearchHeight = 9", source);
+        Assert.Contains("inline void ResolveLanding(PlayerState player, Pixel screenX, Pixel previousFootWorldY, Pixel footWorldY)", source);
+        Assert.Contains("i16 previousFootWorldY = player.y + Player.FootOffset;", source);
         Assert.Contains("i16 footWorldY = player.y + Player.FootOffset;", source);
-        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
-        Assert.Contains("if (footTile != CollisionProbe.NoTileHit)", source);
+        var previousFootCapture = source.IndexOf("i16 previousFootWorldY = player.y + Player.FootOffset;", StringComparison.Ordinal);
+        var gravityCall = source.IndexOf("player.ApplyGravity();", previousFootCapture, StringComparison.Ordinal);
+        var currentFootCapture = source.IndexOf("i16 footWorldY = player.y + Player.FootOffset;", gravityCall, StringComparison.Ordinal);
+        Assert.True(gravityCall > previousFootCapture);
+        Assert.True(currentFootCapture > gravityCall);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Landable);", source);
+        Assert.Contains("if (footTile >= 0 && previousFootWorldY <= footTile && footWorldY >= footTile)", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("CollisionProbe.TileSize2", source);
         Assert.DoesNotContain("CollisionProbe.TileSize3", source);
         Assert.DoesNotContain("CollisionProbe.TileSize4", source);
         Assert.DoesNotContain("landedWorldY", source);
-        Assert.Contains("frame.ResolveSolidLanding(player, screenX, footWorldY);", source);
+        Assert.Contains("frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);", source);
         Assert.DoesNotContain("collision_aabb_tiles(footLeftX, 0", source);
         Assert.DoesNotContain("playerWorldX", source);
         Assert.DoesNotContain("WrapWorldX", source);
@@ -7537,10 +7542,10 @@ public class GameBoyRomCompilerTests
         Assert.Contains("StartDirection(Direction.Left);", cameraBlock);
         Assert.Contains("speed = MotionSpeed.Walk;", cameraBlock);
         Assert.Contains("movementRemainder += speed;", cameraBlock);
-        Assert.Contains("void ApplyMotionStep(PlayerState player, Pixel wallProbeY)", cameraBlock);
+        Assert.Contains("void ApplyMotionStep(PlayerState player, Pixel wallProbeY, Pixel collisionCameraX)", cameraBlock);
         Assert.Contains("movementRemainder -= MotionSpeed.Subpixel;", cameraBlock);
-        Assert.Contains("MoveRightOnePixel(player, wallProbeY);", cameraBlock);
-        Assert.Contains("MoveLeftOnePixel(player, wallProbeY);", cameraBlock);
+        Assert.Contains("MoveRightOnePixel(player, wallProbeY, collisionCameraX);", cameraBlock);
+        Assert.Contains("MoveLeftOnePixel(player, wallProbeY, collisionCameraX);", cameraBlock);
 
         // The corrected model turns instantly: no skid/turn-friction that would let the actor walk backward.
         Assert.DoesNotContain("ApplyHorizontalIntent", cameraBlock);
@@ -7590,11 +7595,13 @@ public class GameBoyRomCompilerTests
         Assert.True(horizontalStart > motionStart);
         var motionBlock = cameraBlock[motionStart..horizontalStart];
         Assert.Contains("while (steps < MotionSpeed.MaxSteps)", motionBlock);
-        Assert.Equal(1, CountOccurrences(motionBlock, "ApplyMotionStep(player, wallProbeY);"));
+        Assert.Contains("let collisionCameraX = x;", motionBlock);
+        Assert.Equal(2, CountOccurrences(cameraBlock, "let screenX = player.x - collisionCameraX;"));
+        Assert.Equal(1, CountOccurrences(motionBlock, "ApplyMotionStep(player, wallProbeY, collisionCameraX);"));
         Assert.DoesNotContain("while (movementRemainder >= MotionSpeed.Subpixel)", motionBlock);
 
-        // Regression guard: the camera state is advanced per single-pixel step, then synced once per
-        // frame so the camera backend can catch up to a faster two-pixel run frame.
+        // Regression guard: every collision substep projects against the camera state from the start
+        // of motion while source camera state advances per pixel and syncs once after both probes.
         Assert.Contains("player.x += 1;", cameraBlock);
         Assert.Contains("x += 1;", cameraBlock);
         Assert.Contains("player.x -= 1;", cameraBlock);
@@ -7608,7 +7615,7 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void GameBoy_runner_uses_lower_gravity_with_compensated_jump_height()
+    public void GameBoy_runner_uses_lower_gravity_with_original_variable_jump_height()
     {
         var source = RunnerSample.FlattenedSource();
 
@@ -7628,7 +7635,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("if (gravityTick >= Jump.GravityFrames)", gravityBlock);
         Assert.Contains("velocityY += 1;", gravityBlock);
         Assert.Contains("if (velocityY != 0)", gravityBlock);
-        Assert.Contains("grounded = false;", gravityBlock);
+        Assert.Contains("if (!grounded)", gravityBlock);
         Assert.Contains("y += velocityY;", gravityBlock);
         Assert.DoesNotContain("grounded = false;\n        gravityTick++;", gravityBlock);
 
@@ -7663,8 +7670,8 @@ public class GameBoyRomCompilerTests
         Assert.Contains("i16 footWorldY = player.y + Player.FootOffset;", source);
         Assert.DoesNotContain("if (velocityY < 0)", source);
         Assert.DoesNotContain("y = 0;", source);
-        Assert.Contains("player.velocityY > 0", source);
-        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
+        Assert.Contains("player.velocityY >= 0", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Landable);", source);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
@@ -7718,14 +7725,15 @@ public class GameBoyRomCompilerTests
         Assert.Contains("i16 footWorldY = player.y + Player.FootOffset;", source);
         Assert.DoesNotContain("Player.TopWrapY", source);
         Assert.DoesNotContain("if (velocityY < 0)", source);
-        var solidLandingStart = source.IndexOf("inline void ResolveSolidLanding", StringComparison.Ordinal);
+        var solidLandingStart = source.IndexOf("inline void ResolveLanding", StringComparison.Ordinal);
         var fallStart = source.IndexOf("inline void ResolveFall", StringComparison.Ordinal);
         Assert.True(solidLandingStart >= 0);
         Assert.True(fallStart > solidLandingStart);
         var solidLandingBlock = source[solidLandingStart..fallStart];
-        Assert.Contains("player.velocityY > 0", solidLandingBlock);
-        Assert.Contains("Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid)", solidLandingBlock);
+        Assert.Contains("player.velocityY >= 0", solidLandingBlock);
+        Assert.Contains("Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Landable)", solidLandingBlock);
         Assert.Contains("player.Land(footTile - Player.FootOffset);", solidLandingBlock);
+        Assert.Contains("player.grounded = false;", solidLandingBlock);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("camera_span_has_tile(", source);
         Assert.DoesNotContain("camera_span_tile_at(", source);
@@ -7837,8 +7845,8 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("World.Map(", source);
         Assert.DoesNotContain("World.Column(", source);
         Assert.DoesNotContain("Tilemap.Set(", source);
-        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Solid);", source);
-        Assert.Contains("player.velocityY > 0", source);
+        Assert.Contains("i16 footTile = Camera.AabbHitTop(screenX, footWorldY - CollisionProbe.LandingSearchTopOffset, Sprite.Width(mario_player), CollisionProbe.LandingSearchHeight, CollisionFlag.Landable);", source);
+        Assert.Contains("player.velocityY >= 0", source);
         Assert.DoesNotContain("camera_span_has_flags(", source);
         Assert.DoesNotContain("failTile", source);
         Assert.DoesNotContain("hazardHit", source);

@@ -2,6 +2,10 @@
 
 Status: **joint `LW-3.5` acceptance recorded on 2026-07-12.**
 
+The hashes and pack sizes below intentionally preserve the pre-platform
+closeout. The 2026-07-14 one-way-platform runner revision is recorded in
+`RunnerLandingAcceptance.md`.
+
 This checkpoint records the production artifacts and external emulator evidence
 used to close #305 and #275. The assertions remain in the GB/NES full-stage,
 runner, camera, reader, and small-ROM golden suites; this file preserves the

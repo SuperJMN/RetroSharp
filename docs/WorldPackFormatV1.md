@@ -27,8 +27,9 @@ one visual byte and one collision byte for every 8x8 cell:
 | Source-cell ID planes before tables | 3,120 | 3,120 | target-dependent | 6,240 |
 
 `stage1` contains 3,120 source cells, 53 distinct authored visual metatiles,
-and two distinct 2x2 collision profiles (`Empty` and `Solid`). Its generated
-8x8 art remains target-owned: 82 Game Boy patterns and 90 NES patterns.
+and three distinct 2x2 collision profiles (`Empty`, `Solid`, and `Platform`).
+Its generated 8x8 art remains target-owned: 82 Game Boy patterns and 90 NES
+patterns.
 
 V1 therefore stores source-cell metatile IDs and target-owned expansion tables.
 It uses 8x8 source-metatile chunks. The measured alternatives below show why:
@@ -356,21 +357,21 @@ chunks = ceil(156 / 8) * ceil(20 / 8) = 20 * 3 = 60
 directory = 60 * 20 = 1,200 bytes
 visual plane raw fallback = 3,120 * 1 = 3,120 bytes
 collision plane raw fallback = 3,120 * 1 = 3,120 bytes
-collision profiles = 2 * 2 * 2 = 8 bytes
+collision profiles = 3 * 2 * 2 = 12 bytes
 
-GB  = 48 + 8 + (53 * 2 * 2 * 1) + 1,200 + 3,120 + 3,120 = 7,708 bytes
-NES = 48 + 8 + (53 * 2 * 2 * 2) + 1,200 + 3,120 + 3,120 = 7,920 bytes
+GB  = 48 + 12 + (53 * 2 * 2 * 1) + 1,200 + 3,120 + 3,120 = 7,712 bytes
+NES = 48 + 12 + (53 * 2 * 2 * 2) + 1,200 + 3,120 + 3,120 = 7,924 bytes
 ```
 
 | Pack-only component | Game Boy | NES PRG side |
 | --- | ---: | ---: |
 | Header | 48 | 48 |
-| Collision profiles | 8 | 8 |
+| Collision profiles | 12 | 12 |
 | Target expansion table | 212 | 424 |
 | Chunk directory | 1,200 | 1,200 |
 | Raw visual plane fallback | 3,120 | 3,120 |
 | Raw collision plane fallback | 3,120 | 3,120 |
-| **WorldPack total** | **7,708** | **7,920** |
+| **WorldPack total** | **7,712** | **7,924** |
 
 These are worst-case pack sizes for the measured level because every plane is
 budgeted as raw; RLE may only reduce them.
@@ -379,14 +380,14 @@ The complete known non-code payload frozen by LW-0.1 is:
 
 | Known payload | Game Boy ROM | NES PRG | NES CHR |
 | --- | ---: | ---: | ---: |
-| Raw-fallback `WorldPack` | 7,708 | 7,920 | 0 |
+| Raw-fallback `WorldPack` | 7,712 | 7,924 | 0 |
 | Reserved + background + sprite patterns | 2,368 (`(6 + 82 + 60) * 16`) | 0 | 3,056 (`(6 + 95 + 90) * 16`) |
 | BGM | 11,614 | 4,126 | 0 |
 | DPCM blocks | 0 | 1,282 | 0 |
 | SFX | 28 | 26 | 0 |
-| **Known target subtotal** | **21,718** | **13,354** | **3,056** |
+| **Known target subtotal** | **21,722** | **13,358** | **3,056** |
 
-The NES combined known payload is 16,410 bytes, but PRG and CHR are physically
+The NES combined known payload is 16,414 bytes, but PRG and CHR are physically
 separate budgets; the combined figure is comparison only. These subtotals
 exclude generated code, linker/runtime helpers, ROM/iNES headers, vectors,
 alignment/padding, and cartridge placement. The 131,072-byte Game Boy capacity
@@ -463,13 +464,14 @@ The NES record retains palette slot and world-layer provenance in its second
 byte. Duplicate target records remain legal when distinct authoring identities
 quantize to the same target result.
 
-The focused full-`stage1` builds measure 2,550 serialized bytes on Game Boy and
-2,762 on NES, compared with the raw-fallback envelopes of 7,708 and 7,920.
-Both builds retain 60 clipped chunks, 53 visual metatiles, two collision
-profiles, 82 GB patterns, 90 NES patterns, and 788 solid hardware cells. Tests
-also cover external TSJ/TSX tilesets, target PNG variants, background/world
-composition, explicit collision overrides, target metadata parity, canonical
-round-trip decoding, and two fresh byte-identical compilations.
+The focused full-`stage1` builds measure 2,568 serialized bytes on Game Boy and
+2,780 on NES, compared with the raw-fallback envelopes of 7,712 and 7,924.
+Both builds retain 60 clipped chunks, 53 visual metatiles, three collision
+profiles, 82 GB patterns, 90 NES patterns, 788 solid hardware cells, and 56
+one-way platform cells. Tests also cover external TSJ/TSX tilesets, target PNG
+variants, background/world composition, explicit collision overrides, target
+metadata parity, canonical round-trip decoding, and two fresh byte-identical
+compilations.
 
 ## Consequences, rejected alternatives, and non-goals
 

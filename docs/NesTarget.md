@@ -133,7 +133,17 @@ LW-1.4 also exposes an internal inspection build that serializes the same Tiled
 result as `WorldPack` v1. It retains the weighted palette plan and historical
 first-encounter CHR deduplication, then writes two-byte target expansion cells:
 tile ID followed by palette slot plus the world-layer provenance bit. Full
-normalized `stage1` uses 2,762 bytes and retains all 90 generated CHR patterns.
+normalized `stage1` uses 2,780 bytes and retains all 90 generated CHR patterns.
+The shared runner's green ledges contribute 56 `Platform` hardware cells. Its
+source landing/support query uses `Solid | Platform` while wall and ceiling
+queries use only `Solid`; a non-rising actor lands only when its previous/current
+feet straddle the returned tile top, and an unsupported grounded actor starts
+falling. The same ledges are therefore passable from below, landable from
+above, and safe to walk off without a NES-only gameplay operation. Horizontal
+collision also remains shared source policy: both one-pixel probes in a
+two-step B-speed tick use the camera X captured at tick start, matching the
+runtime camera until the end-of-tick position update and preventing the second
+probe from entering the first solid staircase by one pixel.
 At LW-1.4 this payload was inspection-only and mapper-0 behavior, runner input,
 and tracked ROMs stayed unchanged. Today fitting mapper-0 images still preserve
 their byte-identical path, while packed mapper-0/MMC3 runtimes read the same
@@ -187,9 +197,9 @@ and AprNes proves the combined mapper-4/four-screen behavior. `LW-3.2` adds the
 production mapper-0-first selector and target-private physical data linker:
 ordered R6 world banks are `0, 3, 4, 5`, pinned R7 is bank `1`, boot-only R7 is
 bank `2`, and fixed execution is banks `6, 7`. The normalized full-`stage1`
-placement baseline measures 2,762 pack, 5,012 pinned, 4,128 boot, 4,327 fixed
+placement baseline measures 2,780 pack, 5,012 pinned, 4,128 boot, 4,327 fixed
 payload including the LW-3.3 reader, and 3,056 resident CHR bytes. The current
-packed-camera profile uses a 3,154-byte runtime index and measures 7,306 pinned
+packed-camera profile uses a 3,158-byte runtime index and measures 7,310 pinned
 bytes after adding physical-nametable-aligned column attributes, still inside
 the same 8 KiB R7 window. The 8 KiB R6 window is not a whole-pack
 limit: continuation segments preserve canonical bytes and all v1 relative
@@ -202,7 +212,7 @@ code, handlers, DPCM, helpers, and vectors remain in the fixed 16 KiB region,
 and automatic executable-code banking is not implemented by this epic.
 
 The final packed-camera runtime probe currently measures 8,999 fixed bytes and
-7,306 pinned R7 bytes after the bounded column-commit, hardware-VBlank, and
+7,310 pinned R7 bytes after the bounded column-commit, hardware-VBlank, and
 physical 30-row attribute-seam corrections. It remains within the same
 `nes-mmc3-tvrom-v1` layout; the mapper, bank ownership, PRG/CHR capacity, and
 automatic profile-selection rules are unchanged.

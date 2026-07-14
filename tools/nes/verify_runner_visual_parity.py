@@ -505,11 +505,22 @@ def authored_collision_evidence(state: dict[str, object]) -> dict[str, object]:
     tileset_path = map_path.with_name("stage1.tsx")
     authored = json.loads(map_path.read_text(encoding="utf-8"))
     tileset = ElementTree.parse(tileset_path).getroot()
-    solid_ids = {
-        int(tile.attrib["id"])
-        for tile in tileset.findall("tile")
-        if tile.find("objectgroup") is not None
-    }
+    tile_flags: dict[int, set[str]] = {}
+    for tile in tileset.findall("tile"):
+        flags = tile_flags.setdefault(int(tile.attrib["id"]), set())
+        if tile.find("objectgroup") is not None:
+            flags.add("solid")
+        for prop in tile.findall("./properties/property"):
+            if prop.attrib.get("name", "").lower() not in {
+                "retrosharpcollision",
+                "retrosharpflags",
+            }:
+                continue
+            value = prop.attrib.get("value", prop.text or "").lower()
+            for token in value.replace("|", ",").split(","):
+                token = token.strip()
+                if token in {"solid", "hazard", "platform"}:
+                    flags.add(token)
     layer = next(layer for layer in authored["layers"] if layer["name"] == "world")
     first_gid = int(authored["tilesets"][0]["firstgid"])
     player_x = int(state["player_x"])
@@ -522,7 +533,16 @@ def authored_collision_evidence(state: dict[str, object]) -> dict[str, object]:
     for column in range(first_column, last_column + 1):
         gid = int(layer["data"][row * int(layer["width"]) + column])
         local_id = gid - first_gid if gid else -1
-        cells.append({"column": column, "gid": gid, "solid": local_id in solid_ids})
+        flags = tile_flags.get(local_id, set())
+        cells.append(
+            {
+                "column": column,
+                "gid": gid,
+                "solid": "solid" in flags,
+                "platform": "platform" in flags,
+                "landable": bool(flags & {"solid", "platform"}),
+            }
+        )
     collision_top = row * int(authored["tileheight"])
     return {
         "player_x": player_x,
@@ -532,7 +552,7 @@ def authored_collision_evidence(state: dict[str, object]) -> dict[str, object]:
         "collision_top": collision_top,
         "expected_player_y": collision_top - 31,
         "cells": cells,
-        "aligned": player_y == collision_top - 31 and any(cell["solid"] for cell in cells),
+        "aligned": player_y == collision_top - 31 and any(cell["landable"] for cell in cells),
     }
 
 

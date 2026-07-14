@@ -52,8 +52,8 @@ public sealed class NesRunnerAcceptanceTests
         Assert.Equal(40, canonical.Pack.Descriptor.HardwareHeight);
         Assert.Equal(60, canonical.Pack.Chunks.Count);
         Assert.Equal(770, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.VisualStoredBytes));
-        Assert.Equal(312, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
-        Assert.Equal(2_762, canonical.SerializedBytes.Length);
+        Assert.Equal(326, canonical.Pack.Chunks.Sum(chunk => chunk.Directory.CollisionStoredBytes));
+        Assert.Equal(2_780, canonical.SerializedBytes.Length);
         Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
         Assert.Equal(new byte[] { 0x04, 0x02, 0x48, 0x00 }, result.Rom[4..8]);
         Assert.Contains(result.Report.Segments, segment => segment.Owner == "worldpack:default");

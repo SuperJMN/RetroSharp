@@ -439,8 +439,8 @@ stream rows, and row-pointer tables rather than storing both forms. The final
 build result, also target-private, reports the selected profile, ROM size,
 ordered physical owner ranges, CPU-window addresses, and occupied banks. It is
 the final-link source of truth; the map-only CLI report still selects nothing.
-Full normalized `stage1` remains exactly 2,550 bytes (60 chunks, 770 stored
-visual bytes, 312 stored collision bytes, largest combined stored chunk 49)
+Full normalized `stage1` is exactly 2,568 bytes (60 chunks, 770 stored visual
+bytes, 326 stored collision bytes, largest combined stored chunk 49)
 and retains all 82 generated patterns.
 
 LW-2.3 routes packed collision queries through the fixed-bank reader, so a
@@ -573,7 +573,7 @@ Landed after the initial runner loop:
 
 - `Input.Poll()`, `Input.IsDown(...)`, `Input.WasPressed(...)`, `Input.WasReleased(...)`, and `Input.HoldTicks(...)` provide a tick-based input surface.
 - The Game Boy runner uses the new input helpers for edge-triggered, variable-height jumping: holding A extends upward impulse for a bounded number of ticks, and releasing A cuts the extension.
-- The runner's horizontal movement, dead-zone camera state, and run animation now advance from a horizontal speed value rather than raw D-pad state: holding a direction moves at a brisk base walk speed and faces that way immediately, holding B builds speed up to a faster run limit only while grounded (Mario has traction), airborne input preserves horizontal momentum without building or bleeding speed, releasing the D-pad coasts to a stop through ground friction, and pressing the opposite direction turns instantly instead of drifting backward.
+- The runner's horizontal movement, dead-zone camera state, and run animation now advance from a horizontal speed value rather than raw D-pad state: holding a direction moves at a brisk base walk speed and faces that way immediately, holding B builds speed up to a faster run limit only while grounded (Mario has traction), airborne input preserves horizontal momentum without building or bleeding speed, releasing the D-pad coasts to a stop through ground friction, and pressing the opposite direction turns instantly instead of drifting backward. Both single-pixel collision probes in a two-step run tick project against the camera X captured at tick start while source camera state advances after accepted movement; this keeps the probes aligned with the runtime camera until the single end-of-tick `Camera.SetPosition(...)` and prevents a one-pixel entry into a solid stair.
 - `Camera.SetPosition(x, y)` walks the runtime camera toward the requested word position one pixel per step. Each call advances up to two tile crossings (16 px) per axis; same-axis crossings keep two pending stream slots and commit both during the next `Camera.Apply()`, so a single call per frame reaches runner-scale targets without stale background edges.
 - The runner now draws idle, run, and jump states through a single player sprite sheet so the same OAM slots are updated every frame; the jump frame is used whenever the actor is airborne.
 - `Sprite.Draw` accepts optional portable `flipX` and `paletteSlot` values; the runner uses them to make the same idle, run, and jump frames face left while preserving the last facing direction and selecting a logical sprite palette slot.
@@ -605,7 +605,7 @@ Landed after the Collision V1 pass:
 Landed after the landing-query pass:
 
 - The runner uses `Camera.AabbHitTop(...)` to query the top edge of the first solid tile in a caller-defined landing search window, so descending actors can snap to stacked or multi-tile solids without copying a ladder of one-pixel probes.
-- Landing policy remains source-owned: the runner still gates the query on downward velocity and calls `player.Land(...)` only when the query returns something other than `CollisionProbe.NoTileHit`.
+- Landing policy remains source-owned: the runner queries non-rising actors for `Solid | Platform` and calls `player.Land(...)` only when the actor's previous/current feet straddle the returned tile top. The `-1` no-hit result fails that comparison naturally; when a grounded actor has no landable support, source clears `grounded` so walking off an edge starts a fall.
 
 Landed after the NES portable spike:
 
@@ -621,14 +621,14 @@ Landed after the first HUD pass:
 Landed after the richer runner scene pass:
 
 - The runner project `samples/runner/runner.retrosharp.json` lists local helper/state code from `samples/runner/src` and imports complete `samples/runner/assets/maps/stage1.tmj` with `World.Load(...)`. The 156x20 source cells become a 312x40 packed world in a 128 KiB MBC1 ROM while retaining target BGM/SFX, Y=304 collision, 2-axis scrolling, bank restoration, and bounded resident edge commits.
-- Tileset `objectgroup` rectangles now provide the runner's solid platform and ground collision flags without a separate hand-authored collision layer.
-- The runner scene focuses on the player, 2-axis camera movement, packed Tiled map streaming, tileset-authored solid collision, fall reset, and variable-height jump over the complete 312x40 expanded tile world.
+- Tileset `objectgroup` rectangles provide the runner's solid blocks and ground, while tile `30` uses `retrosharpCollision=platform` for the green one-way ledges without a separate hand-authored collision layer.
+- The runner scene focuses on the player, 2-axis camera movement, packed Tiled map streaming, tileset-authored solid/one-way collision, fall reset, and variable-height jump over the complete 312x40 expanded tile world.
 
 Landed after the ceiling-collision pass:
 
 - Solid blocks now block the player from below: `FrameState.ResolveCeilingHit(...)` probes a short AABB over the head with `Camera.AabbTiles(...)` while the actor is rising (`velocityY >= Level.SignedVelocityWrap`) and calls `player.BounceDown()` on contact, cancelling the jump and applying a small downward velocity so the actor rebounds with a physical feel instead of passing through the block.
 - The head probe is offset to the sprite's visible content, not its full cell. The player sheet is 32 px tall but the figure is bottom-aligned with ~4 px of transparent padding at the top, so the probe references the real head at `footWorldY - CeilingProbeTopOffset` with `CeilingProbeTopOffset = 28` (probe band `[footWorldY - 28, footWorldY - 24]`). This makes the impact register when the visible head reaches the block instead of a few pixels early.
-- The landing search window is now feet-relative (`LandingSearchTopOffset = 4`, `LandingSearchHeight = 12`) instead of spanning the whole sprite body, so `Camera.AabbHitTop(...)` only snaps the actor onto a surface at or just below the feet. This stops a descending actor from being magnetised up onto a block whose underside it just hit, while preserving normal landing on ground and platforms approached from above. Both responses remain source-level policy in `samples/runner/src/main.rs`.
+- The landing search window is feet-relative (`LandingSearchTopOffset = 3`, `LandingSearchHeight = 9`) instead of spanning the whole sprite body. `Camera.AabbHitTop(...)` may see a landable surface at or just below the feet, but source captures the previous foot before gravity and requires the previous/current pair to straddle the returned top. A non-rising actor therefore accepts a downward step that crosses a top still overlapping that window, while avoiding a snap onto a platform whose underside it crossed. A failed support query clears `grounded`, so walking off the ledge falls normally. Walls and ceilings continue to query only `Solid`. This remains source-level policy in `samples/runner/src/frame/state.rs`.
 
 ## Current Framework Backlog
 

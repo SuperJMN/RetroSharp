@@ -268,6 +268,21 @@ internal sealed class GameBoyTestCpu
         }
     }
 
+    public void RunUntilAudioUpdateCalls(long expected, long maxInstructions = 50_000_000)
+    {
+        var startInstructions = instructions;
+        while (AudioUpdateCalls < expected)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but observed {AudioUpdateCalls} audio updates instead of {expected}.");
+            }
+
+            Step();
+        }
+    }
+
     public void SetCurrentRomBank(byte bank) => romBank = bank;
 
     public FarReadResult RunFarReadSubroutine(ushort entry, byte bank, ushort address, long maxInstructions = 10_000)

@@ -260,7 +260,7 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         var pinnedRuntimeDataBytes = flagRowPointerBytes + columnAttributeBytes + musicBytes + 26;
         var bootDataBytes = initialNametableBytes + paletteBytes;
         var nonWorldDataBytes = pinnedRuntimeDataBytes + bootDataBytes;
-        const int worldPackBytes = 7_920;
+        const int worldPackBytes = 7_924;
         const int chrBytes = 3_056;
 
         Assert.Equal(13_639, fixedBankBytes);
@@ -268,17 +268,17 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.Equal(4_128, bootDataBytes);
         Assert.Equal(9_140, nonWorldDataBytes);
         var reconstructedPrgBytes = fixedBankBytes + nonWorldDataBytes + worldPackBytes;
-        Assert.Equal(30_699, reconstructedPrgBytes);
-        Assert.Equal(2_069, 32 * 1_024 - reconstructedPrgBytes);
+        Assert.Equal(30_703, reconstructedPrgBytes);
+        Assert.Equal(2_065, 32 * 1_024 - reconstructedPrgBytes);
         Assert.True(reconstructedPrgBytes < 32 * 1_024, "This reconstruction is a feasible NROM lower bound, not proof of final production fit.");
         Assert.Equal(2_745, 16 * 1_024 - fixedBankBytes);
         Assert.Equal(3_180, 8 * 1_024 - pinnedRuntimeDataBytes);
         Assert.Equal(4_064, 8 * 1_024 - bootDataBytes);
-        Assert.Equal(272, 8 * 1_024 - worldPackBytes);
+        Assert.Equal(268, 8 * 1_024 - worldPackBytes);
         Assert.Equal(13_328, 16 * 1_024 - chrBytes);
 
         var uxromPinnedRuntimeBytes = worldPackBytes + musicBytes + 26 + columnAttributeBytes + paletteBytes;
-        Assert.Equal(12_884, uxromPinnedRuntimeBytes);
+        Assert.Equal(12_888, uxromPinnedRuntimeBytes);
         Assert.True(uxromPinnedRuntimeBytes + flagRowPointerBytes < 16 * 1_024);
 
         var candidates = new[]
@@ -317,7 +317,7 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
             new Bank(2, "$A000-$BFFF via R7 during boot only", bootDataBytes, 8 * 1_024),
         };
         var fixedRegion = new Region("$C000-$FFFF in physical banks 6-7", fixedBankBytes, 16 * 1_024);
-        Assert.Equal(272, switchableBanks[0].CapacityBytes - switchableBanks[0].UsedBytes);
+        Assert.Equal(268, switchableBanks[0].CapacityBytes - switchableBanks[0].UsedBytes);
         Assert.Equal(3_180, switchableBanks[1].CapacityBytes - switchableBanks[1].UsedBytes);
         Assert.Equal(4_064, switchableBanks[2].CapacityBytes - switchableBanks[2].UsedBytes);
         Assert.Equal(2_745, fixedRegion.CapacityBytes - fixedRegion.UsedBytes);

@@ -357,10 +357,12 @@ LW-1.2 owns these changes:
   the complete target word ABI;
 - add a diagnostic for unsafe narrowing described below.
 
-The runner now declares `i16 footTile`, and its `CollisionProbe.NoTileHit`
-constant is `-1`; the landing expression remains
-`footTile - Player.FootOffset`. This migration changes only the collision fact
-and sentinel, while landing policy stays in source.
+The runner declares `i16 footTile`; the landing expression remains
+`footTile - Player.FootOffset`. Its source policy compares the current foot
+position with the returned tile top, so the `-1` no-hit result naturally fails
+the landing condition without a separate sample constant. This migration
+changes only the collision fact and sentinel, while landing policy stays in
+source.
 
 An explicit byte destination for world `AabbHitTop` consumes the low result
 byte. That preserves legacy behavior only when the active map has at most 32

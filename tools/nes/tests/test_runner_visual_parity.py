@@ -216,6 +216,16 @@ class ExactEmulatorStateTests(unittest.TestCase):
         self.assertTrue(evidence["aligned"])
         self.assertEqual(304, evidence["foot_y"])
         self.assertEqual(304, evidence["collision_top"])
+        self.assertTrue(any(cell["solid"] for cell in evidence["cells"]))
+
+    def test_tracked_stage1_one_way_platform_is_landable_from_above(self) -> None:
+        evidence = authored_collision_evidence({"player_x": 752, "player_y": 241})
+
+        self.assertTrue(evidence["aligned"])
+        self.assertEqual(272, evidence["foot_y"])
+        self.assertEqual(272, evidence["collision_top"])
+        self.assertTrue(any(cell["platform"] for cell in evidence["cells"]))
+        self.assertFalse(any(cell["solid"] for cell in evidence["cells"]))
 
 
 class TransientFrameAcceptanceTests(unittest.TestCase):

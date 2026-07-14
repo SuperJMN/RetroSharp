@@ -2,7 +2,14 @@
 
 Status: **complete; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, NES
 `LW-3.1` through `LW-3.4`, and joint acceptance `LW-3.5` are implemented.**
-Last updated: 2026-07-12.
+Last updated: 2026-07-14.
+
+Post-epic content revision: the runner now authors 56 one-way `Platform` cells
+on its existing green ledges. This does not change WorldPack v1 or the completed
+banking graph; it adds one collision profile and changes the current production
+pack measurements to GB 2,568 / NES 2,780 bytes, with 770 visual and 326
+collision stored bytes. Historical LW checkpoint numbers below remain the
+evidence captured when those milestones landed.
 
 This roadmap is the executable plan for levels that exceed the legacy
 one-byte world addressing and current monolithic ROM-data budgets. It coordinates the
@@ -1110,18 +1117,18 @@ Recommended execution and merge order:
 | Concern | Required evidence |
 | --- | --- |
 | Portable boundary | Architecture tests; no bank, mapper, window, register, PPU, or MBC term in the public SDK/Core world contract |
-| Canonical pack | GB 2,550 bytes and NES 2,762 bytes; each has 770 stored visual bytes, 312 stored collision bytes, 60 chunks, and raw/RLE plus malformed-data coverage |
+| Canonical pack | Current runner: GB 2,568 bytes and NES 2,780 bytes; each has 770 stored visual bytes, 326 stored collision bytes, 60 chunks, and raw/RLE plus malformed-data coverage. Historical LW-1.4 checkpoint: GB 2,550 / NES 2,762. |
 | Address width | 255 -> 256 and 256 -> 255 crossings on both targets |
 | Collision | Hit at world Y 304 plus unambiguous `0xFFFF` no-hit result |
 | GB placement/restoration | Deterministic MBC1 far placement; every exit/nested/audio-active path restores the actual entry bank and shadow |
 | GB runtime budget | 298-byte direct reader / 362-byte standard packed camera / 554-byte diagonal and v1 maximum staging; bank/directory/decode outside VBlank with LY 136-153 guarded; at most 19 column or 21 row writes in VBlank |
 | NES cartridge | Final-link mapper-0-first selection; forced MMC3 header `04 02 48 00`; PRG <=65,536, physical CHR 16,384, resident CHR <=8,192, fixed code/DPCM/vectors <=16,384 |
-| NES windows/restoration | `WorldPack` raw-fallback <=7,920/8,192 R6; packed-camera pinned data <=7,306/8,192 R7 (5,012-byte LW-3.2 placement baseline); boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
+| NES windows/restoration | Current `WorldPack` raw-fallback <=7,924/8,192 R6; packed-camera pinned data <=7,310/8,192 R7 (5,012-byte LW-3.2 placement baseline); boot data <=4,128/8,192 R7; every R6 exit restores hardware and shadow while R7 stays pinned |
 | NES runtime budget | 594-byte canonical staging (six visual, two collision, two edge slots); bank/directory/decode outside VBlank/NMI; fixed NMI only accounts hardware/pending frames; at most 32 column tiles or four 8-tile row phases, then at most 9 attributes |
 | Behavioral backends | Game Boy interrupt/restoration/visual traversal in SameBoy/GameboyMcp; generated mapper-4 + four-screen `0x48` ROM in AprNes through NesMcp `auto` |
 | Visual/audio parity | Decoded and visible tiles/collision match LW-1.4; GB BGM/SFX and NES BGM/SFX/DPCM remain complete and frame-correct |
 | Small-ROM stability | Representative ROM-only GB and mapper-0 NES outputs remain byte-identical |
-| Final shared acceptance | The shared manifest loads complete `stage1`; tracked GB/NES ROMs are regenerated together with no trimming or target no-ops |
+| Final shared acceptance | The shared manifest loads complete `stage1`; tracked GB/NES ROMs are regenerated together with no trimming or target no-ops; short/full jump probes prove one-way traversal and landing on both targets |
 
 Durable closeout commands remain:
 

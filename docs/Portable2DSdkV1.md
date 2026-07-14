@@ -95,6 +95,12 @@ Game Boy currently accepts VGM/VGZ DMG register logs, hUGETracker `.uge` v6 reso
 | `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` | Return the top screen-pixel Y of the first/top overlapped tile matching the requested flags for a screen-space AABB, or `255` when there is no hit. Its signature/descriptor remain `I16`: a word destination receives zero-extended `0x0000..0x00F8` or no-hit `0x00FF`; a byte destination consumes the low byte. Source/framework code can add the current camera Y bytes back when it needs to resolve a world Y. |
 
 World flag values are `0` empty, `1` solid, `2` hazard, and `4` platform. Values can be combined.
+The SDK reports these facts but does not impose platformer response policy. For
+example, the shared runner requests `Solid | Platform` only for its non-rising
+landing/support query, requests `Solid` for walls/ceilings, accepts the hit top
+only when the actor approaches it from above, and clears grounded state when
+support disappears. That implements one-way platforms in portable source with
+the existing flag and AABB operations.
 
 The accepted
 [`WorldCoordinateCollisionContract.md`](WorldCoordinateCollisionContract.md)
