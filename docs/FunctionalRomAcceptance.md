@@ -106,7 +106,8 @@ Tiled production path: `tiled-tall` GB, `tiled-vscroll` GB/NES,
 They add complete authored tile/palette oracles, request/resident/commit/visible
 lifecycles, bank/mapper restoration, and cycle-positioned video/OAM writes over
 long vertical, diagonal, reversal, circular-buffer, chunk, and bank-sensitive
-windows. See
+windows. Fixed state checkpoints retain forward, reverse, wrap, and chunk-return
+trajectory inside those windows. See
 [`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md) for
 the exact hashes, measured budgets, and external emulator checkpoints.
 

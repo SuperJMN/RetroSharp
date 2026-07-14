@@ -25,24 +25,22 @@ physical frames.
 
 | Scenario | SHA-256 | Window | Gameplay | Longest miss | Camera latency | Integrity failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `tiled-tall` GB | `43a81cf9b91a62baf1bc0ad628801f4f021dd8baa6a3a2c015181d26222e4c13` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-vscroll` GB | `f8a611a63f7a7c17d11816f40c149b860ce3430acbb19418ecd8200e45573df7` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
+| `tiled-tall` GB | `9c8b6432c8231831f0a5018f2c8f128b66702245719b52886c665dcdc4317afa` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
 | `tiled-vscroll` NES | `6d723a734c8192802e636e03dab659385a9514097fa31b7fd7af2f4ea8f2351b` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
-| `tiled-diagonal` GB | `37d92a278446d5b68c36f4b7fb5902264ae4dc93d87a14ee499a0a73726db4a5` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` GB | `3e5b9a2284c8bbf51fe7bb893a6ecbe3ebde7af43b28b884136533847272ac62` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
+| `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
+| `tiled-free-scroll` GB | `60948ac30f49cbd1f1814a552f74b1c7346612eeadf6095c308e1b9da8b0983c` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` NES | `297675f54f334c0b328f7500fd209c2ea66b4487c8267b2e67502b8c78cedd4e` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
-| `deadzone-follow` GB | `25a63bd76bd274627a8acf0992a0839f928ac938882a01b4e30a1a56b1c12092` | 400 | 298 / 400 (0.745) | 4 | 4 / 4 | 0 |
+| `deadzone-follow` GB | `3db43f7a1b23c8f84c4865ee332eec904d8a9bb033a1b887d74c6807b84dc8b3` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
 | `deadzone-follow` NES | `3e659cf9794f713060942063ecd3c353f5c338b2c31cf9f9230f24a30d7c1ef6` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
-The reviewed Game Boy dead-zone budget is intentionally different from the
-simple camera samples. That fixture combines a sprite/OAM presentation with
-diagonal cold-edge preparation and can legally serialize up to four physical
-frames before publication. Its checked-in scenario therefore requires a
-0.70 gameplay ratio, a four-frame miss streak, and four-frame residency and
-visibility deadlines. The remaining Game Boy rows require at least 0.95 with
-at most one missed frame; the NES dead-zone row requires 0.95 and allows its
-authored four-frame idle interval. These are explicit reviewed limits, not
-values learned from the current build.
+The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400
+source waits after the same warm-up. Its production packed gate therefore
+keeps the common minimum 0.95 gameplay ratio and one-frame miss streak, plus
+the same two-frame diagonal residency/visibility ceiling as the sprite-free
+diagonal rows. The NES dead-zone row also requires 0.95 and allows only its
+authored four-frame idle interval. These are baseline- and hardware-reviewed
+limits, not values learned from the current build.
 
 ## What every row proves
 
@@ -51,6 +49,8 @@ values learned from the current build.
   from the authored Tiled map. A single transient mismatch fails the row.
 - Request, resident, committed, and visible sequence transitions are retained
   even when several transitions occur between sampled physical frames.
+- Fixed checkpoints make forward, reverse, wrap, chunk-return, and bank-sensitive
+  trajectory observable instead of allowing a stationary but coherent screen.
 - Game Boy MBC1 entry-bank and shadow restoration, or the NES mapper state,
   remains correct throughout the observation window.
 - Every VRAM/PPU and OAM write is cycle-positioned and must occur in a legal
@@ -65,10 +65,14 @@ prepared axis, so a cold row and column never compete for an unsafe VBlank
 budget. Cache replacement protects the current row/column working set and the
 last opposite-axis group. Raw and RLE decode checkpoints defer while LCD is in
 VBlank, and VBlank commits remain bounded to one 19-tile column or 21-tile row.
-When such a commit consumes the budget of a large metasprite frame, the
-backend retains the previous OAM projection before attempting another VBlank
-wait; cooperative audio therefore remains at one update per physical frame
-instead of losing a frame merely to decide that OAM must be deferred.
+The RLE hot path uses an inline no-audio LY guard below scanline 128, retains a
+full guard when audio wrap observation is active, records every completed
+packet, and combines stored-byte validation with its decrement. This restores
+the production dead-zone cadence without changing the canonical RLE pack.
+When an edge commit owns the VBlank window, the backend retains the previous
+OAM projection before attempting another wait; cooperative audio therefore
+remains at one update per physical frame instead of losing a frame merely to
+decide that OAM must be deferred.
 
 The NES acceptance exposed a separate transient palette defect: palette RAM
 aliases at `$3F10`, `$3F14`, `$3F18`, and `$3F1C` could overwrite the derived

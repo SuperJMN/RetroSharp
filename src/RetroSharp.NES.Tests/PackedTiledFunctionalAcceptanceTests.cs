@@ -42,6 +42,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         Assert.Equal(trackedRom, regeneratedRom);
 
         var map = NesTiledWorldImporter.Load(RepositoryFile(mapRelativePath), NesVideoProgram.FirstSpriteTile);
+        Assert.InRange(map.Width, 1, 64);
+        Assert.InRange(map.Height, 1, 60);
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         Assert.Equal(sampleId, scenario.SampleId);
         var factory = new PackedNesMachineFactory();
@@ -244,7 +246,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             return new FunctionalCameraLifecycleObservation(
                 cameraRequestSequence,
                 cameraRequestSequence,
-                cameraRequestSequence,
+                visibleSequence,
                 visibleSequence);
         }
 

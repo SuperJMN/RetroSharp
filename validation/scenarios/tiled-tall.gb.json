@@ -6,7 +6,11 @@
   "warmUpFrames": 20,
   "observationFrames": 360,
   "inputs": [],
-  "checkpoints": [],
+  "checkpoints": [
+    { "id": "forward-past-row-wrap", "frame": 160, "expectedSignals": { "user0": 158, "user1": 1, "visibleCameraY": 157, "commitCount": 19 } },
+    { "id": "reversed-after-vertical-limit", "frame": 200, "expectedSignals": { "user0": 155, "user1": 0, "visibleCameraY": 156, "commitCount": 25 } },
+    { "id": "returned-through-origin", "frame": 360, "expectedSignals": { "user0": 4, "user1": 1, "visibleCameraY": 3, "commitCount": 44 } }
+  ],
   "expectedFeatures": {
     "gameplayTicks": true,
     "audioService": false,

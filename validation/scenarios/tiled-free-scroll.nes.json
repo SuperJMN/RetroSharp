@@ -6,7 +6,11 @@
   "warmUpFrames": 20,
   "observationFrames": 360,
   "inputs": [],
-  "checkpoints": [],
+  "checkpoints": [
+    { "id": "forward-diagonal-nametable-window", "frame": 160, "expectedSignals": { "user0": 139, "user2": 139, "user4": 1, "visibleCameraX": 139, "visibleCameraY": 139 } },
+    { "id": "reversed-diagonal-window", "frame": 200, "expectedSignals": { "user0": 109, "user2": 109, "user4": 0, "visibleCameraX": 109, "visibleCameraY": 109 } },
+    { "id": "origin-crossed-and-forward-again", "frame": 320, "expectedSignals": { "user0": 11, "user2": 11, "user4": 1, "visibleCameraX": 11, "visibleCameraY": 11 } }
+  ],
   "expectedFeatures": {
     "gameplayTicks": true,
     "audioService": false,

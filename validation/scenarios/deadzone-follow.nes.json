@@ -6,7 +6,11 @@
   "warmUpFrames": 20,
   "observationFrames": 400,
   "inputs": [],
-  "checkpoints": [],
+  "checkpoints": [
+    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 216, "user1": 208, "user2": 119, "user3": 119, "user4": 1, "user5": 1, "visibleCameraX": 119, "visibleCameraY": 119 } },
+    { "id": "reversed-deadzone-follow", "frame": 240, "expectedSignals": { "user0": 169, "user1": 161, "user2": 106, "user3": 106, "user4": 255, "user5": 255, "visibleCameraX": 106, "visibleCameraY": 106 } },
+    { "id": "origin-crossed-and-forward-again", "frame": 360, "expectedSignals": { "user0": 110, "user1": 102, "user2": 16, "user3": 16, "user4": 1, "user5": 1, "visibleCameraX": 16, "visibleCameraY": 16 } }
+  ],
   "expectedFeatures": {
     "gameplayTicks": true,
     "audioService": false,

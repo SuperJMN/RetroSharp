@@ -160,6 +160,8 @@ internal static class GameBoyPackedCameraRuntime
 
 internal static class GameBoyPackedCameraRuntimeEmitter
 {
+    private const byte SafeActiveScanlineEnd = 128;
+
     internal static void EmitWaitOutsideVBlank(GbBuilder builder)
     {
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitOutsideVBlankLabel);
@@ -181,9 +183,32 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         EmitRecordCriticalWork(builder, counterAddress);
     }
 
+    internal static void EmitGuardRleCriticalWork(GbBuilder builder, ushort counterAddress)
+    {
+        EmitWaitForSafeRleCriticalWork(builder);
+        EmitRecordCriticalWork(builder, counterAddress);
+    }
+
+    internal static void EmitWaitForSafeRleCriticalWork(GbBuilder builder)
+    {
+        var wait = builder.CreateLabel("packed_world_critical_guard_wait");
+        var done = builder.CreateLabel("packed_world_critical_guard_done");
+        builder.LoadA(GameBoyPackedCameraRuntime.WaitAudioEnabled);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, wait); // JP NZ,wait: the full guard observes frame wraps for audio.
+        builder.LoadHighRamA(0x40); // LCDC
+        builder.AndImmediate(0x80);
+        builder.JumpAbsolute(0xCA, done); // JP Z,done when LCD timing is inactive.
+        builder.LoadHighRamA(0x44); // LY
+        builder.CompareImmediate(SafeActiveScanlineEnd);
+        builder.JumpAbsolute(0xDA, done); // JP C,done on the safe active-display fast path.
+        builder.Label(wait);
+        EmitWaitOutsideVBlank(builder);
+        builder.Label(done);
+    }
+
     internal static void EmitWaitOutsideVBlankRoutine(GbBuilder builder)
     {
-        const byte safeActiveScanlineEnd = 128;
         var lcdDisabled = builder.CreateLabel("packed_world_lcd_disabled");
         var firstObservation = builder.CreateLabel("packed_world_first_ly_observation");
         var wrapped = builder.CreateLabel("packed_world_ly_wrapped");
@@ -233,7 +258,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.Label(classify);
         builder.LoadA(GameBoyPackedCameraRuntime.CurrentLy);
         builder.StoreA(GameBoyPackedCameraRuntime.LastObservedLy);
-        builder.CompareImmediate(safeActiveScanlineEnd);
+        builder.CompareImmediate(SafeActiveScanlineEnd);
         builder.JumpAbsolute(0xDA, safeActive); // JP C,safeActive
 
         builder.Label(waitForVBlank);
@@ -255,7 +280,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.Label(waitForSafeActive);
         builder.LoadHighRamA(0x44);
         builder.StoreA(GameBoyPackedCameraRuntime.CurrentLy);
-        builder.CompareImmediate(safeActiveScanlineEnd);
+        builder.CompareImmediate(SafeActiveScanlineEnd);
         builder.JumpAbsolute(0xD2, waitForSafeActive); // Wait through VBlank and the guard band.
         builder.Label(safeActive);
         builder.LoadA(GameBoyPackedCameraRuntime.CurrentLy);

@@ -301,9 +301,12 @@ zero forbidden-work counts. A fixed-bank wait routine treats only LY 0-135 as
 safe, reserving an eight-scanline guard band before VBlank around every
 sensitive read/write. Cooperative preparation waits service packed audio once
 per real frame, so deferrals and bank-spanning decodes do not slow BGM.
-Raw and RLE decode checkpoints wait out VBlank before continuing; separate
-counters at `$C1E9-$C1EA` distinguish directory work in commit from decode
-work physically observed in VBlank. `$C19D` is a wrapping target-private packed-audio tick counter; it is cleared
+Raw and RLE decode checkpoints wait out VBlank before continuing. The RLE
+decoder uses a scanline-128 inline guard when audio is inactive, retains the
+full frame-wrap-aware guard when audio is active, and validates/decrements the
+stored-byte budget in one step. Separate counters at `$C1E9-$C1EA` distinguish
+directory work in commit from decode work physically observed in VBlank.
+`$C19D` is a wrapping target-private packed-audio tick counter; it is cleared
 when the packed runtime starts and increments after every real BGM/SFX update.
 Together with the lifecycle and forbidden-work counters at `$C152-$C159` and
 `$C19C`, it lets tests and external debuggers prove frame cadence without

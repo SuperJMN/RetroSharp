@@ -158,6 +158,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private long requestSequence;
         private long residentSequence;
         private long commitSequence;
+        private long visibleSequence;
+        private (int X, int Y)? previousVisibleCamera;
 
         public FunctionalFrameObservation ObserveInitial() => Observe(0);
 
@@ -217,7 +219,16 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             var requested = UpdateSequence(RequestCount, ref previousRequestCount, ref requestSequence);
             var resident = UpdateSequence(ResidentCount, ref previousResidentCount, ref residentSequence);
             var committed = UpdateSequence(CommitCount, ref previousCommitCount, ref commitSequence);
-            var camera = new FunctionalCameraLifecycleObservation(requested, resident, committed, committed);
+            if (commitSequence != 0
+                && previousVisibleCamera is { } previousVisible
+                && visibleCamera != previousVisible)
+            {
+                visibleSequence = commitSequence;
+            }
+
+            previousVisibleCamera = visibleCamera;
+            long? visible = visibleSequence == 0 ? null : visibleSequence;
+            var camera = new FunctionalCameraLifecycleObservation(requested, resident, committed, visible);
 
             return new FunctionalFrameObservation(
                 frame,

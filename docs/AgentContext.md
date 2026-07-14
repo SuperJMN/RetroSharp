@@ -14,9 +14,10 @@ This document preserves project knowledge that previously lived only in agent me
   serializes diagonal preparation, keeps decode/directory/bank work outside
   VBlank, and records transitions that complete between sampled frames. NES
   synchronizes the four sprite-side universal palette aliases with the derived
-  Tiled background color. Large Game Boy metasprites also test the packed
-  commit decision before waiting for another VBlank, preserving one audio
-  update per physical frame while safely retaining OAM. Exact tracked-ROM hashes, reviewed timing budgets,
+  Tiled background color. Game Boy packed commits retain the previous OAM
+  projection instead of starting a second VBlank wait, while the no-audio RLE
+  hot path uses a bounded inline LY guard and preserves the full audio-aware
+  guard when audio is active. Exact tracked-ROM hashes, reviewed timing budgets,
   zero transient integrity failures, and GameboyMcp/NesMcp checkpoints are in
   `docs/PackedTiledFunctionalAcceptance.md`.
 - CSL-3 / #338 binds eight exact production-source GB/NES ROM scenarios to the

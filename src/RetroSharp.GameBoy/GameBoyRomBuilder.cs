@@ -4650,10 +4650,10 @@ internal sealed class GameBoyRuntimeCompiler
             throw new InvalidOperationException("Game Boy sprite_draw calls exceed the 40 hardware sprite OAM limit.");
         }
 
-        // A large metasprite already consumes the full DMG VBlank OAM budget. On a frame that
-        // publishes a packed edge, retain its previous OAM entries and refresh them next frame;
-        // small sprites still fit beside the bounded camera commit and draw normally.
-        var skipDraw = UsesPackedCameraRuntime && asset.Pieces.Count > 4
+        // A packed edge owns the bounded VBlank commit window. Retain the complete previous OAM
+        // projection on that frame and refresh it next frame instead of waiting through another
+        // physical frame merely to decide whether this metasprite still fits.
+        var skipDraw = UsesPackedCameraRuntime
             ? builder.CreateLabel("sprite_draw_skip_after_packed_commit")
             : null;
         if (skipDraw is not null)

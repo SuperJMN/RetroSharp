@@ -2122,7 +2122,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var done = builder.CreateLabel("worldpack_staged_rle_done");
 
         builder.Label(label);
-        GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
+        GameBoyPackedCameraRuntimeEmitter.EmitGuardRleCriticalWork(
             builder,
             GameBoyPackedCameraRuntime.DecodeWorkInCommit);
         EmitBeginDecode(builder, banked, enableStagedCamera: true);
@@ -2130,13 +2130,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.LoadAFromC();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, done);
-        GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
-            builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+        GameBoyPackedCameraRuntimeEmitter.EmitWaitForSafeRleCriticalWork(builder);
         EmitReadSafeStagedByte(builder, ScratchPacketCount, banked, malformed, trackStoredBytes: true);
         builder.LoadA(ScratchPacketCount);
         builder.AndImmediate(0x80);
-        builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, runPacket);
 
         builder.LoadA(ScratchPacketCount);
@@ -2207,18 +2204,16 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         if (trackStoredBytes)
         {
-            EmitRequireStoredByte(builder, malformed);
+            builder.LoadA(ScratchStoredRemaining);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xCA, malformed);
+            builder.DecrementA();
+            builder.StoreA(ScratchStoredRemaining);
         }
 
         builder.LoadAFromHl();
         builder.IncrementHl();
         builder.StoreA(destination);
-        if (trackStoredBytes)
-        {
-            builder.LoadA(ScratchStoredRemaining);
-            builder.DecrementA();
-            builder.StoreA(ScratchStoredRemaining);
-        }
 
         if (banked)
         {
