@@ -1,0 +1,35 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-tall-gb-functional",
+  "sampleId": "tiled-tall",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 360,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "forward-past-row-wrap", "frame": 160, "expectedSignals": { "user0": 158, "user1": 1, "visibleCameraY": 157, "commitCount": 19 } },
+    { "id": "reversed-after-vertical-limit", "frame": 200, "expectedSignals": { "user0": 155, "user1": 0, "visibleCameraY": 156, "commitCount": 25 } },
+    { "id": "returned-through-origin", "frame": 360, "expectedSignals": { "user0": 4, "user1": 1, "visibleCameraY": 3, "commitCount": 44 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Each Game Boy packed row is prepared outside VBlank and commits no more than 21 tile bytes inside the 70224-cycle frame.",
+    "productionTraceRationale": "The autonomous production path reaches Y=176, reverses, and crosses the 32-row circular buffer and multiple packed chunk rows in this window."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

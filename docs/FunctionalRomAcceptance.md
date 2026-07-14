@@ -1,7 +1,8 @@
 # Functional ROM Acceptance
 
-Status: implemented shared contract for CSL-2 / #337, with the first canonical
-static/source-camera rung bound by CSL-3 / #338.
+Status: implemented shared contract for CSL-2 / #337, with the canonical
+static/source-camera rung bound by CSL-3 / #338 and the packed Tiled
+production matrix bound by RPH-3.5 / #339.
 
 This document defines the functional acceptance boundary for canonical RetroSharp sample ROMs. Compilation and final-state checks remain useful, but they cannot prove sustained gameplay cadence, transient visual integrity, legal video writes, or correct camera publication. Functional acceptance runs the exact emitted ROM and evaluates every retained observation through one target-neutral contract.
 
@@ -98,6 +99,17 @@ checks for every animated sample, request/resident/commit/visible camera
 deadlines, and legal video/OAM write timing. See
 [`SimpleSampleFunctionalAcceptance.md`](SimpleSampleFunctionalAcceptance.md)
 for the matrix, reviewed budgets, hashes, MCP checkpoints, and focused command.
+
+RPH-3.5 binds the next eight canonical sample/target scenarios to the packed
+Tiled production path: `tiled-tall` GB, `tiled-vscroll` GB/NES,
+`tiled-diagonal` GB, `tiled-free-scroll` GB/NES, and `deadzone-follow` GB/NES.
+They add complete authored tile/palette oracles, request/resident/commit/visible
+lifecycles, bank/mapper restoration, and cycle-positioned video/OAM writes over
+long vertical, diagonal, reversal, circular-buffer, chunk, and bank-sensitive
+windows. Fixed state checkpoints retain forward, reverse, wrap, and chunk-return
+trajectory inside those windows. See
+[`PackedTiledFunctionalAcceptance.md`](PackedTiledFunctionalAcceptance.md) for
+the exact hashes, measured budgets, and external emulator checkpoints.
 
 ## CI tiers
 

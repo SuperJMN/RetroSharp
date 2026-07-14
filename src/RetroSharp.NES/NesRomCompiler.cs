@@ -1011,6 +1011,16 @@ internal sealed class NesVideoProgram
                 ApplyBackgroundPalette(slot, colors.Skip(slot * 4).Take(4).ToArray());
             }
         }
+
+        // NES palette addresses $3F10/$3F14/$3F18/$3F1C mirror the four
+        // background universal-color entries. The 32-byte boot upload writes
+        // those sprite-side aliases last, so keep every alias synchronized with
+        // the derived Tiled universal color instead of restoring the default
+        // $0F over the authored background at the end of the upload.
+        for (var slot = 0; slot < 4; slot++)
+        {
+            Palette[16 + slot * 4] = Palette[0];
+        }
     }
 
     private bool BackgroundPaletteSlotHasRawOverrides(int slot)

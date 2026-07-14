@@ -1,0 +1,35 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "tiled-diagonal-gb-functional",
+  "sampleId": "tiled-diagonal",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 360,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "forward-diagonal-chunk-window", "frame": 160, "expectedSignals": { "user0": 152, "user1": 152, "user2": 1, "visibleCameraX": 151, "visibleCameraY": 151, "commitCount": 36 } },
+    { "id": "reversed-diagonal-window", "frame": 200, "expectedSignals": { "user0": 129, "user1": 129, "user2": 0, "visibleCameraX": 130, "visibleCameraY": 130, "commitCount": 46 } },
+    { "id": "origin-crossed-and-forward-again", "frame": 360, "expectedSignals": { "user0": 25, "user1": 25, "user2": 1, "visibleCameraX": 23, "visibleCameraY": 24, "commitCount": 83 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Serialized diagonal preparation keeps each request outside VBlank and each staggered commit within the target's 19-column or 21-row write ceiling.",
+    "productionTraceRationale": "The production loop reaches the authored diagonal maximum, reverses through both axes, and revisits prior chunk groups without a same-edge decode cascade."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}

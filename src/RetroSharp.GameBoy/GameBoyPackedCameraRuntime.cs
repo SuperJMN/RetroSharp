@@ -81,6 +81,49 @@ internal static class GameBoyPackedCameraRuntime
     internal const ushort EdgeExpansionAddressLow = 0xC1A9;
     internal const ushort EdgeExpansionAddressHigh = 0xC1AA;
     internal const ushort EdgeExpansionBank = 0xC1AB;
+    internal const ushort DiagonalTargetXLow = 0xC1AC;
+    internal const ushort DiagonalTargetXHigh = 0xC1AD;
+    internal const ushort DiagonalTargetYLow = 0xC1AE;
+    internal const ushort DiagonalTargetYHigh = 0xC1AF;
+    internal const ushort DiagonalPreferredPreparationAxis = 0xC1B0;
+    internal const ushort DiagonalPreparedAxis = 0xC1B1;
+    internal const ushort DiagonalNextPreparationAxis = 0xC1B2;
+    internal const ushort VisualCache2Valid = 0xC1B3;
+    internal const ushort VisualCache2ChunkLow = 0xC1B4;
+    internal const ushort VisualCache2ChunkHigh = 0xC1B5;
+    internal const ushort VisualCache3Valid = 0xC1B6;
+    internal const ushort VisualCache3ChunkLow = 0xC1B7;
+    internal const ushort VisualCache3ChunkHigh = 0xC1B8;
+    internal const ushort VisualCache4Valid = 0xC1B9;
+    internal const ushort VisualCache4ChunkLow = 0xC1BA;
+    internal const ushort VisualCache4ChunkHigh = 0xC1BB;
+    internal const ushort VisualCache5Valid = 0xC1BC;
+    internal const ushort VisualCache5ChunkLow = 0xC1BD;
+    internal const ushort VisualCache5ChunkHigh = 0xC1BE;
+    internal const ushort VisualCache0Age = 0xC1BF;
+    internal const ushort VisualCache1Age = 0xC1C0;
+    internal const ushort VisualCache2Age = 0xC1C1;
+    internal const ushort VisualCache3Age = 0xC1C2;
+    internal const ushort VisualCache4Age = 0xC1C3;
+    internal const ushort VisualCache5Age = 0xC1C4;
+    internal const ushort VisualPendingRowGroupLow = 0xC1C5;
+    internal const ushort VisualPendingRowGroupHigh = 0xC1C6;
+    internal const ushort VisualPendingColumnGroupLow = 0xC1C7;
+    internal const ushort VisualPendingColumnGroupHigh = 0xC1C8;
+    internal const ushort VisualLastColumnGroupValid = 0xC1C9;
+    internal const ushort VisualLastColumnGroupLow = 0xC1CA;
+    internal const ushort VisualLastColumnGroupHigh = 0xC1CB;
+    internal const ushort VisualLastRowGroupValid = 0xC1CC;
+    internal const ushort VisualLastRowGroupLow = 0xC1CD;
+    internal const ushort VisualLastRowGroupHigh = 0xC1CE;
+    internal const ushort VisualCacheRowGroupLowStart = 0xC1CF;
+    internal const ushort VisualCacheRowGroupHighStart = 0xC1D5;
+    internal const ushort VisualCacheColumnGroupLowStart = 0xC1DB;
+    internal const ushort VisualCacheColumnGroupHighStart = 0xC1E1;
+    internal const ushort DiagonalTargetFresh = 0xC1E7;
+    internal const ushort CommitEnteredVBlank = 0xC1E8;
+    internal const ushort DirectoryWorkInCommit = 0xC1E9;
+    internal const ushort DecodeWorkInVBlank = 0xC1EA;
     internal const int SlotMetadataBytes = 10;
 
     internal const int StateOffset = 0;
@@ -117,9 +160,21 @@ internal static class GameBoyPackedCameraRuntime
 
 internal static class GameBoyPackedCameraRuntimeEmitter
 {
+    private const byte SafeActiveScanlineEnd = 128;
+
     internal static void EmitWaitOutsideVBlank(GbBuilder builder)
     {
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitOutsideVBlankLabel);
+    }
+
+    internal static void EmitWaitIfInVBlank(GbBuilder builder)
+    {
+        var safe = builder.CreateLabel("packed_world_decode_element_safe");
+        builder.LoadHighRamA(0x44); // LY
+        builder.CompareImmediate(143);
+        builder.JumpAbsolute(0xDA, safe);
+        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitIfInVBlankLabel);
+        builder.Label(safe);
     }
 
     internal static void EmitGuardCriticalWork(GbBuilder builder, ushort counterAddress)
@@ -128,9 +183,32 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         EmitRecordCriticalWork(builder, counterAddress);
     }
 
+    internal static void EmitGuardRleCriticalWork(GbBuilder builder, ushort counterAddress)
+    {
+        EmitWaitForSafeRleCriticalWork(builder);
+        EmitRecordCriticalWork(builder, counterAddress);
+    }
+
+    internal static void EmitWaitForSafeRleCriticalWork(GbBuilder builder)
+    {
+        var wait = builder.CreateLabel("packed_world_critical_guard_wait");
+        var done = builder.CreateLabel("packed_world_critical_guard_done");
+        builder.LoadA(GameBoyPackedCameraRuntime.WaitAudioEnabled);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, wait); // JP NZ,wait: the full guard observes frame wraps for audio.
+        builder.LoadHighRamA(0x40); // LCDC
+        builder.AndImmediate(0x80);
+        builder.JumpAbsolute(0xCA, done); // JP Z,done when LCD timing is inactive.
+        builder.LoadHighRamA(0x44); // LY
+        builder.CompareImmediate(SafeActiveScanlineEnd);
+        builder.JumpAbsolute(0xDA, done); // JP C,done on the safe active-display fast path.
+        builder.Label(wait);
+        EmitWaitOutsideVBlank(builder);
+        builder.Label(done);
+    }
+
     internal static void EmitWaitOutsideVBlankRoutine(GbBuilder builder)
     {
-        const byte safeActiveScanlineEnd = 128;
         var lcdDisabled = builder.CreateLabel("packed_world_lcd_disabled");
         var firstObservation = builder.CreateLabel("packed_world_first_ly_observation");
         var wrapped = builder.CreateLabel("packed_world_ly_wrapped");
@@ -180,7 +258,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.Label(classify);
         builder.LoadA(GameBoyPackedCameraRuntime.CurrentLy);
         builder.StoreA(GameBoyPackedCameraRuntime.LastObservedLy);
-        builder.CompareImmediate(safeActiveScanlineEnd);
+        builder.CompareImmediate(SafeActiveScanlineEnd);
         builder.JumpAbsolute(0xDA, safeActive); // JP C,safeActive
 
         builder.Label(waitForVBlank);
@@ -202,7 +280,7 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.Label(waitForSafeActive);
         builder.LoadHighRamA(0x44);
         builder.StoreA(GameBoyPackedCameraRuntime.CurrentLy);
-        builder.CompareImmediate(safeActiveScanlineEnd);
+        builder.CompareImmediate(SafeActiveScanlineEnd);
         builder.JumpAbsolute(0xD2, waitForSafeActive); // Wait through VBlank and the guard band.
         builder.Label(safeActive);
         builder.LoadA(GameBoyPackedCameraRuntime.CurrentLy);
@@ -216,21 +294,98 @@ internal static class GameBoyPackedCameraRuntimeEmitter
         builder.Emit(0xC9); // RET
     }
 
+    internal static void EmitObserveFrameWrapRoutine(GbBuilder builder)
+    {
+        var initialize = builder.CreateLabel("packed_world_observe_initialize");
+        var store = builder.CreateLabel("packed_world_observe_store");
+        var done = builder.CreateLabel("packed_world_observe_done");
+        builder.Label(GameBoyRomBuilder.WorldPackObserveFrameWrapLabel);
+        builder.Emit(0xF5); // PUSH AF
+        builder.Emit(0xC5); // PUSH BC
+        builder.LoadA(GameBoyPackedCameraRuntime.WaitAudioEnabled);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, done);
+        builder.LoadHighRamA(0x40); // LCDC
+        builder.AndImmediate(0x80);
+        builder.JumpAbsolute(0xCA, done);
+        builder.LoadHighRamA(0x44); // LY
+        builder.StoreA(GameBoyPackedCameraRuntime.CurrentLy);
+        builder.LoadA(GameBoyPackedCameraRuntime.LastObservedLyValid);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, initialize);
+        builder.LoadA(GameBoyPackedCameraRuntime.LastObservedLy);
+        builder.LoadBFromA();
+        builder.LoadA(GameBoyPackedCameraRuntime.CurrentLy);
+        builder.CompareB();
+        builder.JumpAbsolute(0xD2, store); // JP NC: LY has not wrapped.
+        builder.LoadA(GameBoyPackedCameraRuntime.WaitAudioTicked);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, store);
+        builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackWaitAudioTickLabel);
+        builder.JumpAbsolute(store);
+        builder.Label(initialize);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyPackedCameraRuntime.LastObservedLyValid);
+        builder.Label(store);
+        builder.LoadA(GameBoyPackedCameraRuntime.CurrentLy);
+        builder.StoreA(GameBoyPackedCameraRuntime.LastObservedLy);
+        builder.Label(done);
+        builder.Emit(0xC1); // POP BC
+        builder.Emit(0xF1); // POP AF
+        builder.Emit(0xC9); // RET
+    }
+
+    internal static void EmitWaitIfInVBlankRoutine(GbBuilder builder, bool enablePackedAudioService)
+    {
+        var wait = builder.CreateLabel("packed_world_wait_while_in_vblank");
+        var done = builder.CreateLabel("packed_world_wait_if_in_vblank_done");
+        builder.Label(GameBoyRomBuilder.WorldPackWaitIfInVBlankLabel);
+        builder.Emit(0xF5); // PUSH AF
+        builder.LoadHighRamA(0x40); // LCDC
+        builder.AndImmediate(0x80);
+        builder.JumpAbsolute(0xCA, done);
+        builder.LoadHighRamA(0x44); // LY
+        builder.CompareImmediate(143); // Leave one scanline for the current decode element.
+        builder.JumpAbsolute(0xDA, done);
+        builder.Label(wait);
+        builder.LoadHighRamA(0x44);
+        builder.CompareImmediate(144);
+        builder.JumpAbsolute(0xD2, wait);
+        if (enablePackedAudioService)
+        {
+            builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackObserveFrameWrapLabel);
+        }
+
+        builder.Label(done);
+        builder.Emit(0xF1); // POP AF
+        builder.Emit(0xC9); // RET
+    }
+
     internal static void EmitRecordCriticalWork(GbBuilder builder, ushort counterAddress)
     {
         var done = builder.CreateLabel("packed_camera_critical_work_done");
+        var inspectVBlank = builder.CreateLabel("packed_camera_critical_work_inspect_vblank");
+        var commitCounter = counterAddress == GameBoyPackedCameraRuntime.DirectoryWorkInVBlank
+            ? GameBoyPackedCameraRuntime.DirectoryWorkInCommit
+            : counterAddress;
+        var vblankCounter = counterAddress == GameBoyPackedCameraRuntime.DecodeWorkInCommit
+            ? GameBoyPackedCameraRuntime.DecodeWorkInVBlank
+            : counterAddress;
         builder.Emit(0xF5); // PUSH AF
         builder.LoadA(GameBoyPackedCameraRuntime.CriticalSection);
         builder.CompareImmediate(0);
-        var record = builder.CreateLabel("packed_camera_critical_work_record");
-        builder.JumpAbsolute(0xC2, record);
+        builder.JumpAbsolute(0xCA, inspectVBlank);
+        builder.LoadA(commitCounter);
+        builder.AddAImmediate(1);
+        builder.StoreA(commitCounter);
+        builder.JumpAbsolute(done);
+        builder.Label(inspectVBlank);
         builder.LoadHighRamA(0x44);
         builder.CompareImmediate(144);
         builder.JumpAbsolute(0xDA, done);
-        builder.Label(record);
-        builder.LoadA(counterAddress);
+        builder.LoadA(vblankCounter);
         builder.AddAImmediate(1);
-        builder.StoreA(counterAddress);
+        builder.StoreA(vblankCounter);
         builder.Label(done);
         builder.Emit(0xF1); // POP AF
     }

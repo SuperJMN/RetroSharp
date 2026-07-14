@@ -318,6 +318,30 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Multiple_camera_lifecycle_transitions_in_one_sampled_frame_are_retained_and_counted()
+    {
+        var scenario = LifecycleScenario();
+        var observations = new[]
+        {
+            Frame(0, signals: Signals(("playerX", 0)), camera: Camera(10, 10, 10, 10)),
+            Frame(1, signals: Signals(("playerX", 1)), camera: Camera(13, 13, 13, 13)),
+            Frame(2, signals: Signals(("playerX", 2)), camera: Camera(13, 13, 13, 13)),
+            Frame(3, signals: Signals(("playerX", 3)), camera: Camera(13, 13, 13, 13)),
+            Frame(4, signals: Signals(("playerX", 3)), camera: Camera(13, 13, 13, 13)),
+        };
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations));
+
+        Assert.True(report.Passed, report.ToHumanReadable());
+        Assert.Equal(3, report.Summary.CameraRequests);
+        Assert.Equal(3, report.Summary.CameraResidents);
+        Assert.Equal(3, report.Summary.CameraCommits);
+        Assert.Equal(3, report.Summary.CameraVisible);
+        Assert.Equal(0, Assert.Single(report.TimingChecks, check => check.Metric == "request-to-resident").Observed);
+        Assert.Equal(0, Assert.Single(report.TimingChecks, check => check.Metric == "request-to-visible").Observed);
+    }
+
+    [Fact]
     public void Final_camera_request_drains_only_within_its_declared_latency_budget()
     {
         var scenario = LifecycleScenario() with

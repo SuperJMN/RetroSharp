@@ -4,28 +4,21 @@
   "sampleId": "tiled-vscroll",
   "target": "gb",
   "warmUpFrames": 20,
-  "observationFrames": 70,
+  "observationFrames": 600,
   "inputs": [],
   "checkpoints": [
-    {
-      "id": "packed-camera-at-frame-90",
-      "frame": 90,
-      "expectedSignals": {
-        "sourceCameraY": 87,
-        "visibleCameraY": 86,
-        "scy": 86,
-        "worldPackValidationState": 1
-      }
-    }
+    { "id": "forward-near-vertical-limit", "frame": 240, "expectedSignals": { "user0": 238, "user1": 1, "visibleCameraY": 237, "commitCount": 29 } },
+    { "id": "reversed-after-authored-hold", "frame": 320, "expectedSignals": { "user0": 195, "user1": 0, "visibleCameraY": 196, "commitCount": 36 } },
+    { "id": "returned-and-forward-again", "frame": 520, "expectedSignals": { "user0": 2, "user1": 1, "visibleCameraY": 1, "commitCount": 60 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,
     "audioService": false,
     "cameraLifecycle": true,
-    "background": false,
+    "background": true,
     "spriteOam": false,
-    "bankRestoration": false,
-    "safeVideoWrites": false
+    "bankRestoration": true,
+    "safeVideoWrites": true
   },
   "audio": {
     "serviceExpectedByDefault": false,
@@ -33,8 +26,8 @@
   },
   "budgetEvidence": {
     "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
-    "hardwareTimingRationale": "A DMG physical frame is 70224 cycles. Packed preparation may consume one frame, but residency, commit, and visibility must complete within that frame without unsafe retained writes.",
-    "productionTraceRationale": "The 90-frame GameboyMcp trace in docs/GameBoyPackedCameraCadenceAcceptance.md measured 87 source ticks, visible Y 86, and one-frame cold-edge publication on the exact tracked production ROM."
+    "hardwareTimingRationale": "DMG provides 70224 cycles per frame and one immutable packed row commits within the 21-write VBlank ceiling; preparation and publication may each lag by at most one physical frame.",
+    "productionTraceRationale": "The autonomous 600-frame production traversal covers upward movement, the authored hold, reversal, row-buffer wrap, and later chunk groups while retaining at least 95 percent gameplay cadence."
   },
   "budgets": {
     "minimumGameplayTickRatio": 0.95,

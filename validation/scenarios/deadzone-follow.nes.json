@@ -1,0 +1,35 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "deadzone-follow-nes-functional",
+  "sampleId": "deadzone-follow",
+  "target": "nes",
+  "warmUpFrames": 20,
+  "observationFrames": 400,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 216, "user1": 208, "user2": 119, "user3": 119, "user4": 1, "user5": 1, "visibleCameraX": 119, "visibleCameraY": 119 } },
+    { "id": "reversed-deadzone-follow", "frame": 240, "expectedSignals": { "user0": 169, "user1": 161, "user2": 106, "user3": 106, "user4": 255, "user5": 255, "visibleCameraX": 106, "visibleCameraY": 106 } },
+    { "id": "origin-crossed-and-forward-again", "frame": 360, "expectedSignals": { "user0": 110, "user1": 102, "user2": 16, "user3": 16, "user4": 1, "user5": 1, "visibleCameraX": 16, "visibleCameraY": 16 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Dead-zone following requests at most one pixel per axis per gameplay tick; packed preparation stays outside NMI and each serialized edge publication is bounded by VBlank.",
+    "productionTraceRationale": "The 400-frame exact production traversal crosses both dead-zone boundaries, reverses both directions, draws the marker, and retains the authored 64x60 Tiled background."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 4,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1
+  }
+}

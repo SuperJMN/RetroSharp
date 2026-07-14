@@ -494,14 +494,15 @@ public static class FunctionalScenarioRunner
             };
             foreach (var transition in transitions)
             {
-                if (transition.Current is { } value &&
-                    transition.Current != transition.Previous &&
-                    !knownRequests.Contains(value))
+                foreach (var value in SequenceTransitions(transition.Previous, transition.Current))
                 {
-                    failures.Add(new(
-                        "unexpected-camera-sequence",
-                        frame.Frame,
-                        $"Camera stage published sequence {value} without a matching request in the measurement window."));
+                    if (!knownRequests.Contains(value))
+                    {
+                        failures.Add(new(
+                            "unexpected-camera-sequence",
+                            frame.Frame,
+                            $"Camera stage published sequence {value} without a matching request in the measurement window."));
+                    }
                 }
             }
 
@@ -533,7 +534,7 @@ public static class FunctionalScenarioRunner
     {
         for (var frame = request.Frame; frame <= end; frame++)
         {
-            if (frames[frame].Camera is { } camera && stage(camera) == request.Sequence)
+            if (frames[frame].Camera is { } camera && stage(camera) is { } sequence && sequence >= request.Sequence)
             {
                 return true;
             }
@@ -569,20 +570,41 @@ public static class FunctionalScenarioRunner
         var start = scenario.WarmUpFrames;
         var end = start + scenario.ObservationFrames;
         var window = frames.Skip(start + 1).Take(scenario.ObservationFrames).ToArray();
-        var camera = window.Where(frame => frame.Camera is not null).Select(frame => frame.Camera!).ToArray();
         return new FunctionalObservationSummary(
             frames[end].GameplayTicks - frames[start].GameplayTicks,
             frames[end].AudioServiceTicks - frames[start].AudioServiceTicks,
             window.Max(frame => frame.ResetCount),
-            camera.Select(item => item.RequestedSequence).Where(item => item is not null).Distinct().Count(),
-            camera.Select(item => item.ResidentSequence).Where(item => item is not null).Distinct().Count(),
-            camera.Select(item => item.CommittedSequence).Where(item => item is not null).Distinct().Count(),
-            camera.Select(item => item.VisibleSequence).Where(item => item is not null).Distinct().Count(),
+            CountCameraTransitions(frames, start, end, camera => camera.RequestedSequence),
+            CountCameraTransitions(frames, start, end, camera => camera.ResidentSequence),
+            CountCameraTransitions(frames, start, end, camera => camera.CommittedSequence),
+            CountCameraTransitions(frames, start, end, camera => camera.VisibleSequence),
             window.Count(frame => frame.Bank is { } bank && (!bank.Restored || bank.SelectedBank != bank.ShadowBank)),
             window.Sum(frame => frame.VideoWrites?.Count(write => !write.Safe) ?? 0),
             window.Sum(frame => frame.OamWrites?.Count(write => !write.Safe) ?? 0),
             failures.Count(failure => failure.Code.Contains("background", StringComparison.Ordinal)),
             failures.Count(failure => failure.Code.Contains("sprite", StringComparison.Ordinal)));
+    }
+
+    private static int CountCameraTransitions(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int start,
+        int end,
+        Func<FunctionalCameraLifecycleObservation, long?> sequence)
+    {
+        var seen = new HashSet<long>();
+        var previous = frames[start].Camera is { } baseline ? sequence(baseline) : null;
+        for (var frame = start + 1; frame <= end; frame++)
+        {
+            var current = frames[frame].Camera is { } camera ? sequence(camera) : null;
+            foreach (var value in SequenceTransitions(previous, current))
+            {
+                seen.Add(value);
+            }
+
+            previous = current;
+        }
+
+        return seen.Count;
     }
     private static int MaximumMissedStreak(
         IReadOnlyList<FunctionalFrameObservation> frames,
@@ -645,9 +667,12 @@ public static class FunctionalScenarioRunner
         for (var frame = start + 1; frame <= end; frame++)
         {
             var current = frames[frame].Camera?.RequestedSequence;
-            if (current is { } sequence && current != previous && seen.Add(sequence))
+            foreach (var sequence in SequenceTransitions(previous, current))
             {
-                requests.Add((sequence, frame));
+                if (seen.Add(sequence))
+                {
+                    requests.Add((sequence, frame));
+                }
             }
 
             previous = current;
@@ -671,7 +696,9 @@ public static class FunctionalScenarioRunner
         {
             for (var frame = request.Frame; frame <= end; frame++)
             {
-                if (frames[frame].Camera is { } camera && completedSequence(camera) == request.Sequence)
+                if (frames[frame].Camera is { } camera &&
+                    completedSequence(camera) is { } sequence &&
+                    sequence >= request.Sequence)
                 {
                     return frame - request.Frame;
                 }
@@ -686,6 +713,26 @@ public static class FunctionalScenarioRunner
 
     private static FunctionalTimingCheck MaximumCheck(string metric, double observed, double limit) =>
         new(metric, observed, limit, limit - observed, "<=", observed <= limit);
+
+    private static IEnumerable<long> SequenceTransitions(long? previous, long? current)
+    {
+        if (current is not { } value || current == previous)
+        {
+            yield break;
+        }
+
+        if (previous is { } prior && value > prior)
+        {
+            for (var sequence = prior + 1; sequence <= value; sequence++)
+            {
+                yield return sequence;
+            }
+
+            yield break;
+        }
+
+        yield return value;
+    }
 
     private static void ValidateObservationFrame(
         FunctionalFrameObservation observation,

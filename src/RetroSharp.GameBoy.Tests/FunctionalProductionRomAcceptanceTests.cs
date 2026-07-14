@@ -20,7 +20,7 @@ public sealed class FunctionalProductionRomAcceptanceTests
         var romPath = RepositoryFile("samples/tiled-vscroll/vscroll.gb");
         var romBytes = File.ReadAllBytes(romPath);
         var scenario = FunctionalScenarioLoader.Load(
-            RepositoryFile("validation/scenarios/tiled-vscroll.gb.json"));
+            RepositoryFile("validation/scenarios/tiled-vscroll.gb.cadence.json"));
         var factory = new GameBoyTestCpuMachineFactory();
         var adapter = new GameBoyFunctionalRomAdapter(
             factory,
@@ -35,7 +35,7 @@ public sealed class FunctionalProductionRomAcceptanceTests
             adapter);
 
         Assert.True(report.Passed, report.ToHumanReadable());
-        Assert.Equal("9f1dae19dfc15f3589bd07e2add35929531f21977a4b47987223becce147cd5c", report.RomSha256);
+        Assert.Equal("3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5", report.RomSha256);
         Assert.Equal(romBytes, factory.LoadedRom);
         Assert.Equal(FunctionalExecutionSource.InProcess, report.ExecutionSource);
         Assert.Equal(new FunctionalFrameWindow(20, 70, 90), report.FrameWindow);

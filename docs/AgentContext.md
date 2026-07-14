@@ -1,12 +1,25 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-13.
+Last updated: 2026-07-14.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
 ## Recent Baseline
 
+- RPH-3.5 / #339 binds eight exact packed Tiled production scenarios to the
+  shared functional runner: `tiled-tall` GB, `tiled-vscroll` GB/NES,
+  `tiled-diagonal` GB, `tiled-free-scroll` GB/NES, and `deadzone-follow`
+  GB/NES. Game Boy now uses three standard or six diagonal visual cache slots,
+  serializes diagonal preparation, keeps decode/directory/bank work outside
+  VBlank, and records transitions that complete between sampled frames. NES
+  synchronizes the four sprite-side universal palette aliases with the derived
+  Tiled background color. Game Boy packed commits retain the previous OAM
+  projection instead of starting a second VBlank wait, while the no-audio RLE
+  hot path uses a bounded inline LY guard and preserves the full audio-aware
+  guard when audio is active. Exact tracked-ROM hashes, reviewed timing budgets,
+  zero transient integrity failures, and GameboyMcp/NesMcp checkpoints are in
+  `docs/PackedTiledFunctionalAcceptance.md`.
 - CSL-3 / #338 binds eight exact production-source GB/NES ROM scenarios to the
   shared #337 functional runner: static drawing, bidirectional cross-target
   camera, GB source vertical scroll, GB/NES source free scroll, and GB Window

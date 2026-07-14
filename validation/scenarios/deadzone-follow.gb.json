@@ -1,0 +1,35 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "deadzone-follow-gb-functional",
+  "sampleId": "deadzone-follow",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 400,
+  "inputs": [],
+  "checkpoints": [
+    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 229, "user1": 221, "user2": 133, "user3": 133, "user4": 1, "user5": 1, "visibleCameraX": 133, "visibleCameraY": 133, "commitCount": 32 } },
+    { "id": "reversed-deadzone-follow", "frame": 240, "expectedSignals": { "user0": 160, "user1": 152, "user2": 96, "user3": 96, "user4": 255, "user5": 255, "visibleCameraX": 96, "visibleCameraY": 96, "commitCount": 44 } },
+    { "id": "returning-through-chunks", "frame": 400, "expectedSignals": { "user0": 151, "user1": 143, "user2": 55, "user3": 55, "user4": 1, "user5": 1, "visibleCameraX": 55, "visibleCameraY": 55, "commitCount": 72 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": false,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "Dead-zone following requests at most one pixel per axis per gameplay tick; packed preparation remains outside VBlank and commits one bounded axis edge at a time.",
+    "productionTraceRationale": "The exact tracked deadzone.gb at pre-Large-Worlds commit 95f166886713ff3b88bc1e17c03ef0ffe93d649a completes 400/400 source VBlank waits after the same 20-frame warm-up. The production packed gate retains at least 95 percent cadence and the same two-frame diagonal residency/visibility ceiling as the sprite-free diagonal fixtures."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2
+  }
+}
