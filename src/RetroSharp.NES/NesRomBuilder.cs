@@ -5672,11 +5672,12 @@ internal sealed class NesRuntimeCompiler
 
     // One tile row of vertical scroll when a screen-tall world's streamed background reaches the bottom
     // visible row, so its bottom tile row would otherwise be lost to bottom overscan; zero otherwise.
-    // Scoped to worlds that do not scroll vertically (map fits the screen height) so scrolling maps keep
-    // their framing. Sprites apply the same offset so they stay aligned with the shifted background.
+    // Scoped to camera windows that do not scroll vertically (the configured stream height fits the
+    // screen) so scrolling windows keep their framing even when both use the same taller backing world.
+    // Sprites apply the same offset so they stay aligned with the shifted background.
     private int BottomOverscanInset()
         => cameraConfig is { } config
-           && config.MapHeight <= NesTarget.Capabilities.ScreenTiles.Height
+           && config.StreamHeight <= NesTarget.Capabilities.ScreenTiles.Height
            && config.StreamY + config.StreamHeight >= NesTarget.Capabilities.ScreenTiles.Height
             ? BottomOverscanInsetPixels
             : 0;

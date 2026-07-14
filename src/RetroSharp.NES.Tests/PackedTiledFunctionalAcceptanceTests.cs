@@ -17,6 +17,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
     private const ushort VisibleCameraXHigh = 0x03CC;
     private const ushort VisibleCameraYLow = 0x03CD;
     private const ushort VisibleCameraYHigh = 0x03CE;
+    private const byte ExpectedBottomOverscanInsetPixels = 8;
 
     public static TheoryData<string, string, string, string, string> ProductionSamples => new()
     {
@@ -36,6 +37,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         string romRelativePath,
         string scenarioRelativePath)
     {
+        var isHorizontalScrollCanary = sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal);
         var sourcePath = RepositoryFile(sourceRelativePath);
         var sourceDirectory = Path.GetDirectoryName(sourcePath)
             ?? throw new InvalidOperationException($"Could not locate '{sourceRelativePath}'.");
@@ -46,7 +48,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         var map = NesTiledWorldImporter.Load(RepositoryFile(mapRelativePath), NesVideoProgram.FirstSpriteTile);
         Assert.True(map.Width > 0);
         Assert.InRange(map.Height, 1, 60);
-        if (sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal))
+        if (isHorizontalScrollCanary)
         {
             Assert.All(map.WorldFlags, flags => Assert.Equal(0, (int)flags));
         }
@@ -83,6 +85,16 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         Assert.Equal(0, report.Summary.UnsafeVideoWrites);
         Assert.Equal(0, report.Summary.UnsafeOamWrites);
         Assert.Equal(0, report.Summary.BackgroundMismatches);
+        if (isHorizontalScrollCanary)
+        {
+            var firstCheckpointFrame = scenario.Checkpoints.Min(checkpoint => checkpoint.Frame);
+            var appliedScrollY = factory.AppliedScrollYByFrame
+                .Where(item => item.Frame >= firstCheckpointFrame)
+                .ToArray();
+            Assert.NotEmpty(appliedScrollY);
+            Assert.All(appliedScrollY, item => Assert.Equal(ExpectedBottomOverscanInsetPixels, item.Y));
+        }
+
         Assert.All(
             report.FrameEvidence,
             evidence =>
@@ -134,12 +146,15 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         public Dictionary<int, (int X, int Y)> VisibleCameraByFrame { get; } = [];
 
+        public List<(int Frame, int Y)> AppliedScrollYByFrame { get; } = [];
+
         public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
         {
             LoadedRom = exactRom.ToArray();
             return new PackedNesMachine(
                 LoadedRom,
                 VisibleCameraByFrame,
+                AppliedScrollYByFrame,
                 resetCount => ResetCount = resetCount);
         }
     }
@@ -147,6 +162,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
     private sealed class PackedNesMachine(
         byte[] exactRom,
         IDictionary<int, (int X, int Y)> visibleCameraByFrame,
+        ICollection<(int Frame, int Y)> appliedScrollYByFrame,
         Action<int> publishResetCount) : IFunctionalRomMachine
     {
         private readonly NesTestCpu cpu = new(exactRom);
@@ -157,7 +173,6 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private readonly Dictionary<(int X, int Y), long> requestSequenceByPosition = [];
         private long cameraRequestSequence;
         private long visibleSequence;
-
         public FunctionalFrameObservation ObserveInitial()
         {
             cpu.RunFrames(0);
@@ -186,8 +201,12 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 X: Word(VisibleCameraXLow, VisibleCameraXHigh),
                 Y: Word(VisibleCameraYLow, VisibleCameraYHigh));
             visibleCameraByFrame[frame] = visibleCamera;
-            var videoWrites = cpu.PpuWrites
+            var rawPpuWrites = cpu.PpuWrites
                 .Skip(processedPpuWrites)
+                .ToArray();
+            appliedScrollYByFrame.Add((frame, cpu.ScrollY));
+
+            var videoWrites = rawPpuWrites
                 .Where(write => write.Register == 0x2007)
                 .Select(VideoWrite)
                 .ToArray();

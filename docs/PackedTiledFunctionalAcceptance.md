@@ -30,9 +30,9 @@ physical frames.
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `tiled-tall` GB | `9c8b6432c8231831f0a5018f2c8f128b66702245719b52886c665dcdc4317afa` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-short` GB | `e51ecdb8e969c8989d920a9ec5cfb6fc604176d3c5547355dde25a332275da27` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-short` NES | `96524134f7e2680b5e860d727638c71e82274ffe56a9f829261e511027c64f4c` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-short` NES | `a5c353c8ebda111cf3bbbb52a60e10f8d7346583a033bfb09f29e7f0b2f5fde9` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-full` GB | `d5baa0effd76548832a2e7c4fbaab17ca378fe1b3436aada18dd2f00984ebebb` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-full` NES | `cae9efa7ad02a9fd1d369605fa7b51126a3f9c893f46a9e2c4d0c0b8fcdc1a95` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-full` NES | `9ad5b7023ac1f4c539ec728a810d087b0917133e293f05ea34f391b5cb2ad264` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
 | `tiled-vscroll` NES | `4f7a524e25584576866e87f1069f4922d1c07873ee344ceaec7964c717451869` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
 | `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
@@ -94,9 +94,12 @@ functional tests assert that every imported world flag is empty. Both fixtures
 preserve their complete horizontal content, move the bottom 15 authored rows
 into the 30-hardware-row camera window, and keep five empty staging rows below
 it. `Camera.VerticalScrollMax()` therefore presents the dense bottom of the
-scene at visible Y 96 on Game Boy and Y 0 on NES. X stays zero for 64 ticks
-before horizontal acceptance begins. The short crop crosses the 8-bit camera
-boundary and circular nametable boundary before reversing at visible X 768;
+scene at visible Y 96 on Game Boy and logical Y 0 on NES. The NES target treats
+that configured window as vertically fixed even though the backing map is 40
+rows tall, applies the same render-only 8 px bottom-overscan inset as other
+screen-tall fixed views, and leaves the empty staging strip below it. X stays
+zero for 64 ticks before horizontal acceptance begins. The short crop crosses
+the 8-bit camera boundary and circular nametable boundary before reversing at visible X 768;
 the full row traverses every chunk and bank window of all 156 `stage1` columns
 before reversing at visible X 2240.
 Adding those rows fixed NES fast prepared-column subcell/row-stride state,
@@ -107,8 +110,9 @@ nametable wrap. All four exact ROMs retain zero tile/palette mismatches and
 zero unsafe video writes across the complete 1024/2584-frame traversal and
 return windows. Camera visibility remains bounded to two frames, the gameplay
 miss streak remains at most one frame, and the steady-state ratio remains at
-least 0.994. The bottom-framing adjustment is sample-only; it does not change
-either target runtime.
+least 0.994. Game Boy output remains unchanged; the NES ROM hashes change only
+because the target-owned safe-area inset now keys off the effective camera
+window rather than the complete backing-map height.
 
 ## External emulator checkpoints
 
@@ -144,6 +148,14 @@ its exact tracked cartridges on 2026-07-14:
   remained enabled with `PPUCTRL=$80` and `PPUMASK=$1E`; a sampled lower strip
   retained three palette indexes and eight distinct repeated-pattern row
   hashes. The critical bank/directory/decode counters remained zero.
+
+The regenerated NES canary additionally verifies the target-owned safe-area
+framing when the 30-row camera window uses the same 40-row backing map. At
+physical frame 150, NesMcp/AprNes reported `PPUCTRL=$80`, `PPUMASK=$1E`, and
+`t=$0025`, whose coarse Y is one tile row. The complete two-row floor occupied
+screen Y `216..231`; the wrapped Y `232..239` strip was a single uniform sky
+palette index. Cropping the bottom eight overscan lines therefore retains the
+complete floor instead of removing its lower half.
 
 These external snapshots prove real-emulator traversal and direction change;
 the longer in-process windows remain stricter because they compare every
