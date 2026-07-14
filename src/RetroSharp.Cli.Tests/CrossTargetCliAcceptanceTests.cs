@@ -1150,7 +1150,7 @@ public sealed class CrossTargetCliAcceptanceTests
         {
             "gb" when sampleId == "runner" => 131072,
             "gb" => 32768,
-            "nes" when sampleId is "runner" or "tiled-hscroll-full" => 81936,
+            "nes" when sampleId is "runner" or "tiled-hscroll-full" or "tiled-hscroll-offset" => 81936,
             "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
         };
