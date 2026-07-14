@@ -18,10 +18,13 @@ The two 20-cell-high fixtures move the bottom 15 authored `stage1` rows into
 the 30-hardware-row camera window and retain five empty staging rows below it.
 This keeps the packed-map geometry stable while `Camera.VerticalScrollMax()`
 selects the same bottom-focused picture on both targets: visible Y 96 on Game
-Boy and Y 0 on NES. The first 64 gameplay ticks hold X at zero so that framing
-settles before horizontal acceptance begins. The denser scenery makes stale or
-corrupt columns conspicuous, and each horizontal edge is held for one tick
-before reversal.
+Boy and logical Y 0 on NES. The NES target recognizes this fixed 30-row camera
+window even though the backing Tiled map is 40 rows tall, and applies its
+render-only 8 px bottom-overscan inset; the five empty staging rows provide the
+clean wrapped strip below the shifted scene. The first 64 gameplay ticks hold X
+at zero so that framing settles before horizontal acceptance begins. The denser
+scenery makes stale or corrupt columns conspicuous, and each horizontal edge is
+held for one tick before reversal.
 
 The local `stage1-visual.tsx` deliberately omits the collision object groups
 from the runner tileset. This keeps the sample focused on column preparation,
