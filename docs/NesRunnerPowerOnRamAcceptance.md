@@ -8,6 +8,20 @@ checkpoint covers the exact shared `samples/runner/bin/runner.nes` path, the
 complete `stage1.tmj` WorldPack, the automatically selected
 `nes-mmc3-tvrom-v1` profile, BGM/SFX/DPCM, and the packed four-screen camera.
 
+## Runtime ABI preflight
+
+The harness loads `samples/runner/bin/runner.nes.runtime-abi.json` before it
+checks an emulator core or starts RetroArch. This compiler-generated v1
+contract supplies the runner-local player words plus every observed camera,
+WorldPack, packed-camera, cadence, collision, and audio address or runtime
+region. Multi-byte fields, lifecycle counters, control ranges, and visual
+staging slots are all resolved explicitly rather than inferred by adjacency.
+It also binds the projection to the exact ROM SHA-256. A missing field, unsupported contract
+version, malformed range/address, or ROM hash mismatch exits with a qualified
+diagnostic before an emulator can produce evidence against the wrong layout.
+Use `--runtime-abi <path>` together with `--rom <path>` for another generated
+pair.
+
 ## Initialization contract
 
 Reset clears only target-runtime-owned memory:
@@ -88,3 +102,9 @@ The focused emitted-boot regression runs the real runner compilation against
 guard bytes. Normal closeout also requires the complete NES tests, the full
 solution, tracked ROM regeneration plus a clean dry-run, and
 `git diff --check`.
+
+Contract/tooling coverage runs without an emulator:
+
+```bash
+python3 -m unittest tools.nes.tests.test_runtime_abi -q
+```

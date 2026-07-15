@@ -1,0 +1,1952 @@
+{
+  "contract": "retrosharp.nes.runtime-abi",
+  "version": 1,
+  "target": "nes",
+  "abiFingerprint": "e22a5fa74b088fcd9d1538cf2ad10ad02aef36fbd3338bbdee209ad0a5f57737",
+  "romSha256": "7464aea0f068869d6786ef4591445c75d85800a394f830b9dc607af62c9ec5c7",
+  "ranges": [
+    {
+      "id": "UserLocals",
+      "name": "user zero-page locals",
+      "start": 0,
+      "length": 222
+    },
+    {
+      "id": "SoundEffectZeroPage",
+      "name": "sound-effect zero-page state",
+      "start": 222,
+      "length": 2
+    },
+    {
+      "id": "CameraAndRuntimeZeroPage",
+      "name": "camera and runtime zero-page scratch",
+      "start": 224,
+      "length": 16
+    },
+    {
+      "id": "InputZeroPage",
+      "name": "input zero-page state",
+      "start": 240,
+      "length": 10
+    },
+    {
+      "id": "AudioZeroPage",
+      "name": "audio zero-page state",
+      "start": 250,
+      "length": 6
+    },
+    {
+      "id": "Stack",
+      "name": "CPU stack",
+      "start": 256,
+      "length": 256
+    },
+    {
+      "id": "OamShadow",
+      "name": "OAM shadow",
+      "start": 512,
+      "length": 256
+    },
+    {
+      "id": "CameraControlState",
+      "name": "camera control state",
+      "start": 768,
+      "length": 13
+    },
+    {
+      "id": "AudioState",
+      "name": "audio state",
+      "start": 784,
+      "length": 8
+    },
+    {
+      "id": "ExtendedCameraState",
+      "name": "extended camera state",
+      "start": 792,
+      "length": 12
+    },
+    {
+      "id": "MapperBankShadows",
+      "name": "mapper bank shadows",
+      "start": 804,
+      "length": 2
+    },
+    {
+      "id": "WorldPackScalarState",
+      "name": "WorldPack scalar state",
+      "start": 806,
+      "length": 72
+    },
+    {
+      "id": "PackedCameraAndWorldPackAuxiliaryState",
+      "name": "packed camera and WorldPack auxiliary state",
+      "start": 878,
+      "length": 146
+    },
+    {
+      "id": "WorldPackStaging",
+      "name": "WorldPack staging",
+      "start": 1024,
+      "length": 594
+    },
+    {
+      "id": "CpuRamMirror1",
+      "name": "CPU RAM mirror 1",
+      "start": 2048,
+      "length": 2048
+    },
+    {
+      "id": "CpuRamMirror2",
+      "name": "CPU RAM mirror 2",
+      "start": 4096,
+      "length": 2048
+    },
+    {
+      "id": "CpuRamMirror3",
+      "name": "CPU RAM mirror 3",
+      "start": 6144,
+      "length": 2048
+    }
+  ],
+  "addresses": [
+    {
+      "domain": "audio",
+      "name": "SfxPointerLow",
+      "address": 222,
+      "owner": "SoundEffectZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "SfxPointerHigh",
+      "address": 223,
+      "owner": "SoundEffectZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "X",
+      "address": 224,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "TileColumn",
+      "address": 225,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "TargetColumn",
+      "address": 226,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "SourceColumn",
+      "address": 227,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PayloadIndexScratch",
+      "address": 228,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "runtime",
+      "name": "SpriteFrameScratch",
+      "address": 228,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "runtime",
+      "name": "CollisionColumnScratch",
+      "address": 229,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "runtime",
+      "name": "CollisionRowScratch",
+      "address": 230,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "NewX",
+      "address": 231,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PointerLow",
+      "address": 232,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PointerLow",
+      "address": 232,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "runtime",
+      "name": "IndexScratch",
+      "address": 232,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PointerHigh",
+      "address": 233,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PointerHigh",
+      "address": 233,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "runtime",
+      "name": "ExpressionScratch",
+      "address": 233,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "Y",
+      "address": 234,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "TileRow",
+      "address": 235,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "NewY",
+      "address": 236,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "TargetRow",
+      "address": 237,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "SourceRow",
+      "address": 238,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "camera",
+      "name": "StreamRemaining",
+      "address": 239,
+      "owner": "CameraAndRuntimeZeroPage"
+    },
+    {
+      "domain": "input",
+      "name": "Current",
+      "address": 240,
+      "owner": "InputZeroPage"
+    },
+    {
+      "domain": "input",
+      "name": "Previous",
+      "address": 241,
+      "owner": "InputZeroPage"
+    },
+    {
+      "domain": "input",
+      "name": "HoldTicksStart",
+      "address": 242,
+      "owner": "InputZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicOrderPointerLow",
+      "address": 250,
+      "owner": "AudioZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicOrderPointerHigh",
+      "address": 251,
+      "owner": "AudioZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicBodyPointerLow",
+      "address": 252,
+      "owner": "AudioZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicBodyPointerHigh",
+      "address": 253,
+      "owner": "AudioZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicTick",
+      "address": 254,
+      "owner": "AudioZeroPage"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicCommandCount",
+      "address": 255,
+      "owner": "AudioZeroPage"
+    },
+    {
+      "domain": "sprite",
+      "name": "OamShadow",
+      "address": 512,
+      "owner": "OamShadow"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingStreamFlags",
+      "address": 768,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingNextStream",
+      "address": 769,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingColumnTarget",
+      "address": 770,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingColumnSource",
+      "address": 771,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingRowTarget",
+      "address": 772,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingRowSource",
+      "address": 773,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingRowTargetColumn",
+      "address": 774,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingRowSourceColumn",
+      "address": 775,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingRowPhase",
+      "address": 776,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "ScrollApplied",
+      "address": 777,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "WalkTarget",
+      "address": 778,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "WalkSteps",
+      "address": 779,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "camera",
+      "name": "WalkTargetHigh",
+      "address": 780,
+      "owner": "CameraControlState"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicLoopPointerLow",
+      "address": 784,
+      "owner": "AudioState"
+    },
+    {
+      "domain": "audio",
+      "name": "MusicLoopPointerHigh",
+      "address": 785,
+      "owner": "AudioState"
+    },
+    {
+      "domain": "audio",
+      "name": "SfxActive",
+      "address": 786,
+      "owner": "AudioState"
+    },
+    {
+      "domain": "audio",
+      "name": "Pulse1ShadowBase",
+      "address": 787,
+      "owner": "AudioState"
+    },
+    {
+      "domain": "audio",
+      "name": "SfxLinger",
+      "address": 791,
+      "owner": "AudioState"
+    },
+    {
+      "domain": "camera",
+      "name": "XHigh",
+      "address": 792,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "YHigh",
+      "address": 793,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "TileColumnHigh",
+      "address": 794,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "TileRowHigh",
+      "address": 795,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "SourceRowHigh",
+      "address": 796,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "SourceColumnHigh",
+      "address": 798,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingColumnSourceHigh",
+      "address": 801,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "camera",
+      "name": "PendingRowSourceColumnHigh",
+      "address": 803,
+      "owner": "ExtendedCameraState"
+    },
+    {
+      "domain": "banking",
+      "name": "Mmc3R6Shadow",
+      "address": 804,
+      "owner": "MapperBankShadows"
+    },
+    {
+      "domain": "banking",
+      "name": "Mmc3R7Shadow",
+      "address": 805,
+      "owner": "MapperBankShadows"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ValidationState",
+      "address": 806,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SourceOffset0",
+      "address": 807,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SourceOffset1",
+      "address": 808,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SourceOffset2",
+      "address": 809,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SourceOffset3",
+      "address": 810,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ReadValue",
+      "address": 811,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ValidationCrcLow",
+      "address": 812,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ValidationCrcHigh",
+      "address": 813,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ValidationByte",
+      "address": 814,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ChunkIndexLow",
+      "address": 815,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ChunkIndexHigh",
+      "address": 816,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SlotIndex",
+      "address": 817,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PlaneKind",
+      "address": 818,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DirectoryEntryOffset0",
+      "address": 819,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DirectoryEntryOffset1",
+      "address": 820,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DirectoryEntryOffset2",
+      "address": 821,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DirectoryEntryOffset3",
+      "address": 822,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PlaneOffset0",
+      "address": 823,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PlaneOffset1",
+      "address": 824,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PlaneOffset2",
+      "address": 825,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PlaneOffset3",
+      "address": 826,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "StoredRemaining",
+      "address": 827,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DecodedRemaining",
+      "address": 828,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "Codec",
+      "address": 829,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DestinationLow",
+      "address": 830,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "DestinationHigh",
+      "address": 831,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "WorkLow",
+      "address": 832,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "WorkHigh",
+      "address": 833,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "PacketCount",
+      "address": 834,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "IdBytes",
+      "address": 835,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "TempIdLow",
+      "address": 836,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "TempIdHigh",
+      "address": 837,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "HardwareXLow",
+      "address": 838,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "HardwareXHigh",
+      "address": 839,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "HardwareYLow",
+      "address": 840,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "HardwareYHigh",
+      "address": 841,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ResultTile",
+      "address": 842,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ResultMetadata",
+      "address": 843,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ResultCollision",
+      "address": 844,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MetatileXLow",
+      "address": 845,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MetatileXHigh",
+      "address": 846,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MetatileYLow",
+      "address": 847,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MetatileYHigh",
+      "address": 848,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SubcellX",
+      "address": 849,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SubcellY",
+      "address": 850,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ChunkXLow",
+      "address": 851,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ChunkXHigh",
+      "address": 852,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ChunkYLow",
+      "address": 853,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ChunkYHigh",
+      "address": 854,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "LocalX",
+      "address": 855,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "LocalY",
+      "address": 856,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CellIndex",
+      "address": 857,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SubcellIndexLow",
+      "address": 858,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SubcellIndexHigh",
+      "address": 859,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "IdLow",
+      "address": 860,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "IdHigh",
+      "address": 861,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MathValueLow",
+      "address": 862,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MathValueHigh",
+      "address": 863,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MathCountLow",
+      "address": 864,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MathCountHigh",
+      "address": 865,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MathResultLow",
+      "address": 866,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "MathResultHigh",
+      "address": 867,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ValidWidth",
+      "address": 868,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualSlot0State",
+      "address": 869,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualSlot1State",
+      "address": 870,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionSlot0State",
+      "address": 871,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionSlot1State",
+      "address": 872,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SelectedStateAddressLow",
+      "address": 873,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "SelectedStateAddressHigh",
+      "address": 874,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ProbeVisualStatus",
+      "address": 875,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ProbeCollisionStatus",
+      "address": 876,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "ProbeCompleted",
+      "address": 877,
+      "owner": "WorldPackScalarState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "FrameCounterLow",
+      "address": 878,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "FrameCounterHigh",
+      "address": 879,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "RequestCount",
+      "address": 880,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PrepareCount",
+      "address": 881,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "ResidentCount",
+      "address": 882,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitCount",
+      "address": 883,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "ReleaseCount",
+      "address": 884,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "BankWorkInCommit",
+      "address": 885,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "DirectoryWorkInCommit",
+      "address": 886,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "DecodeWorkInCommit",
+      "address": 887,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "LastTileWrites",
+      "address": 888,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "LastAttributeWrites",
+      "address": 889,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "RequestFrameLow",
+      "address": 890,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "RequestFrameHigh",
+      "address": 891,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "ResidentFrameLow",
+      "address": 892,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "ResidentFrameHigh",
+      "address": 893,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitFrameLow",
+      "address": 894,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitFrameHigh",
+      "address": 895,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CriticalSection",
+      "address": 896,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "SelectedSlot",
+      "address": 897,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitAxis",
+      "address": 898,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitDirection",
+      "address": 899,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitWorldEdgeLow",
+      "address": 900,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitWorldEdgeHigh",
+      "address": 901,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitTarget",
+      "address": 902,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitOrthogonalLow",
+      "address": 903,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitOrthogonalHigh",
+      "address": 904,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitPayloadLength",
+      "address": 905,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "RowPhase",
+      "address": 906,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "CommitTargetStart",
+      "address": 907,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "NextAxis",
+      "address": 908,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "FramePending",
+      "address": 911,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Slot0",
+      "address": 912,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Slot1",
+      "address": 928,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Iterator",
+      "address": 944,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "DestinationLow",
+      "address": 945,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "DestinationHigh",
+      "address": 946,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Status",
+      "address": 947,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "TargetCursor",
+      "address": 948,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AddressColumn",
+      "address": 949,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PhaseRemaining",
+      "address": 950,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeBlock",
+      "address": 951,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "FastVisualCacheTag0",
+      "address": 952,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualCache0Valid",
+      "address": 952,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "FastVisualCacheTag2",
+      "address": 953,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualCache0ChunkLow",
+      "address": 953,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "FastVisualCacheTag3",
+      "address": 954,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualCache0ChunkHigh",
+      "address": 954,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "FastVisualCacheTag1",
+      "address": 955,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualCache1Valid",
+      "address": 955,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "FastVisualCacheTag4",
+      "address": 956,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualCache1ChunkLow",
+      "address": 956,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "FastVisualCacheTag5",
+      "address": 957,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualCache1ChunkHigh",
+      "address": 957,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualReplacementNext",
+      "address": 958,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "VisualDecodeCount",
+      "address": 959,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "BulkReadActive",
+      "address": 960,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "BulkReadEntryBank",
+      "address": 961,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "BulkReadCurrentBank",
+      "address": 962,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeIndexLow",
+      "address": 963,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeIndexHigh",
+      "address": 964,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeCount",
+      "address": 965,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeBlockXLow",
+      "address": 966,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeBlockXHigh",
+      "address": 967,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeBlockYLow",
+      "address": 968,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "AttributeBlockYHigh",
+      "address": 969,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PendingAxes",
+      "address": 970,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "VisibleCameraXLow",
+      "address": 971,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "VisibleCameraXHigh",
+      "address": 972,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "VisibleCameraYLow",
+      "address": 973,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "VisibleCameraYHigh",
+      "address": 974,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "VisibleCameraTileColumn",
+      "address": 975,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PendingColumn",
+      "address": 976,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "PendingRow",
+      "address": 992,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "VisibleCameraTileRow",
+      "address": 1008,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCache0Valid",
+      "address": 1009,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCache0ChunkLow",
+      "address": 1010,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCache0ChunkHigh",
+      "address": 1011,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCache1Valid",
+      "address": 1012,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCache1ChunkLow",
+      "address": 1013,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCache1ChunkHigh",
+      "address": 1014,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionReplacementNext",
+      "address": 1015,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionDecodeCountLow",
+      "address": 1016,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionDecodeCountHigh",
+      "address": 1017,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "GameplayTickCount",
+      "address": 1018,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "AudioTickCount",
+      "address": 1019,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCellYTag",
+      "address": 1020,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCellXLow",
+      "address": 1021,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCellXHigh",
+      "address": 1022,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "CollisionCellResult",
+      "address": 1023,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "WorldPack",
+      "name": "StagingStart",
+      "address": 1024,
+      "owner": "WorldPackStaging"
+    }
+  ],
+  "rangeAliases": [
+    {
+      "name": "CPU RAM mirror 1",
+      "canonicalStart": 0,
+      "canonicalLength": 2048,
+      "aliasStart": 2048,
+      "aliasLength": 2048
+    },
+    {
+      "name": "CPU RAM mirror 2",
+      "canonicalStart": 0,
+      "canonicalLength": 2048,
+      "aliasStart": 4096,
+      "aliasLength": 2048
+    },
+    {
+      "name": "CPU RAM mirror 3",
+      "canonicalStart": 0,
+      "canonicalLength": 2048,
+      "aliasStart": 6144,
+      "aliasLength": 2048
+    }
+  ],
+  "addressAliases": [
+    {
+      "name": "sprite-frame/payload-index scratch",
+      "address": 228,
+      "roles": [
+        "packed camera.PayloadIndexScratch",
+        "runtime.SpriteFrameScratch"
+      ]
+    },
+    {
+      "name": "runtime/WorldPack/packed-camera pointer low scratch",
+      "address": 232,
+      "roles": [
+        "WorldPack.PointerLow",
+        "packed camera.PointerLow",
+        "runtime.IndexScratch"
+      ]
+    },
+    {
+      "name": "runtime/WorldPack/packed-camera pointer high scratch",
+      "address": 233,
+      "roles": [
+        "WorldPack.PointerHigh",
+        "packed camera.PointerHigh",
+        "runtime.ExpressionScratch"
+      ]
+    },
+    {
+      "name": "fast visual cache tag 0",
+      "address": 952,
+      "roles": [
+        "WorldPack.FastVisualCacheTag0",
+        "WorldPack.VisualCache0Valid"
+      ]
+    },
+    {
+      "name": "fast visual cache tag 2",
+      "address": 953,
+      "roles": [
+        "WorldPack.FastVisualCacheTag2",
+        "WorldPack.VisualCache0ChunkLow"
+      ]
+    },
+    {
+      "name": "fast visual cache tag 3",
+      "address": 954,
+      "roles": [
+        "WorldPack.FastVisualCacheTag3",
+        "WorldPack.VisualCache0ChunkHigh"
+      ]
+    },
+    {
+      "name": "fast visual cache tag 1",
+      "address": 955,
+      "roles": [
+        "WorldPack.FastVisualCacheTag1",
+        "WorldPack.VisualCache1Valid"
+      ]
+    },
+    {
+      "name": "fast visual cache tag 4",
+      "address": 956,
+      "roles": [
+        "WorldPack.FastVisualCacheTag4",
+        "WorldPack.VisualCache1ChunkLow"
+      ]
+    },
+    {
+      "name": "fast visual cache tag 5",
+      "address": 957,
+      "roles": [
+        "WorldPack.FastVisualCacheTag5",
+        "WorldPack.VisualCache1ChunkHigh"
+      ]
+    }
+  ],
+  "constants": [
+    {
+      "name": "WorldPack.CurrentStagingBytes",
+      "value": 338
+    },
+    {
+      "name": "WorldPack.MaximumStagingBytes",
+      "value": 594
+    },
+    {
+      "name": "packed camera.AxisOffset",
+      "value": 1
+    },
+    {
+      "name": "packed camera.Column",
+      "value": 1
+    },
+    {
+      "name": "packed camera.CommitPhaseOffset",
+      "value": 13
+    },
+    {
+      "name": "packed camera.Committing",
+      "value": 4
+    },
+    {
+      "name": "packed camera.DirectionOffset",
+      "value": 2
+    },
+    {
+      "name": "packed camera.Empty",
+      "value": 0
+    },
+    {
+      "name": "packed camera.Negative",
+      "value": 1
+    },
+    {
+      "name": "packed camera.NoSlot",
+      "value": 255
+    },
+    {
+      "name": "packed camera.OrthogonalHighOffset",
+      "value": 7
+    },
+    {
+      "name": "packed camera.OrthogonalLowOffset",
+      "value": 6
+    },
+    {
+      "name": "packed camera.PayloadCursorOffset",
+      "value": 15
+    },
+    {
+      "name": "packed camera.PayloadLengthOffset",
+      "value": 8
+    },
+    {
+      "name": "packed camera.Positive",
+      "value": 2
+    },
+    {
+      "name": "packed camera.Preparing",
+      "value": 2
+    },
+    {
+      "name": "packed camera.Released",
+      "value": 5
+    },
+    {
+      "name": "packed camera.RequestFrameHighOffset",
+      "value": 10
+    },
+    {
+      "name": "packed camera.RequestFrameLowOffset",
+      "value": 9
+    },
+    {
+      "name": "packed camera.Requested",
+      "value": 1
+    },
+    {
+      "name": "packed camera.Resident",
+      "value": 3
+    },
+    {
+      "name": "packed camera.ResidentFrameHighOffset",
+      "value": 12
+    },
+    {
+      "name": "packed camera.ResidentFrameLowOffset",
+      "value": 11
+    },
+    {
+      "name": "packed camera.Row",
+      "value": 2
+    },
+    {
+      "name": "packed camera.SlotMetadataBytes",
+      "value": 16
+    },
+    {
+      "name": "packed camera.StateOffset",
+      "value": 0
+    },
+    {
+      "name": "packed camera.TargetOffset",
+      "value": 5
+    },
+    {
+      "name": "packed camera.TargetStartOffset",
+      "value": 14
+    },
+    {
+      "name": "packed camera.WorldEdgeHighOffset",
+      "value": 4
+    },
+    {
+      "name": "packed camera.WorldEdgeLowOffset",
+      "value": 3
+    }
+  ],
+  "runtimeRegions": [
+    {
+      "name": "WorldPack.VisualSlot0",
+      "start": 1024,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.VisualSlot1",
+      "start": 1088,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.VisualSlot2",
+      "start": 1152,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.VisualSlot3",
+      "start": 1216,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.VisualSlot4",
+      "start": 1280,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.VisualSlot5",
+      "start": 1344,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.CollisionSlot0",
+      "start": 1408,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.CollisionSlot1",
+      "start": 1472,
+      "length": 64,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.EdgeSlot0",
+      "start": 1536,
+      "length": 41,
+      "owner": "WorldPackStaging"
+    },
+    {
+      "name": "WorldPack.EdgeSlot1",
+      "start": 1577,
+      "length": 41,
+      "owner": "WorldPackStaging"
+    }
+  ],
+  "userVariables": [
+    {
+      "name": "player.x",
+      "type": "i16",
+      "address": 0,
+      "size": 2
+    },
+    {
+      "name": "player.y",
+      "type": "i16",
+      "address": 2,
+      "size": 2
+    },
+    {
+      "name": "player.velocityY",
+      "type": "i8",
+      "address": 4,
+      "size": 1
+    },
+    {
+      "name": "player.grounded",
+      "type": "bool",
+      "address": 5,
+      "size": 1
+    },
+    {
+      "name": "player.displayFrame",
+      "type": "i16",
+      "address": 6,
+      "size": 2
+    },
+    {
+      "name": "player.displayFlipX",
+      "type": "bool",
+      "address": 8,
+      "size": 1
+    },
+    {
+      "name": "player.animTick",
+      "type": "i16",
+      "address": 9,
+      "size": 2
+    },
+    {
+      "name": "player.jumping",
+      "type": "bool",
+      "address": 11,
+      "size": 1
+    },
+    {
+      "name": "player.verticalSubpixel",
+      "type": "i16",
+      "address": 12,
+      "size": 2
+    },
+    {
+      "name": "view.x",
+      "type": "i16",
+      "address": 14,
+      "size": 2
+    },
+    {
+      "name": "view.y",
+      "type": "i16",
+      "address": 16,
+      "size": 2
+    },
+    {
+      "name": "view.moving",
+      "type": "bool",
+      "address": 18,
+      "size": 1
+    },
+    {
+      "name": "view.speed",
+      "type": "i16",
+      "address": 19,
+      "size": 2
+    },
+    {
+      "name": "view.direction",
+      "type": "i16",
+      "address": 21,
+      "size": 2
+    },
+    {
+      "name": "view.movementRemainder",
+      "type": "i16",
+      "address": 23,
+      "size": 2
+    },
+    {
+      "name": "frame.resetRequested",
+      "type": "bool",
+      "address": 25,
+      "size": 1
+    },
+    {
+      "name": "__retrosharp_inline_12_screenX",
+      "type": "i16",
+      "address": 26,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_12_screenY",
+      "type": "i16",
+      "address": 28,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_16_previousFootWorldY",
+      "type": "i16",
+      "address": 30,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_18_verticalMotion",
+      "type": "i16",
+      "address": 32,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_16_footWorldY",
+      "type": "i16",
+      "address": 34,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_16_screenX",
+      "type": "i16",
+      "address": 36,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_19_footTile",
+      "type": "i16",
+      "address": 38,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_21_headProbeY",
+      "type": "i16",
+      "address": 40,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_27_screenY",
+      "type": "i16",
+      "address": 42,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_27_maxScrollY",
+      "type": "i16",
+      "address": 44,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_16_movementFootWorldY",
+      "type": "i16",
+      "address": 46,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_31_wallProbeY",
+      "type": "i16",
+      "address": 48,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_31_desiredDirection",
+      "type": "i16",
+      "address": 50,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_43_collisionCameraX",
+      "type": "i16",
+      "address": 52,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_43_steps",
+      "type": "u8",
+      "address": 54,
+      "size": 1
+    },
+    {
+      "name": "__retrosharp_inline_45_screenX",
+      "type": "i16",
+      "address": 55,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_45_rightProbeX",
+      "type": "i16",
+      "address": 57,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_47_screenX",
+      "type": "i16",
+      "address": 59,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_47_leftProbeX",
+      "type": "i16",
+      "address": 61,
+      "size": 2
+    }
+  ]
+}

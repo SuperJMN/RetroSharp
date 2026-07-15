@@ -21,7 +21,6 @@ from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[2]
-FRAME_COUNTER_LOW = 0x036E
 RETRO_DEVICE_JOYPAD = 1
 RETRO_DEVICE_ID_JOYPAD_LEFT = 6
 RETRO_DEVICE_ID_JOYPAD_RIGHT = 7
@@ -239,7 +238,7 @@ class RetroArchNetworkSession:
         core_options: dict[str, str] | None = None,
         base_config: str = "",
         frontend_options: dict[str, str] | None = None,
-        frame_counter_address: int | None = FRAME_COUNTER_LOW,
+        frame_counter_addresses: tuple[int, int] | None = None,
     ) -> None:
         self.launch_command = list(launch_command)
         self.core_path = core_path.resolve()
@@ -250,7 +249,7 @@ class RetroArchNetworkSession:
         self.core_options = core_options or {}
         self.base_config = base_config
         self.frontend_options = frontend_options or {}
-        self.frame_counter_address = frame_counter_address
+        self.frame_counter_addresses = frame_counter_addresses
         self.process: subprocess.Popen[str] | None = None
         self.log_file = None
         self.command_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -402,13 +401,14 @@ class RetroArchNetworkSession:
             self.write(start, pattern[start : start + 128])
 
     def frame_counter(self) -> int:
-        if self.frame_counter_address is None:
+        if self.frame_counter_addresses is None:
             raise RuntimeError("This core does not expose the runner frame counter through RetroArch.")
-        low, high = self.read(self.frame_counter_address, 2)
+        low = self.read(self.frame_counter_addresses[0], 1)[0]
+        high = self.read(self.frame_counter_addresses[1], 1)[0]
         return low | high << 8
 
     def advance_frame(self) -> None:
-        if self.frame_counter_address is None:
+        if self.frame_counter_addresses is None:
             self.action("FRAMEADVANCE")
             self.query("GET_STATUS")
             time.sleep(0.001)

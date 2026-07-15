@@ -38,12 +38,15 @@ framebuffers, PPU registers/writer counts, palettes, physical nametable hashes
 and bytes, exact visible `(tile ID, palette selector)` cells, and collision
 evidence.
 
-Each atomic AprNes frame probes only `$0000+4`, `$00E0+2`, `$0318+2`,
-`$036E+12`, `$0380+12`, `$0390+1`, `$03A0+1`, `$03CA+5`, and `$03F8+4` for
-player/camera words, lifecycle/write counters, the active commit descriptor,
-slot states, pending/critical state, collision/decode counters, and
-gameplay/audio ticks. Long observations
-use one frame per call within the MCP's 600-frame limit and at most 2,000 PPU
+Before any emulator starts, the harness loads the compiler-generated
+`samples/runner/bin/runner.nes.runtime-abi.json`, validates its v1 schema and
+required semantic fields, and compares its bound ROM SHA-256 with the selected
+`--rom`. `--runtime-abi <path>` selects another generated sidecar. Each atomic
+AprNes frame coalesces the contract's runner-local, camera, lifecycle,
+commit-descriptor, slot, collision, gameplay, and audio addresses into the
+smallest contiguous probe spans. Requested camera Y resolves through
+`camera.Y` rather than the adjacent `camera.TileColumn` scratch byte. Long
+observations use one frame per call within the MCP's 600-frame limit and at most 2,000 PPU
 events; focal single-frame traces allow 10,000. The accepted run made 391
 atomic observations and returned all 4,072 observed events with matching declared counts and no
 `ppuTraceTruncated` or result `truncated` flag.
@@ -194,7 +197,7 @@ The differential harness complements, rather than replaces, normal target
 validation:
 
 ```bash
-python3 -m unittest tools.nes.tests.test_runner_visual_parity -q
+python3 -m unittest tools.nes.tests.test_runtime_abi tools.nes.tests.test_runner_visual_parity -q
 tools/nes/verify_runner_power_on_ram.py
 dotnet test RetroSharp.sln -m:1
 tools/gameboy/generate_sample_roms.py

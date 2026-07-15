@@ -31,8 +31,12 @@ dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target 
 Build the NES acceptance runner from the same source. The shared music path resolves to `assets/music/runner.nes.vgz` for NES:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out bin/runner.nes runner.retrosharp.json
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --runtime-abi-out bin/runner.nes.runtime-abi.json --out bin/runner.nes runner.retrosharp.json
 ```
+
+The NES sidecar is the versioned, ROM-bound address contract consumed by the
+power-on, cadence, and visual-parity probes. Regenerate it with the ROM; a hash
+mismatch is rejected before an emulator starts.
 
 Preview with RetroArch Flatpak:
 

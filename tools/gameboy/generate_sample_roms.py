@@ -17,6 +17,7 @@ class SampleBuild:
     target: str
     output: Path
     library_paths: tuple[Path, ...] = ()
+    runtime_abi_output: Path | None = None
 
 
 def main(argv: list[str]) -> int:
@@ -60,6 +61,13 @@ def main(argv: list[str]) -> int:
         ]
         for library_path in build.library_paths:
             command.extend(["--lib-path", str(library_path.relative_to(repo_root))])
+        if build.runtime_abi_output is not None:
+            command.extend(
+                [
+                    "--runtime-abi-out",
+                    str(build.runtime_abi_output.relative_to(repo_root)),
+                ]
+            )
 
         command.extend(
             [
@@ -83,6 +91,7 @@ def select_builds(repo_root: Path, include_all: bool, requested_samples: list[st
             target=target,
             output=sample_output_path(repo_root / sample["path"], target),
             library_paths=tuple(repo_root / library_path for library_path in sample.get("libraryPaths", [])),
+            runtime_abi_output=sample_runtime_abi_output(repo_root, sample, target),
         )
         for sample in manifest["samples"]
         for target in sample.get("targets", [])
@@ -160,6 +169,16 @@ def project_declared_output(source: Path, target: str) -> Path | None:
         return resolve_project_path(source, output)
 
     return None
+
+
+def sample_runtime_abi_output(repo_root: Path, sample: dict, target: str) -> Path | None:
+    outputs = sample.get("runtimeAbiOutputs")
+    if not isinstance(outputs, dict):
+        return None
+    output = outputs.get(target)
+    if not isinstance(output, str) or not output:
+        return None
+    return repo_root / output
 
 
 def project_declares_single_target(project: dict, target: str) -> bool:

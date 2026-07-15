@@ -17,9 +17,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tools.nes.runner_visual_parity import RetroArchNetworkSession as IsolatedRetroArchSession
+from tools.nes.runtime_abi import NesRuntimeAbi
 
 
 DEFAULT_ROM = ROOT / "samples" / "runner" / "bin" / "runner.nes"
+DEFAULT_RUNTIME_ABI = ROOT / "samples" / "runner" / "bin" / "runner.nes.runtime-abi.json"
 DEFAULT_CORE = (
     Path.home()
     / ".var"
@@ -31,46 +33,22 @@ DEFAULT_CORE = (
     / "fceumm_libretro.so"
 )
 
-PLAYER_X_LOW = 0x0000
-PLAYER_X_HIGH = 0x0001
-PLAYER_Y_LOW = 0x0002
-PLAYER_Y_HIGH = 0x0003
-REQUESTED_CAMERA_X_LOW = 0x00E0
-REQUESTED_CAMERA_X_HIGH = 0x0318
-FRAME_COUNTER_LOW = 0x036E
-REQUEST_COUNT = 0x0370
-PREPARE_COUNT = 0x0371
-RESIDENT_COUNT = 0x0372
-COMMIT_COUNT = 0x0373
-RELEASE_COUNT = 0x0374
-BANK_WORK_IN_COMMIT = 0x0375
-DIRECTORY_WORK_IN_COMMIT = 0x0376
-DECODE_WORK_IN_COMMIT = 0x0377
-LAST_TILE_WRITES = 0x0378
-LAST_ATTRIBUTE_WRITES = 0x0379
-CRITICAL_SECTION = 0x0380
-SELECTED_SLOT = 0x0381
-FRAME_PENDING = 0x038F
-SLOT0 = 0x0390
-SLOT1 = 0x03A0
-PENDING_AXES = 0x03CA
-VISIBLE_CAMERA_X_LOW = 0x03CB
-VISIBLE_CAMERA_X_HIGH = 0x03CC
-WORLD_PACK_VISUAL_CACHE0_VALID = 0x03B8
-WORLD_PACK_BULK_READ_CURRENT_BANK = 0x03C2
-WORLD_PACK_COLLISION_CACHE0_VALID = 0x03F1
-COLLISION_DECODE_COUNT_LOW = 0x03F8
-GAMEPLAY_TICK_COUNT = 0x03FA
-AUDIO_TICK_COUNT = 0x03FB
-WORLD_PACK_VALIDATION_STATE = 0x0326
-BULK_READ_ACTIVE = 0x03C0
-PACKED_STATUS = 0x03B3
-
-EMPTY = 0
-RELEASED = 5
-NO_SLOT = 0xFF
+_ACTIVE_RUNTIME_ABI: NesRuntimeAbi | None = None
 SETTLE_FRAMES = 500
 MEASURED_FRAMES = 120
+
+
+def activate_runtime_abi(abi: NesRuntimeAbi) -> None:
+    global _ACTIVE_RUNTIME_ABI
+    _ACTIVE_RUNTIME_ABI = abi
+
+
+def runtime_abi(override: NesRuntimeAbi | None = None) -> NesRuntimeAbi:
+    if override is not None:
+        return override
+    if _ACTIVE_RUNTIME_ABI is not None:
+        return _ACTIVE_RUNTIME_ABI
+    return NesRuntimeAbi.load(DEFAULT_RUNTIME_ABI, DEFAULT_ROM)
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +59,7 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--rom", type=Path, default=DEFAULT_ROM)
+    parser.add_argument("--runtime-abi", type=Path, default=DEFAULT_RUNTIME_ABI)
     parser.add_argument("--core", type=Path, default=DEFAULT_CORE)
     parser.add_argument(
         "--retroarch-command",
@@ -134,73 +113,106 @@ def deterministic_pattern(seed: int) -> bytes:
 def word(
     session: IsolatedRetroArchSession,
     low_address: int,
-    high_address: int | None = None,
+    high_address: int,
 ) -> int:
-    if high_address is None:
-        low, high = session.read(low_address, 2)
-    else:
-        low = session.read(low_address, 1)[0]
-        high = session.read(high_address, 1)[0]
+    low = session.read(low_address, 1)[0]
+    high = session.read(high_address, 1)[0]
     return low | high << 8
 
 
-def snapshot(session: IsolatedRetroArchSession) -> dict[str, object]:
-    counters = session.read(REQUEST_COUNT, RELEASE_COUNT - REQUEST_COUNT + 1)
-    visual_slots = [bytes(session.read(0x0400 + index * 64, 64)) for index in range(6)]
+def variable_word(session: IsolatedRetroArchSession, variable) -> int:
+    low, high = session.read(variable.address, variable.size)
+    return low | high << 8
+
+
+def snapshot(
+    session: IsolatedRetroArchSession,
+    abi: NesRuntimeAbi | None = None,
+) -> dict[str, object]:
+    contract = runtime_abi(abi)
+
+    def address(name: str) -> int:
+        return contract.address(name)
+
+    visual_slot_regions = [
+        contract.region(f"WorldPack.VisualSlot{index}")
+        for index in range(6)
+    ]
+    visual_slots = [
+        bytes(session.read(region.start, region.length))
+        for region in visual_slot_regions
+    ]
+    player_x = contract.variable("player.x")
+    player_y = contract.variable("player.y")
+    control_ranges = [
+        contract.range("WorldPackScalarState"),
+        contract.range("PackedCameraAndWorldPackAuxiliaryState"),
+    ]
+    control_bytes = b"".join(
+        bytes(session.read(value.start, value.length))
+        for value in control_ranges
+    )
     return {
         "hardware_frames": session.frame_counter(),
-        "gameplay_ticks": session.read(GAMEPLAY_TICK_COUNT, 1)[0],
-        "audio_ticks": session.read(AUDIO_TICK_COUNT, 1)[0],
-        "player_x": word(session, PLAYER_X_LOW, PLAYER_X_HIGH),
-        "player_y": word(session, PLAYER_Y_LOW, PLAYER_Y_HIGH),
+        "gameplay_ticks": session.read(address("WorldPack.GameplayTickCount"), 1)[0],
+        "audio_ticks": session.read(address("WorldPack.AudioTickCount"), 1)[0],
+        "player_x": variable_word(session, player_x),
+        "player_y": variable_word(session, player_y),
         "requested_camera_x": word(
             session,
-            REQUESTED_CAMERA_X_LOW,
-            REQUESTED_CAMERA_X_HIGH,
+            address("camera.X"),
+            address("camera.XHigh"),
         ),
         "visible_camera_x": word(
             session,
-            VISIBLE_CAMERA_X_LOW,
-            VISIBLE_CAMERA_X_HIGH,
+            address("packed camera.VisibleCameraXLow"),
+            address("packed camera.VisibleCameraXHigh"),
         ),
-        "collision_decodes": word(session, COLLISION_DECODE_COUNT_LOW),
+        "collision_decodes": word(
+            session,
+            address("WorldPack.CollisionDecodeCountLow"),
+            address("WorldPack.CollisionDecodeCountHigh"),
+        ),
         "lifecycle": {
-            "request": counters[0],
-            "prepare": counters[1],
-            "resident": counters[2],
-            "commit": counters[3],
-            "release": counters[4],
+            "request": session.read(address("packed camera.RequestCount"), 1)[0],
+            "prepare": session.read(address("packed camera.PrepareCount"), 1)[0],
+            "resident": session.read(address("packed camera.ResidentCount"), 1)[0],
+            "commit": session.read(address("packed camera.CommitCount"), 1)[0],
+            "release": session.read(address("packed camera.ReleaseCount"), 1)[0],
         },
         "slot_states": [
-            session.read(SLOT0, 1)[0],
-            session.read(SLOT1, 1)[0],
+            session.read(address("packed camera.Slot0"), 1)[0],
+            session.read(address("packed camera.Slot1"), 1)[0],
         ],
-        "selected_slot": session.read(SELECTED_SLOT, 1)[0],
-        "pending_axes": session.read(PENDING_AXES, 1)[0],
-        "critical_section": session.read(CRITICAL_SECTION, 1)[0],
-        "packed_status": session.read(PACKED_STATUS, 1)[0],
+        "selected_slot": session.read(address("packed camera.SelectedSlot"), 1)[0],
+        "pending_axes": session.read(address("packed camera.PendingAxes"), 1)[0],
+        "critical_section": session.read(address("packed camera.CriticalSection"), 1)[0],
+        "packed_status": session.read(address("packed camera.Status"), 1)[0],
         "forbidden_commit_work": {
-            "bank": session.read(BANK_WORK_IN_COMMIT, 1)[0],
-            "directory": session.read(DIRECTORY_WORK_IN_COMMIT, 1)[0],
-            "decode": session.read(DECODE_WORK_IN_COMMIT, 1)[0],
+            "bank": session.read(address("packed camera.BankWorkInCommit"), 1)[0],
+            "directory": session.read(address("packed camera.DirectoryWorkInCommit"), 1)[0],
+            "decode": session.read(address("packed camera.DecodeWorkInCommit"), 1)[0],
         },
         "last_commit_writes": {
-            "tiles": session.read(LAST_TILE_WRITES, 1)[0],
-            "attributes": session.read(LAST_ATTRIBUTE_WRITES, 1)[0],
+            "tiles": session.read(address("packed camera.LastTileWrites"), 1)[0],
+            "attributes": session.read(address("packed camera.LastAttributeWrites"), 1)[0],
         },
         "world_pack_state": {
-            "validation": session.read(WORLD_PACK_VALIDATION_STATE, 1)[0],
-            "visual_cache0_valid": session.read(WORLD_PACK_VISUAL_CACHE0_VALID, 1)[0],
-            "bulk_read_active": session.read(BULK_READ_ACTIVE, 1)[0],
-            "bulk_read_current_bank": session.read(WORLD_PACK_BULK_READ_CURRENT_BANK, 1)[0],
-            "collision_cache0_valid": session.read(WORLD_PACK_COLLISION_CACHE0_VALID, 1)[0],
-            "control_hex": bytes(session.read(0x0326, 0xDA)).hex(),
+            "validation": session.read(address("WorldPack.ValidationState"), 1)[0],
+            "visual_cache0_valid": session.read(address("WorldPack.VisualCache0Valid"), 1)[0],
+            "bulk_read_active": session.read(address("WorldPack.BulkReadActive"), 1)[0],
+            "bulk_read_current_bank": session.read(address("WorldPack.BulkReadCurrentBank"), 1)[0],
+            "collision_cache0_valid": session.read(address("WorldPack.CollisionCache0Valid"), 1)[0],
+            "control_hex": control_bytes.hex(),
             "visual_slot_sha256": [hashlib.sha256(slot).hexdigest() for slot in visual_slots],
         },
     }
 
 
 def verify_snapshot_pair(before: dict[str, object], after: dict[str, object], measured_frames: int) -> None:
+    contract = runtime_abi()
+    empty = contract.constant("packed camera.Empty")
+    released = contract.constant("packed camera.Released")
     hardware_delta = delta16(int(before["hardware_frames"]), int(after["hardware_frames"]))
     gameplay_delta = delta8(int(before["gameplay_ticks"]), int(after["gameplay_ticks"]))
     audio_delta = delta8(int(before["audio_ticks"]), int(after["audio_ticks"]))
@@ -253,7 +265,7 @@ def verify_snapshot_pair(before: dict[str, object], after: dict[str, object], me
         raise AssertionError(f"tile commit exceeded 32 writes: {after['last_commit_writes']}")
     if int(after["last_commit_writes"]["attributes"]) > 9:
         raise AssertionError(f"attribute commit exceeded 9 writes: {after['last_commit_writes']}")
-    if any(not EMPTY <= int(state) <= RELEASED for state in after["slot_states"]):
+    if any(not empty <= int(state) <= released for state in after["slot_states"]):
         raise AssertionError(f"invalid slot state after traversal: {after['slot_states']}")
 
 
@@ -271,6 +283,15 @@ def run_pattern(
     measured_frames: int,
     base_config: str,
 ) -> dict[str, object]:
+    contract = runtime_abi()
+    empty = contract.constant("packed camera.Empty")
+    released = contract.constant("packed camera.Released")
+    no_slot = contract.constant("packed camera.NoSlot")
+    slot0 = contract.address("packed camera.Slot0")
+    slot1 = contract.address("packed camera.Slot1")
+    frame_pending = contract.address("packed camera.FramePending")
+    selected_slot = contract.address("packed camera.SelectedSlot")
+    critical_section = contract.address("packed camera.CriticalSection")
     run_directory = artifact_directory / name
     with IsolatedRetroArchSession(
         launch_command,
@@ -281,6 +302,10 @@ def run_pattern(
         remote_port,
         {"fceumm_ramstate": initial_fill},
         base_config,
+        frame_counter_addresses=(
+            contract.address("packed camera.FrameCounterLow"),
+            contract.address("packed camera.FrameCounterHigh"),
+        ),
     ) as session:
         session.set_paused(True)
         session.set_right(False)
@@ -295,10 +320,10 @@ def run_pattern(
 
         session.wait_until(
             lambda: (
-                all(EMPTY <= state <= RELEASED for state in session.read(SLOT0, 1) + session.read(SLOT1, 1))
-                and session.read(FRAME_PENDING, 1)[0] <= 1
-                and session.read(SELECTED_SLOT, 1)[0] in (0, 1, NO_SLOT)
-                and session.read(CRITICAL_SECTION, 1)[0] == 0
+                all(empty <= state <= released for state in session.read(slot0, 1) + session.read(slot1, 1))
+                and session.read(frame_pending, 1)[0] <= 1
+                and session.read(selected_slot, 1)[0] in (0, 1, no_slot)
+                and session.read(critical_section, 1)[0] == 0
                 and session.frame_counter() > 0
             ),
             timeout=15,
@@ -308,12 +333,13 @@ def run_pattern(
         for _ in range(settle_frames):
             session.advance_frame()
 
-        expected_guard = pattern[0x0652]
-        actual_guard = session.read(0x0652, 1)[0]
+        guard_address = contract.range("WorldPackStaging").end_exclusive
+        expected_guard = pattern[guard_address]
+        actual_guard = session.read(guard_address, 1)[0]
         if actual_guard != expected_guard:
             raise AssertionError(
                 "packed-camera initialization crossed its runtime-owned staging boundary "
-                f"at $0652: expected {expected_guard}, got {actual_guard}"
+                f"at ${guard_address:04X}: expected {expected_guard}, got {actual_guard}"
             )
 
         before = snapshot(session)
@@ -347,6 +373,7 @@ def run_pattern(
 
 def main() -> int:
     args = parse_args()
+    activate_runtime_abi(NesRuntimeAbi.load(args.runtime_abi, args.rom))
     rom = args.rom.resolve()
     core = args.core.resolve()
     if not rom.is_file():

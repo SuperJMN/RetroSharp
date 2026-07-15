@@ -181,6 +181,7 @@ internal static class NesRomBuilder
                 prgBuild,
                 packedWorldBytes,
                 worldPackPlacement,
+                worldPackRuntime,
                 includeLegacyWorldData));
     }
 
@@ -482,7 +483,8 @@ internal static class NesRomBuilder
             pinnedDataBytes,
             dpcmPlacements,
             fixedPayloadBytes,
-            fixedSymbols);
+            fixedSymbols,
+            runtimeCompiler.UserVariables);
     }
 
     private static void EnsureFixedDataBeforeTrailer(NesCartridgeLayout layout, int currentAddress)
@@ -575,6 +577,7 @@ internal static class NesRomBuilder
         NesPrgBuild prgBuild,
         byte[]? packedWorldBytes,
         NesWorldPackPlacement? worldPackPlacement,
+        NesWorldPackRuntimePlan? worldPackRuntime,
         bool includeLegacyWorldData)
     {
         var segments = new List<NesRomBuildSegment>();
@@ -667,7 +670,27 @@ internal static class NesRomBuilder
             layout.EmitMmc3Foundation ? 4_128 : 0,
             CalculateResidentChrBytes(program),
             orderedSegments,
-            prgBuild.FixedSymbols);
+            prgBuild.FixedSymbols,
+            prgBuild.UserVariables,
+            DescribeRuntimeRegions(worldPackRuntime));
+    }
+
+    private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(
+        NesWorldPackRuntimePlan? worldPackRuntime)
+    {
+        if (worldPackRuntime is null)
+        {
+            return [];
+        }
+
+        const string owner = nameof(NesRuntimeMemoryLayout.WorldPackStaging);
+        return worldPackRuntime.Layout.VisualSlots
+            .Select((range, index) => new NesRuntimeRegion($"WorldPack.VisualSlot{index}", range.Start, range.Length, owner))
+            .Concat(worldPackRuntime.Layout.CollisionSlots.Select(
+                (range, index) => new NesRuntimeRegion($"WorldPack.CollisionSlot{index}", range.Start, range.Length, owner)))
+            .Concat(worldPackRuntime.Layout.EdgeSlots.Select(
+                (range, index) => new NesRuntimeRegion($"WorldPack.EdgeSlot{index}", range.Start, range.Length, owner)))
+            .ToArray();
     }
 
     private static void ValidateReportedSegments(
@@ -2487,6 +2510,16 @@ internal sealed class NesRuntimeCompiler
     {
         return IsWordBackedType(type) ? 2 : 1;
     }
+
+    internal IReadOnlyList<NesRuntimeUserVariable> UserVariables => variables
+        .Select(variable => new NesRuntimeUserVariable(
+            variable.Key,
+            variableTypes[variable.Key],
+            variable.Value,
+            StorageSize(variableTypes[variable.Key])))
+        .OrderBy(variable => variable.Address)
+        .ThenBy(variable => variable.Name, StringComparer.Ordinal)
+        .ToArray();
 
     private string VariableStorageType(string name)
     {
@@ -8721,7 +8754,8 @@ internal sealed record NesPrgBuild(
     byte[] PinnedDataBytes,
     IReadOnlyList<NesDpcmBuildPlacement> DpcmPlacements,
     int FixedPayloadBytes,
-    IReadOnlyDictionary<string, ushort> FixedSymbols);
+    IReadOnlyDictionary<string, ushort> FixedSymbols,
+    IReadOnlyList<NesRuntimeUserVariable> UserVariables);
 
 internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
 
@@ -8736,7 +8770,21 @@ internal sealed record NesRomBuildReport(
     int BootR7Bytes,
     int ResidentChrBytes,
     IReadOnlyList<NesRomBuildSegment> Segments,
-    IReadOnlyDictionary<string, ushort> FixedSymbols);
+    IReadOnlyDictionary<string, ushort> FixedSymbols,
+    IReadOnlyList<NesRuntimeUserVariable> UserVariables,
+    IReadOnlyList<NesRuntimeRegion> RuntimeRegions);
+
+internal sealed record NesRuntimeUserVariable(
+    string Name,
+    string Type,
+    ushort Address,
+    int Size);
+
+internal sealed record NesRuntimeRegion(
+    string Name,
+    ushort Start,
+    int Length,
+    string Owner);
 
 internal sealed record NesRomBuildSegment(
     string Owner,
