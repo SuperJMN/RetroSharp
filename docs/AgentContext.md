@@ -7,6 +7,16 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-2 / #358 makes `src/RetroSharp.NES/NesRuntimeMemoryLayout.cs` the
+  single owner of compiler-reserved NES CPU RAM. Its interface groups
+  zero-page locals, camera/runtime scratch, input, audio, OAM, mapper shadows,
+  packed-camera, WorldPack scalar/auxiliary state, and the fixed `$0400`
+  staging window; declares the three `$0800-$1FFF` CPU RAM mirrors and every
+  intentional shared-address role (including `$E4/$E8/$E9`); and validates
+  disjoint reserved ranges, the exact 222-byte local limit, and the 594-byte
+  staging maximum. NES builders, runtime emitters, and in-repo ABI tests must
+  consume this module rather than add private address maps. The focused
+  contract lives in `NesRuntimeMemoryLayoutTests`.
 - AIN-1 / #357 makes `src/RetroSharp.GameBoy/GameBoyRuntimeMemoryLayout.cs`
   the single owner of compiler-reserved Game Boy RAM. Its interface groups
   named user-local, camera, input, audio, banking, packed-camera, collision,
