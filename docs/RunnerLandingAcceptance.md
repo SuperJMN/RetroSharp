@@ -87,15 +87,15 @@ this rejects the `-1` no-hit value, accepts a downward step that crosses a top
 still overlapping the landing window, and ignores any platform top observed
 while the actor is underneath it. Gravity does not move a
 grounded actor. A grounded actor whose query no longer finds support clears
-`grounded`, so walking off the ledge falls to the floor. The original
-`Jump.BoostTicks = 12` variable-height jump already reaches player Y=222 (foot
-Y=253), clearing the authored ledge top at Y=272 with 19 pixels of margin.
+`grounded`, so walking off the ledge falls to the floor. The current 4.4
+fixed-point held jump reaches player Y=202 (foot Y=233), clearing the authored
+ledge top at Y=272 with 39 pixels of margin.
 
 Executable tests compile the real manifest/map and prove on both target CPU
 models that a short jump below the ledge returns to the floor without snapping,
 while a full held jump crosses Y=272 from below and then remains landed at
 player Y=241; a separate walk-off probe leaves Y=241 and settles on floor
-Y=273. Held-jump regressions additionally pin the original Y=222 apex and read
+Y=273. Held-jump regressions additionally pin the current Y=202 apex and read
 the player's word-backed Y directly on every gameplay tick, proving that it
 never crosses floor Y=273 or reaches the fall-reset path. Game Boy additionally
 proves packed camera collision at source
@@ -149,25 +149,73 @@ revision hashes for the current tracked runner.
 | Game Boy | `samples/runner/bin/runner.gb` | 131072 | `d4f482cd48663debc123e92b3dfea46f48183fc9dc7606582c1377d9606f8dd1` |
 | NES | `samples/runner/bin/runner.nes` | 81936 | `89608ebdc2ef98a99449acd944f36b709012376e756bf412c1a3d24072a66177` |
 
+## SMB3 4.4 jump revision (2026-07-15)
+
+The runner now reproduces the Super Mario Bros. 3 vertical jump model with
+signed 4.4 velocity and a `0..15` position remainder. Gravity is applied before
+motion. The standing takeoff velocity is `-$38`; the runner's walking, running,
+and maximum B-speed tiers select `-$3A`, `-$3C`, and `-$40`. Gravity adds `+1`
+only while A remains held and vertical velocity is below `-$20`. Releasing A,
+or reaching exactly `-$20`, switches to `+5`; release never clamps vertical
+velocity. Falling velocity is capped at `$45`.
+
+The threshold is evaluated directly from signed velocity every tick; no
+precomputed low-gravity counter or jump-cut assignment is stored. The NES
+signed-byte relational lowering normalizes the sign-biased constant back to an
+8-bit immediate, so the same literal portable condition compiles on both
+targets. This adds no SDK operation, target intrinsic, heap state, dynamic
+dispatch, or hidden object semantics.
+
+`GameBoyRunnerLandingTests` and `NesRunnerLandingTests` compile and execute the
+same real runner manifest, read integer Y plus the subpixel remainder, and pin
+all four input/speed profiles:
+
+| Profile | Exact rise | Visible target |
+| --- | ---: | ---: |
+| Brief A tap | `330/16 = 20.625 px` | about 21 px |
+| Held A from rest | `1131/16 = 70.6875 px` | 71 px |
+| Held A while running | `1361/16 = 85.0625 px` | about 85 px |
+| Held A at maximum B-speed | `1607/16 = 100.4375 px` | about 100 px |
+
+The higher arc enters the vertical camera dead zone. The Game Boy single-landing
+regression therefore observes world Y instead of treating a repeated OAM Y as
+a second landing; the latter can now occur legitimately while the camera
+follows an airborne player. Floor-crossing tests inject velocity in the new
+4.4 units. Dedicated probes also pin `-$21 -> -$20` while held, `-$20 -> -$1B`
+at the threshold, and `-$30 -> -$2B` after release, proving that the gravity
+transition is velocity-driven and does not clamp. The platform, walk-off,
+ceiling, and nine-phase staircase regressions remain green on both targets.
+
+Both tracked cartridges were regenerated from the shared manifest. These hashes
+supersede the run-speed staircase revision hashes above.
+
+| Target | Tracked artifact | Bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| Game Boy | `samples/runner/bin/runner.gb` | 131072 | `e640cd502689b70c0c0f6ca89e9997494b0a5d4228982c54a55aafe8f3cf7fe5` |
+| NES | `samples/runner/bin/runner.nes` | 81936 | `7464aea0f068869d6786ef4591445c75d85800a394f830b9dc607af62c9ec5c7` |
+
 ## Validation
 
 The final branch state passed:
 
 ```text
 dotnet test src/RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj -m:1
-469 passed, 0 failed
+479 passed, 0 failed
 
 dotnet test src/RetroSharp.NES.Tests/RetroSharp.NES.Tests.csproj -m:1
-336 passed, 0 failed
+339 passed, 0 failed
 
 dotnet test RetroSharp.sln -m:1
-1239 passed, 3 skipped, 0 failed
+1252 passed, 3 skipped, 0 failed
 
 python3 -m unittest tools.nes.tests.test_runner_visual_parity
 45 passed, 0 failed
 
 tools/gameboy/generate_sample_roms.py --dry-run
 exit 0
+
+direct GB/NES CLI rebuilds versus tracked runner ROMs
+byte-identical
 
 git diff --check
 exit 0

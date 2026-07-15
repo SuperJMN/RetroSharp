@@ -6186,7 +6186,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("class CameraState", source);
         Assert.Contains("class FrameState", source);
         Assert.Contains("inline void PresentFrame(PlayerState player, CameraState view)", source);
-        Assert.Contains("inline void HandleJumpInput()", source);
+        Assert.Contains("inline void HandleJumpInput(Pixel horizontalSpeed)", source);
         Assert.Contains("inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)", source);
         Assert.Contains("inline void ResolveLanding(PlayerState player, Pixel screenX, Pixel previousFootWorldY, Pixel footWorldY)", source);
         Assert.Contains("inline void ResolveFall(PlayerState player)", source);
@@ -6198,7 +6198,7 @@ public class GameBoyRomCompilerTests
         Assert.Contains("frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);", source);
         Assert.Contains("frame.ResolveFall(player);", source);
         Assert.Contains("frame.ResolveReset(player, view);", source);
-        Assert.Contains("player.HandleJumpInput();", source);
+        Assert.Contains("player.HandleJumpInput(view.speed);", source);
         Assert.Contains("i16 movementFootWorldY = player.y + Player.FootOffset;", source);
         Assert.Contains("view.HandleHorizontalInput(player, movementFootWorldY);", source);
         Assert.Contains("player.UpdateRunAnimation(view);", source);
@@ -7436,7 +7436,7 @@ public class GameBoyRomCompilerTests
 
         Assert.Contains("CeilingProbeTopOffset = 28", source);
         Assert.Contains("CeilingProbeHeight = 4", source);
-        Assert.Contains("BounceVelocity = 2", source);
+        Assert.Contains("BounceVelocity = 32", source);
         Assert.Contains("inline void BounceDown()", source);
         Assert.Contains("velocityY = Jump.BounceVelocity;", source);
         Assert.Contains("inline void ResolveCeilingHit(PlayerState player, Pixel screenX, Pixel footWorldY)", source);
@@ -7454,7 +7454,7 @@ public class GameBoyRomCompilerTests
 
         var landingCall = source.IndexOf("frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);", StringComparison.Ordinal);
         var ceilingCall = source.IndexOf("frame.ResolveCeilingHit(player, screenX, footWorldY);", StringComparison.Ordinal);
-        var jumpInputCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
+        var jumpInputCall = source.IndexOf("player.HandleJumpInput(view.speed);", StringComparison.Ordinal);
         Assert.True(ceilingCall > landingCall, "Ceiling resolution should run after solid landing resolution.");
         Assert.True(jumpInputCall > ceilingCall, "Ceiling resolution should clear the jump before jump input is consumed.");
 
@@ -7615,37 +7615,54 @@ public class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void GameBoy_runner_uses_lower_gravity_with_original_variable_jump_height()
+    public void GameBoy_runner_uses_smb3_4_4_speed_scaled_variable_jump_height()
     {
         var source = RunnerSample.FlattenedSource();
 
-        Assert.Contains("Velocity = -3", source);
-        Assert.Contains("BoostTicks = 12", source);
-        Assert.Contains("GravityFrames = 2", source);
-        Assert.Contains("BoostTickMask = 1", source);
-        Assert.Contains("Pixel gravityTick;", source);
-        Assert.Contains("gravityTick = 0;", source);
+        Assert.Contains("StandingVelocity = -56", source);
+        Assert.Contains("WalkingVelocity = -58", source);
+        Assert.Contains("RunningVelocity = -60", source);
+        Assert.Contains("PSpeedVelocity = -64", source);
+        Assert.Contains("HeldGravityThreshold = -32", source);
+        Assert.Contains("HeldGravity = 1", source);
+        Assert.Contains("ReleasedGravity = 5", source);
+        Assert.Contains("TerminalVelocity = 69", source);
+        Assert.Contains("Subpixel = 16", source);
+        Assert.Contains("Pixel verticalSubpixel;", source);
+        Assert.DoesNotContain("heldGravityTicks", source);
 
         var gravityStart = source.IndexOf("inline void ApplyGravity()", StringComparison.Ordinal);
         var landStart = source.IndexOf("inline void Land(Pixel targetY)", StringComparison.Ordinal);
         Assert.True(gravityStart >= 0);
         Assert.True(landStart > gravityStart);
         var gravityBlock = source[gravityStart..landStart];
-        Assert.Contains("gravityTick++;", gravityBlock);
-        Assert.Contains("if (gravityTick >= Jump.GravityFrames)", gravityBlock);
-        Assert.Contains("velocityY += 1;", gravityBlock);
-        Assert.Contains("if (velocityY != 0)", gravityBlock);
+        Assert.Contains("if (jumping && Input.IsDown(Button.A) && velocityY < Jump.HeldGravityThreshold)", gravityBlock);
+        Assert.Contains("velocityY += Jump.HeldGravity;", gravityBlock);
+        Assert.Contains("velocityY += Jump.ReleasedGravity;", gravityBlock);
+        Assert.Contains("if (velocityY > Jump.TerminalVelocity)", gravityBlock);
+        Assert.Contains("Pixel verticalMotion = verticalSubpixel + velocityY;", gravityBlock);
+        Assert.Contains("while (verticalMotion < 0)", gravityBlock);
+        Assert.Contains("while (verticalMotion >= Jump.Subpixel)", gravityBlock);
         Assert.Contains("if (!grounded)", gravityBlock);
-        Assert.Contains("y += velocityY;", gravityBlock);
-        Assert.DoesNotContain("grounded = false;\n        gravityTick++;", gravityBlock);
+        Assert.Contains("verticalSubpixel = verticalMotion;", gravityBlock);
 
-        var jumpStart = source.IndexOf("inline void HandleJumpInput()", StringComparison.Ordinal);
-        var animationStart = source.IndexOf("inline void UpdateRunAnimation(CameraState view)", StringComparison.Ordinal);
+        var jumpStart = source.IndexOf("inline void StartJump(Pixel horizontalSpeed)", StringComparison.Ordinal);
+        var animationStart = source.IndexOf("inline void SelectDisplayFrame(bool moving)", StringComparison.Ordinal);
         Assert.True(jumpStart >= 0);
         Assert.True(animationStart > jumpStart);
         var jumpBlock = source[jumpStart..animationStart];
-        Assert.Contains("if ((jumpTicks & Jump.BoostTickMask) != 0)", jumpBlock);
-        Assert.Contains("velocityY -= 1;", jumpBlock);
+        Assert.Contains("velocityY = Jump.StandingVelocity;", jumpBlock);
+        Assert.Contains("if (horizontalSpeed > 0)", jumpBlock);
+        Assert.Contains("velocityY = Jump.WalkingVelocity;", jumpBlock);
+        Assert.Contains("if (horizontalSpeed > MotionSpeed.Walk)", jumpBlock);
+        Assert.Contains("velocityY = Jump.RunningVelocity;", jumpBlock);
+        Assert.Contains("if (horizontalSpeed >= MotionSpeed.RunMax)", jumpBlock);
+        Assert.Contains("velocityY = Jump.PSpeedVelocity;", jumpBlock);
+
+        Assert.Contains("inline void HandleJumpInput(Pixel horizontalSpeed)", source);
+        Assert.Contains("StartJump(horizontalSpeed);", source);
+        Assert.Contains("player.HandleJumpInput(view.speed);", source);
+        Assert.DoesNotContain("Input.HoldTicks(Button.A)", source);
 
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         AssertRunnerMbc1Rom(rom);
@@ -7816,7 +7833,7 @@ public class GameBoyRomCompilerTests
         var source = RunnerSample.FlattenedSource();
 
         var resetStart = source.IndexOf("frame.ResolveReset(player, view);", StringComparison.Ordinal);
-        var jumpStart = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
+        var jumpStart = source.IndexOf("player.HandleJumpInput(view.speed);", StringComparison.Ordinal);
         var movementStart = source.IndexOf("view.HandleHorizontalInput(player, movementFootWorldY);", StringComparison.Ordinal);
 
         Assert.True(resetStart >= 0);
@@ -7863,7 +7880,7 @@ public class GameBoyRomCompilerTests
         Assert.DoesNotContain("view.moving = 0;", resetBlock);
 
         var resetCall = source.IndexOf("frame.ResolveReset(player, view);", StringComparison.Ordinal);
-        var jumpCall = source.IndexOf("player.HandleJumpInput();", StringComparison.Ordinal);
+        var jumpCall = source.IndexOf("player.HandleJumpInput(view.speed);", StringComparison.Ordinal);
         Assert.True(jumpCall > resetCall);
 
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);

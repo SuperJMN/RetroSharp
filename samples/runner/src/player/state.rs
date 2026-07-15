@@ -11,8 +11,7 @@ class PlayerState
     bool displayFlipX;
     Pixel animTick;
     bool jumping;
-    Pixel jumpTicks;
-    Pixel gravityTick;
+    Pixel verticalSubpixel;
 
     inline void Reset(CameraState view)
     {
@@ -22,24 +21,38 @@ class PlayerState
         grounded = true;
         displayFrame = 0;
         jumping = false;
-        jumpTicks = 0;
-        gravityTick = 0;
+        verticalSubpixel = 0;
     }
 
     inline void ApplyGravity()
     {
         if (!grounded)
         {
-            gravityTick++;
-            if (gravityTick >= Jump.GravityFrames)
+            if (jumping && Input.IsDown(Button.A) && velocityY < Jump.HeldGravityThreshold)
             {
-                gravityTick = 0;
-                velocityY += 1;
+                velocityY += Jump.HeldGravity;
             }
-            if (velocityY != 0)
+            else
             {
-                y += velocityY;
+                velocityY += Jump.ReleasedGravity;
+                if (velocityY > Jump.TerminalVelocity)
+                {
+                    velocityY = Jump.TerminalVelocity;
+                }
             }
+
+            Pixel verticalMotion = verticalSubpixel + velocityY;
+            while (verticalMotion < 0)
+            {
+                y -= 1;
+                verticalMotion += Jump.Subpixel;
+            }
+            while (verticalMotion >= Jump.Subpixel)
+            {
+                y += 1;
+                verticalMotion -= Jump.Subpixel;
+            }
+            verticalSubpixel = verticalMotion;
         }
     }
 
@@ -49,7 +62,7 @@ class PlayerState
         velocityY = 0;
         grounded = true;
         jumping = false;
-        gravityTick = 0;
+        verticalSubpixel = 0;
     }
 
     inline void BounceDown()
@@ -57,15 +70,27 @@ class PlayerState
         velocityY = Jump.BounceVelocity;
         grounded = false;
         jumping = false;
-        gravityTick = 0;
+        verticalSubpixel = 0;
     }
 
-    inline void StartJump()
+    inline void StartJump(Pixel horizontalSpeed)
     {
-        velocityY = Jump.Velocity;
+        velocityY = Jump.StandingVelocity;
+        if (horizontalSpeed > 0)
+        {
+            velocityY = Jump.WalkingVelocity;
+        }
+        if (horizontalSpeed > MotionSpeed.Walk)
+        {
+            velocityY = Jump.RunningVelocity;
+        }
+        if (horizontalSpeed >= MotionSpeed.RunMax)
+        {
+            velocityY = Jump.PSpeedVelocity;
+        }
         grounded = false;
         jumping = true;
-        gravityTick = 0;
+        verticalSubpixel = 0;
     }
 
     inline void SelectDisplayFrame(bool moving)
@@ -81,31 +106,19 @@ class PlayerState
         };
     }
 
-    inline void HandleJumpInput()
+    inline void HandleJumpInput(Pixel horizontalSpeed)
     {
         if (Input.WasPressed(Button.A))
         {
             if (grounded)
             {
-                StartJump();
+                StartJump(horizontalSpeed);
                 Sfx.Play(jump_sfx);
             }
         }
 
         if (jumping)
         {
-            jumpTicks = Input.HoldTicks(Button.A);
-            if (Input.IsDown(Button.A))
-            {
-                if (jumpTicks < Jump.BoostTicks)
-                {
-                    if ((jumpTicks & Jump.BoostTickMask) != 0)
-                    {
-                        velocityY -= 1;
-                    }
-                }
-            }
-
             if (Input.WasReleased(Button.A))
             {
                 jumping = false;

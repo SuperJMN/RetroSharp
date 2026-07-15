@@ -69,7 +69,7 @@ inline void SimulatePlayer(PlayerState player, CameraState view, FrameState fram
     frame.ResolveReset(player, view);
 
     view.FollowPlayer(player);
-    player.HandleJumpInput();
+    player.HandleJumpInput(view.speed);
 
     i16 movementFootWorldY = player.y + Player.FootOffset;
     view.HandleHorizontalInput(player, movementFootWorldY);

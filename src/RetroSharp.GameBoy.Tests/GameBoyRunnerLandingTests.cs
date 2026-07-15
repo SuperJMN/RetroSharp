@@ -14,8 +14,7 @@ public sealed class GameBoyRunnerLandingTests
     private const ushort PlayerVelocityY = 0xC004;
     private const ushort PlayerGrounded = 0xC005;
     private const ushort PlayerJumping = 0xC00B;
-    private const ushort PlayerJumpTicksLow = 0xC00C;
-    private const ushort PlayerGravityTickLow = 0xC00E;
+    private const ushort PlayerVerticalSubpixelLow = 0xC00C;
     private const int FirstPlatformCameraX = 696;
     private const int PlatformTopY = 272;
     private const int PlatformPlayerY = PlatformTopY - 31;
@@ -106,7 +105,7 @@ public sealed class GameBoyRunnerLandingTests
     public void Full_jump_crosses_one_way_platform_from_below_then_lands_on_its_top()
     {
         var cpu = RunnerAtFirstPlatform();
-        var trace = RunJump(cpu, heldFrames: 20, observedFrames: 240);
+        var trace = RunJump(cpu, heldFrames: 40, observedFrames: 240);
         var playerYByFrame = trace.PlayerY;
 
         Assert.True(
@@ -131,7 +130,7 @@ public sealed class GameBoyRunnerLandingTests
     public void Walking_off_one_way_platform_releases_grounded_state_and_falls_to_the_floor()
     {
         var cpu = RunnerAtFirstPlatform();
-        var jump = RunJump(cpu, heldFrames: 20, observedFrames: 180);
+        var jump = RunJump(cpu, heldFrames: 40, observedFrames: 180);
         Assert.Equal(PlatformPlayerY, jump.PlayerY[^1]);
 
         var playerYByFrame = RunHorizontal(cpu, "right", observedFrames: 400);
@@ -284,13 +283,11 @@ public sealed class GameBoyRunnerLandingTests
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
 
         RunUntilWordEquals(cpu, 0xC14F, 176, maxFrames: 400);
-        var floorOamY = cpu.Oam(0xFE00);
-        var oamYByFrame = new List<byte>(400);
         var playerYByFrame = new List<int>(400);
 
         for (var frame = 0; frame < 400; frame++)
         {
-            if (frame < 20)
+            if (frame < 40)
             {
                 cpu.Held.Add("a");
             }
@@ -300,31 +297,30 @@ public sealed class GameBoyRunnerLandingTests
             }
 
             cpu.RunAdditionalFrames(1);
-            oamYByFrame.Add(cpu.Oam(0xFE00));
             playerYByFrame.Add(cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8);
         }
 
-        Assert.Equal(222, playerYByFrame.Min());
+        Assert.Equal(202, playerYByFrame.Min());
         Assert.True(
             playerYByFrame.Max() <= FloorPlayerY,
             $"The player crossed the floor before landing: maximum playerY={playerYByFrame.Max()}.");
 
         var leftFloor = false;
         var landingFrames = new List<int>();
-        for (var frame = 0; frame < oamYByFrame.Count; frame++)
+        for (var frame = 0; frame < playerYByFrame.Count; frame++)
         {
-            if (oamYByFrame[frame] != floorOamY)
+            if (playerYByFrame[frame] != FloorPlayerY)
             {
                 leftFloor = true;
             }
-            else if (leftFloor && (frame == 0 || oamYByFrame[frame - 1] != floorOamY))
+            else if (leftFloor && (frame == 0 || playerYByFrame[frame - 1] != FloorPlayerY))
             {
                 landingFrames.Add(frame);
             }
         }
 
         var landingFrame = Assert.Single(landingFrames);
-        Assert.All(oamYByFrame.Skip(landingFrame), y => Assert.Equal(floorOamY, y));
+        Assert.All(playerYByFrame.Skip(landingFrame), y => Assert.Equal(FloorPlayerY, y));
     }
 
     [Fact]
@@ -335,12 +331,76 @@ public sealed class GameBoyRunnerLandingTests
         RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
 
-        var trace = RunJump(cpu, heldFrames: 20, observedFrames: 240);
+        var trace = RunJump(cpu, heldFrames: 40, observedFrames: 240);
 
-        Assert.Equal(222, trace.PlayerY.Min());
+        Assert.Equal(202, trace.PlayerY.Min());
         Assert.True(
             trace.PlayerY.Max() <= FloorPlayerY,
             $"The player crossed the floor before landing: maximum playerY={trace.PlayerY.Max()}.");
+    }
+
+    [Fact]
+    public void Shared_runner_uses_smb3_4_4_jump_arcs_for_tap_stand_run_and_p_speed()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        var profiles = new[]
+        {
+            new JumpProfile("tap", RunUpTicks: 0, HeldInputTicks: 1, ExpectedRiseSixteenths: 330),
+            new JumpProfile("stand", RunUpTicks: 0, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_131),
+            new JumpProfile("run", RunUpTicks: 3, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_361),
+            new JumpProfile("p-speed", RunUpTicks: 4, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_607),
+        };
+
+        foreach (var profile in profiles)
+        {
+            var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+            RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+            cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
+            RunUp(cpu, profile.RunUpTicks);
+
+            var trace = RunSmb3Jump(cpu, profile.HeldInputTicks, observedFrames: 180);
+            var minimumPositionSixteenths = trace.PlayerY
+                .Zip(trace.VerticalSubpixel, (y, subpixel) => y * 16 + subpixel)
+                .Min();
+            var riseSixteenths = FloorPlayerY * 16 - minimumPositionSixteenths;
+
+            Assert.True(
+                riseSixteenths == profile.ExpectedRiseSixteenths,
+                $"The {profile.Name} jump rose {riseSixteenths / 16.0:F4}px "
+                + $"({riseSixteenths}/16) instead of {profile.ExpectedRiseSixteenths / 16.0:F4}px "
+                + $"({profile.ExpectedRiseSixteenths}/16).");
+        }
+    }
+
+    [Fact]
+    public void Shared_runner_selects_jump_gravity_from_hold_state_and_the_minus_two_threshold_without_clamping()
+    {
+        var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        var probes = new[]
+        {
+            new GravityProbe(InitialVelocity: -33, IsHeld: true, ExpectedVelocity: -32),
+            new GravityProbe(InitialVelocity: -32, IsHeld: true, ExpectedVelocity: -27),
+            new GravityProbe(InitialVelocity: -48, IsHeld: false, ExpectedVelocity: -43),
+        };
+
+        foreach (var probe in probes)
+        {
+            var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
+            RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+            cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
+            cpu.Held.Add("a");
+            AdvanceGameplayTick(cpu);
+
+            cpu.SetWram(PlayerVelocityY, unchecked((byte)probe.InitialVelocity));
+            if (!probe.IsHeld)
+            {
+                cpu.Held.Remove("a");
+            }
+
+            AdvanceGameplayTick(cpu);
+
+            Assert.Equal(probe.ExpectedVelocity, unchecked((sbyte)cpu.Wram(PlayerVelocityY)));
+        }
     }
 
     [Fact]
@@ -352,15 +412,13 @@ public sealed class GameBoyRunnerLandingTests
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
         cpu.Held.Clear();
 
-        cpu.SetWram(PlayerYLow, 0x08);
+        cpu.SetWram(PlayerYLow, 0x0D);
         cpu.SetWram(PlayerYLow + 1, 0x01);
-        cpu.SetWram(PlayerVelocityY, 10);
+        cpu.SetWram(PlayerVelocityY, 64);
         cpu.SetWram(PlayerGrounded, 0);
         cpu.SetWram(PlayerJumping, 0);
-        cpu.SetWram(PlayerJumpTicksLow, 0);
-        cpu.SetWram(PlayerJumpTicksLow + 1, 0);
-        cpu.SetWram(PlayerGravityTickLow, 0);
-        cpu.SetWram(PlayerGravityTickLow + 1, 0);
+        cpu.SetWram(PlayerVerticalSubpixelLow, 0);
+        cpu.SetWram(PlayerVerticalSubpixelLow + 1, 0);
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
 
         Assert.Equal(FloorPlayerY, cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8);
@@ -447,6 +505,7 @@ public sealed class GameBoyRunnerLandingTests
         var playerYByFrame = new List<int>(observedFrames);
         var velocityYByFrame = new List<int>(observedFrames);
         var holdTicksByFrame = new List<int>(observedFrames);
+        var verticalSubpixelByFrame = new List<int>(observedFrames);
         for (var frame = 0; frame < observedFrames; frame++)
         {
             if (frame < heldFrames)
@@ -462,9 +521,81 @@ public sealed class GameBoyRunnerLandingTests
             playerYByFrame.Add(cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8);
             velocityYByFrame.Add(unchecked((sbyte)cpu.Wram(PlayerVelocityY)));
             holdTicksByFrame.Add(cpu.Wram(0xC0F2));
+            verticalSubpixelByFrame.Add(
+                cpu.Wram(PlayerVerticalSubpixelLow) | cpu.Wram(PlayerVerticalSubpixelLow + 1) << 8);
         }
 
-        return new JumpTrace(playerYByFrame, velocityYByFrame, holdTicksByFrame);
+        return new JumpTrace(playerYByFrame, velocityYByFrame, holdTicksByFrame, verticalSubpixelByFrame);
+    }
+
+    private static JumpTrace RunSmb3Jump(GameBoyTestCpu cpu, int heldInputTicks, int observedFrames)
+    {
+        var playerYByFrame = new List<int>(observedFrames);
+        var velocityYByFrame = new List<int>(observedFrames);
+        var holdTicksByFrame = new List<int>(observedFrames);
+        var verticalSubpixelByFrame = new List<int>(observedFrames);
+        cpu.Held.Add("a");
+        for (var tick = 0; tick < 8 && playerYByFrame.Count == 0; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            var playerY = cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8;
+            var subpixel = cpu.Wram(PlayerVerticalSubpixelLow) | cpu.Wram(PlayerVerticalSubpixelLow + 1) << 8;
+            if (playerY * 16 + subpixel < FloorPlayerY * 16)
+            {
+                playerYByFrame.Add(playerY);
+                velocityYByFrame.Add(unchecked((sbyte)cpu.Wram(PlayerVelocityY)));
+                holdTicksByFrame.Add(cpu.Wram(0xC0F2));
+                verticalSubpixelByFrame.Add(subpixel);
+            }
+        }
+        Assert.Single(playerYByFrame);
+
+        for (var frame = 1; frame < observedFrames; frame++)
+        {
+            if (frame >= heldInputTicks)
+            {
+                cpu.Held.Remove("a");
+            }
+
+            AdvanceGameplayTick(cpu);
+            playerYByFrame.Add(cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8);
+            velocityYByFrame.Add(unchecked((sbyte)cpu.Wram(PlayerVelocityY)));
+            holdTicksByFrame.Add(cpu.Wram(0xC0F2));
+            verticalSubpixelByFrame.Add(
+                cpu.Wram(PlayerVerticalSubpixelLow) | cpu.Wram(PlayerVerticalSubpixelLow + 1) << 8);
+        }
+
+        return new JumpTrace(playerYByFrame, velocityYByFrame, holdTicksByFrame, verticalSubpixelByFrame);
+    }
+
+    private static void AdvanceGameplayTick(GameBoyTestCpu cpu)
+    {
+        var previousTick = cpu.SourceWaitCompletions;
+        for (var frame = 0; frame < 8; frame++)
+        {
+            cpu.RunAdditionalFrames(1);
+            if (cpu.SourceWaitCompletions != previousTick)
+            {
+                return;
+            }
+        }
+
+        Assert.Fail("The Game Boy runner did not advance a gameplay tick within eight physical frames.");
+    }
+
+    private static void RunUp(GameBoyTestCpu cpu, int ticks)
+    {
+        if (ticks == 0)
+        {
+            return;
+        }
+
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        for (var tick = 0; tick < ticks; tick++)
+        {
+            cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
+        }
     }
 
     private static List<int> RunHorizontal(GameBoyTestCpu cpu, string direction, int observedFrames)
@@ -481,6 +612,18 @@ public sealed class GameBoyRunnerLandingTests
         return playerYByFrame;
     }
 
-    private sealed record JumpTrace(List<int> PlayerY, List<int> VelocityY, List<int> HoldTicks);
+    private sealed record JumpTrace(
+        List<int> PlayerY,
+        List<int> VelocityY,
+        List<int> HoldTicks,
+        List<int> VerticalSubpixel);
+
+    private sealed record JumpProfile(
+        string Name,
+        int RunUpTicks,
+        int HeldInputTicks,
+        int ExpectedRiseSixteenths);
+
+    private sealed record GravityProbe(int InitialVelocity, bool IsHeld, int ExpectedVelocity);
 
 }

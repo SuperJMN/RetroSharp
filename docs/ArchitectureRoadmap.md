@@ -120,7 +120,7 @@ Intrinsic work belongs here:
 | `Input.IsDown(...)` | Portable SDK | Good shared input semantics. |
 | `Input.WasPressed(...)` | Portable SDK | Good shared input semantics. |
 | `Input.WasReleased(...)` | Portable SDK | Good shared input semantics. |
-| `Input.HoldTicks(...)` | Portable SDK | Accepted current variable-height jump seam. |
+| `Input.HoldTicks(...)` | Portable SDK | Available duration-count seam; the current SMB3-style runner jump uses `Input.IsDown` plus a source-owned signed-velocity threshold and no jump cut. |
 | `Button.*` arguments | Portable SDK | Input helpers accept enum members; bare lowercase button names are no longer public source. |
 | `Sprite.Asset(...)` | Portable SDK candidate | Needs target-neutral asset contract and palette slots. |
 | `Sprite.Draw(...)` | Portable SDK | Game Boy and NES lower it through compile-time-operand target intrinsics supplied by the source package. |
@@ -1734,7 +1734,7 @@ are in `docs/LargeWorldsRoadmap.md`.
 
 ## Acceptance Sample Strategy
 
-The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmj` (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, NES DPCM retained, and one-way ledges authored with the existing `Platform` flag. The landing response remains portable source policy: `Solid | Platform` for non-rising feet/support, `Solid` for walls/ceilings, an approach-from-above check before snapping, and grounded-state release when support disappears. No new language feature, SDK call, target intrinsic, managed object, or runtime dispatch is needed. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
+The shared Game Boy/NES runner remains the richest target-acceptance sample for the platformer slice. It loads complete `stage1.tmj` (156x20 source cells, expanding to 312x40 hardware cells) through target-owned packed runtimes, with 2-axis camera streaming, collision beyond byte Y, per-target VGM/VGZ audio, NES DPCM retained, and one-way ledges authored with the existing `Platform` flag. The landing response remains portable source policy: `Solid | Platform` for non-rising feet/support, `Solid` for walls/ceilings, an approach-from-above check before snapping, and grounded-state release when support disappears. Jump response is likewise source-owned: signed 4.4 position/velocity, speed-dependent SMB3-style takeoff, and lower gravity while A remains held produce a 70.6875 px standard standing arc without introducing a genre-level SDK operation. No new language feature, SDK call, target intrinsic, managed object, or runtime dispatch is needed. The portable SDK contract is still represented by smaller samples such as `samples/cross-target-camera/camera.rs`; focused Tiled/free-scroll samples remain useful isolation coverage rather than substitutes for the joint runner acceptance.
 
 The final cross-target sample should prove:
 

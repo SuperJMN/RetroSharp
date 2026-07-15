@@ -38,11 +38,16 @@ static class CollisionProbe
 
 static class Jump
 {
-    const i8 Velocity = -3;
-    const u8 BoostTicks = 12;
-    const u8 GravityFrames = 2;
-    const u8 BoostTickMask = 1;
-    const i8 BounceVelocity = 2;
+    const i8 StandingVelocity = -56;
+    const i8 WalkingVelocity = -58;
+    const i8 RunningVelocity = -60;
+    const i8 PSpeedVelocity = -64;
+    const i8 HeldGravityThreshold = -32;
+    const i8 HeldGravity = 1;
+    const i8 ReleasedGravity = 5;
+    const i8 TerminalVelocity = 69;
+    const i8 BounceVelocity = 32;
+    const i16 Subpixel = 16;
 }
 
 enum Direction
