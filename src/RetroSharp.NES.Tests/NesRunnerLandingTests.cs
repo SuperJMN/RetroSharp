@@ -11,8 +11,7 @@ public sealed class NesRunnerLandingTests
     private const ushort PlayerVelocityY = 0x0004;
     private const ushort PlayerGrounded = 0x0005;
     private const ushort PlayerJumping = 0x000B;
-    private const ushort PlayerJumpTicksLow = 0x000C;
-    private const ushort PlayerGravityTickLow = 0x000E;
+    private const ushort PlayerVerticalSubpixelLow = 0x000C;
     private const int FirstPlatformCameraX = 696;
     private const int PlatformTopY = 272;
     private const int PlatformPlayerY = PlatformTopY - 31;
@@ -55,7 +54,7 @@ public sealed class NesRunnerLandingTests
     public void Full_jump_crosses_one_way_platform_from_below_then_lands_on_its_top()
     {
         var cpu = RunnerAtFirstPlatform();
-        var playerYByTick = RunJump(cpu, heldTicks: 20, observedTicks: 240);
+        var playerYByTick = RunJump(cpu, heldTicks: 40, observedTicks: 240);
 
         var apexFrame = playerYByTick.IndexOf(playerYByTick.Min());
         Assert.True(
@@ -73,7 +72,7 @@ public sealed class NesRunnerLandingTests
     public void Walking_off_one_way_platform_releases_grounded_state_and_falls_to_the_floor()
     {
         var cpu = RunnerAtFirstPlatform();
-        var jump = RunJump(cpu, heldTicks: 20, observedTicks: 180);
+        var jump = RunJump(cpu, heldTicks: 40, observedTicks: 180);
         Assert.Equal(PlatformPlayerY, jump[^1]);
 
         var playerYByTick = RunHorizontal(cpu, "right", observedTicks: 180);
@@ -86,7 +85,7 @@ public sealed class NesRunnerLandingTests
     }
 
     [Fact]
-    public void Shared_runner_held_jump_preserves_its_original_height_without_crossing_the_floor()
+    public void Shared_runner_held_jump_matches_smb3_standing_height_without_crossing_the_floor()
     {
         var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var cpu = new NesTestCpu(rom);
@@ -94,12 +93,78 @@ public sealed class NesRunnerLandingTests
         AdvanceGameplayTick(cpu);
         AdvanceGameplayTick(cpu);
 
-        var playerYByTick = RunJump(cpu, heldTicks: 20, observedTicks: 240);
+        var playerYByTick = RunJump(cpu, heldTicks: 40, observedTicks: 240);
 
-        Assert.Equal(222, playerYByTick.Min());
+        Assert.Equal(202, playerYByTick.Min());
         Assert.True(
             playerYByTick.Max() <= FloorPlayerY,
             $"The player crossed the floor before landing: maximum playerY={playerYByTick.Max()}.");
+    }
+
+    [Fact]
+    public void Shared_runner_uses_smb3_4_4_jump_arcs_for_tap_stand_run_and_p_speed()
+    {
+        var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        var profiles = new[]
+        {
+            new JumpProfile("tap", RunUpTicks: 0, HeldInputTicks: 1, ExpectedRiseSixteenths: 330),
+            new JumpProfile("stand", RunUpTicks: 0, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_131),
+            new JumpProfile("run", RunUpTicks: 3, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_361),
+            new JumpProfile("p-speed", RunUpTicks: 4, HeldInputTicks: 90, ExpectedRiseSixteenths: 1_607),
+        };
+
+        foreach (var profile in profiles)
+        {
+            var cpu = new NesTestCpu(rom);
+            RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+            AdvanceGameplayTick(cpu);
+            AdvanceGameplayTick(cpu);
+            RunUp(cpu, profile.RunUpTicks);
+
+            var trace = RunJumpTrace(cpu, profile.HeldInputTicks, observedTicks: 180);
+            var minimumPositionSixteenths = trace.PlayerY
+                .Zip(trace.VerticalSubpixel, (y, subpixel) => y * 16 + subpixel)
+                .Min();
+            var riseSixteenths = FloorPlayerY * 16 - minimumPositionSixteenths;
+
+            Assert.True(
+                riseSixteenths == profile.ExpectedRiseSixteenths,
+                $"The {profile.Name} jump rose {riseSixteenths / 16.0:F4}px "
+                + $"({riseSixteenths}/16) instead of {profile.ExpectedRiseSixteenths / 16.0:F4}px "
+                + $"({profile.ExpectedRiseSixteenths}/16).");
+        }
+    }
+
+    [Fact]
+    public void Shared_runner_selects_jump_gravity_from_hold_state_and_the_minus_two_threshold_without_clamping()
+    {
+        var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
+        var probes = new[]
+        {
+            new GravityProbe(InitialVelocity: -33, IsHeld: true, ExpectedVelocity: -32),
+            new GravityProbe(InitialVelocity: -32, IsHeld: true, ExpectedVelocity: -27),
+            new GravityProbe(InitialVelocity: -48, IsHeld: false, ExpectedVelocity: -43),
+        };
+
+        foreach (var probe in probes)
+        {
+            var cpu = new NesTestCpu(rom);
+            RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+            AdvanceGameplayTick(cpu);
+            AdvanceGameplayTick(cpu);
+            cpu.Held.Add("a");
+            AdvanceGameplayTick(cpu);
+
+            cpu.SetRam(PlayerVelocityY, unchecked((byte)probe.InitialVelocity));
+            if (!probe.IsHeld)
+            {
+                cpu.Held.Remove("a");
+            }
+
+            AdvanceGameplayTick(cpu);
+
+            Assert.Equal(probe.ExpectedVelocity, unchecked((sbyte)cpu.Ram(PlayerVelocityY)));
+        }
     }
 
     [Fact]
@@ -112,15 +177,13 @@ public sealed class NesRunnerLandingTests
         AdvanceGameplayTick(cpu);
         cpu.Held.Clear();
 
-        cpu.SetRam(PlayerYLow, 0x08);
+        cpu.SetRam(PlayerYLow, 0x0D);
         cpu.SetRam(PlayerYLow + 1, 0x01);
-        cpu.SetRam(PlayerVelocityY, 10);
+        cpu.SetRam(PlayerVelocityY, 64);
         cpu.SetRam(PlayerGrounded, 0);
         cpu.SetRam(PlayerJumping, 0);
-        cpu.SetRam(PlayerJumpTicksLow, 0);
-        cpu.SetRam(PlayerJumpTicksLow + 1, 0);
-        cpu.SetRam(PlayerGravityTickLow, 0);
-        cpu.SetRam(PlayerGravityTickLow + 1, 0);
+        cpu.SetRam(PlayerVerticalSubpixelLow, 0);
+        cpu.SetRam(PlayerVerticalSubpixelLow + 1, 0);
         AdvanceGameplayTick(cpu);
 
         Assert.Equal(FloorPlayerY, RamWord(cpu, PlayerYLow));
@@ -208,6 +271,54 @@ public sealed class NesRunnerLandingTests
         return playerYByTick;
     }
 
+    private static JumpTrace RunJumpTrace(NesTestCpu cpu, int heldInputTicks, int observedTicks)
+    {
+        var playerYByTick = new List<int>(observedTicks);
+        var verticalSubpixelByTick = new List<int>(observedTicks);
+        cpu.Held.Add("a");
+        for (var tick = 0; tick < 8 && playerYByTick.Count == 0; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+            var playerY = RamWord(cpu, PlayerYLow);
+            var subpixel = RamWord(cpu, PlayerVerticalSubpixelLow);
+            if (playerY * 16 + subpixel < FloorPlayerY * 16)
+            {
+                playerYByTick.Add(playerY);
+                verticalSubpixelByTick.Add(subpixel);
+            }
+        }
+        Assert.Single(playerYByTick);
+
+        for (var tick = 1; tick < observedTicks; tick++)
+        {
+            if (tick >= heldInputTicks)
+            {
+                cpu.Held.Remove("a");
+            }
+
+            AdvanceGameplayTick(cpu);
+            playerYByTick.Add(RamWord(cpu, PlayerYLow));
+            verticalSubpixelByTick.Add(RamWord(cpu, PlayerVerticalSubpixelLow));
+        }
+
+        return new JumpTrace(playerYByTick, verticalSubpixelByTick);
+    }
+
+    private static void RunUp(NesTestCpu cpu, int ticks)
+    {
+        if (ticks == 0)
+        {
+            return;
+        }
+
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+        for (var tick = 0; tick < ticks; tick++)
+        {
+            AdvanceGameplayTick(cpu);
+        }
+    }
+
     private static List<int> RunHorizontal(NesTestCpu cpu, string direction, int observedTicks)
     {
         var playerYByTick = new List<int>(observedTicks);
@@ -254,4 +365,14 @@ public sealed class NesRunnerLandingTests
 
     private static int RamWord(NesTestCpu cpu, ushort lowAddress) =>
         cpu.Ram(lowAddress) | cpu.Ram((ushort)(lowAddress + 1)) << 8;
+
+    private sealed record JumpTrace(List<int> PlayerY, List<int> VerticalSubpixel);
+
+    private sealed record JumpProfile(
+        string Name,
+        int RunUpTicks,
+        int HeldInputTicks,
+        int ExpectedRiseSixteenths);
+
+    private sealed record GravityProbe(int InitialVelocity, bool IsHeld, int ExpectedVelocity);
 }

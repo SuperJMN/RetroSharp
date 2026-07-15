@@ -3740,7 +3740,7 @@ internal sealed class NesRuntimeCompiler
                 builder.XorImmediate(0x80);
             }
 
-            builder.CompareImmediate(signed ? rightConstant ^ 0x80 : rightConstant);
+            builder.CompareImmediate(signed ? (rightConstant & 0xFF) ^ 0x80 : rightConstant);
             EmitRelationalFalseJump(binary.Operator.Symbol, falseLabel);
             return;
         }
@@ -3753,7 +3753,7 @@ internal sealed class NesRuntimeCompiler
                 builder.XorImmediate(0x80);
             }
 
-            builder.CompareImmediate(signed ? leftConstant ^ 0x80 : leftConstant);
+            builder.CompareImmediate(signed ? (leftConstant & 0xFF) ^ 0x80 : leftConstant);
             EmitRelationalFalseJump(FlipRelationalOperator(binary.Operator.Symbol), falseLabel);
             return;
         }

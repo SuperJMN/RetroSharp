@@ -11,6 +11,26 @@ using Xunit;
 public class NesRomCompilerTests
 {
     [Fact]
+    public void Signed_i8_relational_constants_compile_in_either_operand_order()
+    {
+        const string source = """
+                              void Main() {
+                                  i8 velocityY = -33;
+                                  if (velocityY < -32) {
+                                      velocityY += 1;
+                                  }
+                                  if (-32 > velocityY) {
+                                      velocityY += 1;
+                                  }
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source);
+
+        Assert.Equal(40976, rom.Length);
+    }
+
+    [Fact]
     public void Word_compound_add_and_subtract_with_i8_operand_do_not_clobber_the_carry()
     {
         // Regression for the NES fall-through bug: the sign-extension of an i8 operand clobbers the

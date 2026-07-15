@@ -7,6 +7,15 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- 2026-07-15 runner jump update: shared Game Boy/NES source now uses SMB3-style
+  signed 4.4 vertical motion. Standing/walking/running/maximum-speed takeoff is
+  `-$38/-$3A/-$3C/-$40`; held A applies `+1` gravity only while velocity is
+  below `-$20`, while release or the threshold applies `+5` without clamping,
+  and falling caps at `$45`. Exact production-ROM CPU tests read
+  integer Y plus the `0..15` subpixel remainder and pin rises of `330/16`,
+  `1131/16`, `1361/16`, and `1607/16` pixels, so the standard held jump is
+  70.6875 px internally and 71 visible pixels. Both tracked runner ROMs change
+  with this source behavior; see `docs/RunnerLandingAcceptance.md`.
 - RPH-GB / #353 restores complete-runner Game Boy gameplay cadence on the
   retained packed WorldPack path. The broken exact runner completed 37 of 120
   source ticks and advanced 45 pixels; the fixed build completes 115/120 with
@@ -489,7 +498,7 @@ Suggested next steps for the next agent:
 
 - Normal runner debugging should start with the full app, then use `tools/gameboy/runner_diagnostics.py` to find the first failing diagnostic step before editing code.
 - `Input.Poll()` (PascalCase `Input.Poll()`) is the frame/tick input boundary. New gameplay should use `Input.IsDown`, `Input.WasPressed`, `Input.WasReleased`, and `Input.HoldTicks` (and `Sprite.Width`). The button argument is a member of the built-in `Button` enum (`Button.A`, `Button.Right`, ...), defined in the `RetroSharp.Portable2D` source package under `sdk/RetroSharp.Portable2D`. Direct snake_case button calls, direct `sprite_width`, and bare lowercase button identifiers (`a`, `right`, ...) are not public source APIs. `Input.IsDown`/`WasPressed`/`WasReleased` return `bool`; `Input.HoldTicks` returns a count.
-- `Input.HoldTicks` saturates at `255` and is the accepted seam for variable-height jump timing.
+- `Input.HoldTicks` saturates at `255` and remains the portable duration-count seam. The current SMB3-style runner jump instead uses `Input.IsDown` plus the live signed vertical velocity: `+1` gravity only below `-$20`, otherwise `+5`, with no release clamp.
 - On original DMG hardware, `JOYP` row selection must settle. The backend should select a row, read it several times, use the final sample, and deselect both rows with `0x30`.
 - `Sprite.Draw(...)` accepts portable `flipX` and palette slot arguments. Do not reintroduce raw OAM attribute bytes through portable sprite calls.
 - Sprite PNG paths can be generic. `Sprite.Asset(player, "assets/player.png", w, h)` resolves to a target variant such as `assets/player.gb.png` or `assets/player.nes.png` when present, then falls back to the requested PNG.
