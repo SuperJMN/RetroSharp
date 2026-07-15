@@ -107,15 +107,20 @@ public sealed class GameBoyBankingRoadmapTests
             GameBoyWramLayout.RuntimeState,
             GameBoyWramLayout.WorldScalarState,
             GameBoyWramLayout.AudioChannel1Shadow,
+            GameBoyWramLayout.CollisionMemoState,
             GameBoyWramLayout.WramEcho,
             GameBoyWramLayout.Stack,
         };
 
         Assert.Equal((ushort)0xC000, GameBoyWramLayout.UserLocals.Start);
         Assert.Equal((ushort)0xC0DF, GameBoyWramLayout.UserLocals.EndInclusive);
-        Assert.Equal((ushort)0xC1EA, GameBoyWramLayout.RuntimeState.EndInclusive);
+        Assert.Equal((ushort)0xC1EF, GameBoyWramLayout.RuntimeState.EndInclusive);
+        Assert.Equal((ushort)0xC1F0, GameBoyWramLayout.WorldScalarState.Start);
+        Assert.Equal((ushort)0xC20F, GameBoyWramLayout.WorldScalarState.EndInclusive);
         Assert.Equal((ushort)0xC210, GameBoyWramLayout.AudioChannel1Shadow.Start);
         Assert.Equal((ushort)0xC214, GameBoyWramLayout.AudioChannel1Shadow.EndInclusive);
+        Assert.Equal((ushort)0xC220, GameBoyWramLayout.CollisionMemoState.Start);
+        Assert.Equal((ushort)0xC2DF, GameBoyWramLayout.CollisionMemoState.EndInclusive);
         Assert.Equal(GameBoyWramLayout.CurrentWorldPackStagingBytes, current.Length);
         Assert.Equal(GameBoyWramLayout.MaximumWorldPackStagingBytes, maximum.Length);
         Assert.Equal((ushort)0xC529, maximum.EndInclusive);

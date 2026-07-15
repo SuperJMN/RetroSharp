@@ -1,12 +1,22 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-14.
+Last updated: 2026-07-15.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
 ## Recent Baseline
 
+- RPH-GB / #353 restores complete-runner Game Boy gameplay cadence on the
+  retained packed WorldPack path. The broken exact runner completed 37 of 120
+  source ticks and advanced 45 pixels; the fixed build completes 115/120 with
+  no two-frame stall and advances 142 pixels in the in-process gate. Collision
+  lookup reads raw IDs directly, retains two tagged RLE chunks, serves exact
+  and bounded memo hits, and never publishes malformed decodes. SameBoy through
+  GameboyMcp independently measured 115 gameplay ticks, 120 audio ticks, 143
+  pixels, one additional RLE decode, and zero forbidden VBlank work over the
+  same 120-frame held-Right window. See
+  `docs/GameBoyRunnerCadenceAcceptance.md`.
 - NES packed column attributes must follow physical 30-tile-row nametable
   provenance, not only the portable four-row authored grouping. At nonzero
   camera Y, the 30-row seam otherwise swaps the upper/lower palette quadrants

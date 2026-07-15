@@ -63,6 +63,10 @@ internal sealed class GameBoyTestCpu
 
     public long SourceWaitCompletions { get; private set; }
 
+    public ushort? TracedWorldPackCollisionLookupEntry { get; set; }
+
+    public List<(ushort HardwareX, ushort HardwareY)> WorldPackCollisionQueries { get; } = [];
+
     public byte Vram(ushort address) => vram[address - 0x8000];
 
     public byte Wram(ushort address) => wram[address - 0xC000];
@@ -532,6 +536,11 @@ internal sealed class GameBoyTestCpu
 
         instructions++;
         instructionPc = pc;
+        if (pc == TracedWorldPackCollisionLookupEntry)
+        {
+            WorldPackCollisionQueries.Add(((ushort)((d << 8) | e), (ushort)((h << 8) | l)));
+        }
+
         var opcode = NextByte();
         cycles += CyclesFor(opcode);
         switch (opcode)

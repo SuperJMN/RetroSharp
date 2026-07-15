@@ -10,6 +10,34 @@ internal enum GameBoyWorldPackResult : byte
     Malformed = 3,
 }
 
+internal static class GameBoyWorldPackRuntimeAbi
+{
+    internal const ushort CollisionQueryXLow = 0xC1EB;
+    internal const ushort CollisionQueryXHigh = 0xC1EC;
+    internal const ushort CollisionQueryYLow = 0xC1ED;
+    internal const ushort CollisionQueryYHigh = 0xC1EE;
+    internal const ushort CollisionSelectedSlot = 0xC1EF;
+    internal const ushort CollisionCache0Valid = 0xC1FD;
+    internal const ushort CollisionCache0ChunkLow = 0xC1FE;
+    internal const ushort CollisionCache0ChunkHigh = 0xC1FF;
+    internal const ushort CollisionCache1Valid = 0xC200;
+    internal const ushort CollisionCache1ChunkLow = 0xC201;
+    internal const ushort CollisionCache1ChunkHigh = 0xC202;
+    internal const ushort CollisionReplacementNext = 0xC203;
+    internal const ushort CollisionDecodeCountLow = 0xC204;
+    internal const ushort CollisionDecodeCountHigh = 0xC205;
+    internal const ushort CollisionCellValid = 0xC206;
+    internal const ushort CollisionCellXLow = 0xC207;
+    internal const ushort CollisionCellXHigh = 0xC208;
+    internal const ushort CollisionCellYLow = 0xC209;
+    internal const ushort CollisionCellYHigh = 0xC20A;
+    internal const ushort CollisionCellResult = 0xC20B;
+    internal const ushort GameplayTickCount = 0xC20C;
+    internal const ushort CollisionPendingChunkLow = 0xC20D;
+    internal const ushort CollisionPendingChunkHigh = 0xC20E;
+    internal const ushort CollisionMemoHitCount = 0xC20F;
+}
+
 internal sealed record GameBoyWorldPackPlaneRuntimeDescriptor(
     uint Offset,
     byte StoredBytes,
@@ -49,10 +77,12 @@ internal sealed record GameBoyWorldPackRuntimePlan(
         var visualSlotCount = descriptor.VisualIdBytes == 1
             ? enableDiagonalVisualCache ? 6 : enablePackedCameraCache ? 3 : 2
             : 2;
+        var supportsCollisionMemoTable = SupportsCollisionMemoTable(descriptor);
         var layout = GameBoyWorldPackRuntimeLayout.Create(
             descriptor.VisualIdBytes,
             descriptor.CollisionIdBytes,
-            visualSlotCount);
+            visualSlotCount,
+            enableCollisionMemoTable: enablePackedCameraCache && supportsCollisionMemoTable);
         var metatileCells = checked(descriptor.MetatileWidth * descriptor.MetatileHeight);
         var profileLength = checked(descriptor.CollisionProfileCount * metatileCells);
         var runtimeDirectory = new List<byte>(checked(pack.Chunks.Count * 16));
@@ -87,6 +117,21 @@ internal sealed record GameBoyWorldPackRuntimePlan(
             serializedBytes[..WorldPackDescriptor.V1HeaderBytes],
             serializedBytes.AsSpan(checked((int)descriptor.CollisionProfilesOffset), profileLength).ToArray(),
             runtimeDirectory.ToArray());
+    }
+
+    private static bool SupportsCollisionMemoTable(WorldPackDescriptor descriptor)
+    {
+        // The reduced lookup below is deliberately tied to complete-stage geometry.
+        // Every other v1 shape retains the general word-safe coordinate lowering.
+        var sourceWidth = descriptor.HardwareWidth / descriptor.MetatileWidth;
+        var lastChunkWidth = sourceWidth - ((descriptor.ChunkColumns - 1) * descriptor.ChunkWidth);
+        return descriptor.MetatileWidth == 2
+               && descriptor.MetatileHeight == 2
+               && descriptor.CollisionIdBytes == 1
+               && descriptor.ChunkColumns == 20
+               && descriptor.HardwareHeight <= 64
+               && descriptor.ChunkColumns * descriptor.ChunkRows <= byte.MaxValue
+               && lastChunkWidth == 4;
     }
 
     private static void AddRuntimePlane(List<byte> target, GameBoyWorldPackPlaneRuntimeDescriptor plane)
@@ -148,6 +193,51 @@ internal static class GameBoyWorldPackRuntimeEmitter
     private const ushort ScratchReadByte = 0xC1F8;
     private const ushort ScratchSubcellIndex = 0xC1F9;
     private const ushort ScratchSubcellIndexHigh = 0xC1FC;
+
+    internal static void EmitInitializeState(GbBuilder builder, GameBoyWorldPackRuntimePlan plan)
+    {
+        builder.XorA();
+        foreach (var address in new ushort[]
+                 {
+                     GameBoyWorldPackRuntimeAbi.CollisionQueryXLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionQueryYLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot,
+                     GameBoyWorldPackRuntimeAbi.CollisionCache0Valid,
+                     GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionCache1Valid,
+                     GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionReplacementNext,
+                     GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionCellValid,
+                     GameBoyWorldPackRuntimeAbi.CollisionCellXLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionCellXHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionCellYLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionCellYHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionCellResult,
+                     GameBoyWorldPackRuntimeAbi.GameplayTickCount,
+                     GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow,
+                     GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh,
+                     GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount,
+                 })
+        {
+            builder.StoreA(address);
+        }
+
+        if (plan.Layout.CollisionMemoTable is { } memoTable)
+        {
+            for (var entry = 0; entry < GameBoyWorldPackRuntimeLayout.CollisionMemoEntryCount; entry++)
+            {
+                builder.StoreA(checked((ushort)(memoTable.Start
+                    + entry * GameBoyWorldPackRuntimeLayout.CollisionMemoEntryBytes
+                    + 1)));
+            }
+        }
+    }
 
     public static void Emit(
         GbBuilder builder,
@@ -1596,6 +1686,18 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var lookupBounds = builder.CreateLabel("worldpack_collision_lookup_bounds");
         var lookupReturnStatus = builder.CreateLabel("worldpack_collision_lookup_return_status");
         var lookupMalformed = builder.CreateLabel("worldpack_collision_lookup_malformed");
+        var cellMiss = builder.CreateLabel("worldpack_collision_cell_miss");
+        var checkCache1 = builder.CreateLabel("worldpack_collision_check_cache_1");
+        var cache0 = builder.CreateLabel("worldpack_collision_cache_0");
+        var cache1 = builder.CreateLabel("worldpack_collision_cache_1");
+        var selectSlot = builder.CreateLabel("worldpack_collision_select_slot");
+        var selectSlot0 = builder.CreateLabel("worldpack_collision_select_slot_0");
+        var selectSlot1 = builder.CreateLabel("worldpack_collision_select_slot_1");
+        var rawDirect = builder.CreateLabel("worldpack_collision_raw_direct");
+        var rleDecode = builder.CreateLabel("worldpack_collision_rle_decode");
+        var rleDecoded = builder.CreateLabel("worldpack_collision_rle_decoded");
+        var publishSlot1 = builder.CreateLabel("worldpack_collision_publish_slot_1");
+        var idReady = builder.CreateLabel("worldpack_collision_id_ready");
         var descriptor = plan.Pack.Descriptor;
 
         EmitPlaneDecodeEntry(
@@ -1611,37 +1713,200 @@ internal static class GameBoyWorldPackRuntimeEmitter
             enableStagedCamera);
 
         builder.Label(GameBoyRomBuilder.WorldPackCollisionLookupLabel);
-        builder.Emit(0xD5); // PUSH DE
-        builder.PushHl();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellValid);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xC2, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'E', GameBoyWorldPackRuntimeAbi.CollisionCellXLow, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'D', GameBoyWorldPackRuntimeAbi.CollisionCellXHigh, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'L', GameBoyWorldPackRuntimeAbi.CollisionCellYLow, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'H', GameBoyWorldPackRuntimeAbi.CollisionCellYHigh, cellMiss);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
+        builder.Emit(0xC9);
+
+        builder.Label(cellMiss);
+        if (plan.Layout.CollisionMemoTable is { } collisionMemoTable)
+        {
+            EmitJumpIfRegisterWordAtOrAbove(builder, 'D', 'E', descriptor.HardwareWidth, lookupBounds);
+            EmitJumpIfRegisterWordAtOrAbove(builder, 'H', 'L', descriptor.HardwareHeight, lookupBounds);
+            builder.LoadAFromE();
+            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+            builder.LoadAFromD();
+            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+            builder.LoadAFromL();
+            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+            builder.LoadAFromH();
+            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh);
+            EmitTryCollisionMemoTableLookup(builder, collisionMemoTable);
+        }
+        else
+        {
+            EmitStoreLookupCoordinates(builder);
+            CopyByte(builder, ScratchXLow, GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+            CopyByte(builder, ScratchXHigh, GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+            CopyByte(builder, ScratchYLow, GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+            CopyByte(builder, ScratchYHigh, GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh);
+            EmitJumpIfWordOutside(builder, ScratchXLow, ScratchXHigh, 0, descriptor.HardwareWidth, lookupBounds);
+            EmitJumpIfWordOutside(builder, ScratchYLow, ScratchYHigh, 0, descriptor.HardwareHeight, lookupBounds);
+        }
+
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackValidateLabel);
         builder.LoadAFromB();
-        builder.PopHl();
-        builder.Emit(0xD1); // POP DE
-        builder.LoadBFromA();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, lookupReturnStatus);
-        if (enableStagedCamera)
+
+        if (plan.Layout.CollisionMemoTable is not null)
         {
-            GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
-                builder,
-                GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            EmitPrepareFastCollisionLookupState(builder, descriptor);
         }
-        EmitStoreLookupCoordinates(builder);
-        EmitJumpIfWordOutside(builder, ScratchXLow, ScratchXHigh, 0, descriptor.HardwareWidth, lookupBounds);
-        EmitJumpIfWordOutside(builder, ScratchYLow, ScratchYHigh, 0, descriptor.HardwareHeight, lookupBounds);
-        EmitPrepareLookupState(
+        else
+        {
+            EmitPrepareLookupState(
+                builder,
+                plan,
+                enableStagedCamera,
+                guardLookupState: false);
+        }
+        CopyByte(builder, ScratchXLow, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow);
+        CopyByte(builder, ScratchXHigh, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh);
+
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xC2, checkCache1);
+        EmitJumpIfBytesDiffer(
             builder,
-            plan,
-            enableStagedCamera,
-            guardLookupState: enableStagedCamera);
+            GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkLow,
+            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow,
+            checkCache1);
+        EmitJumpIfBytesDiffer(
+            builder,
+            GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkHigh,
+            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh,
+            checkCache1);
+        builder.JumpAbsolute(cache0);
+
+        builder.Label(checkCache1);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xC2, selectSlot);
+        EmitJumpIfBytesDiffer(
+            builder,
+            GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkLow,
+            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow,
+            selectSlot);
+        EmitJumpIfBytesDiffer(
+            builder,
+            GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkHigh,
+            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh,
+            selectSlot);
+        builder.JumpAbsolute(cache1);
+
+        builder.Label(selectSlot);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, selectSlot0);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, selectSlot1);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionReplacementNext);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xCA, selectSlot0);
+        builder.JumpAbsolute(selectSlot1);
+
+        builder.Label(selectSlot0);
+        builder.XorA();
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.JumpAbsolute(rawDirect);
+        builder.Label(selectSlot1);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+
+        builder.Label(rawDirect);
         EmitLoadPlaneAndPrepareSource(builder, plan, layout, runtimeDirectory, planeEntryOffset: 6, enableStagedCamera);
-        builder.LoadDe(plan.Layout.CollisionSlots[0].Start);
+        builder.LoadA(ScratchPacketCount);
+        builder.CompareImmediate((byte)WorldPackCodec.Raw);
+        var loadRaw = builder.CreateLabel("worldpack_collision_load_raw");
+        builder.JumpAbsolute(0xCA, loadRaw);
+        builder.CompareImmediate((byte)WorldPackCodec.ElementRle);
+        builder.JumpAbsolute(0xCA, rleDecode);
+        builder.JumpAbsolute(lookupMalformed);
+
+        builder.Label(loadRaw);
+        EmitLoadRawCollisionId(builder, descriptor, layout, decoders.Malformed, enableStagedCamera);
+        builder.JumpAbsolute(idReady);
+
+        builder.Label(rleDecode);
+        EmitIncrementWordCounter(
+            builder,
+            GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow,
+            GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh);
+        EmitLoadSelectedCollisionSlotDestination(builder, plan.Layout.CollisionSlots);
         EmitSetValidationOnly(builder, validationOnly: false);
-        EmitCallSelectedDecoder(builder, decoders.Raw, decoders.Rle, lookupReturnStatus);
+        builder.JumpAbsolute(0xCD, decoders.Rle);
         builder.LoadAFromB();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, lookupReturnStatus);
-        EmitCollisionProfileLookup(builder, plan, profileBytes, lookupMalformed);
+        builder.JumpAbsolute(rleDecoded);
+
+        builder.Label(rleDecoded);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, publishSlot1);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow, GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkLow);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh, GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkHigh);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionReplacementNext);
+        builder.JumpAbsolute(cache0);
+
+        builder.Label(publishSlot1);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow, GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkLow);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh, GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkHigh);
+        builder.XorA();
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionReplacementNext);
+        builder.JumpAbsolute(cache1);
+
+        builder.Label(cache0);
+        builder.XorA();
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        EmitLoadSelectedCollisionId(builder, descriptor, plan.Layout.CollisionSlots);
+        builder.JumpAbsolute(idReady);
+        builder.Label(cache1);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        EmitLoadSelectedCollisionId(builder, descriptor, plan.Layout.CollisionSlots);
+
+        builder.Label(idReady);
+        builder.LoadA(ScratchXLow);
+        builder.LoadCFromA();
+        if (descriptor.CollisionIdBytes == 2)
+        {
+            builder.LoadA(ScratchXHigh);
+            builder.LoadBFromA();
+        }
+        else
+        {
+            builder.Emit(0x06, 0x00); // LD B,0
+        }
+
+        EmitJumpIfIdOutsideRange(builder, descriptor.CollisionIdBytes, descriptor.CollisionProfileCount, lookupMalformed);
+        EmitCollisionProfileLookupFromScratchId(builder, plan, profileBytes);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        if (plan.Layout.CollisionMemoTable is { } collisionMemoTableForPublish)
+        {
+            EmitPublishCollisionMemoTable(builder, collisionMemoTableForPublish);
+        }
+
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryXLow, GameBoyWorldPackRuntimeAbi.CollisionCellXLow);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh, GameBoyWorldPackRuntimeAbi.CollisionCellXHigh);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryYLow, GameBoyWorldPackRuntimeAbi.CollisionCellYLow);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh, GameBoyWorldPackRuntimeAbi.CollisionCellYHigh);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellValid);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
         builder.Emit(0xC9);
         builder.Label(lookupBounds);
@@ -1678,7 +1943,381 @@ internal static class GameBoyWorldPackRuntimeEmitter
             enableStagedCamera);
         EmitReadSourceByte(builder, decoders.ReadSourceByte, layout.UsesBankedWorldPack, enableStagedCamera);
         EmitDecodeReturns(builder, decoders.Success, decoders.Malformed, layout.UsesBankedWorldPack, enableStagedCamera);
+    }
 
+    private static void EmitJumpIfRegisterDoesNotMatch(
+        GbBuilder builder,
+        char register,
+        ushort address,
+        string mismatch)
+    {
+        builder.LoadA(address);
+        builder.LoadBFromA();
+        LoadAFromRegister(builder, register);
+        builder.CompareB();
+        builder.JumpAbsolute(0xC2, mismatch);
+    }
+
+    private static void EmitPrepareFastCollisionLookupState(
+        GbBuilder builder,
+        WorldPackDescriptor descriptor)
+    {
+        // SupportsCollisionMemoTable guarantees 2x2 metatiles, 8x8 chunks,
+        // twenty chunk columns, one-byte IDs, and the four-cell clipped tail.
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.AndImmediate(0x01);
+        builder.AddAFromA();
+        builder.LoadBFromA();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.AndImmediate(0x01);
+        builder.AddAFromB();
+        builder.StoreA(ScratchSubcellIndex);
+        builder.XorA();
+        builder.StoreA(ScratchSubcellIndexHigh);
+
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.LoadEFromA();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+        builder.LoadDFromA();
+        for (var shift = 0; shift < 4; shift++)
+        {
+            EmitShiftRightDe(builder);
+        }
+
+        builder.LoadAFromE();
+        builder.StoreA(ScratchSourceBank);
+
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        for (var shift = 0; shift < 4; shift++)
+        {
+            builder.ShiftRightLogicalA();
+        }
+
+        builder.AddAFromA();
+        builder.AddAFromA();
+        builder.LoadBFromA();
+        builder.AddAFromA();
+        builder.AddAFromA();
+        builder.AddAFromB();
+        builder.LoadBFromA();
+        builder.LoadA(ScratchSourceBank);
+        builder.AddAFromB();
+        builder.StoreA(ScratchXLow);
+        builder.XorA();
+        builder.StoreA(ScratchXHigh);
+
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.ShiftRightLogicalA();
+        builder.AndImmediate(0x07);
+        builder.StoreA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.ShiftRightLogicalA();
+        builder.AndImmediate(0x07);
+        builder.StoreA(ScratchYHigh);
+
+        var clippedWidth = builder.CreateLabel("worldpack_fast_collision_clipped_width");
+        var cellReady = builder.CreateLabel("worldpack_fast_collision_cell_ready");
+        builder.LoadA(ScratchSourceBank);
+        builder.CompareImmediate(descriptor.ChunkColumns - 1);
+        builder.JumpAbsolute(0xCA, clippedWidth);
+        builder.LoadA(ScratchStoredRemaining);
+        builder.AddAFromA();
+        builder.AddAFromA();
+        builder.AddAFromA();
+        builder.JumpAbsolute(cellReady);
+        builder.Label(clippedWidth);
+        builder.LoadA(ScratchStoredRemaining);
+        builder.AddAFromA();
+        builder.AddAFromA();
+        builder.Label(cellReady);
+        builder.LoadBFromA();
+        builder.LoadA(ScratchYHigh);
+        builder.AddAFromB();
+        builder.StoreA(ScratchCellIndex);
+    }
+
+    private static void EmitJumpIfBytesDiffer(
+        GbBuilder builder,
+        ushort left,
+        ushort right,
+        string mismatch)
+    {
+        builder.LoadA(left);
+        builder.LoadBFromA();
+        builder.LoadA(right);
+        builder.CompareB();
+        builder.JumpAbsolute(0xC2, mismatch);
+    }
+
+    private static void EmitJumpIfRegisterWordAtOrAbove(
+        GbBuilder builder,
+        char highRegister,
+        char lowRegister,
+        int maximumExclusive,
+        string outside)
+    {
+        var below = builder.CreateLabel("worldpack_fast_bounds_below");
+        LoadAFromRegister(builder, highRegister);
+        builder.CompareImmediate((maximumExclusive >> 8) & 0xFF);
+        builder.JumpAbsolute(0xDA, below);
+        builder.JumpAbsolute(0xC2, outside);
+        if ((maximumExclusive & 0xFF) == 0)
+        {
+            builder.JumpAbsolute(outside);
+        }
+        else
+        {
+            LoadAFromRegister(builder, lowRegister);
+            builder.CompareImmediate(maximumExclusive & 0xFF);
+            builder.JumpAbsolute(0xD2, outside);
+        }
+
+        builder.Label(below);
+    }
+
+    private static void CopyByte(GbBuilder builder, ushort source, ushort target)
+    {
+        builder.LoadA(source);
+        builder.StoreA(target);
+    }
+
+    private static void EmitTryCollisionMemoTableLookup(
+        GbBuilder builder,
+        GameBoyWramRange memoTable)
+    {
+        var miss = builder.CreateLabel("worldpack_collision_memo_table_miss");
+        EmitLoadCollisionMemoTablePointer(builder, memoTable);
+        builder.LoadAFromHl();
+        builder.LoadBFromA();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.CompareB();
+        builder.JumpAbsolute(0xC2, miss);
+        builder.IncrementHl();
+        builder.LoadAFromHl();
+        builder.StoreA(ScratchReadByte);
+        EmitLoadCollisionMemoHighTag(builder);
+        builder.LoadBFromA();
+        builder.LoadA(ScratchReadByte);
+        builder.CompareB();
+        builder.JumpAbsolute(0xC2, miss);
+        builder.IncrementHl();
+        builder.LoadAFromHl();
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount);
+        builder.Emit(0x3C); // INC A
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryXLow, GameBoyWorldPackRuntimeAbi.CollisionCellXLow);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh, GameBoyWorldPackRuntimeAbi.CollisionCellXHigh);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryYLow, GameBoyWorldPackRuntimeAbi.CollisionCellYLow);
+        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh, GameBoyWorldPackRuntimeAbi.CollisionCellYHigh);
+        builder.LoadAImmediate(1);
+        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellValid);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
+        builder.Emit(0xC9);
+        builder.Label(miss);
+    }
+
+    private static void EmitPublishCollisionMemoTable(
+        GbBuilder builder,
+        GameBoyWramRange memoTable)
+    {
+        EmitLoadCollisionMemoTablePointer(builder, memoTable);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.StoreHlA();
+        builder.IncrementHl();
+        EmitLoadCollisionMemoHighTag(builder);
+        builder.StoreHlA();
+        builder.IncrementHl();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.StoreHlA();
+    }
+
+    private static void EmitLoadCollisionMemoTablePointer(
+        GbBuilder builder,
+        GameBoyWramRange memoTable)
+    {
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.AndImmediate(0x1F);
+        builder.AddAFromA();
+        builder.LoadBFromA();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.AndImmediate(0x01);
+        builder.AddAFromB();
+        builder.LoadBFromA();
+        builder.AddAFromA();
+        builder.AddAFromB();
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.LoadHl(memoTable.Start);
+        builder.AddHlDe();
+    }
+
+    private static void EmitLoadCollisionMemoHighTag(GbBuilder builder)
+    {
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.AddAFromA();
+        builder.LoadBFromA();
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+        builder.AddAFromB();
+        builder.OrImmediate(0x80);
+    }
+
+    private static void EmitIncrementWordCounter(GbBuilder builder, ushort lowAddress, ushort highAddress)
+    {
+        var done = builder.CreateLabel("worldpack_increment_word_done");
+        builder.LoadA(lowAddress);
+        builder.Emit(0x3C); // INC A
+        builder.StoreA(lowAddress);
+        builder.CompareImmediate(0);
+        builder.JumpAbsolute(0xC2, done);
+        builder.LoadA(highAddress);
+        builder.Emit(0x3C); // INC A
+        builder.StoreA(highAddress);
+        builder.Label(done);
+    }
+
+    private static void EmitLoadSelectedCollisionSlotDestination(
+        GbBuilder builder,
+        IReadOnlyList<GameBoyWramRange> slots)
+    {
+        var slot1 = builder.CreateLabel("worldpack_collision_destination_slot_1");
+        var ready = builder.CreateLabel("worldpack_collision_destination_ready");
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, slot1);
+        builder.LoadDe(slots[0].Start);
+        builder.JumpAbsolute(ready);
+        builder.Label(slot1);
+        builder.LoadDe(slots[1].Start);
+        builder.Label(ready);
+    }
+
+    private static void EmitLoadSelectedCollisionId(
+        GbBuilder builder,
+        WorldPackDescriptor descriptor,
+        IReadOnlyList<GameBoyWramRange> slots)
+    {
+        var slot1 = builder.CreateLabel("worldpack_collision_id_slot_1");
+        var ready = builder.CreateLabel("worldpack_collision_id_slot_ready");
+        builder.LoadA(ScratchCellIndex);
+        if (descriptor.CollisionIdBytes == 2)
+        {
+            builder.AddAFromA();
+        }
+
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.CompareImmediate(1);
+        builder.JumpAbsolute(0xCA, slot1);
+        builder.LoadHl(slots[0].Start);
+        builder.JumpAbsolute(ready);
+        builder.Label(slot1);
+        builder.LoadHl(slots[1].Start);
+        builder.Label(ready);
+        builder.AddHlDe();
+        builder.LoadAFromHl();
+        builder.StoreA(ScratchXLow);
+        if (descriptor.CollisionIdBytes == 2)
+        {
+            builder.IncrementHl();
+            builder.LoadAFromHl();
+            builder.StoreA(ScratchXHigh);
+        }
+        else
+        {
+            builder.XorA();
+            builder.StoreA(ScratchXHigh);
+        }
+    }
+
+    private static void EmitLoadRawCollisionId(
+        GbBuilder builder,
+        WorldPackDescriptor descriptor,
+        GameBoyRomLayout layout,
+        string malformed,
+        bool enableStagedCamera)
+    {
+        EmitBeginDecode(builder, layout.UsesBankedWorldPack, enableStagedCamera);
+        builder.LoadA(ScratchCellIndex);
+        if (descriptor.CollisionIdBytes == 2)
+        {
+            builder.AddAFromA();
+        }
+
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.AddHlDe();
+        if (layout.UsesBankedWorldPack)
+        {
+            EmitAdvanceSourceBankIfNeeded(builder, enableStagedCamera);
+        }
+
+        builder.LoadAFromHl();
+        builder.StoreA(ScratchXLow);
+        if (descriptor.CollisionIdBytes == 2)
+        {
+            builder.IncrementHl();
+            if (layout.UsesBankedWorldPack)
+            {
+                EmitAdvanceSourceBankIfNeeded(builder, enableStagedCamera);
+            }
+
+            builder.LoadAFromHl();
+            builder.StoreA(ScratchXHigh);
+        }
+        else
+        {
+            builder.XorA();
+            builder.StoreA(ScratchXHigh);
+        }
+
+        EmitValidateSafeStagedId(
+            builder,
+            descriptor.CollisionIdBytes,
+            descriptor.CollisionProfileCount,
+            malformed);
+        if (layout.UsesBankedWorldPack)
+        {
+            builder.PopAf();
+            GameBoyRomBuilder.EmitSelectRomBankFromA(builder, enableStagedCamera);
+        }
+    }
+
+    private static void EmitCollisionProfileLookupFromScratchId(
+        GbBuilder builder,
+        GameBoyWorldPackRuntimePlan plan,
+        string profileBytes)
+    {
+        var descriptor = plan.Pack.Descriptor;
+        builder.LoadA(ScratchXLow);
+        builder.LoadCFromA();
+        if (descriptor.CollisionIdBytes == 2)
+        {
+            builder.LoadA(ScratchXHigh);
+            builder.LoadBFromA();
+        }
+        else
+        {
+            builder.Emit(0x06, 0x00); // LD B,0
+        }
+
+        builder.LoadHl(0);
+        var metatileCells = checked(descriptor.MetatileWidth * descriptor.MetatileHeight);
+        for (var index = 0; index < metatileCells; index++)
+        {
+            builder.AddHlBc();
+        }
+
+        builder.LoadDe(profileBytes);
+        builder.AddHlDe();
+        builder.LoadA(ScratchSubcellIndex);
+        builder.LoadEFromA();
+        builder.LoadA(ScratchSubcellIndexHigh);
+        builder.LoadDFromA();
+        builder.AddHlDe();
+        builder.LoadAFromHl();
     }
 
     private static void EmitPlaneDecodeEntry(
@@ -1697,6 +2336,13 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var miss = builder.CreateLabel("worldpack_decode_miss");
         var returnStatus = builder.CreateLabel("worldpack_decode_return_status");
         builder.Label(entryLabel);
+        if (planeOffset == 1)
+        {
+            builder.XorA();
+            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        }
+
         if (enableStagedCamera)
         {
             GameBoyPackedCameraRuntimeEmitter.EmitWaitOutsideVBlank(builder);
@@ -2014,7 +2660,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.JumpAbsolute(success);
     }
 
-    private static void EmitAdvanceSourceBankIfNeeded(GbBuilder builder)
+    private static void EmitAdvanceSourceBankIfNeeded(
+        GbBuilder builder,
+        bool instrumentPackedCameraCritical = true)
     {
         var noCross = builder.CreateLabel("worldpack_raw_no_cross");
         builder.LoadAFromH();
@@ -2024,7 +2672,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.LoadA(ScratchSourceBank);
         builder.Emit(0x3C); // INC A
         builder.StoreA(ScratchSourceBank);
-        GameBoyRomBuilder.EmitSelectRomBankFromA(builder, instrumentPackedCameraCritical: true);
+        GameBoyRomBuilder.EmitSelectRomBankFromA(builder, instrumentPackedCameraCritical);
         builder.Label(noCross);
     }
 
@@ -2712,53 +3360,6 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.StoreA(ScratchYHigh);
     }
 
-    private static void EmitCollisionProfileLookup(
-        GbBuilder builder,
-        GameBoyWorldPackRuntimePlan plan,
-        string profileBytes,
-        string malformed)
-    {
-        var descriptor = plan.Pack.Descriptor;
-        builder.LoadA(ScratchCellIndex);
-        if (descriptor.CollisionIdBytes == 2)
-        {
-            builder.AddAFromA();
-        }
-
-        builder.LoadEFromA();
-        builder.LoadDImmediate(0);
-        builder.LoadHl(plan.Layout.CollisionSlots[0].Start);
-        builder.AddHlDe();
-        builder.Emit(0x4E); // LD C,(HL)
-        if (descriptor.CollisionIdBytes == 2)
-        {
-            builder.IncrementHl();
-            builder.Emit(0x46); // LD B,(HL)
-        }
-        else
-        {
-            builder.Emit(0x06, 0x00); // LD B,0
-        }
-
-        EmitJumpIfIdOutsideRange(builder, descriptor.CollisionIdBytes, descriptor.CollisionProfileCount, malformed);
-
-        builder.LoadHl(0);
-        var metatileCells = checked(descriptor.MetatileWidth * descriptor.MetatileHeight);
-        for (var index = 0; index < metatileCells; index++)
-        {
-            builder.AddHlBc();
-        }
-
-        builder.LoadDe(profileBytes);
-        builder.AddHlDe();
-        builder.LoadA(ScratchSubcellIndex);
-        builder.LoadEFromA();
-        builder.LoadA(ScratchSubcellIndexHigh);
-        builder.LoadDFromA();
-        builder.AddHlDe();
-        builder.LoadAFromHl();
-    }
-
     private static void EmitJumpIfWordOutside(
         GbBuilder builder,
         ushort lowAddress,
@@ -3008,15 +3609,19 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
     IReadOnlyList<GameBoyWramRange> VisualSlots,
     IReadOnlyList<GameBoyWramRange> CollisionSlots,
     IReadOnlyList<GameBoyWramRange> EdgeSlots,
+    GameBoyWramRange? CollisionMemoTable,
     int TotalBytes)
 {
     private const int ChunkCells = 64;
     private const int EdgeBytes = 21;
+    internal const int CollisionMemoEntryBytes = 3;
+    internal const int CollisionMemoEntryCount = 64;
 
     public static GameBoyWorldPackRuntimeLayout Create(
         int visualIdBytes,
         int collisionIdBytes,
-        int visualSlotCount = 2)
+        int visualSlotCount = 2,
+        bool enableCollisionMemoTable = false)
     {
         ValidateIdBytes(visualIdBytes, nameof(visualIdBytes));
         ValidateIdBytes(collisionIdBytes, nameof(collisionIdBytes));
@@ -3033,6 +3638,9 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
             ref cursor);
         var collisionSlots = CreatePair("WorldPack collision slot", collisionIdBytes * ChunkCells, ref cursor);
         var edgeSlots = CreatePair("WorldPack edge slot", EdgeBytes, ref cursor);
+        GameBoyWramRange? collisionMemoTable = enableCollisionMemoTable
+            ? GameBoyWramLayout.CollisionMemoState
+            : null;
         var totalBytes = cursor - GameBoyWramLayout.WorldPackStaging.Start;
         GameBoyWramLayout.ValidateStagingBytes(totalBytes);
 
@@ -3042,6 +3650,7 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
             visualSlots,
             collisionSlots,
             edgeSlots,
+            collisionMemoTable,
             totalBytes);
     }
 
