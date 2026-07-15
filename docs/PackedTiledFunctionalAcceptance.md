@@ -28,19 +28,19 @@ physical frames.
 
 | Scenario | SHA-256 | Window | Gameplay | Longest miss | Camera latency | Integrity failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
-| `tiled-tall` GB | `9c8b6432c8231831f0a5018f2c8f128b66702245719b52886c665dcdc4317afa` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-short` GB | `e51ecdb8e969c8989d920a9ec5cfb6fc604176d3c5547355dde25a332275da27` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-tall` GB | `db0266c27ec411c8ce40dcf85845e7234f52f328b47086284d7c0cea9e2de958` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-short` GB | `0dfd933e05d4c6c9081125558b4c6d11921695789afa898adde9f690ab25dbd5` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-short` NES | `8b11c98cef004d26542a944a3aedb1d2d4cad699b7a44ed02dbcb16eaeed728a` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
-| `tiled-hscroll-full` GB | `d5baa0effd76548832a2e7c4fbaab17ca378fe1b3436aada18dd2f00984ebebb` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-full` GB | `f712f72b53955fecf5d501624469d8acb72e0bcb9ea322751660dda9f938cc9c` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-full` NES | `72591693ba0e5347dd356f679e3544e25f47741399b1b4e87e3d42344548381c` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
-| `tiled-hscroll-offset` GB | `dd5ba1c1fc41c2f3ce0267f188230883464b603a70922efd7595c1b9087643b0` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
+| `tiled-hscroll-offset` GB | `8f948c2e55a8b7833244005ed3199d73f20bd78028332f2f6741e334b2301c9c` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-offset` NES | `a69e0b6a85e11990cf5933cc8d71f8a649db7a8ad7e1d420b9b5e19f9282cabc` | 420 | 418 / 420 (0.995) | 1 | 0 / 1 | 0 |
-| `tiled-vscroll` GB | `3f44d4dffef12dd615955ee1160123a648484ed1225d1e060a213f48769a95d5` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
+| `tiled-vscroll` GB | `ad9e91a65d9b4ac1f3c741115ec364834205d603d1191bec2d8722f96e24e193` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
 | `tiled-vscroll` NES | `9738cd74d6ecae7a25afd7e6072ab8d2d950e0ccfb4509f2a67976f0bc2b9644` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
-| `tiled-diagonal` GB | `de7a6766d98bb901221f34c2fff0f8c80d5b3f7ba9c9a808c936b309edccb431` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` GB | `60948ac30f49cbd1f1814a552f74b1c7346612eeadf6095c308e1b9da8b0983c` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
+| `tiled-diagonal` GB | `a940a0bc5058e04c64e31c00d34405e3817bf1c3b21a437d47e18f658dee5344` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
+| `tiled-free-scroll` GB | `b3306969a5d7c65dd51424b1554c5a75bf30795ea16b13589042e58aa8d27ca9` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` NES | `3c96e6936f096805088fa73836b5c2861200aa270361e1fa6555e861be3a1d11` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
-| `deadzone-follow` GB | `3db43f7a1b23c8f84c4865ee332eec904d8a9bb033a1b887d74c6807b84dc8b3` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
+| `deadzone-follow` GB | `8eba7e630dd390d80674b16490c331bb20a30c0ed5330967e2be36a482d9d862` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
 | `deadzone-follow` NES | `5b722e19e47ff638a6239ffc805e2f516c1620b034733dd8d540d93ca95c5ccd` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
 The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400

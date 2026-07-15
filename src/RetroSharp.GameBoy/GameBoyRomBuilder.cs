@@ -537,7 +537,7 @@ internal static class GameBoyRomBuilder
         runtime.EmitProgramBankInitialization(usesMbc1Foundation);
         if (worldPackRuntime is not null)
         {
-            builder.LoadAImmediate(0);
+            GameBoyWorldPackRuntimeEmitter.EmitInitializeState(builder, worldPackRuntime);
             builder.StoreA(GameBoyWramLayout.WorldPackValidationStateAddress);
         }
 
@@ -1447,10 +1447,11 @@ internal static class GameBoyWramLayout
     internal const ushort WorldPackValidationStateAddress = 0xC1FB;
 
     internal static readonly GameBoyWramRange UserLocals = new("user locals", 0xC000, 0x00E0);
-    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x010B);
-    // WorldPack decode scratch, actual-visible bank, and one-time validation state.
-    internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x000D);
+    internal static readonly GameBoyWramRange RuntimeState = new("runtime state", 0xC0E0, 0x0110);
+    // WorldPack decode scratch, collision cache/tag state, actual-visible bank, and validation state.
+    internal static readonly GameBoyWramRange WorldScalarState = new("world scalar/tag state", 0xC1F0, 0x0020);
     internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
+    internal static readonly GameBoyWramRange CollisionMemoState = new("collision memo state", 0xC220, 0x00C0);
     internal static readonly GameBoyWramRange WorldPackStaging = new("WorldPack staging", 0xC300, MaximumWorldPackStagingBytes);
     internal static readonly GameBoyWramRange WramEcho = new("WRAM echo", 0xE000, 0x1E00);
     internal static readonly GameBoyWramRange Stack = new("stack/HRAM", 0xFF80, 0x0080);
@@ -1464,7 +1465,7 @@ internal static class GameBoyWramLayout
         }
 
         var requested = WorldPackStaging with { Length = stagingBytes };
-        ValidateDisjoint(requested, UserLocals, RuntimeState, WorldScalarState, AudioChannel1Shadow, WramEcho, Stack);
+        ValidateDisjoint(requested, UserLocals, RuntimeState, WorldScalarState, AudioChannel1Shadow, CollisionMemoState, WramEcho, Stack);
         return requested;
     }
 
@@ -1676,6 +1677,14 @@ internal sealed class GameBoyRuntimeCompiler
     private bool UsesPackedWorldRuntime => packedWorldRuntimeLayout is not null;
 
     private bool UsesPackedCameraRuntime => usesPackedCameraRuntime;
+
+    private bool UsesPackedCollisionRuntime =>
+        UsesPackedWorldRuntime
+        && program.SdkOperations.Any(operation => operation is
+            Sdk2DOperation.CameraAabbTiles or
+            Sdk2DOperation.CameraAabbHitTop or
+            Sdk2DOperation.CameraScreenAabbTiles or
+            Sdk2DOperation.CameraScreenAabbHitTop);
 
     public bool UsesReadOnlyDataHelpers => romLayout.ReadOnlyDataPlacements.Keys.Any(IsRuntimeReadOnlyDataLabel);
 
@@ -3325,6 +3334,13 @@ internal sealed class GameBoyRuntimeCompiler
             builder.Label(wait);
             GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
             builder.Label(done);
+            if (UsesPackedCollisionRuntime)
+            {
+                builder.LoadA(GameBoyWorldPackRuntimeAbi.GameplayTickCount);
+                builder.Emit(0x3C); // INC A
+                builder.StoreA(GameBoyWorldPackRuntimeAbi.GameplayTickCount);
+            }
+
             builder.Emit(0x40); // LD B,B: zero-state source-tick marker observed by acceptance adapters.
             return;
         }

@@ -238,7 +238,7 @@ Banked cartridges keep two deliberately different target-private bank values. `$
 
 The private byte-reader ABI accepts `A=bank` and `HL=$4000-$7FFF`. Banks `1..31` return the byte in `A`, status `0` in `B`, and clear Z/C. Bank `0` is a miss (`A=0`, `B=1`, Z set, C clear); a bank above `31` or an address outside the switchable window is an error (`A=0`, `B=2`, Z/C set). Success, miss, and error all restore the actual hardware bank and `$C1FA`; `$C11C` is unchanged. The helper itself and every bank write it causes execute from fixed bank 0. This is only the reader/bank-state foundation: no `WorldPack` is placed or decoded yet, and the profile remains the current low-five-bit MBC1 mode with at most 32 physical banks.
 
-The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C1EA` (including packed camera slot tags, visible-camera state, counters, visual-cache metadata, diagonal arbitration, and the packed-audio tick counter), fixed WorldPack scratch plus actual-bank/validation scalar state `$C1F0-$C1FC`, channel-1 audio shadow `$C210-$C214`, and `WorldPack` staging `$C300-$C529`. A direct one-byte-ID reader uses the original two visual slots and 298 bytes; the standard packed camera uses three visual slots and 362 bytes; a diagonal packed camera uses six visual slots and the complete 554-byte v1 maximum. Two-byte IDs also require the 554-byte maximum, and a 555-byte request is rejected. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
+The target-private WRAM contract is: user locals `$C000-$C0DF`, runtime state `$C0E0-$C1EF` (including packed camera slot tags, visible-camera state, counters, visual-cache metadata, diagonal arbitration, packed-audio state, and collision query coordinates), fixed WorldPack scratch plus collision cache/tag and validation state `$C1F0-$C20F`, channel-1 audio shadow `$C210-$C214`, an optional 64-entry collision memo table at `$C220-$C2DF`, and `WorldPack` staging `$C300-$C529`. A direct one-byte-ID reader uses the original two visual slots and 298 staging bytes; the standard packed camera uses three visual slots and 362 bytes; a diagonal packed camera uses six visual slots and the complete 554-byte v1 maximum. Two-byte IDs also require the 554-byte maximum, and a 555-byte request is rejected. The memo table is selected only for the complete-stage 2x2-metatile geometry; it is outside staging and does not change those staging totals. These ranges are disjoint from WRAM echo and the `$FF80-$FFFF` stack/HRAM region.
 
 ### WorldPack fixed-bank reader
 
@@ -259,9 +259,15 @@ loops, bank selections, and returns are fixed-bank code. Pack-relative reads
 use the final placement from LW-2.2, continue across `$7FFF->$4000`, and restore
 the actual entry bank and `$C1FA` LIFO; `$C11C` remains program-bank state.
 
-Visual lookup decodes only a visual slot before applying the target expansion;
-collision lookup decodes only a collision slot before applying its collision
-profile. Visual, collision, and edge slots never overlap. A direct one-byte-ID
+Visual lookup decodes only a visual slot before applying the target expansion.
+Collision lookup reads raw IDs directly from ROM and keeps two tagged,
+round-robin slots for element-RLE chunks, so repeated gameplay probes do not
+decode the same chunk again. A one-cell cache serves immediate repeats; the
+complete-stage geometry also uses the bounded 64-entry memo table. Cache tags
+become valid only after a successful complete decode, and the explicit decode
+entry invalidates lookup slot tags before it can overwrite either slot.
+Malformed, miss, and bounds results never publish a tag or memo entry. Visual,
+collision, and edge slots never overlap. A direct one-byte-ID
 reader uses two visual slots and 298 staging bytes including the two 21-byte
 edge slots. The packed camera raises that to three visual slots and 362 bytes,
 or six visual slots and 554 bytes when diagonal streaming is emitted. The
