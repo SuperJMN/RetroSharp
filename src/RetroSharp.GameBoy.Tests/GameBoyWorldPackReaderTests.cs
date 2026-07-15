@@ -201,6 +201,52 @@ public sealed class GameBoyWorldPackReaderTests
         }
     }
 
+    [Theory]
+    [InlineData(false, WorldPackCodec.Raw)]
+    [InlineData(true, WorldPackCodec.ElementRle)]
+    public void Two_byte_collision_lookup_crosses_an_mbc1_window_for_raw_and_rle(
+        bool repeated,
+        WorldPackCodec expectedCodec)
+    {
+        var fixture = CreateTwoByteCrossBankCollisionFixture(repeated);
+        Assert.Equal(expectedCodec, fixture.Pack.Chunks[0].Directory.CollisionCodec);
+        var targetCellIndex = repeated ? 2 : 49;
+        Assert.Equal((ushort)256, fixture.Pack.Chunks[0].CollisionProfileIds[targetCellIndex]);
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            "void Main() { }",
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: fixture.SerializedBytes);
+        var packSegments = result.Report.Segments.Where(segment => segment.Owner == "worldpack:default").ToArray();
+        Assert.NotEmpty(packSegments);
+        var encodedIdOffset = fixture.Pack.Chunks[0].Directory.CollisionOffset
+            + (expectedCodec == WorldPackCodec.ElementRle ? 5u : 49u * 2u);
+        var firstIdPhysicalAddress = packSegments[0].PhysicalStart + checked((int)encodedIdOffset);
+        Assert.Equal(0x7FFF, firstIdPhysicalAddress);
+        var cpu = new GameBoyTestCpu(result.Rom);
+        var validationStatus = cpu.RunWorldPackDecode(
+            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
+            chunkIndex: 0,
+            slot: 0);
+        Assert.Equal(GameBoyWorldPackResult.Success, validationStatus);
+        var bankWritesBeforeLookup = cpu.RomBankWrites.Count;
+        var hardwareX = repeated ? (ushort)6 : (ushort)3;
+        var hardwareY = repeated ? (ushort)0 : (ushort)6;
+
+        var lookup = cpu.RunWorldPackCollisionLookup(
+            result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+            hardwareX,
+            hardwareY);
+
+        Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
+        Assert.Equal((byte)fixture.Pack.CollisionAt(hardwareX, hardwareY), lookup.Value);
+        Assert.Equal(
+            expectedCodec == WorldPackCodec.ElementRle ? 1 : 0,
+            cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Contains(
+            cpu.RomBankWrites.Skip(bankWritesBeforeLookup),
+            write => write.SelectedBank == 2);
+    }
+
     [Fact]
     public void Repeated_rle_collision_queries_in_one_chunk_decode_once()
     {
@@ -249,6 +295,32 @@ public sealed class GameBoyWorldPackReaderTests
                 cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow)
                 | cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh) << 8);
         }
+    }
+
+    [Fact]
+    public void Malformed_rle_replacement_never_exposes_the_replaced_slot_under_its_old_tag()
+    {
+        var fixture = CreateThreeChunkRleFixture();
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            "void Main() { }",
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: fixture.SerializedBytes);
+        var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        var rom = result.Rom.ToArray();
+        var cpu = new GameBoyTestCpu(rom);
+        var entry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel];
+
+        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(entry, 0, 0).Status);
+        Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(entry, 8, 0).Status);
+        rom[packSegment.PhysicalStart + checked((int)fixture.Pack.Chunks[2].Directory.CollisionOffset)] = 0xFF;
+        Assert.Equal(GameBoyWorldPackResult.Malformed, cpu.RunWorldPackCollisionLookup(entry, 16, 0).Status);
+
+        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
+        Assert.Equal(1, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid));
+        var replacedChunk = cpu.RunWorldPackCollisionLookup(entry, 0, 0);
+        Assert.Equal(GameBoyWorldPackResult.Success, replacedChunk.Status);
+        Assert.Equal((byte)WorldTileFlags.Solid, replacedChunk.Value);
+        Assert.Equal(4, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
     }
 
     [Fact]
@@ -1213,6 +1285,92 @@ public sealed class GameBoyWorldPackReaderTests
             profiles,
             new byte[idCount * metatileCells],
             [new WorldPackChunk(directory, ids, ids)]);
+        return new SerializedWorldPack(pack, WorldPackSerializer.Serialize(pack));
+    }
+
+    private static SerializedWorldPack CreateTwoByteCrossBankCollisionFixture(bool repeated)
+    {
+        const int idCount = 257;
+        const int metatileCells = 3;
+        const int chunkCount = 64;
+        var codec = repeated ? WorldPackCodec.ElementRle : WorldPackCodec.Raw;
+        var collisionStoredBytes = repeated ? 10 : 128;
+        const int visualStoredBytes = 128;
+        var visualCount = repeated ? 4_717 : 4_686;
+        var visualIds = Enumerable.Range(0, 64).Select(index => (ushort)(index & 1)).ToArray();
+        var ids = repeated
+            ? new ushort[] { 1, 2, 256 }.Concat(Enumerable.Repeat((ushort)3, 61)).ToArray()
+            : Enumerable.Range(0, 64).Select(index => (ushort)(index % 2 == 1 ? 256 : 1)).ToArray();
+        const uint collisionProfilesOffset = WorldPackDescriptor.V1HeaderBytes;
+        var targetExpansionsOffset = collisionProfilesOffset + idCount * metatileCells;
+        var directoryOffset = targetExpansionsOffset + checked((uint)(visualCount * metatileCells));
+        var chunkDataOffset = directoryOffset + chunkCount * WorldPackDescriptor.V1DirectoryEntryBytes;
+        var collisionOffset = chunkDataOffset + visualStoredBytes;
+        var chunks = new List<WorldPackChunk>(chunkCount)
+        {
+            new(
+                new WorldPackChunkDirectoryEntry(
+                    chunkDataOffset,
+                    visualStoredBytes,
+                    128,
+                    collisionOffset,
+                    checked((ushort)collisionStoredBytes),
+                    128,
+                    8,
+                    8,
+                    WorldPackCodec.Raw,
+                    codec),
+                visualIds,
+                ids),
+        };
+        var nextOffset = collisionOffset + checked((uint)collisionStoredBytes);
+        var rawCollisionIds = Enumerable.Range(0, 64).Select(index => (ushort)(index & 1)).ToArray();
+        for (var chunk = 1; chunk < chunkCount; chunk++)
+        {
+            var directory = new WorldPackChunkDirectoryEntry(
+                nextOffset,
+                visualStoredBytes,
+                128,
+                nextOffset + visualStoredBytes,
+                128,
+                128,
+                8,
+                8,
+                WorldPackCodec.Raw,
+                WorldPackCodec.Raw);
+            chunks.Add(new WorldPackChunk(directory, visualIds, rawCollisionIds));
+            nextOffset += 256;
+        }
+
+        var descriptor = new WorldPackDescriptor
+        {
+            HardwareWidth = chunkCount * 8 * metatileCells,
+            HardwareHeight = 8,
+            MetatileWidth = metatileCells,
+            MetatileHeight = 1,
+            ChunkColumns = chunkCount,
+            ChunkRows = 1,
+            VisualMetatileCount = visualCount,
+            CollisionProfileCount = idCount,
+            VisualIdBytes = 2,
+            CollisionIdBytes = 2,
+            TargetCellStride = 1,
+            CollisionProfilesOffset = collisionProfilesOffset,
+            TargetExpansionsOffset = targetExpansionsOffset,
+            DirectoryOffset = directoryOffset,
+            ChunkDataOffset = chunkDataOffset,
+            PackLength = nextOffset,
+        };
+        var profiles = Enumerable.Range(0, idCount)
+            .Select(index => new WorldPackCollisionProfile(
+                Enumerable.Range(0, metatileCells)
+                    .Select(digit => (WorldTileFlags)((index / (int)Math.Pow(8, metatileCells - digit - 1)) % 8))))
+            .ToArray();
+        var pack = new WorldPack(
+            descriptor,
+            profiles,
+            new byte[visualCount * metatileCells],
+            chunks);
         return new SerializedWorldPack(pack, WorldPackSerializer.Serialize(pack));
     }
 

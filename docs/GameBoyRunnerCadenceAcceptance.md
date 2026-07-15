@@ -52,7 +52,7 @@ VBlank commit, camera lifecycle, and audio service paths are unchanged.
 
 GameboyMcp loaded the exact tracked 128 KiB DMG cartridge
 `samples/runner/bin/runner.gb` with SHA-256
-`e7ac693abe6d39211efb861bba4a635f3883c5744996e8958e31243786161b81`.
+`9980dcfe65f600a674af39a26f4c96870f0bbef6e0b8abce6d063fcf6671951a`.
 After 400 settlement frames, player state was X=72/Y=273, visible camera Y was
 176, and `LCDC=$97`. Holding Right for exactly 120 additional physical frames
 produced:

@@ -35,7 +35,7 @@ public sealed class FunctionalProductionRomAcceptanceTests
             adapter);
 
         Assert.True(report.Passed, report.ToHumanReadable());
-        Assert.Equal("3d27da24d052fc58142edc8feceb15c26417219f4f31bcb8b88f02a12202390e", report.RomSha256);
+        Assert.Equal("ad9e91a65d9b4ac1f3c741115ec364834205d603d1191bec2d8722f96e24e193", report.RomSha256);
         Assert.Equal(romBytes, factory.LoadedRom);
         Assert.Equal(FunctionalExecutionSource.InProcess, report.ExecutionSource);
         Assert.Equal(new FunctionalFrameWindow(20, 70, 90), report.FrameWindow);
