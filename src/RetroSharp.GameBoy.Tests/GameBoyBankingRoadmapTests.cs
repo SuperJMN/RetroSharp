@@ -79,8 +79,8 @@ public sealed class GameBoyBankingRoadmapTests
 
         Assert.Equal(CartridgeMbc1, rom[0x147]);
         Assert.Equal(1, cpu.CurrentRomBank);
-        Assert.Equal(1, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(0, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
     }
 
     [Fact]
@@ -93,47 +93,7 @@ public sealed class GameBoyBankingRoadmapTests
 
         Assert.NotEmpty(cpu.RomBankWrites);
         Assert.All(cpu.RomBankWrites, write => Assert.Equal(write.SelectedBank, write.ShadowBank));
-        Assert.Equal(cpu.CurrentRomBank, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-    }
-
-    [Fact]
-    public void World_pack_staging_reserves_362_byte_packed_camera_and_554_byte_maximum_shapes_without_overlap()
-    {
-        var current = GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.CurrentWorldPackStagingBytes);
-        var maximum = GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.MaximumWorldPackStagingBytes);
-        var protectedRanges = new[]
-        {
-            GameBoyWramLayout.UserLocals,
-            GameBoyWramLayout.RuntimeState,
-            GameBoyWramLayout.WorldScalarState,
-            GameBoyWramLayout.AudioChannel1Shadow,
-            GameBoyWramLayout.CollisionMemoState,
-            GameBoyWramLayout.WramEcho,
-            GameBoyWramLayout.Stack,
-        };
-
-        Assert.Equal((ushort)0xC000, GameBoyWramLayout.UserLocals.Start);
-        Assert.Equal((ushort)0xC0DF, GameBoyWramLayout.UserLocals.EndInclusive);
-        Assert.Equal((ushort)0xC1EF, GameBoyWramLayout.RuntimeState.EndInclusive);
-        Assert.Equal((ushort)0xC1F0, GameBoyWramLayout.WorldScalarState.Start);
-        Assert.Equal((ushort)0xC20F, GameBoyWramLayout.WorldScalarState.EndInclusive);
-        Assert.Equal((ushort)0xC210, GameBoyWramLayout.AudioChannel1Shadow.Start);
-        Assert.Equal((ushort)0xC214, GameBoyWramLayout.AudioChannel1Shadow.EndInclusive);
-        Assert.Equal((ushort)0xC220, GameBoyWramLayout.CollisionMemoState.Start);
-        Assert.Equal((ushort)0xC2DF, GameBoyWramLayout.CollisionMemoState.EndInclusive);
-        Assert.Equal(GameBoyWramLayout.CurrentWorldPackStagingBytes, current.Length);
-        Assert.Equal(GameBoyWramLayout.MaximumWorldPackStagingBytes, maximum.Length);
-        Assert.Equal((ushort)0xC529, maximum.EndInclusive);
-        Assert.All(protectedRanges, range => Assert.False(maximum.Overlaps(range), $"staging overlaps {range.Name}"));
-    }
-
-    [Fact]
-    public void World_pack_staging_rejects_a_one_byte_overflow()
-    {
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            GameBoyWramLayout.ValidateStagingBytes(GameBoyWramLayout.MaximumWorldPackStagingBytes + 1));
-
-        Assert.Contains($"1..{GameBoyWramLayout.MaximumWorldPackStagingBytes} bytes", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(cpu.CurrentRomBank, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
     }
 
     [Fact]
@@ -153,8 +113,8 @@ public sealed class GameBoyBankingRoadmapTests
         var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
         var cpu = new GameBoyTestCpu(rom);
         cpu.SetCurrentRomBank(3);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
-        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, 9);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 3);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, 9);
 
         var result = cpu.RunFarReadSubroutine(helper, bank: 2, address: 0x4000);
 
@@ -163,8 +123,8 @@ public sealed class GameBoyBankingRoadmapTests
         Assert.False(result.Zero);
         Assert.False(result.Carry);
         Assert.Equal(3, cpu.CurrentRomBank);
-        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(9, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(9, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
         Assert.Equal([2, 3], cpu.RomBankWrites.Select(write => write.SelectedBank));
         Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0000, 0x3FFF));
     }
@@ -179,7 +139,7 @@ public sealed class GameBoyBankingRoadmapTests
         var helper = (ushort)IndexOfSequence(rom, [0x5F, 0xFA, 0xFA, 0xC1, 0x4F, 0xC5, 0x7B, 0xFE, 0x00, 0xCA]);
         var cpu = new GameBoyTestCpu(rom);
         cpu.SetCurrentRomBank(3);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 3);
         cpu.InjectFarReadAfterSelecting(selectedBank: 4, helper, bank: 5, address: 0x4000);
 
         var outer = cpu.RunFarReadSubroutine(helper, bank: 4, address: 0x4000);
@@ -188,7 +148,7 @@ public sealed class GameBoyBankingRoadmapTests
         Assert.Equal(0x55, Assert.Single(cpu.InjectedFarReadResults).Data);
         Assert.Equal([4, 5, 4, 3], cpu.RomBankWrites.Select(write => write.SelectedBank));
         Assert.Equal(3, cpu.CurrentRomBank);
-        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
+        Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
         Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0000, 0x3FFF));
     }
 
@@ -494,16 +454,16 @@ public sealed class GameBoyBankingRoadmapTests
     {
         var cpu = new GameBoyTestCpu(rom);
         cpu.SetCurrentRomBank(actualBank);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, actualBank);
-        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, programBank);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, actualBank);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, programBank);
         return cpu;
     }
 
     private static void AssertFarReadRestored(GameBoyTestCpu cpu, byte actualBank, byte programBank)
     {
         Assert.Equal(actualBank, cpu.CurrentRomBank);
-        Assert.Equal(actualBank, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(programBank, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(actualBank, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(programBank, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
         Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0000, 0x3FFF));
     }
 

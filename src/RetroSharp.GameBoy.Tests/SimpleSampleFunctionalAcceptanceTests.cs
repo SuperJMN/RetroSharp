@@ -2,14 +2,11 @@ namespace RetroSharp.GameBoy.Tests;
 
 using RetroSharp.FunctionalAcceptance;
 using Xunit;
+using CameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.Camera;
 
 public sealed class SimpleSampleFunctionalAcceptanceTests
 {
     private const ushort UserVariableStart = 0xC000;
-    private const ushort CameraXLow = 0xC0E0;
-    private const ushort CameraXHigh = 0xC0E1;
-    private const ushort CameraYLow = 0xC0E8;
-    private const ushort CameraYHigh = 0xC0E9;
 
     public static TheoryData<string, string, string, string?> ProductionSamples => new()
     {
@@ -183,7 +180,7 @@ public sealed class SimpleSampleFunctionalAcceptanceTests
         {
             var visibleCamera = (X: (int)cpu.IoRegister(0xFF43), Y: (int)cpu.IoRegister(0xFF42));
             visibleCameraByFrame[frame] = visibleCamera;
-            var requestedCamera = (X: Word(CameraXLow, CameraXHigh), Y: Word(CameraYLow, CameraYHigh));
+            var requestedCamera = (X: Word(CameraMemory.XLow, CameraMemory.XHigh), Y: Word(CameraMemory.YLow, CameraMemory.YHigh));
             var camera = CameraObservation(requestedCamera, visibleCamera);
             var videoWrites = cpu.VramWrites.Skip(processedVramWrites).Select(VideoWrite).ToArray();
             var oamWrites = cpu.OamWrites.Skip(processedOamWrites).Select(OamWrite).ToArray();

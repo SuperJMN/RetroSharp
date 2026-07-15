@@ -4,21 +4,12 @@ using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Targeting;
 using System.Text.RegularExpressions;
 using Xunit;
+using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedCamera;
+using WorldPackMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.WorldPack;
 
 public sealed class GameBoyVerticalScrollAcceptanceTests
 {
     private const ushort SourceCameraY = 0xC000;
-    private const ushort VisibleCameraYLow = 0xC14F;
-    private const ushort VisibleCameraYHigh = 0xC150;
-    private const ushort RequestCount = 0xC152;
-    private const ushort PrepareCount = 0xC153;
-    private const ushort ResidentCount = 0xC154;
-    private const ushort CommitCount = 0xC155;
-    private const ushort ReleaseCount = 0xC156;
-    private const ushort BankWorkInCommit = 0xC157;
-    private const ushort DecodeWorkInCommit = 0xC158;
-    private const ushort DirectoryWorkInVBlank = 0xC19C;
-    private const ushort WorldPackValidationState = 0xC1FB;
 
     [Fact]
     public void Game_boy_vertical_scroll_sample_compiles_collects_vertical_camera_and_streams_fresh_rows()
@@ -171,23 +162,23 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
 
         var sourceTicks = cpu.Wram(SourceCameraY);
         var scy = cpu.IoRegister(0xFF42);
-        var visibleCameraY = cpu.Wram(VisibleCameraYLow) | (cpu.Wram(VisibleCameraYHigh) << 8);
+        var visibleCameraY = cpu.Wram(PackedCameraMemory.VisibleCameraYLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraYHigh) << 8);
         var diagnostics = $"frames={cpu.Cycles / GameBoyTestCpu.DmgCyclesPerFrame} sourceTicks={sourceTicks} SCY={scy} "
-            + $"visibleY={visibleCameraY} lifecycle={cpu.Wram(RequestCount)}/{cpu.Wram(PrepareCount)}/"
-            + $"{cpu.Wram(ResidentCount)}/{cpu.Wram(CommitCount)}/{cpu.Wram(ReleaseCount)}";
+            + $"visibleY={visibleCameraY} lifecycle={cpu.Wram(PackedCameraMemory.RequestCount)}/{cpu.Wram(PackedCameraMemory.PrepareCount)}/"
+            + $"{cpu.Wram(PackedCameraMemory.ResidentCount)}/{cpu.Wram(PackedCameraMemory.CommitCount)}/{cpu.Wram(PackedCameraMemory.ReleaseCount)}";
 
         Assert.True(sourceTicks >= 87 && scy >= 86, diagnostics);
         Assert.InRange(sourceTicks, (byte)87, (byte)90);
         Assert.InRange(scy, (byte)86, (byte)88);
         Assert.Equal(scy, visibleCameraY);
-        Assert.InRange(cpu.Wram(RequestCount), (byte)9, (byte)11);
-        Assert.Equal(cpu.Wram(RequestCount), cpu.Wram(PrepareCount));
-        Assert.Equal(cpu.Wram(PrepareCount), cpu.Wram(ResidentCount));
-        Assert.Equal(cpu.Wram(ResidentCount), cpu.Wram(CommitCount));
-        Assert.Equal(cpu.Wram(CommitCount), cpu.Wram(ReleaseCount));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.InRange(cpu.Wram(PackedCameraMemory.RequestCount), (byte)9, (byte)11);
+        Assert.Equal(cpu.Wram(PackedCameraMemory.RequestCount), cpu.Wram(PackedCameraMemory.PrepareCount));
+        Assert.Equal(cpu.Wram(PackedCameraMemory.PrepareCount), cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(cpu.Wram(PackedCameraMemory.ResidentCount), cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(cpu.Wram(PackedCameraMemory.CommitCount), cpu.Wram(PackedCameraMemory.ReleaseCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     [Fact]
@@ -205,22 +196,22 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(WorldPackValidationState, 1, 500_000_000);
+        cpu.RunUntilWramEquals(WorldPackMemory.ValidationState, 1, 500_000_000);
         var preparationCycles = new List<long>();
         for (byte edge = 1; edge <= 14; edge++)
         {
-            cpu.RunUntilWramEquals(RequestCount, edge, 500_000_000);
+            cpu.RunUntilWramEquals(PackedCameraMemory.RequestCount, edge, 500_000_000);
             var requestedAt = cpu.Cycles;
-            cpu.RunUntilWramEquals(ResidentCount, edge, 500_000_000);
+            cpu.RunUntilWramEquals(PackedCameraMemory.ResidentCount, edge, 500_000_000);
             preparationCycles.Add(cpu.Cycles - requestedAt);
         }
 
         Assert.All(
             preparationCycles,
             cycles => Assert.InRange(cycles, 0, GameBoyTestCpu.DmgCyclesPerFrame));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     [Fact]
@@ -550,9 +541,9 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         }
 
         var leadingAxisDiagnostics = $"SCX={cpu.IoRegister(0xFF43)} SCY={cpu.IoRegister(0xFF42)} "
-            + $"cycles={cpu.Cycles} lifecycle={cpu.Wram(RequestCount)}/{cpu.Wram(PrepareCount)}/"
-            + $"{cpu.Wram(ResidentCount)}/{cpu.Wram(CommitCount)}/{cpu.Wram(ReleaseCount)} "
-            + $"forbidden={cpu.Wram(BankWorkInCommit)}/{cpu.Wram(DecodeWorkInCommit)}/{cpu.Wram(DirectoryWorkInVBlank)}";
+            + $"cycles={cpu.Cycles} lifecycle={cpu.Wram(PackedCameraMemory.RequestCount)}/{cpu.Wram(PackedCameraMemory.PrepareCount)}/"
+            + $"{cpu.Wram(PackedCameraMemory.ResidentCount)}/{cpu.Wram(PackedCameraMemory.CommitCount)}/{cpu.Wram(PackedCameraMemory.ReleaseCount)} "
+            + $"forbidden={cpu.Wram(PackedCameraMemory.BankWorkInCommit)}/{cpu.Wram(PackedCameraMemory.DecodeWorkInCommit)}/{cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank)}";
         Assert.True(cpu.IoRegister(0xFF43) > followedX, $"The leading column should publish within the bounded preparation window. {leadingAxisDiagnostics}");
         Assert.Equal(followedY, cpu.IoRegister(0xFF42));
 
@@ -566,11 +557,11 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
         }
 
         var trailingAxisDiagnostics = $"SCX={cpu.IoRegister(0xFF43)} SCY={cpu.IoRegister(0xFF42)} "
-            + $"lifecycle={cpu.Wram(RequestCount)}/{cpu.Wram(PrepareCount)}/{cpu.Wram(ResidentCount)}/"
-            + $"{cpu.Wram(CommitCount)}/{cpu.Wram(ReleaseCount)}";
+            + $"lifecycle={cpu.Wram(PackedCameraMemory.RequestCount)}/{cpu.Wram(PackedCameraMemory.PrepareCount)}/{cpu.Wram(PackedCameraMemory.ResidentCount)}/"
+            + $"{cpu.Wram(PackedCameraMemory.CommitCount)}/{cpu.Wram(PackedCameraMemory.ReleaseCount)}";
         Assert.True(cpu.IoRegister(0xFF42) > followedY, $"The staggered row should publish within the bounded serialized preparation window. {trailingAxisDiagnostics}");
         Assert.Equal(cpu.IoRegister(0xFF43), cpu.IoRegister(0xFF42));
-        Assert.Equal(cpu.Wram(CommitCount), cpu.Wram(ReleaseCount));
+        Assert.Equal(cpu.Wram(PackedCameraMemory.CommitCount), cpu.Wram(PackedCameraMemory.ReleaseCount));
     }
 
     private static string FastCameraSource(int mapWidth, int mapHeight, int stepPixels, bool vertical)

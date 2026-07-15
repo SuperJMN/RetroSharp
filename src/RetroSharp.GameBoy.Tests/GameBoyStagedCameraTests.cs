@@ -6,55 +6,12 @@ using System.Linq;
 using RetroSharp.GameBoy;
 using RetroSharp.Sdk;
 using Xunit;
+using CameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.Camera;
+using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedCamera;
+using WorldPackMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.WorldPack;
 
 public sealed class GameBoyStagedCameraTests
 {
-    private const ushort VisibleCameraXLow = 0xC14D;
-    private const ushort CriticalSection = 0xC151;
-    private const ushort RequestCount = 0xC152;
-    private const ushort PrepareCount = 0xC153;
-    private const ushort ResidentCount = 0xC154;
-    private const ushort CommitCount = 0xC155;
-    private const ushort ReleaseCount = 0xC156;
-    private const ushort BankWorkInCommit = 0xC157;
-    private const ushort DecodeWorkInCommit = 0xC158;
-    private const ushort LastCommitVramWrites = 0xC159;
-    private const ushort Slot0State = 0xC170;
-    private const ushort Slot0Axis = 0xC171;
-    private const ushort Slot0Direction = 0xC172;
-    private const ushort Slot0WorldEdgeLow = 0xC173;
-    private const ushort Slot0WorldEdgeHigh = 0xC174;
-    private const ushort Slot0Target = 0xC175;
-    private const ushort Slot0OrthogonalLow = 0xC177;
-    private const ushort Slot0OrthogonalHigh = 0xC178;
-    private const ushort SelectedSlot = 0xC16F;
-    private const ushort LastCommittedWorldEdgeLow = 0xC188;
-    private const ushort LastCommittedAxis = 0xC18A;
-    private const ushort Slot1State = 0xC17A;
-    private const ushort Slot1Axis = 0xC17B;
-    private const ushort Slot1Direction = 0xC17C;
-    private const ushort Slot1WorldEdgeLow = 0xC17D;
-    private const ushort Slot1WorldEdgeHigh = 0xC17E;
-    private const ushort Slot1Target = 0xC17F;
-    private const ushort WorldPackValidationState = 0xC1FB;
-    private const ushort CameraRightSourceColumn = 0xC0E6;
-    private const ushort CameraXLow = 0xC0E0;
-    private const ushort CameraXHigh = 0xC0E1;
-    private const ushort CameraFineX = 0xC0E2;
-    private const ushort CameraScreenLeftColumn = 0xC0E3;
-    private const ushort CameraRightBackgroundColumn = 0xC0E4;
-    private const ushort CameraLeftBackgroundColumn = 0xC0E5;
-    private const ushort CameraLeftSourceColumn = 0xC0E7;
-    private const ushort CameraScreenLeftColumnHigh = 0xC143;
-    private const ushort CameraRightSourceColumnHigh = 0xC144;
-    private const ushort CameraLeftSourceColumnHigh = 0xC145;
-    private const ushort VisibleCameraXHigh = 0xC14E;
-    private const ushort VisibleCameraYLow = 0xC14F;
-    private const ushort VisibleCameraYHigh = 0xC150;
-    private const ushort LastCommittedWorldEdgeHigh = 0xC189;
-    private const ushort LastCommittedDirection = 0xC18B;
-    private const ushort DirectoryWorkInVBlank = 0xC19C;
-
     private const byte Released = 5;
     private const byte Empty = 0;
     private const byte Resident = 3;
@@ -94,34 +51,34 @@ public sealed class GameBoyStagedCameraTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(Slot0State, Resident);
+        cpu.RunUntilWramEquals(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset, Resident);
 
-        Assert.Equal(1, cpu.Wram(RequestCount));
-        Assert.Equal(1, cpu.Wram(PrepareCount));
-        Assert.Equal(1, cpu.Wram(ResidentCount));
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(0, cpu.Wram(ReleaseCount));
-        Assert.Equal(Column, cpu.Wram(Slot0Axis));
-        Assert.Equal(Positive, cpu.Wram(Slot0Direction));
-        Assert.Equal(5, cpu.Wram(Slot0WorldEdgeLow));
-        Assert.Equal(0, cpu.Wram(Slot0WorldEdgeHigh));
-        Assert.Equal(21, cpu.Wram(Slot0Target));
-        Assert.Equal(0, cpu.Wram(Slot0OrthogonalLow));
-        Assert.Equal(0, cpu.Wram(Slot0OrthogonalHigh));
-        Assert.Equal(0, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.PrepareCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.ReleaseCount));
+        Assert.Equal(Column, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.AxisOffset));
+        Assert.Equal(Positive, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.DirectionOffset));
+        Assert.Equal(5, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.WorldEdgeLowOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.WorldEdgeHighOffset));
+        Assert.Equal(21, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.TargetOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.OrthogonalLowOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.OrthogonalHighOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(0, cpu.IoRegister(0xFF43));
 
         var bankWritesBeforeCommit = cpu.RomBankWrites.Count;
         var vramWritesBeforeCommit = cpu.VramWrites.Count;
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(Released, cpu.Wram(Slot0State));
-        Assert.Equal(1, cpu.Wram(CommitCount));
-        Assert.Equal(19, cpu.Wram(LastCommitVramWrites));
-        Assert.Equal(0, cpu.Wram(CriticalSection));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CriticalSection));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
         Assert.Empty(cpu.RomBankWrites.Skip(bankWritesBeforeCommit));
         var commitWrites = cpu.VramWrites.Skip(vramWritesBeforeCommit).ToArray();
         Assert.Equal(19, commitWrites.Length);
@@ -130,7 +87,7 @@ public sealed class GameBoyStagedCameraTests
             Assert.True(write.Applied);
             Assert.InRange(write.Ly, (byte)144, (byte)153);
         });
-        Assert.Equal(8, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         var scrollWrites = cpu.RunUntilIoRegisterWrites(0xFF43, 1, 1_000_000);
         Assert.Equal(new byte[] { 8 }, scrollWrites);
         Assert.Equal(8, cpu.IoRegister(0xFF43));
@@ -162,45 +119,45 @@ public sealed class GameBoyStagedCameraTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(Slot1State, Resident);
-        Assert.Equal(2, cpu.Wram(RequestCount));
-        Assert.Equal(Resident, cpu.Wram(Slot0State));
-        Assert.Equal(Resident, cpu.Wram(Slot1State));
-        Assert.Equal(Column, cpu.Wram(Slot1Axis));
-        Assert.Equal(Positive, cpu.Wram(Slot1Direction));
-        Assert.Equal(21, cpu.Wram(Slot0WorldEdgeLow));
-        Assert.Equal(0, cpu.Wram(Slot0WorldEdgeHigh));
-        Assert.Equal(22, cpu.Wram(Slot1WorldEdgeLow));
-        Assert.Equal(0, cpu.Wram(Slot1WorldEdgeHigh));
-        Assert.Equal(22, cpu.Wram(Slot1Target));
-        var retainedSlot1 = Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(Slot1State + offset))).ToArray();
+        cpu.RunUntilWramEquals(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset, Resident);
+        Assert.Equal(2, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(Resident, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(Resident, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(Column, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.AxisOffset));
+        Assert.Equal(Positive, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.DirectionOffset));
+        Assert.Equal(21, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.WorldEdgeLowOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.WorldEdgeHighOffset));
+        Assert.Equal(22, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.WorldEdgeLowOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.WorldEdgeHighOffset));
+        Assert.Equal(22, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.TargetOffset));
+        var retainedSlot1 = Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset + offset))).ToArray();
         var writesBeforeFirstCommit = cpu.VramWrites.Count;
 
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(0, cpu.Wram(SelectedSlot));
-        Assert.Equal(21, cpu.Wram(LastCommittedWorldEdgeLow));
-        Assert.Equal(Released, cpu.Wram(Slot0State));
-        Assert.Equal(Resident, cpu.Wram(Slot1State));
-        Assert.Equal(retainedSlot1, Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(Slot1State + offset))).ToArray());
-        Assert.Equal(8, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.SelectedSlot));
+        Assert.Equal(21, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
+        Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(Resident, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(retainedSlot1, Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset + offset))).ToArray());
+        Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         var firstWrites = cpu.VramWrites.Skip(writesBeforeFirstCommit).ToArray();
         Assert.Equal(19, firstWrites.Length);
         Assert.All(firstWrites, write => Assert.InRange(write.Ly, (byte)144, (byte)153));
         var writesBeforeSecondCommit = cpu.VramWrites.Count;
 
-        cpu.RunUntilWramEquals(ReleaseCount, 2);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
 
-        Assert.Equal(1, cpu.Wram(SelectedSlot));
-        Assert.Equal(22, cpu.Wram(LastCommittedWorldEdgeLow));
-        Assert.Equal(Released, cpu.Wram(Slot1State));
-        Assert.Equal(16, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.SelectedSlot));
+        Assert.Equal(22, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
+        Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(16, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         var secondWrites = cpu.VramWrites.Skip(writesBeforeSecondCommit).ToArray();
         Assert.Equal(19, secondWrites.Length);
         Assert.All(secondWrites, write => Assert.InRange(write.Ly, (byte)144, (byte)153));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     [Fact]
@@ -229,27 +186,27 @@ public sealed class GameBoyStagedCameraTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(WorldPackValidationState, 1);
+        cpu.RunUntilWramEquals(WorldPackMemory.ValidationState, 1);
         var writesBeforeColumn = cpu.VramWrites.Count;
 
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(Column, cpu.Wram(LastCommittedAxis));
-        Assert.Equal(Released, cpu.Wram(Slot0State));
-        Assert.Equal(8, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(Column, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
+        Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(8, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(7, cpu.Wram(0xC14F));
         Assert.Equal(19, cpu.VramWrites.Count - writesBeforeColumn);
         var writesBeforeRow = cpu.VramWrites.Count;
 
-        cpu.RunUntilWramEquals(ReleaseCount, 2);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
 
-        Assert.Equal(Row, cpu.Wram(LastCommittedAxis));
+        Assert.Equal(Row, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
         Assert.Equal(8, cpu.Wram(0xC14F));
         Assert.Equal(21, cpu.VramWrites.Count - writesBeforeRow);
-        Assert.Equal(2, cpu.Wram(ResidentCount));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(2, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     [Fact]
@@ -281,17 +238,17 @@ public sealed class GameBoyStagedCameraTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(1, cpu.Wram(RequestCount));
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(Released, cpu.Wram(Slot0State));
-        Assert.Equal(Empty, cpu.Wram(Slot1State));
-        Assert.Equal(0, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(Empty, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(0, cpu.IoRegister(0xFF43));
         var writesAfterCancellation = cpu.VramWrites.Count;
         cpu.RunFrames(3);
-        Assert.Equal(0, cpu.Wram(CommitCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
         Assert.Equal(writesAfterCancellation, cpu.VramWrites.Count);
     }
 
@@ -325,10 +282,10 @@ public sealed class GameBoyStagedCameraTests
             packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
         var cpu = new GameBoyTestCpu(result.Rom) { CycleAccurateLy = true, EnforceVblankVramWrites = true };
         cpu.Held.Add("right");
-        cpu.RunUntilWramEquals(Slot0State, Resident);
-        cpu.SetWram(Slot0State, Committing);
+        cpu.RunUntilWramEquals(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset, Resident);
+        cpu.SetWram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset, Committing);
         var committingMetadata = Enumerable.Range(0, 10)
-            .Select(offset => cpu.Wram((ushort)(Slot0State + offset)))
+            .Select(offset => cpu.Wram((ushort)(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset + offset)))
             .ToArray();
         cpu.Held.Remove("right");
         cpu.Held.Add("left");
@@ -336,11 +293,11 @@ public sealed class GameBoyStagedCameraTests
         cpu.RunAdditionalFrames(4);
 
         Assert.Equal(committingMetadata, Enumerable.Range(0, 10)
-            .Select(offset => cpu.Wram((ushort)(Slot0State + offset)))
+            .Select(offset => cpu.Wram((ushort)(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset + offset)))
             .ToArray());
-        Assert.Equal(Committing, cpu.Wram(Slot0State));
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(0, cpu.Wram(ReleaseCount));
+        Assert.Equal(Committing, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.ReleaseCount));
     }
 
     [Theory]
@@ -373,25 +330,25 @@ public sealed class GameBoyStagedCameraTests
             EnforceVblankVramWrites = true,
         };
 
-        cpu.RunUntilWramEquals(Slot0State, Resident);
-        var residentPayload = Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(Slot0State + offset))).ToArray();
-        cpu.SetWram((ushort)(Slot0State + tagOffset), wrongValue);
+        cpu.RunUntilWramEquals(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset, Resident);
+        var residentPayload = Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset + offset))).ToArray();
+        cpu.SetWram((ushort)(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset + tagOffset), wrongValue);
         var vramWrites = cpu.VramWrites.Count;
         var scrollWrites = cpu.RunUntilIoRegisterWrites(0xFF43, 1, 5_000_000);
 
         Assert.Equal(new byte[] { 0 }, scrollWrites);
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(0, cpu.Wram(ReleaseCount));
-        Assert.Equal(Resident, cpu.Wram(Slot0State));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.ReleaseCount));
+        Assert.Equal(Resident, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
         Assert.Equal(vramWrites, cpu.VramWrites.Count);
-        var afterDeferral = Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(Slot0State + offset))).ToArray();
+        var afterDeferral = Enumerable.Range(0, 10).Select(offset => cpu.Wram((ushort)(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset + offset))).ToArray();
         var expectedAfterDeferral = residentPayload.ToArray();
         expectedAfterDeferral[tagOffset] = wrongValue;
         Assert.Equal(expectedAfterDeferral, afterDeferral);
 
-        cpu.SetWram((ushort)(Slot0State + tagOffset), residentPayload[tagOffset]);
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
-        Assert.Equal(1, cpu.Wram(CommitCount));
+        cpu.SetWram((ushort)(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset + tagOffset), residentPayload[tagOffset]);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitCount));
     }
 
     [Theory]
@@ -430,30 +387,30 @@ public sealed class GameBoyStagedCameraTests
         cpu.RunUntilIoRegisterWrites(0xFF43, 1, 50_000_000); // first Camera.Apply; Main loop is live
         if (malformed)
         {
-            cpu.SetWram(WorldPackValidationState, 2);
+            cpu.SetWram(WorldPackMemory.ValidationState, 2);
         }
         else
         {
-            cpu.SetWram(CameraRightSourceColumn, 0xFF);
+            cpu.SetWram(CameraMemory.RightSourceColumn, 0xFF);
         }
 
         cpu.Held.Add("right");
         var writesBeforeDeferral = cpu.VramWrites.Count;
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(1, cpu.Wram(RequestCount));
-        Assert.Equal(1, cpu.Wram(PrepareCount));
-        Assert.Equal(0, cpu.Wram(ResidentCount));
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(Released, cpu.Wram(Slot0State));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.PrepareCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(Released, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset));
         Assert.Equal(writesBeforeDeferral, cpu.VramWrites.Count);
         cpu.RunUntilIoRegisterWrites(0xFF43, 1, 5_000_000);
-        Assert.Equal(7, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(7, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(7, cpu.IoRegister(0xFF43));
 
-        cpu.RunUntilWramEquals(ReleaseCount, 2);
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(7, cpu.Wram(VisibleCameraXLow));
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(7, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(writesBeforeDeferral, cpu.VramWrites.Count);
     }
 
@@ -502,40 +459,40 @@ public sealed class GameBoyStagedCameraTests
         var bankWritesBeforeCrossings = cpu.RomBankWrites.Count;
         cpu.Held.Add("right");
 
-        cpu.RunUntilWramEquals(RequestCount, 1, 500_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.RequestCount, 1, 500_000_000);
         var requestedAtCycles = cpu.Cycles;
-        cpu.RunUntilWramEquals(ResidentCount, 1, 500_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ResidentCount, 1, 500_000_000);
         Assert.InRange(cpu.Cycles - requestedAtCycles, 0, GameBoyTestCpu.DmgCyclesPerFrame);
-        cpu.RunUntilWramEquals(ReleaseCount, 1, 500_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1, 500_000_000);
 
-        Assert.Equal(Column, cpu.Wram(LastCommittedAxis));
-        Assert.Equal(Positive, cpu.Wram(LastCommittedDirection));
-        Assert.Equal(0, cpu.Wram(LastCommittedWorldEdgeLow));
-        Assert.Equal(1, cpu.Wram(LastCommittedWorldEdgeHigh));
-        Assert.Equal(1888, cpu.Wram(VisibleCameraXLow) | (cpu.Wram(VisibleCameraXHigh) << 8));
-        Assert.Equal(19, cpu.Wram(LastCommitVramWrites));
+        Assert.Equal(Column, cpu.Wram(PackedCameraMemory.LastCommittedAxis));
+        Assert.Equal(Positive, cpu.Wram(PackedCameraMemory.LastCommittedDirection));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeHigh));
+        Assert.Equal(1888, cpu.Wram(PackedCameraMemory.VisibleCameraXLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraXHigh) << 8));
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
 
         cpu.Held.Remove("right");
         SetHorizontalCameraState(cpu, 2056, 257, 22, 0, 278, 256);
-        cpu.SetWram(VisibleCameraXLow, 0x08);
-        cpu.SetWram(VisibleCameraXHigh, 0x08);
+        cpu.SetWram(PackedCameraMemory.VisibleCameraXLow, 0x08);
+        cpu.SetWram(PackedCameraMemory.VisibleCameraXHigh, 0x08);
         cpu.Held.Add("left");
-        cpu.RunUntilWramEquals(RequestCount, 2, 500_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.RequestCount, 2, 500_000_000);
         requestedAtCycles = cpu.Cycles;
-        cpu.RunUntilWramEquals(ResidentCount, 2, 500_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ResidentCount, 2, 500_000_000);
         Assert.InRange(cpu.Cycles - requestedAtCycles, 0, GameBoyTestCpu.DmgCyclesPerFrame);
-        cpu.RunUntilWramEquals(ReleaseCount, 2, 500_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2, 500_000_000);
 
-        Assert.Equal(Negative, cpu.Wram(LastCommittedDirection));
-        Assert.Equal(0, cpu.Wram(LastCommittedWorldEdgeLow));
-        Assert.Equal(1, cpu.Wram(LastCommittedWorldEdgeHigh));
-        Assert.Equal(2055, cpu.Wram(VisibleCameraXLow) | (cpu.Wram(VisibleCameraXHigh) << 8));
+        Assert.Equal(Negative, cpu.Wram(PackedCameraMemory.LastCommittedDirection));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeHigh));
+        Assert.Equal(2055, cpu.Wram(PackedCameraMemory.VisibleCameraXLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraXHigh) << 8));
         var crossingBankWrites = cpu.RomBankWrites.Skip(bankWritesBeforeCrossings).ToArray();
         Assert.NotEmpty(crossingBankWrites);
         Assert.All(crossingBankWrites, write => Assert.InRange(write.Ly, (byte)0, (byte)143));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     [Fact]
@@ -573,26 +530,26 @@ public sealed class GameBoyStagedCameraTests
         var cpu = new GameBoyTestCpu(result.Rom) { CycleAccurateLy = true, EnforceVblankVramWrites = true };
         cpu.RunUntilWramEquals(0xC000, 2, 100_000_000);
         var startAudio = cpu.AudioUpdateCalls;
-        cpu.SetWram(WorldPackValidationState, 2);
+        cpu.SetWram(WorldPackMemory.ValidationState, 2);
         cpu.Held.Add("right");
 
         cpu.RunAdditionalFrames(8);
 
         Assert.Equal(8, cpu.AudioUpdateCalls - startAudio);
-        Assert.Equal(0, cpu.Wram(CommitCount));
-        Assert.Equal(7, cpu.Wram(VisibleCameraXLow));
-        cpu.SetWram(WorldPackValidationState, 1);
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(7, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
+        cpu.SetWram(WorldPackMemory.ValidationState, 1);
         var audioBeforePreparation = cpu.AudioUpdateCalls;
 
         cpu.RunAdditionalFrames(12);
 
         Assert.Equal(12, cpu.AudioUpdateCalls - audioBeforePreparation);
-        Assert.Equal(2, cpu.Wram(CommitCount));
-        Assert.Equal(2, cpu.Wram(ResidentCount));
-        Assert.Equal(16, cpu.Wram(VisibleCameraXLow));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(2, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(2, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(16, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     [Fact]
@@ -616,23 +573,23 @@ public sealed class GameBoyStagedCameraTests
             sdkLibraryImports: [SdkImportResolver.Portable2D],
             packedWorldOverride: CompileWorldPack(directory, "tall.tmj"));
         var cpu = new GameBoyTestCpu(result.Rom) { CycleAccurateLy = true, EnforceVblankVramWrites = true };
-        cpu.RunUntilWramEquals(Slot1State, Resident);
-        Assert.Equal(Row, cpu.Wram(Slot0Axis));
-        Assert.Equal(Row, cpu.Wram(Slot1Axis));
-        Assert.Equal(19, cpu.Wram(Slot0WorldEdgeLow));
-        Assert.Equal(20, cpu.Wram(Slot1WorldEdgeLow));
+        cpu.RunUntilWramEquals(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.StateOffset, Resident);
+        Assert.Equal(Row, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.AxisOffset));
+        Assert.Equal(Row, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.AxisOffset));
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.WorldEdgeLowOffset));
+        Assert.Equal(20, cpu.Wram(PackedCameraMemory.Slot1 + GameBoyPackedCameraRuntime.WorldEdgeLowOffset));
         var beforeFirst = cpu.VramWrites.Count;
 
-        cpu.RunUntilWramEquals(ReleaseCount, 1);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
 
-        Assert.Equal(19, cpu.Wram(LastCommittedWorldEdgeLow));
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
         Assert.Equal(21, cpu.VramWrites.Count - beforeFirst);
         Assert.Equal(8, cpu.Wram(0xC14F));
         var beforeSecond = cpu.VramWrites.Count;
 
-        cpu.RunUntilWramEquals(ReleaseCount, 2);
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 2);
 
-        Assert.Equal(20, cpu.Wram(LastCommittedWorldEdgeLow));
+        Assert.Equal(20, cpu.Wram(PackedCameraMemory.LastCommittedWorldEdgeLow));
         Assert.Equal(21, cpu.VramWrites.Count - beforeSecond);
         Assert.Equal(16, cpu.Wram(0xC14F));
     }
@@ -662,20 +619,20 @@ public sealed class GameBoyStagedCameraTests
         var visibleCoordinates = new (ushort X, ushort Y)[4];
         for (byte release = 1; release <= observed.Length; release++)
         {
-            cpu.RunUntilWramEquals(ReleaseCount, release);
-            observed[release - 1] = cpu.Wram(LastCommittedAxis);
+            cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, release);
+            observed[release - 1] = cpu.Wram(PackedCameraMemory.LastCommittedAxis);
             visibleCoordinates[release - 1] = (
-                (ushort)(cpu.Wram(VisibleCameraXLow) | (cpu.Wram(VisibleCameraXHigh) << 8)),
-                (ushort)(cpu.Wram(VisibleCameraYLow) | (cpu.Wram(VisibleCameraYHigh) << 8)));
+                (ushort)(cpu.Wram(PackedCameraMemory.VisibleCameraXLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraXHigh) << 8)),
+                (ushort)(cpu.Wram(PackedCameraMemory.VisibleCameraYLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraYHigh) << 8)));
         }
 
         Assert.Equal(new byte[] { Column, Row, Column, Row }, observed);
         Assert.Equal(new (ushort X, ushort Y)[] { (8, 7), (8, 15), (16, 15), (16, 16) }, visibleCoordinates);
-        Assert.Equal(16, cpu.Wram(VisibleCameraXLow));
+        Assert.Equal(16, cpu.Wram(PackedCameraMemory.VisibleCameraXLow));
         Assert.Equal(16, cpu.Wram(0xC14F));
-        Assert.Equal(0, cpu.Wram(BankWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DecodeWorkInCommit));
-        Assert.Equal(0, cpu.Wram(DirectoryWorkInVBlank));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
     }
 
     private static string RepositoryDirectory(string relativePath)
@@ -698,16 +655,16 @@ public sealed class GameBoyStagedCameraTests
         ushort rightSourceColumn,
         ushort leftSourceColumn)
     {
-        cpu.SetWram(CameraXLow, (byte)cameraX);
-        cpu.SetWram(CameraXHigh, (byte)(cameraX >> 8));
-        cpu.SetWram(CameraFineX, (byte)(cameraX & 7));
-        cpu.SetWram(CameraScreenLeftColumn, (byte)screenLeftColumn);
-        cpu.SetWram(CameraScreenLeftColumnHigh, (byte)(screenLeftColumn >> 8));
-        cpu.SetWram(CameraRightBackgroundColumn, rightBackgroundColumn);
-        cpu.SetWram(CameraLeftBackgroundColumn, leftBackgroundColumn);
-        cpu.SetWram(CameraRightSourceColumn, (byte)rightSourceColumn);
-        cpu.SetWram(CameraRightSourceColumnHigh, (byte)(rightSourceColumn >> 8));
-        cpu.SetWram(CameraLeftSourceColumn, (byte)leftSourceColumn);
-        cpu.SetWram(CameraLeftSourceColumnHigh, (byte)(leftSourceColumn >> 8));
+        cpu.SetWram(CameraMemory.XLow, (byte)cameraX);
+        cpu.SetWram(CameraMemory.XHigh, (byte)(cameraX >> 8));
+        cpu.SetWram(CameraMemory.FineX, (byte)(cameraX & 7));
+        cpu.SetWram(CameraMemory.ScreenLeftColumn, (byte)screenLeftColumn);
+        cpu.SetWram(CameraMemory.ScreenLeftColumnHigh, (byte)(screenLeftColumn >> 8));
+        cpu.SetWram(CameraMemory.RightBackgroundColumn, rightBackgroundColumn);
+        cpu.SetWram(CameraMemory.LeftBackgroundColumn, leftBackgroundColumn);
+        cpu.SetWram(CameraMemory.RightSourceColumn, (byte)rightSourceColumn);
+        cpu.SetWram(CameraMemory.RightSourceColumnHigh, (byte)(rightSourceColumn >> 8));
+        cpu.SetWram(CameraMemory.LeftSourceColumn, (byte)leftSourceColumn);
+        cpu.SetWram(CameraMemory.LeftSourceColumnHigh, (byte)(leftSourceColumn >> 8));
     }
 }

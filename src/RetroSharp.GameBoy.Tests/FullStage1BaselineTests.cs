@@ -47,7 +47,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
             .index;
         var cpu = new GameBoyTestCpu(first.Rom);
         cpu.SetCurrentRomBank(1);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 1);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 1);
         Assert.Equal(
             GameBoyWorldPackResult.Success,
             cpu.RunWorldPackDecode(

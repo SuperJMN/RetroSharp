@@ -10,34 +10,6 @@ internal enum GameBoyWorldPackResult : byte
     Malformed = 3,
 }
 
-internal static class GameBoyWorldPackRuntimeAbi
-{
-    internal const ushort CollisionQueryXLow = 0xC1EB;
-    internal const ushort CollisionQueryXHigh = 0xC1EC;
-    internal const ushort CollisionQueryYLow = 0xC1ED;
-    internal const ushort CollisionQueryYHigh = 0xC1EE;
-    internal const ushort CollisionSelectedSlot = 0xC1EF;
-    internal const ushort CollisionCache0Valid = 0xC1FD;
-    internal const ushort CollisionCache0ChunkLow = 0xC1FE;
-    internal const ushort CollisionCache0ChunkHigh = 0xC1FF;
-    internal const ushort CollisionCache1Valid = 0xC200;
-    internal const ushort CollisionCache1ChunkLow = 0xC201;
-    internal const ushort CollisionCache1ChunkHigh = 0xC202;
-    internal const ushort CollisionReplacementNext = 0xC203;
-    internal const ushort CollisionDecodeCountLow = 0xC204;
-    internal const ushort CollisionDecodeCountHigh = 0xC205;
-    internal const ushort CollisionCellValid = 0xC206;
-    internal const ushort CollisionCellXLow = 0xC207;
-    internal const ushort CollisionCellXHigh = 0xC208;
-    internal const ushort CollisionCellYLow = 0xC209;
-    internal const ushort CollisionCellYHigh = 0xC20A;
-    internal const ushort CollisionCellResult = 0xC20B;
-    internal const ushort GameplayTickCount = 0xC20C;
-    internal const ushort CollisionPendingChunkLow = 0xC20D;
-    internal const ushort CollisionPendingChunkHigh = 0xC20E;
-    internal const ushort CollisionMemoHitCount = 0xC20F;
-}
-
 internal sealed record GameBoyWorldPackPlaneRuntimeDescriptor(
     uint Offset,
     byte StoredBytes,
@@ -182,47 +154,36 @@ internal static class GameBoyWorldPackRuntimeEmitter
         string Success,
         string Malformed);
 
-    private const ushort ScratchPacketCount = 0xC1F0;
-    private const ushort ScratchXLow = 0xC1F1;
-    private const ushort ScratchXHigh = 0xC1F2;
-    private const ushort ScratchYLow = 0xC1F3;
-    private const ushort ScratchYHigh = 0xC1F4;
-    private const ushort ScratchCellIndex = 0xC1F5;
-    private const ushort ScratchStoredRemaining = 0xC1F6;
-    private const ushort ScratchSourceBank = 0xC1F7;
-    private const ushort ScratchReadByte = 0xC1F8;
-    private const ushort ScratchSubcellIndex = 0xC1F9;
-    private const ushort ScratchSubcellIndexHigh = 0xC1FC;
 
     internal static void EmitInitializeState(GbBuilder builder, GameBoyWorldPackRuntimePlan plan)
     {
         builder.XorA();
         foreach (var address in new ushort[]
                  {
-                     GameBoyWorldPackRuntimeAbi.CollisionQueryXLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionQueryYLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot,
-                     GameBoyWorldPackRuntimeAbi.CollisionCache0Valid,
-                     GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionCache1Valid,
-                     GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionReplacementNext,
-                     GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionCellValid,
-                     GameBoyWorldPackRuntimeAbi.CollisionCellXLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionCellXHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionCellYLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionCellYHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionCellResult,
-                     GameBoyWorldPackRuntimeAbi.GameplayTickCount,
-                     GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow,
-                     GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh,
-                     GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount,
+                     GameBoyRuntimeMemoryLayout.Collision.QueryXLow,
+                     GameBoyRuntimeMemoryLayout.Collision.QueryXHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.QueryYLow,
+                     GameBoyRuntimeMemoryLayout.Collision.QueryYHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.SelectedSlot,
+                     GameBoyRuntimeMemoryLayout.Collision.Cache0Valid,
+                     GameBoyRuntimeMemoryLayout.Collision.Cache0ChunkLow,
+                     GameBoyRuntimeMemoryLayout.Collision.Cache0ChunkHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.Cache1Valid,
+                     GameBoyRuntimeMemoryLayout.Collision.Cache1ChunkLow,
+                     GameBoyRuntimeMemoryLayout.Collision.Cache1ChunkHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.ReplacementNext,
+                     GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow,
+                     GameBoyRuntimeMemoryLayout.Collision.DecodeCountHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.CellValid,
+                     GameBoyRuntimeMemoryLayout.Collision.CellXLow,
+                     GameBoyRuntimeMemoryLayout.Collision.CellXHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.CellYLow,
+                     GameBoyRuntimeMemoryLayout.Collision.CellYHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.CellResult,
+                     GameBoyRuntimeMemoryLayout.Collision.GameplayTickCount,
+                     GameBoyRuntimeMemoryLayout.Collision.PendingChunkLow,
+                     GameBoyRuntimeMemoryLayout.Collision.PendingChunkHigh,
+                     GameBoyRuntimeMemoryLayout.Collision.MemoHitCount,
                  })
         {
             builder.StoreA(address);
@@ -304,58 +265,58 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var noSlot = builder.CreateLabel("worldpack_edge_no_slot");
 
         builder.Label(GameBoyRomBuilder.WorldPackPrepareEdgeLabel);
-        EmitJumpIfSlotAvailable(builder, GameBoyPackedCameraRuntime.Slot0, selectSlot0);
-        EmitJumpIfSlotAvailable(builder, GameBoyPackedCameraRuntime.Slot1, selectSlot1);
+        EmitJumpIfSlotAvailable(builder, GameBoyRuntimeMemoryLayout.PackedCamera.Slot0, selectSlot0);
+        EmitJumpIfSlotAvailable(builder, GameBoyRuntimeMemoryLayout.PackedCamera.Slot1, selectSlot1);
         builder.JumpAbsolute(noSlot);
 
         builder.Label(selectSlot0);
-        EmitSelectEdgeSlot(builder, plan.Layout.EdgeSlots[0], GameBoyPackedCameraRuntime.Slot0, 0);
+        EmitSelectEdgeSlot(builder, plan.Layout.EdgeSlots[0], GameBoyRuntimeMemoryLayout.PackedCamera.Slot0, 0);
         builder.JumpAbsolute(prepare);
 
         builder.Label(selectSlot1);
-        EmitSelectEdgeSlot(builder, plan.Layout.EdgeSlots[1], GameBoyPackedCameraRuntime.Slot1, 1);
+        EmitSelectEdgeSlot(builder, plan.Layout.EdgeSlots[1], GameBoyRuntimeMemoryLayout.PackedCamera.Slot1, 1);
 
         builder.Label(prepare);
-        builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
         builder.PushAf();
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeReuseReady);
-        EmitIncrementCounter(builder, GameBoyPackedCameraRuntime.RequestCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeReuseReady);
+        EmitIncrementCounter(builder, GameBoyRuntimeMemoryLayout.PackedCamera.RequestCount);
         EmitSetSelectedSlotState(builder, GameBoyPackedCameraRuntime.Requested);
         EmitWriteSelectedSlotMetadata(builder);
         EmitSetSelectedSlotState(builder, GameBoyPackedCameraRuntime.Preparing);
-        EmitIncrementCounter(builder, GameBoyPackedCameraRuntime.PrepareCount);
+        EmitIncrementCounter(builder, GameBoyRuntimeMemoryLayout.PackedCamera.PrepareCount);
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackValidateLabel);
         builder.LoadAFromB();
         builder.CompareImmediate((byte)GameBoyWorldPackResult.Success);
         builder.JumpAbsolute(0xC2, validationFailed);
         GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
         builder.LoadAImmediate(19);
         var lengthReady = builder.CreateLabel("worldpack_edge_length_ready");
         builder.JumpAbsolute(0xC2, lengthReady);
         builder.LoadAImmediate(21);
         builder.Label(lengthReady);
-        builder.StoreA(GameBoyPackedCameraRuntime.PayloadRemaining);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         EmitStoreSelectedSlotPayloadLength(builder);
 
         builder.Label(loop);
         if (enablePackedAudioService)
         {
             var skipAudioObservation = builder.CreateLabel("worldpack_edge_skip_audio_observation");
-            builder.LoadA(GameBoyPackedCameraRuntime.PayloadRemaining);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
             builder.AndImmediate(0x03);
             builder.JumpAbsolute(0xC2, skipAudioObservation);
             builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackObserveFrameWrapLabel);
             builder.Label(skipAudioObservation);
         }
 
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeReuseReady);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeReuseReady);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, fullLookup);
         EmitTryAdvanceEdgeLookupState(builder, plan, fullLookup);
@@ -364,29 +325,29 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         builder.Label(fullLookup);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSameMetatile);
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSameMetatile);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
         builder.JumpAbsolute(0xCA, rowLookup);
 
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
         builder.LoadEFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
         builder.LoadDFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.LoadLFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         builder.LoadHFromA();
         builder.JumpAbsolute(lookup);
 
         builder.Label(rowLookup);
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.LoadEFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         builder.LoadDFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
         builder.LoadLFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitWorldEdgeHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
         builder.LoadHFromA();
 
         builder.Label(lookup);
@@ -397,20 +358,20 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.CompareImmediate((byte)GameBoyWorldPackResult.Success);
         builder.JumpAbsolute(0xC2, lookupFailed);
         builder.Emit(0xF1); // POP AF
-        builder.StoreA(GameBoyPackedCameraRuntime.TileScratch);
-        builder.LoadA(GameBoyPackedCameraRuntime.DestinationLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.TileScratch);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DestinationLow);
         builder.LoadLFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.DestinationHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.DestinationHigh);
         builder.LoadHFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.TileScratch);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.TileScratch);
         builder.StoreHlA();
         builder.IncrementHl();
         builder.LoadAFromL();
-        builder.StoreA(GameBoyPackedCameraRuntime.DestinationLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DestinationLow);
         builder.LoadAFromH();
-        builder.StoreA(GameBoyPackedCameraRuntime.DestinationHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DestinationHigh);
 
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
         var incrementColumnIterator = builder.CreateLabel("worldpack_edge_increment_column_iterator");
         var iteratorIncremented = builder.CreateLabel("worldpack_edge_iterator_incremented");
@@ -421,9 +382,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
         EmitIncrementIteratorModulo(builder, plan.Pack.Descriptor.HardwareHeight);
         builder.Label(iteratorIncremented);
 
-        builder.LoadA(GameBoyPackedCameraRuntime.PayloadRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         builder.SubtractAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.PayloadRemaining);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PayloadRemaining);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, loop);
         builder.JumpAbsolute(success);
@@ -434,7 +395,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(validationFailed);
         builder.Label(failed);
         EmitSetSelectedSlotState(builder, GameBoyPackedCameraRuntime.Released);
-        EmitIncrementCounter(builder, GameBoyPackedCameraRuntime.ReleaseCount);
+        EmitIncrementCounter(builder, GameBoyRuntimeMemoryLayout.PackedCamera.ReleaseCount);
         EmitEndEdgePreparationBankSession(builder);
         builder.LoadAImmediate(GameBoyPackedCameraRuntime.NoSlot);
         builder.Emit(0xC9); // RET
@@ -445,10 +406,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackObserveFrameWrapLabel);
         }
 
-        EmitIncrementCounter(builder, GameBoyPackedCameraRuntime.ResidentCount);
+        EmitIncrementCounter(builder, GameBoyRuntimeMemoryLayout.PackedCamera.ResidentCount);
         EmitSetSelectedSlotState(builder, GameBoyPackedCameraRuntime.Resident);
         EmitEndEdgePreparationBankSession(builder);
-        builder.LoadA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.SelectedSlot);
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
         builder.Emit(0xC9); // RET
 
@@ -471,68 +432,68 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var columnWithinChunk = builder.CreateLabel("worldpack_edge_column_within_chunk");
         var ready = builder.CreateLabel("worldpack_edge_advance_ready");
 
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
         builder.JumpAbsolute(0xC2, advanceColumn);
 
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeSubcellX);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellX);
         builder.AddAImmediate(1);
         builder.CompareImmediate(descriptor.MetatileWidth);
         builder.JumpAbsolute(0xDA, rowWithinMetatile);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSubcellX);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeLocalX);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellX);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeLocalX);
         builder.AddAImmediate(1);
         builder.LoadBFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeValidWidth);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeValidWidth);
         builder.CompareB();
         builder.JumpAbsolute(0xCA, fullLookup);
         builder.LoadAFromB();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeLocalX);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeLocalX);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeCellIndex);
         builder.AddAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeCellIndex);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSameMetatile);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSameMetatile);
         builder.JumpAbsolute(rowWithinChunk);
 
         builder.Label(rowWithinMetatile);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSubcellX);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellX);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSameMetatile);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSameMetatile);
         EmitAdvanceEdgeExpansionAddress(builder, 1);
         builder.JumpAbsolute(ready);
         builder.Label(rowWithinChunk);
         builder.JumpAbsolute(ready);
 
         builder.Label(advanceColumn);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeSubcellY);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellY);
         builder.AddAImmediate(1);
         builder.CompareImmediate(descriptor.MetatileHeight);
         builder.JumpAbsolute(0xDA, columnWithinMetatile);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSubcellY);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeLocalY);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellY);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeLocalY);
         builder.AddAImmediate(1);
         builder.LoadBFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeValidHeight);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeValidHeight);
         builder.CompareB();
         builder.JumpAbsolute(0xCA, fullLookup);
         builder.LoadAFromB();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeLocalY);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeLocalY);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeCellIndex);
         builder.LoadBFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeValidWidth);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeValidWidth);
         builder.AddAFromB();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeCellIndex);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSameMetatile);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSameMetatile);
         builder.JumpAbsolute(columnWithinChunk);
 
         builder.Label(columnWithinMetatile);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSubcellY);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellY);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeSameMetatile);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSameMetatile);
         EmitAdvanceEdgeExpansionAddress(builder, descriptor.MetatileWidth);
         builder.JumpAbsolute(ready);
         builder.Label(columnWithinChunk);
@@ -543,24 +504,24 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var done = builder.CreateLabel("worldpack_edge_expansion_advanced");
         var wrapBank = builder.CreateLabel("worldpack_edge_expansion_wrap_bank");
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeExpansionAddressLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressLow);
         builder.AddAImmediate(delta);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionAddressLow);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeExpansionAddressHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressHigh);
         builder.AdcAImmediate(0);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionAddressHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressHigh);
         builder.CompareImmediate(0x80);
         builder.JumpAbsolute(0xCA, wrapBank);
         builder.JumpAbsolute(done);
         builder.Label(wrapBank);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeExpansionBank);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionBank);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, done);
         builder.Emit(0x3C); // INC A
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionBank);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionBank);
         GameBoyRomBuilder.EmitSelectRomBankFromA(builder, instrumentPackedCameraCritical: true);
         builder.LoadAImmediate(0x40);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionAddressHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressHigh);
         builder.Label(done);
     }
 
@@ -568,10 +529,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var restored = builder.CreateLabel("worldpack_edge_bank_restored");
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
         builder.PopAf();
         builder.LoadBFromA();
-        builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
         builder.CompareB();
         builder.JumpAbsolute(0xCA, restored);
         builder.LoadAFromB();
@@ -595,37 +556,37 @@ internal static class GameBoyWorldPackRuntimeEmitter
         byte slot)
     {
         builder.LoadAImmediate(slot);
-        builder.StoreA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.SelectedSlot);
         builder.LoadAImmediate(payload.Start & 0xFF);
-        builder.StoreA(GameBoyPackedCameraRuntime.DestinationLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DestinationLow);
         builder.LoadAImmediate(payload.Start >> 8);
-        builder.StoreA(GameBoyPackedCameraRuntime.DestinationHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DestinationHigh);
     }
 
     private static void EmitWriteSelectedSlotMetadata(GbBuilder builder)
     {
         var slot1 = builder.CreateLabel("worldpack_edge_write_slot_1_metadata");
         var done = builder.CreateLabel("worldpack_edge_write_metadata_done");
-        builder.LoadA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, slot1);
-        EmitWriteSlotMetadata(builder, GameBoyPackedCameraRuntime.Slot0);
+        EmitWriteSlotMetadata(builder, GameBoyRuntimeMemoryLayout.PackedCamera.Slot0);
         builder.JumpAbsolute(done);
         builder.Label(slot1);
-        EmitWriteSlotMetadata(builder, GameBoyPackedCameraRuntime.Slot1);
+        EmitWriteSlotMetadata(builder, GameBoyRuntimeMemoryLayout.PackedCamera.Slot1);
         builder.Label(done);
     }
 
     private static void EmitWriteSlotMetadata(GbBuilder builder, ushort metadata)
     {
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.CommitAxis, metadata + GameBoyPackedCameraRuntime.AxisOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.CommitDirection, metadata + GameBoyPackedCameraRuntime.DirectionOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.CommitWorldEdgeLow, metadata + GameBoyPackedCameraRuntime.WorldEdgeLowOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.CommitWorldEdgeHigh, metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.CommitTarget, metadata + GameBoyPackedCameraRuntime.TargetOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.CommitTargetStart, metadata + GameBoyPackedCameraRuntime.TargetStartOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.IteratorLow, metadata + GameBoyPackedCameraRuntime.OrthogonalLowOffset);
-        EmitCopyByte(builder, GameBoyPackedCameraRuntime.IteratorHigh, metadata + GameBoyPackedCameraRuntime.OrthogonalHighOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis, metadata + GameBoyPackedCameraRuntime.AxisOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.CommitDirection, metadata + GameBoyPackedCameraRuntime.DirectionOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow, metadata + GameBoyPackedCameraRuntime.WorldEdgeLowOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh, metadata + GameBoyPackedCameraRuntime.WorldEdgeHighOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.CommitTarget, metadata + GameBoyPackedCameraRuntime.TargetOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.CommitTargetStart, metadata + GameBoyPackedCameraRuntime.TargetStartOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow, metadata + GameBoyPackedCameraRuntime.OrthogonalLowOffset);
+        EmitCopyByte(builder, GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh, metadata + GameBoyPackedCameraRuntime.OrthogonalHighOffset);
     }
 
     private static void EmitStoreSelectedSlotPayloadLength(GbBuilder builder)
@@ -633,15 +594,15 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var slot1 = builder.CreateLabel("worldpack_edge_length_slot_1");
         var done = builder.CreateLabel("worldpack_edge_length_done");
         builder.LoadBFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, slot1);
         builder.LoadAFromB();
-        builder.StoreA(GameBoyPackedCameraRuntime.Slot0 + GameBoyPackedCameraRuntime.PayloadLengthOffset);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.Slot0 + GameBoyPackedCameraRuntime.PayloadLengthOffset);
         builder.JumpAbsolute(done);
         builder.Label(slot1);
         builder.LoadAFromB();
-        builder.StoreA(GameBoyPackedCameraRuntime.Slot1 + GameBoyPackedCameraRuntime.PayloadLengthOffset);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.Slot1 + GameBoyPackedCameraRuntime.PayloadLengthOffset);
         builder.Label(done);
     }
 
@@ -649,15 +610,15 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var slot1 = builder.CreateLabel("worldpack_edge_state_slot_1");
         var done = builder.CreateLabel("worldpack_edge_state_done");
-        builder.LoadA(GameBoyPackedCameraRuntime.SelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, slot1);
         builder.LoadAImmediate(state);
-        builder.StoreA(GameBoyPackedCameraRuntime.Slot0 + GameBoyPackedCameraRuntime.StateOffset);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.Slot0 + GameBoyPackedCameraRuntime.StateOffset);
         builder.JumpAbsolute(done);
         builder.Label(slot1);
         builder.LoadAImmediate(state);
-        builder.StoreA(GameBoyPackedCameraRuntime.Slot1 + GameBoyPackedCameraRuntime.StateOffset);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.Slot1 + GameBoyPackedCameraRuntime.StateOffset);
         builder.Label(done);
     }
 
@@ -672,23 +633,23 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var noCarry = builder.CreateLabel("worldpack_edge_iterator_no_carry");
         var done = builder.CreateLabel("worldpack_edge_iterator_done");
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.AddAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.IteratorLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.JumpAbsolute(0xD2, noCarry);
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         builder.AddAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         builder.Label(noCarry);
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         builder.CompareImmediate((modulo >> 8) & 0xFF);
         builder.JumpAbsolute(0xC2, done);
-        builder.LoadA(GameBoyPackedCameraRuntime.IteratorLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
         builder.CompareImmediate(modulo & 0xFF);
         builder.JumpAbsolute(0xC2, done);
         builder.LoadAImmediate(0);
-        builder.StoreA(GameBoyPackedCameraRuntime.IteratorLow);
-        builder.StoreA(GameBoyPackedCameraRuntime.IteratorHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.IteratorHigh);
         builder.Label(done);
     }
 
@@ -811,17 +772,17 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.JumpAbsolute(0xC2, returnStatus);
         builder.Label(GameBoyRomBuilder.WorldPackVisualEdgeLookupLabel);
         EmitStoreLookupCoordinates(builder);
-        EmitJumpIfWordOutside(builder, ScratchXLow, ScratchXHigh, 0, descriptor.HardwareWidth, bounds);
-        EmitJumpIfWordOutside(builder, ScratchYLow, ScratchYHigh, 0, descriptor.HardwareHeight, bounds);
+        EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, 0, descriptor.HardwareWidth, bounds);
+        EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh, 0, descriptor.HardwareHeight, bounds);
         EmitPrepareLookupState(
             builder,
             plan,
             enableStagedCamera,
             guardLookupState: false);
-        builder.LoadA(ScratchXLow);
-        builder.StoreA(GameBoyPackedCameraRuntime.PendingVisualChunkLow);
-        builder.LoadA(ScratchXHigh);
-        builder.StoreA(GameBoyPackedCameraRuntime.PendingVisualChunkHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkHigh);
         for (var slot = 0; slot < plan.Layout.VisualSlots.Count; slot++)
         {
             var next = slot + 1 < cacheChecks.Length ? cacheChecks[slot + 1] : decodeChunk;
@@ -831,12 +792,12 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.JumpAbsolute(0xC2, next);
             builder.LoadA(VisualCacheChunkLowAddress(slot));
             builder.LoadBFromA();
-            builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkLow);
             builder.CompareB();
             builder.JumpAbsolute(0xC2, next);
             builder.LoadA(VisualCacheChunkHighAddress(slot));
             builder.LoadBFromA();
-            builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkHigh);
             builder.CompareB();
             builder.JumpAbsolute(0xCA, cacheHits[slot]);
             builder.JumpAbsolute(next);
@@ -845,12 +806,12 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(decodeChunk);
         GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
         if (enableDiagonalVisualCache)
         {
-            builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkLow);
             builder.LoadEFromA();
-            builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkHigh);
             builder.LoadDFromA();
             builder.JumpAbsolute(0xCD, cacheGroup);
         }
@@ -875,20 +836,20 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 var protect = builder.CreateLabel($"worldpack_visual_lookup_protect_slot_{slot}");
                 var next = builder.CreateLabel($"worldpack_visual_lookup_skip_protected_slot_{slot}");
 
-                builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
                 builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
                 builder.JumpAbsolute(0xCA, rowAxis);
                 EmitLoadVisualCacheGroup(builder, slot, row: false);
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupHigh);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupHigh);
                 builder.LoadCFromA();
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupLow);
                 builder.JumpAbsolute(compareCurrent);
 
                 builder.Label(rowAxis);
                 EmitLoadVisualCacheGroup(builder, slot, row: true);
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingRowGroupHigh);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupHigh);
                 builder.LoadCFromA();
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingRowGroupLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupLow);
 
                 builder.Label(compareCurrent);
                 builder.LoadBFromA();
@@ -900,7 +861,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 builder.JumpAbsolute(0xCA, next);
 
                 builder.Label(consider);
-                builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
                 builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
                 builder.JumpAbsolute(0xCA, protectColumn);
                 EmitLoadVisualCacheGroup(builder, slot, row: true);
@@ -922,19 +883,19 @@ internal static class GameBoyWorldPackRuntimeEmitter
             {
                 var rowAxis = builder.CreateLabel($"worldpack_visual_lookup_fallback_row_axis_slot_{slot}");
                 var compare = builder.CreateLabel($"worldpack_visual_lookup_fallback_compare_slot_{slot}");
-                builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
                 builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
                 builder.JumpAbsolute(0xCA, rowAxis);
                 EmitLoadVisualCacheGroup(builder, slot, row: false);
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupHigh);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupHigh);
                 builder.LoadCFromA();
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupLow);
                 builder.JumpAbsolute(compare);
                 builder.Label(rowAxis);
                 EmitLoadVisualCacheGroup(builder, slot, row: true);
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingRowGroupHigh);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupHigh);
                 builder.LoadCFromA();
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingRowGroupLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupLow);
                 builder.Label(compare);
                 builder.LoadBFromA();
                 builder.LoadAFromD();
@@ -957,7 +918,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         }
         else
         {
-            builder.LoadA(GameBoyPackedCameraRuntime.VisualReplacementNext);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualReplacementNext);
             for (var slot = 1; slot < plan.Layout.VisualSlots.Count; slot++)
             {
                 builder.CompareImmediate(slot);
@@ -970,19 +931,19 @@ internal static class GameBoyWorldPackRuntimeEmitter
         {
             builder.Label(cacheChoices[slot]);
             builder.LoadAImmediate(slot);
-            builder.StoreA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
             builder.LoadAImmediate((slot + 1) % plan.Layout.VisualSlots.Count);
-            builder.StoreA(GameBoyPackedCameraRuntime.VisualReplacementNext);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualReplacementNext);
             builder.LoadDe(plan.Layout.VisualSlots[slot].Start);
             builder.JumpAbsolute(decodeReady);
         }
 
         builder.Label(decodeReady);
         builder.Emit(0xD5); // PUSH DE; source preparation uses DE.
-        builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkLow);
-        builder.StoreA(ScratchXLow);
-        builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkHigh);
-        builder.StoreA(ScratchXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         EmitLoadPlaneAndPrepareSource(builder, plan, layout, runtimeDirectory, planeEntryOffset: 0, enableStagedCamera);
         builder.Emit(0xD1); // POP DE
         EmitSetValidationOnly(builder, validationOnly: false);
@@ -990,7 +951,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.LoadAFromB();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, returnStatus);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
         for (var slot = 1; slot < plan.Layout.VisualSlots.Count; slot++)
         {
             builder.CompareImmediate(slot);
@@ -1001,21 +962,21 @@ internal static class GameBoyWorldPackRuntimeEmitter
         for (var slot = 0; slot < plan.Layout.VisualSlots.Count; slot++)
         {
             builder.Label(cacheUpdates[slot]);
-            builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkLow);
             builder.StoreA(VisualCacheChunkLowAddress(slot));
-            builder.LoadA(GameBoyPackedCameraRuntime.PendingVisualChunkHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.PendingVisualChunkHigh);
             builder.StoreA(VisualCacheChunkHighAddress(slot));
             builder.LoadAImmediate(1);
             builder.StoreA(VisualCacheValidAddress(slot));
             if (enableDiagonalVisualCache)
             {
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingRowGroupLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupLow);
                 builder.StoreA(VisualCacheRowGroupLowAddress(slot));
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingRowGroupHigh);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupHigh);
                 builder.StoreA(VisualCacheRowGroupHighAddress(slot));
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupLow);
                 builder.StoreA(VisualCacheColumnGroupLowAddress(slot));
-                builder.LoadA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupHigh);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupHigh);
                 builder.StoreA(VisualCacheColumnGroupHighAddress(slot));
             }
             if (enableDiagonalVisualCache)
@@ -1032,7 +993,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         {
             builder.Label(cacheHits[slot]);
             builder.LoadAImmediate(slot);
-            builder.StoreA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
             builder.JumpAbsolute(chunkReady);
         }
 
@@ -1042,26 +1003,26 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.JumpAbsolute(0xCD, recordCacheGroup);
         }
         var skipEdgeReuse = builder.CreateLabel("worldpack_visual_skip_edge_reuse");
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, skipEdgeReuse);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeVisualSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeVisualSlot);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeReuseReady);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeReuseReady);
         builder.Label(skipEdgeReuse);
         var standardExpansion = builder.CreateLabel("worldpack_visual_standard_expansion");
         var expansionDone = builder.CreateLabel("worldpack_visual_expansion_done");
         var edgeExpansionMalformed = builder.CreateLabel("worldpack_visual_edge_expansion_malformed");
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, standardExpansion);
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackVisualEdgeExpansionLabel);
-        builder.StoreA(ScratchReadByte);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.LoadAFromB();
         builder.CompareImmediate((byte)GameBoyWorldPackResult.Success);
         builder.JumpAbsolute(0xC2, returnStatus);
-        builder.LoadA(ScratchReadByte);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.JumpAbsolute(expansionDone);
         builder.Label(standardExpansion);
         EmitVisualExpansionLookup(builder, plan, layout, enableStagedCamera, edgeExpansionMalformed);
@@ -1086,33 +1047,33 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         builder.Label(GameBoyRomBuilder.WorldPackVisualEdgeContinueLabel);
         var newMetatile = builder.CreateLabel("worldpack_visual_edge_new_metatile");
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeSameMetatile);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSameMetatile);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, newMetatile);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeExpansionAddressLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressLow);
         builder.LoadLFromA();
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeExpansionAddressHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressHigh);
         builder.LoadHFromA();
         builder.LoadAFromHl();
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
         builder.Emit(0xC9);
         builder.Label(newMetatile);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeCellIndex);
-        builder.StoreA(ScratchCellIndex);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeSubcellY);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellY);
         builder.LoadCFromA();
         builder.Emit(0x06, 0x00); // LD B,0
         EmitMultiplyBcByConstantToHl(builder, descriptor.MetatileWidth);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeSubcellX);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellX);
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
         builder.AddHlDe();
         builder.LoadAFromL();
-        builder.StoreA(ScratchSubcellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndex);
         builder.LoadAFromH();
-        builder.StoreA(ScratchSubcellIndexHigh);
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgeVisualSlot);
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndexHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeVisualSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackVisualEdgeExpansionLabel);
         builder.Emit(0xC9);
 
@@ -1139,7 +1100,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         string malformed)
     {
         var descriptor = plan.Pack.Descriptor;
-        builder.LoadA(ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         if (descriptor.VisualIdBytes == 2)
         {
             builder.AddAFromA();
@@ -1164,9 +1125,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         var metatileCells = checked(descriptor.MetatileWidth * descriptor.MetatileHeight);
         EmitMultiplyBcByConstantToHl(builder, metatileCells);
-        builder.LoadA(ScratchSubcellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndex);
         builder.LoadEFromA();
-        builder.LoadA(ScratchSubcellIndexHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndexHigh);
         builder.LoadDFromA();
         builder.AddHlDe();
 
@@ -1184,14 +1145,14 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.LoadDe(first.Address);
             builder.AddHlDe();
             var bankReady = builder.CreateLabel("worldpack_edge_expansion_bank_ready");
-            builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             builder.CompareImmediate(first.Bank);
             builder.JumpAbsolute(0xCA, bankReady);
             builder.LoadAImmediate(first.Bank);
             GameBoyRomBuilder.EmitSelectRomBankFromA(builder, instrumentPackedCameraCritical: true);
             builder.Label(bankReady);
             builder.LoadAImmediate(first.Bank);
-            builder.StoreA(ScratchSourceBank);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
             EmitRememberEdgeExpansionAddress(builder, banked: true);
             builder.LoadAFromHl();
             builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
@@ -1262,8 +1223,8 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, returnStatus);
         EmitStoreLookupCoordinates(builder);
-        EmitJumpIfWordOutside(builder, ScratchXLow, ScratchXHigh, 0, descriptor.HardwareWidth, bounds);
-        EmitJumpIfWordOutside(builder, ScratchYLow, ScratchYHigh, 0, descriptor.HardwareHeight, bounds);
+        EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, 0, descriptor.HardwareWidth, bounds);
+        EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh, 0, descriptor.HardwareHeight, bounds);
         EmitPrepareLookupState(builder, plan, enableStagedCamera: false, guardLookupState: false);
         EmitLoadPlaneAndPrepareSource(builder, plan, layout, runtimeDirectory, planeEntryOffset: 0, enableStagedCamera: false);
         builder.LoadDe(plan.Layout.VisualSlots[0].Start);
@@ -1296,7 +1257,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         string malformed)
     {
         var descriptor = plan.Pack.Descriptor;
-        builder.LoadA(ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         if (descriptor.VisualIdBytes == 2)
         {
             builder.AddAFromA();
@@ -1329,7 +1290,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.LoadHl(0);
         var metatileCells = checked(descriptor.MetatileWidth * descriptor.MetatileHeight);
         builder.XorA();
-        builder.StoreA(ScratchYLow); // high byte of the 24-bit pack-relative expansion offset
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow); // high byte of the 24-bit pack-relative expansion offset
         builder.LoadDe(checked((ushort)metatileCells));
         var multiplyLoop = builder.CreateLabel("worldpack_visual_expansion_multiply");
         var multiplyDone = builder.CreateLabel("worldpack_visual_expansion_multiply_done");
@@ -1339,39 +1300,39 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, multiplyDone);
         builder.AddHlBc();
-        EmitIncrementScratchOnCarry(builder, ScratchYLow);
+        EmitIncrementScratchOnCarry(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
         builder.Emit(0x1B); // DEC DE
         builder.JumpAbsolute(multiplyLoop);
         builder.Label(multiplyDone);
 
         builder.LoadDe((ushort)(descriptor.TargetExpansionsOffset & 0xFFFF));
         builder.AddHlDe();
-        EmitIncrementScratchOnCarry(builder, ScratchYLow);
-        builder.LoadA(ScratchYLow);
+        EmitIncrementScratchOnCarry(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
         builder.AddAImmediate((int)((descriptor.TargetExpansionsOffset >> 16) & 0xFF));
-        builder.StoreA(ScratchYLow);
-        builder.LoadA(ScratchSubcellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndex);
         builder.LoadEFromA();
-        builder.LoadA(ScratchSubcellIndexHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndexHigh);
         builder.LoadDFromA();
         builder.AddHlDe();
-        EmitIncrementScratchOnCarry(builder, ScratchYLow);
+        EmitIncrementScratchOnCarry(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
 
         if (layout.WorldPackPlacement is { } placement)
         {
             builder.LoadDe(checked((ushort)(placement.BaseAddress - 0x4000)));
             builder.AddHlDe();
-            EmitIncrementScratchOnCarry(builder, ScratchYLow);
+            EmitIncrementScratchOnCarry(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
             var bankSession = builder.CreateLabel("worldpack_expansion_bank_session");
             var bankReady = builder.CreateLabel("worldpack_expansion_bank_ready");
             var valueReady = builder.CreateLabel("worldpack_expansion_value_ready");
-            builder.LoadA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
             builder.CompareImmediate(1);
             builder.JumpAbsolute(0xCA, bankSession);
-            builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             builder.PushAf();
             builder.Label(bankSession);
-            builder.LoadA(ScratchYLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
             builder.AddAFromA();
             builder.AddAFromA();
             builder.LoadBFromA();
@@ -1384,10 +1345,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.ShiftRightLogicalA();
             builder.AddAFromB();
             builder.AddAImmediate(placement.BaseBank);
-            builder.StoreA(ScratchSourceBank);
-            builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             builder.LoadBFromA();
-            builder.LoadA(ScratchSourceBank);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
             builder.CompareB();
             builder.JumpAbsolute(0xCA, bankReady);
             GameBoyRomBuilder.EmitSelectRomBankFromA(builder, enableStagedCamera);
@@ -1398,14 +1359,14 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.LoadHFromA();
             EmitRememberEdgeExpansionAddress(builder, banked: true);
             builder.LoadAFromHl();
-            builder.StoreA(ScratchReadByte);
-            builder.LoadA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
             builder.CompareImmediate(1);
             builder.JumpAbsolute(0xCA, valueReady);
             builder.PopAf();
             GameBoyRomBuilder.EmitSelectRomBankFromA(builder, enableStagedCamera);
             builder.Label(valueReady);
-            builder.LoadA(ScratchReadByte);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         }
         else
         {
@@ -1425,7 +1386,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
             .Select(index => builder.CreateLabel($"{labelPrefix}_slot_{index}"))
             .ToArray();
         var ready = builder.CreateLabel($"{labelPrefix}_slot_ready");
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
         for (var slot = 1; slot < slots.Count; slot++)
         {
             builder.CompareImmediate(slot);
@@ -1446,59 +1407,59 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
     private static ushort VisualCacheValidAddress(int slot) => slot switch
     {
-        0 => GameBoyPackedCameraRuntime.VisualCacheValid,
-        1 => GameBoyPackedCameraRuntime.VisualCache1Valid,
-        2 => GameBoyPackedCameraRuntime.VisualCache2Valid,
-        3 => GameBoyPackedCameraRuntime.VisualCache3Valid,
-        4 => GameBoyPackedCameraRuntime.VisualCache4Valid,
-        5 => GameBoyPackedCameraRuntime.VisualCache5Valid,
+        0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheValid,
+        1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1Valid,
+        2 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache2Valid,
+        3 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache3Valid,
+        4 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache4Valid,
+        5 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache5Valid,
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
     private static ushort VisualCacheChunkLowAddress(int slot) => slot switch
     {
-        0 => GameBoyPackedCameraRuntime.VisualCacheChunkLow,
-        1 => GameBoyPackedCameraRuntime.VisualCache1ChunkLow,
-        2 => GameBoyPackedCameraRuntime.VisualCache2ChunkLow,
-        3 => GameBoyPackedCameraRuntime.VisualCache3ChunkLow,
-        4 => GameBoyPackedCameraRuntime.VisualCache4ChunkLow,
-        5 => GameBoyPackedCameraRuntime.VisualCache5ChunkLow,
+        0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheChunkLow,
+        1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1ChunkLow,
+        2 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache2ChunkLow,
+        3 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache3ChunkLow,
+        4 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache4ChunkLow,
+        5 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache5ChunkLow,
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
     private static ushort VisualCacheChunkHighAddress(int slot) => slot switch
     {
-        0 => GameBoyPackedCameraRuntime.VisualCacheChunkHigh,
-        1 => GameBoyPackedCameraRuntime.VisualCache1ChunkHigh,
-        2 => GameBoyPackedCameraRuntime.VisualCache2ChunkHigh,
-        3 => GameBoyPackedCameraRuntime.VisualCache3ChunkHigh,
-        4 => GameBoyPackedCameraRuntime.VisualCache4ChunkHigh,
-        5 => GameBoyPackedCameraRuntime.VisualCache5ChunkHigh,
+        0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheChunkHigh,
+        1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1ChunkHigh,
+        2 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache2ChunkHigh,
+        3 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache3ChunkHigh,
+        4 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache4ChunkHigh,
+        5 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache5ChunkHigh,
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
     private static ushort VisualCacheAgeAddress(int slot) => slot switch
     {
-        0 => GameBoyPackedCameraRuntime.VisualCache0Age,
-        1 => GameBoyPackedCameraRuntime.VisualCache1Age,
-        2 => GameBoyPackedCameraRuntime.VisualCache2Age,
-        3 => GameBoyPackedCameraRuntime.VisualCache3Age,
-        4 => GameBoyPackedCameraRuntime.VisualCache4Age,
-        5 => GameBoyPackedCameraRuntime.VisualCache5Age,
+        0 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache0Age,
+        1 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache1Age,
+        2 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache2Age,
+        3 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache3Age,
+        4 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache4Age,
+        5 => GameBoyRuntimeMemoryLayout.PackedCamera.VisualCache5Age,
         _ => throw new ArgumentOutOfRangeException(nameof(slot)),
     };
 
     private static ushort VisualCacheRowGroupLowAddress(int slot) =>
-        checked((ushort)(GameBoyPackedCameraRuntime.VisualCacheRowGroupLowStart + slot));
+        checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheRowGroupLowStart + slot));
 
     private static ushort VisualCacheRowGroupHighAddress(int slot) =>
-        checked((ushort)(GameBoyPackedCameraRuntime.VisualCacheRowGroupHighStart + slot));
+        checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheRowGroupHighStart + slot));
 
     private static ushort VisualCacheColumnGroupLowAddress(int slot) =>
-        checked((ushort)(GameBoyPackedCameraRuntime.VisualCacheColumnGroupLowStart + slot));
+        checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheColumnGroupLowStart + slot));
 
     private static ushort VisualCacheColumnGroupHighAddress(int slot) =>
-        checked((ushort)(GameBoyPackedCameraRuntime.VisualCacheColumnGroupHighStart + slot));
+        checked((ushort)(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheColumnGroupHighStart + slot));
 
     private static void EmitLoadVisualCacheGroup(GbBuilder builder, int slot, bool row)
     {
@@ -1514,7 +1475,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         for (var slot = 0; slot < slotCount; slot++)
         {
             var skip = builder.CreateLabel($"worldpack_visual_touch_skip_slot_{slot}");
-            builder.LoadA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
             builder.CompareImmediate(slot);
             builder.JumpAbsolute(0xCA, skip);
             builder.LoadA(VisualCacheAgeAddress(slot));
@@ -1528,7 +1489,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var selectedSlots = Enumerable.Range(1, slotCount - 1)
             .Select(index => builder.CreateLabel($"worldpack_visual_touch_selected_slot_{index}"))
             .ToArray();
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
         for (var slot = 1; slot < slotCount; slot++)
         {
             builder.CompareImmediate(slot);
@@ -1549,15 +1510,15 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
     private static void EmitVisualCacheEdgeGroup(GbBuilder builder, int chunkColumns)
     {
-        EmitDivideDeByConstant(builder, chunkColumns, ScratchPacketCount);
+        EmitDivideDeByConstant(builder, chunkColumns, GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.LoadAFromE();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualPendingRowGroupLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupLow);
         builder.LoadAFromD();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualPendingRowGroupHigh);
-        builder.LoadA(ScratchPacketCount);
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingRowGroupHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupLow);
         builder.XorA();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualPendingColumnGroupHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualPendingColumnGroupHigh);
         builder.Emit(0xC9);
     }
 
@@ -1567,30 +1528,30 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var compare = builder.CreateLabel("worldpack_visual_compare_protected_group");
         var notProtected = builder.CreateLabel("worldpack_visual_group_not_protected");
         var done = builder.CreateLabel("worldpack_visual_group_protection_done");
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
         builder.JumpAbsolute(0xCA, protectColumn);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualLastRowGroupValid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastRowGroupValid);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, notProtected);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualLastRowGroupHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastRowGroupHigh);
         builder.LoadBFromA();
         builder.LoadAFromD();
         builder.CompareB();
         builder.JumpAbsolute(0xC2, notProtected);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualLastRowGroupLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastRowGroupLow);
         builder.JumpAbsolute(compare);
 
         builder.Label(protectColumn);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualLastColumnGroupValid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastColumnGroupValid);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, notProtected);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualLastColumnGroupHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastColumnGroupHigh);
         builder.LoadBFromA();
         builder.LoadAFromD();
         builder.CompareB();
         builder.JumpAbsolute(0xC2, notProtected);
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualLastColumnGroupLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastColumnGroupLow);
 
         builder.Label(compare);
         builder.LoadBFromA();
@@ -1609,34 +1570,34 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var row = builder.CreateLabel("worldpack_visual_record_row_group");
         var done = builder.CreateLabel("worldpack_visual_record_group_done");
-        builder.LoadA(GameBoyPackedCameraRuntime.VisualSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualSelectedSlot);
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
-        builder.LoadA(GameBoyPackedCameraRuntime.CommitAxis);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitAxis);
         builder.CompareImmediate(GameBoyPackedCameraRuntime.Row);
         builder.JumpAbsolute(0xCA, row);
-        builder.LoadHl(GameBoyPackedCameraRuntime.VisualCacheColumnGroupLowStart);
+        builder.LoadHl(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheColumnGroupLowStart);
         builder.AddHlDe();
         builder.LoadAFromHl();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualLastColumnGroupLow);
-        builder.LoadHl(GameBoyPackedCameraRuntime.VisualCacheColumnGroupHighStart);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastColumnGroupLow);
+        builder.LoadHl(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheColumnGroupHighStart);
         builder.AddHlDe();
         builder.LoadAFromHl();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualLastColumnGroupHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastColumnGroupHigh);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualLastColumnGroupValid);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastColumnGroupValid);
         builder.JumpAbsolute(done);
         builder.Label(row);
-        builder.LoadHl(GameBoyPackedCameraRuntime.VisualCacheRowGroupLowStart);
+        builder.LoadHl(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheRowGroupLowStart);
         builder.AddHlDe();
         builder.LoadAFromHl();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualLastRowGroupLow);
-        builder.LoadHl(GameBoyPackedCameraRuntime.VisualCacheRowGroupHighStart);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastRowGroupLow);
+        builder.LoadHl(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheRowGroupHighStart);
         builder.AddHlDe();
         builder.LoadAFromHl();
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualLastRowGroupHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastRowGroupHigh);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyPackedCameraRuntime.VisualLastRowGroupValid);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.VisualLastRowGroupValid);
         builder.Label(done);
         builder.Emit(0xC9);
     }
@@ -1644,23 +1605,23 @@ internal static class GameBoyWorldPackRuntimeEmitter
     private static void EmitRememberEdgeExpansionAddress(GbBuilder builder, bool banked)
     {
         var done = builder.CreateLabel("worldpack_expansion_address_not_needed");
-        builder.LoadA(GameBoyPackedCameraRuntime.EdgePreparationBankSession);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgePreparationBankSession);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, done);
         builder.LoadAFromL();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionAddressLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressLow);
         builder.LoadAFromH();
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionAddressHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionAddressHigh);
         if (banked)
         {
-            builder.LoadA(ScratchSourceBank);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         }
         else
         {
             builder.XorA();
         }
 
-        builder.StoreA(GameBoyPackedCameraRuntime.EdgeExpansionBank);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeExpansionBank);
         builder.Label(done);
     }
 
@@ -1713,14 +1674,14 @@ internal static class GameBoyWorldPackRuntimeEmitter
             enableStagedCamera);
 
         builder.Label(GameBoyRomBuilder.WorldPackCollisionLookupLabel);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellValid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.CellValid);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, cellMiss);
-        EmitJumpIfRegisterDoesNotMatch(builder, 'E', GameBoyWorldPackRuntimeAbi.CollisionCellXLow, cellMiss);
-        EmitJumpIfRegisterDoesNotMatch(builder, 'D', GameBoyWorldPackRuntimeAbi.CollisionCellXHigh, cellMiss);
-        EmitJumpIfRegisterDoesNotMatch(builder, 'L', GameBoyWorldPackRuntimeAbi.CollisionCellYLow, cellMiss);
-        EmitJumpIfRegisterDoesNotMatch(builder, 'H', GameBoyWorldPackRuntimeAbi.CollisionCellYHigh, cellMiss);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'E', GameBoyRuntimeMemoryLayout.Collision.CellXLow, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'D', GameBoyRuntimeMemoryLayout.Collision.CellXHigh, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'L', GameBoyRuntimeMemoryLayout.Collision.CellYLow, cellMiss);
+        EmitJumpIfRegisterDoesNotMatch(builder, 'H', GameBoyRuntimeMemoryLayout.Collision.CellYHigh, cellMiss);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.CellResult);
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
         builder.Emit(0xC9);
 
@@ -1730,24 +1691,24 @@ internal static class GameBoyWorldPackRuntimeEmitter
             EmitJumpIfRegisterWordAtOrAbove(builder, 'D', 'E', descriptor.HardwareWidth, lookupBounds);
             EmitJumpIfRegisterWordAtOrAbove(builder, 'H', 'L', descriptor.HardwareHeight, lookupBounds);
             builder.LoadAFromE();
-            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
             builder.LoadAFromD();
-            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.QueryXHigh);
             builder.LoadAFromL();
-            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
             builder.LoadAFromH();
-            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.QueryYHigh);
             EmitTryCollisionMemoTableLookup(builder, collisionMemoTable);
         }
         else
         {
             EmitStoreLookupCoordinates(builder);
-            CopyByte(builder, ScratchXLow, GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
-            CopyByte(builder, ScratchXHigh, GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
-            CopyByte(builder, ScratchYLow, GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
-            CopyByte(builder, ScratchYHigh, GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh);
-            EmitJumpIfWordOutside(builder, ScratchXLow, ScratchXHigh, 0, descriptor.HardwareWidth, lookupBounds);
-            EmitJumpIfWordOutside(builder, ScratchYLow, ScratchYHigh, 0, descriptor.HardwareHeight, lookupBounds);
+            CopyByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
+            CopyByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, GameBoyRuntimeMemoryLayout.Collision.QueryXHigh);
+            CopyByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow, GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
+            CopyByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh, GameBoyRuntimeMemoryLayout.Collision.QueryYHigh);
+            EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, 0, descriptor.HardwareWidth, lookupBounds);
+            EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh, 0, descriptor.HardwareHeight, lookupBounds);
         }
 
         builder.JumpAbsolute(0xCD, GameBoyRomBuilder.WorldPackValidateLabel);
@@ -1767,63 +1728,63 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 enableStagedCamera,
                 guardLookupState: false);
         }
-        CopyByte(builder, ScratchXLow, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow);
-        CopyByte(builder, ScratchXHigh, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, GameBoyRuntimeMemoryLayout.Collision.PendingChunkLow);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, GameBoyRuntimeMemoryLayout.Collision.PendingChunkHigh);
 
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, checkCache1);
         EmitJumpIfBytesDiffer(
             builder,
-            GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkLow,
-            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow,
+            GameBoyRuntimeMemoryLayout.Collision.Cache0ChunkLow,
+            GameBoyRuntimeMemoryLayout.Collision.PendingChunkLow,
             checkCache1);
         EmitJumpIfBytesDiffer(
             builder,
-            GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkHigh,
-            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh,
+            GameBoyRuntimeMemoryLayout.Collision.Cache0ChunkHigh,
+            GameBoyRuntimeMemoryLayout.Collision.PendingChunkHigh,
             checkCache1);
         builder.JumpAbsolute(cache0);
 
         builder.Label(checkCache1);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, selectSlot);
         EmitJumpIfBytesDiffer(
             builder,
-            GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkLow,
-            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow,
+            GameBoyRuntimeMemoryLayout.Collision.Cache1ChunkLow,
+            GameBoyRuntimeMemoryLayout.Collision.PendingChunkLow,
             selectSlot);
         EmitJumpIfBytesDiffer(
             builder,
-            GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkHigh,
-            GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh,
+            GameBoyRuntimeMemoryLayout.Collision.Cache1ChunkHigh,
+            GameBoyRuntimeMemoryLayout.Collision.PendingChunkHigh,
             selectSlot);
         builder.JumpAbsolute(cache1);
 
         builder.Label(selectSlot);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, selectSlot0);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, selectSlot1);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionReplacementNext);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.ReplacementNext);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, selectSlot0);
         builder.JumpAbsolute(selectSlot1);
 
         builder.Label(selectSlot0);
         builder.XorA();
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         builder.JumpAbsolute(rawDirect);
         builder.Label(selectSlot1);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
 
         builder.Label(rawDirect);
         EmitLoadPlaneAndPrepareSource(builder, plan, layout, runtimeDirectory, planeEntryOffset: 6, enableStagedCamera);
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.CompareImmediate((byte)WorldPackCodec.Raw);
         var loadRaw = builder.CreateLabel("worldpack_collision_load_raw");
         builder.JumpAbsolute(0xCA, loadRaw);
@@ -1838,8 +1799,8 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(rleDecode);
         EmitIncrementWordCounter(
             builder,
-            GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow,
-            GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh);
+            GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow,
+            GameBoyRuntimeMemoryLayout.Collision.DecodeCountHigh);
         EmitInvalidateSelectedCollisionSlot(builder);
         EmitLoadSelectedCollisionSlotDestination(builder, plan.Layout.CollisionSlots);
         EmitSetValidationOnly(builder, validationOnly: false);
@@ -1850,42 +1811,42 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.JumpAbsolute(rleDecoded);
 
         builder.Label(rleDecoded);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, publishSlot1);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow, GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkLow);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh, GameBoyWorldPackRuntimeAbi.CollisionCache0ChunkHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.PendingChunkLow, GameBoyRuntimeMemoryLayout.Collision.Cache0ChunkLow);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.PendingChunkHigh, GameBoyRuntimeMemoryLayout.Collision.Cache0ChunkHigh);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionReplacementNext);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.ReplacementNext);
         builder.JumpAbsolute(cache0);
 
         builder.Label(publishSlot1);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkLow, GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkLow);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionPendingChunkHigh, GameBoyWorldPackRuntimeAbi.CollisionCache1ChunkHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.PendingChunkLow, GameBoyRuntimeMemoryLayout.Collision.Cache1ChunkLow);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.PendingChunkHigh, GameBoyRuntimeMemoryLayout.Collision.Cache1ChunkHigh);
         builder.XorA();
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionReplacementNext);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.ReplacementNext);
         builder.JumpAbsolute(cache1);
 
         builder.Label(cache0);
         builder.XorA();
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         EmitLoadSelectedCollisionId(builder, descriptor, plan.Layout.CollisionSlots);
         builder.JumpAbsolute(idReady);
         builder.Label(cache1);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         EmitLoadSelectedCollisionId(builder, descriptor, plan.Layout.CollisionSlots);
 
         builder.Label(idReady);
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadCFromA();
         if (descriptor.CollisionIdBytes == 2)
         {
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.LoadBFromA();
         }
         else
@@ -1895,7 +1856,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         EmitJumpIfIdOutsideRange(builder, descriptor.CollisionIdBytes, descriptor.CollisionProfileCount, lookupMalformed);
         EmitCollisionProfileLookupFromScratchId(builder, plan, profileBytes);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.CellResult);
         if (plan.Layout.CollisionMemoTable is { } collisionMemoTableForPublish)
         {
             EmitPublishCollisionMemoTable(builder, collisionMemoTableForPublish);
@@ -1957,20 +1918,20 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         // SupportsCollisionMemoTable guarantees 2x2 metatiles, 8x8 chunks,
         // twenty chunk columns, one-byte IDs, and the four-cell clipped tail.
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
         builder.AndImmediate(0x01);
         builder.AddAFromA();
         builder.LoadBFromA();
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
         builder.AndImmediate(0x01);
         builder.AddAFromB();
-        builder.StoreA(ScratchSubcellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndex);
         builder.XorA();
-        builder.StoreA(ScratchSubcellIndexHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndexHigh);
 
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
         builder.LoadEFromA();
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXHigh);
         builder.LoadDFromA();
         for (var shift = 0; shift < 4; shift++)
         {
@@ -1978,9 +1939,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
         }
 
         builder.LoadAFromE();
-        builder.StoreA(ScratchSourceBank); // Reduced-path alias: chunk X, not a ROM bank.
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank); // Reduced-path alias: chunk X, not a ROM bank.
 
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
         for (var shift = 0; shift < 4; shift++)
         {
             builder.ShiftRightLogicalA();
@@ -1993,40 +1954,40 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.AddAFromA();
         builder.AddAFromB();
         builder.LoadBFromA();
-        builder.LoadA(ScratchSourceBank);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         builder.AddAFromB();
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.XorA();
-        builder.StoreA(ScratchXHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
 
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
         builder.ShiftRightLogicalA();
         builder.AndImmediate(0x07);
-        builder.StoreA(ScratchStoredRemaining); // Reduced-path alias: local metatile Y.
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining); // Reduced-path alias: local metatile Y.
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
         builder.ShiftRightLogicalA();
         builder.AndImmediate(0x07);
-        builder.StoreA(ScratchYHigh); // Reduced-path alias: local metatile X.
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh); // Reduced-path alias: local metatile X.
 
         var clippedWidth = builder.CreateLabel("worldpack_fast_collision_clipped_width");
         var cellReady = builder.CreateLabel("worldpack_fast_collision_cell_ready");
-        builder.LoadA(ScratchSourceBank);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         builder.CompareImmediate(descriptor.ChunkColumns - 1);
         builder.JumpAbsolute(0xCA, clippedWidth);
-        builder.LoadA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.AddAFromA();
         builder.AddAFromA();
         builder.AddAFromA();
         builder.JumpAbsolute(cellReady);
         builder.Label(clippedWidth);
-        builder.LoadA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.AddAFromA();
         builder.AddAFromA();
         builder.Label(cellReady);
         builder.LoadBFromA();
-        builder.LoadA(ScratchYHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh);
         builder.AddAFromB();
-        builder.StoreA(ScratchCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
     }
 
     private static void EmitJumpIfBytesDiffer(
@@ -2082,36 +2043,36 @@ internal static class GameBoyWorldPackRuntimeEmitter
         EmitLoadCollisionMemoTablePointer(builder, memoTable);
         builder.LoadAFromHl();
         builder.LoadBFromA();
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
         builder.CompareB();
         builder.JumpAbsolute(0xC2, miss);
         builder.IncrementHl();
         builder.LoadAFromHl();
-        builder.StoreA(ScratchReadByte);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         EmitLoadCollisionMemoHighTag(builder);
         builder.LoadBFromA();
-        builder.LoadA(ScratchReadByte);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.CompareB();
         builder.JumpAbsolute(0xC2, miss);
         builder.IncrementHl();
         builder.LoadAFromHl();
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.CellResult);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.MemoHitCount);
         builder.Emit(0x3C); // INC A
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.MemoHitCount);
         EmitPublishExactCollisionCellAndReturnSuccess(builder);
         builder.Label(miss);
     }
 
     private static void EmitPublishExactCollisionCellAndReturnSuccess(GbBuilder builder)
     {
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryXLow, GameBoyWorldPackRuntimeAbi.CollisionCellXLow);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh, GameBoyWorldPackRuntimeAbi.CollisionCellXHigh);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryYLow, GameBoyWorldPackRuntimeAbi.CollisionCellYLow);
-        CopyByte(builder, GameBoyWorldPackRuntimeAbi.CollisionQueryYHigh, GameBoyWorldPackRuntimeAbi.CollisionCellYHigh);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.QueryXLow, GameBoyRuntimeMemoryLayout.Collision.CellXLow);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.QueryXHigh, GameBoyRuntimeMemoryLayout.Collision.CellXHigh);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.QueryYLow, GameBoyRuntimeMemoryLayout.Collision.CellYLow);
+        CopyByte(builder, GameBoyRuntimeMemoryLayout.Collision.QueryYHigh, GameBoyRuntimeMemoryLayout.Collision.CellYHigh);
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCellValid);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.CellValid);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.CellResult);
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
         builder.Emit(0xC9);
     }
@@ -2121,13 +2082,13 @@ internal static class GameBoyWorldPackRuntimeEmitter
         GameBoyWramRange memoTable)
     {
         EmitLoadCollisionMemoTablePointer(builder, memoTable);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
         builder.StoreHlA();
         builder.IncrementHl();
         EmitLoadCollisionMemoHighTag(builder);
         builder.StoreHlA();
         builder.IncrementHl();
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionCellResult);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.CellResult);
         builder.StoreHlA();
     }
 
@@ -2135,11 +2096,11 @@ internal static class GameBoyWorldPackRuntimeEmitter
         GbBuilder builder,
         GameBoyWramRange memoTable)
     {
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXLow);
         builder.AndImmediate(0x1F);
         builder.AddAFromA();
         builder.LoadBFromA();
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
         builder.AndImmediate(0x01);
         builder.AddAFromB();
         builder.LoadBFromA();
@@ -2153,10 +2114,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
     private static void EmitLoadCollisionMemoHighTag(GbBuilder builder)
     {
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryYLow);
         builder.AddAFromA();
         builder.LoadBFromA();
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionQueryXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.QueryXHigh);
         builder.AddAFromB();
         builder.OrImmediate(0x80);
     }
@@ -2181,7 +2142,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var slot1 = builder.CreateLabel("worldpack_collision_destination_slot_1");
         var ready = builder.CreateLabel("worldpack_collision_destination_ready");
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, slot1);
         builder.LoadDe(slots[0].Start);
@@ -2195,15 +2156,15 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var slot1 = builder.CreateLabel("worldpack_collision_invalidate_slot_1");
         var ready = builder.CreateLabel("worldpack_collision_invalidate_ready");
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, slot1);
         builder.XorA();
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid);
         builder.JumpAbsolute(ready);
         builder.Label(slot1);
         builder.XorA();
-        builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid);
         builder.Label(ready);
     }
 
@@ -2214,7 +2175,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var slot1 = builder.CreateLabel("worldpack_collision_id_slot_1");
         var ready = builder.CreateLabel("worldpack_collision_id_slot_ready");
-        builder.LoadA(ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         if (descriptor.CollisionIdBytes == 2)
         {
             builder.AddAFromA();
@@ -2222,7 +2183,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
-        builder.LoadA(GameBoyWorldPackRuntimeAbi.CollisionSelectedSlot);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Collision.SelectedSlot);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xCA, slot1);
         builder.LoadHl(slots[0].Start);
@@ -2232,17 +2193,17 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(ready);
         builder.AddHlDe();
         builder.LoadAFromHl();
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         if (descriptor.CollisionIdBytes == 2)
         {
             builder.IncrementHl();
             builder.LoadAFromHl();
-            builder.StoreA(ScratchXHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         }
         else
         {
             builder.XorA();
-            builder.StoreA(ScratchXHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         }
     }
 
@@ -2254,7 +2215,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         bool enableStagedCamera)
     {
         EmitBeginDecode(builder, layout.UsesBankedWorldPack, enableStagedCamera);
-        builder.LoadA(ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         if (descriptor.CollisionIdBytes == 2)
         {
             builder.AddAFromA();
@@ -2269,7 +2230,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         }
 
         builder.LoadAFromHl();
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         if (descriptor.CollisionIdBytes == 2)
         {
             builder.IncrementHl();
@@ -2279,12 +2240,12 @@ internal static class GameBoyWorldPackRuntimeEmitter
             }
 
             builder.LoadAFromHl();
-            builder.StoreA(ScratchXHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         }
         else
         {
             builder.XorA();
-            builder.StoreA(ScratchXHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         }
 
         EmitValidateSafeStagedId(
@@ -2305,11 +2266,11 @@ internal static class GameBoyWorldPackRuntimeEmitter
         string profileBytes)
     {
         var descriptor = plan.Pack.Descriptor;
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadCFromA();
         if (descriptor.CollisionIdBytes == 2)
         {
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.LoadBFromA();
         }
         else
@@ -2326,9 +2287,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         builder.LoadDe(profileBytes);
         builder.AddHlDe();
-        builder.LoadA(ScratchSubcellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndex);
         builder.LoadEFromA();
-        builder.LoadA(ScratchSubcellIndexHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndexHigh);
         builder.LoadDFromA();
         builder.AddHlDe();
         builder.LoadAFromHl();
@@ -2353,8 +2314,8 @@ internal static class GameBoyWorldPackRuntimeEmitter
         if (planeOffset == 1)
         {
             builder.XorA();
-            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid);
-            builder.StoreA(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid);
         }
 
         if (enableStagedCamera)
@@ -2362,7 +2323,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
             GameBoyPackedCameraRuntimeEmitter.EmitWaitOutsideVBlank(builder);
             GameBoyPackedCameraRuntimeEmitter.EmitRecordCriticalWork(
                 builder,
-                GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+                GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
             if (planeOffset == 0)
             {
                 builder.LoadAImmediate(0);
@@ -2382,16 +2343,16 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, returnStatus);
         builder.LoadAFromL();
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadAFromH();
-        builder.StoreA(ScratchXHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         builder.LoadAFromC();
-        builder.StoreA(ScratchPacketCount);
-        builder.LoadA(ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.CompareImmediate(2);
         builder.JumpAbsolute(0xD2, bounds);
 
-        EmitJumpIfWordOutside(builder, ScratchXLow, ScratchXHigh, 0, plan.Pack.Chunks.Count, miss);
+        EmitJumpIfWordOutside(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, 0, plan.Pack.Chunks.Count, miss);
         EmitLoadSlotDestination(builder, slots);
         builder.Emit(0xD5); // PUSH DE; source preparation uses DE as arithmetic scratch
         EmitLoadPlaneAndPrepareSource(builder, plan, layout, runtimeDirectory, planeOffset * 6, enableStagedCamera);
@@ -2424,34 +2385,34 @@ internal static class GameBoyWorldPackRuntimeEmitter
         {
             GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
                 builder,
-                GameBoyPackedCameraRuntime.DirectoryWorkInVBlank);
+                GameBoyRuntimeMemoryLayout.PackedCamera.DirectoryWorkInVBlank);
         }
 
         EmitRuntimeDirectoryPointer(builder, runtimeDirectory, planeEntryOffset);
         builder.Emit(0x2A); // LD A,(HL+): offset low
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.Emit(0x2A); // offset middle
-        builder.StoreA(ScratchXHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         builder.Emit(0x2A); // offset high
-        builder.StoreA(ScratchYLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
         builder.Emit(0x2A); // stored bytes
-        builder.StoreA(ScratchStoredRemaining);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.Emit(0x2A); // decoded elements
         builder.LoadCFromA();
         builder.LoadAFromHl(); // codec
-        builder.StoreA(ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
 
         if (layout.WorldPackPlacement is { } placement)
         {
-            builder.LoadA(ScratchXLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
             builder.LoadLFromA();
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.LoadHFromA();
             builder.LoadDe(checked((ushort)(placement.BaseAddress - 0x4000)));
             builder.AddHlDe();
-            builder.LoadA(ScratchYLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
             builder.AdcAImmediate(0);
-            builder.StoreA(ScratchYLow);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
             builder.LoadAFromH();
             builder.ShiftRightLogicalA();
             builder.ShiftRightLogicalA();
@@ -2460,12 +2421,12 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.ShiftRightLogicalA();
             builder.ShiftRightLogicalA();
             builder.LoadBFromA();
-            builder.LoadA(ScratchYLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
             builder.AddAFromA();
             builder.AddAFromA();
             builder.AddAFromB();
             builder.AddAImmediate(placement.BaseBank);
-            builder.StoreA(ScratchSourceBank);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
             builder.LoadAFromH();
             builder.AndImmediate(0x3F);
             builder.OrImmediate(0x40);
@@ -2474,13 +2435,13 @@ internal static class GameBoyWorldPackRuntimeEmitter
         else
         {
             builder.LoadHl(GameBoyRomBuilder.WorldPackLabel);
-            builder.LoadA(ScratchXLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
             builder.LoadEFromA();
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.LoadDFromA();
             builder.AddHlDe();
             builder.LoadAImmediate(0);
-            builder.StoreA(ScratchSourceBank);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         }
     }
 
@@ -2492,7 +2453,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var rle = builder.CreateLabel("worldpack_decode_select_rle");
         var done = builder.CreateLabel("worldpack_decode_select_done");
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.CompareImmediate((byte)WorldPackCodec.Raw);
         builder.JumpAbsolute(0xC2, rle);
         builder.JumpAbsolute(0xCD, rawDecoder);
@@ -2509,9 +2470,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
         string runtimeDirectory,
         int entryOffset)
     {
-        builder.LoadA(ScratchXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         builder.LoadBFromA();
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadCFromA();
         builder.Emit(0x60); // LD H,B
         builder.Emit(0x69); // LD L,C
@@ -2533,7 +2494,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         var second = builder.CreateLabel("worldpack_decode_second_slot");
         var ready = builder.CreateLabel("worldpack_decode_slot_ready");
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, second);
         builder.LoadDe(slots[0].Start);
@@ -2609,7 +2570,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(label);
         GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
         EmitBeginDecode(builder, banked, enableStagedCamera: true);
         builder.LoadAFromC();
         builder.Emit(0xCB, 0x3F); // SRL A
@@ -2636,8 +2597,8 @@ internal static class GameBoyWorldPackRuntimeEmitter
             }
             else
             {
-                EmitReadSafeStagedByte(builder, ScratchXLow, banked, malformed, trackStoredBytes: false);
-                EmitReadSafeStagedByte(builder, ScratchXHigh, banked, malformed, trackStoredBytes: false);
+                EmitReadSafeStagedByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, banked, malformed, trackStoredBytes: false);
+                EmitReadSafeStagedByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, banked, malformed, trackStoredBytes: false);
                 EmitValidateSafeStagedId(builder, idBytes, idCount, malformed);
                 EmitWriteSafeStagedId(builder, idBytes);
             }
@@ -2655,7 +2616,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(secondHalf);
         GameBoyPackedCameraRuntimeEmitter.EmitRecordCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
         GameBoyPackedCameraRuntimeEmitter.EmitWaitIfInVBlank(builder);
         builder.Label(secondLoop);
         builder.LoadAFromC();
@@ -2668,9 +2629,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(done);
         GameBoyPackedCameraRuntimeEmitter.EmitRecordCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
         builder.XorA();
-        builder.StoreA(ScratchStoredRemaining);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.JumpAbsolute(success);
     }
 
@@ -2683,9 +2644,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.CompareImmediate(0x80);
         builder.JumpAbsolute(0xC2, noCross);
         builder.LoadHImmediate(0x40);
-        builder.LoadA(ScratchSourceBank);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         builder.Emit(0x3C); // INC A
-        builder.StoreA(ScratchSourceBank);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         GameBoyRomBuilder.EmitSelectRomBankFromA(builder, instrumentPackedCameraCritical);
         builder.Label(noCross);
     }
@@ -2721,46 +2682,46 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.JumpAbsolute(0xCA, success);
         EmitRequireStoredByte(builder, malformed);
         builder.JumpAbsolute(0xCD, readSourceByte);
-        builder.StoreA(ScratchReadByte);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.AndImmediate(0x80);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, runPacket);
 
-        builder.LoadA(ScratchReadByte);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.AddAImmediate(1);
-        builder.StoreA(ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         EmitRequirePacketFits(builder, malformed);
         builder.Label(literalLoop);
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, packetDone);
         EmitReadAndValidateId(builder, idBytes, idCount, readSourceByte, malformed);
         EmitWriteDecodedId(builder, idBytes, enableStagedCamera: false);
 
         builder.Emit(0x0D); // DEC C
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.DecrementA();
-        builder.StoreA(ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.JumpAbsolute(literalLoop);
 
         builder.Label(runPacket);
-        builder.LoadA(ScratchReadByte);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.AndImmediate(0x7F);
         builder.AddAImmediate(3);
-        builder.StoreA(ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         EmitRequirePacketFits(builder, malformed);
         EmitReadAndValidateId(builder, idBytes, idCount, readSourceByte, malformed);
 
         builder.Label(runLoop);
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, packetDone);
         EmitWriteDecodedId(builder, idBytes, enableStagedCamera: false);
 
         builder.Emit(0x0D); // DEC C
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.DecrementA();
-        builder.StoreA(ScratchPacketCount);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.JumpAbsolute(runLoop);
 
         builder.Label(packetDone);
@@ -2786,19 +2747,19 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(label);
         GameBoyPackedCameraRuntimeEmitter.EmitGuardRleCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
         EmitBeginDecode(builder, banked, enableStagedCamera: true);
         builder.Label(packetLoop);
         builder.LoadAFromC();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, done);
         GameBoyPackedCameraRuntimeEmitter.EmitWaitForSafeRleCriticalWork(builder);
-        EmitReadSafeStagedByte(builder, ScratchPacketCount, banked, malformed, trackStoredBytes: true);
-        builder.LoadA(ScratchPacketCount);
+        EmitReadSafeStagedByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount, banked, malformed, trackStoredBytes: true);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.AndImmediate(0x80);
         builder.JumpAbsolute(0xC2, runPacket);
 
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.AddAImmediate(1);
         builder.LoadBFromA();
         EmitRequireRegisterPacketFits(builder, malformed);
@@ -2811,7 +2772,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.JumpAbsolute(packetDone);
 
         builder.Label(runPacket);
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.AndImmediate(0x7F);
         builder.AddAImmediate(3);
         builder.LoadBFromA();
@@ -2826,7 +2787,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(packetDone);
         GameBoyPackedCameraRuntimeEmitter.EmitRecordCriticalWork(
             builder,
-            GameBoyPackedCameraRuntime.DecodeWorkInCommit);
+            GameBoyRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit);
         builder.JumpAbsolute(packetLoop);
 
         builder.Label(done);
@@ -2848,10 +2809,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
         string malformed,
         bool trackStoredBytes)
     {
-        EmitReadSafeStagedByte(builder, ScratchXLow, banked, malformed, trackStoredBytes);
+        EmitReadSafeStagedByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow, banked, malformed, trackStoredBytes);
         if (idBytes == 2)
         {
-            EmitReadSafeStagedByte(builder, ScratchXHigh, banked, malformed, trackStoredBytes);
+            EmitReadSafeStagedByte(builder, GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh, banked, malformed, trackStoredBytes);
         }
 
         EmitValidateSafeStagedId(builder, idBytes, idCount, malformed);
@@ -2866,11 +2827,11 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         if (trackStoredBytes)
         {
-            builder.LoadA(ScratchStoredRemaining);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
             builder.CompareImmediate(0);
             builder.JumpAbsolute(0xCA, malformed);
             builder.DecrementA();
-            builder.StoreA(ScratchStoredRemaining);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         }
 
         builder.LoadAFromHl();
@@ -2893,7 +2854,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         {
             if (idCount < 256)
             {
-                builder.LoadA(ScratchXLow);
+                builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
                 builder.CompareImmediate(idCount);
                 builder.JumpAbsolute(0xD2, malformed);
             }
@@ -2903,13 +2864,13 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         var highIsLower = builder.CreateLabel("worldpack_staged_id_high_lower");
         var highMatches = builder.CreateLabel("worldpack_staged_id_high_matches");
-        builder.LoadA(ScratchXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         builder.CompareImmediate((idCount >> 8) & 0xFF);
         builder.JumpAbsolute(0xDA, highIsLower);
         builder.JumpAbsolute(0xCA, highMatches);
         builder.JumpAbsolute(malformed);
         builder.Label(highMatches);
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.CompareImmediate(idCount & 0xFF);
         builder.JumpAbsolute(0xD2, malformed);
         builder.Label(highIsLower);
@@ -2917,12 +2878,12 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
     private static void EmitWriteSafeStagedId(GbBuilder builder, int idBytes)
     {
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.Emit(0x12); // LD (DE),A
         builder.Emit(0x13); // INC DE
         if (idBytes == 2)
         {
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.Emit(0x12);
             builder.Emit(0x13);
         }
@@ -2935,9 +2896,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
             return;
         }
 
-        builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
         builder.PushAf();
-        builder.LoadA(ScratchSourceBank);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         GameBoyRomBuilder.EmitSelectRomBankFromA(builder, enableStagedCamera);
     }
 
@@ -2950,25 +2911,25 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var noCross = builder.CreateLabel("worldpack_read_no_cross");
         builder.Label(label);
         builder.LoadAFromHl();
-        builder.StoreA(ScratchReadByte);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.IncrementHl();
-        builder.LoadA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.DecrementA();
-        builder.StoreA(ScratchStoredRemaining);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         if (banked)
         {
             builder.LoadAFromH();
             builder.CompareImmediate(0x80);
             builder.JumpAbsolute(0xC2, noCross);
             builder.LoadHImmediate(0x40);
-            builder.LoadA(ScratchSourceBank);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
             builder.Emit(0x3C); // INC A
-            builder.StoreA(ScratchSourceBank);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
             GameBoyRomBuilder.EmitSelectRomBankFromA(builder, enableStagedCamera);
             builder.Label(noCross);
         }
 
-        builder.LoadA(ScratchReadByte);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.Emit(0xC9);
     }
 
@@ -2982,7 +2943,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var successReturn = builder.CreateLabel("worldpack_decode_success_return");
         var malformedReturn = builder.CreateLabel("worldpack_decode_malformed_return");
         builder.Label(success);
-        builder.LoadA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, malformed);
         builder.JumpAbsolute(successReturn);
@@ -3014,14 +2975,14 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
     private static void EmitRequireStoredByte(GbBuilder builder, string malformed)
     {
-        builder.LoadA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, malformed);
     }
 
     private static void EmitRequirePacketFits(GbBuilder builder, string malformed)
     {
-        builder.LoadA(ScratchPacketCount);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
         builder.LoadBFromA();
         builder.LoadAFromC();
         builder.CompareB();
@@ -3031,13 +2992,13 @@ internal static class GameBoyWorldPackRuntimeEmitter
     private static void EmitStoreLookupCoordinates(GbBuilder builder)
     {
         builder.LoadAFromE();
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadAFromD();
-        builder.StoreA(ScratchXHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         builder.LoadAFromL();
-        builder.StoreA(ScratchYLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
         builder.LoadAFromH();
-        builder.StoreA(ScratchYHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh);
     }
 
     private static void EmitPrepareLookupState(
@@ -3047,39 +3008,39 @@ internal static class GameBoyWorldPackRuntimeEmitter
         bool guardLookupState)
     {
         var descriptor = plan.Pack.Descriptor;
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadEFromA();
-        builder.LoadA(ScratchXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
         builder.LoadDFromA();
-        EmitDivideDeByConstant(builder, descriptor.MetatileWidth, ScratchSourceBank);
+        EmitDivideDeByConstant(builder, descriptor.MetatileWidth, GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
 
         builder.Emit(0xD5); // PUSH DE; preserve metatile X while dividing Y
-        builder.LoadA(ScratchYLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYLow);
         builder.LoadEFromA();
-        builder.LoadA(ScratchYHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh);
         builder.LoadDFromA();
-        EmitDivideDeByConstant(builder, descriptor.MetatileHeight, ScratchReadByte);
+        EmitDivideDeByConstant(builder, descriptor.MetatileHeight, GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.Emit(0x62); // LD H,D
         builder.Emit(0x6B); // LD L,E
         builder.Emit(0xD1); // POP DE
 
         builder.LoadAFromE();
         builder.AndImmediate(0x07);
-        builder.StoreA(ScratchYHigh); // local metatile X
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh); // local metatile X
         if (enableStagedCamera)
         {
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeLocalX);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeLocalX);
         }
         builder.LoadAFromL();
         builder.AndImmediate(0x07);
-        builder.StoreA(ScratchStoredRemaining); // local metatile Y
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining); // local metatile Y
         if (enableStagedCamera)
         {
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeLocalY);
-            builder.LoadA(ScratchSourceBank);
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeSubcellX);
-            builder.LoadA(ScratchReadByte);
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeSubcellY);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeLocalY);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellX);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeSubcellY);
         }
         for (var shift = 0; shift < 3; shift++)
         {
@@ -3091,7 +3052,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         {
             GameBoyPackedCameraRuntimeEmitter.EmitGuardCriticalWork(
                 builder,
-                GameBoyPackedCameraRuntime.DirectoryWorkInVBlank);
+                GameBoyRuntimeMemoryLayout.PackedCamera.DirectoryWorkInVBlank);
         }
 
         var sourceWidth = descriptor.HardwareWidth / descriptor.MetatileWidth;
@@ -3104,10 +3065,10 @@ internal static class GameBoyWorldPackRuntimeEmitter
             descriptor.ChunkWidth,
             lastChunkWidth,
             "worldpack_lookup_width");
-        builder.StoreA(ScratchCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         if (enableStagedCamera)
         {
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeValidWidth);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeValidWidth);
 
             var sourceHeight = descriptor.HardwareHeight / descriptor.MetatileHeight;
             var lastChunkHeight = sourceHeight - ((descriptor.ChunkRows - 1) * descriptor.ChunkHeight);
@@ -3119,7 +3080,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 descriptor.ChunkHeight,
                 lastChunkHeight,
                 "worldpack_lookup_height");
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeValidHeight);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeValidHeight);
         }
 
         builder.Emit(0x44); // LD B,H (chunk Y high)
@@ -3128,38 +3089,38 @@ internal static class GameBoyWorldPackRuntimeEmitter
 
         builder.AddHlDe();
         builder.LoadAFromL();
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.LoadAFromH();
-        builder.StoreA(ScratchXHigh);
-        builder.LoadA(ScratchCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         builder.LoadBFromA();
-        builder.LoadA(ScratchStoredRemaining);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchStoredRemaining);
         builder.LoadCFromA();
         builder.XorA();
-        builder.StoreA(ScratchCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         var cellLoop = builder.CreateLabel("worldpack_cell_index_loop");
         var cellDone = builder.CreateLabel("worldpack_cell_index_done");
         builder.Label(cellLoop);
         builder.LoadAFromC();
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xCA, cellDone);
-        builder.LoadA(ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         builder.AddAFromB();
-        builder.StoreA(ScratchCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         builder.Emit(0x0D); // DEC C
         builder.JumpAbsolute(cellLoop);
         builder.Label(cellDone);
-        builder.LoadA(ScratchCellIndex);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         builder.LoadBFromA();
-        builder.LoadA(ScratchYHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh);
         builder.AddAFromB();
-        builder.StoreA(ScratchCellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchCellIndex);
         if (enableStagedCamera)
         {
-            builder.StoreA(GameBoyPackedCameraRuntime.EdgeCellIndex);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.EdgeCellIndex);
         }
 
-        builder.LoadA(ScratchReadByte);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchReadByte);
         builder.LoadCFromA();
         builder.Emit(0x06, 0x00); // LD B,0
         builder.LoadHl(0);
@@ -3168,14 +3129,14 @@ internal static class GameBoyWorldPackRuntimeEmitter
             builder.AddHlBc();
         }
 
-        builder.LoadA(ScratchSourceBank);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSourceBank);
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
         builder.AddHlDe();
         builder.LoadAFromL();
-        builder.StoreA(ScratchSubcellIndex);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndex);
         builder.LoadAFromH();
-        builder.StoreA(ScratchSubcellIndexHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchSubcellIndexHigh);
     }
 
     private static void EmitLoadClippedChunkDimensionToA(
@@ -3322,28 +3283,28 @@ internal static class GameBoyWorldPackRuntimeEmitter
     {
         EmitRequireStoredByte(builder, malformed);
         builder.JumpAbsolute(0xCD, readSourceByte);
-        builder.StoreA(ScratchXLow);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         if (idBytes == 2)
         {
             EmitRequireStoredByte(builder, malformed);
             builder.JumpAbsolute(0xCD, readSourceByte);
-            builder.StoreA(ScratchXHigh);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             var highIsLower = builder.CreateLabel("worldpack_id_high_lower");
             var highMatches = builder.CreateLabel("worldpack_id_high_matches");
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.CompareImmediate((idCount >> 8) & 0xFF);
             builder.JumpAbsolute(0xDA, highIsLower);
             builder.JumpAbsolute(0xCA, highMatches);
             builder.JumpAbsolute(malformed);
             builder.Label(highMatches);
-            builder.LoadA(ScratchXLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
             builder.CompareImmediate(idCount & 0xFF);
             builder.JumpAbsolute(0xD2, malformed);
             builder.Label(highIsLower);
         }
         else if (idCount < 256)
         {
-            builder.LoadA(ScratchXLow);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
             builder.CompareImmediate(idCount);
             builder.JumpAbsolute(0xD2, malformed);
         }
@@ -3352,15 +3313,15 @@ internal static class GameBoyWorldPackRuntimeEmitter
     private static void EmitWriteDecodedId(GbBuilder builder, int idBytes, bool enableStagedCamera)
     {
         var done = builder.CreateLabel("worldpack_decode_skip_validation_write");
-        builder.LoadA(ScratchYHigh);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh);
         builder.CompareImmediate(0);
         builder.JumpAbsolute(0xC2, done);
-        builder.LoadA(ScratchXLow);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXLow);
         builder.Emit(0x12); // LD (DE),A
         builder.Emit(0x13); // INC DE
         if (idBytes == 2)
         {
-            builder.LoadA(ScratchXHigh);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchXHigh);
             builder.Emit(0x12);
             builder.Emit(0x13);
         }
@@ -3371,7 +3332,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
     private static void EmitSetValidationOnly(GbBuilder builder, bool validationOnly)
     {
         builder.LoadAImmediate(validationOnly ? 1 : 0);
-        builder.StoreA(ScratchYHigh);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchYHigh);
     }
 
     private static void EmitJumpIfWordOutside(
@@ -3416,7 +3377,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         var expectedProfiles = builder.CreateLabel("worldpack_expected_profiles");
         var banked = layout.WorldPackPlacement is not null;
         builder.Label(GameBoyRomBuilder.WorldPackValidateLabel);
-        builder.LoadA(GameBoyWramLayout.WorldPackValidationStateAddress);
+        builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState);
         builder.CompareImmediate(1);
         builder.JumpAbsolute(0xC2, cachedMalformed);
         builder.LoadAImmediate(0);
@@ -3431,7 +3392,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         builder.Label(validate);
         if (banked)
         {
-            builder.LoadA(GameBoyRomBuilder.ActualVisibleBankAddress);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             builder.PushAf();
         }
 
@@ -3447,7 +3408,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         }
 
         builder.LoadAImmediate(2);
-        builder.StoreA(GameBoyWramLayout.WorldPackValidationStateAddress);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState);
         builder.LoadAImmediate(0);
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Malformed);
         builder.Emit(0xC9);
@@ -3460,7 +3421,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
         }
 
         builder.LoadAImmediate(1);
-        builder.StoreA(GameBoyWramLayout.WorldPackValidationStateAddress);
+        builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState);
         builder.LoadAImmediate(0);
         builder.Emit(0x06, (byte)GameBoyWorldPackResult.Success);
         builder.Emit(0xC9);
@@ -3569,7 +3530,7 @@ internal static class GameBoyWorldPackRuntimeEmitter
             var blocks = Math.Min(length / bytesPerBlock, maximumBlocksPerLoop);
             var loop = builder.CreateLabel("worldpack_fingerprint_range_loop");
             builder.LoadAImmediate(blocks);
-            builder.StoreA(ScratchPacketCount);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
             builder.Label(loop);
             for (var index = 0; index < bytesPerBlock; index++)
             {
@@ -3577,9 +3538,9 @@ internal static class GameBoyWorldPackRuntimeEmitter
                 phase = (phase + 1) & 15;
             }
 
-            builder.LoadA(ScratchPacketCount);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
             builder.DecrementA();
-            builder.StoreA(ScratchPacketCount);
+            builder.StoreA(GameBoyRuntimeMemoryLayout.WorldPack.ScratchPacketCount);
             builder.JumpAbsolute(0xC2, loop);
             length -= blocks * bytesPerBlock;
         }
@@ -3644,7 +3605,7 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
             throw new ArgumentOutOfRangeException(nameof(visualSlotCount));
         }
 
-        var cursor = GameBoyWramLayout.WorldPackStaging.Start;
+        var cursor = GameBoyRuntimeMemoryLayout.WorldPackStaging.Start;
         var visualSlots = CreateSlots(
             "WorldPack visual slot",
             visualIdBytes * ChunkCells,
@@ -3653,10 +3614,10 @@ internal sealed record GameBoyWorldPackRuntimeLayout(
         var collisionSlots = CreatePair("WorldPack collision slot", collisionIdBytes * ChunkCells, ref cursor);
         var edgeSlots = CreatePair("WorldPack edge slot", EdgeBytes, ref cursor);
         GameBoyWramRange? collisionMemoTable = enableCollisionMemoTable
-            ? GameBoyWramLayout.CollisionMemoState
+            ? GameBoyRuntimeMemoryLayout.CollisionMemoState
             : null;
-        var totalBytes = cursor - GameBoyWramLayout.WorldPackStaging.Start;
-        GameBoyWramLayout.ValidateStagingBytes(totalBytes);
+        var totalBytes = cursor - GameBoyRuntimeMemoryLayout.WorldPackStaging.Start;
+        GameBoyRuntimeMemoryLayout.ValidateWorldPackStagingBytes(totalBytes);
 
         return new GameBoyWorldPackRuntimeLayout(
             visualIdBytes,

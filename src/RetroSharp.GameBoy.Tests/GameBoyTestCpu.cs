@@ -446,7 +446,7 @@ internal sealed class GameBoyTestCpu
                     instructionPc,
                     value,
                     (byte)romBank,
-                    wram[GameBoyRomBuilder.ActualVisibleBankAddress - 0xC000],
+                    wram[GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank - 0xC000],
                     cycles,
                     (byte)((cycles / 456) % 154)));
                 if (farReadInjections.TryPeek(out var injection) && injection.SelectedBank == romBank)

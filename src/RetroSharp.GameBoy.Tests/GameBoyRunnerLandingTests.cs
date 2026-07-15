@@ -4,11 +4,10 @@ using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
 using RetroSharp.Sdk;
 using Xunit;
+using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedCamera;
 
 public sealed class GameBoyRunnerLandingTests
 {
-    private const ushort VisibleCameraXLow = 0xC14D;
-    private const ushort VisibleCameraYLow = 0xC14F;
     private const ushort PlayerXLow = 0xC000;
     private const ushort PlayerYLow = 0xC002;
     private const ushort PlayerVelocityY = 0xC004;
@@ -80,7 +79,7 @@ public sealed class GameBoyRunnerLandingTests
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var cpu = new GameBoyTestCpu(result.Rom) { CycleAccurateLy = true };
 
-        RunUntilWordEquals(cpu, VisibleCameraXLow, checked((ushort)cameraX), maxFrames: 1_000);
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraXLow, checked((ushort)cameraX), maxFrames: 1_000);
         cpu.RunAdditionalFrames(300);
 
         Assert.Equal(expectedSourceColumn, cpu.Wram(0xC0E3) | cpu.Wram(0xC143) << 8);
@@ -138,7 +137,7 @@ public sealed class GameBoyRunnerLandingTests
         Assert.True(
             playerYByFrame.Any(playerY => playerY > PlatformPlayerY),
             $"The player never fell after walking to world X {cpu.Wram(0xC000) | cpu.Wram(0xC001) << 8}; "
-            + $"camera X={cpu.Wram(VisibleCameraXLow) | cpu.Wram(VisibleCameraXLow + 1) << 8}; "
+            + $"camera X={cpu.Wram(PackedCameraMemory.VisibleCameraXLow) | cpu.Wram(PackedCameraMemory.VisibleCameraXLow + 1) << 8}; "
             + $"observed Y values={string.Join(',', playerYByFrame.Distinct())}.");
         Assert.True(
             playerYByFrame.Max() <= FloorPlayerY,
@@ -181,16 +180,16 @@ public sealed class GameBoyRunnerLandingTests
             CycleAccurateLy = true,
             TracedWorldPackCollisionLookupEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
         };
-        RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
         cpu.RunAdditionalFrames(30);
 
         var sourceTicksAtStart = cpu.SourceWaitCompletions;
         var audioTicksAtStart = cpu.AudioUpdateCalls;
         var playerXAtStart = cpu.Wram(PlayerXLow) | cpu.Wram(PlayerXLow + 1) << 8;
-        var collisionDecodesAtStart = cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow)
-                                      | cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh) << 8;
-        var previousRequests = cpu.Wram(GameBoyPackedCameraRuntime.RequestCount);
-        var previousReleases = cpu.Wram(GameBoyPackedCameraRuntime.ReleaseCount);
+        var collisionDecodesAtStart = cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow)
+                                      | cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountHigh) << 8;
+        var previousRequests = cpu.Wram(PackedCameraMemory.RequestCount);
+        var previousReleases = cpu.Wram(PackedCameraMemory.ReleaseCount);
         var pendingRequests = new Queue<int>();
         var maximumRequestToVisibleFrames = 0;
         var maximumMissedGameplayFrames = 0;
@@ -212,14 +211,14 @@ public sealed class GameBoyRunnerLandingTests
                 firstMovementFrame ??= frame;
             }
 
-            var currentRequests = cpu.Wram(GameBoyPackedCameraRuntime.RequestCount);
+            var currentRequests = cpu.Wram(PackedCameraMemory.RequestCount);
             while (previousRequests != currentRequests)
             {
                 pendingRequests.Enqueue(frame);
                 previousRequests++;
             }
 
-            var currentReleases = cpu.Wram(GameBoyPackedCameraRuntime.ReleaseCount);
+            var currentReleases = cpu.Wram(PackedCameraMemory.ReleaseCount);
             while (previousReleases != currentReleases)
             {
                 Assert.NotEmpty(pendingRequests);
@@ -243,18 +242,18 @@ public sealed class GameBoyRunnerLandingTests
         var audioTicks = cpu.AudioUpdateCalls - audioTicksAtStart;
         var playerX = cpu.Wram(PlayerXLow) | cpu.Wram(PlayerXLow + 1) << 8;
         var progress = playerX - playerXAtStart;
-        var collisionDecodes = cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow)
-                               | cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh) << 8;
+        var collisionDecodes = cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow)
+                               | cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountHigh) << 8;
         var newCollisionDecodes = collisionDecodes - collisionDecodesAtStart;
-        var memoHitsModulo256 = cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionMemoHitCount);
+        var memoHitsModulo256 = cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.MemoHitCount);
         Assert.All(
             new[]
             {
-                GameBoyPackedCameraRuntime.BankWorkInCommit,
-                GameBoyPackedCameraRuntime.DecodeWorkInCommit,
-                GameBoyPackedCameraRuntime.DirectoryWorkInCommit,
-                GameBoyPackedCameraRuntime.DirectoryWorkInVBlank,
-                GameBoyPackedCameraRuntime.DecodeWorkInVBlank,
+                PackedCameraMemory.BankWorkInCommit,
+                PackedCameraMemory.DecodeWorkInCommit,
+                PackedCameraMemory.DirectoryWorkInCommit,
+                PackedCameraMemory.DirectoryWorkInVBlank,
+                PackedCameraMemory.DecodeWorkInVBlank,
             },
             address => Assert.Equal(0, cpu.Wram(address)));
 
@@ -328,7 +327,7 @@ public sealed class GameBoyRunnerLandingTests
     {
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
 
         var trace = RunJump(cpu, heldFrames: 40, observedFrames: 240);
@@ -354,7 +353,7 @@ public sealed class GameBoyRunnerLandingTests
         foreach (var profile in profiles)
         {
             var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-            RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+            RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
             cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
             RunUp(cpu, profile.RunUpTicks);
 
@@ -386,7 +385,7 @@ public sealed class GameBoyRunnerLandingTests
         foreach (var probe in probes)
         {
             var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-            RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+            RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
             cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
             cpu.Held.Add("a");
             AdvanceGameplayTick(cpu);
@@ -408,7 +407,7 @@ public sealed class GameBoyRunnerLandingTests
     {
         var rom = GameBoyRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
         cpu.Held.Clear();
 
@@ -434,7 +433,7 @@ public sealed class GameBoyRunnerLandingTests
         for (var bDelay = 0; bDelay < 9; bDelay++)
         {
             var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-            RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+            RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
             cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
             cpu.Held.Add("right");
             var trace = new Queue<string>();
@@ -494,8 +493,8 @@ public sealed class GameBoyRunnerLandingTests
 
         var rom = GameBoyRomCompiler.CompileSource(positionedSource, RunnerSample.Directory);
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        RunUntilWordEquals(cpu, VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
-        RunUntilWordEquals(cpu, VisibleCameraYLow, 176, maxFrames: 400);
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
         cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
         return cpu;
     }

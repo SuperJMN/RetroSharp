@@ -7,6 +7,14 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-1 / #357 makes `src/RetroSharp.GameBoy/GameBoyRuntimeMemoryLayout.cs`
+  the single owner of compiler-reserved Game Boy RAM. Its interface groups
+  named user-local, camera, input, audio, banking, packed-camera, collision,
+  and WorldPack addresses; declares every reserved range plus the intentional
+  WRAM echo alias; and validates range disjointness, local-storage limits, and
+  WorldPack staging limits. Game Boy emitters and runtime helpers must consume
+  this module rather than add private `$Cxxx` maps. The focused contract lives
+  in `GameBoyRuntimeMemoryLayoutTests`.
 - 2026-07-15 runner jump update: shared Game Boy/NES source now uses SMB3-style
   signed 4.4 vertical motion. Standing/walking/running/maximum-speed takeoff is
   `-$38/-$3A/-$3C/-$40`; held A applies `+1` gravity only while velocity is

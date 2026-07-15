@@ -2,17 +2,12 @@ namespace RetroSharp.GameBoy.Tests;
 
 using RetroSharp.FunctionalAcceptance;
 using Xunit;
+using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedCamera;
+using WorldPackMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.WorldPack;
 
 public sealed class FunctionalProductionRomAcceptanceTests
 {
     private const ushort SourceCameraY = 0xC000;
-    private const ushort VisibleCameraYLow = 0xC14F;
-    private const ushort VisibleCameraYHigh = 0xC150;
-    private const ushort RequestCount = 0xC152;
-    private const ushort ResidentCount = 0xC154;
-    private const ushort CommitCount = 0xC155;
-    private const ushort ReleaseCount = 0xC156;
-    private const ushort WorldPackValidationState = 0xC1FB;
 
     [Fact]
     public void Checked_in_scenario_executes_the_exact_tracked_production_rom_through_the_shared_runner()
@@ -114,10 +109,10 @@ public sealed class FunctionalProductionRomAcceptanceTests
         private FunctionalFrameObservation Observe(int frame)
         {
             var camera = new FunctionalCameraLifecycleObservation(
-                Sequence(cpu.Wram(RequestCount)),
-                Sequence(cpu.Wram(ResidentCount)),
-                Sequence(cpu.Wram(CommitCount)),
-                Sequence(cpu.Wram(ReleaseCount)));
+                Sequence(cpu.Wram(PackedCameraMemory.RequestCount)),
+                Sequence(cpu.Wram(PackedCameraMemory.ResidentCount)),
+                Sequence(cpu.Wram(PackedCameraMemory.CommitCount)),
+                Sequence(cpu.Wram(PackedCameraMemory.ReleaseCount)));
             return new FunctionalFrameObservation(
                 frame,
                 gameplayTicks,
@@ -126,9 +121,9 @@ public sealed class FunctionalProductionRomAcceptanceTests
                 new Dictionary<string, long>(StringComparer.Ordinal)
                 {
                     ["sourceCameraY"] = cpu.Wram(SourceCameraY),
-                    ["visibleCameraY"] = cpu.Wram(VisibleCameraYLow) | (cpu.Wram(VisibleCameraYHigh) << 8),
+                    ["visibleCameraY"] = cpu.Wram(PackedCameraMemory.VisibleCameraYLow) | (cpu.Wram(PackedCameraMemory.VisibleCameraYHigh) << 8),
                     ["scy"] = cpu.IoRegister(0xFF42),
-                    ["worldPackValidationState"] = cpu.Wram(WorldPackValidationState),
+                    ["worldPackValidationState"] = cpu.Wram(WorldPackMemory.ValidationState),
                 },
                 camera);
         }
