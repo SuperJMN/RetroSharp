@@ -1,12 +1,23 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-15.
+Last updated: 2026-07-16.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
 ## Recent Baseline
 
+- AIN-5 / #361 makes the staged internal
+  `ActorFrameworkLowerer.ActorFrameworkLoweringPlan` the single owner of
+  metadata-backed role resolution, actor/spawn/projectile/effect directive
+  discovery, directive validation, generated-name facts, and drawn actor-pool
+  facts. `TargetFrontendPreparation` analyzes the selected target program once,
+  lowers through that plan, and retains the plan (without retaining the source
+  AST after lowering) for the late metasprite-aware pool-budget check. The
+  existing public `Lower(...)` and `ValidatePoolSpriteBudgets(...)` signatures
+  remain unchanged; focused plan and architecture coverage lives in
+  `ActorFrameworkLoweringPlanTests` and
+  `TargetFrontendPreparationArchitectureTests`.
 - AIN-3 / #359 projects the authoritative NES runtime layout into a versioned
   JSON sidecar through CLI `--runtime-abi-out`. The contract contains every
   reserved range, named runtime address, intentional alias, probe constant,
@@ -25,9 +36,9 @@ This document preserves project knowledge that previously lived only in agent me
   validation. Game Boy and NES provide their own intrinsics, capabilities,
   resources, assets, metasprite geometry, and final video-program construction;
   compile plus both operation collectors must route through each target's one
-  `PrepareVideoProgram` adapter. The prepared contract keeps its pre-Actor
-  internal program private and exposes only the late actor pool budget behavior that needs
-  target-resolved geometry. The architecture guard lives in
+  `PrepareVideoProgram` adapter. The prepared contract exposes only the late
+  actor pool budget behavior that needs target-resolved geometry. The
+  architecture guard lives in
   `TargetFrontendPreparationArchitectureTests`, and cross-target public-path
   diagnostics live in `CrossTargetFrontendPreparationTests`.
 - AIN-2 / #358 makes `src/RetroSharp.NES/NesRuntimeMemoryLayout.cs` the

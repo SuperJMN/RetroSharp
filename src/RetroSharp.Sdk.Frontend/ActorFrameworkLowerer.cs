@@ -99,26 +99,32 @@ public static class ActorFrameworkLowerer
 
     public static ProgramSyntax Lower(ProgramSyntax program, Target2DCapabilities capabilities, bool supportsUpdate, bool supportsDraw, string? baseDirectory = null)
     {
-        var roles = ActorFrameworkRoleIndex.Build(program);
-        var state = new ActorFrameworkState(
-            capabilities,
-            supportsUpdate,
-            supportsDraw,
-            baseDirectory,
-            roles,
-            IntrinsicFunctionIndex.Build(program));
-        foreach (var function in program.Functions)
-        {
-            CollectDirectives(function.Block, state);
-        }
+        var plan = Analyze(program, capabilities, supportsUpdate, supportsDraw, baseDirectory);
+        return Lower(program, plan);
+    }
+
+    internal static ActorFrameworkLoweringPlan Analyze(
+        ProgramSyntax program,
+        Target2DCapabilities capabilities,
+        bool supportsUpdate,
+        bool supportsDraw,
+        string? baseDirectory = null)
+    {
+        return ActorFrameworkLoweringPlan.Analyze(program, capabilities, supportsUpdate, supportsDraw, baseDirectory);
+    }
+
+    internal static ProgramSyntax Lower(ProgramSyntax program, ActorFrameworkLoweringPlan plan)
+    {
+        return plan.Lower(program);
+    }
+
+    private static ProgramSyntax LowerAnalyzed(ProgramSyntax program, ActorFrameworkState state)
+    {
 
         if (!state.HasDirectives)
         {
             return program;
         }
-
-        state.ValidateSpawnLayers();
-        state.ValidateProjectileEffects();
 
         var structs = program.Structs.ToList();
         if (state.Pools.Count != 0)
@@ -183,7 +189,7 @@ public static class ActorFrameworkLowerer
             .Concat(GeneratedSpawnLookupFunctions(state.SpawnLayers))
             .ToList();
 
-        return new ProgramSyntax(
+        var loweredProgram = new ProgramSyntax(
             program.Imports,
             program.TypeAliases,
             program.Constants
@@ -194,6 +200,7 @@ public static class ActorFrameworkLowerer
             program.Enums,
             structs,
             functions);
+        return loweredProgram;
     }
 
     public static void ValidatePoolSpriteBudgets(
@@ -202,26 +209,32 @@ public static class ActorFrameworkLowerer
         Func<string, ActorMetaspriteGeometry> metaspriteGeometry,
         string? baseDirectory = null)
     {
-        var state = new ActorFrameworkState(
+        var plan = Analyze(
+            program,
             capabilities,
             supportsUpdate: true,
             supportsDraw: true,
-            baseDirectory,
-            ActorFrameworkRoleIndex.Build(program));
-        foreach (var function in program.Functions)
-        {
-            CollectPoolBudgetDirectives(function.Block, state);
-        }
+            baseDirectory);
+        ValidatePoolSpriteBudgets(plan, metaspriteGeometry);
+    }
+
+    internal static void ValidatePoolSpriteBudgets(
+        ActorFrameworkLoweringPlan plan,
+        Func<string, ActorMetaspriteGeometry> metaspriteGeometry)
+    {
+        plan.ValidatePoolSpriteBudgets(metaspriteGeometry);
+    }
+
+    private static void ValidatePoolSpriteBudgets(
+        ActorFrameworkState state,
+        Target2DCapabilities capabilities,
+        IReadOnlySet<string> drawnPools,
+        Func<string, ActorMetaspriteGeometry> metaspriteGeometry)
+    {
 
         if (state.Pools.Count == 0 || state.EnemyDefs.Count == 0)
         {
             return;
-        }
-
-        var drawnPools = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var function in program.Functions)
-        {
-            CollectDrawnPools(function.Block, drawnPools);
         }
 
         if (drawnPools.Count == 0)
@@ -250,27 +263,6 @@ public static class ActorFrameworkLowerer
         {
             ValidatePoolSpriteBudget(capabilities, pool, enemyBudgets);
         }
-    }
-
-    private static void CollectPoolBudgetDirectives(BlockSyntax block, ActorFrameworkState state)
-    {
-        WalkStatements(block, statement =>
-        {
-            if (!TryActorFrameworkStatementCall(statement, state, out var call))
-            {
-                return;
-            }
-
-            switch (call.Role)
-            {
-                case ActorFrameworkRole.ActorPool:
-                    state.AddPool(ReadPool(call));
-                    break;
-                case ActorFrameworkRole.ActorEnemyDef:
-                    state.AddEnemyDef(ReadEnemyDef(call));
-                    break;
-            }
-        });
     }
 
     private static bool TryActorFrameworkStatementCall(
@@ -312,6 +304,199 @@ public static class ActorFrameworkLowerer
                 drawnPools.Add(drawCall.Qualifier);
             }
         });
+    }
+
+    private static void CollectUsedEnemyLookupMethods(BlockSyntax block, ActorFrameworkState state)
+    {
+        WalkStatements(block, statement => CollectStatementExpressionFacts(statement, state));
+    }
+
+    private static void CollectStatementExpressionFacts(StatementSyntax statement, ActorFrameworkState state)
+    {
+        switch (statement)
+        {
+            case ExpressionStatementSyntax expressionStatement:
+                CollectExpressionFacts(expressionStatement.Expression, state);
+                break;
+            case ConstDeclarationSyntax constant:
+                CollectExpressionFacts(constant.Value, state);
+                break;
+            case DeclarationSyntax declaration:
+                if (declaration.ArrayLength.HasValue)
+                {
+                    CollectExpressionFacts(declaration.ArrayLength.Value, state);
+                }
+
+                if (declaration.Initialization.HasValue)
+                {
+                    CollectExpressionFacts(declaration.Initialization.Value, state);
+                }
+
+                break;
+            case IfElseSyntax ifElse:
+                CollectExpressionFacts(ifElse.Condition, state);
+                break;
+            case WhileSyntax whileSyntax:
+                CollectExpressionFacts(whileSyntax.Condition, state);
+                break;
+            case DoWhileSyntax doWhileSyntax:
+                CollectExpressionFacts(doWhileSyntax.Condition, state);
+                break;
+            case RangeForSyntax rangeForSyntax:
+                CollectExpressionFacts(rangeForSyntax.Start, state);
+                CollectExpressionFacts(rangeForSyntax.End, state);
+                break;
+            case ForSyntax forSyntax:
+                if (forSyntax.Initializer.HasValue)
+                {
+                    CollectStatementExpressionFacts(forSyntax.Initializer.Value, state);
+                }
+
+                if (forSyntax.Condition.HasValue)
+                {
+                    CollectExpressionFacts(forSyntax.Condition.Value, state);
+                }
+
+                if (forSyntax.Increment.HasValue)
+                {
+                    CollectExpressionFacts(forSyntax.Increment.Value, state);
+                }
+
+                break;
+            case SwitchSyntax switchSyntax:
+                CollectExpressionFacts(switchSyntax.Subject, state);
+                foreach (var pattern in switchSyntax.Cases.SelectMany(switchCase => switchCase.Patterns))
+                {
+                    CollectSwitchPatternFacts(pattern, state);
+                }
+
+                break;
+            case ReturnSyntax returnSyntax when returnSyntax.Expression.HasValue:
+                CollectExpressionFacts(returnSyntax.Expression.Value, state);
+                break;
+        }
+    }
+
+    private static void CollectExpressionFacts(ExpressionSyntax expression, ActorFrameworkState state)
+    {
+        switch (expression)
+        {
+            case FunctionCall call:
+                if (state.Roles.TryRole(call, out var actorCall) && EnemyLookupFunctions.ContainsKey(actorCall.Role))
+                {
+                    state.RecordEnemyLookupMethod(actorCall.Role);
+                }
+
+                foreach (var parameter in call.Parameters)
+                {
+                    CollectExpressionFacts(parameter, state);
+                }
+
+                break;
+            case QualifiedCallSyntax call:
+                foreach (var parameter in call.Parameters)
+                {
+                    CollectExpressionFacts(parameter, state);
+                }
+
+                break;
+            case AssignmentSyntax assignment:
+                CollectLValueFacts(assignment.Left, state);
+                CollectExpressionFacts(assignment.Right, state);
+                break;
+            case BinaryExpressionSyntax binary:
+                CollectExpressionFacts(binary.Left, state);
+                CollectExpressionFacts(binary.Right, state);
+                break;
+            case ArrayInitializerSyntax arrayInitializer:
+                foreach (var element in arrayInitializer.Elements)
+                {
+                    CollectExpressionFacts(element, state);
+                }
+
+                break;
+            case StructInitializerSyntax structInitializer:
+                foreach (var field in structInitializer.Fields)
+                {
+                    CollectExpressionFacts(field.Expression, state);
+                }
+
+                break;
+            case ConditionalExpressionSyntax conditional:
+                CollectExpressionFacts(conditional.Condition, state);
+                CollectExpressionFacts(conditional.WhenTrue, state);
+                CollectExpressionFacts(conditional.WhenFalse, state);
+                break;
+            case SwitchExpressionSyntax switchExpression:
+                CollectExpressionFacts(switchExpression.Subject, state);
+                foreach (var arm in switchExpression.Arms)
+                {
+                    foreach (var pattern in arm.Patterns)
+                    {
+                        CollectSwitchPatternFacts(pattern, state);
+                    }
+
+                    CollectExpressionFacts(arm.Value, state);
+                }
+
+                if (switchExpression.DefaultValue.HasValue)
+                {
+                    CollectExpressionFacts(switchExpression.DefaultValue.Value, state);
+                }
+
+                break;
+            case PipelineExpressionSyntax pipeline:
+                CollectExpressionFacts(pipeline.Value, state);
+                foreach (var argument in pipeline.Steps.SelectMany(step => step.Arguments))
+                {
+                    CollectExpressionFacts(argument, state);
+                }
+
+                break;
+            case UnaryExpressionSyntax unary:
+                CollectExpressionFacts(unary.Operand, state);
+                break;
+            case CastSyntax cast:
+                CollectExpressionFacts(cast.Expression, state);
+                break;
+            case NamedArgumentSyntax namedArgument:
+                CollectExpressionFacts(namedArgument.Expression, state);
+                break;
+            case MemberAccessSyntax memberAccess:
+                CollectExpressionFacts(memberAccess.Target, state);
+                break;
+            case IndexExpressionSyntax indexExpression:
+                CollectExpressionFacts(indexExpression.Index, state);
+                break;
+            case PostfixMutationSyntax postfix:
+                CollectLValueFacts(postfix.Target, state);
+                break;
+        }
+    }
+
+    private static void CollectLValueFacts(LValue lValue, ActorFrameworkState state)
+    {
+        switch (lValue)
+        {
+            case MemberAccessLValue memberAccess:
+                CollectExpressionFacts(memberAccess.MemberAccess, state);
+                break;
+            case IndexLValue index:
+                CollectExpressionFacts(index.Index, state);
+                break;
+            case PointerDerefLValue pointer:
+                CollectExpressionFacts(pointer.Expression, state);
+                break;
+        }
+    }
+
+    private static void CollectSwitchPatternFacts(SwitchCasePatternSyntax pattern, ActorFrameworkState state)
+    {
+        CollectExpressionFacts(pattern.Start, state);
+        if (pattern.End.HasValue)
+        {
+            CollectExpressionFacts(pattern.End.Value, state);
+        }
     }
 
     private static void WalkStatements(BlockSyntax block, Action<StatementSyntax> visit)
@@ -3999,6 +4184,122 @@ public static class ActorFrameworkLowerer
     private static Maybe<TOut> MapMaybe<TIn, TOut>(Maybe<TIn> maybe, Func<TIn, TOut> selector)
     {
         return maybe.HasValue ? Maybe.From(selector(maybe.Value)) : Maybe<TOut>.None;
+    }
+
+    internal sealed class ActorFrameworkLoweringPlan
+    {
+        private ProgramSyntax? sourceProgram;
+        private readonly ActorFrameworkState state;
+        private readonly HashSet<string> drawnActorPools;
+        private PlanStage stage = PlanStage.Analyzed;
+
+        private ActorFrameworkLoweringPlan(
+            ProgramSyntax sourceProgram,
+            Target2DCapabilities capabilities,
+            ActorFrameworkState state,
+            IEnumerable<string> drawnActorPools)
+        {
+            this.sourceProgram = sourceProgram;
+            Capabilities = capabilities;
+            this.state = state;
+            this.drawnActorPools = new HashSet<string>(drawnActorPools, StringComparer.Ordinal);
+        }
+
+        internal static ActorFrameworkLoweringPlan Analyze(
+            ProgramSyntax program,
+            Target2DCapabilities capabilities,
+            bool supportsUpdate,
+            bool supportsDraw,
+            string? baseDirectory)
+        {
+            var state = new ActorFrameworkState(
+                capabilities,
+                supportsUpdate,
+                supportsDraw,
+                baseDirectory,
+                ActorFrameworkRoleIndex.Build(program),
+                IntrinsicFunctionIndex.Build(program));
+            foreach (var function in program.Functions)
+            {
+                CollectDirectives(function.Block, state);
+            }
+
+            var drawnActorPools = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var function in program.Functions)
+            {
+                CollectDrawnPools(function.Block, drawnActorPools);
+                CollectUsedEnemyLookupMethods(function.Block, state);
+            }
+
+            var plan = new ActorFrameworkLoweringPlan(program, capabilities, state, drawnActorPools);
+            plan.ValidateDirectives();
+            return plan;
+        }
+
+        internal bool HasDirectives => state.HasDirectives;
+        internal int ActorPoolCount => state.Pools.Count;
+        internal int EnemyDefinitionCount => state.EnemyDefs.Count;
+        internal int SpawnLayerCount => state.SpawnLayers.Count;
+        internal int ProjectilePoolCount => state.ProjectilePools.Count;
+        internal int ProjectileDefinitionCount => state.ProjectileDefs.Count;
+        internal int EffectPoolCount => state.EffectPools.Count;
+        internal int EffectDefinitionCount => state.EffectDefs.Count;
+        internal string[] DrawnActorPoolNames => drawnActorPools.Order(StringComparer.Ordinal).ToArray();
+        internal string[] GeneratedNames => ActorFrameworkLowerer.GeneratedNames(state).Select(name => name.Name).ToArray();
+
+        private Target2DCapabilities Capabilities { get; }
+
+        private void ValidateDirectives()
+        {
+            if (!state.HasDirectives)
+            {
+                return;
+            }
+
+            state.ValidateSpawnLayers();
+            state.ValidateProjectileEffects();
+        }
+
+        internal ProgramSyntax Lower(ProgramSyntax program)
+        {
+            if (!ReferenceEquals(sourceProgram, program))
+            {
+                throw new InvalidOperationException("Actor Framework lowering plan belongs to a different parsed program.");
+            }
+
+            if (stage != PlanStage.Analyzed)
+            {
+                throw new InvalidOperationException($"Actor Framework lowering plan cannot begin lowering from stage '{stage}'.");
+            }
+
+            stage = PlanStage.Lowering;
+            try
+            {
+                var lowered = LowerAnalyzed(program, state);
+                sourceProgram = null;
+                stage = PlanStage.Lowered;
+                return lowered;
+            }
+            catch
+            {
+                sourceProgram = null;
+                stage = PlanStage.Failed;
+                throw;
+            }
+        }
+
+        internal void ValidatePoolSpriteBudgets(Func<string, ActorMetaspriteGeometry> metaspriteGeometry)
+        {
+            ActorFrameworkLowerer.ValidatePoolSpriteBudgets(state, Capabilities, drawnActorPools, metaspriteGeometry);
+        }
+
+        private enum PlanStage
+        {
+            Analyzed,
+            Lowering,
+            Lowered,
+            Failed,
+        }
     }
 
     private sealed class ActorFrameworkState(

@@ -54,6 +54,18 @@ public sealed class TargetFrontendPreparationArchitectureTests
         }
     }
 
+    [Fact]
+    public void Shared_frontend_reuses_one_actor_framework_plan_for_lowering_and_late_budget_validation()
+    {
+        var root = RepositoryRoot();
+        var sharedSource = File.ReadAllText(Path.Combine(root, SharedPreparationPath));
+
+        Assert.Contains("var actorFrameworkPlan = ActorFrameworkLowerer.Analyze(", sharedSource, StringComparison.Ordinal);
+        Assert.Contains("ActorFrameworkLowerer.Lower(targetProgram, actorFrameworkPlan)", sharedSource, StringComparison.Ordinal);
+        Assert.Contains("ActorFrameworkLowerer.ValidatePoolSpriteBudgets(\n            actorFrameworkPlan,", sharedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("selectedPreActorProgram", sharedSource, StringComparison.Ordinal);
+    }
+
     private static string RepositoryRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

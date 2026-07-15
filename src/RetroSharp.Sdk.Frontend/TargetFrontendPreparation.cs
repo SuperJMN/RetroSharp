@@ -23,17 +23,17 @@ internal sealed record TargetFrontendPreparationOptions(
 
 internal sealed class PreparedTargetProgram
 {
-    private readonly ProgramSyntax selectedPreActorProgram;
+    private readonly ActorFrameworkLowerer.ActorFrameworkLoweringPlan actorFrameworkPlan;
 
     internal PreparedTargetProgram(
-        ProgramSyntax selectedPreActorProgram,
+        ActorFrameworkLowerer.ActorFrameworkLoweringPlan actorFrameworkPlan,
         ProgramSyntax loweredProgram,
         TargetIntrinsicCatalog targetIntrinsics,
         SdkResourceDeclarationRegistry resourceDeclarations,
         Target2DCapabilities capabilities,
         string? baseDirectory)
     {
-        this.selectedPreActorProgram = selectedPreActorProgram;
+        this.actorFrameworkPlan = actorFrameworkPlan;
         LoweredProgram = loweredProgram;
         TargetIntrinsics = targetIntrinsics;
         ResourceDeclarations = resourceDeclarations;
@@ -54,10 +54,8 @@ internal sealed class PreparedTargetProgram
     public void ValidateActorPoolSpriteBudgets(Func<string, ActorMetaspriteGeometry> metaspriteGeometry)
     {
         ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
-            selectedPreActorProgram,
-            Capabilities,
-            metaspriteGeometry,
-            BaseDirectory);
+            actorFrameworkPlan,
+            metaspriteGeometry);
     }
 }
 
@@ -83,12 +81,13 @@ internal static class TargetFrontendPreparation
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
         SdkImportResolver.ValidateImports(targetProgram, libraryRegistry);
-        var actorProgram = ActorFrameworkLowerer.Lower(
+        var actorFrameworkPlan = ActorFrameworkLowerer.Analyze(
             targetProgram,
             options.Capabilities,
             supportsUpdate: true,
             supportsDraw: true,
             options.BaseDirectory);
+        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, actorFrameworkPlan);
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
         var contractErrors = FunctionContractValidator.ValidateProgram(loweredProgram).ToList();
@@ -98,7 +97,7 @@ internal static class TargetFrontendPreparation
         }
 
         return new PreparedTargetProgram(
-            targetProgram,
+            actorFrameworkPlan,
             loweredProgram,
             targetIntrinsics,
             resourceDeclarations,
