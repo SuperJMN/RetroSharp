@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 import struct
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from pathlib import Path
 from PIL import Image
 
 from tools.nes import verify_runner_visual_parity as parity
+from tools.nes.runtime_abi import NesRuntimeAbi
 from tools.nes.runner_visual_parity import (
     ConfigIntegrityGuard,
     build_retroarch_command,
@@ -478,7 +480,7 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
         self.assertEqual(bytes([0]) * 1_024, raw[:1_024])
         self.assertEqual(bytes([3]) * 1_024, raw[-1_024:])
 
-    def test_observed_frame_decodes_exact_runner_ram_probes(self) -> None:
+    def test_observed_frame_decodes_runner_ram_through_relocated_abi(self) -> None:
         def probe(address: int, values: list[int]) -> dict[str, object]:
             return {
                 "address": f"0x{address:04X}",
@@ -486,27 +488,46 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
                 "bytesHex": " ".join(f"{value:02X}" for value in values),
             }
 
+        root = Path(__file__).resolve().parents[3]
+        real_abi = NesRuntimeAbi.load(
+            root / "samples" / "runner" / "bin" / "runner.nes.runtime-abi.json",
+            root / "samples" / "runner" / "bin" / "runner.nes",
+        )
+
+        class RelocatedAbi:
+            offset = 0x1000
+
+            def address(self, name: str) -> int:
+                return real_abi.address(name) + self.offset
+
+            def variable(self, name: str):
+                variable = real_abi.variable(name)
+                return replace(variable, address=variable.address + self.offset)
+
+        abi = RelocatedAbi()
         frame = {
             "screen": {"frameOffset": 1, "totalFrame": 501, "hash": "sha256:x"},
             "memory": [
-                probe(0x0000, [0x34, 0x12, 0x11, 0x01]),
-                probe(0x00E0, [0x06, 0x50]),
-                probe(0x0318, [0x01, 0x00]),
-                probe(0x036E, [0xF5, 0x01, 7, 7, 7, 7, 7, 0, 0, 0, 32, 8]),
-                probe(0x0380, [0, 1, 1, 2, 0, 0, 33, 0, 0, 32, 0, 0]),
-                probe(0x0390, [5]),
-                probe(0x03A0, [0]),
-                probe(0x03CA, [0, 0x06, 0x01, 0x50, 0x00]),
-                probe(0x03F8, [3, 0, 0xAA, 0xBB]),
+                probe(abi.variable("player.x").address, [0x34, 0x12, 0x11, 0x01]),
+                probe(abi.address("camera.X"), [0x06]),
+                probe(abi.address("camera.Y"), [0x50]),
+                probe(abi.address("camera.XHigh"), [0x01, 0x00]),
+                probe(abi.address("packed camera.FrameCounterLow"), [0xF5, 0x01, 7, 7, 7, 7, 7, 0, 0, 0, 32, 8]),
+                probe(abi.address("packed camera.CriticalSection"), [0, 1, 1, 2, 0, 0, 33, 0, 0, 32, 0, 0]),
+                probe(abi.address("packed camera.Slot0"), [5]),
+                probe(abi.address("packed camera.Slot1"), [0]),
+                probe(abi.address("packed camera.PendingAxes"), [0, 0x06, 0x01, 0x50, 0x00]),
+                probe(abi.address("WorldPack.CollisionDecodeCountLow"), [3, 0, 0xAA, 0xBB]),
             ],
             "ppuState": {"ppuctrl": "0x81", "v": "0x0D48", "t": "0x0540"},
         }
 
-        observed = parity.observed_runtime_frame(frame, step=17, phase="right")
+        observed = parity.observed_runtime_frame(frame, step=17, phase="right", abi=abi)
 
         self.assertEqual(0x1234, observed["state"]["player_x"])
         self.assertEqual(273, observed["state"]["player_y"])
         self.assertEqual(262, observed["state"]["requested_camera_x"])
+        self.assertEqual(80, observed["state"]["requested_camera_y"])
         self.assertEqual(262, observed["state"]["visible_camera_x"])
         self.assertEqual(7, observed["state"]["lifecycle"]["commit"])
         self.assertEqual(

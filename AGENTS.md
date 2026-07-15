@@ -73,6 +73,7 @@ dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
 
 dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target nes \
+  --runtime-abi-out samples/runner/bin/runner.nes.runtime-abi.json \
   --out samples/runner/bin/runner.nes \
   samples/runner/runner.retrosharp.json
 ```

@@ -33,9 +33,11 @@ from tools.nes.runner_visual_parity import (
     RETRO_DEVICE_ID_JOYPAD_RIGHT,
     RetroArchNetworkSession,
 )
+from tools.nes.runtime_abi import NesRuntimeAbi
 
 
 DEFAULT_ROM = ROOT / "samples" / "runner" / "bin" / "runner.nes"
+DEFAULT_RUNTIME_ABI = ROOT / "samples" / "runner" / "bin" / "runner.nes.runtime-abi.json"
 DEFAULT_FCEUMM_CORE = (
     Path.home()
     / ".var"
@@ -105,22 +107,55 @@ REQUIRED_NES_MCP_TOOLS = frozenset(
     }
 )
 
-PLAYER_X_LOW = 0x0000
-PLAYER_Y_LOW = 0x0002
-REQUESTED_CAMERA_X_LOW = 0x00E0
-REQUESTED_CAMERA_Y_LOW = 0x00E1
-RUNTIME_BLOCK_START = 0x0318
-RUNTIME_BLOCK_END = 0x03FB
-OBSERVATION_MEMORY_PROBES = (
-    (0x0000, 4),
-    (0x00E0, 2),
-    (0x0318, 2),
-    (0x036E, 12),
-    (0x0380, 12),
-    (0x0390, 1),
-    (0x03A0, 1),
-    (0x03CA, 5),
-    (0x03F8, 4),
+_ACTIVE_RUNTIME_ABI: NesRuntimeAbi | None = None
+
+
+def activate_runtime_abi(abi: NesRuntimeAbi) -> None:
+    global _ACTIVE_RUNTIME_ABI
+    _ACTIVE_RUNTIME_ABI = abi
+
+
+def runtime_abi(override: NesRuntimeAbi | None = None) -> NesRuntimeAbi:
+    if override is not None:
+        return override
+    if _ACTIVE_RUNTIME_ABI is not None:
+        return _ACTIVE_RUNTIME_ABI
+    return NesRuntimeAbi.load(DEFAULT_RUNTIME_ABI, DEFAULT_ROM)
+
+
+SNAPSHOT_ADDRESS_FIELDS = (
+    "camera.XHigh",
+    "camera.YHigh",
+    "packed camera.FrameCounterLow",
+    "packed camera.FrameCounterHigh",
+    "packed camera.RequestCount",
+    "packed camera.PrepareCount",
+    "packed camera.ResidentCount",
+    "packed camera.CommitCount",
+    "packed camera.ReleaseCount",
+    "packed camera.BankWorkInCommit",
+    "packed camera.DirectoryWorkInCommit",
+    "packed camera.DecodeWorkInCommit",
+    "packed camera.LastTileWrites",
+    "packed camera.LastAttributeWrites",
+    "packed camera.CriticalSection",
+    "packed camera.SelectedSlot",
+    "packed camera.CommitAxis",
+    "packed camera.CommitDirection",
+    "packed camera.CommitTarget",
+    "packed camera.CommitPayloadLength",
+    "packed camera.CommitTargetStart",
+    "packed camera.Slot0",
+    "packed camera.Slot1",
+    "packed camera.PendingAxes",
+    "packed camera.VisibleCameraXLow",
+    "packed camera.VisibleCameraXHigh",
+    "packed camera.VisibleCameraYLow",
+    "packed camera.VisibleCameraYHigh",
+    "WorldPack.CollisionDecodeCountLow",
+    "WorldPack.CollisionDecodeCountHigh",
+    "WorldPack.GameplayTickCount",
+    "WorldPack.AudioTickCount",
 )
 
 
@@ -132,6 +167,7 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--rom", type=Path, default=DEFAULT_ROM)
+    parser.add_argument("--runtime-abi", type=Path, default=DEFAULT_RUNTIME_ABI)
     parser.add_argument("--fceumm-core", type=Path, default=DEFAULT_FCEUMM_CORE)
     parser.add_argument("--nestopia-core", type=Path)
     parser.add_argument("--nestopia-core-url", default=NESTOPIA_CORE_URL)
@@ -266,59 +302,80 @@ def parse_bytes(result: dict[str, object]) -> list[int]:
     return [int(value, 16) for value in str(result["bytesHex"]).split()]
 
 
-def runtime_snapshot(read) -> dict[str, object]:
-    player = read(PLAYER_X_LOW, 4)
-    requested_low = read(REQUESTED_CAMERA_X_LOW, 2)
-    runtime = read(RUNTIME_BLOCK_START, RUNTIME_BLOCK_END - RUNTIME_BLOCK_START + 1)
+def observation_memory_probes(abi: NesRuntimeAbi | None = None) -> tuple[tuple[int, int], ...]:
+    contract = runtime_abi(abi)
+    addresses: set[int] = set()
+    for name in ("player.x", "player.y"):
+        variable = contract.variable(name)
+        addresses.update(range(variable.address, variable.end_exclusive))
+    addresses.add(contract.address("camera.X"))
+    addresses.add(contract.address("camera.Y"))
+    addresses.update(contract.address(name) for name in SNAPSHOT_ADDRESS_FIELDS)
 
-    def byte(address: int) -> int:
-        return runtime[address - RUNTIME_BLOCK_START]
+    spans: list[tuple[int, int]] = []
+    for address in sorted(addresses):
+        if spans and spans[-1][0] + spans[-1][1] == address:
+            start, length = spans[-1]
+            spans[-1] = (start, length + 1)
+        else:
+            spans.append((address, 1))
+    return tuple(spans)
 
-    return runtime_snapshot_from_parts(player, requested_low, byte)
 
+def runtime_snapshot(read, abi: NesRuntimeAbi | None = None) -> dict[str, object]:
+    contract = runtime_abi(abi)
 
-def runtime_snapshot_from_parts(player, requested_low, byte) -> dict[str, object]:
-    def word(address: int) -> int:
-        return byte(address) | byte(address + 1) << 8
+    def byte(name: str) -> int:
+        return read(contract.address(name), 1)[0]
+
+    def word(low: str, high: str) -> int:
+        return byte(low) | byte(high) << 8
+
+    def variable_word(name: str) -> int:
+        variable = contract.variable(name)
+        if variable.size != 2:
+            raise RuntimeError(f"NES runner variable '{name}' must occupy exactly two bytes.")
+        low, high = read(variable.address, variable.size)
+        return low | high << 8
 
     return {
-        "player_x": player[0] | player[1] << 8,
-        "player_y": player[2] | player[3] << 8,
-        "requested_camera_x": requested_low[0] | byte(0x0318) << 8,
-        "requested_camera_y": requested_low[1] | byte(0x0319) << 8,
-        "hardware_frame": word(0x036E),
+        "player_x": variable_word("player.x"),
+        "player_y": variable_word("player.y"),
+        "requested_camera_x": word("camera.X", "camera.XHigh"),
+        "requested_camera_y": word("camera.Y", "camera.YHigh"),
+        "hardware_frame": word("packed camera.FrameCounterLow", "packed camera.FrameCounterHigh"),
         "lifecycle": {
-            "request": byte(0x0370),
-            "prepare": byte(0x0371),
-            "resident": byte(0x0372),
-            "commit": byte(0x0373),
-            "release": byte(0x0374),
+            "request": byte("packed camera.RequestCount"),
+            "prepare": byte("packed camera.PrepareCount"),
+            "resident": byte("packed camera.ResidentCount"),
+            "commit": byte("packed camera.CommitCount"),
+            "release": byte("packed camera.ReleaseCount"),
         },
         "forbidden_commit_work": {
-            "bank": byte(0x0375),
-            "directory": byte(0x0376),
-            "decode": byte(0x0377),
+            "bank": byte("packed camera.BankWorkInCommit"),
+            "directory": byte("packed camera.DirectoryWorkInCommit"),
+            "decode": byte("packed camera.DecodeWorkInCommit"),
         },
         "last_commit_writes": {
-            "tiles": byte(0x0378),
-            "attributes": byte(0x0379),
+            "tiles": byte("packed camera.LastTileWrites"),
+            "attributes": byte("packed camera.LastAttributeWrites"),
         },
-        "critical_section": byte(0x0380),
-        "selected_slot": byte(0x0381),
+        "critical_section": byte("packed camera.CriticalSection"),
+        "selected_slot": byte("packed camera.SelectedSlot"),
         "commit_descriptor": {
-            "axis": byte(0x0382),
-            "direction": byte(0x0383),
-            "target": byte(0x0386),
-            "payload_length": byte(0x0389),
-            "target_start": byte(0x038B),
+            "axis": byte("packed camera.CommitAxis"),
+            "direction": byte("packed camera.CommitDirection"),
+            "target": byte("packed camera.CommitTarget"),
+            "payload_length": byte("packed camera.CommitPayloadLength"),
+            "target_start": byte("packed camera.CommitTargetStart"),
         },
-        "slot_states": [byte(0x0390), byte(0x03A0)],
-        "pending_axes": byte(0x03CA),
-        "visible_camera_x": word(0x03CB),
-        "visible_camera_y": word(0x03CD),
-        "collision_decodes": word(0x03F8),
-        "gameplay_ticks": byte(0x03FA),
-        "audio_ticks": byte(0x03FB),
+        "slot_states": [byte("packed camera.Slot0"), byte("packed camera.Slot1")],
+        "pending_axes": byte("packed camera.PendingAxes"),
+        "visible_camera_x": word("packed camera.VisibleCameraXLow", "packed camera.VisibleCameraXHigh"),
+        "visible_camera_y": word("packed camera.VisibleCameraYLow", "packed camera.VisibleCameraYHigh"),
+        "collision_decodes": word("WorldPack.CollisionDecodeCountLow", "WorldPack.CollisionDecodeCountHigh"),
+        "gameplay_ticks": byte("WorldPack.GameplayTickCount"),
+        "audio_ticks": byte("WorldPack.AudioTickCount"),
     }
 
 
@@ -327,6 +384,7 @@ def observed_runtime_frame(
     *,
     step: int,
     phase: str,
+    abi: NesRuntimeAbi | None = None,
 ) -> dict[str, object]:
     probes = {
         int(str(probe["address"]), 16): parse_bytes(probe)
@@ -342,17 +400,10 @@ def observed_runtime_frame(
             f"Nes.Mcp observation omitted RAM probe 0x{address:04X}+{length}."
         )
 
-    def byte(address: int) -> int:
-        return read(address, 1)[0]
-
     return {
         "step": step,
         "phase": phase,
-        "state": runtime_snapshot_from_parts(
-            read(PLAYER_X_LOW, 4),
-            read(REQUESTED_CAMERA_X_LOW, 2),
-            byte,
-        ),
+        "state": runtime_snapshot(read, abi),
         "screen": frame["screen"],
         "ppu_state": frame.get("ppuState"),
     }
@@ -710,7 +761,7 @@ def capture_aprnes(
                     "frameCount": frame_count,
                     "memoryProbes": [
                         {"address": f"0x{address:04X}", "length": length}
-                        for address, length in OBSERVATION_MEMORY_PROBES
+                        for address, length in observation_memory_probes()
                     ],
                     "includePpuState": True,
                     "tracePpuWrites": True,
@@ -1084,6 +1135,10 @@ def capture_fceumm(
             "fceumm_overscan_h_right": "0",
         },
         base_config,
+        frame_counter_addresses=(
+            runtime_abi().address("packed camera.FrameCounterLow"),
+            runtime_abi().address("packed camera.FrameCounterHigh"),
+        ),
     ) as session:
         session.set_paused(True)
         for _ in range(idle_frames):
@@ -2823,6 +2878,7 @@ def consensus_visible_mismatches(
 
 def main() -> int:
     args = parse_args()
+    activate_runtime_abi(NesRuntimeAbi.load(args.runtime_abi, args.rom))
     rom = args.rom.resolve()
     fceumm_core = args.fceumm_core.resolve()
     artifacts = args.artifacts.resolve()

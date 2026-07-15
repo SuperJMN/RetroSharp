@@ -8,6 +8,60 @@ using Xunit;
 public sealed class CrossTargetCliAcceptanceTests
 {
     [Fact]
+    public void Cli_runtime_abi_sidecar_rejects_non_nes_targets()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var abi = Path.Combine(workspace.Path, "probe.runtime-abi.json");
+        File.WriteAllText(source, "void Main() { }");
+
+        var result = RunCli(
+            "--target", "z80",
+            "--runtime-abi-out", abi,
+            source);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "--runtime-abi-out is only supported for target nes.",
+            result.StandardError,
+            StringComparison.Ordinal);
+        Assert.False(File.Exists(abi));
+    }
+
+    [Fact]
+    public void Cli_nes_runtime_abi_sidecar_is_bound_to_the_emitted_rom()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var rom = Path.Combine(workspace.Path, "probe.nes");
+        var abi = Path.Combine(workspace.Path, "diagnostics", "probe.runtime-abi.json");
+        File.WriteAllText(
+            source,
+            "void Main() { i16 playerX = 0; i16 playerY = 0; }");
+
+        var result = RunCli(
+            "--target", "nes",
+            "--out", rom,
+            "--runtime-abi-out", abi,
+            source);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(File.Exists(rom), result.CombinedOutput);
+        Assert.True(File.Exists(abi), result.CombinedOutput);
+        using var document = JsonDocument.Parse(File.ReadAllText(abi));
+        var root = document.RootElement;
+        Assert.Equal("retrosharp.nes.runtime-abi", root.GetProperty("contract").GetString());
+        Assert.Equal(
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(rom))),
+            root.GetProperty("romSha256").GetString());
+        Assert.Contains(
+            root.GetProperty("userVariables").EnumerateArray(),
+            variable => variable.GetProperty("name").GetString() == "playerX" &&
+                        variable.GetProperty("address").GetInt32() == 0);
+        Assert.Contains($"Wrote NES runtime ABI: {abi}", result.StandardError, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Cli_world_budget_report_is_explicit_deterministic_json_and_default_output_is_byte_compatible()
     {
         using var workspace = TemporaryWorkspace();

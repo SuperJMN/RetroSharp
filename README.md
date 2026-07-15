@@ -38,6 +38,10 @@ The repository now also contains early cartridge targets that compile a constrai
 - `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, four-screen 2-axis camera movement, Tiled `World.Load(...)`, runtime animation helpers, camera-relative runner collision, and VGM/VGZ-sourced 2A03 BGM playback. HUD and generic world-space collision are still not implemented.
 - `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `for`, half-open range `for`, `Video.WaitVBlank()`, tick-based input polling, `Scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `Sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `Music.Asset(...)`, `Music.Play(...)`, and `Audio.Update()`.
 
+For NES emulator diagnostics, `--runtime-abi-out <path>` writes a deterministic
+versioned JSON projection of the target runtime layout and compiled user-local
+symbols, bound to the emitted ROM SHA-256. It does not change ROM bytes.
+
 The actor framework acceptance slice lives in `samples/actor-framework`. It shows
 fixed actor pools, declarative `Enemies.Def(...)` metadata, Tiled object-layer
 spawns, runtime camera-window activation, and Game Boy/NES lowering without heap

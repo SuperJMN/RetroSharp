@@ -118,7 +118,10 @@
       "path": "samples/runner/runner.retrosharp.json",
       "readme": "samples/runner/README.md",
       "layer": "target-acceptance",
-      "targets": ["gb", "nes"]
+      "targets": ["gb", "nes"],
+      "runtimeAbiOutputs": {
+        "nes": "samples/runner/bin/runner.nes.runtime-abi.json"
+      }
     },
     {
       "id": "runner-projectile",

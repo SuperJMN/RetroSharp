@@ -9,8 +9,6 @@ using Xunit;
 
 public sealed class NesRunnerAcceptanceTests
 {
-    private const ushort PlayerWorldXLow = 0x0000;
-    private const ushort PlayerWorldXHigh = 0x0001;
     private const ushort RequestedCameraXLow = NesRuntimeMemoryLayout.Camera.X;
     private const ushort RequestedCameraXHigh = NesRuntimeMemoryLayout.Camera.XHigh;
 
@@ -236,8 +234,23 @@ public sealed class NesRunnerAcceptanceTests
         var fullPath = Path.GetFullPath(outputPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         File.WriteAllBytes(fullPath, result.Rom);
+        var runtimeAbiPath = Path.ChangeExtension(fullPath, ".runtime-abi.json");
+        var runtimeAbiJson = NesRuntimeAbiProjection.Serialize(result);
+        File.WriteAllText(runtimeAbiPath, runtimeAbiJson);
+        using var runtimeAbiDocument = System.Text.Json.JsonDocument.Parse(runtimeAbiJson);
+        var runtimeAbiRoot = runtimeAbiDocument.RootElement;
+        var playerWorldX = Assert.Single(result.Report.UserVariables, variable => variable.Name == "player.x");
+        Assert.Equal(2, playerWorldX.Size);
         var manifest = new
         {
+            runtimeAbi = new
+            {
+                path = Path.GetFileName(runtimeAbiPath),
+                contract = runtimeAbiRoot.GetProperty("contract").GetString(),
+                version = runtimeAbiRoot.GetProperty("version").GetInt32(),
+                abiFingerprint = runtimeAbiRoot.GetProperty("abiFingerprint").GetString(),
+                romSha256 = runtimeAbiRoot.GetProperty("romSha256").GetString(),
+            },
             scenario = new
             {
                 settleFrames = 500,
@@ -250,7 +263,7 @@ public sealed class NesRunnerAcceptanceTests
             },
             measurements = new
             {
-                playerWorldX = new[] { PlayerWorldXLow, PlayerWorldXHigh },
+                playerWorldX = new[] { playerWorldX.Address, checked((ushort)(playerWorldX.Address + 1)) },
                 requestedCameraX = new[] { RequestedCameraXLow, RequestedCameraXHigh },
                 visibleCameraX = new[] { NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh },
                 hardwareFrames = new[] { NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow, NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh },

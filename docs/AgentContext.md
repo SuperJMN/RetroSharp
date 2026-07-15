@@ -7,6 +7,17 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-3 / #359 projects the authoritative NES runtime layout into a versioned
+  JSON sidecar through CLI `--runtime-abi-out`. The contract contains every
+  reserved range, named runtime address, intentional alias, probe constant,
+  ROM-specific WorldPack runtime region, and compiled user-local symbol. Its
+  SHA-256 binding rejects a sidecar for a different ROM before RetroArch or
+  NesMcp starts. Python power-on and
+  visual-parity tooling must resolve RAM through `tools/nes/runtime_abi.py`,
+  not add address constants; the C# cadence harness emits the same projection
+  directly. The tracked runner contract is
+  `samples/runner/bin/runner.nes.runtime-abi.json` and is regenerated with the
+  ROM by `tools/gameboy/generate_sample_roms.py`.
 - AIN-4 / #360 makes
   `src/RetroSharp.Sdk.Frontend/TargetFrontendPreparation.cs` the single owner of
   source-package merge, parse, target selection, import validation, Actor

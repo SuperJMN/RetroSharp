@@ -77,5 +77,8 @@ RETROSHARP_NES_RUNNER_CADENCE_ROM=/tmp/retrosharp-nes-runner-cadence.nes \
   --filter FullyQualifiedName~Nes_full_stage1_runner_cadence_harness
 ```
 
-It records scenario expectations, RAM measurement addresses, and fixed runtime
-symbols beside the ROM.
+It writes a versioned `.runtime-abi.json` sidecar beside the ROM, binds that
+projection to the ROM SHA-256, and records its contract/version/fingerprint in
+the cadence manifest. RAM measurements come from the same authoritative layout
+and compiled `player.x` symbol used by the power-on and visual probes; the
+cadence manifest no longer owns an independent RAM map.

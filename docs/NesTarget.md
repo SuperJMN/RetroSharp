@@ -225,6 +225,22 @@ NES HUD support is intentionally undeclared in the current descriptor. `Hud.SetT
 
 Split-scroll HUD needs a timed scroll-change path that the current NES spike does not have. A reserved nametable band would still share the current horizontal scroll and would not behave as a stable HUD. Sprite HUD needs a separate tile-as-sprite contract and sprite-budget policy. Until one of those paths is implemented deliberately, `NesTarget.Capabilities.HudModes` remains `HudMode.None`.
 
+## Runtime ABI projection
+
+NES builds can add `--runtime-abi-out <path>` to emit a deterministic
+`retrosharp.nes.runtime-abi` v1 JSON sidecar. It projects
+`NesRuntimeMemoryLayout` ranges, named addresses, aliases, packed-camera probe
+constants, ROM-specific WorldPack runtime regions, and the compilation's
+user-local symbols, then binds them to the
+emitted ROM SHA-256. This is target tooling metadata only: it adds no cartridge
+instrumentation and does not change ROM bytes. External diagnostics load it
+through `tools/nes/runtime_abi.py`, which rejects missing/incompatible fields
+and a stale ROM/sidecar pair before emulator startup.
+
+The tracked runner pair is regenerated together by
+`tools/gameboy/generate_sample_roms.py`; its sidecar is
+`samples/runner/bin/runner.nes.runtime-abi.json`.
+
 ## Cross-Target Sample
 
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses a 48-column repeating authored world, tick input, bounded bidirectional horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`. Its exact mapper-0 ROM is part of the deterministic functional acceptance matrix in [`SimpleSampleFunctionalAcceptance.md`](SimpleSampleFunctionalAcceptance.md).
