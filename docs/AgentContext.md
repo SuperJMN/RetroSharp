@@ -7,6 +7,18 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-4 / #360 makes
+  `src/RetroSharp.Sdk.Frontend/TargetFrontendPreparation.cs` the single owner of
+  source-package merge, parse, target selection, import validation, Actor
+  Framework lowering, facade lowering, `let` inference, and function-contract
+  validation. Game Boy and NES provide their own intrinsics, capabilities,
+  resources, assets, metasprite geometry, and final video-program construction;
+  compile plus both operation collectors must route through each target's one
+  `PrepareVideoProgram` adapter. The prepared contract keeps its pre-Actor
+  internal program private and exposes only the late actor pool budget behavior that needs
+  target-resolved geometry. The architecture guard lives in
+  `TargetFrontendPreparationArchitectureTests`, and cross-target public-path
+  diagnostics live in `CrossTargetFrontendPreparationTests`.
 - AIN-2 / #358 makes `src/RetroSharp.NES/NesRuntimeMemoryLayout.cs` the
   single owner of compiler-reserved NES CPU RAM. Its interface groups
   zero-page locals, camera/runtime scratch, input, audio, OAM, mapper shadows,

@@ -36,7 +36,7 @@ public static class GameBoyRomCompiler
         SdkPluginRegistry? sdkPluginRegistry = null,
         byte[]? packedWorldOverride = null)
     {
-        var videoProgram = ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry);
+        var videoProgram = PrepareVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry);
         ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.BuildWithReport(videoProgram, packedWorldOverride);
@@ -50,7 +50,7 @@ public static class GameBoyRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkOperations;
+        return PrepareVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkOperations;
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
@@ -61,10 +61,10 @@ public static class GameBoyRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        return ParseVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkAudioOperations;
+        return PrepareVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkAudioOperations;
     }
 
-    private static GameBoyVideoProgram ParseVideoProgram(
+    private static GameBoyVideoProgram PrepareVideoProgram(
         string source,
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,
@@ -72,49 +72,24 @@ public static class GameBoyRomCompiler
         IReadOnlyList<string>? sdkLibraryImports,
         SdkPluginRegistry? sdkPluginRegistry)
     {
-        sdkPluginRegistry ??= SdkPluginRegistry.Empty;
-        var targetIntrinsics = GameBoyTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
-        var effectiveLibraryRegistry = (sdkLibraryRegistry ?? SdkLibraryRegistry.Default).WithSdkPlugins(sdkPluginRegistry);
-        var resourceDeclarations = ResourceDeclarationsFor(sdkPluginRegistry);
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(targetIntrinsics, source, sdkImportMode, effectiveLibraryRegistry, sdkLibraryImports));
-        if (parse.IsFailure)
+        var prepared = TargetFrontendPreparation.Prepare(new TargetFrontendPreparationOptions(
+            source,
+            GameBoyTarget.Intrinsics,
+            GameBoyTarget.Capabilities)
         {
-            throw new InvalidOperationException(parse.Error);
-        }
-
-        var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
-        SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
-        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
-        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
-        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
-        ValidateFunctionContracts(loweredProgram);
-        var videoProgram = GameBoyVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
-        ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
-            targetProgram,
-            GameBoyTarget.Capabilities,
-            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
-            baseDirectory);
+            BaseDirectory = baseDirectory,
+            LibraryImportMode = sdkImportMode,
+            BaseLibraryRegistry = sdkLibraryRegistry,
+            LibraryImports = sdkLibraryImports,
+            PluginRegistry = sdkPluginRegistry,
+        });
+        var videoProgram = GameBoyVideoProgram.FromProgram(
+            prepared.LoweredProgram,
+            prepared.BaseDirectory,
+            prepared.TargetIntrinsics,
+            prepared.ResourceDeclarations);
+        prepared.ValidateActorPoolSpriteBudgets(spriteId => ActorMetaspriteGeometry(videoProgram, spriteId));
         return videoProgram;
-    }
-
-    private static SdkResourceDeclarationRegistry ResourceDeclarationsFor(SdkPluginRegistry pluginRegistry)
-    {
-        var registry = SdkResourceDeclarationRegistry.Default;
-        foreach (var plugin in pluginRegistry.Plugins)
-        {
-            registry = registry.Register(plugin);
-        }
-
-        return registry;
-    }
-
-    private static void ValidateFunctionContracts(ProgramSyntax program)
-    {
-        var errors = FunctionContractValidator.ValidateProgram(program).ToList();
-        if (errors.Count != 0)
-        {
-            throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
-        }
     }
 
     private static void ValidateSdkOperations(GameBoyVideoProgram videoProgram)
