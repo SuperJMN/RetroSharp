@@ -18,6 +18,31 @@ portable operations and validate target capabilities, but it should not contain
 the public facade source for classes such as `Video`, `Input`, `Camera`,
 `Sprite`, or `World`.
 
+## Frontend Preparation Boundary
+
+`TargetFrontendPreparation` in `RetroSharp.Sdk.Frontend` is the single owner of
+the ordered source-to-target-neutral preparation sequence. It applies one plugin
+registry to the target intrinsic, library, and resource registries, then runs
+source-package merge, parse, target selection, import validation, Actor Framework
+lowering, source-package facade lowering, `let` inference, and function-contract
+validation in that order.
+
+The resulting `PreparedTargetProgram` carries the validated lowered program and
+the same effective intrinsics, resource declarations, capabilities, and base
+directory used during preparation. It also retains the selected pre-Actor
+program privately so Game Boy and NES can provide resolved metasprite geometry
+for the existing post-asset actor pool budget check without exposing another
+mutable preparation intermediate.
+
+The concrete compiler adapters remain responsible for target catalogs and
+capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,
+resource and asset materialization, SDK/audio capability checks, runtime policy,
+and ROM building. `CompileSource`, `CollectSdkOperations`, and
+`CollectSdkAudioOperations` on each target all enter through that target's one
+`PrepareVideoProgram` adapter. The shared preparation boundary deliberately ends
+at the validated lowered program; the existing post-contract constant fold stays
+inside final video-program construction.
+
 ## Three Extension Levels
 
 RetroSharp has three separate extension levels:

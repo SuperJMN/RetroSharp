@@ -99,28 +99,13 @@ public static class NesRomCompiler
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe)
     {
-        sdkPluginRegistry ??= SdkPluginRegistry.Empty;
-        var targetIntrinsics = NesTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
-        var effectiveLibraryRegistry = (sdkLibraryRegistry ?? SdkLibraryRegistry.Default).WithSdkPlugins(sdkPluginRegistry);
-        var resourceDeclarations = ResourceDeclarationsFor(sdkPluginRegistry);
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(targetIntrinsics, source, sdkImportMode, effectiveLibraryRegistry, sdkLibraryImports));
-        if (parse.IsFailure)
-        {
-            throw new InvalidOperationException(parse.Error);
-        }
-
-        var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
-        SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
-        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
-        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
-        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
-        ValidateFunctionContracts(loweredProgram);
-        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
-        ActorFrameworkLowerer.ValidatePoolSpriteBudgets(
-            targetProgram,
-            NesTarget.Capabilities,
-            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId),
-            baseDirectory);
+        var videoProgram = PrepareVideoProgram(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry);
         var sdkOperations = ValidateSdkOperations(videoProgram);
         videoProgram.UsesCameraRuntime = sdkOperations.Any(operation => operation is
             Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera);
@@ -153,6 +138,35 @@ public static class NesRomCompiler
         Sdk2DOperation.CameraScreenAabbTiles or
         Sdk2DOperation.CameraScreenAabbHitTop;
 
+    private static NesVideoProgram PrepareVideoProgram(
+        string source,
+        string? baseDirectory,
+        SdkLibraryImportMode sdkImportMode,
+        SdkLibraryRegistry? sdkLibraryRegistry,
+        IReadOnlyList<string>? sdkLibraryImports,
+        SdkPluginRegistry? sdkPluginRegistry)
+    {
+        var prepared = TargetFrontendPreparation.Prepare(new TargetFrontendPreparationOptions(
+            source,
+            NesTarget.Intrinsics,
+            NesTarget.Capabilities)
+        {
+            BaseDirectory = baseDirectory,
+            LibraryImportMode = sdkImportMode,
+            BaseLibraryRegistry = sdkLibraryRegistry,
+            LibraryImports = sdkLibraryImports,
+            PluginRegistry = sdkPluginRegistry,
+            BaseResourceDeclarations = SdkResourceDeclarationRegistry.Default,
+        });
+        var videoProgram = NesVideoProgram.FromProgram(
+            prepared.Program,
+            prepared.BaseDirectory,
+            prepared.TargetIntrinsics,
+            prepared.ResourceDeclarations);
+        prepared.ValidateActorPoolSpriteBudgets(spriteId => ActorMetaspriteGeometry(videoProgram, spriteId));
+        return videoProgram;
+    }
+
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
         string source,
         string? baseDirectory = null,
@@ -161,23 +175,13 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        sdkPluginRegistry ??= SdkPluginRegistry.Empty;
-        var targetIntrinsics = NesTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
-        var effectiveLibraryRegistry = (sdkLibraryRegistry ?? SdkLibraryRegistry.Default).WithSdkPlugins(sdkPluginRegistry);
-        var resourceDeclarations = ResourceDeclarationsFor(sdkPluginRegistry);
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(targetIntrinsics, source, sdkImportMode, effectiveLibraryRegistry, sdkLibraryImports));
-        if (parse.IsFailure)
-        {
-            throw new InvalidOperationException(parse.Error);
-        }
-
-        var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
-        SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
-        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
-        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
-        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
-        ValidateFunctionContracts(loweredProgram);
-        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
+        var videoProgram = PrepareVideoProgram(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry);
         return Sdk2DOperationCollector.Collect(
             videoProgram.MainBlock,
             videoProgram.Functions,
@@ -195,35 +199,14 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null)
     {
-        sdkPluginRegistry ??= SdkPluginRegistry.Empty;
-        var targetIntrinsics = NesTarget.Intrinsics.WithSdkPlugins(sdkPluginRegistry);
-        var effectiveLibraryRegistry = (sdkLibraryRegistry ?? SdkLibraryRegistry.Default).WithSdkPlugins(sdkPluginRegistry);
-        var resourceDeclarations = ResourceDeclarationsFor(sdkPluginRegistry);
-        var parse = new SomeParser().Parse(SdkLibrarySource.Merge(targetIntrinsics, source, sdkImportMode, effectiveLibraryRegistry, sdkLibraryImports));
-        if (parse.IsFailure)
-        {
-            throw new InvalidOperationException(parse.Error);
-        }
-
-        var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
-        SdkImportResolver.ValidateImports(targetProgram, effectiveLibraryRegistry);
-        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, NesTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
-        var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
-        loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
-        ValidateFunctionContracts(loweredProgram);
-        var videoProgram = NesVideoProgram.FromProgram(loweredProgram, baseDirectory, targetIntrinsics, resourceDeclarations);
+        var videoProgram = PrepareVideoProgram(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry);
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES", videoProgram.TargetIntrinsics, videoProgram.ResourceDeclarations);
-    }
-
-    private static SdkResourceDeclarationRegistry ResourceDeclarationsFor(SdkPluginRegistry pluginRegistry)
-    {
-        var registry = SdkResourceDeclarationRegistry.Default;
-        foreach (var plugin in pluginRegistry.Plugins)
-        {
-            registry = registry.Register(plugin);
-        }
-
-        return registry;
     }
 
     private static IReadOnlyList<Sdk2DOperation> ValidateSdkOperations(NesVideoProgram videoProgram)
@@ -342,14 +325,6 @@ public static class NesRomCompiler
         return result;
     }
 
-    private static void ValidateFunctionContracts(ProgramSyntax program)
-    {
-        var errors = FunctionContractValidator.ValidateProgram(program).ToList();
-        if (errors.Count != 0)
-        {
-            throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
-        }
-    }
 }
 
 internal sealed record NesColumnAttributeStream(IReadOnlyList<NesColumnAttributeRow> Rows);

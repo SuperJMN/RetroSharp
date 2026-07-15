@@ -1,0 +1,63 @@
+namespace RetroSharp.Architecture.Tests;
+
+public sealed class TargetFrontendPreparationArchitectureTests
+{
+    private const string SharedPreparationPath = "src/RetroSharp.Sdk.Frontend/TargetFrontendPreparation.cs";
+
+    private static readonly string[] TargetCompilerPaths =
+    [
+        "src/RetroSharp.GameBoy/GameBoyRomCompiler.cs",
+        "src/RetroSharp.NES/NesRomCompiler.cs",
+    ];
+
+    private static readonly string[] OrderedPreparationStages =
+    [
+        "SdkLibrarySource.Merge(",
+        "new SomeParser().Parse(",
+        "TargetProgramSelector.Select(",
+        "SdkImportResolver.ValidateImports(",
+        "ActorFrameworkLowerer.Lower(",
+        "SdkSourcePackageFacadeLowerer.Lower(",
+        "LetTypeInference.ResolveOrThrow(",
+        "FunctionContractValidator.ValidateProgram(",
+    ];
+
+    [Fact]
+    public void Shared_frontend_module_owns_the_complete_ordered_preparation_sequence()
+    {
+        var root = RepositoryRoot();
+        var sharedPath = Path.Combine(root, SharedPreparationPath);
+
+        Assert.True(File.Exists(sharedPath), $"Shared frontend preparation module '{SharedPreparationPath}' must exist.");
+
+        var sharedSource = File.ReadAllText(sharedPath);
+        var previousStageIndex = -1;
+        foreach (var stage in OrderedPreparationStages)
+        {
+            var stageIndex = sharedSource.IndexOf(stage, StringComparison.Ordinal);
+            Assert.True(stageIndex >= 0, $"Shared frontend preparation must own stage '{stage}'.");
+            Assert.True(stageIndex > previousStageIndex, $"Shared frontend stage '{stage}' is out of order.");
+            previousStageIndex = stageIndex;
+        }
+
+        foreach (var compilerPath in TargetCompilerPaths)
+        {
+            var compilerSource = File.ReadAllText(Path.Combine(root, compilerPath));
+            Assert.Contains("TargetFrontendPreparation.Prepare(", compilerSource, StringComparison.Ordinal);
+            Assert.All(
+                OrderedPreparationStages,
+                stage => Assert.DoesNotContain(stage, compilerSource, StringComparison.Ordinal));
+        }
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("Could not locate repository root.");
+    }
+}
