@@ -164,25 +164,25 @@ internal sealed class NesTestCpu
 
     public void SetPackOffset(uint offset)
     {
-        SetRam(NesWorldPackRuntimeAbi.SourceOffset0, (byte)offset);
-        SetRam(NesWorldPackRuntimeAbi.SourceOffset1, (byte)(offset >> 8));
-        SetRam(NesWorldPackRuntimeAbi.SourceOffset2, (byte)(offset >> 16));
-        SetRam(NesWorldPackRuntimeAbi.SourceOffset3, (byte)(offset >> 24));
+        SetRam(NesRuntimeMemoryLayout.WorldPack.SourceOffset0, (byte)offset);
+        SetRam(NesRuntimeMemoryLayout.WorldPack.SourceOffset1, (byte)(offset >> 8));
+        SetRam(NesRuntimeMemoryLayout.WorldPack.SourceOffset2, (byte)(offset >> 16));
+        SetRam(NesRuntimeMemoryLayout.WorldPack.SourceOffset3, (byte)(offset >> 24));
     }
 
     public void SetChunkAndSlot(ushort chunkIndex, byte slot)
     {
-        SetRam(NesWorldPackRuntimeAbi.ChunkIndexLow, (byte)chunkIndex);
-        SetRam(NesWorldPackRuntimeAbi.ChunkIndexHigh, (byte)(chunkIndex >> 8));
-        SetRam(NesWorldPackRuntimeAbi.SlotIndex, slot);
+        SetRam(NesRuntimeMemoryLayout.WorldPack.ChunkIndexLow, (byte)chunkIndex);
+        SetRam(NesRuntimeMemoryLayout.WorldPack.ChunkIndexHigh, (byte)(chunkIndex >> 8));
+        SetRam(NesRuntimeMemoryLayout.WorldPack.SlotIndex, slot);
     }
 
     public void SetWorldPackCoordinates(ushort x, ushort y)
     {
-        SetRam(NesWorldPackRuntimeAbi.HardwareXLow, (byte)x);
-        SetRam(NesWorldPackRuntimeAbi.HardwareXHigh, (byte)(x >> 8));
-        SetRam(NesWorldPackRuntimeAbi.HardwareYLow, (byte)y);
-        SetRam(NesWorldPackRuntimeAbi.HardwareYHigh, (byte)(y >> 8));
+        SetRam(NesRuntimeMemoryLayout.WorldPack.HardwareXLow, (byte)x);
+        SetRam(NesRuntimeMemoryLayout.WorldPack.HardwareXHigh, (byte)(x >> 8));
+        SetRam(NesRuntimeMemoryLayout.WorldPack.HardwareYLow, (byte)y);
+        SetRam(NesRuntimeMemoryLayout.WorldPack.HardwareYHigh, (byte)(y >> 8));
     }
 
     public void InjectNestedReadAfterSelecting(byte outerBank, ushort entry, uint nestedOffset) =>
@@ -536,7 +536,7 @@ internal sealed class NesTestCpu
             {
                 var target = oamAddress++;
                 oam[target] = Read((ushort)(source + index));
-                OamWrites.Add(new NesOamWrite((ushort)(0x0200 + target), oam[target], cycles, RenderingEnabled));
+                OamWrites.Add(new NesOamWrite((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + target), oam[target], cycles, RenderingEnabled));
             }
 
             cycles += 513;
@@ -596,7 +596,7 @@ internal sealed class NesTestCpu
                 break;
             case 0x2004:
                 oam[oamAddress] = value;
-                OamWrites.Add(new NesOamWrite((ushort)(0x0200 + oamAddress), value, cycles, RenderingEnabled));
+                OamWrites.Add(new NesOamWrite((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + oamAddress), value, cycles, RenderingEnabled));
                 oamAddress++;
                 PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
                 break;
@@ -746,9 +746,9 @@ internal sealed class NesTestCpu
         }
     }
 
-    private void Push(byte value) => ram[0x0100 | stackPointer--] = value;
+    private void Push(byte value) => ram[NesRuntimeMemoryLayout.Stack.Start | stackPointer--] = value;
 
-    private byte Pop() => ram[0x0100 | ++stackPointer];
+    private byte Pop() => ram[NesRuntimeMemoryLayout.Stack.Start | ++stackPointer];
 
     private void LoadA(byte value)
     {

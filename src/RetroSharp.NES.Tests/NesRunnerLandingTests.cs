@@ -89,7 +89,7 @@ public sealed class NesRunnerLandingTests
     {
         var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var cpu = new NesTestCpu(rom);
-        RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
         AdvanceGameplayTick(cpu);
         AdvanceGameplayTick(cpu);
 
@@ -116,7 +116,7 @@ public sealed class NesRunnerLandingTests
         foreach (var profile in profiles)
         {
             var cpu = new NesTestCpu(rom);
-            RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+            RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
             AdvanceGameplayTick(cpu);
             AdvanceGameplayTick(cpu);
             RunUp(cpu, profile.RunUpTicks);
@@ -149,7 +149,7 @@ public sealed class NesRunnerLandingTests
         foreach (var probe in probes)
         {
             var cpu = new NesTestCpu(rom);
-            RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+            RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
             AdvanceGameplayTick(cpu);
             AdvanceGameplayTick(cpu);
             cpu.Held.Add("a");
@@ -172,7 +172,7 @@ public sealed class NesRunnerLandingTests
     {
         var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
         var cpu = new NesTestCpu(rom);
-        RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
         AdvanceGameplayTick(cpu);
         AdvanceGameplayTick(cpu);
         cpu.Held.Clear();
@@ -199,7 +199,7 @@ public sealed class NesRunnerLandingTests
         for (var bDelay = 0; bDelay < 9; bDelay++)
         {
             var cpu = new NesTestCpu(rom);
-            RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+            RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
             AdvanceGameplayTick(cpu);
             AdvanceGameplayTick(cpu);
             cpu.Held.Add("right");
@@ -243,8 +243,8 @@ public sealed class NesRunnerLandingTests
 
         var rom = NesRomCompiler.CompileSource(positionedSource, RunnerSample.Directory);
         var cpu = new NesTestCpu(rom);
-        RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
-        RunUntilRamWordEquals(cpu, NesPackedCameraRuntime.VisibleCameraYLow, 80, maxFrames: 400);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
         AdvanceGameplayTick(cpu);
         AdvanceGameplayTick(cpu);
         return cpu;
@@ -335,11 +335,11 @@ public sealed class NesRunnerLandingTests
 
     private static void AdvanceGameplayTick(NesTestCpu cpu)
     {
-        var previousTick = cpu.Ram(NesWorldPackRuntimeAbi.GameplayTickCount);
+        var previousTick = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount);
         for (var frame = 0; frame < 8; frame++)
         {
             cpu.RunFrames(cpu.PhysicalFrames + 1);
-            if (cpu.Ram(NesWorldPackRuntimeAbi.GameplayTickCount) != previousTick)
+            if (cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount) != previousTick)
             {
                 return;
             }

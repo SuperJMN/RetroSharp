@@ -81,8 +81,12 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.True(ContainsSequence(fixedRuntime, [.. Mmc3RegisterWrite(register: 7, value: 1), 0x8D, 0x25, 0x03]));
         Assert.False(ContainsSequence(fixedRuntime, [0x8D, 0x00, 0xA0]), "TVROM hardwires four-screen nametables and must not write MMC3 mirroring.");
 
-        Assert.True(ContainsSequence(fixedRuntime, Mmc3BankHelper(register: 6, shadowAddress: 0x0324)));
-        Assert.True(ContainsSequence(fixedRuntime, Mmc3BankHelper(register: 7, shadowAddress: 0x0325)));
+        Assert.True(ContainsSequence(
+            fixedRuntime,
+            Mmc3BankHelper(register: 6, shadowAddress: NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow)));
+        Assert.True(ContainsSequence(
+            fixedRuntime,
+            Mmc3BankHelper(register: 7, shadowAddress: NesRuntimeMemoryLayout.Banking.Mmc3R7Shadow)));
     }
 
     [Fact]
@@ -104,7 +108,7 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.InRange(resetVector, 0xE000, 0xFFF9);
         Assert.InRange(irqVector, 0xC000, 0xFFF9);
         Assert.Equal(0x48, ByteAtCpuAddress(prg, nmiVector));
-        Assert.True(ContainsSequence(prg, IncrementWordSequence(NesPackedCameraRuntime.FrameCounterLow)));
+        Assert.True(ContainsSequence(prg, IncrementWordSequence(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow)));
         Assert.Equal(0x78, ByteAtCpuAddress(prg, resetVector));
         Assert.Equal(0x40, ByteAtCpuAddress(prg, irqVector));
     }
@@ -130,7 +134,7 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
         Assert.Equal(resetVector, irqVector);
         Assert.Equal(0x48, prg[nmiVector - 0x8000]);
         Assert.Equal(0x78, prg[resetVector - 0x8000]);
-        Assert.True(ContainsSequence(prg, IncrementWordSequence(NesPackedCameraRuntime.FrameCounterLow)));
+        Assert.True(ContainsSequence(prg, IncrementWordSequence(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow)));
     }
 
     [Fact]

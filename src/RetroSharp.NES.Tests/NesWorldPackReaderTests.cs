@@ -8,8 +8,8 @@ using Xunit.Abstractions;
 public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
 {
     [Theory]
-    [InlineData(1, 1, 338)]
-    [InlineData(2, 2, 594)]
+    [InlineData(1, 1, NesRuntimeMemoryLayout.WorldPack.CurrentStagingBytes)]
+    [InlineData(2, 2, NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes)]
     public void Runtime_layout_keeps_bounded_visual_collision_and_edge_slots_separate(
         int visualIdBytes,
         int collisionIdBytes,
@@ -30,8 +30,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.All(layout.EdgeSlots, slot => Assert.Equal(41, slot.Length));
         Assert.Equal(expectedBytes, layout.TotalBytes);
         Assert.All(slots.Zip(slots.Skip(1)), pair => Assert.True(pair.First.EndExclusive <= pair.Second.Start));
-        Assert.InRange(slots[0].Start, 0x0400, 0x07FF);
-        Assert.InRange(slots[^1].EndExclusive - 1, 0x0400, 0x07FF);
+        Assert.InRange(slots[0].Start, NesRuntimeMemoryLayout.WorldPackStaging.Start, NesRuntimeMemoryLayout.WorldPackStaging.EndInclusive);
+        Assert.InRange(slots[^1].EndExclusive - 1, NesRuntimeMemoryLayout.WorldPackStaging.Start, NesRuntimeMemoryLayout.WorldPackStaging.EndInclusive);
     }
 
     [Theory]
@@ -120,8 +120,8 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             (byte)validateAddress,
             (byte)(validateAddress >> 8),
             0x8D,
-            (byte)(NesWorldPackRuntimeAbi.ValidationState & 0xFF),
-            (byte)(NesWorldPackRuntimeAbi.ValidationState >> 8),
+            (byte)(NesRuntimeMemoryLayout.WorldPack.ValidationState & 0xFF),
+            (byte)(NesRuntimeMemoryLayout.WorldPack.ValidationState >> 8),
         };
 
         Assert.Equal(-1, result.Rom.AsSpan().IndexOf(invalidSequence));
@@ -154,7 +154,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         {
             var cpu = new NesTestCpu(far.Rom);
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
             cpu.SetPackOffset((uint)offset);
 
             var result = cpu.RunRoutine(far.Report.FixedSymbols[NesRomBuilder.WorldPackReadByteLabel]);
@@ -162,7 +162,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             Assert.False(result.Carry);
             Assert.Equal(farBytes[offset], result.A);
             Assert.Equal(5, cpu.CurrentR6Bank);
-            Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+            Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
             var expectedReadBank = new[] { 0, 3, 4, 5 }[offset / (8 * 1_024)];
             Assert.Equal(new[] { expectedReadBank, 5 }, cpu.R6BankWrites);
         }
@@ -182,7 +182,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var valid = validCpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Success, valid.A);
-        Assert.Equal(1, validCpu.Ram(NesWorldPackRuntimeAbi.ValidationState));
+        Assert.Equal(1, validCpu.Ram(NesRuntimeMemoryLayout.WorldPack.ValidationState));
         AssertSlots(validCpu, layout, 0xA5);
 
         var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
@@ -194,7 +194,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var malformed = malformedCpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Malformed, malformed.A);
-        Assert.Equal(2, malformedCpu.Ram(NesWorldPackRuntimeAbi.ValidationState));
+        Assert.Equal(2, malformedCpu.Ram(NesRuntimeMemoryLayout.WorldPack.ValidationState));
         AssertSlots(malformedCpu, layout, 0xA5);
     }
 
@@ -220,7 +220,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         }
         FillSlots(cpu, layout, 0xA5);
         cpu.SetChunkAndSlot(chunkIndex: 0, slot: 0);
@@ -242,7 +242,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             Assert.Equal(5, cpu.CurrentR6Bank);
-            Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+            Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
         }
     }
 
@@ -263,7 +263,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         }
         cpu.SetWorldPackCoordinates(3, 4);
 
@@ -272,10 +272,10 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
-        Assert.Equal(20, cpu.Ram(NesWorldPackRuntimeAbi.ResultTile));
-        Assert.Equal(0x04, cpu.Ram(NesWorldPackRuntimeAbi.ResultMetadata));
+        Assert.Equal(20, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
+        Assert.Equal(0x04, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
         Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
-        Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision));
+        Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
 
         cpu.SetWorldPackCoordinates(8, 0);
         var bounds = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
@@ -283,7 +283,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             Assert.Equal(5, cpu.CurrentR6Bank);
-            Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+            Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
         }
     }
 
@@ -304,7 +304,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         }
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
         cpu.SetWorldPackCoordinates(3, 4);
@@ -313,14 +313,14 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         output.WriteLine($"raw collision lookup far={far}: {lookup.Cycles} cycles");
 
         Assert.Equal((byte)NesWorldPackResult.Success, lookup.A);
-        Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision));
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionSlot0State));
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionSlot1State));
-        Assert.Equal(0, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal((byte)WorldTileFlags.Solid, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot0State));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot1State));
+        Assert.Equal(0, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
         if (far)
         {
             Assert.Equal(5, cpu.CurrentR6Bank);
-            Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+            Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
         }
     }
 
@@ -341,7 +341,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         }
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
         cpu.SetWorldPackCoordinates(1, 1);
@@ -356,7 +356,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.True(
             repeated.Cycles * 4 < first.Cycles,
             $"A resident RLE collision lookup must avoid another plane decode; first={first.Cycles}, repeated={repeated.Cycles} cycles.");
-        Assert.Equal(1, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(1, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
     }
 
     [Fact]
@@ -368,7 +368,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
 
         cpu.SetWorldPackCoordinates(0, 0);
@@ -386,9 +386,9 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.True(
             backToFirst.Cycles * 4 < secondChunk.Cycles,
             $"Returning across a chunk boundary must reuse the peer slot; second={secondChunk.Cycles}, return={backToFirst.Cycles} cycles.");
-        Assert.Equal(2, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(2, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -402,7 +402,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
         cpu.SetWorldPackCoordinates(9, 38);
         var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
@@ -423,9 +423,9 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.True(
             repeatedCell.Cycles <= 120,
             $"A repeated collision cell must leave frame slack for staged camera work; measured {repeatedCell.Cycles} cycles.");
-        Assert.Equal(1, ReadWord(cpu, NesWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(1, ReadWord(cpu, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow));
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -439,7 +439,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
         cpu.SetWorldPackCoordinates(9, 20);
         var first = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualLookupLabel]);
@@ -457,7 +457,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             cached.Cycles <= 400,
             $"A 32-cell complete-stage edge must prepare within one gameplay frame; cached visual hits must cost at most 400 cycles, measured {cached.Cycles}.");
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -472,7 +472,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
 
         var prewarm = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel]);
@@ -488,12 +488,12 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         }
 
         Assert.Equal(6, plan.Layout.VisualSlots.Count);
-        Assert.Equal(594, plan.Layout.TotalBytes);
-        Assert.True(plan.Layout.TotalBytes <= 594);
+        Assert.Equal(NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes, plan.Layout.TotalBytes);
+        Assert.True(plan.Layout.TotalBytes <= NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes);
         Assert.Equal((byte)NesWorldPackResult.Success, prewarm.A);
-        Assert.Equal(6, cpu.Ram(NesWorldPackRuntimeAbi.VisualDecodeCount));
+        Assert.Equal(6, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualDecodeCount));
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -506,10 +506,10 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var cpu = new NesTestCpu(result.Rom);
         foreach (var address in new[]
                  {
-                     NesWorldPackRuntimeAbi.VisualCache0Valid,
-                     NesWorldPackRuntimeAbi.VisualCache1Valid,
-                     NesWorldPackRuntimeAbi.CollisionCache0Valid,
-                     NesWorldPackRuntimeAbi.CollisionCache1Valid,
+                     NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid,
+                     NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid,
+                     NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid,
+                     NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid,
                  })
         {
             cpu.SetRam(address, 0xA5);
@@ -518,10 +518,10 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         var initialized = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackInitializeLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Success, initialized.A);
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.VisualCache0Valid));
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.VisualCache1Valid));
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionCache0Valid));
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionCache1Valid));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualCache0Valid));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.VisualCache1Valid));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionCache0Valid));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionCache1Valid));
     }
 
     [Fact]
@@ -556,7 +556,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         var validation = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel], maxInstructions: 5_000_000);
         cpu.SetChunkAndSlot(chunkIndex, 0);
 
@@ -572,7 +572,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.Contains(0, cpu.R6BankWrites);
         Assert.Contains(3, cpu.R6BankWrites);
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -587,15 +587,15 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         MutatePackByte(malformedRom, result.Report, collisionOffset, 0xFF);
         var cpu = new NesTestCpu(malformedRom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         cpu.SetChunkAndSlot(0, 1);
 
         var status = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionDecodeLabel]);
 
         Assert.Equal((byte)NesWorldPackResult.Malformed, status.A);
-        Assert.Equal(0, cpu.Ram(NesWorldPackRuntimeAbi.CollisionSlot1State));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.CollisionSlot1State));
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Theory]
@@ -616,7 +616,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         }
         cpu.SetChunkAndSlot(0, 0);
         var visualDecode = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualDecodeLabel]);
@@ -627,16 +627,16 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         cpu.SetWorldPackCoordinates(0, 0);
         var collision = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
 
-        Assert.Equal(594, layout.TotalBytes);
+        Assert.Equal(NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes, layout.TotalBytes);
         Assert.Equal((byte)NesWorldPackResult.Success, visualDecode.A);
         Assert.Equal((byte)NesWorldPackResult.Success, collisionDecode.A);
         Assert.Equal(Enumerable.Repeat(new byte[] { 0x00, 0x01 }, 64).SelectMany(value => value), ReadSlot(cpu, layout.VisualSlots[0]));
         Assert.Equal(Enumerable.Repeat(new byte[] { 0x00, 0x01 }, 64).SelectMany(value => value), ReadSlot(cpu, layout.CollisionSlots[1]));
         Assert.Equal((byte)NesWorldPackResult.Success, visual.A);
-        Assert.Equal(77, cpu.Ram(NesWorldPackRuntimeAbi.ResultTile));
-        Assert.Equal(0x04, cpu.Ram(NesWorldPackRuntimeAbi.ResultMetadata));
+        Assert.Equal(77, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
+        Assert.Equal(0x04, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
         Assert.Equal((byte)NesWorldPackResult.Success, collision.A);
-        Assert.Equal((byte)WorldTileFlags.Platform, cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision));
+        Assert.Equal((byte)WorldTileFlags.Platform, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
     }
 
     [Fact]
@@ -648,7 +648,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: bytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         cpu.SetPackOffset(0);
         cpu.InjectNestedReadAfterSelecting(
             outerBank: 0,
@@ -662,7 +662,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.Equal(bytes[8 * 1_024], Assert.Single(cpu.NestedReadResults).A);
         Assert.Equal(new[] { 0, 3, 0, 5 }, cpu.R6BankWrites);
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -674,7 +674,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         cpu.SetPackOffset(0);
         cpu.InjectNmiAfterSelecting(outerBank: 0);
 
@@ -686,7 +686,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.Equal(new[] { 0, 5 }, cpu.R6BankWrites);
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(1, cpu.CurrentR7Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Theory]
@@ -704,14 +704,14 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         cpu.SetChunkAndSlot(chunkIndex, slot);
 
         var status = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackVisualDecodeLabel]);
 
         Assert.Equal(expected, status.A);
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -723,7 +723,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         cpu.SetPackOffset((uint)fixture.SerializedBytes.Length);
 
         var read = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackReadByteLabel]);
@@ -731,7 +731,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         Assert.True(read.Carry);
         Assert.Equal(new[] { 5 }, cpu.R6BankWrites);
         Assert.Equal(5, cpu.CurrentR6Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
     }
 
     [Fact]
@@ -756,14 +756,14 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             packedWorldOverride: fixture.SerializedBytes);
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         cpu.SetWorldPackCoordinates(0, 38);
 
         var floor = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
-        var floorFlags = cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision);
+        var floorFlags = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
         cpu.SetWorldPackCoordinates(0, 37);
         var above = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackCollisionLookupLabel]);
-        var aboveFlags = cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision);
+        var aboveFlags = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision);
 
         Assert.Equal(304, 38 * 8);
         Assert.Equal((byte)NesWorldPackResult.Success, floor.A);
@@ -819,22 +819,22 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
             worldPackProbe: new NesWorldPackProbe(hardwareX, 0));
         var cpu = new NesTestCpu(result.Rom);
         cpu.SetR6Bank(5);
-        cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+        cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
 
         var probe = cpu.RunRoutine(
             result.Report.FixedSymbols[NesRomBuilder.WorldPackProbeLabel],
             maxInstructions: 5_000_000);
 
         Assert.Equal((byte)NesWorldPackResult.Success, probe.A);
-        Assert.Equal(1, cpu.Ram(NesWorldPackRuntimeAbi.ProbeCompleted));
-        Assert.Equal((byte)NesWorldPackResult.Success, cpu.Ram(NesWorldPackRuntimeAbi.ProbeVisualStatus));
-        Assert.Equal((byte)NesWorldPackResult.Success, cpu.Ram(NesWorldPackRuntimeAbi.ProbeCollisionStatus));
-        Assert.Equal(20, cpu.Ram(NesWorldPackRuntimeAbi.ResultTile));
-        Assert.Equal(0x04, cpu.Ram(NesWorldPackRuntimeAbi.ResultMetadata));
-        Assert.Equal((byte)WorldTileFlags.Empty, cpu.Ram(NesWorldPackRuntimeAbi.ResultCollision));
+        Assert.Equal(1, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeCompleted));
+        Assert.Equal((byte)NesWorldPackResult.Success, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeVisualStatus));
+        Assert.Equal((byte)NesWorldPackResult.Success, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ProbeCollisionStatus));
+        Assert.Equal(20, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultTile));
+        Assert.Equal(0x04, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultMetadata));
+        Assert.Equal((byte)WorldTileFlags.Empty, cpu.Ram(NesRuntimeMemoryLayout.WorldPack.ResultCollision));
         Assert.Equal(5, cpu.CurrentR6Bank);
         Assert.Equal(1, cpu.CurrentR7Bank);
-        Assert.Equal(5, cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress));
+        Assert.Equal(5, cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow));
         Assert.Contains(result.Report.Segments, segment => segment.Owner == "pinned:bgm:theme" && segment.PhysicalBank == 1);
         Assert.All(
             result.Report.Segments.Where(segment => segment.Owner.StartsWith("fixed:dpcm:", StringComparison.Ordinal)),
@@ -860,7 +860,7 @@ public sealed class NesWorldPackReaderTests(ITestOutputHelper output)
         if (far)
         {
             cpu.SetR6Bank(5);
-            cpu.SetRam(NesRomBuilder.Mmc3R6BankShadowAddress, 5);
+            cpu.SetRam(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow, 5);
         }
         _ = cpu.RunRoutine(result.Report.FixedSymbols[NesRomBuilder.WorldPackValidateLabel]);
         cpu.SetChunkAndSlot(0, 0);

@@ -6,17 +6,17 @@ using Xunit.Abstractions;
 
 public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper output)
 {
-    private const ushort RequestCount = 0x0370;
-    private const ushort ResidentCount = 0x0372;
-    private const ushort CommitCount = 0x0373;
-    private const ushort ReleaseCount = 0x0374;
-    private const ushort BankWorkInCommit = 0x0375;
-    private const ushort DirectoryWorkInCommit = 0x0376;
-    private const ushort DecodeWorkInCommit = 0x0377;
-    private const ushort VisibleCameraXLow = 0x03CB;
-    private const ushort VisibleCameraXHigh = 0x03CC;
-    private const ushort VisibleCameraYLow = 0x03CD;
-    private const ushort VisibleCameraYHigh = 0x03CE;
+    private const ushort RequestCount = NesRuntimeMemoryLayout.PackedCamera.RequestCount;
+    private const ushort ResidentCount = NesRuntimeMemoryLayout.PackedCamera.ResidentCount;
+    private const ushort CommitCount = NesRuntimeMemoryLayout.PackedCamera.CommitCount;
+    private const ushort ReleaseCount = NesRuntimeMemoryLayout.PackedCamera.ReleaseCount;
+    private const ushort BankWorkInCommit = NesRuntimeMemoryLayout.PackedCamera.BankWorkInCommit;
+    private const ushort DirectoryWorkInCommit = NesRuntimeMemoryLayout.PackedCamera.DirectoryWorkInCommit;
+    private const ushort DecodeWorkInCommit = NesRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit;
+    private const ushort VisibleCameraXLow = NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow;
+    private const ushort VisibleCameraXHigh = NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh;
+    private const ushort VisibleCameraYLow = NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow;
+    private const ushort VisibleCameraYHigh = NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYHigh;
     private const byte ExpectedBottomOverscanInsetPixels = 8;
 
     public static TheoryData<string, string, string, string, string> ProductionSamples => new()
@@ -375,11 +375,12 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             };
             var bank = new FunctionalBankObservation(
                 cpu.CurrentR6Bank,
-                cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress),
-                cpu.CurrentR6Bank == cpu.Ram(NesRomBuilder.Mmc3R6BankShadowAddress),
+                cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
+                cpu.CurrentR6Bank == cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
                 "nes-prg-r6");
             var camera = CameraObservation(
-                (Word(0x00E0, 0x0318), Word(0x00EA, 0x0319)),
+                (Word(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh),
+                    Word(NesRuntimeMemoryLayout.Camera.Y, NesRuntimeMemoryLayout.Camera.YHigh)),
                 visibleCamera);
 
             return new FunctionalFrameObservation(

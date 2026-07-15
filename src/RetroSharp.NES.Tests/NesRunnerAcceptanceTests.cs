@@ -11,8 +11,8 @@ public sealed class NesRunnerAcceptanceTests
 {
     private const ushort PlayerWorldXLow = 0x0000;
     private const ushort PlayerWorldXHigh = 0x0001;
-    private const ushort RequestedCameraXLow = 0x00E0;
-    private const ushort RequestedCameraXHigh = 0x0318;
+    private const ushort RequestedCameraXLow = NesRuntimeMemoryLayout.Camera.X;
+    private const ushort RequestedCameraXHigh = NesRuntimeMemoryLayout.Camera.XHigh;
 
     [Fact]
     public void Nes_runner_uses_the_shared_runner_source()
@@ -81,10 +81,10 @@ public sealed class NesRunnerAcceptanceTests
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
         Assert.Equal("nes-mmc3-tvrom-v1", result.Report.SelectedProfile);
-        Assert.True(ContainsSequence(result.Rom, IncrementWordSequence(NesPackedCameraRuntime.FrameCounterLow)));
-        Assert.True(ContainsSequence(result.Rom, IncrementWordSequence(NesWorldPackRuntimeAbi.CollisionDecodeCountLow)));
-        Assert.True(ContainsSequence(result.Rom, IncrementByteSequence(NesWorldPackRuntimeAbi.GameplayTickCount)));
-        Assert.True(ContainsSequence(result.Rom, IncrementByteSequence(NesWorldPackRuntimeAbi.AudioTickCount)));
+        Assert.True(ContainsSequence(result.Rom, IncrementWordSequence(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow)));
+        Assert.True(ContainsSequence(result.Rom, IncrementWordSequence(NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow)));
+        Assert.True(ContainsSequence(result.Rom, IncrementByteSequence(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount)));
+        Assert.True(ContainsSequence(result.Rom, IncrementByteSequence(NesRuntimeMemoryLayout.WorldPack.AudioTickCount)));
         Assert.True(
             ContainsSequence(result.Rom, [0xA2, 0x03, 0xA9, 0x01, 0x8D, 0x16, 0x40]),
             "The packed runner must retry paired controller snapshots so DPCM DMA cannot create phantom direction input.");
@@ -103,11 +103,11 @@ public sealed class NesRunnerAcceptanceTests
             RunnerSample.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
         var ram = Enumerable.Repeat(powerOnValue, 0x800).ToArray();
-        var runtimeStateLength = NesWorldPackRuntimeAbi.CollisionCellResult - NesWorldPackRuntimeAbi.ValidationState + 1;
+        var runtimeStateLength = NesRuntimeMemoryLayout.WorldPack.CollisionCellResult - NesRuntimeMemoryLayout.WorldPack.ValidationState + 1;
         var runtimeStateClearLoop = new byte[]
         {
             0xA2, 0x00,
-            0x9D, (byte)(NesWorldPackRuntimeAbi.ValidationState & 0xFF), (byte)(NesWorldPackRuntimeAbi.ValidationState >> 8),
+            0x9D, (byte)(NesRuntimeMemoryLayout.WorldPack.ValidationState & 0xFF), (byte)(NesRuntimeMemoryLayout.WorldPack.ValidationState >> 8),
             0xE8,
             0xE0, checked((byte)runtimeStateLength),
             0xD0, 0xF8,
@@ -115,7 +115,7 @@ public sealed class NesRunnerAcceptanceTests
         Assert.True(
             ContainsSequence(result.Rom, runtimeStateClearLoop),
             "Packed-camera boot must clear exactly the WorldPack/camera runtime-owned $0326..$03FF control and scratch block.");
-        Array.Fill(ram, (byte)0, NesWorldPackRuntimeAbi.ValidationState, runtimeStateLength);
+        Array.Fill(ram, (byte)0, NesRuntimeMemoryLayout.WorldPack.ValidationState, runtimeStateLength);
 
         var stagingClearLoops = new[]
         {
@@ -127,28 +127,34 @@ public sealed class NesRunnerAcceptanceTests
             clearLoop => Assert.True(
                 ContainsSequence(result.Rom, clearLoop),
                 "Packed-camera boot must clear every byte of its 594-byte visual/collision/edge staging layout."));
-        Array.Fill(ram, (byte)0, 0x0400, 594);
+        Array.Fill(
+            ram,
+            (byte)0,
+            NesRuntimeMemoryLayout.WorldPackStaging.Start,
+            NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes);
 
         var noSlotInitialization = new byte[]
         {
             0xA9, NesPackedCameraRuntime.NoSlot,
-            0x8D, (byte)(NesPackedCameraRuntime.SelectedSlot & 0xFF), (byte)(NesPackedCameraRuntime.SelectedSlot >> 8),
+            0x8D, (byte)(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot & 0xFF), (byte)(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot >> 8),
         };
         Assert.True(
             ContainsSequence(result.Rom, noSlotInitialization),
             "Packed-camera boot must give SelectedSlot the explicit NoSlot sentinel.");
-        ram[NesPackedCameraRuntime.SelectedSlot] = NesPackedCameraRuntime.NoSlot;
+        ram[NesRuntimeMemoryLayout.PackedCamera.SelectedSlot] = NesPackedCameraRuntime.NoSlot;
 
         Assert.All(
-            Enumerable.Range(NesWorldPackRuntimeAbi.ValidationState, runtimeStateLength),
+            Enumerable.Range(NesRuntimeMemoryLayout.WorldPack.ValidationState, runtimeStateLength),
             address =>
             {
-                var expected = address == NesPackedCameraRuntime.SelectedSlot ? NesPackedCameraRuntime.NoSlot : (byte)0;
+                var expected = address == NesRuntimeMemoryLayout.PackedCamera.SelectedSlot ? NesPackedCameraRuntime.NoSlot : (byte)0;
                 Assert.Equal(expected, ram[address]);
             });
-        Assert.All(ram[0x0400..0x0652], value => Assert.Equal((byte)0, value));
-        Assert.Equal(powerOnValue, ram[0x0325]);
-        Assert.Equal(powerOnValue, ram[0x0652]);
+        Assert.All(
+            ram[NesRuntimeMemoryLayout.WorldPackStaging.Start..NesRuntimeMemoryLayout.WorldPackStaging.EndExclusive],
+            value => Assert.Equal((byte)0, value));
+        Assert.Equal(powerOnValue, ram[NesRuntimeMemoryLayout.Banking.Mmc3R7Shadow]);
+        Assert.Equal(powerOnValue, ram[NesRuntimeMemoryLayout.WorldPackStaging.EndExclusive]);
     }
 
     [Fact]
@@ -246,18 +252,18 @@ public sealed class NesRunnerAcceptanceTests
             {
                 playerWorldX = new[] { PlayerWorldXLow, PlayerWorldXHigh },
                 requestedCameraX = new[] { RequestedCameraXLow, RequestedCameraXHigh },
-                visibleCameraX = new[] { NesPackedCameraRuntime.VisibleCameraXLow, NesPackedCameraRuntime.VisibleCameraXHigh },
-                hardwareFrames = new[] { NesPackedCameraRuntime.FrameCounterLow, NesPackedCameraRuntime.FrameCounterHigh },
-                gameplayTicksModulo256 = NesWorldPackRuntimeAbi.GameplayTickCount,
-                collisionDecodes = new[] { NesWorldPackRuntimeAbi.CollisionDecodeCountLow, NesWorldPackRuntimeAbi.CollisionDecodeCountHigh },
-                audioTicksModulo256 = NesWorldPackRuntimeAbi.AudioTickCount,
-                r6Shadow = NesRomBuilder.Mmc3R6BankShadowAddress,
-                bankWorkInCommit = NesPackedCameraRuntime.BankWorkInCommit,
-                directoryWorkInCommit = NesPackedCameraRuntime.DirectoryWorkInCommit,
-                decodeWorkInCommit = NesPackedCameraRuntime.DecodeWorkInCommit,
-                criticalSection = NesPackedCameraRuntime.CriticalSection,
-                lastTileWrites = NesPackedCameraRuntime.LastTileWrites,
-                lastAttributeWrites = NesPackedCameraRuntime.LastAttributeWrites,
+                visibleCameraX = new[] { NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh },
+                hardwareFrames = new[] { NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow, NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh },
+                gameplayTicksModulo256 = NesRuntimeMemoryLayout.WorldPack.GameplayTickCount,
+                collisionDecodes = new[] { NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountLow, NesRuntimeMemoryLayout.WorldPack.CollisionDecodeCountHigh },
+                audioTicksModulo256 = NesRuntimeMemoryLayout.WorldPack.AudioTickCount,
+                r6Shadow = NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow,
+                bankWorkInCommit = NesRuntimeMemoryLayout.PackedCamera.BankWorkInCommit,
+                directoryWorkInCommit = NesRuntimeMemoryLayout.PackedCamera.DirectoryWorkInCommit,
+                decodeWorkInCommit = NesRuntimeMemoryLayout.PackedCamera.DecodeWorkInCommit,
+                criticalSection = NesRuntimeMemoryLayout.PackedCamera.CriticalSection,
+                lastTileWrites = NesRuntimeMemoryLayout.PackedCamera.LastTileWrites,
+                lastAttributeWrites = NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites,
             },
             fixedSymbols = result.Report.FixedSymbols,
         };

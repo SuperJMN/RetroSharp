@@ -5,8 +5,8 @@ using Xunit;
 
 public sealed class SimpleSampleFunctionalAcceptanceTests
 {
-    private const ushort CameraX = 0x00E0;
-    private const ushort CameraY = 0x00EA;
+    private const ushort CameraX = NesRuntimeMemoryLayout.Camera.X;
+    private const ushort CameraY = NesRuntimeMemoryLayout.Camera.Y;
     private static readonly int ExpectedBackgroundPaletteIdentity = PaletteIdentity(0, [0x0F, 0x27, 0x16, 0x30]);
 
     [Fact]
