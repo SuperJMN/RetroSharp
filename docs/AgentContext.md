@@ -15,7 +15,7 @@ This document preserves project knowledge that previously lived only in agent me
   resources, assets, metasprite geometry, and final video-program construction;
   compile plus both operation collectors must route through each target's one
   `PrepareVideoProgram` adapter. The prepared contract keeps its pre-Actor
-  program private and exposes only the late actor pool budget behavior that needs
+  internal program private and exposes only the late actor pool budget behavior that needs
   target-resolved geometry. The architecture guard lives in
   `TargetFrontendPreparationArchitectureTests`, and cross-target public-path
   diagnostics live in `CrossTargetFrontendPreparationTests`.

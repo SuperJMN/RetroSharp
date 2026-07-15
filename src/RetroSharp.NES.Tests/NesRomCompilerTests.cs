@@ -2882,6 +2882,31 @@ public class NesRomCompilerTests
     }
 
     [Fact]
+    public void Nes_collectors_do_not_run_compile_only_actor_sprite_budget_validation()
+    {
+        var rows = Enumerable.Repeat(new string('1', 24), 8);
+        var rowJson = string.Join(",", rows.Select(row => $"\"{row}\""));
+        var baseDirectory = WriteSpriteAsset(
+            "wide-goomba.nes.json",
+            "{\"platforms\":{\"nes\":{\"frames\":[[" + rowJson + "]]}}}");
+
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(goomba, "wide-goomba.nes.json");
+                                  Actors.Pool(enemies, 23);
+                                  Enemies.Def(Goomba, sprite: goomba, behavior: Walker, speed: 1);
+                                  Video.WaitVBlank();
+                                  enemies.Draw();
+                                  return;
+                              }
+                              """;
+
+        Assert.NotEmpty(NesRomCompiler.CollectSdkOperations(source, baseDirectory));
+        Assert.Empty(NesRomCompiler.CollectSdkAudioOperations(source, baseDirectory));
+    }
+
+    [Fact]
     public void Compiles_actor_draw_loop_when_multi_sprite_png_pool_fits_nes_budget()
     {
         var baseDirectory = WriteSpritePng(

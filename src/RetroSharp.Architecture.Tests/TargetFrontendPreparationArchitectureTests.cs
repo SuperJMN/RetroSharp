@@ -31,6 +31,10 @@ public sealed class TargetFrontendPreparationArchitectureTests
         Assert.True(File.Exists(sharedPath), $"Shared frontend preparation module '{SharedPreparationPath}' must exist.");
 
         var sharedSource = File.ReadAllText(sharedPath);
+        Assert.DoesNotContain("public sealed record TargetFrontendPreparationOptions", sharedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("public sealed class PreparedTargetProgram", sharedSource, StringComparison.Ordinal);
+        Assert.DoesNotContain("public static class TargetFrontendPreparation", sharedSource, StringComparison.Ordinal);
+
         var previousStageIndex = -1;
         foreach (var stage in OrderedPreparationStages)
         {

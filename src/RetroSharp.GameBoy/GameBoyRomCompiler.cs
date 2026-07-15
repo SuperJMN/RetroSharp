@@ -82,10 +82,9 @@ public static class GameBoyRomCompiler
             BaseLibraryRegistry = sdkLibraryRegistry,
             LibraryImports = sdkLibraryImports,
             PluginRegistry = sdkPluginRegistry,
-            BaseResourceDeclarations = SdkResourceDeclarationRegistry.Default,
         });
         var videoProgram = GameBoyVideoProgram.FromProgram(
-            prepared.Program,
+            prepared.LoweredProgram,
             prepared.BaseDirectory,
             prepared.TargetIntrinsics,
             prepared.ResourceDeclarations);

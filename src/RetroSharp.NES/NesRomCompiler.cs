@@ -99,13 +99,16 @@ public static class NesRomCompiler
         byte[]? packedWorldOverride,
         NesWorldPackProbe? worldPackProbe)
     {
-        var videoProgram = PrepareVideoProgram(
+        var preparedVideoProgram = PrepareVideoProgram(
             source,
             baseDirectory,
             sdkImportMode,
             sdkLibraryRegistry,
             sdkLibraryImports,
             sdkPluginRegistry);
+        var videoProgram = preparedVideoProgram.VideoProgram;
+        preparedVideoProgram.FrontendProgram.ValidateActorPoolSpriteBudgets(
+            spriteId => ActorMetaspriteGeometry(videoProgram, spriteId));
         var sdkOperations = ValidateSdkOperations(videoProgram);
         videoProgram.UsesCameraRuntime = sdkOperations.Any(operation => operation is
             Sdk2DOperation.SetCameraPosition or Sdk2DOperation.ApplyCamera);
@@ -138,7 +141,7 @@ public static class NesRomCompiler
         Sdk2DOperation.CameraScreenAabbTiles or
         Sdk2DOperation.CameraScreenAabbHitTop;
 
-    private static NesVideoProgram PrepareVideoProgram(
+    private static (NesVideoProgram VideoProgram, PreparedTargetProgram FrontendProgram) PrepareVideoProgram(
         string source,
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,
@@ -156,15 +159,13 @@ public static class NesRomCompiler
             BaseLibraryRegistry = sdkLibraryRegistry,
             LibraryImports = sdkLibraryImports,
             PluginRegistry = sdkPluginRegistry,
-            BaseResourceDeclarations = SdkResourceDeclarationRegistry.Default,
         });
         var videoProgram = NesVideoProgram.FromProgram(
-            prepared.Program,
+            prepared.LoweredProgram,
             prepared.BaseDirectory,
             prepared.TargetIntrinsics,
             prepared.ResourceDeclarations);
-        prepared.ValidateActorPoolSpriteBudgets(spriteId => ActorMetaspriteGeometry(videoProgram, spriteId));
-        return videoProgram;
+        return (videoProgram, prepared);
     }
 
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
@@ -181,7 +182,7 @@ public static class NesRomCompiler
             sdkImportMode,
             sdkLibraryRegistry,
             sdkLibraryImports,
-            sdkPluginRegistry);
+            sdkPluginRegistry).VideoProgram;
         return Sdk2DOperationCollector.Collect(
             videoProgram.MainBlock,
             videoProgram.Functions,
@@ -205,7 +206,7 @@ public static class NesRomCompiler
             sdkImportMode,
             sdkLibraryRegistry,
             sdkLibraryImports,
-            sdkPluginRegistry);
+            sdkPluginRegistry).VideoProgram;
         return SdkAudioOperationCollector.Collect(videoProgram.MainBlock, videoProgram.Functions, "NES", videoProgram.TargetIntrinsics, videoProgram.ResourceDeclarations);
     }
 

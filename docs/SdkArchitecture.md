@@ -27,7 +27,7 @@ source-package merge, parse, target selection, import validation, Actor Framewor
 lowering, source-package facade lowering, `let` inference, and function-contract
 validation in that order.
 
-The resulting `PreparedTargetProgram` carries the validated lowered program and
+The resulting internal `PreparedTargetProgram` carries the validated lowered program and
 the same effective intrinsics, resource declarations, capabilities, and base
 directory used during preparation. It also retains the selected pre-Actor
 program privately so Game Boy and NES can provide resolved metasprite geometry
