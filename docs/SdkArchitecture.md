@@ -27,12 +27,12 @@ source-package merge, parse, target selection, import validation, Actor Framewor
 lowering, source-package facade lowering, `let` inference, and function-contract
 validation in that order.
 
-The resulting internal `PreparedTargetProgram` carries the validated lowered program and
-the same effective intrinsics, resource declarations, capabilities, and base
-directory used during preparation. It also retains the selected pre-Actor
-program privately so Game Boy and NES can provide resolved metasprite geometry
-for the existing post-asset actor pool budget check without exposing another
-mutable preparation intermediate.
+The resulting internal `PreparedTargetProgram` carries the validated lowered
+program and the same effective intrinsics, resource declarations, capabilities,
+and base directory used during preparation. It also retains the staged internal
+Actor Framework lowering plan, whose analyzed facts let Game Boy and NES provide
+resolved metasprite geometry for the existing post-asset actor pool budget check
+without rediscovering directives or retaining the selected pre-Actor program.
 
 The concrete compiler adapters remain responsible for target catalogs and
 capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,
