@@ -78,8 +78,8 @@ public sealed class GameBoyWorldPackPlacementTests
         Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
         Assert.Equal(1, result.Rom[0x147]);
         Assert.Equal(1, cpu.CurrentRomBank);
-        Assert.Equal(1, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(0, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
     }
 
     [Fact]

@@ -124,8 +124,8 @@ public sealed class GameBoyWorldPackReaderTests
             canonical.Pack.Descriptor.CollisionIdBytes);
         var cpu = new GameBoyTestCpu(result.Rom);
         cpu.SetCurrentRomBank(3);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
-        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, 9);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 3);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, 9);
         foreach (var slot in runtimeLayout.VisualSlots)
         {
             for (var address = slot.Start; address < slot.EndExclusive; address++)
@@ -150,8 +150,8 @@ public sealed class GameBoyWorldPackReaderTests
         Assert.Equal(lookup, cachedLookup);
         Assert.True(cachedLookupBankWrites < firstLookupBankWrites);
         Assert.Equal(3, cpu.CurrentRomBank);
-        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(9, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(9, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
         Assert.All(runtimeLayout.VisualSlots, slot =>
             Assert.All(Enumerable.Range(slot.Start, slot.Length), address => Assert.Equal(0xA5, cpu.Wram((ushort)address))));
     }
@@ -190,14 +190,14 @@ public sealed class GameBoyWorldPackReaderTests
         {
             Assert.All(runtimeLayout.CollisionSlots, slot =>
                 Assert.All(Enumerable.Range(slot.Start, slot.Length), address => Assert.Equal(0xA5, cpu.Wram((ushort)address))));
-            Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
+            Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
         }
         else
         {
             Assert.Equal(
                 fixture.Pack.Chunks[0].CollisionProfileIds.Select(id => (byte)id),
                 Enumerable.Range(0, 64).Select(offset => cpu.Wram((ushort)(runtimeLayout.CollisionSlots[0].Start + offset))));
-            Assert.Equal(1, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
+            Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
         }
     }
 
@@ -241,7 +241,7 @@ public sealed class GameBoyWorldPackReaderTests
         Assert.Equal((byte)fixture.Pack.CollisionAt(hardwareX, hardwareY), lookup.Value);
         Assert.Equal(
             expectedCodec == WorldPackCodec.ElementRle ? 1 : 0,
-            cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
+            cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
         Assert.Contains(
             cpu.RomBankWrites.Skip(bankWritesBeforeLookup),
             write => write.SelectedBank == 2);
@@ -292,8 +292,8 @@ public sealed class GameBoyWorldPackReaderTests
             Assert.Equal((byte)expected, lookup.Value);
             Assert.Equal(
                 expectedDecodes,
-                cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow)
-                | cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountHigh) << 8);
+                cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow)
+                | cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountHigh) << 8);
         }
     }
 
@@ -315,12 +315,12 @@ public sealed class GameBoyWorldPackReaderTests
         rom[packSegment.PhysicalStart + checked((int)fixture.Pack.Chunks[2].Directory.CollisionOffset)] = 0xFF;
         Assert.Equal(GameBoyWorldPackResult.Malformed, cpu.RunWorldPackCollisionLookup(entry, 16, 0).Status);
 
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
-        Assert.Equal(1, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
+        Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
         var replacedChunk = cpu.RunWorldPackCollisionLookup(entry, 0, 0);
         Assert.Equal(GameBoyWorldPackResult.Success, replacedChunk.Status);
         Assert.Equal((byte)WorldTileFlags.Solid, replacedChunk.Value);
-        Assert.Equal(4, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(4, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
     }
 
     [Fact]
@@ -336,14 +336,14 @@ public sealed class GameBoyWorldPackReaderTests
         var decodeEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionDecodeLabel];
 
         Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 0, 0).Status);
-        Assert.Equal(1, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
+        Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
 
         Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackDecode(decodeEntry, chunkIndex: 2, slot: 0));
 
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
         Assert.Equal(GameBoyWorldPackResult.Success, cpu.RunWorldPackCollisionLookup(lookupEntry, 1, 0).Status);
-        Assert.Equal(2, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionDecodeCountLow));
+        Assert.Equal(2, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow));
     }
 
     [Fact]
@@ -432,16 +432,16 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareY: 0);
 
         Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCellValid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.CellValid));
         Assert.All(
             Enumerable.Range(collisionSlot.Start, collisionSlot.Length),
             address => Assert.Equal(0xA5, cpu.Wram((ushort)address)));
         var startupCpu = new GameBoyTestCpu(rom);
         startupCpu.RunFrames(20);
         Assert.Equal(0, startupCpu.Wram(0xC000));
-        Assert.Equal(2, startupCpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+        Assert.Equal(2, startupCpu.Wram(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState));
     }
 
     [Theory]
@@ -470,9 +470,9 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareY: 0);
 
         Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCellValid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.CellValid));
         Assert.All(
             Enumerable.Range(collisionSlot.Start, collisionSlot.Length),
             address => Assert.Equal(0xA5, cpu.Wram((ushort)address)));
@@ -502,9 +502,9 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareY: 0);
 
         Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache0Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCache1Valid));
-        Assert.Equal(0, cpu.Wram(GameBoyWorldPackRuntimeAbi.CollisionCellValid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache0Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.Cache1Valid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.CellValid));
         Assert.All(
             Enumerable.Range(collisionSlot.Start, collisionSlot.Length),
             address => Assert.Equal(0xA5, cpu.Wram((ushort)address)));
@@ -538,7 +538,7 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         cpu.RunFrames(20);
 
-        Assert.Equal(2, cpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+        Assert.Equal(2, cpu.Wram(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState));
 
         static ushort ReadWord(byte[] bytes, int offset) =>
             (ushort)(bytes[offset] | (bytes[offset + 1] << 8));
@@ -567,7 +567,7 @@ public sealed class GameBoyWorldPackReaderTests
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
         cpu.RunFrames(20);
 
-        Assert.Equal(2, cpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+        Assert.Equal(2, cpu.Wram(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState));
     }
 
     [Fact]
@@ -626,9 +626,9 @@ public sealed class GameBoyWorldPackReaderTests
             hardwareX,
             hardwareY);
 
-        Assert.Equal(1, cpu.Wram(GameBoyWramLayout.WorldPackValidationStateAddress));
+        Assert.Equal(1, cpu.Wram(GameBoyRuntimeMemoryLayout.WorldPack.ValidationState));
         Assert.Equal(GameBoyWorldPackResult.Malformed, lookup.Status);
-        Assert.Equal(0, cpu.Wram(GameBoyPackedCameraRuntime.VisualCacheValid));
+        Assert.Equal(0, cpu.Wram(GameBoyRuntimeMemoryLayout.PackedCamera.VisualCacheValid));
 
         static byte[] Fingerprint(ReadOnlySpan<byte> bytes)
         {
@@ -706,13 +706,13 @@ public sealed class GameBoyWorldPackReaderTests
         {
             var cpu = new GameBoyTestCpu(rom);
             cpu.SetCurrentRomBank(3);
-            cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
-            cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, 9);
+            cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 3);
+            cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, 9);
 
             Assert.Equal(expected, cpu.RunWorldPackDecode(entry, chunkIndex, slot));
             Assert.Equal(3, cpu.CurrentRomBank);
-            Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-            Assert.Equal(9, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+            Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+            Assert.Equal(9, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
             Assert.All(cpu.RomBankWrites, write => Assert.InRange(write.ProgramCounter, 0x0150, 0x3FFF));
         }
     }
@@ -773,8 +773,8 @@ public sealed class GameBoyWorldPackReaderTests
         var layout = GameBoyWorldPackRuntimeLayout.Create(2, 1);
         var cpu = new GameBoyTestCpu(result.Rom);
         cpu.SetCurrentRomBank(3);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
-        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, 9);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 3);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, 9);
 
         var status = cpu.RunWorldPackDecode(
             result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackVisualDecodeLabel],
@@ -783,8 +783,8 @@ public sealed class GameBoyWorldPackReaderTests
 
         Assert.Equal(GameBoyWorldPackResult.Success, status);
         Assert.Equal(3, cpu.CurrentRomBank);
-        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(9, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(9, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
         Assert.Equal(
             fixture.Pack.Chunks[0].VisualIds.SelectMany(id => new[] { (byte)id, (byte)(id >> 8) }),
             Enumerable.Range(layout.VisualSlots[0].Start, layout.VisualSlots[0].Length)
@@ -814,8 +814,8 @@ public sealed class GameBoyWorldPackReaderTests
         var nestedBank = checked((byte)(outerBank == 1 ? 2 : 1));
         var cpu = new GameBoyTestCpu(result.Rom);
         cpu.SetCurrentRomBank(3);
-        cpu.SetWram(GameBoyRomBuilder.ActualVisibleBankAddress, 3);
-        cpu.SetWram(GameBoyRomBuilder.ProgramCurrentBankAddress, 9);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank, 3);
+        cpu.SetWram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank, 9);
         cpu.InjectFarReadAfterSelecting(
             outerBank,
             result.Report.FixedSymbols[GameBoyRomBuilder.Mbc1FarReadByteLabel],
@@ -830,8 +830,8 @@ public sealed class GameBoyWorldPackReaderTests
         Assert.Equal(GameBoyWorldPackResult.Success, status);
         Assert.Equal(result.Rom[nestedBank * 0x4000], Assert.Single(cpu.InjectedFarReadResults).Data);
         Assert.Equal(3, cpu.CurrentRomBank);
-        Assert.Equal(3, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(9, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(3, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(9, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
         Assert.Contains(
             cpu.RomBankWrites.Zip(cpu.RomBankWrites.Skip(1)),
             pair => pair.First.SelectedBank == nestedBank && pair.Second.SelectedBank == outerBank);
@@ -1034,8 +1034,8 @@ public sealed class GameBoyWorldPackReaderTests
         var updatesBefore = cpu.AudioUpdateCalls;
         var apuWritesBefore = cpu.ApuWrites.Count;
         var entryBank = cpu.CurrentRomBank;
-        var entryShadow = cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress);
-        var programShadow = cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress);
+        var entryShadow = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
+        var programShadow = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank);
         var bankWritesBeforeLookup = cpu.RomBankWrites.Count;
 
         var lookup = cpu.RunWorldPackCollisionLookup(
@@ -1045,8 +1045,8 @@ public sealed class GameBoyWorldPackReaderTests
 
         Assert.Equal(GameBoyWorldPackResult.Success, lookup.Status);
         Assert.Equal(entryBank, cpu.CurrentRomBank);
-        Assert.Equal(entryShadow, cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress));
-        Assert.Equal(programShadow, cpu.Wram(GameBoyRomBuilder.ProgramCurrentBankAddress));
+        Assert.Equal(entryShadow, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(programShadow, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank));
         Assert.All(
             cpu.RomBankWrites.Skip(bankWritesBeforeLookup),
             write => Assert.InRange(write.ProgramCounter, 0x0150, 0x3FFF));

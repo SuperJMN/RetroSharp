@@ -3,22 +3,10 @@ namespace RetroSharp.GameBoy.Tests;
 using RetroSharp.FunctionalAcceptance;
 using Xunit;
 using Xunit.Abstractions;
+using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedCamera;
 
 public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper output)
 {
-    private const ushort RequestCount = 0xC152;
-    private const ushort ResidentCount = 0xC154;
-    private const ushort CommitCount = 0xC155;
-    private const ushort ReleaseCount = 0xC156;
-    private const ushort BankWorkInCommit = 0xC157;
-    private const ushort DecodeWorkInCommit = 0xC158;
-    private const ushort DirectoryWorkInVBlank = 0xC19C;
-    private const ushort VisibleCameraXLow = 0xC14D;
-    private const ushort VisibleCameraXHigh = 0xC14E;
-    private const ushort VisibleCameraYLow = 0xC14F;
-    private const ushort VisibleCameraYHigh = 0xC150;
-    private const ushort DirectoryWorkInCommit = 0xC1E9;
-    private const ushort DecodeWorkInVBlank = 0xC1EA;
 
     public static TheoryData<string, string, string, string, string> ProductionSamples => new()
     {
@@ -191,7 +179,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         private FunctionalFrameObservation Observe(int frame)
         {
-            var visibleCamera = (X: Word(VisibleCameraXLow, VisibleCameraXHigh), Y: Word(VisibleCameraYLow, VisibleCameraYHigh));
+            var visibleCamera = (X: Word(PackedCameraMemory.VisibleCameraXLow, PackedCameraMemory.VisibleCameraXHigh), Y: Word(PackedCameraMemory.VisibleCameraYLow, PackedCameraMemory.VisibleCameraYHigh));
             visibleCameraByFrame[frame] = visibleCamera;
             var videoWrites = cpu.VramWrites.Skip(processedVramWrites).Select(VideoWrite).ToArray();
             var oamWrites = cpu.OamWrites.Skip(processedOamWrites).Select(OamWrite).ToArray();
@@ -207,26 +195,26 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 ["user5"] = cpu.Wram(0xC005),
                 ["visibleCameraX"] = visibleCamera.X,
                 ["visibleCameraY"] = visibleCamera.Y,
-                ["requestCount"] = cpu.Wram(RequestCount),
-                ["residentCount"] = cpu.Wram(ResidentCount),
-                ["commitCount"] = cpu.Wram(CommitCount),
-                ["releaseCount"] = cpu.Wram(ReleaseCount),
-                ["bankWorkInCommit"] = cpu.Wram(BankWorkInCommit),
-                ["decodeWorkInCommit"] = cpu.Wram(DecodeWorkInCommit),
-                ["directoryWorkInVBlank"] = cpu.Wram(DirectoryWorkInVBlank),
-                ["directoryWorkInCommit"] = cpu.Wram(DirectoryWorkInCommit),
-                ["decodeWorkInVBlank"] = cpu.Wram(DecodeWorkInVBlank),
+                ["requestCount"] = cpu.Wram(PackedCameraMemory.RequestCount),
+                ["residentCount"] = cpu.Wram(PackedCameraMemory.ResidentCount),
+                ["commitCount"] = cpu.Wram(PackedCameraMemory.CommitCount),
+                ["releaseCount"] = cpu.Wram(PackedCameraMemory.ReleaseCount),
+                ["bankWorkInCommit"] = cpu.Wram(PackedCameraMemory.BankWorkInCommit),
+                ["decodeWorkInCommit"] = cpu.Wram(PackedCameraMemory.DecodeWorkInCommit),
+                ["directoryWorkInVBlank"] = cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank),
+                ["directoryWorkInCommit"] = cpu.Wram(PackedCameraMemory.DirectoryWorkInCommit),
+                ["decodeWorkInVBlank"] = cpu.Wram(PackedCameraMemory.DecodeWorkInVBlank),
             };
-            var shadowBank = cpu.Wram(GameBoyRomBuilder.ActualVisibleBankAddress);
+            var shadowBank = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             var effectiveShadowBank = shadowBank == 0 ? 1 : shadowBank;
             var bank = new FunctionalBankObservation(
                 cpu.CurrentRomBank,
                 effectiveShadowBank,
                 cpu.CurrentRomBank == effectiveShadowBank,
                 "gb-mbc1");
-            var requested = UpdateSequence(RequestCount, ref previousRequestCount, ref requestSequence);
-            var resident = UpdateSequence(ResidentCount, ref previousResidentCount, ref residentSequence);
-            var committed = UpdateSequence(CommitCount, ref previousCommitCount, ref commitSequence);
+            var requested = UpdateSequence(PackedCameraMemory.RequestCount, ref previousRequestCount, ref requestSequence);
+            var resident = UpdateSequence(PackedCameraMemory.ResidentCount, ref previousResidentCount, ref residentSequence);
+            var committed = UpdateSequence(PackedCameraMemory.CommitCount, ref previousCommitCount, ref commitSequence);
             if (commitSequence != 0
                 && previousVisibleCamera is { } previousVisible
                 && visibleCamera != previousVisible)
