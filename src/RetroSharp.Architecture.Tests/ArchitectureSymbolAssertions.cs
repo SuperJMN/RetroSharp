@@ -82,6 +82,12 @@ internal static class ArchitectureSymbolAssertions
         Assert.DoesNotContain(
             root.GetMethods(DeclaredMethods),
             method => SignatureTypes(method).Any(domainFactTypes.Contains));
+        Assert.DoesNotContain(
+            CalledMethods(root),
+            method => method.DeclaringType is not null && domainStates.Contains(method.DeclaringType));
+        Assert.DoesNotContain(
+            ReferencedFields(root),
+            field => field.DeclaringType is not null && domainStates.Contains(field.DeclaringType));
     }
 
     public static Type RequiredNestedType(Type owner, string name)
@@ -92,9 +98,27 @@ internal static class ArchitectureSymbolAssertions
 
     public static IReadOnlyList<MethodBase> CalledMethods(Type source)
     {
-        return source
+        var executableMembers = source
             .GetMethods(DeclaredMethods)
+            .Cast<MethodBase>()
+            .Concat(source.GetConstructors(DeclaredMethods))
+            .Concat(source.TypeInitializer is { } typeInitializer ? [typeInitializer] : [])
+            .DistinctBy(member => (member.Module, member.MetadataToken));
+        return executableMembers
             .SelectMany(CalledMethods)
+            .ToList();
+    }
+
+    public static IReadOnlyList<FieldInfo> ReferencedFields(Type source)
+    {
+        var executableMembers = source
+            .GetMethods(DeclaredMethods)
+            .Cast<MethodBase>()
+            .Concat(source.GetConstructors(DeclaredMethods))
+            .Concat(source.TypeInitializer is { } typeInitializer ? [typeInitializer] : [])
+            .DistinctBy(member => (member.Module, member.MetadataToken));
+        return executableMembers
+            .SelectMany(ReferencedFields)
             .ToList();
     }
 
@@ -136,7 +160,7 @@ internal static class ArchitectureSymbolAssertions
             ?? throw new Xunit.Sdk.XunitException($"Assembly '{assembly.GetName().Name}' must declare type '{name}'.");
     }
 
-    public static IEnumerable<MethodBase> CalledMethods(MethodInfo source)
+    public static IEnumerable<MethodBase> CalledMethods(MethodBase source)
     {
         var body = source.GetMethodBody();
         var bytes = body?.GetILAsByteArray();
@@ -158,7 +182,7 @@ internal static class ArchitectureSymbolAssertions
                     called = source.Module.ResolveMethod(
                         token,
                         source.DeclaringType?.GetGenericArguments(),
-                        source.GetGenericArguments());
+                        MethodGenericArguments(source));
                 }
                 catch (ArgumentException)
                 {
@@ -176,6 +200,46 @@ internal static class ArchitectureSymbolAssertions
         }
     }
 
+    private static IEnumerable<FieldInfo> ReferencedFields(MethodBase source)
+    {
+        var body = source.GetMethodBody();
+        var bytes = body?.GetILAsByteArray();
+        if (bytes is null)
+        {
+            yield break;
+        }
+
+        var index = 0;
+        while (index < bytes.Length)
+        {
+            var opCode = ReadOpCode(bytes, ref index);
+            if (opCode.OperandType == OperandType.InlineField)
+            {
+                var token = BitConverter.ToInt32(bytes, index);
+                FieldInfo? field = null;
+                try
+                {
+                    field = source.Module.ResolveField(
+                        token,
+                        source.DeclaringType?.GetGenericArguments(),
+                        MethodGenericArguments(source));
+                }
+                catch (ArgumentException)
+                {
+                    // Continue inspecting the remaining field edges when a generic
+                    // instantiation cannot be resolved in this reflection context.
+                }
+
+                if (field is not null)
+                {
+                    yield return field;
+                }
+            }
+
+            index += OperandSize(opCode.OperandType, bytes, index);
+        }
+    }
+
     private static OpCode ReadOpCode(byte[] bytes, ref int index)
     {
         short value = bytes[index++];
@@ -185,6 +249,11 @@ internal static class ArchitectureSymbolAssertions
         }
 
         return OpCodesByValue[value];
+    }
+
+    private static Type[] MethodGenericArguments(MethodBase source)
+    {
+        return source is MethodInfo method ? method.GetGenericArguments() : Type.EmptyTypes;
     }
 
     private static int OperandSize(OperandType operandType, byte[] bytes, int index)

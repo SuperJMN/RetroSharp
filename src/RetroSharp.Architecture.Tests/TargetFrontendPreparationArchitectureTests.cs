@@ -26,7 +26,11 @@ public sealed class TargetFrontendPreparationArchitectureTests
         var preparation = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.TargetFrontendPreparation");
         var options = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.TargetFrontendPreparationOptions");
         var preparedProgram = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.PreparedTargetProgram");
-        var calls = ArchitectureSymbolAssertions.CalledMethods(preparation).ToList();
+        var prepare = preparation.GetMethod(
+            "Prepare",
+            BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+        Assert.NotNull(prepare);
+        var calls = ArchitectureSymbolAssertions.CalledMethods(prepare).ToList();
 
         Assert.False(preparation.IsPublic);
         Assert.False(options.IsPublic);
