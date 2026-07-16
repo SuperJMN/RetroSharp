@@ -1310,23 +1310,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Language_ir_gains_no_framework_concepts()
-    {
-        var intermediateFiles = Directory.GetFiles(
-            RepositoryDirectory("src/RetroSharp.Generation.Intermediate"),
-            "*.cs",
-            SearchOption.AllDirectories);
-
-        var intermediateSource = string.Join("\n", intermediateFiles.Select(File.ReadAllText));
-
-        Assert.DoesNotContain("AssetRef", intermediateSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("ConstPaletteSlot", intermediateSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("EnumFlags", intermediateSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("WorldId", intermediateSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("TargetIntrinsic", intermediateSource, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void Compiles_receiver_method_calls_like_static_helper_calls()
     {
         const string staticSource = """

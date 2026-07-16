@@ -1,9 +1,7 @@
 # RetroSharp Project Overview
 
 RetroSharp is a C#-inspired language, compiler, and zero-cost 2D framework for
-8-bit game systems. The current practical target is small cartridge-style games
-for Game Boy and NES, while the older compiler path still proves the classic
-parser, semantic analysis, intermediate-code, and Z80 backend pipeline.
+small cartridge-style games on Game Boy and NES.
 
 The project has three parts that should stay distinct:
 
@@ -84,10 +82,9 @@ RetroSharp has two active cartridge targets:
   where possible, supports the runner source as target acceptance, and proves
   scrolling, sprites, Tiled worlds, VGM/VGZ BGM, and many framework contracts.
 
-The original compiler path still parses RetroSharp, analyzes it, emits
-platform-agnostic intermediate code, and lowers that path to Z80 assembly. That
-path matters because it keeps the language/compiler core honest, even though the
-fastest-moving gameplay work now happens in the direct cartridge targets.
+The retired Z80 compiler path and its external fork recovery points remain
+documented in [LegacyZ80Compiler.md](LegacyZ80Compiler.md), but they are not part
+of the active solution or CLI.
 
 See [GameBoyTarget.md](GameBoyTarget.md) and [NesTarget.md](NesTarget.md) for
 the current supported subsets.

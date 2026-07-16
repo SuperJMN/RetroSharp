@@ -9,7 +9,7 @@ Status: Language v1 preview. Top-level import declarations for built-in compile-
 ## 1. Goals and non-goals
 
 - Zero-cost abstractions: no GC, no heap allocation, no exceptions, no reflection.
-- Deterministic, explicit semantics suitable for 8-bit CPUs (Z80, LR35902, 6502).
+- Deterministic, explicit semantics suitable for the current LR35902 and 6502-family targets.
 - Portable core + platform intrinsics. Clear ABI per backend.
 - C#-like surface where it does not hide cost.
 
@@ -74,7 +74,7 @@ Semantics:
 - Error if the base is not a known struct value or fixed struct-array element.
 - Public gameplay source does not use pointer auto-deref, address-of fields, pointer-backed arrays, raw buffers, or hardware addresses. If a library or target backend needs addressable storage internally, it must hide that behind SDK/resource facades, target intrinsics, or backend lowering.
 
-Codegen notes (Z80):
+Codegen notes (current cartridge targets):
 - Load s.x or a[i].x from the statically known field offset, using the target's fixed local or fixed array layout.
 - Offsets are computed at compile time.
 
@@ -110,7 +110,8 @@ Rationale:
 
 - Signature: RetType Name(params) { ... }
 - Current Game Boy/NES cartridge targets inline user helper calls with parameter substitution. Statement helpers expand their block; value helpers are accepted when the body is exactly one `return expr;` and expand to that expression. Expression-bodied helpers use `Ret name(args) => expr;` and are normalized to the same single-return helper shape before target lowering. Call sites can use named arguments such as `step(amount: 5, value: 4)`, which are reordered against the helper signature before lowering. Parameters can provide defaults with `type name = expr`; omitted defaults are substituted before lowering and may reference constants or earlier parameters visible at that point. This provides reusable source-level helpers without call overhead, stack setup, hidden storage, or ABI cost.
-- Return registers: u8 → A; u16 → HL (Z80) or A:X (6502).
+- Return registers and calling conventions are target-owned; see
+  `GameBoyTarget.md` and `NesTarget.md` for the current ABIs.
 - Parameters on stack by default; attributes may enable fastcall via registers.
 - Attributes (planned): [inline], [naked], [fastcall], [regs(HL,DE)], [intrinsic], [romcall(addr)], [target(...)].
 

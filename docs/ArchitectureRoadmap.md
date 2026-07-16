@@ -503,11 +503,11 @@ descriptors. They do not add runtime SDK operations by themselves.
 
 ## Layer Boundary and Golden Rule
 
-`Sdk2DOperation` is an opinionated 2D-game framework model (camera, sprites, tilemap streaming, HUD) used as an intermediate representation on the cartridge path. It is deliberately **isolated** in `RetroSharp.Core.Sdk`. The language and its classic intermediate code (`RetroSharp.Generation.Intermediate`) stay framework-neutral: they must not gain cameras, sprites, scroll, tilemaps, or controller concepts.
+`Sdk2DOperation` is an opinionated 2D-game framework model (camera, sprites, tilemap streaming, HUD) used as an intermediate representation on the cartridge path. It is deliberately **isolated** in `RetroSharp.Core.Sdk`. The language frontend (`RetroSharp.Parser`, `RetroSharp.Parser.Model`, and `RetroSharp.SemanticAnalysis`) stays framework-neutral: it must not gain cameras, sprites, scroll, tilemaps, or controller concepts.
 
 Golden rule for anyone extending this area:
 
-1. The language and its classic IR never gain framework concepts. Game-facing concepts live in the SDK layer or in target intrinsics, never in the grammar, AST typing, ABI, or classic IR.
+1. The language frontend never gains framework concepts. Game-facing concepts live in the SDK layer or in target intrinsics, never in the grammar, AST typing, semantic model, or language ABI.
 2. `Sdk2DOperation` must not become a dumping ground. Before adding a new operation, ask whether the feature is genuinely a shared portable primitive or whether it should be a target intrinsic plus a library helper. Genre-specific operations are a warning sign.
 3. The operand IR (`SdkByteExpression`) stays at the level of "immediate value" or "storage location". Typed storage descriptors such as `Local`, `Field`, and `IndexedElement` are acceptable because they describe storage, not expression evaluation. Do not add `BinaryOp` or other general expression-tree cases: that would pull source syntax into the portable IR.
 4. End-state: the 2D SDK should migrate from compiler-recognized operations toward a library written in the language over per-target intrinsics, so the framework becomes optional and replaceable. Until the language has per-target intrinsics and modules, the operation model is the accepted pragmatic bridge.

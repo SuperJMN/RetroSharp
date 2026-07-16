@@ -1,7 +1,7 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-16.
+Last updated: 2026-07-17.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
@@ -400,9 +400,11 @@ This document preserves project knowledge that previously lived only in agent me
 
 RetroSharp currently has three important work streams:
 
-- Classic compiler pipeline: parser, semantic analysis, intermediate code, Z80 backend, and CLI.
+- Shared language/frontend preparation: parser, semantic analysis,
+  `TargetFrontendPreparation`, and the CLI.
 - Direct cartridge targets: `src/RetroSharp.NES` and `src/RetroSharp.GameBoy`.
-- Portable 2D SDK architecture: shared concepts are being extracted from Game Boy/NES target experiments into capability-checked SDK operations.
+- Portable 2D SDK architecture: shared concepts become capability-checked SDK
+  operations before target-owned lowering.
 
 The Game Boy runner is the main acceptance path for playable behavior. It is valuable because it catches real target/runtime issues, but it is not automatically portable API evidence. Use `samples/manifest.json` to check each sample's role.
 
@@ -450,14 +452,15 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 ## Portability Lowering Roadmap (epic #106)
 
 Goal: one source program runs the same 2D scroll on Game Boy and NES, with the
-language and its classic IR (`RetroSharp.Generation.Intermediate`) framework-neutral,
-the 2D framework isolated in `RetroSharp.Core.Sdk` (`Sdk2DOperation`), and on a path
-to becoming a library over per-target intrinsics. The GitHub epic #106 implementation
+language frontend framework-neutral, the 2D framework isolated in
+`RetroSharp.Core.Sdk` (`Sdk2DOperation`), and on a path to becoming a library
+over per-target intrinsics. The GitHub epic #106 implementation
 slice is complete after PL-E1; use the newer stabilization issues #119-#122 for the
 active framework backlog.
 
 Golden rule (do not violate):
-- The language and its classic IR never gain framework concepts (camera/sprite/scroll).
+- The language parser, AST, semantic model, and ABI never gain framework concepts
+  (camera/sprite/scroll).
 - `Sdk2DOperation` must not grow into a dumping ground; a genre-specific operation
   should be questioned as an intrinsic+library before a compiler-recognized operation.
 - End-state: the 2D SDK becomes a library over per-target intrinsics.
@@ -724,7 +727,7 @@ or GB/NES asset lowering changes, rebuild the tracked runner ROMs with
 | --- | --- |
 | Assuming `RetroSharp.Cli --help` works | Inspect `src/RetroSharp.Cli/Program.cs`, `README.md`, or `WARP.md`; unknown options fail. |
 | Treating a passing local build as a push | Verify upstream with `git rev-list --left-right --count HEAD...@{u}` and `git ls-remote`. |
-| Ignoring submodules before publication | Check `git submodule status --recursive`; current submodules are `libs/6502DotNet` and `libs/Z80DotNet`. |
+| Assuming the retired Z80 submodules are still required | The active tree has no submodules. Use `docs/LegacyZ80Compiler.md` for the old gitlinks, pinned commits, and recovery worktree. |
 | Broad formatting-only runs touching old/vendored files | Use targeted formatting and `git diff --check`. |
 | Editing generated Game Boy ROMs by hand | Regenerate from source using `tools/gameboy/generate_sample_roms.py`. |
 | Treating generated screenshots as source artifacts | Leave `samples/runner/*.png` alone unless explicitly requested. |

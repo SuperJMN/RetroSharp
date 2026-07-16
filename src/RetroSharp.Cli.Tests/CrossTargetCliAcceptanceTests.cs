@@ -8,6 +8,60 @@ using Xunit;
 public sealed class CrossTargetCliAcceptanceTests
 {
     [Fact]
+    public void Cli_rejects_the_retired_z80_target()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        File.WriteAllText(source, "void Main() { }");
+
+        var result = RunCli("--target", "z80", source);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "Unknown target 'z80'. Supported targets: nes, gb",
+            result.StandardError,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_requires_an_explicit_cartridge_target()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        File.WriteAllText(source, "void Main() { }");
+
+        var result = RunCli(source);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "No target has been specified. Use --target nes or --target gb.",
+            result.StandardError,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cli_project_requires_an_explicit_cartridge_target()
+    {
+        using var workspace = TemporaryWorkspace();
+        var source = Path.Combine(workspace.Path, "probe.rs");
+        var project = Path.Combine(workspace.Path, "probe.retrosharp.json");
+        File.WriteAllText(source, "void Main() { }");
+        File.WriteAllText(project, """
+                                   {
+                                     "sources": [ "probe.rs" ]
+                                   }
+                                   """);
+
+        var result = RunCli(project);
+
+        Assert.Equal(1, result.ExitCode);
+        Assert.Contains(
+            "No target has been specified. Use --target nes or --target gb.",
+            result.StandardError,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Cli_runtime_abi_sidecar_rejects_non_nes_targets()
     {
         using var workspace = TemporaryWorkspace();
@@ -16,7 +70,7 @@ public sealed class CrossTargetCliAcceptanceTests
         File.WriteAllText(source, "void Main() { }");
 
         var result = RunCli(
-            "--target", "z80",
+            "--target", "gb",
             "--runtime-abi-out", abi,
             source);
 

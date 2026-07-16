@@ -2,7 +2,7 @@
 
 This is the first file an AI CLI agent should read before changing RetroSharp.
 
-RetroSharp is a .NET 10 multi-project solution for a small C#-like language that targets 8-bit systems. The original compiler path emits intermediate code and Z80 assembly. The current fast-moving proving ground is the direct NES/Game Boy cartridge compiler path, especially the Game Boy runner sample.
+RetroSharp is a .NET 10 multi-project solution for a small C#-like language that compiles directly to NES and Game Boy cartridges. The shared frontend and portable SDK feed target-owned lowerers, with the Game Boy/NES runner as the main acceptance sample.
 
 ## Read First
 
@@ -20,6 +20,7 @@ Use this order when you need project context:
 10. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
 11. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
 12. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
+13. `docs/LegacyZ80Compiler.md`: archived Z80 path, fork provenance, and exact recovery instructions when that history is in scope.
 
 `WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
 

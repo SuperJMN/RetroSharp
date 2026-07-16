@@ -7,7 +7,7 @@ packages:
   - name: RetroSharp.Tool
     project: src/RetroSharp.Cli/RetroSharp.Cli.csproj
     type: tool
-    description: "A modern C#-like language that compiles to 8-bit architectures (Z80)"
+    description: "A modern C#-like language and zero-cost 2D framework for Game Boy and NES"
     
 output:
   directory: packages/

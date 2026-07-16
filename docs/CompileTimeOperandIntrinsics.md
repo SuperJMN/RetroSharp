@@ -61,7 +61,9 @@ The SDK/frontend collector reads call operands using the descriptor:
 
 Per-target lowerers then emit through the same machinery that current `Sdk2DOperation` lowering uses. For `Sprite.Draw`, the lowerer still resolves metasprite geometry from target asset metadata. For collision, `Camera.AabbTiles` and `Camera.AabbHitTop` preserve their capability checks; world hit-top returns a complete word with `-1` as no hit.
 
-The parser, AST, ABI, and classic `RetroSharp.Generation.Intermediate` IR do not gain sprite, camera, world, asset, generic, or expression-tree concepts. This is SDK/frontend plus target-intrinsic metadata.
+The parser, AST, semantic model, and language ABI do not gain sprite, camera,
+world, asset, generic, or expression-tree concepts. This is SDK/frontend plus
+target-intrinsic metadata.
 
 ## Implemented Proof
 
