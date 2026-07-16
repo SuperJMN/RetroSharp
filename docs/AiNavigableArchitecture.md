@@ -1,7 +1,8 @@
 # AI-Navigable Architecture
 
 Status: acceptance map for AIN-9 / #365, amended by the test-locality audit in
-AIN-11 / #377. Measurements are descriptive, not size gates.
+AIN-11 / #377 and finalized by the rename-safe guard closeout in AIN-12 / #378.
+Measurements are descriptive, not size gates.
 
 Use this document when a compiler or cartridge-runtime change needs a fresh
 navigation path. Start from the owning deep module below, cross its small seam,
@@ -162,8 +163,8 @@ files=(
   src/RetroSharp.Architecture.Tests/NesSdkLoweringArchitectureTests.cs
 )
 
-for path in "${files[@]}"; do
-  codegraph node -p . --file "$path" --symbols-only
+for file in "${files[@]}"; do
+  codegraph node -p . --file "$file" --symbols-only
 done
 ```
 
@@ -181,19 +182,21 @@ The baseline is commit `7260e70`, immediately before the AIN epic. These line
 counts describe locality gained; they are not acceptance thresholds and must
 not become arbitrary size gates.
 
-| Former hotspot | Baseline | AIN-9 tree | AIN-11 tree |
-| --- | ---: | ---: | ---: |
-| `GameBoyRomBuilder.cs` | 10,948 | 1,138 | 1,138 |
-| `NesRomBuilder.cs` | 8,890 | 1,528 | 1,528 |
-| root `ActorFrameworkLowerer.cs` | 4,530 | 622 | 622 |
-| `GameBoyRomCompilerTests.cs` | 8,429 | 6,483 | 5,337 |
-| `NesRomCompilerTests.cs` | 5,110 | 3,503 | 3,173 |
+| Former hotspot | Baseline | AIN-9 tree | AIN-11 tree | AIN-12 tree |
+| --- | ---: | ---: | ---: | ---: |
+| `GameBoyRomBuilder.cs` | 10,948 | 1,138 | 1,138 | 1,138 |
+| `NesRomBuilder.cs` | 8,890 | 1,528 | 1,528 | 1,528 |
+| root `ActorFrameworkLowerer.cs` | 4,530 | 622 | 622 | 622 |
+| `GameBoyRomCompilerTests.cs` | 8,429 | 6,483 | 5,337 | 5,338 |
+| `NesRomCompilerTests.cs` | 5,110 | 3,503 | 3,173 | 3,174 |
 
 The final tree has 11 Game Boy SDK-lowerer modules, 8 NES SDK-lowerer modules,
 7 focused Game Boy SDK-lowering suites, 4 focused NES SDK-lowering suites,
-14 Actor Framework modules, and 27 architecture `[Fact]`/`[Theory]`
-declarations. Validation results and exact runner hashes belong in the closing
-PR/epic record because they are execution evidence, not permanent design limits.
+14 Actor Framework modules, and 30 architecture `[Fact]`/`[Theory]`
+declarations: 29 discovered tests plus one deliberately undiscovered compiled-
+metadata fixture used by a negative ownership test. Validation results and exact
+runner hashes belong in the closing PR/epic record because they are execution
+evidence, not permanent design limits.
 
 ## Acceptance commands
 
