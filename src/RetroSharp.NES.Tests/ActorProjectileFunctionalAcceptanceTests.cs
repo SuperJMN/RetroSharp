@@ -1,8 +1,6 @@
 namespace RetroSharp.NES.Tests;
 
 using RetroSharp.FunctionalAcceptance;
-using RetroSharp.Core.Targeting;
-using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
 using Xunit.Abstractions;
@@ -217,7 +215,13 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                 RepositoryDirectory(sourceRootRelativePath!));
         }
 
-        var program = PrepareVideoProgram(source, RepositoryDirectory(baseDirectoryRelativePath));
+        var program = RetroSharp.NES.NesRomCompiler.PrepareVideoProgram(
+            source,
+            RepositoryDirectory(baseDirectoryRelativePath),
+            SdkLibraryImportMode.ExplicitOnly,
+            null,
+            [SdkImportResolver.Portable2D],
+            null).VideoProgram;
         var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             source,
             RepositoryDirectory(baseDirectoryRelativePath),
@@ -226,25 +230,6 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
             [SdkImportResolver.Portable2D],
             null);
         return new(program, build);
-    }
-
-    private static NesVideoProgram PrepareVideoProgram(string source, string baseDirectory)
-    {
-        var parse = new SomeParser().Parse(
-            SdkLibrarySource.Merge(
-                NesTarget.Intrinsics,
-                source,
-                libraryImportPaths: [SdkImportResolver.Portable2D]));
-        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
-        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
-        var actorProgram = ActorFrameworkLowerer.Lower(
-            targetProgram,
-            NesTarget.Capabilities,
-            supportsUpdate: true,
-            supportsDraw: true,
-            baseDirectory);
-        var loweredProgram = LetTypeInference.ResolveOrThrow(SdkSourcePackageFacadeLowerer.Lower(actorProgram));
-        return NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
     }
 
     private static string RepositoryFile(string relativePath)
