@@ -39,7 +39,7 @@ public sealed class NesSdkSpriteLoweringTests
 
         var rom = NesRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal("EBCA45A4F744B945E22D73422104BBAF7A5E88A28063CB4314E5F6AEC0C04D71", Fingerprint(rom));
+        Assert.Equal("3E85ACCE1E4410F58224D80EC04AF5BD342F6092F51FEB304A3A91057514814D", Fingerprint(rom));
     }
 
     [Fact]

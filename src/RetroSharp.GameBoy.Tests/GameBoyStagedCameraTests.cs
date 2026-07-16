@@ -553,6 +553,45 @@ public sealed class GameBoyStagedCameraTests
     }
 
     [Fact]
+    public void Delayed_packed_commit_does_not_publish_shadow_oam_a_second_time()
+    {
+        var directory = RepositoryDirectory("samples/runner");
+        const string source = """
+            void Main() {
+                Video.Init();
+                World.Load("assets/maps/stage1.playable.tmj");
+                Sprite.Asset(player, "assets/mario-player.png", 18, 32);
+                Camera.Init(176, 0, 30);
+                Camera.SetPosition(8, 0);
+                while (true) {
+                    Video.WaitVBlank();
+                    Sprite.Draw(player, 0, 0, 0, false, 0);
+                    Sprite.Draw(player, 24, 0, 0, false, 0);
+                    Sprite.Draw(player, 48, 0, 0, false, 0);
+                    Camera.Apply();
+                }
+            }
+            """;
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: CompileWorldPack(directory, "assets/maps/stage1.playable.tmj"));
+        var cpu = new GameBoyTestCpu(result.Rom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+
+        cpu.RunUntilWramEquals(PackedCameraMemory.CommitCount, 1);
+        var transfersBeforeDelayedCommit = cpu.OamDmaTransfers.Count;
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1);
+
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitEnteredVBlank));
+        Assert.Equal(transfersBeforeDelayedCommit, cpu.OamDmaTransfers.Count);
+    }
+
+    [Fact]
     public void Two_vertical_crossings_keep_row_order_and_never_exceed_twenty_one_writes_per_vblank()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");

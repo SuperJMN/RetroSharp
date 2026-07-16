@@ -569,17 +569,7 @@ public sealed class GameBoyRunnerLandingTests
 
     private static void AdvanceGameplayTick(GameBoyTestCpu cpu)
     {
-        var previousTick = cpu.SourceWaitCompletions;
-        for (var frame = 0; frame < 8; frame++)
-        {
-            cpu.RunAdditionalFrames(1);
-            if (cpu.SourceWaitCompletions != previousTick)
-            {
-                return;
-            }
-        }
-
-        Assert.Fail("The Game Boy runner did not advance a gameplay tick within eight physical frames.");
+        cpu.RunUntilSourceWaitCompletions(cpu.SourceWaitCompletions + 1);
     }
 
     private static void RunUp(GameBoyTestCpu cpu, int ticks)

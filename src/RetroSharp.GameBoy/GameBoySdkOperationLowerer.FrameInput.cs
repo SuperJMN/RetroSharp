@@ -33,6 +33,10 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.JumpAbsolute(done);
             builder.Label(wait);
             GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
+            if (usesShadowOam)
+            {
+                GameBoyRomBuilder.EmitPublishShadowOam(builder);
+            }
             builder.Label(done);
             if (usesPackedCollisionRuntime)
             {
@@ -46,6 +50,10 @@ internal sealed partial class GameBoySdkOperationLowerer
         }
 
         GameBoyRomBuilder.EmitWaitVBlank(builder, builder.CreateLabel("wait_vblank"));
+        if (usesShadowOam)
+        {
+            GameBoyRomBuilder.EmitPublishShadowOam(builder);
+        }
     }
 
     internal void EmitInputStateInitialization()

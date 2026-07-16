@@ -6,6 +6,20 @@ using Xunit;
 public sealed class FunctionalScenarioRunnerTests
 {
     [Fact]
+    public void Timing_contract_exposes_spawn_to_visible_budget()
+    {
+        Assert.NotNull(typeof(FunctionalTimingBudgets).GetProperty("MaximumSpawnToVisibleFrames"));
+        Assert.NotNull(typeof(FunctionalFrameObservation).GetProperty("Spawn"));
+    }
+
+    [Fact]
+    public void Sprite_contract_exposes_explicit_oam_slot_order()
+    {
+        Assert.NotNull(typeof(FunctionalSpriteObservation).GetProperty("OamSlot"));
+        Assert.NotNull(typeof(FunctionalSpriteExpectation).GetProperty("OamSlot"));
+    }
+
+    [Fact]
     public void Checked_in_json_schema_requires_the_stable_contract_keys()
     {
         using var document = JsonDocument.Parse(
@@ -95,6 +109,37 @@ public sealed class FunctionalScenarioRunnerTests
             Assert.True(scenario.ObservationFrames >= 30);
             Assert.False(string.IsNullOrWhiteSpace(scenario.BudgetEvidence.HardwareTimingRationale));
             Assert.False(string.IsNullOrWhiteSpace(scenario.BudgetEvidence.ProductionTraceRationale));
+        }
+    }
+
+    [Fact]
+    public void Csl6_scenarios_cover_every_declared_actor_and_projectile_target()
+    {
+        var expected = new[]
+        {
+            ("actor-framework.gb.json", "actor-framework", FunctionalTarget.GameBoy),
+            ("actor-framework.nes.json", "actor-framework", FunctionalTarget.Nes),
+            ("shots-simple.gb.json", "shots-simple", FunctionalTarget.GameBoy),
+            ("shots-simple.nes.json", "shots-simple", FunctionalTarget.Nes),
+            ("shots-bouncy.gb.json", "shots-bouncy", FunctionalTarget.GameBoy),
+            ("shots-bouncy.nes.json", "shots-bouncy", FunctionalTarget.Nes),
+            ("runner-projectile.gb.json", "runner-projectile", FunctionalTarget.GameBoy),
+            ("runner-projectile.nes.json", "runner-projectile", FunctionalTarget.Nes),
+        };
+
+        foreach (var (file, sampleId, target) in expected)
+        {
+            var scenario = FunctionalScenarioLoader.Load(RepositoryFile($"validation/scenarios/{file}"));
+
+            Assert.Equal(sampleId, scenario.SampleId);
+            Assert.Equal(target, scenario.Target);
+            Assert.Equal("95f166886713ff3b88bc1e17c03ef0ffe93d649a", scenario.BudgetEvidence.BaselineCommit);
+            Assert.True(scenario.ExpectedFeatures.GameplayTicks);
+            Assert.True(scenario.ExpectedFeatures.Background);
+            Assert.True(scenario.ExpectedFeatures.SpriteOam);
+            Assert.True(scenario.ExpectedFeatures.SafeVideoWrites);
+            Assert.False(scenario.ExpectedFeatures.AudioService);
+            Assert.NotNull(scenario.Budgets.MaximumSpawnToVisibleFrames);
         }
     }
 
@@ -242,6 +287,126 @@ public sealed class FunctionalScenarioRunnerTests
         Assert.False(report.Passed);
         Assert.Contains(report.IntegrityFailures, failure => failure.Code == "sprite-visibility" && failure.Frame == 1);
         Assert.Contains(report.IntegrityFailures, failure => failure.Code == "sprite-oam" && failure.Frame == 1);
+    }
+
+    [Fact]
+    public void Spawn_to_visible_latency_is_measured_from_accepted_spawn_transitions()
+    {
+        var scenario = IntegrityScenario(spriteOam: true) with
+        {
+            Budgets = new(0, 2, MaximumSpawnToVisibleFrames: 1),
+        };
+        var hidden = Sprite("projectile-0", false, [160, 8, 6, 0]);
+        var visible = Sprite("projectile-0", true, [64, 40, 6, 0]);
+        var observations = new[]
+        {
+            Frame(0, sprites: [hidden], spawn: new(null, null)),
+            Frame(1, sprites: [hidden], spawn: new(1, null)),
+            Frame(2, sprites: [visible], spawn: new(1, 1)),
+        };
+        var oracle = new ScriptedOracle(frame => new(
+            frame,
+            Sprites: frame == 2
+                ? [ExpectedSprite("projectile-0", true, [64, 40, 6, 0])]
+                : [ExpectedSprite("projectile-0", false, [160, 8, 6, 0])]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.True(report.Passed, report.ToHumanReadable());
+        Assert.Equal(1, Assert.Single(report.TimingChecks, check => check.Metric == "spawn-to-visible").Observed);
+    }
+
+    [Fact]
+    public void Spawn_budget_rejects_a_window_without_any_accepted_spawn()
+    {
+        var scenario = IntegrityScenario(spriteOam: true) with
+        {
+            Budgets = new(0, 2, MaximumSpawnToVisibleFrames: 1),
+        };
+        var hidden = Sprite("projectile-0", false, [160, 8, 6, 0]);
+        var observations = new[]
+        {
+            Frame(0, sprites: [hidden], spawn: new(null, null)),
+            Frame(1, sprites: [hidden], spawn: new(null, null)),
+            Frame(2, sprites: [hidden], spawn: new(null, null)),
+        };
+        var oracle = new ScriptedOracle(frame => new(frame, Sprites: [ExpectedSprite("projectile-0", false, [160, 8, 6, 0])]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.False(report.Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "missing-spawn-transition");
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "spawn-to-visible").Passed);
+    }
+
+    [Fact]
+    public void Spawn_budget_rejects_an_unresolved_spawn_on_the_final_frame()
+    {
+        var scenario = IntegrityScenario(spriteOam: true) with
+        {
+            Budgets = new(0, 2, MaximumSpawnToVisibleFrames: 1),
+        };
+        var hidden = Sprite("projectile-0", false, [160, 8, 6, 0]);
+        var observations = new[]
+        {
+            Frame(0, sprites: [hidden], spawn: new(null, null)),
+            Frame(1, sprites: [hidden], spawn: new(null, null)),
+            Frame(2, sprites: [hidden], spawn: new(1, null)),
+        };
+        var oracle = new ScriptedOracle(frame => new(frame, Sprites: [ExpectedSprite("projectile-0", false, [160, 8, 6, 0])]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.False(report.Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "spawn-not-visible-within-budget");
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "spawn-to-visible").Passed);
+    }
+
+    [Fact]
+    public void Later_visible_spawn_cannot_mask_a_skipped_sequence()
+    {
+        var scenario = IntegrityScenario(spriteOam: true) with
+        {
+            Budgets = new(0, 2, MaximumSpawnToVisibleFrames: 1),
+        };
+        var hidden = Sprite("projectile-0", false, [160, 8, 6, 0]);
+        var visible = Sprite("projectile-0", true, [64, 40, 6, 0]);
+        var observations = new[]
+        {
+            Frame(0, sprites: [hidden], spawn: new(null, null)),
+            Frame(1, sprites: [hidden], spawn: new(1, null)),
+            Frame(2, sprites: [visible], spawn: new(2, 2)),
+        };
+        var oracle = new ScriptedOracle(frame => new(
+            frame,
+            Sprites: frame == 2
+                ? [ExpectedSprite("projectile-0", true, [64, 40, 6, 0])]
+                : [ExpectedSprite("projectile-0", false, [160, 8, 6, 0])]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.False(report.Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "spawn-not-visible-within-budget");
+    }
+
+    [Fact]
+    public void Controlled_stale_oam_slot_reuse_probe_is_rejected()
+    {
+        var scenario = IntegrityScenario(spriteOam: true);
+        var observations = new[]
+        {
+            Frame(0, sprites: [new("projectile-0", false, [160, 8, 6, 0], OamSlot: 0)]),
+            Frame(1, sprites: [new("projectile-0", false, [160, 8, 6, 0], OamSlot: 1)]),
+            Frame(2, sprites: [new("projectile-0", false, [160, 8, 6, 0], OamSlot: 0)]),
+        };
+        var oracle = new ScriptedOracle(frame => new(
+            frame,
+            Sprites: [new FunctionalSpriteExpectation("projectile-0", false, [160, 8, 6, 0], OamSlot: 0)]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.False(report.Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "sprite-oam-slot" && failure.Frame == 1);
     }
 
     [Fact]
@@ -621,7 +786,8 @@ public sealed class FunctionalScenarioRunnerTests
         IReadOnlyList<FunctionalBackgroundObservation>? background = null,
         IReadOnlyList<FunctionalSpriteObservation>? sprites = null,
         IReadOnlyList<FunctionalVideoWriteObservation>? videoWrites = null,
-        IReadOnlyList<FunctionalOamWriteObservation>? oamWrites = null) =>
+        IReadOnlyList<FunctionalOamWriteObservation>? oamWrites = null,
+        FunctionalSpawnLifecycleObservation? spawn = null) =>
         new(
             frame,
             gameplayTicks,
@@ -633,7 +799,8 @@ public sealed class FunctionalScenarioRunnerTests
             background,
             sprites,
             videoWrites,
-            oamWrites);
+            oamWrites,
+            spawn);
 
     private static FunctionalBackgroundObservation Background(string location, int tile, int palette) =>
         new(location, tile, palette);

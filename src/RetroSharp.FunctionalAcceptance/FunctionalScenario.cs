@@ -68,7 +68,8 @@ public sealed record FunctionalTimingBudgets(
     int? MaximumRequestToResidentFrames = null,
     int? MaximumRequestToVisibleFrames = null,
     int? MaximumUnplannedAudioGapFrames = null,
-    int? MaximumAudioDriftTicks = null);
+    int? MaximumAudioDriftTicks = null,
+    int? MaximumSpawnToVisibleFrames = null);
 
 public sealed record FunctionalRomArtifact(string SourcePath, byte[] Bytes);
 
@@ -83,7 +84,12 @@ public sealed record FunctionalFrameObservation(
     IReadOnlyList<FunctionalBackgroundObservation>? Background = null,
     IReadOnlyList<FunctionalSpriteObservation>? Sprites = null,
     IReadOnlyList<FunctionalVideoWriteObservation>? VideoWrites = null,
-    IReadOnlyList<FunctionalOamWriteObservation>? OamWrites = null);
+    IReadOnlyList<FunctionalOamWriteObservation>? OamWrites = null,
+    FunctionalSpawnLifecycleObservation? Spawn = null);
+
+public sealed record FunctionalSpawnLifecycleObservation(
+    long? ActivatedSequence,
+    long? VisibleSequence);
 
 public sealed record FunctionalCameraLifecycleObservation(
     long? RequestedSequence,
@@ -105,7 +111,8 @@ public sealed record FunctionalBackgroundObservation(
 public sealed record FunctionalSpriteObservation(
     string Id,
     bool Visible,
-    IReadOnlyList<int> Oam);
+    IReadOnlyList<int> Oam,
+    int OamSlot = -1);
 
 public sealed record FunctionalFrameExpectation(
     int Frame,
@@ -114,7 +121,7 @@ public sealed record FunctionalFrameExpectation(
 
 public sealed record FunctionalBackgroundExpectation(string Location, int Tile, int Palette);
 
-public sealed record FunctionalSpriteExpectation(string Id, bool Visible, IReadOnlyList<int> Oam);
+public sealed record FunctionalSpriteExpectation(string Id, bool Visible, IReadOnlyList<int> Oam, int OamSlot = -1);
 
 public sealed record FunctionalWriteTimingObservation(
     long Cycle,

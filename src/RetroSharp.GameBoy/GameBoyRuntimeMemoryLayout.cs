@@ -43,8 +43,10 @@ internal static class GameBoyRuntimeMemoryLayout
     internal static readonly GameBoyWramRange AudioChannel1Shadow = new("audio channel-1 shadow", 0xC210, 0x0005);
     internal static readonly GameBoyWramRange CollisionMemoState = new("collision memo state", 0xC220, 0x00C0);
     internal static readonly GameBoyWramRange WorldPackStaging = new("WorldPack staging", 0xC300, WorldPack.MaximumStagingBytes);
+    internal static readonly GameBoyWramRange SpriteOamShadow = new("sprite OAM shadow", 0xC600, 0x00A0);
     internal static readonly GameBoyWramRange WramEcho = new("WRAM echo", 0xE000, 0x1E00);
-    internal static readonly GameBoyWramRange Stack = new("stack/HRAM", 0xFF80, 0x0080);
+    internal static readonly GameBoyWramRange OamDmaRoutine = new("OAM DMA HRAM routine", 0xFF80, 0x000A);
+    internal static readonly GameBoyWramRange Stack = new("stack/HRAM", 0xFF8A, 0x0076);
 
     internal static IReadOnlyList<GameBoyWramRange> ReservedRanges { get; } =
     [
@@ -62,7 +64,9 @@ internal static class GameBoyRuntimeMemoryLayout
         AudioChannel1Shadow,
         CollisionMemoState,
         WorldPackStaging,
+        SpriteOamShadow,
         WramEcho,
+        OamDmaRoutine,
         Stack,
     ];
 
@@ -196,6 +200,13 @@ internal static class GameBoyRuntimeMemoryLayout
     {
         internal const ushort WordScratchLow = 0xC12F;
         internal const ushort WordScratchHigh = 0xC130;
+    }
+
+    internal static class Sprites
+    {
+        internal const ushort OamShadowStart = 0xC600;
+        internal const ushort DmaRoutineAddress = 0xFF80;
+        internal const byte OamShadowPage = 0xC6;
     }
 
     internal static class PackedCamera
@@ -454,6 +465,7 @@ internal static class GameBoyRuntimeMemoryLayout
             ("input", typeof(Input)),
             ("packed camera", typeof(PackedCamera)),
             ("runtime", typeof(Runtime)),
+            ("sprites", typeof(Sprites)),
             ("WorldPack", typeof(WorldPack)),
         };
 

@@ -33,7 +33,7 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
-        Assert.Equal("5D42DDFDB36FD0FCE746A9960C0379D6F9DE6D747735D7498BB11261380D407C", Fingerprint(rom));
+        Assert.Equal("8D3D133258DBBA2A28B934EA16C03404AA25DF2D1B1C3BF3044A1250FC8C529D", Fingerprint(rom));
     }
 
     [Fact]
@@ -53,6 +53,7 @@ public sealed class GameBoySdkSpriteLoweringTests
                               void Main() {
                                   Video.Init();
                                   Sprite.Asset(player_run, "player.sprite.json");
+                                  Video.WaitVBlank();
                                   Sprite.Draw(player_run, 72, 80, 0);
                               }
                               """;
@@ -61,9 +62,10 @@ public sealed class GameBoySdkSpriteLoweringTests
 
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x55, 0x33, 0xAA, 0xCC]), "ROM should contain tile data loaded from the editable sprite asset.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "sprite_draw should write the logical Y plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]), "sprite_draw should write the logical X plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should use the first generated tile for the first hardware sprite.");
+        Assert.True(ContainsSequence(rom, [0xCD, 0x80, 0xFF]), "Video.WaitVBlank should publish shadow OAM through the HRAM DMA routine.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xC6]), "sprite_draw should write the logical Y plus the Game Boy sprite offset to shadow OAM.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xC6]), "sprite_draw should write the logical X plus the Game Boy sprite offset to shadow OAM.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite_draw should use the first generated tile for the first shadow OAM entry.");
     }
 
     [Fact]
@@ -82,10 +84,10 @@ public sealed class GameBoySdkSpriteLoweringTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "Top-left piece should use the logical Y coordinate.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x05, 0xFE]), "Top-right piece should add the 8 px X offset.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x20, 0xEA, 0x08, 0xFE]), "Bottom-left piece should add the 16 px Y offset.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xFE]), "Bottom-right piece should use the fourth generated 8x16 tile pair.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x10, 0xEA, 0x00, 0xC6]), "Top-left piece should use the logical Y coordinate in shadow OAM.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x05, 0xC6]), "Top-right piece should add the 8 px X offset in shadow OAM.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x20, 0xEA, 0x08, 0xC6]), "Bottom-left piece should add the 16 px Y offset in shadow OAM.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xC6]), "Bottom-right piece should use the fourth generated 8x16 tile pair in shadow OAM.");
     }
 
     [Fact]
@@ -107,10 +109,10 @@ public sealed class GameBoySdkSpriteLoweringTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x20]), "sprite_draw should lower logical flipX to the Game Boy OAM X-flip bit.");
         Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "sprite_draw should test the logical flipX boolean before placing metasprite pieces.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xFE]), "X-flipped first logical piece should move to the mirrored top-right hardware X coordinate.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x05, 0xFE]), "X-flipped second logical piece should move to the mirrored top-left hardware X coordinate.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "X-flipped first logical piece should keep its own tile and rely on the OAM flip bit.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x06, 0xFE]), "X-flipped second logical piece should keep its own tile and rely on the OAM flip bit.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xC6]), "X-flipped first logical piece should move to the mirrored top-right shadow OAM X coordinate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x05, 0xC6]), "X-flipped second logical piece should move to the mirrored top-left shadow OAM X coordinate.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xC6]), "X-flipped first logical piece should keep its own tile and rely on the shadow OAM flip bit.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x06, 0xC6]), "X-flipped second logical piece should keep its own tile and rely on the shadow OAM flip bit.");
     }
 
     [Fact]
@@ -129,7 +131,7 @@ public sealed class GameBoySdkSpriteLoweringTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xEA, 0x03, 0xFE]), "palette slot 1 should lower to the Game Boy OBP1 OAM attribute bit.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xEA, 0x03, 0xC6]), "palette slot 1 should lower to the Game Boy OBP1 shadow OAM attribute bit.");
     }
 
     [Fact]
@@ -148,7 +150,7 @@ public sealed class GameBoySdkSpriteLoweringTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x30, 0xEA, 0x03, 0xFE]), "flipX and palette slot 1 should combine into OAM attributes without exposing raw flags in source.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x30, 0xEA, 0x03, 0xC6]), "flipX and palette slot 1 should combine into shadow OAM attributes without exposing raw flags in source.");
     }
 
     [Fact]
@@ -186,9 +188,9 @@ public sealed class GameBoySdkSpriteLoweringTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xFE]), "The first 8 px piece should move to logical X + 10 when an 18 px sprite is flipped.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xFE]), "The middle 8 px piece should move to logical X + 2 when an 18 px sprite is flipped.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xFE]), "The padded edge piece should straddle the logical origin instead of adding padded left spacing.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xC6]), "The first 8 px piece should move to logical X + 10 in shadow OAM when an 18 px sprite is flipped.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xC6]), "The middle 8 px piece should move to logical X + 2 in shadow OAM when an 18 px sprite is flipped.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xC6]), "The padded edge shadow OAM piece should straddle the logical origin instead of adding padded left spacing.");
     }
 
     [Fact]
@@ -230,7 +232,7 @@ public sealed class GameBoySdkSpriteLoweringTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should multiply the logical frame by the per-frame tile count.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite_draw should multiply the logical frame by the per-frame tile count in shadow OAM.");
     }
 
     [Fact]
@@ -259,9 +261,9 @@ public sealed class GameBoySdkSpriteLoweringTests
                 StaticTransform: SpriteTransform.None));
 
         var bytes = builder.Build();
-        Assert.True(ContainsSequence(bytes, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "sprite draw operation should write the logical Y plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(bytes, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]), "sprite draw operation should write the logical X plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(bytes, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite draw operation should use the first generated tile for the first hardware sprite.");
+        Assert.True(ContainsSequence(bytes, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xC6]), "sprite draw operation should write the logical Y plus the Game Boy sprite offset to shadow OAM.");
+        Assert.True(ContainsSequence(bytes, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xC6]), "sprite draw operation should write the logical X plus the Game Boy sprite offset to shadow OAM.");
+        Assert.True(ContainsSequence(bytes, [0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite draw operation should use the first generated tile for the first shadow OAM entry.");
     }
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]

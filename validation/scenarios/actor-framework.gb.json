@@ -1,0 +1,65 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "actor-framework-gb-functional",
+  "sampleId": "actor-framework",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 321,
+  "inputs": [
+    {
+      "id": "move-right",
+      "startFrame": 21,
+      "durationFrames": 160,
+      "buttons": [
+        "right"
+      ],
+      "responseSignal": "sourceCameraX"
+    },
+    {
+      "id": "reverse-left",
+      "startFrame": 181,
+      "durationFrames": 161,
+      "buttons": [
+        "left"
+      ],
+      "responseSignal": "sourceCameraX"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "returned-after-reverse",
+      "frame": 341,
+      "expectedSignals": {
+        "sourceCameraX": 0,
+        "visibleCameraX": 0,
+        "poolCapacity": 2
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A 70224-cycle DMG frame permits one complete fixed-pool update plus a VBlank OAM projection; accepted logical spawns must reach retained OAM by the following frame.",
+    "productionTraceRationale": "The exact actor-framework ROM traverses the full 160-pixel camera span, activates and recycles its two fixed slots, then reverses to X=0 without reactivating one-shot spawns or retaining stale OAM."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 1,
+    "maximumSpawnToVisibleFrames": 1
+  }
+}

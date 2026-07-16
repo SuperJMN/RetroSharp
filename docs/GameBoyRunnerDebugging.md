@@ -143,7 +143,7 @@ Use this table to avoid fixing the wrong layer:
 | Background shifted or missing under terrain | `GameBoyTiledMapImporter`, `GameBoyRomCompiler` initial tilemap fill, `retrosharpWorldY`, `retrosharpStreamY`. |
 | Background decorations above the band ghost/repeat every ~32 tiles while scrolling | Background-row streaming in `GameBoyRomBuilder` camera right/left steps and `PopulateBackgroundStreamRows`. |
 | Background blocks tear/glitch only while crossing a tile boundary (especially on heavy frames such as jumping or landing on a platform) | Camera tile streaming writing VRAM during active display, starting too late in the current VBlank, or writing the wrong visible edge for the current `SCX`/`SCY`; confirm `Camera.Apply()` runs after a fresh VBlank edge and compare the 20x18 visible tile projection against the imported world map. Read `0xFF44` directly for `LY`; some debug bridges report a stale `LY` in compact PPU state. |
-| Player sprite pieces flicker, appear at fixed screen positions, or remain as non-scrolling "stickers" | Treat these as OAM/sprite artifacts first, not background tiles. Check that `Sprite.Draw(...)` writes happen immediately after `Video.WaitVBlank()` and before expensive `Audio.Update()` bursts or camera streaming can push direct OAM writes past VBlank on real hardware. |
+| Player sprite pieces flicker, appear at fixed screen positions, or remain as non-scrolling "stickers" | Treat these as OAM/sprite artifacts first, not background tiles. Logical `Sprite.Draw(...)` must update the `$C600` shadow and publish one `$FF46` DMA at the frame's accepted VBlank boundary; check the DMA source page, physical OAM slot order, and that CPU fetch remains in HRAM during transfer. Raw `Sprite.Set(...)` fixtures still write physical OAM directly. |
 | Collision does not match visible tiles | World flags, tileset `objectgroup`, explicit collision layer, `Camera.AabbTiles(...)` vs `collision_aabb_tiles(...)`, actor camera/world coordinates. |
 | Player cannot jump in one zone | Frame order, reset before input, collision state clearing, `Input.WasPressed(...)`. |
 | Jump apex is not about 21/71/85/100 px for tap/standing/run/maximum-speed input | Inspect `PlayerState` 4.4 velocity plus subpixel remainder, the `-$38/-$3A/-$3C/-$40` takeoff tier selected from camera speed, and whether held A receives `+1` gravity only below `-$20`; release or velocity `>= -$20` must use `+5` without clamping. Use the exact CPU tests in `GameBoyRunnerLandingTests` / `NesRunnerLandingTests` rather than inferring height from OAM Y while the vertical camera is following. |
@@ -179,6 +179,9 @@ recorded in [`RunnerLandingAcceptance.md`](RunnerLandingAcceptance.md).
 Use focused tests first, then broader validation:
 
 ```bash
+dotnet test src/RetroSharp.FunctionalAcceptance.Tests/RetroSharp.FunctionalAcceptance.Tests.csproj -m:1
+dotnet test src/RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj -m:1 --filter FullyQualifiedName~ActorProjectileFunctionalAcceptanceTests
+dotnet test src/RetroSharp.NES.Tests/RetroSharp.NES.Tests.csproj -m:1 --filter FullyQualifiedName~ActorProjectileFunctionalAcceptanceTests
 dotnet test src/RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj -m:1
 dotnet test src/RetroSharp.Cli.Tests/RetroSharp.Cli.Tests.csproj -m:1
 dotnet test RetroSharp.sln -m:1

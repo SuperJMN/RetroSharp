@@ -1830,7 +1830,7 @@ public partial class GameBoyRomCompilerTests
 
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x30, 0x60, 0xAA, 0xCC]), "ROM should contain tile data decoded from the PNG sprite sheet with stable palette indexes.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should use the PNG logical frame index.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xC6]), "sprite_draw should use the PNG logical frame index in shadow OAM.");
     }
 
     [Fact]
@@ -1880,8 +1880,8 @@ public partial class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x4D, 0xC6, 0x20, 0xEA, 0x08, 0xFE]), "sprite_draw should emit a bottom row hardware sprite after padding 27 px to 32 px.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xFE]), "sprite_draw should allocate the fourth 8x16 tile pair for a padded 16x27 logical sprite.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x4D, 0xC6, 0x20, 0xEA, 0x08, 0xC6]), "sprite_draw should emit a bottom row shadow OAM sprite after padding 27 px to 32 px.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xC6]), "sprite_draw should allocate the fourth 8x16 tile pair for a padded 16x27 logical sprite in shadow OAM.");
     }
 
     [Fact]
@@ -4560,7 +4560,7 @@ public partial class GameBoyRomCompilerTests
         var rom = GameBoyRomCompiler.CompileSource(source, directory);
 
         Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x02, 0xFE]), "Generated background tiles should leave the first 8x16 sprite tile on an even tile after them.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x02, 0xC6]), "Generated background tiles should leave the first 8x16 shadow OAM sprite tile on an even tile after them.");
     }
 
     [Fact]

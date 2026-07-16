@@ -7,9 +7,9 @@
   "observationFrames": 400,
   "inputs": [],
   "checkpoints": [
-    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 229, "user1": 221, "user2": 133, "user3": 133, "user4": 1, "user5": 1, "visibleCameraX": 133, "visibleCameraY": 133, "commitCount": 32 } },
-    { "id": "reversed-deadzone-follow", "frame": 240, "expectedSignals": { "user0": 160, "user1": 152, "user2": 96, "user3": 96, "user4": 255, "user5": 255, "visibleCameraX": 96, "visibleCameraY": 96, "commitCount": 44 } },
-    { "id": "returning-through-chunks", "frame": 400, "expectedSignals": { "user0": 151, "user1": 143, "user2": 55, "user3": 55, "user4": 1, "user5": 1, "visibleCameraX": 55, "visibleCameraY": 55, "commitCount": 72 } }
+    { "id": "forward-deadzone-follow", "frame": 160, "expectedSignals": { "user0": 230, "user1": 222, "user2": 133, "user3": 133, "user4": 1, "user5": 1, "visibleCameraX": 133, "visibleCameraY": 133, "commitCount": 32 } },
+    { "id": "reversed-deadzone-follow", "frame": 240, "expectedSignals": { "user0": 159, "user1": 151, "user2": 96, "user3": 96, "user4": 255, "user5": 255, "visibleCameraX": 96, "visibleCameraY": 96, "commitCount": 44 } },
+    { "id": "returning-through-chunks", "frame": 400, "expectedSignals": { "user0": 152, "user1": 144, "user2": 55, "user3": 55, "user4": 1, "user5": 1, "visibleCameraX": 55, "visibleCameraY": 55, "commitCount": 72 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,

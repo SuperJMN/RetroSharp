@@ -100,6 +100,8 @@ public partial class GameBoyRomCompilerTests
         cpu.RunFrames(4);
 
         Assert.Contains(cpu.OamWrites, write => write.Address == 0xFE00 && write.Value == 76);
+        Assert.Equal(160, cpu.Wram(GameBoyRuntimeMemoryLayout.Sprites.OamShadowStart));
+        cpu.RunAdditionalFrames(1);
         Assert.Equal(160, cpu.Oam(0xFE00));
     }
 

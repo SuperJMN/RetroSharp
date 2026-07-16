@@ -1,0 +1,87 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "runner-projectile-gb-functional",
+  "sampleId": "runner-projectile",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 100,
+  "inputs": [
+    {
+      "id": "fire-right",
+      "startFrame": 21,
+      "durationFrames": 1,
+      "buttons": [
+        "b"
+      ],
+      "responseSignal": "visibleProjectileCount"
+    },
+    {
+      "id": "fire-left",
+      "startFrame": 27,
+      "durationFrames": 1,
+      "buttons": [
+        "a"
+      ],
+      "responseSignal": "visibleProjectileCount"
+    },
+    {
+      "id": "drop-right-under-load",
+      "startFrame": 35,
+      "durationFrames": 1,
+      "buttons": [
+        "b"
+      ]
+    },
+    {
+      "id": "drop-left-under-load",
+      "startFrame": 37,
+      "durationFrames": 1,
+      "buttons": [
+        "a"
+      ]
+    },
+    {
+      "id": "reuse-right",
+      "startFrame": 81,
+      "durationFrames": 1,
+      "buttons": [
+        "b"
+      ]
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "pool-contract",
+      "frame": 120,
+      "expectedSignals": {
+        "poolCapacity": 2,
+        "requestCapacity": 2,
+        "effectCapacity": 4
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": false,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A 70224-cycle DMG frame permits one complete fixed-pool update plus a VBlank OAM projection; accepted logical spawns must reach retained OAM by the following frame.",
+    "productionTraceRationale": "The exact runner-projectile ROM accepts the first B/A requests, drops later saturated requests, expires four-frame muzzle effects into hidden OAM, and later reuses projectile storage."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 1,
+    "maximumSpawnToVisibleFrames": 1
+  }
+}

@@ -15,7 +15,14 @@ internal sealed record GameBoyRomBuildReport(
     int RomSize,
     IReadOnlyList<GameBoyRomBuildSegment> Segments,
     IReadOnlyList<int> OccupiedBanks,
-    IReadOnlyDictionary<string, ushort> FixedSymbols);
+    IReadOnlyDictionary<string, ushort> FixedSymbols,
+    IReadOnlyList<GameBoyRuntimeUserVariable> UserVariables);
+
+internal sealed record GameBoyRuntimeUserVariable(
+    string Name,
+    string Type,
+    ushort Address,
+    int Size);
 
 internal sealed record GameBoyRomBuildSegment(
     string Owner,

@@ -516,16 +516,12 @@ public static partial class ActorFrameworkLowerer
             var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(
                     def.Name,
-                    pool.Capacity == 1
-                        ? ActorDrawBlock(pool, indexName, def, projection, state.ScreenHeight, state)
-                        : VisibleActorDrawBlock(pool, indexName, def, projection, state)))
+                    ActorDrawBlock(pool, indexName, def, projection, state.ScreenHeight, state)))
                 .ToList();
             var activeStatements = projection.Declarations
                 .Append(PooledKindDispatch(pool.Name, indexName, branches, $"{pool.Name} actor dispatch requires at least one Enemies.Def declaration."))
                 .ToList();
-            var loop = pool.Capacity == 1
-                ? PoolLoop(pool, indexName, activeStatements)
-                : PoolLoop(pool, indexName, ActiveGuard(pool.Name, indexName, activeStatements));
+            var loop = PoolLoop(pool, indexName, activeStatements);
 
             return PooledCameraDeclarations(pool.Name, "draw", configuresCamera: true)
                 .Append(loop)
@@ -603,53 +599,6 @@ public static partial class ActorFrameworkLowerer
                     new IdentifierSyntax("false"),
                     new ConstantSyntax("0"),
                 ])));
-
-            return new BlockSyntax(statements);
-        }
-
-        private static BlockSyntax VisibleActorDrawBlock(
-            ActorPool pool,
-            string indexName,
-            EnemyDef def,
-            ActorScreenProjection projection,
-            ActorFrameworkState state)
-        {
-            var statements = new List<StatementSyntax>();
-
-            ExpressionSyntax frame = new ConstantSyntax("0");
-            if (def.Animation is not null)
-            {
-                var frameVariable = $"__{pool.Name}_draw_frame_{def.Name}";
-                statements.Add(new DeclarationSyntax(
-                    "u8",
-                    frameVariable,
-                    Maybe<ExpressionSyntax>.None,
-                    Maybe.From<ExpressionSyntax>(IntrinsicCall(
-                        state,
-                        AnimationFrameIntrinsic,
-                        [
-                            new IdentifierSyntax(def.Animation),
-                            PoolField(pool.Name, indexName, "animTick"),
-                        ]))));
-                frame = new IdentifierSyntax(frameVariable);
-            }
-
-            statements.Add(new IfElseSyntax(
-                projection.Visible,
-                new BlockSyntax([
-                    new ExpressionStatementSyntax(IntrinsicCall(
-                        state,
-                        SpriteDrawIntrinsic,
-                        [
-                            new IdentifierSyntax(def.Sprite!),
-                            projection.ScreenX,
-                            projection.ScreenY,
-                            frame,
-                            new IdentifierSyntax("false"),
-                            new ConstantSyntax("0"),
-                        ])),
-                ]),
-                Maybe<BlockSyntax>.None));
 
             return new BlockSyntax(statements);
         }

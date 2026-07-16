@@ -116,6 +116,7 @@ internal static class FunctionalScenarioValidator
             scenario.Budgets.MaximumRequestToVisibleFrames,
             scenario.Budgets.MaximumUnplannedAudioGapFrames,
             scenario.Budgets.MaximumAudioDriftTicks,
+            scenario.Budgets.MaximumSpawnToVisibleFrames,
         };
         if (optionalBudgets.Any(value => value < 0))
         {
@@ -145,6 +146,12 @@ internal static class FunctionalScenarioValidator
         {
             throw new InvalidOperationException(
                 $"Functional scenario '{scenario.Id}' camera acceptance requires a residency or visibility latency budget.");
+        }
+
+        if (scenario.Budgets.MaximumSpawnToVisibleFrames is not null && !scenario.ExpectedFeatures.SpriteOam)
+        {
+            throw new InvalidOperationException(
+                $"Functional scenario '{scenario.Id}' spawn-to-visible acceptance requires sprite/OAM observations.");
         }
     }
 

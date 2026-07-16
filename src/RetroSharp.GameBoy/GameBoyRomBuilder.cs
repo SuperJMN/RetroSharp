@@ -110,7 +110,7 @@ internal static class GameBoyRomBuilder
         if (packedWorldBytes is null || packedWorldBytes.Length <= ushort.MaxValue)
         {
             var romOnlyLayout = GameBoyRomLayout.RomOnly;
-            builder = BuildProgram(program, romOnlyLayout, readOnlyData, packedWorldBytes);
+            builder = BuildProgram(program, romOnlyLayout, readOnlyData, packedWorldBytes, out var userVariables);
             programBytes = builder.Build();
             if (programBytes.Length <= RomOnlyPayloadLimit)
             {
@@ -120,18 +120,18 @@ internal static class GameBoyRomBuilder
                 WriteHeaderChecksums(rom);
                 return new GameBoyRomBuildResult(
                     rom,
-                    BuildRomOnlyReport(builder, program, programBytes.Length, packedWorldBytes));
+                    BuildRomOnlyReport(builder, program, programBytes.Length, packedWorldBytes, userVariables));
             }
         }
 
         var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes);
-        builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes);
+        builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes, out var bankedUserVariables);
         programBytes = builder.Build();
         var programTailBanks = CalculateProgramTailBanks(programBytes.Length);
         if (programTailBanks > 1)
         {
             bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes, bankReadOnlyData: true);
-            builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes);
+            builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes, out bankedUserVariables);
             programBytes = builder.Build();
             programTailBanks = CalculateProgramTailBanks(programBytes.Length);
         }
@@ -145,7 +145,7 @@ internal static class GameBoyRomBuilder
                 packedWorldBytes,
                 programTailBanks,
                 bankedLayout.UsesBankedReadOnlyData);
-            builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes);
+            builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes, out bankedUserVariables);
             programBytes = builder.Build();
             programTailBanks = CalculateProgramTailBanks(programBytes.Length);
             EnsureSupportedProgramTailBanks(programTailBanks, bankedLayout.UsesBankedReadOnlyData);
@@ -192,7 +192,7 @@ internal static class GameBoyRomBuilder
         WriteHeaderChecksums(bankedRom);
         return new GameBoyRomBuildResult(
             bankedRom,
-            BuildBankedReport(builder, program, bankedLayout, programBytes.Length, packedWorldBytes));
+            BuildBankedReport(builder, program, bankedLayout, programBytes.Length, packedWorldBytes, bankedUserVariables));
     }
 
     private static bool IsMissingLegacyWorldLabel(string message)
@@ -225,10 +225,11 @@ internal static class GameBoyRomBuilder
         GbBuilder builder,
         GameBoyVideoProgram program,
         int programLength,
-        byte[]? inlineWorldPack)
+        byte[]? inlineWorldPack,
+        IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
     {
         var segments = BuildInlineProgramSegments(builder, program, programLength, inlineWorldPack);
-        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments, BuildFixedSymbols(builder));
+        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments, BuildFixedSymbols(builder), userVariables);
     }
 
     private static GameBoyRomBuildReport BuildBankedReport(
@@ -236,7 +237,8 @@ internal static class GameBoyRomBuilder
         GameBoyVideoProgram program,
         GameBoyRomLayout layout,
         int programLength,
-        byte[]? packedWorldBytes)
+        byte[]? packedWorldBytes,
+        IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
     {
         var segments = BuildInlineProgramSegments(
             builder,
@@ -269,7 +271,7 @@ internal static class GameBoyRomBuilder
             AddPhysicalSegments(segments, $"sfx:{placement.Name}", placement.Bank * BankSize, placement.Data.Length);
         }
 
-        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments, BuildFixedSymbols(builder));
+        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments, BuildFixedSymbols(builder), userVariables);
     }
 
     private static IReadOnlyList<GameBoyRomBuildSegment> BuildInlineProgramSegments(
@@ -369,14 +371,15 @@ internal static class GameBoyRomBuilder
         string selectedProfile,
         int romSize,
         IEnumerable<GameBoyRomBuildSegment> segments,
-        IReadOnlyDictionary<string, ushort> fixedSymbols)
+        IReadOnlyDictionary<string, ushort> fixedSymbols,
+        IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
     {
         var ordered = segments
             .OrderBy(segment => segment.PhysicalStart)
             .ThenBy(segment => segment.Owner, StringComparer.Ordinal)
             .ToArray();
         var occupiedBanks = ordered.Select(segment => segment.Bank).Distinct().Order().ToArray();
-        return new GameBoyRomBuildReport(selectedProfile, romSize, ordered, occupiedBanks, fixedSymbols);
+        return new GameBoyRomBuildReport(selectedProfile, romSize, ordered, occupiedBanks, fixedSymbols, userVariables);
     }
 
     private static IReadOnlyDictionary<string, ushort> BuildFixedSymbols(GbBuilder builder)
@@ -457,7 +460,8 @@ internal static class GameBoyRomBuilder
         GameBoyVideoProgram program,
         GameBoyRomLayout layout,
         IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData,
-        byte[]? packedWorldBytes)
+        byte[]? packedWorldBytes,
+        out IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
     {
         var enableDiagonalVisualCache = ProgramUsesDiagonalCameraStreaming(program);
         var enablePackedCameraCache = ProgramUsesCameraStreaming(program);
@@ -490,6 +494,11 @@ internal static class GameBoyRomBuilder
 
         builder.Emit(0xAF);                         // XOR A
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
+        var usesShadowOam = program.SdkOperations.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
+        if (usesShadowOam)
+        {
+            EmitInstallOamDmaRoutine(builder);
+        }
         builder.Emit(0x3E, program.BackgroundPalette);
         builder.Emit(0xE0, 0x47);                   // LDH ($47),A
         builder.Emit(0x3E, program.ObjectPalette);
@@ -516,6 +525,10 @@ internal static class GameBoyRomBuilder
         }
 
         EmitClearOam(builder, "clear_oam");
+        if (usesShadowOam)
+        {
+            EmitClearOamShadow(builder, "clear_oam_shadow");
+        }
 
         var lcdControl = (byte)(program.UsesWindowHud ? 0xF7 : 0x97);
         if (worldPackRuntime is null)
@@ -624,6 +637,7 @@ internal static class GameBoyRomBuilder
             EmitAudioData(builder, program);
         }
 
+        userVariables = runtime.UserVariables;
         return builder;
     }
 
@@ -913,7 +927,33 @@ internal static class GameBoyRomBuilder
         builder.JumpRelative(0x38, $"{label}_wait_vblank"); // JR C,label
     }
 
-    internal static void EmitEnterVBlank(GbBuilder builder)
+    internal static void EmitPublishShadowOam(GbBuilder builder)
+    {
+        builder.Emit(
+            0xCD,
+            (byte)(GameBoyRuntimeMemoryLayout.Sprites.DmaRoutineAddress & 0xFF),
+            (byte)(GameBoyRuntimeMemoryLayout.Sprites.DmaRoutineAddress >> 8));
+    }
+
+    private static void EmitInstallOamDmaRoutine(GbBuilder builder)
+    {
+        byte[] routine =
+        [
+            0x3E, GameBoyRuntimeMemoryLayout.Sprites.OamShadowPage, // LD A,$C6
+            0xE0, 0x46,                                          // LDH ($46),A
+            0x3E, 0x28,                                          // LD A,40
+            0x3D,                                                // wait: DEC A
+            0x20, 0xFD,                                          // JR NZ,wait
+            0xC9,                                                // RET
+        ];
+        for (var index = 0; index < routine.Length; index++)
+        {
+            builder.LoadAImmediate(routine[index]);
+            builder.StoreA(checked((ushort)(GameBoyRuntimeMemoryLayout.Sprites.DmaRoutineAddress + index)));
+        }
+    }
+
+    internal static void EmitEnterVBlank(GbBuilder builder, bool publishShadowOam = false)
     {
         const byte lastSafeStartingScanline = 148;
         var waitForVisible = builder.CreateLabel("packed_camera_wait_for_visible");
@@ -936,6 +976,10 @@ internal static class GameBoyRomBuilder
         builder.JumpAbsolute(0xDA, waitForVBlank);  // JP C,waitForVBlank
         builder.LoadAImmediate(1);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitEnteredVBlank);
+        if (publishShadowOam)
+        {
+            EmitPublishShadowOam(builder);
+        }
         builder.Label(safe);
     }
 
@@ -953,8 +997,18 @@ internal static class GameBoyRomBuilder
 
     internal static void EmitClearOam(GbBuilder builder, string label)
     {
-        builder.LoadHl(0xFE00);
-        builder.LoadBc(160);
+        EmitClearMemory(builder, 0xFE00, 160, label);
+    }
+
+    private static void EmitClearOamShadow(GbBuilder builder, string label)
+    {
+        EmitClearMemory(builder, GameBoyRuntimeMemoryLayout.Sprites.OamShadowStart, 160, label);
+    }
+
+    private static void EmitClearMemory(GbBuilder builder, ushort start, ushort length, string label)
+    {
+        builder.LoadHl(start);
+        builder.LoadBc(length);
         builder.Label(label);
         builder.Emit(0x36, 0x00);                   // LD (HL),$00
         builder.Emit(0x23);                         // INC HL

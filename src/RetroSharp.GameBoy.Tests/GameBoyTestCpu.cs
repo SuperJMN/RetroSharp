@@ -2,6 +2,14 @@ namespace RetroSharp.GameBoy.Tests;
 
 using System.Collections.Generic;
 
+internal readonly record struct GameBoyOamDmaTransfer(
+    byte SourcePage,
+    long StartCycle,
+    long EndCycle,
+    byte[] WramSnapshot,
+    byte[] IoSnapshot,
+    byte[] SourceSnapshot);
+
 /// <summary>
 /// Minimal Sharp SM83 (Game Boy CPU) interpreter used to execute the real ROMs the
 /// Game Boy target emits and observe their runtime behavior. It deliberately models only
@@ -44,6 +52,7 @@ internal sealed class GameBoyTestCpu
     private long instructions;
     private long cycles;
     private byte? previousLyRead;
+    private long? oamDmaEndCycle;
 
     // Opt-in instrumentation for timing investigations. Defaults preserve existing behavior:
     // CycleAccurateLy off => LY driven by instruction count; empty Held => no buttons pressed.
@@ -84,6 +93,10 @@ internal sealed class GameBoyTestCpu
     public byte Oam(ushort address) => oam[address - 0xFE00];
 
     public IReadOnlyList<OamWrite> OamWrites => oamWrites;
+
+    public IReadOnlyList<(ushort Register, byte Value)> IoWrites => ioWrites;
+
+    public List<GameBoyOamDmaTransfer> OamDmaTransfers { get; } = [];
 
     public IReadOnlyList<VramWrite> VramWrites => vramWrites;
 
@@ -287,6 +300,21 @@ internal sealed class GameBoyTestCpu
         }
     }
 
+    public void RunUntilSourceWaitCompletions(long expected, long maxInstructions = 50_000_000)
+    {
+        var startInstructions = instructions;
+        while (SourceWaitCompletions < expected)
+        {
+            if (instructions - startInstructions >= maxInstructions)
+            {
+                throw new InvalidOperationException(
+                    $"CPU executed {instructions - startInstructions} instructions but observed {SourceWaitCompletions} source waits instead of {expected}.");
+            }
+
+            Step();
+        }
+    }
+
     public void SetCurrentRomBank(byte bank) => romBank = bank;
 
     public FarReadResult RunFarReadSubroutine(ushort entry, byte bank, ushort address, long maxInstructions = 10_000)
@@ -384,10 +412,10 @@ internal sealed class GameBoyTestCpu
             case < 0x4000:
                 return addr < rom.Length ? rom[addr] : (byte)0;
             case < 0x8000:
-            {
-                var index = (romBank * BankSize) + (addr - 0x4000);
-                return index < rom.Length ? rom[index] : (byte)0;
-            }
+                {
+                    var index = (romBank * BankSize) + (addr - 0x4000);
+                    return index < rom.Length ? rom[index] : (byte)0;
+                }
             case < 0xA000:
                 return vram[addr - 0x8000];
             case < 0xC000:
@@ -439,48 +467,48 @@ internal sealed class GameBoyTestCpu
             case < 0x2000:
                 return; // RAM enable
             case < 0x4000:
-            {
-                var bank = value & 0x1F;
-                romBank = bank == 0 ? 1 : bank; // MBC1: bank 0 in the switchable window maps to 1
-                romBankWrites.Add(new RomBankWrite(
-                    instructionPc,
-                    value,
-                    (byte)romBank,
-                    wram[GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank - 0xC000],
-                    cycles,
-                    (byte)((cycles / 456) % 154)));
-                if (farReadInjections.TryPeek(out var injection) && injection.SelectedBank == romBank)
                 {
-                    farReadInjections.Dequeue();
-                    var registers = (a, b, c, d, e, h, l, f, sp, pc);
-                    var result = RunFarReadSubroutine(injection.Entry, injection.Bank, injection.Address);
-                    injectedFarReadResults.Add(result);
-                    (a, b, c, d, e, h, l, f, sp, pc) = registers;
-                }
+                    var bank = value & 0x1F;
+                    romBank = bank == 0 ? 1 : bank; // MBC1: bank 0 in the switchable window maps to 1
+                    romBankWrites.Add(new RomBankWrite(
+                        instructionPc,
+                        value,
+                        (byte)romBank,
+                        wram[GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank - 0xC000],
+                        cycles,
+                        (byte)((cycles / 456) % 154)));
+                    if (farReadInjections.TryPeek(out var injection) && injection.SelectedBank == romBank)
+                    {
+                        farReadInjections.Dequeue();
+                        var registers = (a, b, c, d, e, h, l, f, sp, pc);
+                        var result = RunFarReadSubroutine(injection.Entry, injection.Bank, injection.Address);
+                        injectedFarReadResults.Add(result);
+                        (a, b, c, d, e, h, l, f, sp, pc) = registers;
+                    }
 
-                return;
-            }
+                    return;
+                }
             case < 0x8000:
                 return; // RAM bank / banking mode (unused by the ROMs under test)
             case < 0xA000:
-            {
-                var ly = (byte)((cycles / 456) % 154);
-                var lcdEnabled = (io[0x40] & 0x80) != 0;
-                var applied = !EnforceVblankVramWrites || !lcdEnabled || ly is >= 144 and <= 153;
-                vramWrites.Add(new VramWrite(
-                    addr,
-                    value,
-                    cycles,
-                    ly,
-                    lcdEnabled,
-                    applied));
-                if (applied)
                 {
-                    vram[addr - 0x8000] = value;
-                }
+                    var ly = (byte)((cycles / 456) % 154);
+                    var lcdEnabled = (io[0x40] & 0x80) != 0;
+                    var applied = !EnforceVblankVramWrites || !lcdEnabled || ly is >= 144 and <= 153;
+                    vramWrites.Add(new VramWrite(
+                        addr,
+                        value,
+                        cycles,
+                        ly,
+                        lcdEnabled,
+                        applied));
+                    if (applied)
+                    {
+                        vram[addr - 0x8000] = value;
+                    }
 
-                return;
-            }
+                    return;
+                }
             case < 0xC000:
                 extRam[addr - 0xA000] = value;
                 return;
@@ -502,6 +530,40 @@ internal sealed class GameBoyTestCpu
             case < 0xFF00:
                 return;
             case < 0xFF80:
+                if (addr == 0xFF46)
+                {
+                    if (oamDmaEndCycle is { } activeEnd && cycles < activeEnd)
+                    {
+                        throw new InvalidOperationException("A second OAM DMA started before the previous 640-cycle transfer completed.");
+                    }
+
+                    var source = (ushort)(value << 8);
+                    var lcdEnabled = (io[0x40] & 0x80) != 0;
+                    oamDmaEndCycle = cycles + 640;
+                    var sourceSnapshot = Enumerable.Range(0, 160)
+                        .Select(offset => ReadByte(checked((ushort)(source + offset))))
+                        .ToArray();
+                    OamDmaTransfers.Add(new(
+                        value,
+                        cycles,
+                        oamDmaEndCycle.Value,
+                        (byte[])wram.Clone(),
+                        (byte[])io.Clone(),
+                        sourceSnapshot));
+                    for (var offset = 0; offset < 160; offset++)
+                    {
+                        var copied = sourceSnapshot[offset];
+                        var copyCycle = cycles + offset * 4L;
+                        oam[offset] = copied;
+                        oamWrites.Add(new OamWrite(
+                            checked((ushort)(0xFE00 + offset)),
+                            copied,
+                            copyCycle,
+                            (byte)((copyCycle / 456) % 154),
+                            lcdEnabled));
+                    }
+                }
+
                 if (addr is >= 0xFF10 and <= 0xFF3F)
                 {
                     apuWrites.Add((addr, value));
@@ -529,6 +591,19 @@ internal sealed class GameBoyTestCpu
 
     private void Step()
     {
+        if (oamDmaEndCycle is { } dmaEnd)
+        {
+            if (cycles >= dmaEnd)
+            {
+                oamDmaEndCycle = null;
+            }
+            else if (pc is < 0xFF80 or >= 0xFF8A)
+            {
+                throw new InvalidOperationException(
+                    $"OAM DMA is active until cycle {dmaEnd}, but instruction fetch left the HRAM routine at 0x{pc:X4} on cycle {cycles}.");
+            }
+        }
+
         if (instructions > 0 && pc == 0x0100)
         {
             ResetCount++;
@@ -689,14 +764,14 @@ internal sealed class GameBoyTestCpu
                 f = a == 0 ? FlagZ : (byte)0;
                 break;
             case 0x3F: // SRL A
-            {
-                var carry = (byte)(a & 0x01);
-                a >>= 1;
-                f = 0;
-                if (a == 0) f |= FlagZ;
-                if (carry != 0) f |= FlagC;
-                break;
-            }
+                {
+                    var carry = (byte)(a & 0x01);
+                    a >>= 1;
+                    f = 0;
+                    if (a == 0) f |= FlagZ;
+                    if (carry != 0) f |= FlagC;
+                    break;
+                }
             case 0x3A: d = ShiftRightLogical(d); break; // SRL D
             case 0x3C: h = ShiftRightLogical(h); break; // SRL H
             case 0x1B: e = RotateRightThroughCarry(e); break; // RR E
