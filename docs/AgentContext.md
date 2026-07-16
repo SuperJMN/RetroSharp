@@ -7,6 +7,26 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-6 / #362 partitions Actor Framework generation behind feature-owned
+  partial internal modules in `RetroSharp.Sdk.Frontend`: each of
+  `ActorFrameworkLowerer.Actors.cs`, `ActorFrameworkLowerer.Projectiles.cs`, and
+  `ActorFrameworkLowerer.Effects.cs` owns its directive policy, rewrite
+  dispatch, and declarations, while its paired `.Generation.cs` file owns the
+  corresponding deeper domain lowering, validation, and AST builders.
+  Cross-domain pool dispatch, camera projection, and stable sprite
+  draw primitives live under the neutral
+  `ActorFrameworkLowerer.SharedGeneration.cs`.
+  `ActorFrameworkLowerer.GeneratedProgram.cs` aggregates the generated-name
+  facts from those modules, then assembles structs, constants, lookup helpers,
+  and rewritten functions in the preserved source order.
+  `ActorFrameworkLowerer.cs` remains the single public lowering interface and
+  keeps the one staged `ActorFrameworkLoweringPlan`, shared state, traversal,
+  expression rewriting, and generic syntax constructors used throughout the
+  lowering pipeline. Focused GB
+  and NES regressions now live in `ActorFrameworkActorsTests.cs`,
+  `ActorFrameworkProjectilesTests.cs`, and (where applicable)
+  `ActorFrameworkEffectsTests.cs` instead of the monolithic ROM compiler test
+  files.
 - AIN-5 / #361 makes the staged internal
   `ActorFrameworkLowerer.ActorFrameworkLoweringPlan` the single owner of
   metadata-backed role resolution, actor/spawn/projectile/effect directive
