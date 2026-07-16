@@ -7,9 +7,11 @@ using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkSpriteLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Golden_sprite_draw_emission_is_pinned_gb()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -35,6 +37,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -64,6 +67,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_composes_16x32_assets_from_four_hardware_sprites()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -85,6 +89,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_accepts_logical_flip_x_and_flips_logical_metasprites_horizontally()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -109,6 +114,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_accepts_logical_palette_slot_and_lowers_to_game_boy_object_palette_bit()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -127,6 +133,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_combines_logical_flip_x_and_palette_slot_in_oam_attributes()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -145,6 +152,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_rejects_palette_slots_outside_game_boy_capabilities()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -162,6 +170,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_flips_against_logical_width_before_padding()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(18, 16)));
@@ -183,6 +192,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_rejects_raw_oam_attribute_constants_in_portable_flip_argument()
     {
         var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
@@ -200,6 +210,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Sprite_draw_treats_frame_as_a_logical_frame_index()
     {
         var baseDirectory = WriteSpriteJsonAsset(
@@ -223,6 +234,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_draw_logical_sprite_operation_to_game_boy_metasprite_bytes()
     {
         var builder = new GbBuilder();
@@ -252,6 +264,7 @@ public sealed class GameBoySdkSpriteLoweringTests
         Assert.True(ContainsSequence(bytes, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite draw operation should use the first generated tile for the first hardware sprite.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_actor_draw_with_animation_frame_as_sprite_draw_frame()
     {
         const string source = """
@@ -276,6 +289,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_sprite_draw_with_runtime_operands()
     {
         const string source = """
@@ -300,6 +314,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_sprite_draw_from_compile_time_operand_intrinsic()
     {
         const string source = """
@@ -323,6 +338,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compilation_rejects_sprite_draws_that_exceed_one_frame_hardware_sprite_budget()
     {
         var draws = string.Join(
@@ -348,6 +364,7 @@ public sealed class GameBoySdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compilation_rejects_constant_y_sprite_draws_that_exceed_scanline_budget()
     {
         var draws = string.Join(

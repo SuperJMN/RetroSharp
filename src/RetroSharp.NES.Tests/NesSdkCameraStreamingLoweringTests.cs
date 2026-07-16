@@ -4,9 +4,11 @@ using RetroSharp.NES;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkCameraStreamingLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_horizontal_camera_path_from_world_map_to_nes_scroll()
     {
         const string source = """
@@ -33,6 +35,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_lowers_explicit_stream_map_row_to_ppu_row_writes()
     {
         const string source = """
@@ -58,6 +61,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             "Streaming a row should also refresh the matching bottom-row attribute byte at $23F8.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_accepts_world_rows_beyond_four_screen_surface_for_runtime_row_streaming()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
@@ -78,6 +82,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
         Assert.Equal(0x08, rom[6] & 0x08);
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Four_screen_horizontal_streaming_prepares_the_next_offscreen_column()
     {
         var column = string.Join(", ", Enumerable.Range(0, 14).Select(row => row % 4 + 1));
@@ -106,6 +111,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             "Adding 64 wraps onto the visible left column after a tile crossing and causes four-screen artifacts.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_streams_runtime_rows_when_vertical_camera_crosses_tall_world_boundary()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
@@ -132,6 +138,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             "A tall four-screen row stream should refresh the worst-case 9 touched attribute bytes for the visible row.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_automatic_camera_row_streaming_uses_the_callers_vblank()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
@@ -157,6 +164,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             $"Startup should wait for two VBlanks and source video_wait_vblank should wait once; automatic camera row streaming must not insert another frame wait before restoring scroll. Actual count: {waitFrameCount}.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_runtime_row_streaming_writes_contiguous_ppudata_segments()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
@@ -181,6 +189,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             "Runtime row streaming should keep PPUDATA auto-incrementing within a nametable row and only reset PPUADDR when the target column crosses a 32-column nametable boundary.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_runtime_row_streaming_is_split_across_vblanks()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 61).Select(row => row % 4 + 1));
@@ -208,6 +217,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             "Runtime row streaming must not attempt the full 32-tile row in one VBlank.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_four_screen_camera_path_from_world_map_to_nes_scroll()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 60).Select(row => row % 4 + 1));
@@ -240,6 +250,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
         Assert.True(ContainsSequence(prg, [0xA5, 0xEA, 0x29, 0x07]), "camera_apply should preserve fine Y when wrapping NES scroll Y at 240 pixels.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_vertical_camera_large_delta_steps_one_pixel_instead_of_jumping()
     {
         var column = string.Join(", ", Enumerable.Range(0, 14).Select(row => row % 4 + 1));
@@ -265,6 +276,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
             "NES vertical camera must not jump directly to a non-adjacent requested Y.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Accepts_vertical_camera_stream_area_taller_than_four_screen_buffer()
     {
         var tallColumn = string.Join(", ", Enumerable.Range(0, 96).Select(row => row % 4 + 1));
@@ -285,6 +297,7 @@ public sealed class NesSdkCameraStreamingLoweringTests
         Assert.Equal(0x08, rom[6] & 0x08);
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Rejects_vertical_camera_stream_start_outside_four_screen_buffer()
     {
         const string source = """

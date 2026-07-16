@@ -6,9 +6,11 @@ using RetroSharp.Parser;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkFrameInputLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_wait_frame_operation_to_existing_nes_vblank_routine()
     {
         var builder = new PrgBuilder();
@@ -47,6 +49,7 @@ public sealed class NesSdkFrameInputLoweringTests
         new("Wait-frame lowering must not use source operand context.");
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_poll_input_operation_to_deterministic_nes_bytes()
     {
         var builder = new PrgBuilder();
@@ -60,6 +63,7 @@ public sealed class NesSdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_wait_frame_library_helper_over_nes_intrinsic_like_sdk_operation()
     {
         const string sdkSource = "void Main() { Video.WaitVBlank(); }";
@@ -75,6 +79,7 @@ public sealed class NesSdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_input_poll_library_helper_over_nes_intrinsic_like_sdk_operation()
     {
         const string sdkSource = "void Main() { Input.Poll(); }";
@@ -90,6 +95,7 @@ public sealed class NesSdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_video_wait_vblank_waits_for_the_next_vblank_edge()
     {
         const string source = """
@@ -109,6 +115,7 @@ public sealed class NesSdkFrameInputLoweringTests
             "video_wait_vblank should first wait for any active VBlank flag to clear, then wait for the next VBlank edge.");
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Nes_video_wait_vblank_applies_pending_camera_scroll_before_sprite_dma()
     {
         const string source = """
@@ -142,6 +149,7 @@ public sealed class NesSdkFrameInputLoweringTests
         Assert.True(scrollIndex < dmaIndex, "Pending camera scroll should be restored at the start of VBlank before sprite DMA consumes the window.");
     }
     [Theory]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     [InlineData("Button.A")]
     [InlineData("Button.B")]
     [InlineData("Button.Select")]
@@ -173,6 +181,7 @@ public sealed class NesSdkFrameInputLoweringTests
         Assert.Equal(40976, NesRomCompiler.CompileSource(source).Length);
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Bare_button_identifiers_are_rejected_by_input_facade()
     {
         const string source = """
@@ -188,6 +197,7 @@ public sealed class NesSdkFrameInputLoweringTests
         Assert.Contains("Button enum member", exception.Message, StringComparison.Ordinal);
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Input_facade_predicates_lower_like_explicit_numeric_checks()
     {
         const string explicitComparisonSource = """
@@ -225,6 +235,7 @@ public sealed class NesSdkFrameInputLoweringTests
         Assert.Equal(NesRomCompiler.CompileSource(explicitComparisonSource), NesRomCompiler.CompileSource(predicateConditionSource));
     }
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_tick_input_helpers_to_nes_controller_state()
     {
         const string source = """

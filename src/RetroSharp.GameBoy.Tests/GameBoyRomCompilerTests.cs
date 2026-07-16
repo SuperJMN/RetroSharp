@@ -9,6 +9,7 @@ using RetroSharp.Sdk;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
+[Trait("RetroSharp.TestOwnership", "CompilerIntegration")]
 public partial class GameBoyRomCompilerTests
 {
     [Fact]

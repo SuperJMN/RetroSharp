@@ -171,6 +171,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Prunes_unused_enemy_lookup_helpers_until_author_calls_metadata_api()
     {
         const string unusedSource = """
@@ -202,6 +203,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Actor_draw_hoists_camera_x_projection_once_per_phase_loop()
     {
         const string source = """
@@ -241,6 +243,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Actor_draw_hides_offscreen_slots_without_skipping_the_sprite_call()
     {
         const string source = """
@@ -269,6 +272,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Actor_framework_projects_wide_y_spawns_for_draw_and_collision_on_game_boy()
     {
         var baseDirectory = WriteActorSpawnMap(

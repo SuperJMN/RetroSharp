@@ -3,9 +3,11 @@ namespace RetroSharp.GameBoy.Tests;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkCameraRuntimeLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_camera_runtime_to_world_scroll_state_and_streaming()
     {
         const string source = """
@@ -56,6 +58,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_compares_requested_x_before_reusing_camera_steps()
     {
         const string source = """
@@ -82,6 +85,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_tracks_y_state_and_applies_vertical_scroll()
     {
         const string source = """
@@ -109,6 +113,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_streams_bottom_row_when_y_crosses_tile_down()
     {
         const string source = """
@@ -138,6 +143,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_set_position_streams_top_row_when_y_crosses_tile_up()
     {
         const string source = """
@@ -165,6 +171,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
     {
         const string source = """
@@ -206,6 +213,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_tilemap_fill_column_to_runtime_vram_writes()
     {
         const string source = """
@@ -228,6 +236,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_map_columns_to_rom_data_and_streams_them_to_vram()
     {
         const string source = """
@@ -258,6 +267,7 @@ public sealed class GameBoySdkCameraRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_horizontal_streaming_fills_configured_visible_world_rows()
     {
         const string source = """

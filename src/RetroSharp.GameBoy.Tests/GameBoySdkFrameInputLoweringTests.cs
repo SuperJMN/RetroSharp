@@ -6,9 +6,11 @@ using RetroSharp.Parser;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkFrameInputLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Video_wait_vblank_waits_for_the_next_vblank_edge()
     {
         const string source = """
@@ -29,6 +31,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
     {
         var builder = new GbBuilder();
@@ -70,6 +73,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
         new("Wait-frame lowering must not use source operand context.");
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_poll_input_operation_to_deterministic_game_boy_bytes()
     {
         var builder = new GbBuilder();
@@ -83,6 +87,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Direct_button_read_and_bare_button_identifiers_are_rejected()
     {
         const string source = """
@@ -101,6 +106,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Bare_button_identifiers_are_rejected_by_input_facade()
     {
         const string source = """
@@ -117,6 +123,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Theory]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     [InlineData("Button.A")]
     [InlineData("Button.B")]
     [InlineData("Button.Select")]
@@ -153,6 +160,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Input_facade_predicates_lower_like_explicit_numeric_checks()
     {
         const string explicitComparisonSource = """
@@ -191,6 +199,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_tick_input_api_for_variable_jump()
     {
         const string source = """
@@ -238,6 +247,7 @@ public sealed class GameBoySdkFrameInputLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Input_poll_settles_joypad_rows_before_latching_buttons()
     {
         const string source = """

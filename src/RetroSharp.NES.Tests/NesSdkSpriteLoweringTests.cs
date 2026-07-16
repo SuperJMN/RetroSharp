@@ -5,9 +5,11 @@ using Xunit;
 using static NesSdkOperationBoundaryTests;
 using static NesTestAssets;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkSpriteLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Golden_sprite_draw_emission_is_pinned_nes()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -41,6 +43,7 @@ public sealed class NesSdkSpriteLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_logical_sprite_draw_to_nes_oam_and_chr_data()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -93,6 +96,7 @@ public sealed class NesSdkSpriteLoweringTests
 
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Rejects_png_overlay_draw_when_base_palette_slot_has_no_overlay_slot()
     {
         var baseDirectory = WriteSpritePng(
@@ -138,6 +142,7 @@ public sealed class NesSdkSpriteLoweringTests
 
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Rejects_logical_sprite_palette_slots_outside_nes_capabilities()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -179,6 +184,7 @@ public sealed class NesSdkSpriteLoweringTests
 
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Rejects_png_sprite_palette_slots_outside_nes_capabilities_before_palette_derivation()
     {
         var baseDirectory = WriteSpritePng(
@@ -203,6 +209,7 @@ public sealed class NesSdkSpriteLoweringTests
 
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Rejects_constant_y_sprite_draws_that_exceed_nes_scanline_budget()
     {
         var baseDirectory = WriteSpriteAsset(
@@ -251,6 +258,7 @@ public sealed class NesSdkSpriteLoweringTests
 
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Rejects_logical_sprite_assets_that_exceed_nes_sprite_count()
     {
         var rows = Enumerable.Repeat(new string('1', 65 * 8), 8);

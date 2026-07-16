@@ -107,6 +107,7 @@ public partial class NesRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Actor_framework_projects_wide_y_spawns_for_draw_and_collision_on_nes()
     {
         var baseDirectory = WriteActorSpawnMap(

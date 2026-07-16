@@ -1,6 +1,8 @@
 using System.Reflection;
 using RetroSharp.GameBoy;
+using RetroSharp.GameBoy.Tests;
 using RetroSharp.NES;
+using RetroSharp.NES.Tests;
 using RetroSharp.Sdk;
 
 namespace RetroSharp.Architecture.Tests;
@@ -17,6 +19,14 @@ public sealed class TargetFrontendPreparationArchitectureTests
         "RetroSharp.Sdk.SdkSourcePackageFacadeLowerer",
         "RetroSharp.Parser.LetTypeInference",
         "RetroSharp.Parser.FunctionContractValidator",
+    ];
+
+    private static readonly string[] MonolithicCompilerForbiddenStageTypes =
+    [
+        "RetroSharp.Parser.SomeParser",
+        "RetroSharp.Sdk.TargetProgramSelector",
+        "RetroSharp.Sdk.ActorFrameworkLowerer",
+        "RetroSharp.Sdk.SdkSourcePackageFacadeLowerer",
     ];
 
     [Fact]
@@ -84,25 +94,22 @@ public sealed class TargetFrontendPreparationArchitectureTests
     [Fact]
     public void Monolithic_compiler_regressions_do_not_reconstruct_extracted_frontend_stages()
     {
-        var root = RepositoryRoot();
-        var forbiddenCalls = new[]
-        {
-            "new SomeParser",
-            "TargetProgramSelector.Select(",
-            "ActorFrameworkLowerer.Lower(",
-            "SdkSourcePackageFacadeLowerer.Lower(",
-        };
+        var preparation = ArchitectureSymbolAssertions.RequiredType(
+            typeof(ActorFrameworkLowerer).Assembly,
+            "RetroSharp.Sdk.TargetFrontendPreparation");
+        var preparationCalls = ArchitectureSymbolAssertions.CalledMethods(preparation);
+        var forbiddenStageTypes = MonolithicCompilerForbiddenStageTypes
+            .Select(typeName => preparationCalls
+                .Select(call => call.DeclaringType)
+                .First(type => type?.FullName == typeName)!)
+            .ToHashSet();
 
-        foreach (var relativePath in new[]
-                 {
-                     "src/RetroSharp.GameBoy.Tests/GameBoyRomCompilerTests.cs",
-                     "src/RetroSharp.NES.Tests/NesRomCompilerTests.cs",
-                 })
+        foreach (var compilerSuite in new[] { typeof(GameBoyRomCompilerTests), typeof(NesRomCompilerTests) })
         {
-            var source = File.ReadAllText(Path.Combine(root, relativePath));
-            Assert.All(
-                forbiddenCalls,
-                call => Assert.DoesNotContain(call, source, StringComparison.Ordinal));
+            ArchitectureSymbolAssertions.AssertCallsToTypesHaveDeclaredTestOwnership(
+                compilerSuite,
+                forbiddenStageTypes,
+                "FocusedFrontend");
         }
     }
 
@@ -113,14 +120,4 @@ public sealed class TargetFrontendPreparationArchitectureTests
             call => call.DeclaringType == preparation);
     }
 
-    private static string RepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate repository root.");
-    }
 }

@@ -4,9 +4,11 @@ using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkCollisionRuntimeLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Golden_collision_aabb_emission_is_pinned_gb()
     {
         const string source = """
@@ -35,6 +37,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_map_tile_lookup_as_a_runtime_expression()
     {
         const string source = """
@@ -60,6 +63,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_tile_flags_at_reads_world_pixel_coordinates_and_bounds_to_empty()
     {
         const string source = """
@@ -108,6 +112,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collision_aabb_tiles_checks_each_overlapped_world_tile()
     {
         const string source = """
@@ -145,6 +150,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_aabb_tiles_checks_each_overlapped_tile_against_visible_camera_columns()
     {
         const string source = """
@@ -183,6 +189,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Camera_aabb_hit_top_returns_top_edge_of_first_overlapped_tile()
     {
         const string source = """
@@ -213,6 +220,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_returns_y_304_and_minus_one_as_complete_words_on_game_boy()
     {
         var source = CollisionHitContractSource(
@@ -237,6 +245,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Screen_camera_hit_top_keeps_byte_semantics_and_zero_extends_word_results_on_game_boy()
     {
         var source = CollisionHitContractSource(
@@ -259,6 +268,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_game_boy_world()
     {
         var source = CollisionHitContractSource(
@@ -274,6 +284,7 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_keeps_legacy_byte_destination_for_32_row_game_boy_world()
     {
         var source = CollisionHitContractSource(

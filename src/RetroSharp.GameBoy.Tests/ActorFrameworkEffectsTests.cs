@@ -14,6 +14,7 @@ using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 public partial class GameBoyRomCompilerTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Effect_framework_lowers_requests_update_and_draw_as_separate_fixed_pool()
     {
         const string source = """
@@ -45,6 +46,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Effect_framework_draw_hides_inactive_or_offscreen_slots_without_skipping_the_sprite_call()
     {
         const string source = """
