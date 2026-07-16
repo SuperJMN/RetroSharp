@@ -6,6 +6,7 @@ using RetroSharp.Parser;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkFrameInputLoweringTests
 {
     [Fact]

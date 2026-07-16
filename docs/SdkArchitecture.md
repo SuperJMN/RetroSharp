@@ -67,7 +67,12 @@ domain state/contribution symbol into its feature partial. Target SDK ownership
 uses the same compiled-symbol and IL-call-edge guard: runtime compilers may
 consume streams and route operations, but the lowerer must not call back into a
 runtime compiler. Exact paths remain tests only when physical separation itself
-is the contract.
+is the contract. The remaining physical contracts are the five documented
+layout/runtime/stream/lowerer/builder navigation roots per target; feature
+partial names are deliberately rename-safe. Focused SDK suites and intentional
+focused frontend callers declare compiled `RetroSharp.TestOwnership` metadata,
+while executable-member enumeration and IL traversal are shared by all symbol
+guards.
 
 The concrete compiler adapters remain responsible for target catalogs and
 capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,

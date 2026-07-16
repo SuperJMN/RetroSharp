@@ -47,6 +47,14 @@ public sealed class ArchitectureSymbolAssertionsTests
             [typeof(FixtureActorState)]));
     }
 
+    [Fact]
+    public void Test_ownership_guard_rejects_misplaced_lowering_coverage()
+    {
+        Assert.ThrowsAny<Exception>(() => ArchitectureSymbolAssertions.AssertFocusedTestOwnership(
+            typeof(FixtureCompilerIntegrationSuite),
+            []));
+    }
+
     private sealed class LeakingSdkOwner
     {
         static LeakingSdkOwner()
@@ -95,6 +103,12 @@ public sealed class ArchitectureSymbolAssertionsTests
             state.Actors.Add(new ActorFact());
         }
     }
+
+    [Trait("RetroSharp.TestOwnership", "CompilerIntegration")]
+    private sealed class FixtureCompilerIntegrationSuite;
+
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    private sealed class MisplacedLoweringSuite;
 
     private readonly record struct FixtureRuntimeRange(ushort Start, int Length)
     {

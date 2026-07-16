@@ -14,6 +14,7 @@ using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 public partial class GameBoyRomCompilerTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_lowers_requests_update_and_draw_as_fixed_pools()
     {
         const string source = """
@@ -58,6 +59,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_draw_hides_inactive_or_offscreen_slots_without_skipping_the_sprite_call()
     {
         const string source = """
@@ -85,6 +87,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_lowers_gravity_arc_through_instance_velocity()
     {
         const string source = """
@@ -115,6 +118,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_lowers_bouncing_tile_collision()
     {
         const string source = """
@@ -142,6 +146,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_lowers_expiring_tile_collision_with_impact_effect()
     {
         const string source = """
@@ -172,6 +177,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_culls_update_against_camera_bounds_plus_offscreen_margin()
     {
         const string source = """
@@ -199,6 +205,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_uniquifies_request_temporaries_per_call_site()
     {
         const string source = """
@@ -226,6 +233,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_emits_effect_requests_for_spawn_impact_and_expiration()
     {
         const string source = """
@@ -263,6 +271,7 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Projectile_framework_lowers_actor_and_hero_collision_hooks()
     {
         const string source = """

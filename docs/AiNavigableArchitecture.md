@@ -20,14 +20,31 @@ Keep the language, portable 2D SDK, and target-intrinsic layers separate.
 | NES portable SDK emission | `NesSdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `NesSdkLoweringContext` supplies only operand/storage primitives | `NesRuntimeCompiler` owns one lowerer and routes its collected `SdkOperationStream` through `NesSdkStreamReader`; the lowerer must not call back into the runtime compiler | `NesSdkLoweringArchitectureTests`, `NesSdkOperationBoundaryTests`, and `NesSdk{FrameInput,Sprite,CameraStreaming,Collision}LoweringTests` |
 
 The target cartridge modules are deliberately physical as well as conceptual.
-For Game Boy, layout/placement, runtime compilation, SDK stream reading, SDK
-emission, and byte building start in `GameBoyRomLayout.cs`,
+For Game Boy, the five documented physical navigation roots for
+layout/placement, runtime compilation, SDK stream reading, SDK emission, and
+byte building are `GameBoyRomLayout.cs`,
 `GameBoyRuntimeCompiler.cs`, `GameBoySdkStreamReader.cs`,
 `GameBoySdkOperationLowerer.cs`, and `GbBuilder.cs`. The NES equivalents are
 `NesCartridgeLayout.cs`, `NesRuntimeCompiler.cs`, `NesSdkStreamReader.cs`,
 `NesSdkOperationLowerer.cs`, and `PrgBuilder.cs`. Feature partials are the next
-navigation hop; the ROM builders are link/orchestration modules, not the owner
-of those extracted concerns.
+navigation hop, but their file names are not architecture contracts; the ROM
+builders are link/orchestration modules, not the owner of those extracted
+concerns.
+
+## Guard taxonomy
+
+Semantic guards inspect compiled symbols and IL edges. Runtime-memory owners,
+frontend-stage ownership, Actor Framework state/contributions, target-lowerer
+backedges, the SDK operation inventory, and test-suite ownership all belong in
+this category. Focused lowering suites declare `RetroSharp.TestOwnership`
+metadata, so method and source-file renames do not require architecture-test
+edits. Focused tests that intentionally exercise frontend stages declare the
+same metadata on the calling method instead of relying on a source fragment.
+
+Physical guards use exact repository paths only for the ten navigation roots
+listed above. Each path assertion carries the physical invariant it protects.
+Feature-partial names, test method names, and private declaration text are not
+physical contracts.
 
 ## Common change paths
 

@@ -23,7 +23,9 @@
   <ItemGroup>
     <ProjectReference Include="../RetroSharp.Core/RetroSharp.Core.csproj" />
     <ProjectReference Include="../RetroSharp.GameBoy/RetroSharp.GameBoy.csproj" />
+    <ProjectReference Include="../RetroSharp.GameBoy.Tests/RetroSharp.GameBoy.Tests.csproj" />
     <ProjectReference Include="../RetroSharp.NES/RetroSharp.NES.csproj" />
+    <ProjectReference Include="../RetroSharp.NES.Tests/RetroSharp.NES.Tests.csproj" />
     <ProjectReference Include="../RetroSharp.Sdk.Frontend/RetroSharp.Sdk.Frontend.csproj" />
   </ItemGroup>
 </Project>

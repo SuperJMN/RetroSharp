@@ -205,6 +205,52 @@ internal static class ArchitectureSymbolAssertions
             field => field.DeclaringType is not null && domainStates.Contains(field.DeclaringType));
     }
 
+    public static void AssertFocusedTestOwnership(
+        Type compilerIntegrationSuite,
+        IReadOnlyCollection<Type> focusedLoweringSuites)
+    {
+        const string ownershipTrait = "RetroSharp.TestOwnership";
+        const string compilerIntegration = "CompilerIntegration";
+        const string sdkLowering = "SdkLowering";
+
+        Assert.True(HasTrait(compilerIntegrationSuite, ownershipTrait, compilerIntegration));
+        Assert.All(focusedLoweringSuites, suite =>
+        {
+            Assert.Equal(compilerIntegrationSuite.Assembly, suite.Assembly);
+            Assert.True(HasTrait(suite, ownershipTrait, sdkLowering));
+        });
+
+        var declaredFocusedSuites = compilerIntegrationSuite.Assembly
+            .GetTypes()
+            .Where(type => HasTrait(type, ownershipTrait, sdkLowering))
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+        var expectedFocusedSuites = focusedLoweringSuites
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(expectedFocusedSuites, declaredFocusedSuites);
+    }
+
+    public static void AssertCallsToTypesHaveDeclaredTestOwnership(
+        Type testSuite,
+        IReadOnlyCollection<Type> calledTypes,
+        string ownership)
+    {
+        var calledTypeSet = calledTypes.ToHashSet();
+        var undeclaredCallers = ExecutableMembers(testSuite)
+            .SelectMany(source => CalledMethods(source).Select(target => (Source: source, Target: target)))
+            .Where(edge => edge.Target.DeclaringType is not null && calledTypeSet.Contains(edge.Target.DeclaringType))
+            .Where(edge => !HasTrait(edge.Source, "RetroSharp.TestOwnership", ownership))
+            .ToList();
+
+        Assert.True(
+            undeclaredCallers.Count == 0,
+            $"Test methods call guarded symbols without '{ownership}' ownership:{Environment.NewLine}" +
+            string.Join(Environment.NewLine, undeclaredCallers.Select(edge =>
+                $"{edge.Source.DeclaringType?.FullName}.{edge.Source.Name} -> {edge.Target.DeclaringType?.FullName}.{edge.Target.Name}")));
+    }
+
     public static Type RequiredNestedType(Type owner, string name)
     {
         return owner.GetNestedType(name, BindingFlags.Public | BindingFlags.NonPublic)
@@ -213,26 +259,14 @@ internal static class ArchitectureSymbolAssertions
 
     public static IReadOnlyList<MethodBase> CalledMethods(Type source)
     {
-        var executableMembers = source
-            .GetMethods(DeclaredMethods)
-            .Cast<MethodBase>()
-            .Concat(source.GetConstructors(DeclaredMethods))
-            .Concat(source.TypeInitializer is { } typeInitializer ? [typeInitializer] : [])
-            .DistinctBy(member => (member.Module, member.MetadataToken));
-        return executableMembers
+        return ExecutableMembers(source)
             .SelectMany(CalledMethods)
             .ToList();
     }
 
     public static IReadOnlyList<FieldInfo> ReferencedFields(Type source)
     {
-        var executableMembers = source
-            .GetMethods(DeclaredMethods)
-            .Cast<MethodBase>()
-            .Concat(source.GetConstructors(DeclaredMethods))
-            .Concat(source.TypeInitializer is { } typeInitializer ? [typeInitializer] : [])
-            .DistinctBy(member => (member.Module, member.MetadataToken));
-        return executableMembers
+        return ExecutableMembers(source)
             .SelectMany(ReferencedFields)
             .ToList();
     }
@@ -277,20 +311,11 @@ internal static class ArchitectureSymbolAssertions
 
     public static IEnumerable<MethodBase> CalledMethods(MethodBase source)
     {
-        var body = source.GetMethodBody();
-        var bytes = body?.GetILAsByteArray();
-        if (bytes is null)
+        foreach (var instruction in Instructions(source))
         {
-            yield break;
-        }
-
-        var index = 0;
-        while (index < bytes.Length)
-        {
-            var opCode = ReadOpCode(bytes, ref index);
-            if (opCode.OperandType == OperandType.InlineMethod)
+            if (instruction.OpCode.OperandType == OperandType.InlineMethod)
             {
-                var token = BitConverter.ToInt32(bytes, index);
+                var token = BitConverter.ToInt32(instruction.Bytes, instruction.OperandOffset);
                 MethodBase? called = null;
                 try
                 {
@@ -310,27 +335,16 @@ internal static class ArchitectureSymbolAssertions
                     yield return called;
                 }
             }
-
-            index += OperandSize(opCode.OperandType, bytes, index);
         }
     }
 
     private static IEnumerable<FieldInfo> ReferencedFields(MethodBase source)
     {
-        var body = source.GetMethodBody();
-        var bytes = body?.GetILAsByteArray();
-        if (bytes is null)
+        foreach (var instruction in Instructions(source))
         {
-            yield break;
-        }
-
-        var index = 0;
-        while (index < bytes.Length)
-        {
-            var opCode = ReadOpCode(bytes, ref index);
-            if (opCode.OperandType == OperandType.InlineField)
+            if (instruction.OpCode.OperandType == OperandType.InlineField)
             {
-                var token = BitConverter.ToInt32(bytes, index);
+                var token = BitConverter.ToInt32(instruction.Bytes, instruction.OperandOffset);
                 FieldInfo? field = null;
                 try
                 {
@@ -350,10 +364,47 @@ internal static class ArchitectureSymbolAssertions
                     yield return field;
                 }
             }
-
-            index += OperandSize(opCode.OperandType, bytes, index);
         }
     }
+
+    private static IEnumerable<MethodBase> ExecutableMembers(Type source)
+    {
+        return source
+            .GetMethods(DeclaredMethods)
+            .Cast<MethodBase>()
+            .Concat(source.GetConstructors(DeclaredMethods))
+            .Concat(source.TypeInitializer is { } typeInitializer ? [typeInitializer] : [])
+            .DistinctBy(member => (member.Module, member.MetadataToken));
+    }
+
+    private static IEnumerable<IlInstruction> Instructions(MethodBase source)
+    {
+        var bytes = source.GetMethodBody()?.GetILAsByteArray();
+        if (bytes is null)
+        {
+            yield break;
+        }
+
+        var index = 0;
+        while (index < bytes.Length)
+        {
+            var opCode = ReadOpCode(bytes, ref index);
+            var operandOffset = index;
+            index += OperandSize(opCode.OperandType, bytes, index);
+            yield return new IlInstruction(bytes, opCode, operandOffset);
+        }
+    }
+
+    private static bool HasTrait(MemberInfo member, string name, string value)
+    {
+        return member.CustomAttributes.Any(attribute =>
+            attribute.AttributeType.FullName == "Xunit.TraitAttribute" &&
+            attribute.ConstructorArguments is [{ Value: string traitName }, { Value: string traitValue }] &&
+            traitName == name &&
+            traitValue == value);
+    }
+
+    private readonly record struct IlInstruction(byte[] Bytes, OpCode OpCode, int OperandOffset);
 
     private static OpCode ReadOpCode(byte[] bytes, ref int index)
     {

@@ -6,6 +6,7 @@ using RetroSharp.GameBoy;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkCollisionLoweringTests
 {
     [Fact]

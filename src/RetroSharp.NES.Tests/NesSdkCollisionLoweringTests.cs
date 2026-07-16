@@ -5,6 +5,7 @@ using RetroSharp.Sdk;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkCollisionLoweringTests
 {
     [Fact]

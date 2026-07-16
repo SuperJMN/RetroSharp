@@ -7,6 +7,7 @@ using RetroSharp.Sdk;
 using Xunit;
 using static RetroSharp.NES.Tests.NesTestAssets;
 
+[Trait("RetroSharp.TestOwnership", "CompilerIntegration")]
 public partial class NesRomCompilerTests
 {
     [Fact]

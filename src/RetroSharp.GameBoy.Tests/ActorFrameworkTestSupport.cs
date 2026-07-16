@@ -3,9 +3,11 @@ namespace RetroSharp.GameBoy.Tests;
 using RetroSharp.GameBoy;
 using RetroSharp.Parser;
 using RetroSharp.Sdk;
+using Xunit;
 
 public partial class GameBoyRomCompilerTests
 {
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     private static ProgramSyntax ParseGameBoySourceWithPortable2D(string source)
     {
         var parse = new SomeParser().Parse(

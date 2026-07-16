@@ -1,7 +1,8 @@
 namespace RetroSharp.Architecture.Tests;
 
-using System.Text.RegularExpressions;
+using System.Reflection;
 using System.Xml.Linq;
+using RetroSharp.Core.Sdk;
 
 public sealed class ArchitectureBoundaryTests
 {
@@ -176,7 +177,7 @@ public sealed class ArchitectureBoundaryTests
         var root = RepositoryRoot();
         var roadmap = File.ReadAllText(Path.Combine(root, "docs/ArchitectureRoadmap.md"));
         var section = MarkdownSection(roadmap, "## Compiler-Owned SDK Operation Inventory");
-        var expectedEntries = CompilerOwnedSdkOperationNames(root);
+        var expectedEntries = CompilerOwnedSdkOperationNames();
 
         var missing = expectedEntries
             .Where(entry => !section.Contains($"`{entry}`", StringComparison.Ordinal))
@@ -240,37 +241,22 @@ public sealed class ArchitectureBoundaryTests
         return matches;
     }
 
-    private static IReadOnlyList<string> CompilerOwnedSdkOperationNames(string repositoryRoot)
+    private static IReadOnlyList<string> CompilerOwnedSdkOperationNames()
     {
         return
         [
-            .. NestedRecordNames(repositoryRoot, "src/RetroSharp.Core/Sdk/Sdk2DOperation.cs", "Sdk2DOperation"),
-            .. NestedRecordNames(repositoryRoot, "src/RetroSharp.Core/Sdk/SdkAudioOperation.cs", "SdkAudioOperation"),
-            .. EnumMemberNames(repositoryRoot, "src/RetroSharp.Core/Sdk/TargetIntrinsicCatalog.cs", "TargetIntrinsicOperation"),
+            .. NestedOperationNames(typeof(Sdk2DOperation)),
+            .. NestedOperationNames(typeof(SdkAudioOperation)),
+            .. Enum.GetNames<TargetIntrinsicOperation>().Select(name => $"{nameof(TargetIntrinsicOperation)}.{name}"),
         ];
     }
 
-    private static IEnumerable<string> NestedRecordNames(string repositoryRoot, string relativePath, string owner)
+    private static IEnumerable<string> NestedOperationNames(Type owner)
     {
-        var source = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
-        return Regex.Matches(source, @"public\s+sealed\s+record\s+([A-Za-z0-9_]+)")
-            .Select(match => $"{owner}.{match.Groups[1].Value}");
-    }
-
-    private static IEnumerable<string> EnumMemberNames(string repositoryRoot, string relativePath, string enumName)
-    {
-        var source = File.ReadAllText(Path.Combine(repositoryRoot, relativePath));
-        var match = Regex.Match(source, $@"public\s+enum\s+{enumName}\s*\{{(?<body>.*?)\n\}}", RegexOptions.Singleline);
-        if (!match.Success)
-        {
-            throw new InvalidOperationException($"Could not find enum {enumName} in {relativePath}.");
-        }
-
-        return match.Groups["body"].Value
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(line => line.TrimEnd(','))
-            .Where(line => line.Length > 0)
-            .Select(line => $"{enumName}.{line}");
+        return owner
+            .GetNestedTypes(BindingFlags.Public)
+            .Where(type => type.IsAssignableTo(owner))
+            .Select(type => $"{owner.Name}.{type.Name}");
     }
 
     private static string MarkdownSection(string markdown, string heading)

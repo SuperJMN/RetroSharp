@@ -5,6 +5,7 @@ using Xunit;
 using static NesSdkOperationBoundaryTests;
 using static NesTestAssets;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class NesSdkSpriteLoweringTests
 {
     [Fact]

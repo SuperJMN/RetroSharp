@@ -3,6 +3,7 @@ namespace RetroSharp.GameBoy.Tests;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
+[Trait("RetroSharp.TestOwnership", "SdkLowering")]
 public sealed class GameBoySdkAnimationLoweringTests
 {
     [Fact]

@@ -8,6 +8,7 @@ using Xunit;
 public partial class GameBoyRomCompilerTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
     public void Actor_pool_ownership_wins_over_homonymous_projectile_pool_calls()
     {
         const string source = """
