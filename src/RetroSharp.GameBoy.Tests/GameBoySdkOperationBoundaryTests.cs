@@ -9,31 +9,7 @@ using Xunit;
 
 public sealed class GameBoySdkOperationBoundaryTests
 {
-    [Fact]
-    public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
-    {
-        var builder = new GbBuilder();
-        var compiler = CreateRuntimeCompiler(builder);
 
-        GameBoySdkOperationLowerer.Emit(compiler, new Sdk2DOperation.WaitFrame());
-
-        Assert.Equal(
-            [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA],
-            builder.Build());
-    }
-
-    [Fact]
-    public void Lowers_poll_input_operation_to_deterministic_game_boy_bytes()
-    {
-        var viaOperation = new GbBuilder();
-        GameBoySdkOperationLowerer.Emit(CreateRuntimeCompiler(viaOperation), new Sdk2DOperation.PollInput());
-
-        var viaDirect = new GbBuilder();
-        CreateRuntimeCompiler(viaDirect).EmitPollInput();
-
-        Assert.NotEmpty(viaOperation.Build());
-        Assert.Equal(viaDirect.Build(), viaOperation.Build());
-    }
 
     [Fact]
     public void Runtime_compiler_consumes_the_collected_sdk_operation_stream()
@@ -72,77 +48,46 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
-    public void Lowers_draw_logical_sprite_operation_to_game_boy_metasprite_bytes()
+    public void Runtime_compiler_consumes_an_overridden_value_sdk_operation_through_the_collected_stream()
     {
         var builder = new GbBuilder();
-        var compiler = CreateRuntimeCompiler(
-            builder,
+        var program = ProgramWithOverriddenSdkOperations(
             """
             void Main() {
-                Video.Init();
-                Sprite.Asset(player_run, "player.sprite.json");
+                World.Column(0, 0, 0);
+                World.Column(1, 0, 0);
+                World.Flags(0, 0, 1);
+                World.Flags(1, 1, 0);
+                World.Map(2, 11, 2);
+                i16 flags = World.TileFlagsAt(0, 8);
             }
             """,
-            WriteSpriteAsset());
+            Directory.GetCurrentDirectory(),
+            [new Sdk2DOperation.ReadWorldTileFlags("default", WorldX: 8, WorldY: 8)]);
+        builder.Label(GameBoyRomBuilder.MapFlagDataLabel);
+        builder.Emit(0, 1, 1, 0);
+        var compiler = new GameBoyRuntimeCompiler(builder, program);
 
-        GameBoySdkOperationLowerer.Emit(
-            compiler,
-            new Sdk2DOperation.DrawLogicalSprite(
-                "player_run",
-                X: new SdkByteExpression.Constant(72),
-                Y: new SdkByteExpression.Constant(80),
-                Frame: new SdkByteExpression.Constant(0),
-                FlipX: null,
-                PaletteSlot: 0,
-                StaticTransform: SpriteTransform.None));
+        compiler.Emit(program.MainBlock);
 
         var bytes = builder.Build();
-        Assert.True(ContainsSequence(bytes, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "sprite draw operation should write the logical Y plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(bytes, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]), "sprite draw operation should write the logical X plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(bytes, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite draw operation should use the first generated tile for the first hardware sprite.");
+        Assert.True(
+            ContainsSequence(bytes, [0x3E, 0x08, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]),
+            "Runtime value emission should use the overridden world X operand from the collected SDK operation.");
+        Assert.False(
+            ContainsSequence(bytes, [0x3E, 0x00, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]),
+            "Runtime value emission should not re-read the original world X operand from the AST call.");
     }
 
-    [Fact]
-    public void Lowers_stream_map_column_operation_to_game_boy_vram_writes()
-    {
-        var builder = new GbBuilder();
-        var compiler = CreateRuntimeCompiler(
-            builder,
-            """
-            void Main() {
-                Video.Init();
-                World.Column(0, 1, 2, 3, 4);
-                World.Column(1, 5, 6, 7, 8);
-                World.Map(2, 11, 4);
-            }
-            """,
-            Directory.GetCurrentDirectory());
-        builder.Label(GameBoyRomBuilder.MapRowLabel(0));
-        builder.Emit(1, 5);
-        builder.Label(GameBoyRomBuilder.MapRowLabel(1));
-        builder.Emit(2, 6);
-        builder.Label(GameBoyRomBuilder.MapRowLabel(2));
-        builder.Emit(3, 7);
-        builder.Label(GameBoyRomBuilder.MapRowLabel(3));
-        builder.Emit(4, 8);
 
-        GameBoySdkOperationLowerer.Emit(
-            compiler,
-            new Sdk2DOperation.StreamMapColumn(TargetColumn: 20, SourceColumn: 0, Y: 11, Height: 4));
 
-        var bytes = builder.Build();
-        Assert.True(ContainsSequence(bytes, [0x01, 0x05]), "stream operation should keep map row 0 data reachable.");
-        Assert.True(ContainsSequence(bytes, [0x3E, 0x00, 0x5F, 0x16, 0x00, 0x21]), "stream operation should load the source map column into DE and a row-table address into HL.");
-        Assert.True(ContainsSequence(bytes, [0x3E, 0x14, 0xC6, 0x60, 0x6F, 0x26, 0x99, 0x78, 0x77]), "stream operation should stream row 11 into the target background column.");
-    }
-
-    private static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder)
+    internal static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder)
     {
         var program = GameBoyVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));
         return new GameBoyRuntimeCompiler(builder, program);
     }
 
-    private static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder, string source, string baseDirectory)
+    internal static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder, string source, string baseDirectory)
     {
         var program = GameBoyVideoProgram.FromProgram(ParseLoweredProgram(source), baseDirectory);
         return new GameBoyRuntimeCompiler(builder, program);
@@ -157,7 +102,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         return program;
     }
 
-    private static ProgramSyntax ParseLoweredProgram(string source)
+    internal static ProgramSyntax ParseLoweredProgram(string source)
     {
         var merged = SdkLibrarySource.Merge(
             GameBoyTarget.Intrinsics,
@@ -203,346 +148,6 @@ public sealed class GameBoySdkOperationBoundaryTests
     }
 
     [Fact]
-    public void Collects_camera_set_position_with_byte_backed_expressions()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 4);
-                                  World.Map(2, 11, 2);
-                                  Camera.Init(2, 11, 2);
-                                  i16 cameraX = 1;
-                                  Camera.SetPosition(cameraX, 0);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var operations = GameBoyRomCompiler.CollectSdkOperations(source);
-        Assert.Collection(
-            operations,
-            operation =>
-            {
-                var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(operation);
-
-                Assert.Equal(WordLocal("cameraX"), camera.X);
-                Assert.Equal(new SdkWordExpression.Constant(0), camera.Y);
-                Assert.Equal(ScrollAxes.Horizontal, camera.Axes);
-            },
-            operation =>
-            {
-                var apply = Assert.IsType<Sdk2DOperation.ApplyCamera>(operation);
-                Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, apply.Axes);
-            });
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
-    }
-
-    [Fact]
-    public void Collects_camera_set_position_constant_above_byte_range_without_truncation()
-    {
-        const string source = """
-                              void Main() {
-                                  Camera.SetPosition(256, 0);
-                              }
-                              """;
-
-        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
-            Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source)));
-
-        Assert.Equal(new SdkWordExpression.Constant(256), camera.X);
-        Assert.Equal(ScrollAxes.Horizontal, camera.Axes);
-    }
-
-    [Fact]
-    public void Collects_camera_set_position_with_vertical_axis_when_y_can_move()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 4);
-                                  World.Map(2, 11, 2);
-                                  Camera.Init(2, 11, 2);
-                                  i16 cameraY = 1;
-                                  Camera.SetPosition(0, cameraY);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var operations = GameBoyRomCompiler.CollectSdkOperations(source);
-        Assert.Collection(
-            operations,
-            operation =>
-            {
-                var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(operation);
-
-                Assert.Equal(new SdkWordExpression.Constant(0), camera.X);
-                Assert.Equal(WordLocal("cameraY"), camera.Y);
-                Assert.Equal(ScrollAxes.Vertical, camera.Axes);
-            },
-            operation =>
-            {
-                var apply = Assert.IsType<Sdk2DOperation.ApplyCamera>(operation);
-                Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, apply.Axes);
-            });
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
-    }
-
-    [Fact]
-    public void Compiles_world_tile_flags_at_library_helper_over_game_boy_intrinsic_like_sdk_operation()
-    {
-        const string direct = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  i16 worldX = 0;
-                                  i16 flags = World.TileFlagsAt(worldX, 8);
-                              }
-                              """;
-        const string library = """
-                               void Main() {
-                                   World.Column(0, 0, 4);
-                                   World.Flags(0, 0, 1);
-                                   World.Map(1, 11, 2);
-                                   i16 worldX = 0;
-                                   i16 flags = World.TileFlagsAt(worldX, 8);
-                               }
-                               """;
-        Assert.Equal(GameBoyRomCompiler.CompileSource(direct, WriteSpriteAsset()), GameBoyRomCompiler.CompileSource(library, WriteSpriteAsset()));
-    }
-
-    [Fact]
-    public void Collects_world_tile_flags_query_with_byte_backed_coordinates()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  i16 worldX = 0;
-                                  i16 flags = World.TileFlagsAt(worldX, 8);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
-        var flags = Assert.IsType<Sdk2DOperation.ReadWorldTileFlags>(operation);
-
-        Assert.Equal("default", flags.WorldId);
-        Assert.Equal(Local("worldX"), flags.WorldX);
-        Assert.Equal(new SdkByteExpression.Constant(8), flags.WorldY);
-    }
-
-    [Fact]
-    public void Collects_camera_aabb_tiles_query_with_byte_backed_world_y()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  Camera.Init(1, 11, 2);
-                                  i16 footY = 16;
-                                  i16 hit = Camera.AabbTiles(72, footY, 16, 8, 1);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
-        var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
-
-        Assert.Equal("default", query.WorldId);
-        Assert.Equal(new SdkByteExpression.Constant(72), query.ScreenX);
-        Assert.Equal(WordLocal("footY"), query.WorldY);
-        Assert.Equal(0, query.WorldYOffset);
-        Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
-        Assert.Equal(8, query.Height);
-        Assert.Equal(WorldTileFlags.Solid, query.Flags);
-    }
-
-    [Fact]
-    public void Collects_camera_aabb_tiles_query_with_sprite_width_extent()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  Camera.Init(1, 11, 2);
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  i16 footY = 16;
-                                  i16 hit = Camera.AabbTiles(72, footY, Sprite.Width(player_run), 8, 1);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
-        var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
-
-        Assert.Equal(new SdkAabbExtent.SpriteWidth("player_run"), query.Width);
-    }
-
-    [Fact]
-    public void Collects_camera_aabb_tiles_query_with_constant_world_y_offset()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  Camera.Init(1, 11, 2);
-                                  i16 footY = 16;
-                                  i16 hit = Camera.AabbTiles(72, footY - 8, 16, 8, 1);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
-        var query = Assert.IsType<Sdk2DOperation.CameraAabbTiles>(operation);
-
-        Assert.Equal(WordLocal("footY"), query.WorldY);
-        Assert.Equal(-8, query.WorldYOffset);
-    }
-
-    [Fact]
-    public void Collects_camera_aabb_hit_top_query_with_sprite_width_and_search_offset()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  Camera.Init(1, 11, 2);
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  i16 footY = 40;
-                                  i16 hitTop = Camera.AabbHitTop(72, footY - 32, Sprite.Width(player_run), 40, 1);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
-        var query = Assert.IsType<Sdk2DOperation.CameraAabbHitTop>(operation);
-
-        Assert.Equal("default", query.WorldId);
-        Assert.Equal(new SdkByteExpression.Constant(72), query.ScreenX);
-        Assert.Equal(WordLocal("footY"), query.WorldY);
-        Assert.Equal(-32, query.WorldYOffset);
-        Assert.Equal(new SdkAabbExtent.SpriteWidth("player_run"), query.Width);
-        Assert.Equal(40, query.Height);
-        Assert.Equal(WorldTileFlags.Solid, query.Flags);
-    }
-
-    [Fact]
-    public void Collects_actor_pool_tile_helpers_as_camera_aabb_operations()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 11, 2);
-                                  Camera.Init(1, 11, 2);
-                                  Actors.Pool(enemies, 1);
-                                  Enemies.Def(Goomba, behavior: Walker, hitboxWidth: 16, hitboxHeight: 8);
-                                  enemies[0].active = 1;
-                                  enemies[0].kind = Goomba;
-                                  enemies[0].x = 24;
-                                  enemies[0].xHi = 0;
-                                  enemies[0].y = 24;
-                                  enemies.TouchTiles(0, 1);
-                                  enemies.LandOnTiles(4, 12, 1);
-                              }
-                              """;
-
-        var operations = GameBoyRomCompiler.CollectSdkOperations(source);
-
-        Assert.Collection(
-            operations,
-            operation =>
-            {
-                var query = Assert.IsType<Sdk2DOperation.CameraScreenAabbTiles>(operation);
-                Assert.Equal(Local("__enemies_touch_screen_x"), query.ScreenX);
-                Assert.Equal(Local("__enemies_touch_screen_y"), query.ScreenY);
-                Assert.Equal(0, query.ScreenYOffset);
-                Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
-                Assert.Equal(8, query.Height);
-            },
-            operation =>
-            {
-                var query = Assert.IsType<Sdk2DOperation.CameraScreenAabbHitTop>(operation);
-                Assert.Equal(Local("__enemies_land_screen_x"), query.ScreenX);
-                Assert.Equal(Local("__enemies_land_screen_y"), query.ScreenY);
-                Assert.Equal(-4, query.ScreenYOffset);
-                Assert.Equal(new SdkAabbExtent.Constant(16), query.Width);
-                Assert.Equal(12, query.Height);
-            });
-    }
-
-    [Fact]
-    public void Collects_actor_draw_with_animation_frame_as_sprite_draw_frame()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  Animation.Clip(walk, 0, 4, 4);
-                                  Actors.Pool(enemies, 1);
-                                  Enemies.Def(Goomba, sprite: player_run, behavior: Walker, animation: walk);
-                                  enemies[0].active = 1;
-                                  enemies[0].kind = Goomba;
-                                  enemies[0].animTick = 5;
-                                  enemies.Draw();
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source, WriteSpriteAsset()));
-        var draw = Assert.IsType<Sdk2DOperation.DrawLogicalSprite>(operation);
-
-        Assert.Equal("player_run", draw.SpriteId);
-        Assert.Equal(Local("__enemies_draw_frame_Goomba"), draw.Frame);
-    }
-
-    [Fact]
-    public void Collects_sprite_draw_with_runtime_operands()
-    {
-        const string source = """
-                              void Main() {
-                                  i16 y = 80;
-                                  i16 frame = 1;
-                                  bool flipX = true;
-                                  Sprite.Draw(player_run, 72, y, frame, flipX, 1);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
-        var draw = Assert.IsType<Sdk2DOperation.DrawLogicalSprite>(operation);
-
-        Assert.Equal("player_run", draw.SpriteId);
-        Assert.Equal(new SdkByteExpression.Constant(72), draw.X);
-        Assert.Equal(Local("y"), draw.Y);
-        Assert.Equal(Local("frame"), draw.Frame);
-        Assert.Equal(Local("flipX"), draw.FlipX);
-        Assert.Equal(1, draw.PaletteSlot);
-        Assert.Equal(SpriteTransform.None, draw.StaticTransform);
-    }
-
-    [Fact]
-    public void Collects_sprite_draw_from_compile_time_operand_intrinsic()
-    {
-        const string source = """
-                              void Main() {
-                                  i16 y = 80;
-                                  i16 frame = 1;
-                                  bool flipX = true;
-                                  Sprite.Draw(player_run, 72, y, frame, flipX, 1);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
-        var draw = Assert.IsType<Sdk2DOperation.DrawLogicalSprite>(operation);
-
-        Assert.Equal("player_run", draw.SpriteId);
-        Assert.Equal(new SdkByteExpression.Constant(72), draw.X);
-        Assert.Equal(Local("y"), draw.Y);
-        Assert.Equal(Local("frame"), draw.Frame);
-        Assert.Equal(Local("flipX"), draw.FlipX);
-        Assert.Equal(1, draw.PaletteSlot);
-    }
-
-    [Fact]
     public void Collects_byte_operands_as_typed_storage_locations()
     {
         const string source = """
@@ -562,198 +167,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         Assert.Equal(Indexed("frames", 2), draw.Y);
     }
 
-    [Fact]
-    public void Collects_stream_map_column_before_game_boy_lowering()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 1, 2, 3, 4);
-                                  World.Column(1, 5, 6, 7, 8);
-                                  i16 targetColumn = 20;
-                                  i16 sourceColumn = 0;
-                                  map_stream_column(targetColumn, sourceColumn, 11, 4);
-                              }
-                              """;
-
-        var operation = Assert.Single(GameBoyRomCompiler.CollectSdkOperations(source));
-        var stream = Assert.IsType<Sdk2DOperation.StreamMapColumn>(operation);
-
-        Assert.Equal(Local("targetColumn"), stream.TargetColumn);
-        Assert.Equal(Local("sourceColumn"), stream.SourceColumn);
-        Assert.Equal(11, stream.Y);
-        Assert.Equal(4, stream.Height);
-    }
-
-    [Fact]
-    public void Compilation_rejects_combined_streaming_that_exceeds_one_frame_budget()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-                                  World.Map(1, 0, 11);
-                                  i16 targetColumn = 20;
-                                  i16 sourceColumn = 0;
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      map_stream_column(targetColumn, sourceColumn, 0, 11);
-                                      map_stream_column(targetColumn, sourceColumn, 0, 11);
-                                  }
-                              }
-                              """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
-
-        Assert.Equal(
-            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
-            exception.Message);
-    }
-
-    [Fact]
-    public void Compilation_counts_user_helper_streaming_per_call_site_for_frame_budget()
-    {
-        const string source = """
-                              void stream_once(i16 targetColumn, i16 sourceColumn) {
-                                  map_stream_column(targetColumn, sourceColumn, 0, 11);
-                              }
-
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-                                  World.Map(1, 0, 11);
-                                  i16 targetColumn = 20;
-                                  i16 sourceColumn = 0;
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      stream_once(targetColumn, sourceColumn);
-                                      stream_once(targetColumn, sourceColumn);
-                                  }
-                              }
-                              """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
-
-        Assert.Equal(
-            "Target 'gb' supports 21 background tile writes per frame, but 22 are required for streaming background tiles in one frame.",
-            exception.Message);
-    }
-
-    [Fact]
-    public void Compilation_validates_branch_alternatives_as_exclusive_frame_paths()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-                                  World.Map(1, 0, 11);
-                                  i16 targetColumn = 20;
-                                  i16 sourceColumn = 0;
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      if (targetColumn == 20) {
-                                          map_stream_column(targetColumn, sourceColumn, 0, 11);
-                                      } else {
-                                          map_stream_column(targetColumn, sourceColumn, 0, 10);
-                                      }
-                                  }
-                              }
-                              """;
-
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
-    }
-
-    [Fact]
-    public void Compilation_rejects_sprite_draws_that_exceed_one_frame_hardware_sprite_budget()
-    {
-        var draws = string.Join(
-            Environment.NewLine,
-            Enumerable.Range(0, 41).Select(index => $"        Sprite.Draw(player_run, {index % 20}, {(index % 4) * 20}, 0);"));
-        var source = """
-                     void Main() {
-                         Video.Init();
-                         Sprite.Asset(player_run, "player.sprite.json");
-                         while (true) {
-                             Video.WaitVBlank();
-
-                     """ + draws + """
-                         }
-                     }
-                     """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, WriteSpriteAsset()));
-
-        Assert.Equal(
-            "Target 'gb' supports 40 hardware sprites per frame, but 41 are required for drawing logical sprites in one frame.",
-            exception.Message);
-    }
-
-    [Fact]
-    public void Compilation_rejects_constant_y_sprite_draws_that_exceed_scanline_budget()
-    {
-        var draws = string.Join(
-            Environment.NewLine,
-            Enumerable.Range(0, 11).Select(index => $"        Sprite.Draw(player_run, {index * 8}, 16, 0);"));
-        var source = """
-                     void Main() {
-                         Video.Init();
-                         Sprite.Asset(player_run, "player.sprite.json");
-                         while (true) {
-                             Video.WaitVBlank();
-
-                     """ + draws + """
-                         }
-                     }
-                     """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, WriteSpriteAsset()));
-
-        Assert.Equal(
-            "Target 'gb' supports 10 hardware sprites per scanline, but 11 are required on scanline 16 for drawing logical sprites in one frame.",
-            exception.Message);
-    }
-
-    [Fact]
-    public void Camera_set_position_accepts_diagonal_movement_on_game_boy_with_staggered_streaming_budget()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 4);
-                                  World.Map(2, 11, 2);
-                                  Camera.Init(2, 11, 2);
-                                  i16 cameraX = 1;
-                                  i16 cameraY = 1;
-                                  Camera.SetPosition(cameraX, cameraY);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var operations = GameBoyRomCompiler.CollectSdkOperations(source);
-        var camera = Assert.IsType<Sdk2DOperation.SetCameraPosition>(
-            Assert.Single(operations.OfType<Sdk2DOperation.SetCameraPosition>()));
-
-        Assert.Equal(WordLocal("cameraX"), camera.X);
-        Assert.Equal(WordLocal("cameraY"), camera.Y);
-        Assert.Equal(ScrollAxes.Horizontal | ScrollAxes.Vertical, camera.Axes);
-
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
-    }
-
-    [Fact]
-    public void Camera_set_position_validates_arity_at_the_sdk_boundary()
-    {
-        const string source = """
-                              void Main() {
-                                  Camera.SetPosition(0);
-                              }
-                              """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CollectSdkOperations(source));
-
-        Assert.Contains("argument 2", exception.Message, StringComparison.Ordinal);
-    }
-
-    private static string WriteSpriteAsset()
+    internal static string WriteSpriteAsset()
     {
         var directory = Path.Combine(Path.GetTempPath(), "retrosharp-gb-sdk-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -790,7 +204,7 @@ public sealed class GameBoySdkOperationBoundaryTests
         return directory;
     }
 
-    private static bool ContainsSequence(byte[] bytes, byte[] sequence)
+    internal static bool ContainsSequence(byte[] bytes, byte[] sequence)
     {
         for (var i = 0; i <= bytes.Length - sequence.Length; i++)
         {
@@ -813,32 +227,32 @@ public sealed class GameBoySdkOperationBoundaryTests
         return false;
     }
 
-    private static SdkByteExpression.Variable Local(string name)
+    internal static SdkByteExpression.Variable Local(string name)
     {
         return new SdkByteExpression.Variable(LocalLocation(name));
     }
 
-    private static SdkWordExpression.Variable WordLocal(string name)
+    internal static SdkWordExpression.Variable WordLocal(string name)
     {
         return new SdkWordExpression.Variable(LocalLocation(name));
     }
 
-    private static SdkByteExpression.Variable Field(SdkStorageLocation target, string fieldName)
+    internal static SdkByteExpression.Variable Field(SdkStorageLocation target, string fieldName)
     {
         return new SdkByteExpression.Variable(new SdkStorageLocation.Field(target, fieldName));
     }
 
-    private static SdkByteExpression.Variable Indexed(string baseName, int index)
+    internal static SdkByteExpression.Variable Indexed(string baseName, int index)
     {
         return new SdkByteExpression.Variable(new SdkStorageLocation.IndexedElement(baseName, index));
     }
 
-    private static SdkByteExpression.Variable RuntimeIndexedField(string baseName, string indexName, string fieldName)
+    internal static SdkByteExpression.Variable RuntimeIndexedField(string baseName, string indexName, string fieldName)
     {
         return new SdkByteExpression.Variable(new SdkStorageLocation.RuntimeIndexedField(baseName, Local(indexName), fieldName));
     }
 
-    private static SdkStorageLocation.Local LocalLocation(string name)
+    internal static SdkStorageLocation.Local LocalLocation(string name)
     {
         return new SdkStorageLocation.Local(name);
     }
