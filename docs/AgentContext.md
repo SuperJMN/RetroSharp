@@ -7,6 +7,17 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-8 / #364 deepens the NES SDK lowering seam: one production
+  `NesSdkOperationLowerer` instance owns frame/input, logical-sprite and OAM,
+  camera movement/streaming, packed camera scheduling, and camera/world
+  collision emission in feature partials. `NesVideoProgram.SdkOperations`
+  retains the complete list for validation, while `NesRuntimeCompiler` consumes
+  its reachability-aligned `SdkOperationStream` through `NesSdkStreamReader` and
+  supplies only a concrete `NesSdkLoweringContext` for source-expression and
+  storage primitives. `NesRomBuilder`, `NesCartridgeLayout`,
+  `NesRuntimeCompiler`, `PrgBuilder`, and the stream/lowerer modules are now
+  physically separate; raw and transitional calls reuse lowerer-owned target
+  helpers without adding portable operations.
 - AIN-7 / #363 deepens the Game Boy SDK lowering seam: one production
   `GameBoySdkOperationLowerer` instance now owns substantive frame/input,
   logical-sprite, camera/streaming, world-flag, and camera-AABB emission in

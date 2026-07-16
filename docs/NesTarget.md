@@ -33,6 +33,20 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 
 The descriptor records NES sprite, palette, X/Y fine-scroll, horizontal background-column streaming, four-screen camera movement, vertical row streaming, and camera-relative collision-query support. Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over NES target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`), while the collector still records the matching `Sdk2DOperation` values for validation and frame-budget boundaries.
 
+Those collected operations remain complete for capability validation, while a
+reachability-aligned view is the authoritative production lowering stream.
+`NesVideoProgram` retains both, `NesSdkStreamReader` checks each migrated
+statement/value call and rejects mismatches or leftovers, and one
+stateful `NesSdkOperationLowerer` owns the emitted frame/input, sprite/OAM,
+camera/streaming, packed scheduling, and collision bytes. The syntax runtime
+compiler supplies only source-expression and storage primitives through
+`NesSdkLoweringContext`. Cartridge selection/link layout, syntax/control-flow
+compilation, SDK feature lowering, stream handling, and PRG byte emission live
+in `NesRomBuilder`, `NesCartridgeLayout`, `NesRuntimeCompiler*`,
+`NesSdkOperationLowerer*`, `NesSdkStreamReader`, and `PrgBuilder`
+respectively. This is an internal ownership split; mapper selection, PPU
+scheduling, public operations, timing, and ROM layout are unchanged.
+
 Runtime sprite lowering is implemented for logical PNG sprite sheets and transitional JSON assets through `Sdk2DOperation.DrawLogicalSprite`; `Sprite.Draw(...)` is provided by the SDK library over a role-bearing `sprite_draw` target intrinsic. `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, `Music.Stop()`, and `Sfx.Play(name)` are also provided by the SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop`/`sfx_play` target intrinsics (`music_play` and `sfx_play` carry the audio asset as a compile-time `AssetRef` operand), and `Music.Asset(...)` / `Sfx.Asset(...)` are package resource declarations. Camera-relative `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)`, plus screen-space `Camera.ScreenAabbTiles(...)` and `Camera.ScreenAabbHitTop(...)`, are likewise provided by the SDK library over role-bearing `camera_aabb_tiles`/`camera_aabb_hit_top`/`camera_screen_aabb_tiles`/`camera_screen_aabb_hit_top` target intrinsics matching the Game Boy target.
 
 The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. In mapper-backed packed builds, request preparation completes outside VBlank and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 32 column tiles plus 9 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
