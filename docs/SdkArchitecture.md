@@ -34,6 +34,24 @@ Actor Framework lowering plan, whose analyzed facts let Game Boy and NES provide
 resolved metasprite geometry for the existing post-asset actor pool budget check
 without rediscovering directives or retaining the selected pre-Actor program.
 
+Actor Framework generation keeps that one lowering plan and the public
+`ActorFrameworkLowerer` interface, but its internal gameplay policy is local to
+feature-owned partial modules in `RetroSharp.Sdk.Frontend`. The
+`ActorFrameworkLowerer.Actors.cs`, `.Projectiles.cs`, and `.Effects.cs` files own
+directive policy for actors/Tiled spawns, projectile pools/definitions, and
+effect pools/definitions respectively, together with rewrite dispatch and the
+declarations assembled directly from those directives. Each paired
+`.Generation.cs` file owns the deeper domain lowering, validation, and AST
+builders invoked by that dispatch. The neutral
+`ActorFrameworkLowerer.SharedGeneration.cs` centralizes cross-domain pool
+dispatch, camera projection, and stable sprite-draw primitives.
+`ActorFrameworkLowerer.GeneratedProgram.cs` aggregates generated-name facts from
+the feature modules before ordered generated-program assembly and name-collision
+checks. The root `ActorFrameworkLowerer.cs` retains only the public interface,
+one plan/state model, AST traversal and rewriting, and primitives shared across
+the entire lowering pipeline; the modules do not introduce target-specific actor
+intrinsics or separate public lowering entry points.
+
 The concrete compiler adapters remain responsible for target catalogs and
 capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,
 resource and asset materialization, SDK/audio capability checks, runtime policy,
