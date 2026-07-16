@@ -124,6 +124,13 @@
       }
     },
     {
+      "id": "platformer-landing",
+      "path": "samples/platformer-landing/platformer-landing.retrosharp.json",
+      "readme": "samples/platformer-landing/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"]
+    },
+    {
       "id": "runner-projectile",
       "path": "samples/runner-projectile/runner-projectile.retrosharp.json",
       "readme": "samples/runner-projectile/README.md",

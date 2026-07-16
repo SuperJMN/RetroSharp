@@ -78,6 +78,17 @@ public sealed class SampleApiQuarantineTests
     }
 
     [Fact]
+    public void Platformer_landing_is_a_canonical_cross_target_acceptance_sample()
+    {
+        var sample = Assert.Single(LoadManifest().Samples, sample => sample.Id == "platformer-landing");
+
+        Assert.Equal("samples/platformer-landing/platformer-landing.retrosharp.json", sample.Path);
+        Assert.Equal("samples/platformer-landing/README.md", sample.Readme);
+        Assert.Equal("target-acceptance", sample.Layer);
+        Assert.Equal(new[] { "gb", "nes" }, sample.Targets);
+    }
+
+    [Fact]
     public void Portable_samples_do_not_use_transitional_or_target_intrinsic_calls()
     {
         var manifest = LoadManifest();

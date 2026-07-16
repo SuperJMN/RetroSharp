@@ -274,6 +274,13 @@ The tracked runner pair is regenerated together by
 
 ## Cross-Target Sample
 
+`samples/platformer-landing/` is the focused shared `target-acceptance` rung for
+word-wide Y=304 landing, wall and chunk traversal, a complete jump, return, and
+one authored fall reset. NES keeps the mapper-0 profile; its exact ROM,
+one-tick-per-frame cadence, background/OAM oracle, write timing, and AprNes
+checkpoint are recorded in
+[`PlatformerLandingFunctionalAcceptance.md`](PlatformerLandingFunctionalAcceptance.md).
+
 `samples/cross-target-camera/camera.rs` is the first shared source sample that builds for both Game Boy and NES. It uses a 48-column repeating authored world, tick input, bounded bidirectional horizontal camera positioning, and JSON logical sprite variants under `platforms.gb` and `platforms.nes`. Its exact mapper-0 ROM is part of the deterministic functional acceptance matrix in [`SimpleSampleFunctionalAcceptance.md`](SimpleSampleFunctionalAcceptance.md).
 
 `samples/runner/runner.retrosharp.json` is the shared Game Boy/NES acceptance project for the runner path. It lists `src/main.rs` plus local helper/state code from `samples/runner/src`, and uses the complete 156x20-cell `stage1.tmj` map (312x40 hardware tiles), 2-axis camera movement, camera-relative collision helpers, runtime animation, jump/reset logic, `assets/music/runner.vgz`, and `assets/mario-player.png` for both targets. NES resolves its target variants, preserves both DPCM blocks, stages packed rows/columns outside NMI, commits through all four nametables, and automatically selects `nes-mmc3-tvrom-v1` for the final runner image. The shared jump policy uses signed 4.4 vertical motion with SMB3-style `-$38/-$3A/-$3C/-$40` takeoff tiers, `+1` gravity only while A is held below `-$20`, and `+5` on release or at/above the threshold without clamping; NES real-ROM tests pin the same `20.625`, `70.6875`, `85.0625`, and `100.4375` pixel rises as Game Boy.

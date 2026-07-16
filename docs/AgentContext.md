@@ -214,6 +214,14 @@ This document preserves project knowledge that previously lived only in agent me
   logical sprites publish `$0200` once per VBlank and reset unexecuted call
   sites to `$FF`. Raw/direct compatibility OAM paths remain separate. See
   `docs/ActorProjectileFunctionalAcceptance.md`.
+- CSL-7 / #342 adds `platformer-landing`, the focused shared Game Boy/NES rung
+  between packed camera and complete runner acceptance. One source and one
+  32x20 Tiled map prove Y=304 support, wall/column/chunk traversal, camera
+  X=255/256, return, full jump/landing, and exactly one authored fall reset.
+  Exact ROMs use `gb-rom-only-current` and `nes-mapper-0-current`; both shared
+  scenarios retain at least 0.95 gameplay cadence, one-frame input response,
+  two-frame-or-better visibility, and zero background/sprite/write/bank
+  failures. See `docs/PlatformerLandingFunctionalAcceptance.md`.
 - Code baseline immediately before the AF-4.3 documentation closeout:
   `f0398452fd0e3b93d4d77e6aeac5749dbf1322ed`.
 - 2026-07-14 runner update: `stage1.tsx` tile 30 marks the existing green
