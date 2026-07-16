@@ -5,9 +5,223 @@ using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
+using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
 public sealed class GameBoySdkSpriteLoweringTests
 {
+    [Fact]
+    public void Golden_sprite_draw_emission_is_pinned_gb()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(
+                    8,
+                    16,
+                    "01230123",
+                    "32103210")));
+
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player_run, "player.sprite.json");
+                                  Sprite.Draw(player_run, 72, 80, 0, false, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal("5D42DDFDB36FD0FCE746A9960C0379D6F9DE6D747735D7498BB11261380D407C", Fingerprint(rom));
+    }
+
+    [Fact]
+    public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(
+                    8,
+                    16,
+                    "01230123",
+                    "32103210")));
+
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player_run, "player.sprite.json");
+                                  Sprite.Draw(player_run, 72, 80, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x55, 0x33, 0xAA, 0xCC]), "ROM should contain tile data loaded from the editable sprite asset.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "sprite_draw should write the logical Y plus the Game Boy sprite offset.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]), "sprite_draw should write the logical X plus the Game Boy sprite offset.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should use the first generated tile for the first hardware sprite.");
+    }
+
+    [Fact]
+    public void Sprite_draw_composes_16x32_assets_from_four_hardware_sprites()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(big_player, "player.sprite.json");
+                                  Sprite.Draw(big_player, 72, 64, 0);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "Top-left piece should use the logical Y coordinate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x05, 0xFE]), "Top-right piece should add the 8 px X offset.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x20, 0xEA, 0x08, 0xFE]), "Bottom-left piece should add the 16 px Y offset.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xFE]), "Bottom-right piece should use the fourth generated 8x16 tile pair.");
+    }
+
+    [Fact]
+    public void Sprite_draw_accepts_logical_flip_x_and_flips_logical_metasprites_horizontally()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(big_player, "player.sprite.json");
+                                  bool flipX = true;
+                                  Sprite.Draw(big_player, 72, 64, 0, flipX);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x20]), "sprite_draw should lower logical flipX to the Game Boy OAM X-flip bit.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "sprite_draw should test the logical flipX boolean before placing metasprite pieces.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xFE]), "X-flipped first logical piece should move to the mirrored top-right hardware X coordinate.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x05, 0xFE]), "X-flipped second logical piece should move to the mirrored top-left hardware X coordinate.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "X-flipped first logical piece should keep its own tile and rely on the OAM flip bit.");
+        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x06, 0xFE]), "X-flipped second logical piece should keep its own tile and rely on the OAM flip bit.");
+    }
+
+    [Fact]
+    public void Sprite_draw_accepts_logical_palette_slot_and_lowers_to_game_boy_object_palette_bit()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Sprite.Draw(player, 72, 64, 0, false, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xEA, 0x03, 0xFE]), "palette slot 1 should lower to the Game Boy OBP1 OAM attribute bit.");
+    }
+
+    [Fact]
+    public void Sprite_draw_combines_logical_flip_x_and_palette_slot_in_oam_attributes()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Sprite.Draw(player, 72, 64, 0, true, 1);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x30, 0xEA, 0x03, 0xFE]), "flipX and palette slot 1 should combine into OAM attributes without exposing raw flags in source.");
+    }
+
+    [Fact]
+    public void Sprite_draw_rejects_palette_slots_outside_game_boy_capabilities()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Sprite.Draw(player, 72, 64, 0, false, 2);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.", exception.Message);
+    }
+
+    [Fact]
+    public void Sprite_draw_flips_against_logical_width_before_padding()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(18, 16)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  bool flipX = true;
+                                  Sprite.Draw(player, 72, 64, 0, flipX);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xFE]), "The first 8 px piece should move to logical X + 10 when an 18 px sprite is flipped.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xFE]), "The middle 8 px piece should move to logical X + 2 when an 18 px sprite is flipped.");
+        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xFE]), "The padded edge piece should straddle the logical origin instead of adding padded left spacing.");
+    }
+
+    [Fact]
+    public void Sprite_draw_rejects_raw_oam_attribute_constants_in_portable_flip_argument()
+    {
+        var baseDirectory = WriteSpriteJsonAsset("player.sprite.json", SpriteJson(Rows(16, 32)));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Sprite.Draw(player, 72, 64, 0, 32);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.", exception.Message);
+    }
+
+    [Fact]
+    public void Sprite_draw_treats_frame_as_a_logical_frame_index()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(
+                Rows(8, 16, "01230123"),
+                Rows(8, 16, "32103210")));
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player_run, "player.sprite.json");
+                                  i16 frame = 1;
+                                  Sprite.Draw(player_run, 72, 80, frame);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should multiply the logical frame by the per-frame tile count.");
+    }
+
     [Fact]
     public void Lowers_draw_logical_sprite_operation_to_game_boy_metasprite_bytes()
     {
@@ -157,4 +371,5 @@ public sealed class GameBoySdkSpriteLoweringTests
             "Target 'gb' supports 10 hardware sprites per scanline, but 11 are required on scanline 16 for drawing logical sprites in one frame.",
             exception.Message);
     }
+
 }

@@ -1,7 +1,5 @@
 namespace RetroSharp.GameBoy.Tests;
 
-using System.Buffers.Binary;
-using System.IO.Compression;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Core.Sdk.Tiled;
 using RetroSharp.Core.Targeting;
@@ -9,6 +7,7 @@ using RetroSharp.GameBoy;
 using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
+using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
 public partial class GameBoyRomCompilerTests
 {
@@ -928,7 +927,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Sprite_draw_via_library_helper_is_byte_identical_gb()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "player.sprite.json",
             SpriteJson(Rows(8, 16, "01230123", "32103210")));
 
@@ -970,7 +969,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Sprite_draw_library_preserves_capability_and_budget_checks_gb()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "player.sprite.json",
             SpriteJson(Rows(16, 32)));
 
@@ -1009,7 +1008,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Sprite_draw_source_package_helper_compiles_gb()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "player.sprite.json",
             SpriteJson(Rows(8, 16, "01230123", "32103210")));
 
@@ -1757,7 +1756,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Inline_helper_wrapping_sprite_draw_and_camera_apply_is_byte_identical()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "player.sprite.json",
             SpriteJson(
                 Rows(
@@ -1797,318 +1796,6 @@ public partial class GameBoyRomCompilerTests
                                }
                                """;
         Assert.Equal(GameBoyRomCompiler.CompileSource(direct, baseDirectory), GameBoyRomCompiler.CompileSource(wrapped, baseDirectory));
-    }
-
-    [Fact]
-    public void Golden_sprite_draw_emission_is_pinned_gb()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(
-                Rows(
-                    8,
-                    16,
-                    "01230123",
-                    "32103210")));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  Sprite.Draw(player_run, 72, 80, 0, false, 1);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal("5D42DDFDB36FD0FCE746A9960C0379D6F9DE6D747735D7498BB11261380D407C", Fingerprint(rom));
-    }
-
-    [Fact]
-    public void Golden_collision_aabb_emission_is_pinned_gb()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 4);
-                                  World.Column(2, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Flags(1, 0, 1);
-                                  World.Flags(2, 0, 1);
-                                  World.Map(3, 11, 2);
-                                  Camera.Init(3, 11, 2);
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  i16 footY = 16;
-                                  i16 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                  i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal("927F804320BC973C4139D33F5010C236EE595EE39AEC17DA0A2D02D05B42099F", Fingerprint(rom));
-    }
-
-    [Fact]
-    public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(
-                Rows(
-                    8,
-                    16,
-                    "01230123",
-                    "32103210")));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  Sprite.Draw(player_run, 72, 80, 0);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x55, 0x33, 0xAA, 0xCC]), "ROM should contain tile data loaded from the editable sprite asset.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x50, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "sprite_draw should write the logical Y plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]), "sprite_draw should write the logical X plus the Game Boy sprite offset.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should use the first generated tile for the first hardware sprite.");
-    }
-
-    [Fact]
-    public void Sprite_draw_composes_16x32_assets_from_four_hardware_sprites()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(16, 32)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(big_player, "player.sprite.json");
-                                  Sprite.Draw(big_player, 72, 64, 0);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x10, 0xEA, 0x00, 0xFE]), "Top-left piece should use the logical Y coordinate.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x05, 0xFE]), "Top-right piece should add the 8 px X offset.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x40, 0xC6, 0x20, 0xEA, 0x08, 0xFE]), "Bottom-left piece should add the 16 px Y offset.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x0C, 0xEA, 0x0E, 0xFE]), "Bottom-right piece should use the fourth generated 8x16 tile pair.");
-    }
-
-    [Fact]
-    public void Sprite_draw_accepts_logical_flip_x_and_flips_logical_metasprites_horizontally()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(16, 32)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(big_player, "player.sprite.json");
-                                  bool flipX = true;
-                                  Sprite.Draw(big_player, 72, 64, 0, flipX);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x20]), "sprite_draw should lower logical flipX to the Game Boy OAM X-flip bit.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xFE, 0x00, 0xCA]), "sprite_draw should test the logical flipX boolean before placing metasprite pieces.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x10, 0xEA, 0x01, 0xFE]), "X-flipped first logical piece should move to the mirrored top-right hardware X coordinate.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x05, 0xFE]), "X-flipped second logical piece should move to the mirrored top-left hardware X coordinate.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x06, 0xEA, 0x02, 0xFE]), "X-flipped first logical piece should keep its own tile and rely on the OAM flip bit.");
-        Assert.True(ContainsSequence(rom, [0xC6, 0x08, 0xEA, 0x06, 0xFE]), "X-flipped second logical piece should keep its own tile and rely on the OAM flip bit.");
-    }
-
-    [Fact]
-    public void Sprite_draw_accepts_logical_palette_slot_and_lowers_to_game_boy_object_palette_bit()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(16, 32)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player, "player.sprite.json");
-                                  Sprite.Draw(player, 72, 64, 0, false, 1);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x10, 0xEA, 0x03, 0xFE]), "palette slot 1 should lower to the Game Boy OBP1 OAM attribute bit.");
-    }
-
-    [Fact]
-    public void Sprite_draw_combines_logical_flip_x_and_palette_slot_in_oam_attributes()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(16, 32)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player, "player.sprite.json");
-                                  Sprite.Draw(player, 72, 64, 0, true, 1);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x30, 0xEA, 0x03, 0xFE]), "flipX and palette slot 1 should combine into OAM attributes without exposing raw flags in source.");
-    }
-
-    [Fact]
-    public void Animation_frame_maps_constant_ticks_through_looping_clip_data()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Animation.Clip(run, 1, 6, 6, 6);
-                                  sprite_set(0, 72, 80, Animation.Frame(run, 0), 0);
-                                  sprite_set(1, 80, 80, Animation.Frame(run, 5), 0);
-                                  sprite_set(2, 88, 80, Animation.Frame(run, 6), 0);
-                                  sprite_set(3, 96, 80, Animation.Frame(run, 17), 0);
-                                  sprite_set(4, 104, 80, Animation.Frame(run, 18), 0);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x02, 0xFE]), "tick 0 should select frame 1 through the complete zero-extended I16 intrinsic return.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x06, 0xFE]), "tick 5 should still select frame 1 through the complete zero-extended I16 intrinsic return.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x02, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x0A, 0xFE]), "tick 6 should select frame 2 through the complete zero-extended I16 intrinsic return.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x03, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x0E, 0xFE]), "tick 17 should select frame 3 through the complete zero-extended I16 intrinsic return.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0x6F, 0x26, 0x00, 0x7D, 0xEA, 0x12, 0xFE]), "tick 18 should loop to frame 1 through the complete zero-extended I16 intrinsic return.");
-    }
-
-    [Fact]
-    public void Animation_frame_lowers_dynamic_ticks_with_predictable_modulo_and_boundary_checks()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Animation.Clip(run, 1, 6, 6, 6);
-                                  i16 tick = 18;
-                                  sprite_set(0, 72, 80, Animation.Frame(run, tick), 0);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFE, 0x12, 0xDA]), "animation_frame should compare the tick against total clip duration before modulo subtraction.");
-        Assert.True(ContainsSequence(rom, [0xD6, 0x12]), "animation_frame should subtract total clip duration while the tick is outside the clip.");
-        Assert.True(ContainsSequence(rom, [0xFE, 0x06, 0xDA]), "animation_frame should test the first frame boundary.");
-        Assert.True(ContainsSequence(rom, [0xFE, 0x0C, 0xDA]), "animation_frame should test the second frame boundary.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01]), "animation_frame should be able to return frame 1.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x02]), "animation_frame should be able to return frame 2.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x03]), "animation_frame should be able to return frame 3.");
-    }
-
-    [Fact]
-    public void Sprite_draw_rejects_palette_slots_outside_game_boy_capabilities()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(16, 32)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player, "player.sprite.json");
-                                  Sprite.Draw(player, 72, 64, 0, false, 2);
-                              }
-                              """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
-
-        Assert.Equal("Target 'gb' supports sprite palette slots 0..1, but slot 2 was requested.", exception.Message);
-    }
-
-    [Fact]
-    public void Sprite_draw_flips_against_logical_width_before_padding()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(18, 16)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player, "player.sprite.json");
-                                  bool flipX = true;
-                                  Sprite.Draw(player, 72, 64, 0, flipX);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x12, 0xEA, 0x01, 0xFE]), "The first 8 px piece should move to logical X + 10 when an 18 px sprite is flipped.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x0A, 0xEA, 0x05, 0xFE]), "The middle 8 px piece should move to logical X + 2 when an 18 px sprite is flipped.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x48, 0xC6, 0x02, 0xEA, 0x09, 0xFE]), "The padded edge piece should straddle the logical origin instead of adding padded left spacing.");
-    }
-
-    [Fact]
-    public void Sprite_draw_rejects_raw_oam_attribute_constants_in_portable_flip_argument()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(Rows(16, 32)));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player, "player.sprite.json");
-                                  Sprite.Draw(player, 72, 64, 0, 32);
-                              }
-                              """;
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source, baseDirectory));
-
-        Assert.Equal("sprite_draw argument 5 is portable flipX and must be 0, 1, true, false, or a local bool-like value. Use sprite_set for raw Game Boy OAM attributes.", exception.Message);
-    }
-
-    [Fact]
-    public void Sprite_draw_treats_frame_as_a_logical_frame_index()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "player.sprite.json",
-            SpriteJson(
-                Rows(8, 16, "01230123"),
-                Rows(8, 16, "32103210")));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  i16 frame = 1;
-                                  Sprite.Draw(player_run, 72, 80, frame);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x47, 0xAF, 0x80, 0x80, 0xC6, 0x06, 0xEA, 0x02, 0xFE]), "sprite_draw should multiply the logical frame by the per-frame tile count.");
     }
 
     [Fact]
@@ -2242,206 +1929,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Compiles_camera_runtime_to_world_scroll_state_and_streaming()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 0, 0, 4, 5);
-                                  World.Column(1, 0, 0, 4, 5);
-                                  World.Column(2, 0, 0, 4, 5);
-                                  World.Column(3, 0, 0, 4, 5);
-                                  World.Column(4, 0, 0, 4, 5);
-                                  World.Column(5, 0, 0, 4, 5);
-                                  World.Column(6, 0, 0, 4, 5);
-                                  World.Column(7, 0, 0, 4, 5);
-                                  World.Column(8, 0, 0, 4, 5);
-                                  World.Column(9, 0, 0, 4, 5);
-                                  World.Column(10, 0, 0, 4, 5);
-                                  World.Column(11, 0, 0, 4, 5);
-                                  World.Column(12, 0, 0, 4, 5);
-                                  World.Column(13, 0, 0, 4, 5);
-                                  World.Column(14, 0, 0, 4, 5);
-                                  World.Column(15, 0, 0, 4, 5);
-                                  World.Map(16, 11, 4);
-                                  Camera.Init(16, 11, 4);
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      Camera.Apply();
-                                      camera_move_right();
-                                      camera_move_left();
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xE0, 0xC0, 0xEA, 0xE1, 0xC0, 0xEA, 0xE2, 0xC0]), "camera_init should initialize the 16-bit world X and fine scroll state.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x15, 0xEA, 0xE4, 0xC0, 0x3E, 0x1F, 0xEA, 0xE5, 0xC0]), "camera_init should prefetch one column beyond the 20 full visible columns for fine-scroll partial tiles.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x05, 0xEA, 0xE6, 0xC0]), "camera_init should seed the right source cursor to the fine-scroll partial edge column.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xE0, 0x43, 0xFA, 0xE8, 0xC0, 0xE0, 0x42]), "camera_apply should write the current camera X and Y low bytes to SCX and SCY.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xC6, 0x01, 0xEA, 0xE0, 0xC0]), "camera_move_right should increment the 16-bit camera X low byte.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE6, 0xC0, 0xEA, 0x1B, 0xC1]), "camera_move_right should queue the right source column for deferred streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]), "camera_move_left should queue the left background edge column for deferred streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]), "camera_apply should dispatch on the queued stream kind.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x28, 0xC1]), "camera_apply should seed the column stream from the current top source row.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x28, 0xC1, 0x5F, 0x16, 0x00, 0x21]), "camera_apply should resolve the top source row through the row-pointer table.");
-        Assert.True(ContainsSequence(rom, [0x1A, 0x77, 0x7B, 0xC6, 0x10, 0x5F]), "camera_apply should stream source-column rows through a compact DE-to-HL loop.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x4F, 0xFA, 0xEB, 0xC0]), "camera_apply should stream the queued column into the circular background edge.");
-    }
-
-    [Fact]
-    public void Camera_set_position_compares_requested_x_before_reusing_camera_steps()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 0, 0, 4, 5);
-                                  World.Column(1, 0, 0, 4, 5);
-                                  World.Map(2, 11, 4);
-                                  Camera.Init(2, 11, 4);
-                                  i16 requestedX = 1;
-                                  Camera.SetPosition(requestedX, 0);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xEA, 0x2D, 0xC1, 0xFA, 0x01, 0xC0, 0xEA, 0x4A, 0xC1, 0x3E, 0x10, 0xEA, 0x2E, 0xC1]), "camera_set_position should cache both requested word bytes and seed the two-tile per-frame step budget.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x4A, 0xC1, 0x47, 0xFA, 0xE1, 0xC0, 0xB8, 0xDA]), "camera_set_position should compare requested and current X high bytes before selecting a direction.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE0, 0xC0, 0xB8, 0xCA]), "camera_set_position should compare X low bytes when the high bytes match and keep a no-movement path.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xC6, 0x01, 0xEA, 0xE0, 0xC0]), "camera_set_position should reuse the right-step camera movement path.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xFE, 0x00, 0xC2]), "camera_set_position should reuse the left-step camera movement path.");
-    }
-
-    [Fact]
-    public void Camera_set_position_tracks_y_state_and_applies_vertical_scroll()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 0, 0, 4, 5);
-                                  World.Column(1, 0, 0, 4, 5);
-                                  World.Map(2, 11, 4);
-                                  Camera.Init(2, 11, 4);
-                                  i16 cameraY = 1;
-                                  Camera.SetPosition(0, cameraY);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xE8, 0xC0, 0xEA, 0xE9, 0xC0, 0xEA, 0xEA, 0xC0]), "camera_init should initialize the 16-bit world Y and fine scroll state.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x4A, 0xC1, 0x47, 0xFA, 0xE9, 0xC0, 0xB8, 0xDA]), "camera_set_position should compare requested and current Y high bytes before selecting a direction.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x2D, 0xC1, 0x47, 0xFA, 0xE8, 0xC0, 0xB8, 0xCA]), "camera_set_position should compare Y low bytes when the high bytes match and keep a no-movement path.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE8, 0xC0, 0xC6, 0x01, 0xEA, 0xE8, 0xC0]), "camera_set_position should reuse a down-step camera movement path.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEA, 0xC0, 0xC6, 0x01, 0xEA, 0xEA, 0xC0, 0xFE, 0x08]), "camera_set_position should track fine Y tile-boundary crossings.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE0, 0xC0, 0xE0, 0x43, 0xFA, 0xE8, 0xC0, 0xE0, 0x42]), "camera_apply should write camera X to SCX and camera Y to SCY.");
-    }
-
-    [Fact]
-    public void Camera_set_position_streams_bottom_row_when_y_crosses_tile_down()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 0, 1, 2, 3, 4, 5);
-                                  World.Column(1, 6, 7, 8, 9, 10, 11);
-                                  World.Map(2, 11, 6);
-                                  Camera.Init(2, 11, 4);
-                                  i16 cameraY = 8;
-                                  Camera.SetPosition(0, cameraY);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x0B, 0xEA, 0xEB, 0xC0, 0x3E, 0x0F, 0xEA, 0xEC, 0xC0]), "camera_init should seed top and bottom background row cursors.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x00, 0xEA, 0xED, 0xC0, 0x3E, 0x04, 0xEA, 0xEE, 0xC0]), "camera_init should seed top and bottom source row cursors.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xEA, 0x1B, 0xC1]), "downward crossing should queue the current bottom source row for deferred streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x5F, 0x16, 0x00, 0x21]), "downward row streaming should resolve the queued bottom source row through the row-pointer table.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "downward row streaming should fill the visible row from the current background-left column.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xFE, 0x08, 0xDA]), "downward row streaming should compute the target background row address from the queued bottom row cursor.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEC, 0xC0, 0xC6, 0x01, 0xEA, 0xEC, 0xC0]), "downward row streaming should advance the bottom background row cursor.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEE, 0xC0, 0xC6, 0x01, 0xEA, 0xEE, 0xC0]), "downward row streaming should advance the bottom source row cursor.");
-    }
-
-    [Fact]
-    public void Camera_set_position_streams_top_row_when_y_crosses_tile_up()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 0, 1, 2, 3, 4, 5);
-                                  World.Column(1, 6, 7, 8, 9, 10, 11);
-                                  World.Map(2, 11, 6);
-                                  Camera.Init(2, 11, 4);
-                                  i16 cameraY = 255;
-                                  Camera.SetPosition(0, cameraY);
-                                  Camera.Apply();
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0xEB, 0xC0, 0xD6, 0x01, 0xEA, 0xEB, 0xC0]), "upward row streaming should move the top background row cursor before streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xD6, 0x01, 0xEA, 0xED, 0xC0]), "upward row streaming should move the top source row cursor before streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xED, 0xC0, 0xEA, 0x1B, 0xC1]), "upward crossing should queue the wrapped top source row for deferred streaming.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1B, 0xC1, 0x5F, 0x16, 0x00, 0x21]), "upward row streaming should resolve the queued top source row through the row-pointer table.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0xFE, 0x08, 0xDA]), "upward row streaming should compute the target background row address from the queued top row cursor.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xC6, 0x01, 0xFE, 0x20]), "upward row streaming should fill the visible row from the current background-left column.");
-    }
-
-    [Fact]
-    public void Compiles_camera_tile_column_at_to_map_width_wrapped_source_column()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 0, 0, 4, 5);
-                                  World.Column(1, 0, 0, 4, 5);
-                                  World.Column(2, 0, 0, 4, 5);
-                                  World.Column(3, 0, 0, 4, 5);
-                                  World.Column(4, 0, 0, 4, 5);
-                                  World.Column(5, 0, 0, 4, 5);
-                                  World.Column(6, 0, 0, 4, 5);
-                                  World.Column(7, 0, 0, 4, 5);
-                                  World.Column(8, 0, 0, 4, 5);
-                                  World.Column(9, 0, 0, 4, 5);
-                                  World.Column(10, 0, 0, 4, 5);
-                                  World.Column(11, 0, 0, 4, 5);
-                                  World.Column(12, 0, 0, 4, 5);
-                                  World.Column(13, 0, 0, 4, 5);
-                                  World.Column(14, 0, 0, 4, 5);
-                                  World.Column(15, 0, 0, 4, 5);
-                                  World.Map(16, 11, 4);
-                                  Camera.Init(16, 11, 4);
-                                  i16 tile = 0;
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      tile = map_tile_at(camera_tile_column_at(19), 2);
-                                      camera_move_right();
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x13, 0x47, 0xFA, 0xE3, 0xC0, 0x80]), "camera_tile_column_at should add a screen tile column to the camera's source-left column.");
-        Assert.True(ContainsSequence(rom, [0xFE, 0x10, 0xDA]), "camera_tile_column_at should branch when the source column is already inside the configured map width.");
-        Assert.True(ContainsSequence(rom, [0xD6, 0x10]), "camera_tile_column_at should wrap columns by subtracting the configured map width.");
-    }
-
-    [Fact]
     public void Compiles_camera_span_tile_helpers_across_sprite_logical_width()
     {
         var baseDirectory = WriteSpritePng(
@@ -2494,48 +1981,6 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
-    public void Video_wait_vblank_waits_for_the_next_vblank_edge()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      scroll_set(1, 0);
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30]), "ROM should first wait until the previous VBlank has ended.");
-        Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38]), "ROM should then wait until the next VBlank begins.");
-    }
-
-    [Fact]
-    public void Compiles_tilemap_fill_column_to_runtime_vram_writes()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  i16 column = 20;
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      tilemap_fill_column(column, 13, 2, 4);
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x3E, 0x04, 0x47]), "ROM should preserve the tile id in B.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0xA0, 0x6F, 0x26, 0x99, 0x78, 0x77]), "ROM should write row 13 at $99A0 + column.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0xC0, 0x6F, 0x26, 0x99, 0x78, 0x77]), "ROM should write row 14 at $99C0 + column.");
-    }
-
-    [Fact]
     public void Compiles_long_runtime_loop_with_column_streaming()
     {
         const string source = """
@@ -2580,61 +2025,6 @@ public partial class GameBoyRomCompilerTests
 
         Assert.Equal(32768, rom.Length);
         Assert.Contains(rom.Skip(0x0150), b => b == 0xC3);
-    }
-
-    [Fact]
-    public void Compiles_map_columns_to_rom_data_and_streams_them_to_vram()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 1, 2, 3, 4);
-                                  World.Column(1, 5, 6, 7, 8);
-                                  World.Map(2, 11, 4);
-                                  i16 targetColumn = 20;
-                                  i16 mapColumn = 0;
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      map_stream_column(targetColumn, mapColumn, 11, 4);
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x01, 0x05]), "ROM should contain map row 0 data.");
-        Assert.True(ContainsSequence(rom, [0x02, 0x06]), "ROM should contain map row 1 data.");
-        Assert.True(ContainsSequence(rom, [0x03, 0x07]), "ROM should contain map row 2 data.");
-        Assert.True(ContainsSequence(rom, [0x04, 0x08]), "ROM should contain map row 3 data.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the source map column into DE and a row-table address into HL.");
-        Assert.True(ContainsSequence(rom, [0x19, 0x7E, 0x47]), "ROM should read a tile from the map row table and preserve it in B.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0xC6, 0x60, 0x6F, 0x26, 0x99, 0x78, 0x77]), "ROM should stream row 11 into the target background column.");
-    }
-
-    [Fact]
-    public void Compiles_map_tile_lookup_as_a_runtime_expression()
-    {
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  World.Column(0, 1, 0);
-                                  World.Column(1, 0, 2);
-                                  World.Map(2, 0, 2);
-                                  i16 column = 1;
-                                  i16 grounded = 0;
-                                  if (map_tile_at(column, 1) != 0) {
-                                      grounded = 1;
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xFA, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x21]), "ROM should load the runtime source map column and the selected row table address.");
-        Assert.True(ContainsSequence(rom, [0x19, 0x7E, 0xFE, 0x00]), "ROM should read the tile id into A and compare it with zero.");
-        Assert.True(ContainsSequence(rom, [0x3E, 0x01, 0xEA, 0x02, 0xC0, 0x3E, 0x00, 0xEA, 0x03, 0xC0]), "ROM should execute the branch body when the tile is non-zero.");
     }
 
     [Fact]
@@ -3905,7 +3295,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Direct_legacy_sprite_draw_builtin_is_rejected()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "player.sprite.json",
             SpriteJson(Rows(8, 16, "01230123", "32103210")));
 
@@ -4854,153 +4244,6 @@ public partial class GameBoyRomCompilerTests
         }
     }
 
-    [Fact]
-    public void Camera_streams_background_rows_above_the_world_band_when_scrolling_horizontally()
-    {
-        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        WriteTiledTilesheetPng(directory, "runner.png", 8, 8, 1, 2, 3);
-        File.WriteAllText(
-            Path.Combine(directory, "runner.tsj"),
-            """
-            {
-              "type": "tileset",
-              "version": "1.10",
-              "tiledversion": "1.12.2",
-              "name": "runner",
-              "tilewidth": 8,
-              "tileheight": 8,
-              "spacing": 0,
-              "margin": 0,
-              "tilecount": 3,
-              "columns": 3,
-              "image": "runner.png",
-              "imagewidth": 24,
-              "imageheight": 8
-            }
-            """);
-        File.WriteAllText(
-            Path.Combine(directory, "level.tmj"),
-            """
-            {
-              "type": "map",
-              "version": "1.10",
-              "tiledversion": "1.10.2",
-              "orientation": "orthogonal",
-              "renderorder": "right-down",
-              "width": 3,
-              "height": 6,
-              "tilewidth": 8,
-              "tileheight": 8,
-              "infinite": false,
-              "properties": [
-                { "name": "retrosharpStreamY", "type": "int", "value": 2 },
-                { "name": "retrosharpWorldY", "type": "int", "value": 3 },
-                { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
-              ],
-              "layers": [
-                {
-                  "id": 1,
-                  "name": "background",
-                  "type": "tilelayer",
-                  "width": 3,
-                  "height": 6,
-                  "visible": true,
-                  "opacity": 1,
-                  "x": 0,
-                  "y": 0,
-                  "data": [0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0]
-                },
-                {
-                  "id": 2,
-                  "name": "world",
-                  "type": "tilelayer",
-                  "width": 3,
-                  "height": 6,
-                  "visible": true,
-                  "opacity": 1,
-                  "x": 0,
-                  "y": 0,
-                  "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0]
-                }
-              ],
-              "tilesets": [
-                { "firstgid": 1, "source": "runner.tsj" }
-              ]
-            }
-            """);
-
-        const string source = """
-                              void Main() {
-                                  World.Load("level.tmj");
-                                  Camera.Init(3, 2, 2);
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      Camera.Apply();
-                                      Camera.SetPosition(1, 0);
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, directory);
-
-        // The world band starts at GB row 2 (0x9840). The background region above the band
-        // (GB rows 0..1) must also stream when scrolling, writing GB row 0 at 0x9800. A crossing
-        // queues the edge column for deferred streaming; both directions feed the same pending
-        // slot, so Camera.Apply commits one column stream into the background tilemap.
-        Assert.True(
-            ContainsSequence(rom, [0xFA, 0xE4, 0xC0, 0xEA, 0x1A, 0xC1]),
-            "a rightward crossing should queue the right background edge column for deferred streaming.");
-        Assert.True(
-            ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]),
-            "a leftward crossing should queue the left background edge column for deferred streaming.");
-        Assert.True(
-            ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x6F, 0x26, 0x98, 0x0E]),
-            "Camera.Apply should stream the queued background row above the band into GB row 0 (0x9800).");
-
-        // The deferred commit replaces the old per-crossing extra WaitVBlank: streaming now happens
-        // only from Camera.Apply, at the top of the frame inside VBlank, so a scrolling frame costs a
-        // single VBlank (and a single Audio.Update tick). The move steps must no longer busy-wait on LY
-        // themselves; the streaming is gated by the queued-kind dispatch in Camera.Apply instead.
-        Assert.True(
-            ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]),
-            "Camera.Apply should dispatch the deferred stream on the queued kind.");
-    }
-
-    [Fact]
-    public void Camera_horizontal_streaming_fills_configured_visible_world_rows()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
-                                  World.Column(1, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28);
-                                  return;
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  World.Map(2, 9, 14);
-                                  Camera.Init(2, 9, 14);
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      Camera.Apply();
-                                      Camera.SetPosition(8, 0);
-                                  }
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.True(
-            ContainsSequence(rom, [0x0E, 0x0E, 0x1A, 0x77]),
-            "camera horizontal streaming should cover the configured visible world rows when fewer than the screen-plus-partial edge are configured.");
-        Assert.True(
-            ContainsSequence(rom, [0x1A, 0x77, 0x7B, 0xC6, 0x02, 0x5F]),
-            "camera horizontal streaming should advance the source pointer by the map width while filling the column.");
-        Assert.True(
-            ContainsSequence(rom, [0x7D, 0xC6, 0x20, 0x6F]),
-            "camera horizontal streaming should advance the target pointer by one GB background row.");
-    }
 
     [Fact]
     public void World_load_imports_tiled_external_tilesets_images_and_object_collisions()
@@ -5252,7 +4495,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void World_load_reserves_generated_background_tiles_before_sprite_assets()
     {
-        var directory = WriteSpriteAsset(
+        var directory = WriteSpriteJsonAsset(
             "player.sprite.json",
             SpriteJson(Rows(8, 16, "01230123")));
         WriteTiledTilesheetPng(directory, "tiles.png", 16, 16, 3);
@@ -5365,231 +4608,6 @@ public partial class GameBoyRomCompilerTests
         Assert.True(ContainsSequence(rom, [0x01, 0x01]), "ROM should contain world flag row 1 data.");
         Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Solid flag queries should mask bit 0 independently.");
         Assert.True(ContainsSequence(rom, [0xE6, 0x02, 0xFE, 0x00, 0xC2]), "Hazard flag queries should mask bit 1 independently.");
-    }
-
-    [Fact]
-    public void World_tile_flags_at_reads_world_pixel_coordinates_and_bounds_to_empty()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 3, 5);
-                                  World.Flags(0, 0, 1);
-                                  World.Flags(1, 2, 1);
-                                  return;
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  World.Map(2, 11, 2);
-                                  i16 worldX = 8;
-                                  i16 worldY = 0;
-                                  i16 hazard = 0;
-                                  i16 solid = 0;
-                                  i16 empty = 0;
-                                  if (World.TileFlagsAt(worldX, worldY) != 0) {
-                                      hazard = 1;
-                                  }
-                                  if (World.TileFlagsAt(0, 8) != 0) {
-                                      solid = 1;
-                                  }
-                                  if (World.TileFlagsAt(0, 0) != 0) {
-                                      empty = 3;
-                                  }
-                                  if (World.TileFlagsAt(16, 0) != 0) {
-                                      empty = 1;
-                                  }
-                                  if (World.TileFlagsAt(0, 16) != 0) {
-                                      empty = 2;
-                                  }
-                                  return;
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x00, 0x02]), "ROM should contain world flag row 0 data.");
-        Assert.True(ContainsSequence(rom, [0x01, 0x01]), "ROM should contain world flag row 1 data.");
-        Assert.True(ContainsSequence(rom, [0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]), "world_tile_flags_at should convert world pixels to tile coordinates by dividing by 8.");
-        Assert.True(ContainsSequence(rom, [0xFE, 0x02, 0xD2]), "world_tile_flags_at should guard map bounds before reading flag rows.");
-    }
-
-    [Fact]
-    public void Collision_aabb_tiles_checks_each_overlapped_world_tile()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 0, 4, 0);
-                                  World.Column(1, 3, 5, 0);
-                                  World.Column(2, 0, 0, 6);
-                                  World.Flags(0, 0, 1, 0);
-                                  World.Flags(1, 2, 1, 0);
-                                  World.Flags(2, 0, 0, 4);
-                                  return;
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  World.Map(3, 11, 3);
-                                  i16 x = 7;
-                                  i16 y = 8;
-                                  i16 oneTile = collision_aabb_tiles(8, 0, 8, 8, 2);
-                                  i16 horizontalSpan = collision_aabb_tiles(x, y, 2, 1, 1);
-                                  i16 verticalSpan = collision_aabb_tiles(0, 7, 1, 2, 1);
-                                  i16 empty = collision_aabb_tiles(0, 0, 8, 8, 1);
-                                  i16 platform = collision_aabb_tiles(16, 16, 8, 8, 4);
-                                  i16 zeroWidth = collision_aabb_tiles(0, 8, 0, 8, 1);
-                                  return;
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "AABB collision should mask solid flags.");
-        Assert.True(ContainsSequence(rom, [0xE6, 0x02, 0xFE, 0x00, 0xC2]), "AABB collision should mask hazard flags.");
-        Assert.True(ContainsSequence(rom, [0xE6, 0x04, 0xFE, 0x00, 0xC2]), "AABB collision should mask platform flags.");
-    }
-
-    [Fact]
-    public void Camera_aabb_tiles_checks_each_overlapped_tile_against_visible_camera_columns()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 5);
-                                  World.Column(2, 0, 6);
-                                  World.Column(3, 0, 7);
-                                  World.Flags(0, 0, 1);
-                                  World.Flags(1, 0, 0);
-                                  World.Flags(2, 0, 1);
-                                  World.Flags(3, 0, 0);
-                                  return;
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  World.Map(4, 11, 2);
-                                  Camera.Init(4, 11, 2);
-                                  i16 y = 8;
-                                  i16 hit = Camera.AabbTiles(72, y, 18, 8, 1);
-                                  return;
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(
-            ContainsSequence(rom, [0xFA, 0xE2, 0xC0, 0xC6, 0x48, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F, 0x47, 0xFA, 0xE3, 0xC0, 0x80]),
-            "Camera.AabbTiles should derive the source column from camera fine X plus the visible screen X.");
-        Assert.True(
-            ContainsSequence(rom, [0xFA, 0xE2, 0xC0, 0xC6, 0x59, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]),
-            "Camera.AabbTiles should include the far edge of the sprite-width span.");
-        Assert.True(ContainsSequence(rom, [0xE6, 0x01, 0xFE, 0x00, 0xC2]), "Camera.AabbTiles should mask requested collision flags.");
-    }
-
-    [Fact]
-    public void Camera_aabb_hit_top_returns_top_edge_of_first_overlapped_tile()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 4);
-                                  World.Column(2, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Flags(1, 0, 1);
-                                  World.Flags(2, 0, 1);
-                                  World.Map(3, 11, 2);
-                                  Camera.Init(3, 11, 2);
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  i16 footY = 16;
-                                  i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
-                                  return;
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal(32768, rom.Length);
-        Assert.True(ContainsSequence(rom, [0x21, 0xFF, 0xFF]), "Camera.AabbHitTop should return -1 as FF FF when no overlapped tile has the requested flags.");
-        Assert.True(ContainsSequence(rom, [0xCE, 0xFF, 0x67, 0xFA]), "Camera.AabbHitTop should propagate the signed search offset into the high result byte.");
-    }
-
-    [Fact]
-    public void World_camera_hit_top_returns_y_304_and_minus_one_as_complete_words_on_game_boy()
-    {
-        var source = CollisionHitContractSource(
-            height: 40,
-            solidRow: 38,
-            body: """
-                      i16 footWorldY = 304;
-                      i16 hitTop = Camera.AabbHitTop(0, footWorldY - 4, 8, 12, 1);
-                      i16 noHit = Camera.AabbHitTop(0, footWorldY - 4, 8, 12, 4);
-                      while (true) {
-                          Video.WaitVBlank();
-                      }
-                  """);
-
-        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source));
-        cpu.RunFrames(2);
-
-        Assert.Equal(0x30, cpu.Wram(0xC002));
-        Assert.Equal(0x01, cpu.Wram(0xC003));
-        Assert.Equal(0xFF, cpu.Wram(0xC004));
-        Assert.Equal(0xFF, cpu.Wram(0xC005));
-    }
-
-    [Fact]
-    public void Screen_camera_hit_top_keeps_byte_semantics_and_zero_extends_word_results_on_game_boy()
-    {
-        var source = CollisionHitContractSource(
-            height: 40,
-            solidRow: 38,
-            body: """
-                      u8 legacyNoHit = Camera.ScreenAabbHitTop(0, 0, 8, 8, 4);
-                      i16 completeNoHit = Camera.ScreenAabbHitTop(0, 0, 8, 8, 4);
-                      while (true) {
-                          Video.WaitVBlank();
-                      }
-                  """);
-
-        var cpu = new GameBoyTestCpu(GameBoyRomCompiler.CompileSource(source));
-        cpu.RunFrames(2);
-
-        Assert.Equal(0xFF, cpu.Wram(0xC000));
-        Assert.Equal(0xFF, cpu.Wram(0xC001));
-        Assert.Equal(0x00, cpu.Wram(0xC002));
-    }
-
-    [Fact]
-    public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_game_boy_world()
-    {
-        var source = CollisionHitContractSource(
-            height: 40,
-            solidRow: 38,
-            body: "u8 hitTop = Camera.AabbHitTop(0, 300, 8, 12, 1);");
-
-        var exception = Assert.Throws<InvalidOperationException>(() => GameBoyRomCompiler.CompileSource(source));
-
-        Assert.Equal(
-            "World hit-top cannot be stored in byte destination type 'u8' because the active world is 40 hardware rows tall; use an i16 local and compare it with -1.",
-            exception.Message);
-    }
-
-    [Fact]
-    public void World_camera_hit_top_keeps_legacy_byte_destination_for_32_row_game_boy_world()
-    {
-        var source = CollisionHitContractSource(
-            height: 32,
-            solidRow: 31,
-            body: "u8 noHit = Camera.AabbHitTop(0, 0, 8, 8, 4);");
-
-        Assert.Equal(32768, GameBoyRomCompiler.CompileSource(source).Length);
     }
 
     [Fact]
@@ -6105,14 +5123,6 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(0x02, rom[0x0148]);
     }
 
-    private static string WriteSpriteAsset(string fileName, string json)
-    {
-        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        File.WriteAllText(Path.Combine(directory, fileName), json);
-        return directory;
-    }
-
     private static string WriteLibraryPackage(string importPath, string sourceName, string source, params string[] targets)
     {
         var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
@@ -6207,140 +5217,6 @@ public partial class GameBoyRomCompilerTests
         return directory;
     }
 
-    private static void WriteTiledTilesheetPng(string directory, string fileName, int tileWidth, int tileHeight, params byte[] tileColors)
-    {
-        var width = tileWidth * tileColors.Length;
-        var height = tileHeight;
-        var rgba = new byte[width * height * 4];
-        var palette = new[]
-        {
-            (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
-            (R: (byte)0xB8, G: (byte)0xB8, B: (byte)0xB8, A: (byte)0xFF),
-            (R: (byte)0x68, G: (byte)0x68, B: (byte)0x68, A: (byte)0xFF),
-            (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
-        };
-
-        for (var tile = 0; tile < tileColors.Length; tile++)
-        {
-            var color = palette[tileColors[tile]];
-            for (var y = 0; y < tileHeight; y++)
-            {
-                for (var x = 0; x < tileWidth; x++)
-                {
-                    var offset = (y * width + tile * tileWidth + x) * 4;
-                    rgba[offset] = color.R;
-                    rgba[offset + 1] = color.G;
-                    rgba[offset + 2] = color.B;
-                    rgba[offset + 3] = color.A;
-                }
-            }
-        }
-
-        File.WriteAllBytes(Path.Combine(directory, fileName), EncodeRgbaPng(width, height, rgba));
-    }
-
-    private static string SpriteJson(params string[][] frames)
-    {
-        var frameJson = string.Join(
-            ",",
-            frames.Select(frame => "[" + string.Join(",", frame.Select(row => $"\"{row}\"")) + "]"));
-
-        return $$"""
-                 {
-                   "platforms": {
-                     "gb": {
-                       "frames": [{{frameJson}}]
-                     }
-                   }
-                 }
-                 """;
-    }
-
-    private static string[] Rows(int width, int height, params string[] overrides)
-    {
-        var rows = Enumerable.Repeat(new string('0', width), height).ToArray();
-        for (var i = 0; i < overrides.Length; i++)
-        {
-            rows[i] = overrides[i];
-        }
-
-        return rows;
-    }
-
-    private static byte[] EncodeRgbaPng(int width, int height, byte[] rgba)
-    {
-        using var output = new MemoryStream();
-        output.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-
-        Span<byte> ihdr = stackalloc byte[13];
-        BinaryPrimitives.WriteInt32BigEndian(ihdr[0..4], width);
-        BinaryPrimitives.WriteInt32BigEndian(ihdr[4..8], height);
-        ihdr[8] = 8;
-        ihdr[9] = 6;
-        WritePngChunk(output, "IHDR", ihdr);
-
-        using var raw = new MemoryStream();
-        for (var y = 0; y < height; y++)
-        {
-            raw.WriteByte(0);
-            raw.Write(rgba, y * width * 4, width * 4);
-        }
-
-        using var compressed = new MemoryStream();
-        using (var zlib = new ZLibStream(compressed, CompressionLevel.SmallestSize, leaveOpen: true))
-        {
-            raw.Position = 0;
-            raw.CopyTo(zlib);
-        }
-
-        WritePngChunk(output, "IDAT", compressed.ToArray());
-        WritePngChunk(output, "IEND", []);
-        return output.ToArray();
-    }
-
-    private static void WritePngChunk(Stream output, string type, ReadOnlySpan<byte> data)
-    {
-        Span<byte> length = stackalloc byte[4];
-        BinaryPrimitives.WriteInt32BigEndian(length, data.Length);
-        output.Write(length);
-
-        var typeBytes = System.Text.Encoding.ASCII.GetBytes(type);
-        output.Write(typeBytes);
-        output.Write(data);
-
-        var crc = Crc32(typeBytes, data);
-        Span<byte> crcBytes = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc);
-        output.Write(crcBytes);
-    }
-
-    private static uint Crc32(ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
-    {
-        var crc = 0xFFFFFFFFu;
-        foreach (var value in type)
-        {
-            crc = UpdateCrc32(crc, value);
-        }
-
-        foreach (var value in data)
-        {
-            crc = UpdateCrc32(crc, value);
-        }
-
-        return crc ^ 0xFFFFFFFFu;
-    }
-
-    private static uint UpdateCrc32(uint crc, byte value)
-    {
-        crc ^= value;
-        for (var i = 0; i < 8; i++)
-        {
-            crc = (crc & 1) == 0 ? crc >> 1 : 0xEDB88320u ^ (crc >> 1);
-        }
-
-        return crc;
-    }
-
     private static bool ContainsSequence(byte[] bytes, byte[] sequence)
     {
         return IndexOfSequence(bytes, sequence) >= 0;
@@ -6374,11 +5250,6 @@ public partial class GameBoyRomCompilerTests
         return bytes[offset] | bytes[offset + 1] << 8;
     }
 
-    private static string Fingerprint(byte[] bytes)
-    {
-        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
-    }
-
     private static string BytesAround(byte[] bytes, int offset)
     {
         var start = Math.Max(0, offset - 8);
@@ -6401,23 +5272,6 @@ public partial class GameBoyRomCompilerTests
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
-    }
-
-    private static string CollisionHitContractSource(int height, int solidRow, string body)
-    {
-        var visual = string.Join(", ", Enumerable.Repeat("0", height));
-        var flags = string.Join(", ", Enumerable.Range(0, height).Select(row => row == solidRow ? "1" : "0"));
-        return $$"""
-                 void Main() {
-                     World.Column(0, {{visual}});
-                     World.Flags(0, {{flags}});
-                     World.Map(1, 0, {{height}});
-                     Camera.Init(1, 0, {{height}});
-                     Camera.SetPosition(0, 1);
-                     Camera.Apply();
-                     {{body}}
-                 }
-                 """;
     }
 
     private static string RepositoryDirectory(string relativePath)

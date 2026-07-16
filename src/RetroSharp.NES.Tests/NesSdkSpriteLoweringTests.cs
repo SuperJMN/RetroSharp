@@ -3,6 +3,7 @@ namespace RetroSharp.NES.Tests;
 using RetroSharp.NES;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
+using static NesTestAssets;
 
 public sealed class NesSdkSpriteLoweringTests
 {
@@ -90,4 +91,185 @@ public sealed class NesSdkSpriteLoweringTests
         Assert.True(ContainsSequence(prg, [0xA9, 0x02, 0x8D, 0x14, 0x40]), "sprite_draw should DMA the OAM shadow page after writing logical sprites.");
     }
 
+
+    [Fact]
+    public void Rejects_png_overlay_draw_when_base_palette_slot_has_no_overlay_slot()
+    {
+        var baseDirectory = WriteSpritePng(
+            "hero.nes.png",
+            8,
+            8,
+            [
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0x00),
+                (R: (byte)0xFC, G: (byte)0xBC, B: (byte)0xB0, A: (byte)0xFF),
+                (R: (byte)0xD8, G: (byte)0x28, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0x00, G: (byte)0x00, B: (byte)0x00, A: (byte)0xFF),
+                (R: (byte)0xFF, G: (byte)0xFF, B: (byte)0xFF, A: (byte)0xFF),
+            ],
+            Rows(
+                8,
+                8,
+                "11111111",
+                "11111111",
+                "22222222",
+                "22222222",
+                "33333333",
+                "33333333",
+                "11114411",
+                "11114411"));
+
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.png", 8, 8);
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      Sprite.Draw(hero, 24, 32, 0, false, 3);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "NES sprite asset 'hero' needs sprite palette slot 4 for an automatic PNG overlay, but target 'nes' supports slots 0..3.",
+            exception.Message);
+    }
+
+
+    [Fact]
+    public void Rejects_logical_sprite_palette_slots_outside_nes_capabilities()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero, "hero.nes.json");
+                                  while (true) {
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 4);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Contains("Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.", exception.Message);
+    }
+
+
+    [Fact]
+    public void Rejects_png_sprite_palette_slots_outside_nes_capabilities_before_palette_derivation()
+    {
+        var baseDirectory = WriteSpritePng(
+            "hero.nes.png",
+            8,
+            8,
+            Rows(8, 8, Enumerable.Repeat("33333333", 8).ToArray()));
+
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(hero, "hero.nes.png", 8, 8);
+                                  while (true) {
+                                      Sprite.Draw(hero, 24, 32, 0, 0, 4);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Contains("Target 'nes' supports sprite palette slots 0..3, but slot 4 was requested.", exception.Message);
+    }
+
+
+    [Fact]
+    public void Rejects_constant_y_sprite_draws_that_exceed_nes_scanline_budget()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [
+                    [
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111",
+                      "11111111"
+                    ]
+                  ]
+                }
+              }
+            }
+            """);
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 9).Select(index => $"        Sprite.Draw(hero, {index * 8}, 24, 0);"));
+        var source = """
+                     void Main() {
+                         Video.Init();
+                         Sprite.Asset(hero, "hero.nes.json");
+                         while (true) {
+                             Video.WaitVBlank();
+
+                     """ + draws + """
+                         }
+                     }
+                     """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Equal(
+            "Target 'nes' supports 8 hardware sprites per scanline, but 9 are required on scanline 24 for drawing logical sprites in one frame.",
+            exception.Message);
+    }
+
+
+    [Fact]
+    public void Rejects_logical_sprite_assets_that_exceed_nes_sprite_count()
+    {
+        var rows = Enumerable.Repeat(new string('1', 65 * 8), 8);
+        var rowJson = string.Join(",", rows.Select(row => $"\"{row}\""));
+        var baseDirectory = WriteSpriteAsset(
+            "wide.nes.json",
+            "{\"platforms\":{\"nes\":{\"frames\":[[" + rowJson + "]]}}}");
+
+        const string source = """
+                              void Main() {
+                                  Sprite.Asset(wide, "wide.nes.json");
+                                  while (true) {
+                                      Sprite.Draw(wide, 0, 0, 0);
+                                  }
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() => NesRomCompiler.CompileSource(source, baseDirectory));
+
+        Assert.Contains("NES sprite asset needs 65 hardware sprites, but the hardware limit is 64.", exception.Message);
+    }
 }

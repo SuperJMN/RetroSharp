@@ -7,6 +7,17 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-11 / #377 finishes target SDK-lowering test locality. A regression belongs
+  in a focused lowering suite when its primary observable is collected SDK
+  operations, target capabilities or diagnostics, emitted bytes, runtime
+  storage effects, or hardware budgets, even when `CompileSource(...)` is the
+  realistic arrangement path. Monolithic compiler suites retain tests whose
+  value is the complete frontend, asset, linker, runtime, or sample path. The
+  audit moved 33 Game Boy regressions into seven domain-focused suites and 5
+  NES regressions into its four focused suites. Shared fixture/PNG support is
+  neutral rather than owned by either monolith. `GameBoyRomCompilerTests.cs` is
+  consequently 5,337 lines rather than 6,483 and `NesRomCompilerTests.cs` is
+  3,173 rather than 3,503, without removing coverage.
 - AIN-9 / #365 freezes the AI-navigable architecture acceptance in
   `docs/AiNavigableArchitecture.md`: it maps the runtime-memory, shared frontend,
   Actor Framework, and target SDK-emission owners to their production and test

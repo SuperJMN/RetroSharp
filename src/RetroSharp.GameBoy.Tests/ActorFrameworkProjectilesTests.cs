@@ -9,6 +9,7 @@ using RetroSharp.GameBoy;
 using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
+using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
 public partial class GameBoyRomCompilerTests
 {
@@ -302,7 +303,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Compiles_projectile_draw_through_game_boy_backend()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "hero-shot.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
         const string source = """
@@ -327,7 +328,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Projectile_draw_runtime_uses_distinct_oam_slots_for_pool_slots()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "hero-shot.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
         const string source = """

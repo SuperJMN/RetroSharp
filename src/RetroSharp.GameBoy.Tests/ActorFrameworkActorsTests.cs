@@ -9,6 +9,7 @@ using RetroSharp.GameBoy;
 using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
+using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
 public partial class GameBoyRomCompilerTests
 {
@@ -415,7 +416,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Rejects_actor_draw_loop_that_exceeds_game_boy_hardware_sprite_budget()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "wide-goomba.sprite.json",
             SpriteJson(Rows(16, 16, "1111111111111111")));
 
@@ -465,7 +466,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Rejects_actor_draw_loop_that_can_exceed_game_boy_scanline_budget()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "goomba.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
 
@@ -490,7 +491,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Compiles_actor_update_and_draw_like_grouped_pool_loops()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "goomba.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
 
@@ -588,7 +589,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Actor_draw_uses_world_x_minus_camera_x_and_culls_offscreen_on_game_boy()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "goomba.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
 

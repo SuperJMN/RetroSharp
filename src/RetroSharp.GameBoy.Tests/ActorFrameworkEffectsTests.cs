@@ -9,6 +9,7 @@ using RetroSharp.GameBoy;
 using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
+using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
 public partial class GameBoyRomCompilerTests
 {
@@ -73,7 +74,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Effect_draw_runtime_hides_expired_slot_in_oam()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "spark.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
         const string source = """
@@ -103,7 +104,7 @@ public partial class GameBoyRomCompilerTests
     [Fact]
     public void Effect_draw_runtime_uses_distinct_oam_slots_for_pool_slots()
     {
-        var baseDirectory = WriteSpriteAsset(
+        var baseDirectory = WriteSpriteJsonAsset(
             "spark.sprite.json",
             SpriteJson(Rows(8, 16, "11111111")));
         const string source = """
