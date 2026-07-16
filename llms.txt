@@ -4,6 +4,7 @@
 ## Agent Entry Points
 - [AGENTS.md](AGENTS.md): generic AI CLI agent rules, read order, validation, and publication workflow.
 - [docs/AgentContext.md](docs/AgentContext.md): memory-derived project context, known traps, recent changes, and reliable commands.
+- [docs/AiNavigableArchitecture.md](docs/AiNavigableArchitecture.md): deep-module owners, production/test seams, common change paths, CodeGraph probes, and final AIN measurements.
 - [docs/SdkArchitecture.md](docs/SdkArchitecture.md): frontend preparation, Actor Framework domain-state/contribution seams, and target SDK ownership navigation.
 - [WARP.md](WARP.md): Warp-specific repository guide.
 - [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.

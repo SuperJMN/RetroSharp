@@ -2,6 +2,7 @@ namespace RetroSharp.GameBoy.Tests;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
+using RetroSharp.Parser;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 
@@ -11,14 +12,42 @@ public sealed class GameBoySdkFrameInputLoweringTests
     public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
     {
         var builder = new GbBuilder();
-        var compiler = CreateRuntimeCompiler(builder);
+        var lowerer = CreateLowerer(builder);
 
-        compiler.SdkOperationLowerer.Emit(new Sdk2DOperation.WaitFrame());
+        lowerer.Emit(new Sdk2DOperation.WaitFrame());
 
         Assert.Equal(
             [0xF0, 0x44, 0xFE, 0x90, 0x30, 0xFA, 0xF0, 0x44, 0xFE, 0x90, 0x38, 0xFA],
             builder.Build());
     }
+
+    private static GameBoySdkOperationLowerer CreateLowerer(GbBuilder builder)
+    {
+        var program = GameBoyVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));
+        return new GameBoySdkOperationLowerer(
+            builder,
+            program,
+            new GameBoySdkLoweringState(),
+            new GameBoySdkLoweringContext(
+                _ => throw UnusedContext(),
+                (_, _) => throw UnusedContext(),
+                _ => throw UnusedContext(),
+                (_, _, _) => throw UnusedContext(),
+                NoSourceConstant,
+                (_, _) => throw UnusedContext()),
+            GameBoyRomLayout.RomOnly,
+            packedWorldRuntimeLayout: null,
+            usesPackedCameraRuntime: false);
+    }
+
+    private static bool NoSourceConstant(ExpressionSyntax _, out int value)
+    {
+        value = 0;
+        return false;
+    }
+
+    private static InvalidOperationException UnusedContext() =>
+        new("Wait-frame lowering must not use source operand context.");
 
     [Fact]
     public void Lowers_poll_input_operation_to_deterministic_game_boy_bytes()

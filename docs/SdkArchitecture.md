@@ -1,5 +1,9 @@
 # RetroSharp SDK Architecture
 
+For the concise deep-module owner map, common change routes, focused test seams,
+and reproducible CodeGraph probes, start with
+[`AiNavigableArchitecture.md`](AiNavigableArchitecture.md).
+
 This document names the current SDK boundary so the source-only package model
 does not get confused with a compiler plugin system.
 

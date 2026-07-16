@@ -11,14 +11,15 @@ Use this order when you need project context:
 1. `AGENTS.md`: repo rules, validation, and agent workflow.
 2. `docs/AgentContext.md`: memory-derived context, known traps, and recent changes.
 3. `README.md`: project summary and basic examples.
-4. `docs/ArchitectureRoadmap.md`: language vs portable 2D SDK vs target-intrinsics boundary.
-5. `docs/SdkArchitecture.md`: frontend preparation, Actor Framework internals, and target SDK lowering navigation.
-6. `docs/LargeWorldsRoadmap.md`: large-map, banking, mapper, chunking, and full-`stage1` execution plan when that epic is in scope.
-7. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
-8. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
-9. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
-10. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
-11. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
+4. `docs/AiNavigableArchitecture.md`: deep-module owners, production/test seams, and CodeGraph probes.
+5. `docs/ArchitectureRoadmap.md`: language vs portable 2D SDK vs target-intrinsics boundary.
+6. `docs/SdkArchitecture.md`: frontend preparation, Actor Framework internals, and target SDK lowering navigation.
+7. `docs/LargeWorldsRoadmap.md`: large-map, banking, mapper, chunking, and full-`stage1` execution plan when that epic is in scope.
+8. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
+9. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
+10. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
+11. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
+12. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
 
 `WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
 

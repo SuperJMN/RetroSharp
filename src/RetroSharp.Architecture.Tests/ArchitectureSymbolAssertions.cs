@@ -56,6 +56,121 @@ internal static class ArchitectureSymbolAssertions
             method.MetadataToken == operationEntryPoint.MetadataToken);
     }
 
+    public static void AssertRuntimeMemoryOwnership(
+        Assembly assembly,
+        string layoutTypeName,
+        params string[] allowedByteConstants)
+    {
+        var layout = RequiredType(assembly, layoutTypeName);
+        var allowedByteConstantSet = allowedByteConstants.ToHashSet(StringComparer.Ordinal);
+        var reservedRanges = RequiredEnumerableProperty(layout, "ReservedRanges")
+            .Cast<object>()
+            .Select(RangeBounds)
+            .ToList();
+        var aliasRanges = layout
+            .GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(property => property.Name.StartsWith("Intentional", StringComparison.Ordinal))
+            .SelectMany(property => property.GetValue(null) is System.Collections.IEnumerable values
+                ? values.Cast<object>()
+                : [])
+            .Select(alias => alias.GetType().GetProperty("Alias")?.GetValue(alias))
+            .Where(alias => alias is not null)
+            .Select(alias => RangeBounds(alias!))
+            .ToHashSet();
+        var canonicalRanges = reservedRanges
+            .Where(range => !aliasRanges.Contains(range))
+            .ToList();
+        var namedAddressValues = RequiredEnumerableProperty(layout, "NamedAddresses")
+            .Cast<object>()
+            .Select(address => Convert.ToInt64(address.GetType().GetProperty("Address")?.GetValue(address)))
+            .ToHashSet();
+        var byteAddressRanges = canonicalRanges
+            .Where(range => namedAddressValues.Any(address => address >= range.Start && address < range.EndExclusive))
+            .ToList();
+
+        var leakedFields = assembly
+            .GetTypes()
+            .Where(type => !IsOwnedBy(type, layout))
+            .SelectMany(type => type.GetFields(DeclaredMethods))
+            .Where(field => field.IsLiteral && !field.IsSpecialName)
+            .Select(field => (Field: field, Value: NumericConstant(field)))
+            .Where(candidate => candidate.Value.HasValue)
+            .Where(candidate =>
+                candidate.Field.FieldType != typeof(byte) ||
+                !allowedByteConstantSet.Contains(FieldId(candidate.Field)))
+            .Where(candidate =>
+                candidate.Field.FieldType == typeof(ushort) &&
+                canonicalRanges.Any(range => candidate.Value >= range.Start && candidate.Value < range.EndExclusive) ||
+                candidate.Field.FieldType == typeof(byte) &&
+                byteAddressRanges.Any(range => candidate.Value >= range.Start && candidate.Value < range.EndExclusive))
+            .ToList();
+
+        Assert.True(
+            leakedFields.Count == 0,
+            $"Runtime-memory constants escaped '{layout.FullName}':{Environment.NewLine}" +
+            string.Join(Environment.NewLine, leakedFields.Select(candidate =>
+                $"{FieldId(candidate.Field)}=0x{candidate.Value:X4}")));
+    }
+
+    public static void AssertExclusiveFrontendPreparation(
+        Type preparation,
+        IReadOnlyCollection<Type> preparationStages,
+        params Type[] targetCompilers)
+    {
+        var stageSet = preparationStages.ToHashSet();
+        var preparationCalls = CalledMethods(preparation);
+        Assert.All(
+            preparationStages,
+            stage => Assert.Contains(preparationCalls, call => call.DeclaringType == stage));
+        Assert.All(
+            targetCompilers,
+            targetCompiler => Assert.DoesNotContain(
+                CalledMethods(targetCompiler),
+                call => call.DeclaringType is not null && stageSet.Contains(call.DeclaringType)));
+    }
+
+    private static bool IsOwnedBy(Type candidate, Type owner)
+    {
+        for (var current = candidate; current is not null; current = current.DeclaringType)
+        {
+            if (current == owner)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static long? NumericConstant(FieldInfo field)
+    {
+        if (field.FieldType != typeof(byte) && field.FieldType != typeof(ushort))
+        {
+            return null;
+        }
+
+        return Convert.ToInt64(field.GetRawConstantValue());
+    }
+
+    private static string FieldId(FieldInfo field) => $"{field.DeclaringType?.FullName}.{field.Name}";
+
+    private static System.Collections.IEnumerable RequiredEnumerableProperty(Type owner, string name)
+    {
+        var property = owner.GetProperty(
+            name,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(property);
+        return Assert.IsAssignableFrom<System.Collections.IEnumerable>(property.GetValue(null));
+    }
+
+    private static (long Start, long EndExclusive) RangeBounds(object range)
+    {
+        var type = range.GetType();
+        return (
+            Convert.ToInt64(type.GetProperty("Start")?.GetValue(range)),
+            Convert.ToInt64(type.GetProperty("EndExclusive")?.GetValue(range)));
+    }
+
     public static void AssertDomainStateOwnership(
         Type root,
         Type rootState,

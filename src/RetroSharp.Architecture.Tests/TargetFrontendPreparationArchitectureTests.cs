@@ -36,6 +36,16 @@ public sealed class TargetFrontendPreparationArchitectureTests
         Assert.False(options.IsPublic);
         Assert.False(preparedProgram.IsPublic);
 
+        ArchitectureSymbolAssertions.AssertExclusiveFrontendPreparation(
+            preparation,
+            OrderedPreparationStageTypes
+                .Select(typeName => calls
+                    .Select(call => call.DeclaringType)
+                    .First(type => type?.FullName == typeName)!)
+                .ToArray(),
+            typeof(GameBoyRomCompiler),
+            typeof(NesRomCompiler));
+
         var previousStageIndex = -1;
         foreach (var stageTypeName in OrderedPreparationStageTypes)
         {
@@ -71,10 +81,46 @@ public sealed class TargetFrontendPreparationArchitectureTests
             call => call.DeclaringType == lowerer && call.GetParameters().Any(parameter => parameter.ParameterType == plan));
     }
 
+    [Fact]
+    public void Monolithic_compiler_regressions_do_not_reconstruct_extracted_frontend_stages()
+    {
+        var root = RepositoryRoot();
+        var forbiddenCalls = new[]
+        {
+            "new SomeParser",
+            "TargetProgramSelector.Select(",
+            "ActorFrameworkLowerer.Lower(",
+            "SdkSourcePackageFacadeLowerer.Lower(",
+        };
+
+        foreach (var relativePath in new[]
+                 {
+                     "src/RetroSharp.GameBoy.Tests/GameBoyRomCompilerTests.cs",
+                     "src/RetroSharp.NES.Tests/NesRomCompilerTests.cs",
+                 })
+        {
+            var source = File.ReadAllText(Path.Combine(root, relativePath));
+            Assert.All(
+                forbiddenCalls,
+                call => Assert.DoesNotContain(call, source, StringComparison.Ordinal));
+        }
+    }
+
     private static void AssertTargetRoutesThroughPreparation(Type targetCompiler, Type preparation)
     {
         Assert.Contains(
             ArchitectureSymbolAssertions.CalledMethods(targetCompiler),
             call => call.DeclaringType == preparation);
+    }
+
+    private static string RepositoryRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return directory?.FullName ?? throw new InvalidOperationException("Could not locate repository root.");
     }
 }

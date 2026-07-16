@@ -6470,36 +6470,14 @@ public partial class GameBoyRomCompilerTests
         return CompileVideoProgram(source, null);
     }
 
-    private static ProgramSyntax ParseGameBoySourceWithPortable2D(string source)
-    {
-        var parse = new SomeParser().Parse(
-            SdkLibrarySource.Merge(
-                GameBoyTarget.Intrinsics,
-                source,
-                libraryImportPaths: [SdkImportResolver.Portable2D]));
-        if (parse.IsFailure)
-        {
-            throw new InvalidOperationException(parse.Error);
-        }
-
-        return TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
-    }
-
     private static GameBoyVideoProgram CompileVideoProgram(string source, string? baseDirectory)
     {
-        var parse = new SomeParser().Parse(
-            SdkLibrarySource.Merge(
-                GameBoyTarget.Intrinsics,
-                source,
-                libraryImportPaths: [SdkImportResolver.Portable2D]));
-        if (parse.IsFailure)
-        {
-            throw new InvalidOperationException(parse.Error);
-        }
-
-        var targetProgram = TargetProgramSelector.Select(parse.Value, GameBoyTarget.Intrinsics);
-        var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, GameBoyTarget.Capabilities, supportsUpdate: true, supportsDraw: true, baseDirectory);
-        var lowered = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
-        return GameBoyVideoProgram.FromProgram(lowered, baseDirectory);
+        return RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+            source,
+            baseDirectory,
+            SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: null,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            sdkPluginRegistry: null);
     }
 }
