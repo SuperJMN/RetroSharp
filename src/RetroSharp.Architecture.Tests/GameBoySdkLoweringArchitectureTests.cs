@@ -32,6 +32,16 @@ public sealed class GameBoySdkLoweringArchitectureTests
         "src/RetroSharp.GameBoy/GameBoySdkOperationLowerer.Collision.cs",
     ];
 
+    private static readonly string[] FocusedInputLoweringTests =
+    [
+        "Direct_button_read_and_bare_button_identifiers_are_rejected",
+        "Bare_button_identifiers_are_rejected_by_input_facade",
+        "Button_enum_members_are_accepted_by_input_facade",
+        "Input_facade_predicates_lower_like_explicit_numeric_checks",
+        "Compiles_tick_input_api_for_variable_jump",
+        "Input_poll_settles_joypad_rows_before_latching_buttons",
+    ];
+
     [Fact]
     public void Game_boy_sdk_lowerer_owns_emission_without_delegating_to_runtime_compiler()
     {
@@ -116,6 +126,20 @@ public sealed class GameBoySdkLoweringArchitectureTests
         var streamReaderSource = File.ReadAllText(Path.Combine(root, "src/RetroSharp.GameBoy/GameBoySdkStreamReader.cs"));
         Assert.Contains("class Sdk2DStreamReader", streamReaderSource, StringComparison.Ordinal);
         Assert.Contains("class SdkAudioStreamReader", streamReaderSource, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Input_lowering_regressions_live_in_the_focused_sdk_suite()
+    {
+        var root = RepositoryRoot();
+        var monolithicSource = File.ReadAllText(Path.Combine(root, "src/RetroSharp.GameBoy.Tests/GameBoyRomCompilerTests.cs"));
+        var focusedSource = File.ReadAllText(Path.Combine(root, "src/RetroSharp.GameBoy.Tests/GameBoySdkFrameInputLoweringTests.cs"));
+
+        Assert.All(FocusedInputLoweringTests, testName =>
+        {
+            Assert.DoesNotContain($"void {testName}(", monolithicSource, StringComparison.Ordinal);
+            Assert.Contains($"void {testName}(", focusedSource, StringComparison.Ordinal);
+        });
     }
 
     private static string RepositoryRoot()
