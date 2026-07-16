@@ -168,21 +168,6 @@ public static class NesRomCompiler
         return (videoProgram, prepared);
     }
 
-    internal static NesVideoProgram PrepareVideoProgramForTests(
-        string source,
-        string? baseDirectory,
-        SdkLibraryImportMode sdkImportMode,
-        SdkLibraryRegistry? sdkLibraryRegistry,
-        IReadOnlyList<string>? sdkLibraryImports,
-        SdkPluginRegistry? sdkPluginRegistry) =>
-        PrepareVideoProgram(
-            source,
-            baseDirectory,
-            sdkImportMode,
-            sdkLibraryRegistry,
-            sdkLibraryImports,
-            sdkPluginRegistry).VideoProgram;
-
     public static IReadOnlyList<Sdk2DOperation> CollectSdkOperations(
         string source,
         string? baseDirectory = null,

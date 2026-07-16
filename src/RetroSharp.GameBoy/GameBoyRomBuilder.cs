@@ -953,7 +953,7 @@ internal static class GameBoyRomBuilder
         }
     }
 
-    internal static void EmitEnterVBlank(GbBuilder builder, bool publishShadowOam = false)
+    internal static void EmitEnterVBlank(GbBuilder builder)
     {
         const byte lastSafeStartingScanline = 148;
         var waitForVisible = builder.CreateLabel("packed_camera_wait_for_visible");
@@ -976,10 +976,6 @@ internal static class GameBoyRomBuilder
         builder.JumpAbsolute(0xDA, waitForVBlank);  // JP C,waitForVBlank
         builder.LoadAImmediate(1);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitEnteredVBlank);
-        if (publishShadowOam)
-        {
-            EmitPublishShadowOam(builder);
-        }
         builder.Label(safe);
     }
 

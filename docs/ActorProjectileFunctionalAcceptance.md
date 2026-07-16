@@ -35,7 +35,8 @@ hardware state. Every retained frame checks:
 - canonical unused OAM after the last allocated call site;
 - no visible-time VRAM/PPU or OAM writes, with cycle/scanline/dot evidence;
 - camera request/resident/commit/visible state where the sample scrolls;
-- pool capacity, saturation, dropped requests, reuse, bounce, and effect expiry;
+- actor tile-contact and grounded world-Y state, plus pool capacity, saturation,
+  dropped requests, reuse, bounce, and effect expiry;
 - one logical tick per physical frame within the reviewed cadence budget.
 
 `maximumSpawnToVisibleFrames` is 1 for all eight scenarios. The shared runner

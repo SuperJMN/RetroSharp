@@ -390,7 +390,36 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
-    public void Controlled_stale_oam_slot_reuse_probe_is_rejected()
+    public void Controlled_stale_oam_from_disappeared_logical_sprite_is_rejected()
+    {
+        var scenario = IntegrityScenario(spriteOam: true);
+        var visible = new FunctionalSpriteObservation("projectile-0", true, [64, 40, 6, 0], OamSlot: 0);
+        var hidden = new FunctionalSpriteObservation("projectile-0", false, [160, 8, 6, 0], OamSlot: 0);
+        var observations = new[]
+        {
+            Frame(0, sprites: [visible]),
+            Frame(1, sprites: [visible]),
+            Frame(2, sprites: [hidden]),
+        };
+        var oracle = new ScriptedOracle(frame => new(
+            frame,
+            Sprites:
+            [
+                frame == 0
+                    ? new FunctionalSpriteExpectation("projectile-0", true, [64, 40, 6, 0], OamSlot: 0)
+                    : new FunctionalSpriteExpectation("projectile-0", false, [160, 8, 6, 0], OamSlot: 0),
+            ]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.False(report.Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "sprite-visibility" && failure.Frame == 1);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "sprite-oam" && failure.Frame == 1);
+        Assert.DoesNotContain(report.IntegrityFailures, failure => failure.Code == "sprite-oam-slot");
+    }
+
+    [Fact]
+    public void Wrong_oam_slot_metadata_is_rejected_independently_of_sprite_bytes()
     {
         var scenario = IntegrityScenario(spriteOam: true);
         var observations = new[]
@@ -406,7 +435,8 @@ public sealed class FunctionalScenarioRunnerTests
         var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
 
         Assert.False(report.Passed);
-        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "sprite-oam-slot" && failure.Frame == 1);
+        var failure = Assert.Single(report.IntegrityFailures);
+        Assert.Equal(("sprite-oam-slot", 1), (failure.Code, failure.Frame));
     }
 
     [Fact]

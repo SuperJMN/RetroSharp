@@ -126,8 +126,9 @@ CSL-6 binds `actor-framework`, `shots-simple`, `shots-bouncy`, and
 the exact tracked cartridge bytes. Every physical frame in the forward/reverse
 actor traversal and projectile timelines checks the authored background,
 logical visibility, exact hardware-slot order, every OAM byte, and timed video
-and OAM writes. The lifecycle evidence separately proves fixed-pool saturation,
-dropped requests, slot reuse, bounces, and muzzle-effect expiry; the timing
+and OAM writes. The shared lifecycle evidence separately proves actor
+tile-contact and grounded world-Y state, fixed-pool saturation, dropped
+requests, slot reuse, bounces, and muzzle-effect expiry; the timing
 evidence adds explicit tick, input-to-state, and spawn-to-visible budgets. A
 controlled stale-OAM contract probe proves that a retained sprite from an
 unexecuted draw path fails immediately instead of being hidden by a later good

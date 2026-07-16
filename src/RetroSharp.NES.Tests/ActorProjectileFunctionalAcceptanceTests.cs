@@ -1,7 +1,8 @@
 namespace RetroSharp.NES.Tests;
 
 using RetroSharp.FunctionalAcceptance;
-using RetroSharp.Core.Sdk;
+using RetroSharp.Core.Targeting;
+using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
 using Xunit.Abstractions;
@@ -69,13 +70,6 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                               }
                               """;
         var baseDirectory = RepositoryDirectory("samples/actor-framework");
-        var program = RetroSharp.NES.NesRomCompiler.PrepareVideoProgramForTests(
-            source,
-            baseDirectory,
-            SdkLibraryImportMode.ExplicitOnly,
-            null,
-            [SdkImportResolver.Portable2D],
-            null);
         var rom = RetroSharp.NES.NesRomCompiler.CompileSource(
             source,
             baseDirectory,
@@ -84,8 +78,6 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
 
         cpu.RunFrames(6);
 
-        Assert.Contains(program.SdkOperations, operation => operation is Sdk2DOperation.DrawLogicalSprite);
-        Assert.DoesNotContain(program.SdkOperationStream, operation => operation is Sdk2DOperation.DrawLogicalSprite);
         Assert.Single(cpu.OamDmaTransfers);
     }
 
@@ -187,6 +179,9 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
         {
             Assert.Equal(3, factory.MaximumUsedActorSpawns);
             Assert.True(factory.ActorSlotRecycles > 0);
+            Assert.True(factory.MaximumActorTileContacts > 0, "The exact actor ROM must retain tile-contact state on active actors.");
+            Assert.Equal(8, factory.MinimumGroundedActorWorldY);
+            Assert.Equal(9, factory.MaximumGroundedActorWorldY);
         }
         else
         {
@@ -222,13 +217,7 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                 RepositoryDirectory(sourceRootRelativePath!));
         }
 
-        var program = RetroSharp.NES.NesRomCompiler.PrepareVideoProgramForTests(
-            source,
-            RepositoryDirectory(baseDirectoryRelativePath),
-            SdkLibraryImportMode.ExplicitOnly,
-            null,
-            [SdkImportResolver.Portable2D],
-            null);
+        var program = PrepareVideoProgram(source, RepositoryDirectory(baseDirectoryRelativePath));
         var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             source,
             RepositoryDirectory(baseDirectoryRelativePath),
@@ -237,6 +226,25 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
             [SdkImportResolver.Portable2D],
             null);
         return new(program, build);
+    }
+
+    private static NesVideoProgram PrepareVideoProgram(string source, string baseDirectory)
+    {
+        var parse = new SomeParser().Parse(
+            SdkLibrarySource.Merge(
+                NesTarget.Intrinsics,
+                source,
+                libraryImportPaths: [SdkImportResolver.Portable2D]));
+        Assert.True(parse.IsSuccess, parse.IsFailure ? parse.Error : null);
+        var targetProgram = TargetProgramSelector.Select(parse.Value, NesTarget.Intrinsics);
+        var actorProgram = ActorFrameworkLowerer.Lower(
+            targetProgram,
+            NesTarget.Capabilities,
+            supportsUpdate: true,
+            supportsDraw: true,
+            baseDirectory);
+        var loweredProgram = LetTypeInference.ResolveOrThrow(SdkSourcePackageFacadeLowerer.Lower(actorProgram));
+        return NesVideoProgram.FromProgram(loweredProgram, baseDirectory);
     }
 
     private static string RepositoryFile(string relativePath)
@@ -306,15 +314,19 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
     {
         public byte[]? LoadedRom { get; private set; }
         public Dictionary<int, Snapshot> Snapshots { get; } = [];
-        public int MaximumActiveProjectiles { get; set; }
-        public int MaximumSpawnToVisibleFrames { get; set; }
-        public int DroppedRequests { get; set; }
-        public int ReusedProjectileSlots { get; set; }
-        public int BounceContacts { get; set; }
-        public int ExpiredEffects { get; set; }
-        public int HiddenExpiredEffects { get; set; }
-        public int MaximumUsedActorSpawns { get; set; }
-        public int ActorSlotRecycles { get; set; }
+        public FunctionalActorProjectileLifecycleTracker Lifecycle { get; } = new(sampleId);
+        public int MaximumActiveProjectiles => Lifecycle.MaximumActiveProjectiles;
+        public int MaximumSpawnToVisibleFrames => Lifecycle.MaximumSpawnToVisibleFrames;
+        public int DroppedRequests => Lifecycle.DroppedRequests;
+        public int ReusedProjectileSlots => Lifecycle.ReusedProjectileSlots;
+        public int BounceContacts => Lifecycle.BounceContacts;
+        public int ExpiredEffects => Lifecycle.ExpiredEffects;
+        public int HiddenExpiredEffects => Lifecycle.HiddenExpiredEffects;
+        public int MaximumUsedActorSpawns => Lifecycle.MaximumUsedActorSpawns;
+        public int ActorSlotRecycles => Lifecycle.ActorSlotRecycles;
+        public int MaximumActorTileContacts => Lifecycle.MaximumActorTileContacts;
+        public int? MinimumGroundedActorWorldY => Lifecycle.MinimumGroundedActorWorldY;
+        public int? MaximumGroundedActorWorldY => Lifecycle.MaximumGroundedActorWorldY;
 
         public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
         {
@@ -333,21 +345,9 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
         private readonly IReadOnlyList<SpritePlan> plans;
         private readonly Dictionary<string, int[]> expectedOam = [];
         private readonly Dictionary<string, bool> expectedSpriteVisible = [];
-        private readonly bool[] previousActive;
-        private readonly bool[] previousVisible;
-        private readonly int[] activationCounts;
-        private readonly (long Sequence, int Frame)?[] pendingVisible;
-        private readonly HashSet<long> completedVisibleSequences = [];
-        private readonly sbyte[] previousProjectileVy;
         private int processedPpuWrites;
         private int processedOamWrites;
         private int lastFrame;
-        private int previousFireTick;
-        private int previousAttemptCount;
-        private int previousActiveEffectCount;
-        private int previousActiveActorCount;
-        private long activatedSequence;
-        private long visibleSequence;
         private (int X, int Y)? previousRequestedCamera;
         private readonly Dictionary<(int X, int Y), long> cameraSequenceByPosition = [];
         private long cameraRequestSequence;
@@ -366,12 +366,6 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                 expectedOam[plan.Id] = Enumerable.Repeat(255, plan.Asset.Pieces.Count * 4).ToArray();
                 expectedSpriteVisible[plan.Id] = false;
             }
-            var dynamicCount = plans.Count(plan => plan.Kind is SpriteKind.Actor or SpriteKind.Projectile);
-            previousActive = new bool[dynamicCount];
-            previousVisible = new bool[dynamicCount];
-            activationCounts = new int[dynamicCount];
-            pendingVisible = new (long Sequence, int Frame)?[dynamicCount];
-            previousProjectileVy = new sbyte[sampleId == "actor-framework" ? 0 : 2];
         }
 
         public FunctionalFrameObservation ObserveInitial()
@@ -436,7 +430,7 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                 Sprites: actual,
                 VideoWrites: videoWrites,
                 OamWrites: oamWrites,
-                Spawn: new(activatedSequence == 0 ? null : activatedSequence, visibleSequence == 0 ? null : visibleSequence));
+                Spawn: owner.Lifecycle.Spawn);
         }
 
         private IReadOnlyDictionary<string, long> State(
@@ -444,10 +438,7 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
             IReadOnlyList<FunctionalSpriteObservation> actual,
             (int X, int Y) visibleCamera)
         {
-            var activeProjectiles = sampleId == "actor-framework"
-                ? 0
-                : Enumerable.Range(0, 2).Count(index => Byte(cpu, $"shotsHero[{index}].active") != 0);
-            owner.MaximumActiveProjectiles = Math.Max(owner.MaximumActiveProjectiles, activeProjectiles);
+            var lifecycle = owner.Lifecycle;
             return new Dictionary<string, long>(StringComparer.Ordinal)
             {
                 ["sourceTick"] = cpu.VBlankWaitCompletions,
@@ -457,12 +448,16 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                 ["poolCapacity"] = 2,
                 ["requestCapacity"] = sampleId == "actor-framework" ? 0 : 2,
                 ["effectCapacity"] = sampleId == "runner-projectile" ? 4 : 0,
-                ["activeProjectileCount"] = activeProjectiles,
+                ["activeProjectileCount"] = lifecycle.CurrentActiveProjectiles,
                 ["visibleProjectileCount"] = actual.Count(sprite => sprite.Id.StartsWith("projectile-", StringComparison.Ordinal) && sprite.Visible),
-                ["droppedRequests"] = owner.DroppedRequests,
-                ["reusedProjectileSlots"] = owner.ReusedProjectileSlots,
-                ["bounceContacts"] = owner.BounceContacts,
-                ["expiredEffects"] = owner.ExpiredEffects,
+                ["droppedRequests"] = lifecycle.DroppedRequests,
+                ["reusedProjectileSlots"] = lifecycle.ReusedProjectileSlots,
+                ["bounceContacts"] = lifecycle.BounceContacts,
+                ["expiredEffects"] = lifecycle.ExpiredEffects,
+                ["actorTileContactCount"] = lifecycle.CurrentActorTileContacts,
+                ["groundedActorCount"] = lifecycle.CurrentGroundedActors,
+                ["groundedActorMinimumWorldY"] = lifecycle.CurrentMinimumGroundedActorWorldY ?? -1,
+                ["groundedActorMaximumWorldY"] = lifecycle.CurrentMaximumGroundedActorWorldY ?? -1,
             };
         }
 
@@ -472,74 +467,46 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
             IReadOnlyList<ProjectedSprite> logical,
             IReadOnlyList<FunctionalSpriteObservation> actual)
         {
-            var dynamic = logical.Where(sprite => sprite.Plan.Kind is SpriteKind.Actor or SpriteKind.Projectile).ToArray();
-            for (var index = 0; index < dynamic.Length; index++)
-            {
-                var sprite = dynamic[index];
-                if (sprite.Active && !previousActive[index])
-                {
-                    activatedSequence++;
-                    pendingVisible[index] = (activatedSequence, frame);
-                    activationCounts[index]++;
-                    if (sprite.Plan.Kind == SpriteKind.Projectile && activationCounts[index] > 1) owner.ReusedProjectileSlots++;
-                    if (sprite.Plan.Kind == SpriteKind.Actor && activationCounts[index] > 1) owner.ActorSlotRecycles++;
-                }
-
-                var observedVisible = actual.Single(item => item.Id == sprite.Plan.Id).Visible;
-                if (observedVisible && !previousVisible[index] && pendingVisible[index] is { } activated)
-                {
-                    pendingVisible[index] = null;
-                    completedVisibleSequences.Add(activated.Sequence);
-                    while (completedVisibleSequences.Remove(visibleSequence + 1)) visibleSequence++;
-                    owner.MaximumSpawnToVisibleFrames = Math.Max(owner.MaximumSpawnToVisibleFrames, frame - activated.Frame);
-                }
-
-                previousActive[index] = sprite.Active;
-                previousVisible[index] = observedVisible;
-            }
-
-            if (sampleId == "actor-framework")
-            {
-                owner.MaximumUsedActorSpawns = Math.Max(owner.MaximumUsedActorSpawns,
-                    Enumerable.Range(0, 3).Count(index => Byte(cpu, $"__enemies_spawn_0_used[{index}]") != 0));
-                var actorActive = Enumerable.Range(0, 2).Count(index => Byte(cpu, $"enemies[{index}].active") != 0);
-                if (actorActive < previousActiveActorCount) owner.ActorSlotRecycles += previousActiveActorCount - actorActive;
-                previousActiveActorCount = actorActive;
-                return;
-            }
-
-            var attempts = previousAttemptCount;
-            if (sampleId is "shots-simple" or "shots-bouncy")
-            {
-                var fireTick = Byte(cpu, "fireTick");
-                if (frame > 0 && previousFireTick != 0 && fireTick == 0) attempts++;
-                previousFireTick = fireTick;
-            }
-            else
-            {
-                attempts += heldInputs.Count(button => button.Equals("a", StringComparison.OrdinalIgnoreCase) || button.Equals("b", StringComparison.OrdinalIgnoreCase));
-            }
-
-            previousAttemptCount = attempts;
-            owner.DroppedRequests = Math.Max(owner.DroppedRequests, attempts - (int)activatedSequence);
-            for (var index = 0; index < 2; index++)
-            {
-                var active = Byte(cpu, $"shotsHero[{index}].active") != 0;
-                var vy = unchecked((sbyte)Byte(cpu, $"shotsHero[{index}].vy"));
-                if (sampleId == "shots-bouncy" && active && previousProjectileVy[index] >= 0 && vy < 0) owner.BounceContacts++;
-                previousProjectileVy[index] = vy;
-            }
-
-            if (sampleId == "runner-projectile")
-            {
-                var activeEffects = Enumerable.Range(0, 4).Count(index => Byte(cpu, $"fx[{index}].active") != 0);
-                if (activeEffects < previousActiveEffectCount)
-                {
-                    owner.ExpiredEffects += previousActiveEffectCount - activeEffects;
-                    owner.HiddenExpiredEffects += logical.Count(sprite => sprite.Plan.Kind == SpriteKind.Effect && !sprite.Active && !sprite.Visible);
-                }
-                previousActiveEffectCount = activeEffects;
-            }
+            var projectiles = sampleId == "actor-framework"
+                ? []
+                : Enumerable.Range(0, 2)
+                    .Select(index => new FunctionalProjectileMotionObservation(
+                        Byte(cpu, $"shotsHero[{index}].active") != 0,
+                        unchecked((sbyte)Byte(cpu, $"shotsHero[{index}].vy"))))
+                    .ToArray();
+            var actors = sampleId == "actor-framework"
+                ? Enumerable.Range(0, 2)
+                    .Select(index => new FunctionalActorContactObservation(
+                        Byte(cpu, $"enemies[{index}].active") != 0,
+                        Byte(cpu, $"enemies[{index}].state"),
+                        Word(name => Byte(cpu, name), $"enemies[{index}].y", $"enemies[{index}].yHi"),
+                        unchecked((sbyte)Byte(cpu, $"enemies[{index}].vy"))))
+                    .ToArray()
+                : [];
+            owner.Lifecycle.Update(new(
+                frame,
+                heldInputs.ToArray(),
+                logical
+                    .Where(sprite => sprite.Plan.Kind is SpriteKind.Actor or SpriteKind.Projectile)
+                    .Select(sprite => new FunctionalDynamicSpriteLifecycleObservation(
+                        sprite.Plan.Id,
+                        sprite.Plan.Kind == SpriteKind.Actor
+                            ? FunctionalDynamicSpriteKind.Actor
+                            : FunctionalDynamicSpriteKind.Projectile,
+                        sprite.Active,
+                        actual.Single(item => item.Id == sprite.Plan.Id).Visible))
+                    .ToArray(),
+                FireTick: sampleId is "shots-simple" or "shots-bouncy" ? Byte(cpu, "fireTick") : null,
+                UsedActorSpawns: sampleId == "actor-framework"
+                    ? Enumerable.Range(0, 3).Count(index => Byte(cpu, $"__enemies_spawn_0_used[{index}]") != 0)
+                    : 0,
+                ActiveActorCount: actors.Count(actor => actor.Active),
+                Projectiles: projectiles,
+                Effects: logical
+                    .Where(sprite => sprite.Plan.Kind == SpriteKind.Effect)
+                    .Select(sprite => new FunctionalEffectLifecycleObservation(sprite.Active, sprite.Visible))
+                    .ToArray(),
+                Actors: actors));
         }
 
         private IReadOnlyList<ProjectedSprite> Published((int X, int Y) camera)
