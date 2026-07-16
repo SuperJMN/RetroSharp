@@ -29,7 +29,10 @@ byte building are `GameBoyRomLayout.cs`,
 `NesSdkOperationLowerer.cs`, and `PrgBuilder.cs`. Feature partials are the next
 navigation hop, but their file names are not architecture contracts; the ROM
 builders are link/orchestration modules, not the owner of those extracted
-concerns.
+concerns. `GameBoyRomBuilder.cs` and `NesRomBuilder.cs` are therefore explicit
+physical non-owner paths: the compiled owner types above must be declared in
+their contracted root files and must not be declared in either target's ROM
+builder.
 
 ## Guard taxonomy
 
@@ -42,8 +45,10 @@ edits. Focused tests that intentionally exercise frontend stages declare the
 same metadata on the calling method instead of relying on a source fragment.
 
 Physical guards use exact repository paths only for the ten navigation roots
-listed above. Each path assertion carries the physical invariant it protects.
-Feature-partial names, test method names, and private declaration text are not
+and two ROM-builder non-owner paths listed above. Each owner root is paired with
+its compiled `Type` symbol, and generic declaration matching proves the symbol
+is declared there and absent from the target ROM builder. Feature-partial names,
+test method names, and private hand-written declaration fragments are not
 physical contracts.
 
 ## Common change paths

@@ -20,13 +20,11 @@ internal static class ArchitectureSymbolAssertions
         .ToDictionary(opCode => opCode.Value);
 
     public static void AssertSdkOperationOwnership(
-        Assembly assembly,
-        string ownerTypeName,
-        string runtimeTypeName)
+        Type owner,
+        Type runtime)
     {
-        var owner = RequiredType(assembly, ownerTypeName);
-        var runtime = RequiredType(assembly, runtimeTypeName);
-        var operationEntryPoints = assembly
+        Assert.Equal(owner.Assembly, runtime.Assembly);
+        var operationEntryPoints = owner.Assembly
             .GetTypes()
             .SelectMany(type => type.GetMethods(DeclaredMethods))
             .Where(method =>
@@ -230,6 +228,21 @@ internal static class ArchitectureSymbolAssertions
             .ToArray();
 
         Assert.Equal(expectedFocusedSuites, declaredFocusedSuites);
+
+        var expectedFocusedSuiteSet = expectedFocusedSuites.ToHashSet();
+        var markedMethods = compilerIntegrationSuite.Assembly
+            .GetTypes()
+            .SelectMany(type => type.GetMethods(DeclaredMethods))
+            .Where(method => HasTrait(method, ownershipTrait, sdkLowering))
+            .ToList();
+        Assert.All(expectedFocusedSuites, suite => Assert.All(
+            TestMethods(suite),
+            method => Assert.True(HasTrait(method, ownershipTrait, sdkLowering))));
+        Assert.All(markedMethods, method =>
+        {
+            Assert.NotNull(method.DeclaringType);
+            Assert.Contains(method.DeclaringType!, expectedFocusedSuiteSet);
+        });
     }
 
     public static void AssertCallsToTypesHaveDeclaredTestOwnership(
@@ -402,6 +415,28 @@ internal static class ArchitectureSymbolAssertions
             attribute.ConstructorArguments is [{ Value: string traitName }, { Value: string traitValue }] &&
             traitName == name &&
             traitValue == value);
+    }
+
+    private static IEnumerable<MethodInfo> TestMethods(Type suite)
+    {
+        return suite
+            .GetMethods(DeclaredMethods)
+            .Where(method => method.CustomAttributes.Any(attribute =>
+                IsAttribute(attribute.AttributeType, "Xunit.FactAttribute") ||
+                IsAttribute(attribute.AttributeType, "Xunit.TheoryAttribute")));
+    }
+
+    private static bool IsAttribute(Type attribute, string fullName)
+    {
+        for (var current = attribute; current is not null; current = current.BaseType)
+        {
+            if (current.FullName == fullName)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private readonly record struct IlInstruction(byte[] Bytes, OpCode OpCode, int OperandOffset);

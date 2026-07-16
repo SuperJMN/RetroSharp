@@ -69,10 +69,11 @@ consume streams and route operations, but the lowerer must not call back into a
 runtime compiler. Exact paths remain tests only when physical separation itself
 is the contract. The remaining physical contracts are the five documented
 layout/runtime/stream/lowerer/builder navigation roots per target; feature
-partial names are deliberately rename-safe. Focused SDK suites and intentional
-focused frontend callers declare compiled `RetroSharp.TestOwnership` metadata,
-while executable-member enumeration and IL traversal are shared by all symbol
-guards.
+partial names are deliberately rename-safe. Compiled owner types must be
+declared in those roots and absent from `GameBoyRomBuilder.cs` or
+`NesRomBuilder.cs`. Every focused SDK test method, plus intentional focused
+frontend callers, declares compiled `RetroSharp.TestOwnership` metadata, while
+executable-member enumeration and IL traversal are shared by all symbol guards.
 
 The concrete compiler adapters remain responsible for target catalogs and
 capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,

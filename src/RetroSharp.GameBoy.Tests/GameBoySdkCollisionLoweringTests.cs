@@ -10,6 +10,7 @@ using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 public sealed class GameBoySdkCollisionLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_world_tile_flags_value_operation_through_the_production_seam()
     {
         var builder = new GbBuilder();
@@ -35,6 +36,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Lowers_camera_aabb_value_operation_through_the_production_seam()
     {
         const string source = """
@@ -67,6 +69,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_world_tile_flags_query_with_byte_backed_coordinates()
     {
         const string source = """
@@ -88,6 +91,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_camera_aabb_tiles_query_with_byte_backed_world_y()
     {
         const string source = """
@@ -114,6 +118,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_camera_aabb_tiles_query_with_sprite_width_extent()
     {
         const string source = """
@@ -135,6 +140,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_camera_aabb_tiles_query_with_constant_world_y_offset()
     {
         const string source = """
@@ -156,6 +162,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_camera_aabb_hit_top_query_with_sprite_width_and_search_offset()
     {
         const string source = """
@@ -183,6 +190,7 @@ public sealed class GameBoySdkCollisionLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Collects_actor_pool_tile_helpers_as_camera_aabb_operations()
     {
         const string source = """

@@ -7,6 +7,7 @@ using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 public sealed class GameBoySdkAnimationLoweringTests
 {
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Animation_frame_maps_constant_ticks_through_looping_clip_data()
     {
         const string source = """
@@ -32,6 +33,7 @@ public sealed class GameBoySdkAnimationLoweringTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Animation_frame_lowers_dynamic_ticks_with_predictable_modulo_and_boundary_checks()
     {
         const string source = """

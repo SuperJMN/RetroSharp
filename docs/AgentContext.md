@@ -12,8 +12,9 @@ This document preserves project knowledge that previously lived only in agent me
   Game Boy and four NES focused lowering suites declare typed test-ownership
   metadata instead of method-name/file-fragment allowlists. Shared reflection
   helpers own executable-member enumeration and IL traversal. Exact paths remain
-  only for the five documented physical navigation roots per target, while
-  runtime feature-partial names are deliberately free to change.
+  only for the five documented physical navigation roots and explicit ROM-
+  builder non-owner path per target. Each root is bound to compiled owner types;
+  runtime feature-partial and test method names are deliberately free to change.
 - AIN-11 / #377 finishes target SDK-lowering test locality. A regression belongs
   in a focused lowering suite when its primary observable is collected SDK
   operations, target capabilities or diagnostics, emitted bytes, runtime

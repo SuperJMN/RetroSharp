@@ -33,9 +33,8 @@ public sealed class ArchitectureSymbolAssertionsTests
     public void Sdk_ownership_guard_rejects_a_runtime_compiler_backedge_from_a_type_initializer()
     {
         Assert.ThrowsAny<Exception>(() => ArchitectureSymbolAssertions.AssertSdkOperationOwnership(
-            typeof(ArchitectureSymbolAssertionsTests).Assembly,
-            typeof(LeakingSdkOwner).FullName!,
-            typeof(LeakingRuntimeCompiler).FullName!));
+            typeof(LeakingSdkOwner),
+            typeof(LeakingRuntimeCompiler)));
     }
 
     [Fact]
@@ -53,6 +52,17 @@ public sealed class ArchitectureSymbolAssertionsTests
         Assert.ThrowsAny<Exception>(() => ArchitectureSymbolAssertions.AssertFocusedTestOwnership(
             typeof(FixtureCompilerIntegrationSuite),
             []));
+    }
+
+    [Fact]
+    public void Physical_guard_rejects_an_owner_mapped_to_the_wrong_file()
+    {
+        Assert.ThrowsAny<Exception>(() => ArchitecturePhysicalAssertions.AssertModuleOwnership(
+            "src/RetroSharp.Architecture.Tests/ArchitecturePhysicalAssertions.cs",
+            new PhysicalFileContract(
+                "src/RetroSharp.Architecture.Tests/ArchitectureSymbolAssertionsTests.cs",
+                "Fixture owner must be declared by its contracted file.",
+                [typeof(ArchitectureSymbolAssertions)])));
     }
 
     private sealed class LeakingSdkOwner
@@ -107,8 +117,16 @@ public sealed class ArchitectureSymbolAssertionsTests
     [Trait("RetroSharp.TestOwnership", "CompilerIntegration")]
     private sealed class FixtureCompilerIntegrationSuite;
 
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-    private sealed class MisplacedLoweringSuite;
+#pragma warning disable xUnit1000 // Compiled test metadata fixture; it must not be discovered as a real suite.
+    private sealed class MisplacedLoweringSuite
+    {
+        [Fact]
+        [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+        public void Misplaced_lowering_test()
+        {
+        }
+    }
+#pragma warning restore xUnit1000
 
     private readonly record struct FixtureRuntimeRange(ushort Start, int Length)
     {
