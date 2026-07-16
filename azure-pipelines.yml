@@ -6,7 +6,6 @@ variables:
 steps:
 - checkout: self
   fetchDepth: 0
-  submodules: recursive
 
 - pwsh: dotnet tool install --global DotnetDeployer.Tool
   displayName: Install DotnetDeployer

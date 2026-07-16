@@ -18,7 +18,7 @@ RetroSharp has three layers that should stay separate:
   control flow, and zero-cost source ergonomics.
 - **Portable 2D SDK**: capability-checked game APIs for frames, input, worlds,
   cameras, sprites, palettes, music, animation, and actors.
-- **Target intrinsics and lowering**: Game Boy, NES, Z80, and future
+- **Target intrinsics and lowering**: Game Boy, NES, and future
   hardware-specific behavior.
 
 The language should not know what a sprite, camera, tilemap, joypad, or palette
@@ -26,14 +26,10 @@ register is. Those concepts belong in the SDK or in explicit target intrinsics.
 
 ## Compilation paths
 
-RetroSharp's original compiler path uses a multi-stage pipeline:
-
-1. **Parser**: Uses ANTLR4 to parse RetroSharp source code into an AST
-2. **Semantic Analysis**: Validates types, scopes, and semantics
-3. **Intermediate Code Generation**: Produces platform-agnostic 3-address code (IL)
-4. **Backend**: Translates IL to target architecture (currently Zilog Z80)
-
-The repository now also contains early cartridge targets that compile a constrained RetroSharp video subset directly to ROMs:
+RetroSharp parses and prepares source through a shared target-neutral frontend,
+then lowers it directly through one of two cartridge targets. The CLI requires
+an explicit `--target` for standalone source files and manifests that do not
+declare `target` or `targets`:
 
 - `--target nes`: emits an iNES mapper 0 ROM for static background/tile drawing plus tick-based input, logical sprites, horizontal camera streaming, four-screen 2-axis camera movement, Tiled `World.Load(...)`, runtime animation helpers, camera-relative runner collision, and VGM/VGZ-sourced 2A03 BGM playback. HUD and generic world-space collision are still not implemented.
 - `--target gb`: emits a 32 KiB ROM-only Game Boy cartridge when the program fits, or an MBC1 banked ROM when large music assets need more space. It supports static background/map setup and a first runtime sprite loop subset with local byte-backed variables, assignment, `if`/`else if`/`else`, `while`, `for`, half-open range `for`, `Video.WaitVBlank()`, tick-based input polling, `Scroll.Set(...)`, position-based camera X/Y scrolling with runtime row/column streaming, `Sprite.Set(...)`, simple source-map tile queries for collision, joypad button queries, hUGETracker `.uge` BGM playback, `.gbapu`/`.gbapu.json` APU trace playback, and VGM/VGZ-sourced DMG playback through the same compact on-ROM trace repack. Bank selection for banked BGM data is emitted by the runtime; source code keeps using `Music.Asset(...)`, `Music.Play(...)`, and `Audio.Update()`.
@@ -162,15 +158,14 @@ reference.
 
 ## Which platforms does it compile for?
 
-The original backend targets the **Zilog Z80** processor - one of the most iconic 8-bit CPUs of all time! The Z80 powered legendary systems like:
+The active targets are Game Boy and NES, implemented under
+`src/RetroSharp.GameBoy` and `src/RetroSharp.NES`. Runnable samples live under
+`samples/`; only samples marked `portable-sdk` in `samples/manifest.json` are
+cross-target SDK evidence.
 
-- Nintendo Game Boy
-- Amstrad CPC
-- MSX computers
-- TRS-80
-- And many arcade machines
-
-There are also experimental ROM targets for NES and Game Boy under `src/RetroSharp.NES` and `src/RetroSharp.GameBoy`, with runnable samples under `samples/`. Sample portability is tracked in `samples/manifest.json`; only samples marked `portable-sdk` are treated as evidence for cross-target SDK behavior.
+The retired Z80 compiler path, its exact recovery commit, and the two external
+forks it used are recorded in
+[`docs/LegacyZ80Compiler.md`](docs/LegacyZ80Compiler.md).
 
 ## Installation
 
@@ -183,7 +178,7 @@ dotnet tool install --global RetroSharp
 Then use it to compile your programs:
 
 ```bash
-retroSharp myprogram.rs
+retrosharp --target gb --out myprogram.gb myprogram.rs
 ```
 
 Build the Game Boy runner sample from source:

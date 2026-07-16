@@ -106,20 +106,19 @@ The pipeline automatically:
 
 ## Tool Architecture
 
-RetroSharp follows a classic compiler architecture:
+RetroSharp shares a target-neutral frontend and then lowers directly through a
+cartridge target:
 
 ```
 Source Code (.rs) 
     ↓
 Parser (ANTLR4) → AST
     ↓
-Semantic Analysis → Enriched AST
+TargetFrontendPreparation
     ↓
-Intermediate Code Generation → 3-Address Code
+Game Boy lowerer ──or── NES lowerer
     ↓
-Z80 Backend → Assembly
-    ↓
-Z80 Simulator (for testing)
+Cartridge ROM (.gb / .nes)
 ```
 
 For detailed architecture information, see `WARP.md`.

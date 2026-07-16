@@ -1,5 +1,5 @@
 # RetroSharp
-> A C#-inspired language, compiler, and zero-cost 2D framework for 8-bit targets, with classic Z80 output and experimental NES/Game Boy ROM targets.
+> A C#-inspired language, compiler, and zero-cost 2D framework with direct Game Boy and NES cartridge targets.
 
 ## Agent Entry Points
 - [AGENTS.md](AGENTS.md): generic AI CLI agent rules, read order, validation, and publication workflow.
@@ -8,6 +8,7 @@
 - [docs/SdkArchitecture.md](docs/SdkArchitecture.md): frontend preparation, Actor Framework domain-state/contribution seams, and target SDK ownership navigation.
 - [WARP.md](WARP.md): Warp-specific repository guide.
 - [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.
+- [docs/LegacyZ80Compiler.md](docs/LegacyZ80Compiler.md): retired Z80 compiler path, exact recovery commit, and fork provenance.
 
 ## Core Documentation
 - [README.md](README.md): project overview and examples.
@@ -42,7 +43,6 @@
 - [src/RetroSharp.NES/](src/RetroSharp.NES/): direct NES ROM compiler and runtime lowering.
 - [src/RetroSharp.Parser/](src/RetroSharp.Parser/): parser.
 - [src/RetroSharp.SemanticAnalysis/](src/RetroSharp.SemanticAnalysis/): semantic analysis.
-- [src/RetroSharp.Z80/](src/RetroSharp.Z80/): Z80 backend.
 - [samples/actor-framework/actors.rs](samples/actor-framework/actors.rs): Game Boy/NES target-acceptance actor framework sample with fixed pools, enemy definitions, Tiled spawns, runtime activation, and camera-relative helpers.
 - [samples/runner/runner.retrosharp.json](samples/runner/runner.retrosharp.json): shared Game Boy/NES target-acceptance runner project that lists [samples/runner/src/main.rs](samples/runner/src/main.rs) plus helper/state code under [samples/runner/src/](samples/runner/src/) and uses per-target VGM/VGZ background music.
 - [samples/runner/assets/maps/runner.tmj](samples/runner/assets/maps/runner.tmj): editable Tiled runner map.

@@ -11,8 +11,8 @@
     <PackageId>RetroSharp.Tool</PackageId>
     <Version>0.1.0</Version>
     <Authors>SuperJMN</Authors>
-    <Description>A modern C#-like language that compiles to 8-bit architectures (Z80)</Description>
-    <PackageTags>compiler;8bit;z80;retro;csharp;language</PackageTags>
+    <Description>A modern C#-like language and zero-cost 2D framework for Game Boy and NES</Description>
+    <PackageTags>compiler;8bit;gameboy;nes;retro;csharp;language</PackageTags>
     <RepositoryUrl>https://github.com/SuperJMN/RetroSharp</RepositoryUrl>
     <PackageProjectUrl>https://github.com/SuperJMN/RetroSharp</PackageProjectUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -23,14 +23,8 @@
   </ItemGroup>
   
   <ItemGroup>
-    <ProjectReference Include="..\RetroSharp.Parser\RetroSharp.Parser.csproj" />
-    <ProjectReference Include="..\RetroSharp.SemanticAnalysis\RetroSharp.SemanticAnalysis.csproj" />
-    <ProjectReference Include="..\RetroSharp.Generation.Intermediate\RetroSharp.Generation.Intermediate.csproj" />
-    <ProjectReference Include="..\RetroSharp.Z80\RetroSharp.Z80.csproj" />
     <ProjectReference Include="..\RetroSharp.NES\RetroSharp.NES.csproj" />
     <ProjectReference Include="..\RetroSharp.GameBoy\RetroSharp.GameBoy.csproj" />
-    <ProjectReference Include="..\..\libs\Z80DotNet\Main\Main.csproj" />
-    <ProjectReference Include="..\..\libs\6502DotNet\Sixty502DotNet.Shared\Sixty502DotNet.Shared.csproj" />
     <ProjectReference Include="..\RetroSharp.Sdk.Plugins.Platformer2D\RetroSharp.Sdk.Plugins.Platformer2D.csproj" />
   </ItemGroup>
 </Project>

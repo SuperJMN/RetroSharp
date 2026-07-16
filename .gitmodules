@@ -1,6 +1,0 @@
-[submodule "6502DotNet"]
-	path = libs/6502DotNet
-	url = https://github.com/SuperJMN/6502.Net.git
-[submodule "Z80DotNet"]
-	path = libs/Z80DotNet
-	url = https://github.com/SuperJMN/Z80dotNet.git

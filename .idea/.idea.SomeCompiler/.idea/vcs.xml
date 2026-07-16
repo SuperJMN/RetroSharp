@@ -2,9 +2,5 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/6502DotNet" vcs="" />
-    <mapping directory="$PROJECT_DIR$/Z80DotNet" vcs="" />
-    <mapping directory="$PROJECT_DIR$/libs/6502DotNet" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/libs/Z80DotNet" vcs="Git" />
   </component>
 </project>
