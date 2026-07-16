@@ -4,6 +4,7 @@
 ## Agent Entry Points
 - [AGENTS.md](AGENTS.md): generic AI CLI agent rules, read order, validation, and publication workflow.
 - [docs/AgentContext.md](docs/AgentContext.md): memory-derived project context, known traps, recent changes, and reliable commands.
+- [docs/SdkArchitecture.md](docs/SdkArchitecture.md): frontend preparation, Actor Framework domain-state/contribution seams, and target SDK ownership navigation.
 - [WARP.md](WARP.md): Warp-specific repository guide.
 - [docs/AgentExecution.md](docs/AgentExecution.md): roadmap-to-GitHub issue execution workflow.
 
@@ -32,6 +33,8 @@
 ## Core Source Paths
 - [src/RetroSharp.Cli/Program.cs](src/RetroSharp.Cli/Program.cs): CLI option parsing and target dispatch.
 - [src/RetroSharp.Core/](src/RetroSharp.Core/): shared compiler/SDK concepts.
+- [src/RetroSharp.Sdk.Frontend/](src/RetroSharp.Sdk.Frontend/): source-package preparation and the single Actor Framework plan with actor/spawn/projectile/effect/generated-call state modules.
+- [src/RetroSharp.Architecture.Tests/](src/RetroSharp.Architecture.Tests/): compiled-symbol and IL-call-edge ownership guards plus intentional physical module checks.
 - [src/RetroSharp.FunctionalAcceptance/](src/RetroSharp.FunctionalAcceptance/): target-neutral functional ROM scenario runner, observation contract, and deterministic reports.
 - [src/RetroSharp.GameBoy/](src/RetroSharp.GameBoy/): direct Game Boy ROM compiler and runtime lowering.
 - [src/RetroSharp.NES/](src/RetroSharp.NES/): direct NES ROM compiler and runtime lowering.
@@ -52,7 +55,7 @@ git diff --check
 dotnet test RetroSharp.sln -m:1
 tools/gameboy/generate_sample_roms.py --dry-run
 tools/gameboy/generate_sample_roms.py
-dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out samples/runner/runner.nes samples/runner/runner.retrosharp.json
+dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --runtime-abi-out samples/runner/bin/runner.nes.runtime-abi.json --out samples/runner/bin/runner.nes samples/runner/runner.retrosharp.json
 PYTHONPATH=/tmp/retrosharp-pyboy-site python3 tools/gameboy/runner_diagnostics.py
 ```
 

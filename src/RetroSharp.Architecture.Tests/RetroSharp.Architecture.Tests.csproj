@@ -19,4 +19,11 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../RetroSharp.Core/RetroSharp.Core.csproj" />
+    <ProjectReference Include="../RetroSharp.GameBoy/RetroSharp.GameBoy.csproj" />
+    <ProjectReference Include="../RetroSharp.NES/RetroSharp.NES.csproj" />
+    <ProjectReference Include="../RetroSharp.Sdk.Frontend/RetroSharp.Sdk.Frontend.csproj" />
+  </ItemGroup>
 </Project>

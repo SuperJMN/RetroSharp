@@ -214,11 +214,11 @@ Portable 2D calls should be represented as semantic operations before target low
 
 The collector itself is target-neutral and lives in a dedicated SDK-frontend assembly, `RetroSharp.Sdk.Frontend` (namespace `RetroSharp.Sdk`): `Sdk2DOperationCollector` (with `SdkCallReader` for argument parsing) walks the parsed main block and inlined user functions for any target. It references the parser and `Core` but is **not** part of the language assembly, so SDK call-name knowledge does not live in the language front-end. Both Game Boy and NES run this one collector and then validate the resulting operations through `Sdk2DOperationValidator` against their own `Target2DCapabilities` before lowering, so the portable boundary is no longer Game Boy-only. The same collector also exposes `CollectFrameBudgets(...)`, a control-flow-aware budget pass that treats branches as alternatives and frame waits/input polls as frame boundaries. Targets supply resolved metasprite geometry for `Sprite.Draw(...)`, allowing total hardware sprite checks and per-scanline checks when Y is constant; runtime Y positions remain outside static scanline proof.
 
-Each target has one stateful lowerer that maps an `Sdk2DOperation` to substantive target emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. Their feature partials own frame/input, logical-sprite, camera/streaming, and collision emission directly. The runtime compilers route migrated statement and value calls through the collected operation stream and expose only small concrete operand/storage contexts, so an operation drives emission instead of being reconstructed from the AST. Raw and transitional target calls may reuse lowerer-owned internal helpers without becoming new portable operations.
+Each target has one stateful lowerer that maps an `Sdk2DOperation` to substantive target emission: `GameBoySdkOperationLowerer` and `NesSdkOperationLowerer`. Their feature partials own frame/input, logical-sprite, camera/streaming, and collision emission directly. The runtime compilers route migrated statement and value calls through the collected operation stream and expose only small concrete operand/storage contexts, so an operation drives emission instead of being reconstructed from the AST. Raw and transitional target calls may reuse lowerer-owned internal helpers without becoming new portable operations. Architecture guards enforce this direction from compiled operation-entry symbols and IL call edges rather than feature-file names or private emitter names; a lowerer-to-runtime backedge is an ownership failure.
 
 Byte facts use `SdkByteExpression` and logical camera/world operands use `SdkWordExpression`; both retain the `Constant | Variable` shape. A variable carries a typed `SdkStorageLocation` that targets resolve only at the backend boundary. `Camera.AabbTiles` carries byte screen X plus word world Y. `Camera.AabbHitTop` carries the same AABB shape and returns the complete aligned world top, or `0xFFFF` for no hit. Game Boy `HL` and NES `A:X` materialize every `I16` intrinsic result; screen-relative hit-top remains byte-range but zero-extends to a complete word.
 
-The IR stays at the immediate-value-or-storage-location level without gaining general source syntax trees. Game Boy runtime lowering consumes `program.SdkOperations`; NES retains that complete list for capability validation and consumes a reachability-aligned `program.SdkOperationStream`. Target-owned stream readers handle migrated statement and value calls, and both targets route camera-AABB value operations through the same lowerer instance used for statement operations. The stream readers fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
+The IR stays at the immediate-value-or-storage-location level without gaining general source syntax trees. Both targets retain a flattened operation list for capability validation. During runtime emission, Game Boy consumes a reachability-aligned `Sdk2DProgram` with separate main and named-subroutine streams, while NES consumes its reachability-aligned flat `SdkOperationStream`. Target-owned stream readers handle migrated statement and value calls, and both targets route camera-AABB value operations through the same lowerer instance used for statement operations. The stream readers fail if a source call and the next collected operation disagree, or if collected operations remain after emission.
 
 The SDK-as-library slice is now in place. Project manifests load
 `RetroSharp.Portable2D` through `libraries`, while standalone source can declare
@@ -518,6 +518,8 @@ Where each piece lives:
 - Operation collection from source: `RetroSharp.Sdk.Frontend` (SDK-frontend assembly).
 - Portable operation records, validator, capabilities, world/Tiled model: `RetroSharp.Core.Sdk` and `RetroSharp.Core.Targeting`.
 - Per-target lowering: `GameBoySdkOperationLowerer` / `NesSdkOperationLowerer`; target runtime compilers own syntax/control-flow traversal and stream consumption, not migrated portable SDK emission.
+- Actor Framework lowering: enter through the single `ActorFrameworkLowerer` plan, then follow actor/spawn/projectile/effect domain state and generation symbols; generated program/name facts join through one ordered domain contribution catalog.
+- Ownership validation: `RetroSharp.Architecture.Tests` resolves compiled symbols and IL dependency edges; use exact source paths only for an intentionally physical module contract.
 
 ## Shared World Map Resource
 
@@ -836,7 +838,7 @@ Acceptance criteria:
 
 - Status: landed 2026-06-08.
 - Layer: portable SDK infrastructure.
-- Candidate files: a shared target/SDK project such as `src/RetroSharp.Targeting/`, or a shared namespace used by `RetroSharp.GameBoy` and `RetroSharp.NES`.
+- Landed module: `src/RetroSharp.Core/Targeting/`, shared by `RetroSharp.GameBoy` and `RetroSharp.NES`.
 - Steps:
   - Add a `Target2DCapabilities` record or class with the fields listed in the Capability Model section.
   - Add small value types or enums for scroll axes, sprite size modes, and HUD modes.

@@ -162,8 +162,8 @@ public static partial class ActorFrameworkLowerer
                 throw new InvalidOperationException($"{pool.Name}.Request kind must be a projectile identifier.");
             }
 
-            state.ProjectileDef(kind.Identifier);
-            var prefix = state.NextProjectileRequestPrefix(pool);
+            state.Projectiles.Definition(kind.Identifier);
+            var prefix = state.GeneratedCalls.NextProjectileRequestPrefix(pool);
             var indexName = $"{prefix}_i";
             var writtenName = $"{prefix}_written";
             var result = parameters.Count >= 5 ? ExpressionToLValue(parameters[4], $"{pool.Name}.Request result") : null;
@@ -215,7 +215,7 @@ public static partial class ActorFrameworkLowerer
             RequireProjectileDefs(state, $"{pool.Name}.ProcessRequests");
 
             var requestIndex = $"__{pool.Name}_process_request_i";
-            var branches = state.ProjectileDefs
+            var branches = state.Projectiles.Definitions
                 .Select(def => new KindBranch(def.Name, new BlockSyntax(ProjectileSpawnFromRequestStatements(pool, requestIndex, def, state).ToList())))
                 .ToList();
 
@@ -290,7 +290,7 @@ public static partial class ActorFrameworkLowerer
 
         private static IReadOnlyList<StatementSyntax> ProjectileUpdateTeamStatements(ProjectilePool pool, string team, ActorFrameworkState state)
         {
-            var defs = state.ProjectileDefs.Where(def => def.Team == team).ToList();
+            var defs = state.Projectiles.Definitions.Where(def => def.Team == team).ToList();
             if (defs.Count == 0)
             {
                 return [];
@@ -454,7 +454,7 @@ public static partial class ActorFrameworkLowerer
 
         private static IReadOnlyList<StatementSyntax> ProjectileDrawTeamStatements(ProjectilePool pool, string team, ActorFrameworkState state)
         {
-            var defs = state.ProjectileDefs.Where(def => def.Team == team).ToList();
+            var defs = state.Projectiles.Definitions.Where(def => def.Team == team).ToList();
             if (defs.Count == 0)
             {
                 return [];
@@ -532,7 +532,7 @@ public static partial class ActorFrameworkLowerer
             ExpressionSyntax flags,
             ActorFrameworkState state)
         {
-            var defs = state.ProjectileDefs.Where(def => def.Team == team && def.TileCollision != "None").ToList();
+            var defs = state.Projectiles.Definitions.Where(def => def.Team == team && def.TileCollision != "None").ToList();
             if (defs.Count == 0)
             {
                 return [];
@@ -623,7 +623,7 @@ public static partial class ActorFrameworkLowerer
         private static IReadOnlyList<StatementSyntax> ProjectileTouchActorsStatements(ProjectilePool pool, QualifiedCallSyntax call, ActorFrameworkState state)
         {
             var parameters = RequireArguments(call, 1);
-            if (parameters[0] is not IdentifierSyntax actorPoolName || !state.TryPool(actorPoolName.Identifier, out var actorPool))
+            if (parameters[0] is not IdentifierSyntax actorPoolName || !state.Actors.TryPool(actorPoolName.Identifier, out var actorPool))
             {
                 throw new InvalidOperationException($"{pool.Name}.TouchActors expects an actor pool identifier.");
             }
@@ -631,7 +631,7 @@ public static partial class ActorFrameworkLowerer
             RequireProjectileDefs(state, $"{pool.Name}.TouchActors");
             Actors.RequireEnemyDefs(state, $"{pool.Name}.TouchActors");
 
-            var heroDefs = state.ProjectileDefs.Where(def => def.Team == "Hero").ToList();
+            var heroDefs = state.Projectiles.Definitions.Where(def => def.Team == "Hero").ToList();
             if (heroDefs.Count == 0)
             {
                 return [];
@@ -669,7 +669,7 @@ public static partial class ActorFrameworkLowerer
             ActorScreenProjection actorProjection,
             ActorFrameworkState state)
         {
-            var actorBranches = state.EnemyDefs
+            var actorBranches = state.Actors.EnemyDefs
                 .Select(enemyDef => new KindBranch(enemyDef.Name, ProjectileTouchActorKindBlock(pool, projectileIndex, actorPool, actorIndex, projectileDef, enemyDef, projectileProjection, actorProjection, state)))
                 .ToList();
 
@@ -742,7 +742,7 @@ public static partial class ActorFrameworkLowerer
             var damageTarget = ExpressionToLValue(parameters[4], $"{pool.Name}.TouchHero damage target");
             RequireProjectileDefs(state, $"{pool.Name}.TouchHero");
 
-            var enemyDefs = state.ProjectileDefs.Where(def => def.Team == "Enemy").ToList();
+            var enemyDefs = state.Projectiles.Definitions.Where(def => def.Team == "Enemy").ToList();
             if (enemyDefs.Count == 0)
             {
                 return [];
@@ -823,8 +823,8 @@ public static partial class ActorFrameworkLowerer
                 throw new InvalidOperationException($"Projectiles.Pool for '{projectilePool.Name}' must declare an effects pool before Projectiles.Def '{projectileDef.Name}' can emit effect '{effectName}'.");
             }
 
-            state.EffectDef(effectName);
-            var effectPool = state.EffectPool(projectilePool.EffectPoolName);
+            state.Effects.Definition(effectName);
+            var effectPool = state.Effects.Pool(projectilePool.EffectPoolName);
             return Effects.EnqueueStatements(
                 effectPool,
                 new IdentifierSyntax(effectName),
@@ -832,12 +832,12 @@ public static partial class ActorFrameworkLowerer
                 xHi,
                 y,
                 yHi,
-                state.NextEffectRequestPrefix(effectPool, $"{purpose}_{projectileDef.Name}"));
+                state.GeneratedCalls.NextEffectRequestPrefix(effectPool, $"{purpose}_{projectileDef.Name}"));
         }
 
         private static void RequireProjectileDefs(ActorFrameworkState state, string callName)
         {
-            if (state.ProjectileDefs.Count == 0)
+            if (state.Projectiles.Definitions.Count == 0)
             {
                 throw new InvalidOperationException($"{callName} requires at least one Projectiles.Def declaration.");
             }

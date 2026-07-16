@@ -1,9 +1,9 @@
 namespace RetroSharp.Architecture.Tests;
 
+using RetroSharp.NES;
+
 public sealed class NesSdkLoweringArchitectureTests
 {
-    private const string LowererPath = "src/RetroSharp.NES/NesSdkOperationLowerer.cs";
-
     private static readonly string[] PurposeNamedModules =
     [
         "src/RetroSharp.NES/NesCartridgeLayout.cs",
@@ -22,17 +22,6 @@ public sealed class NesSdkLoweringArchitectureTests
         "src/RetroSharp.NES/NesRuntimeCompiler.Expressions.cs",
         "src/RetroSharp.NES/NesRuntimeCompiler.Functions.cs",
         "src/RetroSharp.NES/NesRuntimeCompiler.Storage.cs",
-    ];
-
-    private static readonly string[] SdkFeatureModules =
-    [
-        "src/RetroSharp.NES/NesSdkOperationLowerer.CameraMovement.cs",
-        "src/RetroSharp.NES/NesSdkOperationLowerer.FrameInput.cs",
-        "src/RetroSharp.NES/NesSdkOperationLowerer.Sprites.cs",
-        "src/RetroSharp.NES/NesSdkOperationLowerer.CameraStreaming.cs",
-        "src/RetroSharp.NES/NesSdkOperationLowerer.Collision.cs",
-        "src/RetroSharp.NES/NesSdkOperationLowerer.Compatibility.cs",
-        "src/RetroSharp.NES/NesSdkOperationLowerer.StreamingRuntime.cs",
     ];
 
     private static readonly (string TestName, string FocusedFile)[] FocusedLoweringTests =
@@ -72,49 +61,10 @@ public sealed class NesSdkLoweringArchitectureTests
     [Fact]
     public void Nes_sdk_lowerer_owns_emission_without_delegating_to_runtime_compiler()
     {
-        var root = RepositoryRoot();
-        var lowererSource = File.ReadAllText(Path.Combine(root, LowererPath));
-
-        Assert.DoesNotContain("NesRuntimeCompiler", lowererSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("interface INesSdkLoweringTarget", lowererSource, StringComparison.Ordinal);
-        Assert.Contains("sealed partial class NesSdkOperationLowerer", lowererSource, StringComparison.Ordinal);
-        Assert.Contains("public void Emit(Sdk2DOperation operation)", lowererSource, StringComparison.Ordinal);
-
-        foreach (var path in SdkFeatureModules)
-        {
-            var fullPath = Path.Combine(root, path);
-            Assert.True(File.Exists(fullPath), $"NES SDK feature module '{path}' must exist.");
-            var source = File.ReadAllText(fullPath);
-            Assert.Contains("partial class NesSdkOperationLowerer", source, StringComparison.Ordinal);
-            Assert.Contains("builder.", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("NesRuntimeCompiler", source, StringComparison.Ordinal);
-        }
-
-        var runtimeSources = Directory
-            .GetFiles(Path.Combine(root, "src/RetroSharp.NES"), "NesRuntimeCompiler*.cs")
-            .Select(File.ReadAllText)
-            .ToArray();
-        Assert.Contains(runtimeSources, source => source.Contains("sdkOperationLowerer.Emit(", StringComparison.Ordinal));
-        Assert.Contains(runtimeSources, source => source.Contains("sdkOperations.ConsumeOperation<", StringComparison.Ordinal));
-        var runtimeMain = File.ReadAllText(Path.Combine(root, "src/RetroSharp.NES/NesRuntimeCompiler.cs"));
-        Assert.Contains("new NesSdkStreamReader(program.SdkOperationStream)", runtimeMain, StringComparison.Ordinal);
-        Assert.DoesNotContain("new NesSdkStreamReader(program.SdkOperations)", runtimeMain, StringComparison.Ordinal);
-
-        var romCompiler = File.ReadAllText(Path.Combine(root, "src/RetroSharp.NES/NesRomCompiler.cs"));
-        Assert.Contains("var sdkOperations = Sdk2DOperationCollector.CollectForValidation(", romCompiler, StringComparison.Ordinal);
-        Assert.Contains("var sdkOperationStream = Sdk2DOperationCollector.CollectReachable(", romCompiler, StringComparison.Ordinal);
-        Assert.All(runtimeSources, source =>
-        {
-            Assert.DoesNotContain("void EmitPollInput()", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitDrawLogicalSprite(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitSetCameraPosition(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitStreamMapColumn(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitCameraAabbTiles(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitButtonDown(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitCameraStateInitialization(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("void EmitOamShadowClear(", source, StringComparison.Ordinal);
-            Assert.DoesNotContain("record struct NesCameraConfig", source, StringComparison.Ordinal);
-        });
+        ArchitectureSymbolAssertions.AssertSdkOperationOwnership(
+            typeof(NesRomCompiler).Assembly,
+            "RetroSharp.NES.NesSdkOperationLowerer",
+            "RetroSharp.NES.NesRuntimeCompiler");
     }
 
     [Fact]

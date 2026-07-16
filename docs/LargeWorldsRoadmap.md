@@ -20,6 +20,15 @@ NES mapper-backed data, collision, art residency, and acceptance validation.
 boundary. This file owns the detailed Large Worlds task graph. GitHub owns
 remote state and review; the parent epic is not an implementation unit.
 
+Navigation after AIN-1 through AIN-8: candidate `GameBoyRomBuilder.cs` and
+`NesRomBuilder.cs` paths in the completed task cards are historical landing
+records. Current runtime addresses come from `GameBoyRuntimeMemoryLayout` /
+`NesRuntimeMemoryLayout`; source/runtime traversal lives in the target
+`*RuntimeCompiler*` modules; portable SDK emission lives in the target
+`*SdkOperationLowerer*` modules; and cartridge placement/byte assembly uses the
+purpose-named layout and builder modules. Start from `docs/SdkArchitecture.md`
+and the target guide rather than a historical candidate line.
+
 ## 1. Outcome
 
 The first acceptance target is the complete authored runner `stage1` level:

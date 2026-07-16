@@ -507,13 +507,13 @@ public static partial class ActorFrameworkLowerer
         }
 
         internal bool HasDirectives => state.HasDirectives;
-        internal int ActorPoolCount => state.Pools.Count;
-        internal int EnemyDefinitionCount => state.EnemyDefs.Count;
-        internal int SpawnLayerCount => state.SpawnLayers.Count;
-        internal int ProjectilePoolCount => state.ProjectilePools.Count;
-        internal int ProjectileDefinitionCount => state.ProjectileDefs.Count;
-        internal int EffectPoolCount => state.EffectPools.Count;
-        internal int EffectDefinitionCount => state.EffectDefs.Count;
+        internal int ActorPoolCount => state.Actors.Pools.Count;
+        internal int EnemyDefinitionCount => state.Actors.EnemyDefs.Count;
+        internal int SpawnLayerCount => state.Spawns.Layers.Count;
+        internal int ProjectilePoolCount => state.Projectiles.Pools.Count;
+        internal int ProjectileDefinitionCount => state.Projectiles.Definitions.Count;
+        internal int EffectPoolCount => state.Effects.Pools.Count;
+        internal int EffectDefinitionCount => state.Effects.Definitions.Count;
         internal string[] DrawnActorPoolNames => drawnActorPools.Order(StringComparer.Ordinal).ToArray();
         internal string[] GeneratedNames => GeneratedProgramArtifacts.GeneratedNames(state).Select(name => name.Name).ToArray();
 
@@ -580,24 +580,6 @@ public static partial class ActorFrameworkLowerer
         ActorFrameworkRoleIndex roles,
         IReadOnlyDictionary<string, string>? intrinsicFunctionNames = null)
     {
-        private readonly Dictionary<string, ActorPool> pools = new(StringComparer.Ordinal);
-        private readonly List<ActorPool> poolsInOrder = [];
-        private readonly Dictionary<string, EnemyDef> enemyDefs = new(StringComparer.Ordinal);
-        private readonly List<EnemyDef> enemyDefsInOrder = [];
-        private readonly Dictionary<string, ProjectilePool> projectilePools = new(StringComparer.Ordinal);
-        private readonly List<ProjectilePool> projectilePoolsInOrder = [];
-        private readonly Dictionary<string, ProjectileDef> projectileDefs = new(StringComparer.Ordinal);
-        private readonly List<ProjectileDef> projectileDefsInOrder = [];
-        private readonly Dictionary<string, EffectPool> effectPools = new(StringComparer.Ordinal);
-        private readonly List<EffectPool> effectPoolsInOrder = [];
-        private readonly Dictionary<string, EffectDef> effectDefs = new(StringComparer.Ordinal);
-        private readonly List<EffectDef> effectDefsInOrder = [];
-        private readonly Dictionary<ActorSpawnLayerKey, ActorSpawnLayer> spawnLayers = [];
-        private readonly List<ActorSpawnLayer> spawnLayersInOrder = [];
-        private readonly Dictionary<string, int> activationCallCounts = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> projectileRequestCallCounts = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, int> effectRequestCallCounts = new(StringComparer.Ordinal);
-        private readonly HashSet<ActorFrameworkRole> usedEnemyLookupMethods = [];
         private readonly IReadOnlyDictionary<string, string> intrinsicFunctions = intrinsicFunctionNames ?? new Dictionary<string, string>(StringComparer.Ordinal);
 
         public string TargetName { get; } = capabilities.Name;
@@ -606,15 +588,12 @@ public static partial class ActorFrameworkLowerer
         public bool SupportsDraw { get; } = supportsDraw;
         public int ScreenWidth { get; } = capabilities.ScreenPixels.Width;
         public int ScreenHeight { get; } = capabilities.ScreenPixels.Height;
-        public IReadOnlyList<ActorPool> Pools => poolsInOrder;
-        public IReadOnlyList<EnemyDef> EnemyDefs => enemyDefsInOrder;
-        public IReadOnlyList<ProjectilePool> ProjectilePools => projectilePoolsInOrder;
-        public IReadOnlyList<ProjectileDef> ProjectileDefs => projectileDefsInOrder;
-        public IReadOnlyList<EffectPool> EffectPools => effectPoolsInOrder;
-        public IReadOnlyList<EffectDef> EffectDefs => effectDefsInOrder;
-        public IReadOnlyList<ActorSpawnLayer> SpawnLayers => spawnLayersInOrder;
-        public IReadOnlySet<ActorFrameworkRole> UsedEnemyLookupMethods => usedEnemyLookupMethods;
-        public bool HasDirectives => pools.Count != 0 || enemyDefs.Count != 0 || spawnLayers.Count != 0 || projectilePools.Count != 0 || projectileDefs.Count != 0 || effectPools.Count != 0 || effectDefs.Count != 0;
+        public ActorState Actors { get; } = new();
+        public SpawnState Spawns { get; } = new();
+        public ProjectileState Projectiles { get; } = new();
+        public EffectState Effects { get; } = new();
+        public GeneratedCallState GeneratedCalls { get; } = new();
+        public bool HasDirectives => Actors.HasDirectives || Spawns.HasDirectives || Projectiles.HasDirectives || Effects.HasDirectives;
         public ActorFrameworkRoleIndex Roles { get; } = roles;
 
         // True once the program is seen to call the camera-init facade (either the qualified
@@ -638,164 +617,6 @@ public static partial class ActorFrameworkLowerer
             throw new InvalidOperationException(
                 $"Actor framework requires intrinsic '{intrinsicId}' to be declared by an imported source library.");
         }
-
-        public void AddPool(ActorPool pool)
-        {
-            if (!pools.TryAdd(pool.Name, pool))
-            {
-                throw new InvalidOperationException($"Actors.Pool for '{pool.Name}' is already declared.");
-            }
-
-            poolsInOrder.Add(pool);
-        }
-
-        public ActorPool Pool(string name) => pools[name];
-
-        public bool TryPool(string name, out ActorPool pool)
-        {
-            return pools.TryGetValue(name, out pool!);
-        }
-
-        public void AddEnemyDef(EnemyDef def)
-        {
-            if (!enemyDefs.TryAdd(def.Name, def))
-            {
-                throw new InvalidOperationException($"Enemies.Def for '{def.Name}' is already declared.");
-            }
-
-            enemyDefsInOrder.Add(def);
-        }
-
-        public void AddProjectilePool(ProjectilePool pool)
-        {
-            if (!projectilePools.TryAdd(pool.Name, pool))
-            {
-                throw new InvalidOperationException($"Projectiles.Pool for '{pool.Name}' is already declared.");
-            }
-
-            projectilePoolsInOrder.Add(pool);
-        }
-
-        public ProjectilePool ProjectilePool(string name) => projectilePools[name];
-
-        public bool TryProjectilePool(string name, out ProjectilePool pool)
-        {
-            return projectilePools.TryGetValue(name, out pool!);
-        }
-
-        public void AddProjectileDef(ProjectileDef def)
-        {
-            if (!projectileDefs.TryAdd(def.Name, def))
-            {
-                throw new InvalidOperationException($"Projectiles.Def for '{def.Name}' is already declared.");
-            }
-
-            projectileDefsInOrder.Add(def);
-        }
-
-        public void AddEffectPool(EffectPool pool)
-        {
-            if (!effectPools.TryAdd(pool.Name, pool))
-            {
-                throw new InvalidOperationException($"Effects.Pool for '{pool.Name}' is already declared.");
-            }
-
-            effectPoolsInOrder.Add(pool);
-        }
-
-        public EffectPool EffectPool(string name)
-        {
-            if (effectPools.TryGetValue(name, out var pool))
-            {
-                return pool;
-            }
-
-            throw new InvalidOperationException($"Unknown effect pool '{name}'. Declare Effects.Pool({name}, ...).");
-        }
-
-        public bool TryEffectPool(string name, out EffectPool pool)
-        {
-            return effectPools.TryGetValue(name, out pool!);
-        }
-
-        public void AddEffectDef(EffectDef def)
-        {
-            if (!effectDefs.TryAdd(def.Name, def))
-            {
-                throw new InvalidOperationException($"Effects.Def for '{def.Name}' is already declared.");
-            }
-
-            effectDefsInOrder.Add(def);
-        }
-
-        public EffectDef EffectDef(string name)
-        {
-            if (effectDefs.TryGetValue(name, out var def))
-            {
-                return def;
-            }
-
-            throw new InvalidOperationException($"Unknown effect kind '{name}'. Declare Effects.Def({name}, ...).");
-        }
-
-        public ProjectileDef ProjectileDef(string name)
-        {
-            if (projectileDefs.TryGetValue(name, out var def))
-            {
-                return def;
-            }
-
-            throw new InvalidOperationException($"Unknown projectile kind '{name}'. Declare Projectiles.Def({name}, ...).");
-        }
-
-        public void RecordEnemyLookupMethod(ActorFrameworkRole role)
-        {
-            usedEnemyLookupMethods.Add(role);
-        }
-
-        public void AddSpawnLayer(ActorSpawnLayer spawnLayer)
-        {
-            var key = ActorSpawnLayerKey.From(spawnLayer.MethodName, spawnLayer.PoolName, spawnLayer.MapPath, spawnLayer.LayerName, spawnLayer.WindowLeft, spawnLayer.WindowWidth);
-            if (spawnLayers.ContainsKey(key))
-            {
-                return;
-            }
-
-            var runtimeName = $"__{spawnLayer.PoolName}_spawn_{spawnLayers.Count}";
-            var runtimeLayer = spawnLayer with { RuntimeName = runtimeName };
-            spawnLayers.Add(key, runtimeLayer);
-            spawnLayersInOrder.Add(runtimeLayer);
-        }
-
-        public ActorSpawnLayer SpawnLayer(ActorSpawnLayerKey key) => spawnLayers[key];
-
-        public IEnumerable<ActorSpawnLayer> SpawnLayersFor(string poolName)
-        {
-            return spawnLayersInOrder.Where(layer => layer.PoolName == poolName);
-        }
-
-        public string NextActivationPrefix(ActorSpawnLayer spawnLayer)
-        {
-            activationCallCounts.TryGetValue(spawnLayer.RuntimeName, out var count);
-            activationCallCounts[spawnLayer.RuntimeName] = count + 1;
-            return $"{spawnLayer.RuntimeName}_call{count}";
-        }
-
-        public string NextProjectileRequestPrefix(ProjectilePool pool)
-        {
-            projectileRequestCallCounts.TryGetValue(pool.Name, out var count);
-            projectileRequestCallCounts[pool.Name] = count + 1;
-            return $"__{pool.Name}_request_call{count}";
-        }
-
-        public string NextEffectRequestPrefix(EffectPool pool, string purpose)
-        {
-            var key = $"{pool.Name}:{purpose}";
-            effectRequestCallCounts.TryGetValue(key, out var count);
-            effectRequestCallCounts[key] = count + 1;
-            return $"__{pool.Name}_{purpose}_call{count}";
-        }
-
     }
 
 }

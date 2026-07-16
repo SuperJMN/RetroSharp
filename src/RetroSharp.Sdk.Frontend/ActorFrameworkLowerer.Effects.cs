@@ -17,10 +17,10 @@ public static partial class ActorFrameworkLowerer
             switch (statement)
             {
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Pool" } call }:
-                    state.AddEffectPool(ReadPool(call));
+                    state.Effects.AddPool(ReadPool(call));
                     break;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Def" } call }:
-                    state.AddEffectDef(ReadDefinition(call));
+                    state.Effects.AddDefinition(ReadDefinition(call));
                     break;
             }
         }
@@ -86,13 +86,13 @@ public static partial class ActorFrameworkLowerer
             switch (statement)
             {
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Pool" } call }:
-                    statements = EffectPoolDeclarations(state.EffectPool(ReadPool(call).Name));
+                    statements = EffectPoolDeclarations(state.Effects.Pool(ReadPool(call).Name));
                     return true;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Effects", Method: "Def" } }:
                     statements = [];
                     return true;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax call }
-                    when state.TryEffectPool(call.Qualifier, out var pool):
+                    when state.Effects.TryPool(call.Qualifier, out var pool):
                     statements = call.Method switch
                     {
                         "Request" => EffectRequestStatements(pool, call, state),
@@ -125,7 +125,7 @@ public static partial class ActorFrameworkLowerer
             RequireEffectDefs(state, $"{pool.Name}.Update");
 
             var indexName = $"__{pool.Name}_update_i";
-            var branches = state.EffectDefs
+            var branches = state.Effects.Definitions
                 .Select(def => new KindBranch(def.Name, new BlockSyntax([
                     FieldAssignment(pool.Name, indexName, "age", "+=", Constant(1)),
                     new IfElseSyntax(
@@ -169,7 +169,7 @@ public static partial class ActorFrameworkLowerer
                     state.ScreenWidth,
                     state.ScreenHeight,
                     cameraPhase: "draw");
-                var branches = state.EffectDefs
+                var branches = state.Effects.Definitions
                     .Select(def => new KindBranch(
                         def.Name,
                         StableSpriteDrawBlock(
@@ -197,7 +197,7 @@ public static partial class ActorFrameworkLowerer
 
         public static void AddGeneratedStructs(ActorFrameworkState state, IList<StructSyntax> structs)
         {
-            if (state.EffectPools.Count == 0)
+            if (state.Effects.Pools.Count == 0)
             {
                 return;
             }
@@ -253,13 +253,13 @@ public static partial class ActorFrameworkLowerer
 
         public static IEnumerable<GeneratedName> GeneratedNames(ActorFrameworkState state)
         {
-            if (state.EffectPools.Count != 0)
+            if (state.Effects.Pools.Count != 0)
             {
                 yield return new GeneratedName(EffectStructName, "framework struct 'Effect'");
                 yield return new GeneratedName(EffectSpawnRequestStructName, "framework struct 'EffectSpawnRequest'");
             }
 
-            foreach (var def in state.EffectDefs)
+            foreach (var def in state.Effects.Definitions)
             {
                 yield return new GeneratedName(def.Name, $"Effects.Def '{def.Name}' kind constant");
                 yield return new GeneratedName($"{def.Name}Lifetime", $"Effects.Def '{def.Name}' lifetime constant");

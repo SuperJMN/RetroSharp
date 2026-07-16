@@ -33,24 +33,27 @@ Key constants (`GameBoyRomBuilder.cs`): `BankSize=16384`, `FixedBankProgramStart
 
 ## 2. Root-cause findings (verified in code)
 
-1. **Every user function is inlined at each call site.** `GameBoyRuntimeCompiler.TryEmitUserFunction`
-   does `EmitBlock(ParameterSubstitution.Substitute(function, call, "Game Boy"))`. There is no
-   `CALL`/`RET` mechanism. The `inline` keyword is currently a no-op (everything is inlined).
-   Consequence: the runner's ~22 KB is mostly inherent single-call logic; de-duplicating the
-   few multi-call methods saves only ~2-3 KB → still ~19-20 KB > 16 KB.
+The first and third findings below describe the constraints at roadmap creation.
+The current implementation supports real banked subroutines and preserves SDK
+operations as separate main and named-subroutine streams; use the current-code
+pointers in section 6 when extending that landed design.
+
+1. **Every user function was inlined at each call site.** At roadmap creation,
+   `GameBoyRuntimeCompiler.TryEmitUserFunction` emitted a substituted function block directly;
+   there was no `CALL`/`RET` mechanism and the `inline` keyword was effectively a no-op.
+   The measured consequence was that de-duplicating the few multi-call methods still left
+   the runner above the 16 KB fixed-bank limit. Banked subroutine emission has since landed.
 
 2. **Executing code that touches banked data must live in bank 0.** On MBC1 the switchable
    window is `0x4000-0x7FFF`; code cannot switch the window it is executing from. So banked
    functions must be reached via **bank-0 trampolines** and must route any banked-data access
    through **bank-0 helpers** (the pattern the audio runtime already uses for banked music reads).
 
-3. **The SDK-operation pipeline assumes whole-program inlining.** `Sdk2DOperationCollector`
-   (and `SdkAudioOperationCollector`, `FrameBudgetCollector`) builds the portable op list by
-   walking the program with every function inline-expanded (`CollectUserFunction` →
-   `ParameterSubstitution.Substitute`). The GB and NES targets then consume that list through a
-   single linear cursor (`nextSdkOperation++` in `ConsumeSdkOperation`). Emitting any function
-   that contains SDK calls as a real subroutine (once) desynchronises the cursor. **This is the
-   true prerequisite for the calling convention** and must be reworked first (see Phase 0).
+3. **The SDK-operation pipeline assumed whole-program inlining.** At roadmap creation, the
+   SDK collectors inline-expanded functions and the targets consumed one flattened list with
+   a single cursor. Emitting a function containing SDK calls as a real subroutine would have
+   desynchronised that cursor. Phase 0 resolved this prerequisite with separate main and
+   named-subroutine streams plus target-owned stream readers.
 
 4. **Existing music banking is the template.** `GameBoyRomLayout.CreateBankedMusicLayout`
    places music assets in banks; `UsesBankedMusic`; banked reads use a transient cursor bank
@@ -137,11 +140,13 @@ Key constants (`GameBoyRomBuilder.cs`): `BankSize=16384`, `FixedBankProgramStart
   use absolute `JP`/`CALL` across banks and keep `JR` within a bank.
 
 ## 6. Pointers
-- Builder/layout/limits: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`
-  (`Build`, `BuildProgram`, `GameBoyRomLayout`, `CreateBankedMusicLayout`, `GbBuilder`).
-- Inlining: `GameBoyRuntimeCompiler.TryEmitUserFunction` / `TryEmitUserValueFunction`.
-- SDK pipeline: `src/RetroSharp.Sdk.Frontend/Sdk2DOperationCollector.cs`,
-  `SdkAudioOperationCollector.cs`; consumption `ConsumeSdkOperation`/`ConsumeSdkAudioOperation`.
+- Builder/layout/limits: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs`,
+  `GameBoyRomLayout.cs`, and `GbBuilder.cs`.
+- Runtime calls and banked subroutines: the `GameBoyRuntimeCompiler*.cs` partials.
+- SDK streams and consumption: `src/RetroSharp.GameBoy/GameBoySdkStreamReader.cs`
+  and the `GameBoySdkOperationLowerer*.cs` partials; shared collection remains
+  under `src/RetroSharp.Sdk.Frontend`.
+- Runtime addresses: `src/RetroSharp.GameBoy/GameBoyRuntimeMemoryLayout.cs`.
 - Music banking reference: the `UsesBankedMusic` branches and `Music*BankAddress` runtime state.
 - ROM execution tests: `src/RetroSharp.GameBoy.Tests/GameBoyTestCpu.cs`,
   `GameBoyMusicTests.cs`.
