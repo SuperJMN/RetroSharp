@@ -207,20 +207,16 @@ internal sealed partial class GameBoyRuntimeCompiler
                 sdkOperationLowerer.EmitCameraVerticalScrollMax();
                 break;
             case TargetIntrinsicOperation.ButtonDown:
-                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
-                EmitButtonDown(call);
+                sdkOperationLowerer.EmitButtonDown(call);
                 break;
             case TargetIntrinsicOperation.ButtonJustPressed:
-                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
-                EmitButtonJustPressed(call);
+                sdkOperationLowerer.EmitButtonJustPressed(call);
                 break;
             case TargetIntrinsicOperation.ButtonJustReleased:
-                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
-                EmitButtonJustReleased(call);
+                sdkOperationLowerer.EmitButtonJustReleased(call);
                 break;
             case TargetIntrinsicOperation.ButtonHoldTicks:
-                GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
-                EmitButtonHoldTicks(call);
+                sdkOperationLowerer.EmitButtonHoldTicks(call);
                 break;
             case TargetIntrinsicOperation.ReadSpriteWidth:
                 GameBoyVideoProgram.RequireArity(call, intrinsic.Arity);
@@ -251,122 +247,6 @@ internal sealed partial class GameBoyRuntimeCompiler
         }
 
         return true;
-    }
-
-    private void EmitButtonPressed(FunctionCall call)
-    {
-        GameBoyVideoProgram.RequireArity(call, 1);
-        var button = ButtonArg(call, "button_pressed argument 1");
-        var pressedLabel = builder.CreateLabel("button_pressed");
-        var endLabel = builder.CreateLabel("button_end");
-
-        sdkOperationLowerer.EmitReadJoypadNibble(button.Selector);
-        builder.AndImmediate(button.Mask);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xC2, pressedLabel); // JP NZ,pressedLabel
-        sdkOperationLowerer.EmitDeselectJoypad();
-        builder.LoadAImmediate(0);
-        builder.JumpAbsolute(endLabel);
-        builder.Label(pressedLabel);
-        sdkOperationLowerer.EmitDeselectJoypad();
-        builder.LoadAImmediate(1);
-        builder.Label(endLabel);
-    }
-
-    private void EmitButtonDown(FunctionCall call)
-    {
-        GameBoyVideoProgram.RequireArity(call, 1);
-        EmitButtonMaskToBool(GameBoyRuntimeMemoryLayout.Input.Current, ButtonArg(call, "button_down argument 1"));
-    }
-
-    private void EmitButtonJustPressed(FunctionCall call)
-    {
-        GameBoyVideoProgram.RequireArity(call, 1);
-        var button = ButtonArg(call, "button_just_pressed argument 1");
-        var falseLabel = builder.CreateLabel("button_just_pressed_false");
-        var endLabel = builder.CreateLabel("button_just_pressed_end");
-
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Input.Current);
-        builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
-
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Input.Previous);
-        builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
-
-        builder.LoadAImmediate(1);
-        builder.JumpAbsolute(endLabel);
-        builder.Label(falseLabel);
-        builder.LoadAImmediate(0);
-        builder.Label(endLabel);
-    }
-
-    private void EmitButtonJustReleased(FunctionCall call)
-    {
-        GameBoyVideoProgram.RequireArity(call, 1);
-        var button = ButtonArg(call, "button_just_released argument 1");
-        var falseLabel = builder.CreateLabel("button_just_released_false");
-        var endLabel = builder.CreateLabel("button_just_released_end");
-
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Input.Current);
-        builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xC2, falseLabel); // JP NZ,falseLabel
-
-        builder.LoadA(GameBoyRuntimeMemoryLayout.Input.Previous);
-        builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, falseLabel); // JP Z,falseLabel
-
-        builder.LoadAImmediate(1);
-        builder.JumpAbsolute(endLabel);
-        builder.Label(falseLabel);
-        builder.LoadAImmediate(0);
-        builder.Label(endLabel);
-    }
-
-    private void EmitButtonHoldTicks(FunctionCall call)
-    {
-        GameBoyVideoProgram.RequireArity(call, 1);
-        builder.LoadA(ButtonArg(call, "button_hold_ticks argument 1").HoldTicksAddress);
-    }
-
-    private void EmitButtonMaskToBool(ushort address, GameBoyButton button)
-    {
-        var pressedLabel = builder.CreateLabel("button_down");
-        var endLabel = builder.CreateLabel("button_down_end");
-
-        builder.LoadA(address);
-        builder.AndImmediate(button.SnapshotMask);
-        builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xC2, pressedLabel); // JP NZ,pressedLabel
-        builder.LoadAImmediate(0);
-        builder.JumpAbsolute(endLabel);
-        builder.Label(pressedLabel);
-        builder.LoadAImmediate(1);
-        builder.Label(endLabel);
-    }
-
-    private static GameBoyButton ButtonArg(FunctionCall call, string context)
-    {
-        var argument = call.Parameters.ElementAt(0);
-
-        // A `Button` enum member (e.g. Button.A) is constant-folded to its ordinal,
-        // which matches the canonical Buttons order, so resolve it by index.
-        if (argument is ConstantSyntax)
-        {
-            var ordinal = GameBoyVideoProgram.ConstValue(argument, context);
-            if (ordinal < 0 || ordinal >= Buttons.Length)
-            {
-                throw new InvalidOperationException($"Unsupported Game Boy button ordinal '{ordinal}'.");
-            }
-
-            return Buttons[ordinal];
-        }
-
-        throw new InvalidOperationException($"{context} must be a Button enum member.");
     }
 
     private void EmitBinaryExpressionToA(BinaryExpressionSyntax binary)
@@ -743,16 +623,6 @@ internal sealed partial class GameBoyRuntimeCompiler
         return SpriteWidth(assetName);
     }
 
-    private int CameraAabbWidth(SdkAabbExtent width)
-    {
-        return width switch
-        {
-            SdkAabbExtent.Constant constant => constant.Value,
-            SdkAabbExtent.SpriteWidth spriteWidth => SpriteWidth(spriteWidth.SpriteId),
-            _ => throw new InvalidOperationException($"Unsupported camera AABB width '{width.GetType().Name}'."),
-        };
-    }
-
     private int SpriteWidth(string assetName)
     {
         if (!program.SpriteAssets.TryGetValue(assetName, out var asset))
@@ -762,8 +632,6 @@ internal sealed partial class GameBoyRuntimeCompiler
 
         return asset.LogicalWidth;
     }
-
-    private readonly record struct GameBoyButton(string Name, byte Selector, byte Mask, byte SnapshotMask, ushort HoldTicksAddress);
 
     private sealed class InlineVariableScope
     {

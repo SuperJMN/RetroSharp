@@ -10,17 +10,6 @@ namespace RetroSharp.GameBoy;
 
 internal sealed partial class GameBoyRuntimeCompiler
 {
-    private void EmitInputStateInitialization()
-    {
-        builder.LoadAImmediate(0);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.Input.Current);
-        builder.StoreA(GameBoyRuntimeMemoryLayout.Input.Previous);
-        foreach (var button in Buttons)
-        {
-            builder.StoreA(button.HoldTicksAddress);
-        }
-    }
-
     private void EmitBlock(BlockSyntax block)
     {
         foreach (var statement in block.Statements)

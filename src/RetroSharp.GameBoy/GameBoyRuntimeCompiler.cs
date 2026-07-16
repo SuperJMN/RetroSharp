@@ -18,18 +18,6 @@ internal sealed partial class GameBoyRuntimeCompiler
     private const int MusicRowCacheLength = 15;
     private const byte ApuTraceWaveRamBlockCommand = 0xFF;
 
-    private static readonly GameBoyButton[] Buttons =
-    [
-        new("a", 0x10, 0x01, 0x01, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart),
-        new("b", 0x10, 0x02, 0x02, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 1),
-        new("select", 0x10, 0x04, 0x04, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 2),
-        new("start", 0x10, 0x08, 0x08, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 3),
-        new("right", 0x20, 0x01, 0x10, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 4),
-        new("left", 0x20, 0x02, 0x20, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 5),
-        new("up", 0x20, 0x04, 0x40, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 6),
-        new("down", 0x20, 0x08, 0x80, GameBoyRuntimeMemoryLayout.Input.HoldTicksStart + 7),
-    ];
-
     private readonly GbBuilder builder;
     private readonly GameBoyVideoProgram program;
     private readonly GameBoyRomLayout romLayout;
@@ -89,7 +77,7 @@ internal sealed partial class GameBoyRuntimeCompiler
 
     public void EmitMain(BlockSyntax block)
     {
-        EmitInputStateInitialization();
+        sdkOperationLowerer.EmitInputStateInitialization();
         EmitBlock(block);
     }
 

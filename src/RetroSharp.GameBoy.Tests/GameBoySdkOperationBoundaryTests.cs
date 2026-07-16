@@ -47,6 +47,38 @@ public sealed class GameBoySdkOperationBoundaryTests
             "Runtime emission should not re-read the sprite operand from the AST call.");
     }
 
+    [Fact]
+    public void Runtime_compiler_consumes_an_overridden_value_sdk_operation_through_the_collected_stream()
+    {
+        var builder = new GbBuilder();
+        var program = ProgramWithOverriddenSdkOperations(
+            """
+            void Main() {
+                World.Column(0, 0, 0);
+                World.Column(1, 0, 0);
+                World.Flags(0, 0, 1);
+                World.Flags(1, 1, 0);
+                World.Map(2, 11, 2);
+                i16 flags = World.TileFlagsAt(0, 8);
+            }
+            """,
+            Directory.GetCurrentDirectory(),
+            [new Sdk2DOperation.ReadWorldTileFlags("default", WorldX: 8, WorldY: 8)]);
+        builder.Label(GameBoyRomBuilder.MapFlagDataLabel);
+        builder.Emit(0, 1, 1, 0);
+        var compiler = new GameBoyRuntimeCompiler(builder, program);
+
+        compiler.Emit(program.MainBlock);
+
+        var bytes = builder.Build();
+        Assert.True(
+            ContainsSequence(bytes, [0x3E, 0x08, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]),
+            "Runtime value emission should use the overridden world X operand from the collected SDK operation.");
+        Assert.False(
+            ContainsSequence(bytes, [0x3E, 0x00, 0xCB, 0x3F, 0xCB, 0x3F, 0xCB, 0x3F]),
+            "Runtime value emission should not re-read the original world X operand from the AST call.");
+    }
+
 
 
     internal static GameBoyRuntimeCompiler CreateRuntimeCompiler(GbBuilder builder)

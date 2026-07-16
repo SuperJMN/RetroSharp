@@ -57,13 +57,34 @@ public sealed class GameBoySdkLoweringArchitectureTests
             .GetFiles(Path.Combine(root, "src/RetroSharp.GameBoy"), "GameBoyRuntimeCompiler*.cs")
             .Select(File.ReadAllText)
             .ToArray();
+        var frameInputSource = File.ReadAllText(Path.Combine(root, "src/RetroSharp.GameBoy/GameBoySdkOperationLowerer.FrameInput.cs"));
         Assert.Contains(runtimeSources, source => source.Contains("sdkOperationLowerer.Emit(operation)", StringComparison.Ordinal));
+        Assert.Contains("internal void EmitButtonDown(", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains("internal void EmitButtonJustPressed(", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains("internal void EmitButtonJustReleased(", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains("internal void EmitButtonHoldTicks(", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains("internal void EmitButtonPressed(", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains("internal void EmitInputStateInitialization(", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains("record struct GameBoyButton", frameInputSource, StringComparison.Ordinal);
+        Assert.Contains(runtimeSources, source => source.Contains("sdkOperationLowerer.EmitButtonDown(call)", StringComparison.Ordinal));
+        Assert.Contains(runtimeSources, source => source.Contains("sdkOperationLowerer.EmitButtonJustPressed(call)", StringComparison.Ordinal));
+        Assert.Contains(runtimeSources, source => source.Contains("sdkOperationLowerer.EmitButtonJustReleased(call)", StringComparison.Ordinal));
+        Assert.Contains(runtimeSources, source => source.Contains("sdkOperationLowerer.EmitButtonHoldTicks(call)", StringComparison.Ordinal));
         Assert.All(runtimeSources, source =>
         {
             Assert.DoesNotContain("void EmitPollInput()", source, StringComparison.Ordinal);
             Assert.DoesNotContain("void EmitDrawLogicalSprite(", source, StringComparison.Ordinal);
             Assert.DoesNotContain("void EmitSetCameraPosition(", source, StringComparison.Ordinal);
             Assert.DoesNotContain("void EmitReadWorldTileFlags(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("void EmitButtonDown(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("void EmitButtonJustPressed(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("void EmitButtonJustReleased(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("void EmitButtonHoldTicks(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("void EmitButtonPressed(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("void EmitInputStateInitialization(", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("record struct GameBoyButton", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("GameBoyButton[] Buttons", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("CameraAabbWidth(", source, StringComparison.Ordinal);
         });
     }
 
