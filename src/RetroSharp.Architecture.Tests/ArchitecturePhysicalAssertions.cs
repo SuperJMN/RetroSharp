@@ -21,12 +21,18 @@ internal static class ArchitecturePhysicalAssertions
             Assert.NotEmpty(contract.DeclaredOwners);
             var ownerSource = RequiredSource(root, contract.RelativePath, contract.Invariant);
             Assert.All(contract.DeclaredOwners, owner =>
-            {
-                var declaration = DeclarationPattern(owner);
-                Assert.Matches(declaration, ownerSource);
-                Assert.DoesNotMatch(declaration, nonOwnerSource);
-            });
+                AssertTypeDeclarationOwnership(owner, ownerSource, nonOwnerSource));
         });
+    }
+
+    public static void AssertTypeDeclarationOwnership(
+        Type owner,
+        string ownerSource,
+        string nonOwnerSource)
+    {
+        var declaration = DeclarationPattern(owner);
+        Assert.Matches(declaration, ownerSource);
+        Assert.DoesNotMatch(declaration, nonOwnerSource);
     }
 
     private static string RequiredSource(string root, string relativePath, string invariant)

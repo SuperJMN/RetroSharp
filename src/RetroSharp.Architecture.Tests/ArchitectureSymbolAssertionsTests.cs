@@ -57,12 +57,13 @@ public sealed class ArchitectureSymbolAssertionsTests
     [Fact]
     public void Physical_guard_rejects_an_owner_mapped_to_the_wrong_file()
     {
-        Assert.ThrowsAny<Exception>(() => ArchitecturePhysicalAssertions.AssertModuleOwnership(
-            "src/RetroSharp.Architecture.Tests/ArchitecturePhysicalAssertions.cs",
-            new PhysicalFileContract(
-                "src/RetroSharp.Architecture.Tests/ArchitectureSymbolAssertionsTests.cs",
-                "Fixture owner must be declared by its contracted file.",
-                [typeof(ArchitectureSymbolAssertions)])));
+        const string wrongOwnerSource = "internal static class DifferentOwner { }";
+        const string leakingNonOwnerSource = "internal static class ArchitectureSymbolAssertions { }";
+
+        Assert.ThrowsAny<Exception>(() => ArchitecturePhysicalAssertions.AssertTypeDeclarationOwnership(
+            typeof(ArchitectureSymbolAssertions),
+            wrongOwnerSource,
+            leakingNonOwnerSource));
     }
 
     private sealed class LeakingSdkOwner
