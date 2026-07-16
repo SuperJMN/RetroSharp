@@ -183,13 +183,7 @@ public static class NesRomCompiler
             sdkLibraryRegistry,
             sdkLibraryImports,
             sdkPluginRegistry).VideoProgram;
-        return Sdk2DOperationCollector.Collect(
-            videoProgram.MainBlock,
-            videoProgram.Functions,
-            "NES",
-            NesTarget.Capabilities,
-            videoProgram.TargetIntrinsics,
-            videoProgram.ResourceDeclarations);
+        return videoProgram.SdkOperations;
     }
 
     public static IReadOnlyList<SdkAudioOperation> CollectSdkAudioOperations(
@@ -212,13 +206,7 @@ public static class NesRomCompiler
 
     private static IReadOnlyList<Sdk2DOperation> ValidateSdkOperations(NesVideoProgram videoProgram)
     {
-        var operations = Sdk2DOperationCollector.Collect(
-            videoProgram.MainBlock,
-            videoProgram.Functions,
-            "NES",
-            NesTarget.Capabilities,
-            videoProgram.TargetIntrinsics,
-            videoProgram.ResourceDeclarations);
+        var operations = videoProgram.SdkOperations;
         foreach (var operation in operations)
         {
             Sdk2DOperationValidator.Validate(NesTarget.Capabilities, operation);
@@ -421,6 +409,10 @@ internal sealed class NesVideoProgram
 
     public required SdkResourceDeclarationRegistry ResourceDeclarations { get; init; }
 
+    public required IReadOnlyList<Sdk2DOperation> SdkOperations { get; init; }
+
+    public required IReadOnlyList<Sdk2DOperation> SdkOperationStream { get; init; }
+
     public int ResolveSpritePaletteBaseSlot(string spriteId, int requestedBaseSlot)
     {
         return spritePalettePhysicalBaseSlots.TryGetValue(new SpritePaletteUse(spriteId, requestedBaseSlot), out var physicalBaseSlot)
@@ -444,16 +436,32 @@ internal sealed class NesVideoProgram
         var functions = BuildFunctionIndex(program.Functions);
         var enums = BuildEnumIndex(program.Enums);
         var structs = BuildStructIndex(program.Structs);
+        var sdkOperations = Sdk2DOperationCollector.CollectForValidation(
+            main.Block,
+            functions,
+            "NES",
+            NesTarget.Capabilities,
+            targetIntrinsics,
+            resourceDeclarations);
+        var sdkOperationStream = Sdk2DOperationCollector.CollectReachable(
+            main.Block,
+            functions,
+            "NES",
+            NesTarget.Capabilities,
+            targetIntrinsics,
+            resourceDeclarations);
         var result = new NesVideoProgram
         {
             BaseDirectory = Path.GetFullPath(baseDirectory ?? Directory.GetCurrentDirectory()),
-            UseFourScreenNametables = UsesVerticalCamera(main.Block, functions, targetIntrinsics, resourceDeclarations),
+            UseFourScreenNametables = UsesVerticalCamera(sdkOperations),
             Functions = functions,
             Enums = enums,
             Structs = structs,
             MainBlock = main.Block,
             TargetIntrinsics = targetIntrinsics,
             ResourceDeclarations = resourceDeclarations,
+            SdkOperations = sdkOperations,
+            SdkOperationStream = sdkOperationStream,
         };
 
         result.ApplyStaticVideoCalls(main.Block, []);
@@ -461,19 +469,8 @@ internal sealed class NesVideoProgram
         return result;
     }
 
-    private static bool UsesVerticalCamera(
-        BlockSyntax mainBlock,
-        IReadOnlyDictionary<string, FunctionSyntax> functions,
-        TargetIntrinsicCatalog targetIntrinsics,
-        SdkResourceDeclarationRegistry resourceDeclarations)
+    private static bool UsesVerticalCamera(IEnumerable<Sdk2DOperation> operations)
     {
-        var operations = Sdk2DOperationCollector.Collect(
-            mainBlock,
-            functions,
-            "NES",
-            NesTarget.Capabilities,
-            targetIntrinsics,
-            resourceDeclarations);
         return operations
             .OfType<Sdk2DOperation.SetCameraPosition>()
             .Any(operation => (operation.Axes & ScrollAxes.Vertical) != 0);
@@ -667,8 +664,7 @@ internal sealed class NesVideoProgram
     private void ApplyDerivedSpritePalettes()
     {
         var appliedPalettes = new Dictionary<int, byte[]>();
-        var operations = Sdk2DOperationCollector.Collect(MainBlock, Functions, "NES", NesTarget.Capabilities, TargetIntrinsics, ResourceDeclarations);
-        foreach (var operation in operations.OfType<Sdk2DOperation.DrawLogicalSprite>())
+        foreach (var operation in SdkOperations.OfType<Sdk2DOperation.DrawLogicalSprite>())
         {
             if (!spriteAssets.TryGetValue(operation.SpriteId, out var asset)
                 || operation.PaletteSlot < 0)

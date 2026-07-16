@@ -68,6 +68,29 @@ public sealed class Sdk2DProgramStreamTests
     }
 
     [Fact]
+    public void Empty_subroutine_stream_matches_legacy_collect_for_static_hud_resource()
+    {
+        var program = Compile("void Main() { Hud.SetTile(none, 0, 0, 1); }");
+        var legacy = Sdk2DOperationCollector.Collect(
+            program.MainBlock,
+            program.Functions,
+            "Game Boy",
+            GameBoyTarget.Capabilities,
+            GameBoyTarget.Intrinsics);
+        var streamed = Sdk2DOperationCollector.CollectProgram(
+            program.MainBlock,
+            program.Functions,
+            "Game Boy",
+            GameBoyTarget.Capabilities,
+            new HashSet<string>(),
+            GameBoyTarget.Intrinsics);
+
+        var flattened = streamed.Main.Select(item => Assert.IsType<Sdk2DStreamItem.Op>(item).Operation).ToList();
+        Assert.Empty(legacy);
+        Assert.Equal(legacy, flattened);
+    }
+
+    [Fact]
     public void Subroutined_function_body_is_collected_once_and_referenced_by_call_markers()
     {
         var program = Compile();

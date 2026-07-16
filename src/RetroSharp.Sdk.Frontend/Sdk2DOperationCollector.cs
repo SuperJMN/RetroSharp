@@ -22,6 +22,44 @@ public static class Sdk2DOperationCollector
         return collector.Operations;
     }
 
+    public static IReadOnlyList<Sdk2DOperation> CollectForValidation(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        Target2DCapabilities capabilities,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
+    {
+        var collector = new Collector(
+            functions,
+            targetName,
+            capabilities,
+            targetIntrinsics: targetIntrinsics,
+            resourceDeclarations: resourceDeclarations,
+            collectResourceOperations: true);
+        collector.CollectBlock(mainBlock);
+        return collector.Operations;
+    }
+
+    public static IReadOnlyList<Sdk2DOperation> CollectReachable(
+        BlockSyntax mainBlock,
+        IReadOnlyDictionary<string, FunctionSyntax> functions,
+        string targetName,
+        Target2DCapabilities capabilities,
+        TargetIntrinsicCatalog? targetIntrinsics = null,
+        SdkResourceDeclarationRegistry? resourceDeclarations = null)
+    {
+        var collector = new Collector(
+            functions,
+            targetName,
+            capabilities,
+            targetIntrinsics: targetIntrinsics,
+            resourceDeclarations: resourceDeclarations,
+            skipUnreachableStatements: true);
+        collector.CollectBlock(mainBlock);
+        return collector.Operations;
+    }
+
     // Collects a program split into a main stream plus per-subroutine streams for
     // the named functions. When subroutineNames is empty the main stream is a flat
     // sequence of Op items equivalent to Collect(...), so targets stay byte-identical.
@@ -726,6 +764,8 @@ public static class Sdk2DOperationCollector
         private readonly IReadOnlySet<string> subroutineNames;
         private readonly TargetIntrinsicCatalog? targetIntrinsics;
         private readonly SdkResourceDeclarationRegistry resourceDeclarations;
+        private readonly bool skipUnreachableStatements;
+        private readonly bool collectResourceOperations;
         private readonly List<Sdk2DStreamItem> mainItems = [];
         private readonly Dictionary<string, IReadOnlyList<Sdk2DStreamItem>> subroutineStreams = [];
         private readonly HashSet<string> userFunctionCallStack = [];
@@ -738,7 +778,9 @@ public static class Sdk2DOperationCollector
             Target2DCapabilities capabilities,
             IReadOnlySet<string>? subroutineNames = null,
             TargetIntrinsicCatalog? targetIntrinsics = null,
-            SdkResourceDeclarationRegistry? resourceDeclarations = null)
+            SdkResourceDeclarationRegistry? resourceDeclarations = null,
+            bool skipUnreachableStatements = false,
+            bool collectResourceOperations = false)
         {
             this.functions = functions;
             this.targetName = targetName;
@@ -746,6 +788,8 @@ public static class Sdk2DOperationCollector
             this.subroutineNames = subroutineNames ?? new HashSet<string>(StringComparer.Ordinal);
             this.targetIntrinsics = targetIntrinsics;
             this.resourceDeclarations = resourceDeclarations ?? SdkResourceDeclarationRegistry.Default;
+            this.skipUnreachableStatements = skipUnreachableStatements;
+            this.collectResourceOperations = collectResourceOperations;
             currentItems = mainItems;
         }
 
@@ -794,13 +838,38 @@ public static class Sdk2DOperationCollector
 
         public void CollectBlock(BlockSyntax block)
         {
-            foreach (var statement in block.Statements)
-            {
-                CollectStatement(statement);
-            }
+            _ = CollectNestedBlock(block);
         }
 
-        private void CollectStatement(StatementSyntax statement)
+        private bool CollectNestedBlock(BlockSyntax block)
+        {
+            if (skipUnreachableStatements)
+            {
+                return CollectReachableBlock(block);
+            }
+
+            foreach (var statement in block.Statements)
+            {
+                _ = CollectStatement(statement);
+            }
+
+            return false;
+        }
+
+        private bool CollectReachableBlock(BlockSyntax block)
+        {
+            foreach (var statement in block.Statements)
+            {
+                if (CollectStatement(statement))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool CollectStatement(StatementSyntax statement)
         {
             switch (statement)
             {
@@ -826,19 +895,22 @@ public static class Sdk2DOperationCollector
                     break;
                 case WhileSyntax loop:
                     CollectExpression(loop.Condition);
-                    CollectBlock(loop.Body);
+                    if (!skipUnreachableStatements || !IsConstantFalse(loop.Condition))
+                    {
+                        _ = CollectNestedBlock(loop.Body);
+                    }
+
                     break;
                 case DoWhileSyntax loop:
-                    CollectBlock(loop.Body);
+                    _ = CollectNestedBlock(loop.Body);
                     CollectExpression(loop.Condition);
                     break;
                 case RangeForSyntax loop:
-                    CollectStatement(RangeForLowerer.Lower(loop));
-                    break;
+                    return CollectStatement(RangeForLowerer.Lower(loop));
                 case ForSyntax loop:
                     if (loop.Initializer.HasValue)
                     {
-                        CollectStatement(loop.Initializer.Value);
+                        _ = CollectStatement(loop.Initializer.Value);
                     }
 
                     if (loop.Condition.HasValue)
@@ -846,7 +918,7 @@ public static class Sdk2DOperationCollector
                         CollectExpression(loop.Condition.Value);
                     }
 
-                    CollectBlock(loop.Body);
+                    _ = CollectNestedBlock(loop.Body);
                     if (loop.Increment.HasValue)
                     {
                         CollectExpression(loop.Increment.Value);
@@ -855,19 +927,30 @@ public static class Sdk2DOperationCollector
                     break;
                 case IfElseSyntax branch:
                     CollectExpression(branch.Condition);
-                    CollectBlock(branch.ThenBlock);
+                    var thenTerminates = CollectNestedBlock(branch.ThenBlock);
                     if (branch.ElseBlock.HasValue)
                     {
-                        CollectBlock(branch.ElseBlock.Value);
+                        var elseTerminates = CollectNestedBlock(branch.ElseBlock.Value);
+                        return skipUnreachableStatements && thenTerminates && elseTerminates;
                     }
 
                     break;
+                case BreakSyntax:
+                case ContinueSyntax:
+                case ReturnSyntax:
+                    return skipUnreachableStatements;
             }
+
+            return false;
         }
+
+        private static bool IsConstantFalse(ExpressionSyntax expression) =>
+            expression is IdentifierSyntax { Identifier: "false" }
+            || TryConstValue(expression, out var value) && value == 0;
 
         private void CollectCall(FunctionCall call)
         {
-            if (IsResourceDeclarationCall(call))
+            if (TryCollectResourceOperation(call))
             {
                 return;
             }
@@ -892,10 +975,20 @@ public static class Sdk2DOperationCollector
             }
         }
 
-        private bool IsResourceDeclarationCall(FunctionCall call)
+        private bool TryCollectResourceOperation(FunctionCall call)
         {
-            return functions.TryGetValue(call.Name, out var function)
-                   && SdkResourceDeclarationResolver.TryResolve(function, out _, resourceDeclarations);
+            if (!functions.TryGetValue(call.Name, out var function)
+                || !SdkResourceDeclarationResolver.TryResolve(function, out var descriptor, resourceDeclarations))
+            {
+                return false;
+            }
+
+            if (collectResourceOperations && descriptor.Kind == SdkResourceDeclarationKind.HudSetTile)
+            {
+                CollectHudSetTile(call);
+            }
+
+            return true;
         }
 
         private bool CollectTargetIntrinsic(FunctionCall call)
