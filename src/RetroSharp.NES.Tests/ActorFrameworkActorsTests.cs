@@ -7,6 +7,7 @@ using RetroSharp.NES;
 using RetroSharp.Parser;
 using RetroSharp.Sdk;
 using Xunit;
+using static RetroSharp.NES.Tests.NesTestAssets;
 
 public partial class NesRomCompilerTests
 {

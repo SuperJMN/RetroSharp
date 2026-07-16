@@ -9,6 +9,26 @@ using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
 public sealed class GameBoySdkFrameInputLoweringTests
 {
     [Fact]
+    public void Video_wait_vblank_waits_for_the_next_vblank_edge()
+    {
+        const string source = """
+                              void Main() {
+                                  Video.Init();
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      scroll_set(1, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x30]), "ROM should first wait until the previous VBlank has ended.");
+        Assert.True(ContainsSequence(rom, [0xF0, 0x44, 0xFE, 0x90, 0x38]), "ROM should then wait until the next VBlank begins.");
+    }
+
+    [Fact]
     public void Lowers_wait_frame_operation_to_existing_game_boy_vblank_routine()
     {
         var builder = new GbBuilder();

@@ -1,6 +1,7 @@
 # AI-Navigable Architecture
 
-Status: acceptance map for AIN-9 / #365. Measurements are descriptive, not size gates.
+Status: acceptance map for AIN-9 / #365, amended by the test-locality audit in
+AIN-11 / #377. Measurements are descriptive, not size gates.
 
 Use this document when a compiler or cartridge-runtime change needs a fresh
 navigation path. Start from the owning deep module below, cross its small seam,
@@ -15,7 +16,7 @@ Keep the language, portable 2D SDK, and target-intrinsic layers separate.
 | NES runtime RAM and external ABI | `src/RetroSharp.NES/NesRuntimeMemoryLayout.cs` owns CPU RAM; `NesRuntimeAbiProjection.Serialize(...)` projects it without creating another map | NES builder/runtime/lowerer modules consume the layout; CLI `--runtime-abi-out` emits the ROM-bound sidecar; `tools/nes/runtime_abi.py` is the external-probe reader | `NesRuntimeMemoryLayoutTests`, `NesRuntimeAbiProjectionTests`, `tools/nes/tests/test_runtime_abi.py`, and `RuntimeMemoryOwnershipArchitectureTests` |
 | Shared frontend preparation | `TargetFrontendPreparation.Prepare(...)` returns one internal `PreparedTargetProgram` after the ordered target-neutral stages | `GameBoyRomCompiler.PrepareVideoProgram(...)` and `NesRomCompiler.PrepareVideoProgram(...)` provide target catalogs/assets and are the only target adapters; compile, 2D collection, and audio collection reuse them | `TargetFrontendPreparationArchitectureTests` and `CrossTargetFrontendPreparationTests` |
 | Actor Framework analysis and generation | `ActorFrameworkLowerer.Analyze(...)`, `Lower(...)`, and one `ActorFrameworkLoweringPlan`; Actor/Spawn/Projectile/Effect/GeneratedCall state modules own mutable facts; `ActorFrameworkDomains.Contributions` is the ordered generated-program seam | `TargetFrontendPreparation` analyzes once, lowers through the plan, and retains that plan only for late metasprite-aware pool-budget validation | `ActorFrameworkLoweringPlanTests`, `ActorFrameworkDomainArchitectureTests`, and the `ActorFrameworkActors`, `ActorFrameworkProjectiles`, `ActorFrameworkEffects`, and `ActorFrameworkCrossDomain` suites |
-| Game Boy portable SDK emission | `GameBoySdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `GameBoySdkLoweringContext` supplies only operand/storage primitives | `GameBoyRuntimeCompiler` owns one lowerer and routes its collected `Sdk2DProgram` through `GameBoySdkStreamReader`; the lowerer must not call back into the runtime compiler | `GameBoySdkLoweringArchitectureTests`, `GameBoySdkOperationBoundaryTests`, and `GameBoySdk{FrameInput,Sprite,CameraStreaming,Collision}LoweringTests` |
+| Game Boy portable SDK emission | `GameBoySdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `GameBoySdkLoweringContext` supplies only operand/storage primitives | `GameBoyRuntimeCompiler` owns one lowerer and routes its collected `Sdk2DProgram` through `GameBoySdkStreamReader`; the lowerer must not call back into the runtime compiler | `GameBoySdkLoweringArchitectureTests`, `GameBoySdkOperationBoundaryTests`, and the `GameBoySdk{FrameInput,Sprite,Animation,CameraRuntime,CameraStreaming,CollisionRuntime,Collision}LoweringTests` suites |
 | NES portable SDK emission | `NesSdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `NesSdkLoweringContext` supplies only operand/storage primitives | `NesRuntimeCompiler` owns one lowerer and routes its collected `SdkOperationStream` through `NesSdkStreamReader`; the lowerer must not call back into the runtime compiler | `NesSdkLoweringArchitectureTests`, `NesSdkOperationBoundaryTests`, and `NesSdk{FrameInput,Sprite,CameraStreaming,Collision}LoweringTests` |
 
 The target cartridge modules are deliberately physical as well as conceptual.
@@ -74,9 +75,28 @@ the merge/parse/select/Actor/facade/inference/contract sequence themselves.
 5. Pin emitted bytes in the focused lowering suite and keep the lowerer-to-
    runtime backedge guard green.
 
-End-to-end compiler and ROM tests may cross these modules, but unit and
-ownership regressions for an extracted module belong in the focused files named
-in the table, not `GameBoyRomCompilerTests.cs` or `NesRomCompilerTests.cs`.
+Classify a target SDK regression by its primary observable, not by the public
+entry point used to arrange it:
+
+- If the assertion pins collected SDK operations, capability validation or a
+  diagnostic for that operation, target-emitted bytes, runtime storage effects,
+  or that operation's target hardware budget, it belongs in the matching
+  focused lowering suite. This remains true when `CompileSource(...)` is the
+  smallest realistic way to arrange the program.
+- If the value of the test is the complete path across source parsing, facade
+  or Actor rewriting, asset import, linker/layout, generated cartridge data,
+  emulator execution, or a complete sample, it belongs in the target compiler
+  or acceptance suite.
+- A monolithic compiler test must not duplicate a focused lowering regression.
+  Cross-module acceptance may cover the same public feature only when it
+  asserts a distinct end-to-end contract.
+
+The AIN-11 audit applied this rule to every remaining Game Boy and NES compiler
+regression. It moved 33 Game Boy and 5 NES emission-, capability-, and
+budget-specific regressions into the focused suites above. The monoliths retain
+frontend/helper parity, asset-pipeline composition, linker/runtime, and complete
+scenario coverage; shared PNG and sprite-fixture support lives in neutral test
+support modules rather than either monolithic suite.
 
 ## CodeGraph probes
 
@@ -108,6 +128,9 @@ files=(
   src/RetroSharp.GameBoy.Tests/ActorFrameworkLoweringPlanTests.cs
   src/RetroSharp.Architecture.Tests/ActorFrameworkDomainArchitectureTests.cs
   src/RetroSharp.GameBoy/GameBoySdkOperationLowerer.cs
+  src/RetroSharp.GameBoy.Tests/GameBoySdkAnimationLoweringTests.cs
+  src/RetroSharp.GameBoy.Tests/GameBoySdkCameraRuntimeLoweringTests.cs
+  src/RetroSharp.GameBoy.Tests/GameBoySdkCollisionRuntimeLoweringTests.cs
   src/RetroSharp.GameBoy.Tests/GameBoySdkFrameInputLoweringTests.cs
   src/RetroSharp.GameBoy.Tests/GameBoySdkOperationBoundaryTests.cs
   src/RetroSharp.Architecture.Tests/GameBoySdkLoweringArchitectureTests.cs
@@ -122,12 +145,13 @@ for path in "${files[@]}"; do
 done
 ```
 
-The AIN-9 acceptance run used the current 901-file index. All 27 file probes
-returned the requested symbol map. Together they locate each authority, its
-production route, and its focused C# or Python tests without loading either
-complete ROM builder. The direct frame/input lowerer tests expose an explicit
-constructor edge; the boundary/architecture files pin the end-to-end stream
-seam and compiled ownership guard separately.
+The AIN-9 acceptance run used the then-current 901-file index and all 27 file
+probes returned the requested symbol map. AIN-11 adds the three new focused
+Game Boy suite probes, bringing the reproducible recipe to 30 files. Together
+they locate each authority, its production route, and its focused C# or Python
+tests without loading either complete ROM builder. The direct frame/input
+lowerer tests expose an explicit constructor edge; the boundary/architecture
+files pin the end-to-end stream seam and compiled ownership guard separately.
 
 ## Final measurements
 
@@ -135,15 +159,16 @@ The baseline is commit `7260e70`, immediately before the AIN epic. These line
 counts describe locality gained; they are not acceptance thresholds and must
 not become arbitrary size gates.
 
-| Former hotspot | Baseline | AIN-9 tree |
-| --- | ---: | ---: |
-| `GameBoyRomBuilder.cs` | 10,948 | 1,138 |
-| `NesRomBuilder.cs` | 8,890 | 1,528 |
-| root `ActorFrameworkLowerer.cs` | 4,530 | 622 |
-| `GameBoyRomCompilerTests.cs` | 8,429 | 6,483 |
-| `NesRomCompilerTests.cs` | 5,110 | 3,503 |
+| Former hotspot | Baseline | AIN-9 tree | AIN-11 tree |
+| --- | ---: | ---: | ---: |
+| `GameBoyRomBuilder.cs` | 10,948 | 1,138 | 1,138 |
+| `NesRomBuilder.cs` | 8,890 | 1,528 | 1,528 |
+| root `ActorFrameworkLowerer.cs` | 4,530 | 622 | 622 |
+| `GameBoyRomCompilerTests.cs` | 8,429 | 6,483 | 5,337 |
+| `NesRomCompilerTests.cs` | 5,110 | 3,503 | 3,173 |
 
 The final tree has 11 Game Boy SDK-lowerer modules, 8 NES SDK-lowerer modules,
+7 focused Game Boy SDK-lowering suites, 4 focused NES SDK-lowering suites,
 14 Actor Framework modules, and 27 architecture `[Fact]`/`[Theory]`
 declarations. Validation results and exact runner hashes belong in the closing
 PR/epic record because they are execution evidence, not permanent design limits.

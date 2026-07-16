@@ -5,6 +5,7 @@ using RetroSharp.Core.Targeting;
 using RetroSharp.GameBoy;
 using Xunit;
 using static RetroSharp.GameBoy.Tests.GameBoySdkOperationBoundaryTests;
+using static RetroSharp.GameBoy.Tests.GameBoyTestSupport;
 
 public sealed class GameBoySdkCameraStreamingLoweringTests
 {
@@ -264,4 +265,118 @@ public sealed class GameBoySdkCameraStreamingLoweringTests
 
         Assert.Contains("argument 2", exception.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Camera_streams_background_rows_above_the_world_band_when_scrolling_horizontally()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "RetroSharp.GameBoy.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        WriteTiledTilesheetPng(directory, "runner.png", 8, 8, 1, 2, 3);
+        File.WriteAllText(
+            Path.Combine(directory, "runner.tsj"),
+            """
+            {
+              "type": "tileset",
+              "version": "1.10",
+              "tiledversion": "1.12.2",
+              "name": "runner",
+              "tilewidth": 8,
+              "tileheight": 8,
+              "spacing": 0,
+              "margin": 0,
+              "tilecount": 3,
+              "columns": 3,
+              "image": "runner.png",
+              "imagewidth": 24,
+              "imageheight": 8
+            }
+            """);
+        File.WriteAllText(
+            Path.Combine(directory, "level.tmj"),
+            """
+            {
+              "type": "map",
+              "version": "1.10",
+              "tiledversion": "1.10.2",
+              "orientation": "orthogonal",
+              "renderorder": "right-down",
+              "width": 3,
+              "height": 6,
+              "tilewidth": 8,
+              "tileheight": 8,
+              "infinite": false,
+              "properties": [
+                { "name": "retrosharpStreamY", "type": "int", "value": 2 },
+                { "name": "retrosharpWorldY", "type": "int", "value": 3 },
+                { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+              ],
+              "layers": [
+                {
+                  "id": 1,
+                  "name": "background",
+                  "type": "tilelayer",
+                  "width": 3,
+                  "height": 6,
+                  "visible": true,
+                  "opacity": 1,
+                  "x": 0,
+                  "y": 0,
+                  "data": [0, 0, 0, 0, 0, 0, 1, 2, 3, 3, 3, 3, 0, 0, 0, 0, 0, 0]
+                },
+                {
+                  "id": 2,
+                  "name": "world",
+                  "type": "tilelayer",
+                  "width": 3,
+                  "height": 6,
+                  "visible": true,
+                  "opacity": 1,
+                  "x": 0,
+                  "y": 0,
+                  "data": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0]
+                }
+              ],
+              "tilesets": [
+                { "firstgid": 1, "source": "runner.tsj" }
+              ]
+            }
+            """);
+
+        const string source = """
+                              void Main() {
+                                  World.Load("level.tmj");
+                                  Camera.Init(3, 2, 2);
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                      Camera.Apply();
+                                      Camera.SetPosition(1, 0);
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, directory);
+
+        // The world band starts at GB row 2 (0x9840). The background region above the band
+        // (GB rows 0..1) must also stream when scrolling, writing GB row 0 at 0x9800. A crossing
+        // queues the edge column for deferred streaming; both directions feed the same pending
+        // slot, so Camera.Apply commits one column stream into the background tilemap.
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0xE4, 0xC0, 0xEA, 0x1A, 0xC1]),
+            "a rightward crossing should queue the right background edge column for deferred streaming.");
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0xE5, 0xC0, 0xEA, 0x1A, 0xC1]),
+            "a leftward crossing should queue the left background edge column for deferred streaming.");
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0x1A, 0xC1, 0x6F, 0x26, 0x98, 0x0E]),
+            "Camera.Apply should stream the queued background row above the band into GB row 0 (0x9800).");
+
+        // The deferred commit replaces the old per-crossing extra WaitVBlank: streaming now happens
+        // only from Camera.Apply, at the top of the frame inside VBlank, so a scrolling frame costs a
+        // single VBlank (and a single Audio.Update tick). The move steps must no longer busy-wait on LY
+        // themselves; the streaming is gated by the queued-kind dispatch in Camera.Apply instead.
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0x19, 0xC1, 0xFE, 0x00, 0xCA]),
+            "Camera.Apply should dispatch the deferred stream on the queued kind.");
+    }
+
 }
