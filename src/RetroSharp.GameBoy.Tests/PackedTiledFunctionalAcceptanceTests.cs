@@ -18,6 +18,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         { "tiled-diagonal", "samples/tiled-diagonal/diag.rs", "samples/tiled-diagonal/diag.tmj", "samples/tiled-diagonal/diag.gb", "validation/scenarios/tiled-diagonal.gb.json" },
         { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.gb", "validation/scenarios/tiled-free-scroll.gb.json" },
         { "deadzone-follow", "samples/deadzone-follow/deadzone.rs", "samples/deadzone-follow/deadzone.tmj", "samples/deadzone-follow/deadzone.gb", "validation/scenarios/deadzone-follow.gb.json" },
+        { "platformer-landing", "samples/platformer-landing/src/main.rs", "samples/platformer-landing/assets/platformer-landing.tmj", "samples/platformer-landing/bin/platformer-landing.gb", "validation/scenarios/platformer-landing.gb.json" },
     };
 
     [Theory]
@@ -30,10 +31,39 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         string scenarioRelativePath)
     {
         var sourcePath = RepositoryFile(sourceRelativePath);
-        var sourceDirectory = Path.GetDirectoryName(sourcePath)
+        var sourceDirectory = sampleId == "platformer-landing"
+            ? Path.GetDirectoryName(Path.GetDirectoryName(sourcePath))
+            : Path.GetDirectoryName(sourcePath);
+        sourceDirectory = sourceDirectory
             ?? throw new InvalidOperationException($"Could not locate '{sourceRelativePath}'.");
+        var source = File.ReadAllText(sourcePath);
+        GameBoyVideoProgram? platformerProgram = null;
+        GameBoyRomBuildReport? platformerBuildReport = null;
+        byte[] regeneratedRom;
+        if (sampleId == "platformer-landing")
+        {
+            platformerProgram = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+                source,
+                sourceDirectory,
+                RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+                null,
+                [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+                null);
+            var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+                source,
+                sourceDirectory,
+                RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+                null,
+                [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+                null);
+            platformerBuildReport = build.Report;
+            regeneratedRom = build.Rom;
+        }
+        else
+        {
+            regeneratedRom = GameBoyRomCompiler.CompileSource(source, sourceDirectory);
+        }
         var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
-        var regeneratedRom = GameBoyRomCompiler.CompileSource(File.ReadAllText(sourcePath), sourceDirectory);
         Assert.Equal(trackedRom, regeneratedRom);
 
         var map = GameBoyTiledMapImporter.Load(RepositoryFile(mapRelativePath));
@@ -44,20 +74,22 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         Assert.Equal(sampleId, scenario.SampleId);
-        var factory = new PackedGameBoyMachineFactory();
+        var factory = new PackedGameBoyMachineFactory(platformerProgram, platformerBuildReport);
         var adapter = new GameBoyFunctionalRomAdapter(
             factory,
             new FunctionalAdapterCapabilities(
                 GameplayTicks: true,
+                InputTimeline: sampleId == "platformer-landing",
                 CameraLifecycle: true,
                 BankRestoration: true,
                 Background: true,
+                SpriteOam: sampleId == "platformer-landing",
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
             new FunctionalRomArtifact(romRelativePath, trackedRom),
             adapter,
-            new AuthoredTiledBackgroundOracle(map, factory));
+            new AuthoredTiledBackgroundOracle(map, factory, platformerProgram, scenario));
 
         output.WriteLine($"{report.ScenarioId}: {report.Summary}");
         foreach (var check in report.TimingChecks)
@@ -123,7 +155,9 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
     }
 
-    private sealed class PackedGameBoyMachineFactory : IFunctionalRomMachineFactory
+    private sealed class PackedGameBoyMachineFactory(
+        GameBoyVideoProgram? platformerProgram,
+        GameBoyRomBuildReport? platformerBuildReport) : IFunctionalRomMachineFactory
     {
         public byte[]? LoadedRom { get; private set; }
 
@@ -132,13 +166,19 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
         {
             LoadedRom = exactRom.ToArray();
-            return new PackedGameBoyMachine(LoadedRom, VisibleCameraByFrame);
+            return new PackedGameBoyMachine(
+                LoadedRom,
+                VisibleCameraByFrame,
+                platformerProgram,
+                platformerBuildReport);
         }
     }
 
     private sealed class PackedGameBoyMachine(
         byte[] exactRom,
-        IDictionary<int, (int X, int Y)> visibleCameraByFrame) : IFunctionalRomMachine
+        IDictionary<int, (int X, int Y)> visibleCameraByFrame,
+        GameBoyVideoProgram? platformerProgram,
+        GameBoyRomBuildReport? platformerBuildReport) : IFunctionalRomMachine
     {
         private readonly GameBoyTestCpu cpu = new(exactRom)
         {
@@ -156,6 +196,11 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private long commitSequence;
         private long visibleSequence;
         private (int X, int Y)? previousVisibleCamera;
+        private readonly IReadOnlyDictionary<string, GameBoyRuntimeUserVariable> variables =
+            platformerBuildReport?.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal)
+            ?? new Dictionary<string, GameBoyRuntimeUserVariable>(StringComparer.Ordinal);
+        private readonly GameBoyCompiledSpriteAsset? playerAsset = platformerProgram?.SpriteAssets
+            .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
 
         public FunctionalFrameObservation ObserveInitial() => Observe(0);
 
@@ -205,6 +250,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 ["directoryWorkInCommit"] = cpu.Wram(PackedCameraMemory.DirectoryWorkInCommit),
                 ["decodeWorkInVBlank"] = cpu.Wram(PackedCameraMemory.DecodeWorkInVBlank),
             };
+            AddPlatformerState(state);
+            var sprites = CapturePlatformerSprites();
             var shadowBank = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             var effectiveShadowBank = shadowBank == 0 ? 1 : shadowBank;
             var bank = new FunctionalBankObservation(
@@ -235,9 +282,61 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 camera,
                 bank,
                 CaptureBackground(visibleCamera),
+                Sprites: sprites,
                 VideoWrites: videoWrites,
                 OamWrites: oamWrites);
         }
+
+        private void AddPlatformerState(IDictionary<string, long> state)
+        {
+            if (playerAsset is null)
+            {
+                return;
+            }
+
+            var playerY = VariableWord("player.y");
+            state["playerX"] = VariableWord("player.x");
+            state["playerY"] = playerY;
+            state["worldFootY"] = playerY + 31;
+            state["grounded"] = VariableByte("player.grounded");
+            state["jumpCount"] = VariableByte("player.jumpCount");
+            state["landingCount"] = VariableByte("player.landingCount");
+            state["gameplayResetCount"] = VariableByte("player.gameplayResetCount");
+            state["supportProbeCount"] = VariableByte("player.supportProbeCount");
+            state["wallContactCount"] = VariableByte("player.wallContactCount");
+            state["sourceCameraX"] = VariableWord("view.x");
+            state["sourceCameraY"] = VariableWord("view.y");
+            state["displayEnabled"] = (cpu.IoRegister(0xFF40) & 0x80) != 0 ? 1 : 0;
+        }
+
+        private IReadOnlyList<FunctionalSpriteObservation>? CapturePlatformerSprites()
+        {
+            if (playerAsset is null)
+            {
+                return null;
+            }
+
+            var playerOamBytes = playerAsset.Pieces.Count * 4;
+            var actualPlayer = Enumerable.Range(0, playerOamBytes)
+                .Select(offset => (int)cpu.Oam((ushort)(0xFE00 + offset)))
+                .ToArray();
+            var actualUnused = Enumerable.Range(playerOamBytes, 160 - playerOamBytes)
+                .Select(offset => (int)cpu.Oam((ushort)(0xFE00 + offset)))
+                .ToArray();
+
+            return
+            [
+                new FunctionalSpriteObservation("player", OamVisible(actualPlayer), actualPlayer, 0),
+                new FunctionalSpriteObservation("unused-oam", OamVisible(actualUnused), actualUnused, playerAsset.Pieces.Count),
+            ];
+        }
+
+        private int VariableWord(string name) => VariableByte(name) | (VariableByte(name, 1) << 8);
+
+        private byte VariableByte(string name, int offset = 0) => cpu.Wram(checked((ushort)(variables[name].Address + offset)));
+
+        private static bool OamVisible(IReadOnlyList<int> oam) =>
+            oam.Chunk(4).Any(piece => piece[0] is > 0 and < 160);
 
         private IReadOnlyList<FunctionalBackgroundObservation> CaptureBackground((int X, int Y) camera)
         {
@@ -288,8 +387,41 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
     private sealed class AuthoredTiledBackgroundOracle(
         GameBoyTiledMap map,
-        PackedGameBoyMachineFactory factory) : IFunctionalFrameOracle
+        PackedGameBoyMachineFactory factory,
+        GameBoyVideoProgram? platformerProgram,
+        FunctionalScenario scenario) : IFunctionalFrameOracle
     {
+        private static readonly HashSet<int> PlatformerMissedGameplayFrames =
+        [
+            194, 202, 210, 218, 226, 234, 242, 250, 258, 266, 274, 281, 283,
+            291, 299, 307, 315, 323, 331, 339, 347, 355, 363, 371, 379, 387,
+            395, 403, 410, 412, 420, 428, 436, 444, 452, 600, 602, 609, 611,
+            618, 620, 627, 629, 636, 638, 645, 647, 654, 656, 663, 665, 672,
+            674, 681, 683, 690, 692, 699, 701, 708, 710, 717, 719, 726, 728,
+            735, 737, 744, 746, 753, 755, 762, 764, 771, 773, 780, 782, 789,
+            791, 798, 800, 807, 809, 816, 818, 825, 827, 1005, 1007, 1014,
+            1016, 1023, 1025, 1032, 1034, 1041, 1043, 1050, 1052, 1059, 1061,
+        ];
+        private static readonly HashSet<int> PlatformerDoubleGameplayFrames =
+        [
+            195, 203, 211, 219, 227, 235, 243, 251, 259, 267, 275, 284, 292,
+            300, 308, 316, 324, 332, 340, 348, 356, 364, 372, 380, 388, 396,
+            404, 413, 421, 429, 437, 445, 453, 603, 612, 621, 630, 639, 648,
+            657, 666, 675, 684, 693, 702, 711, 720, 729, 738, 747, 756, 765,
+            774, 783, 792, 801, 810, 819, 828, 1008, 1017, 1026, 1035, 1044,
+            1053, 1062,
+        ];
+        private readonly GameBoyCompiledSpriteAsset? playerAsset = platformerProgram?.SpriteAssets
+            .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
+        private readonly PlatformerLandingReferenceTimeline? platformerTimeline = platformerProgram is null
+            ? null
+            : new PlatformerLandingReferenceTimeline(
+                scenario,
+                cameraY: 176,
+                inputDelayFrames: 1,
+                missedGameplayFrames: PlatformerMissedGameplayFrames,
+                doubleGameplayFrames: PlatformerDoubleGameplayFrames);
+
         public FunctionalFrameExpectation ExpectedFrame(int frame)
         {
             var camera = factory.VisibleCameraByFrame[frame];
@@ -305,8 +437,47 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                             $"screen:{x:D2},{y:D2}",
                             AuthoredTile(startColumn + x, startRow + y),
                             0xE4)))
-                    .ToArray());
+                    .ToArray(),
+                PlatformerSprites(frame));
         }
+
+        private IReadOnlyList<FunctionalSpriteExpectation>? PlatformerSprites(int frame)
+        {
+            if (playerAsset is null || platformerTimeline is null)
+            {
+                return null;
+            }
+
+            var state = platformerTimeline.ExpectedDrawState(frame);
+            var screenX = state.PlayerX - state.CameraX;
+            var screenY = state.PlayerY - state.CameraY;
+            var spriteFrame = state.Grounded ? 0 : 4;
+            var expectedPlayer = playerAsset.Pieces.SelectMany(piece =>
+            {
+                var pieceX = state.FlipX
+                    ? playerAsset.LogicalWidth - 8 - piece.XOffset
+                    : piece.XOffset;
+                return new[]
+                {
+                    (screenY + piece.YOffset + 16) & 0xFF,
+                    (screenX + pieceX + 8) & 0xFF,
+                    playerAsset.FirstTile + spriteFrame * playerAsset.TilesPerFrame + piece.TileOffset,
+                    state.FlipX ? 0x20 : 0,
+                };
+            }).ToArray();
+            return
+            [
+                new FunctionalSpriteExpectation("player", OamVisible(expectedPlayer), expectedPlayer, 0),
+                new FunctionalSpriteExpectation(
+                    "unused-oam",
+                    false,
+                    Enumerable.Repeat(0, 160 - expectedPlayer.Length).ToArray(),
+                    playerAsset.Pieces.Count),
+            ];
+        }
+
+        private static bool OamVisible(IReadOnlyList<int> oam) =>
+            oam.Chunk(4).Any(piece => piece[0] is > 0 and < 160);
 
         private int AuthoredTile(int x, int y)
         {

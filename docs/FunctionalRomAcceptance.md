@@ -3,7 +3,8 @@
 Status: implemented shared contract for CSL-2 / #337, with the canonical
 static/source-camera rung bound by CSL-3 / #338 and the packed Tiled
 production matrix bound by RPH-3.5 / #339. CSL-6 / #341 adds the sustained
-actor/projectile sprite-integrity rung.
+actor/projectile sprite-integrity rung, and CSL-7 / #342 adds the shared
+platformer landing/reset rung.
 
 This document defines the functional acceptance boundary for canonical RetroSharp sample ROMs. Compilation and final-state checks remain useful, but they cannot prove sustained gameplay cadence, transient visual integrity, legal video writes, or correct camera publication. Functional acceptance runs the exact emitted ROM and evaluates every retained observation through one target-neutral contract.
 
@@ -134,6 +135,16 @@ controlled stale-OAM contract probe proves that a retained sprite from an
 unexecuted draw path fails immediately instead of being hidden by a later good
 frame. The accepted hashes and external emulator checkpoints are recorded in
 [`ActorProjectileFunctionalAcceptance.md`](ActorProjectileFunctionalAcceptance.md).
+
+CSL-7 binds `platformer-landing` on Game Boy and NES to one shared source,
+one authored 32x20 Tiled map, the same wall/return/jump/fall input timeline,
+and the exact tracked cartridge bytes. Typed build-report variables prove
+word-wide Y=304 support, wall contact, camera X=255/256 traversal, a complete
+apex and landing, return without reset, and exactly one source-owned gameplay
+reset. Every retained frame also checks the authored packed background, the
+complete player metasprite and unused OAM, bank/mapper restoration, and legal
+video/OAM timing. See
+[`PlatformerLandingFunctionalAcceptance.md`](PlatformerLandingFunctionalAcceptance.md).
 
 The production targets retain logical sprites before publication. Game Boy
 logical draws update the `$C600` shadow page and a ten-byte HRAM routine starts

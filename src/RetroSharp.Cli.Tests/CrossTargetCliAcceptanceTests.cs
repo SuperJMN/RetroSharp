@@ -306,6 +306,26 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Contains("""shots.Request(MarioFireball""", source, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("gb", "samples/platformer-landing/bin/platformer-landing.gb")]
+    [InlineData("nes", "samples/platformer-landing/bin/platformer-landing.nes")]
+    public void Platformer_landing_manifest_emits_the_exact_tracked_rom(
+        string target,
+        string trackedRomRelativePath)
+    {
+        using var workspace = TemporaryWorkspace();
+        var output = Path.Combine(workspace.Path, $"platformer-landing.{target}");
+        var result = RunCli(
+            "--target",
+            target,
+            "--out",
+            output,
+            RepositoryFile("samples/platformer-landing/platformer-landing.retrosharp.json"));
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(File.ReadAllBytes(RepositoryFile(trackedRomRelativePath)), File.ReadAllBytes(output));
+    }
+
     [Fact]
     public void Cli_builds_every_manifest_sample_for_declared_targets()
     {

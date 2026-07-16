@@ -27,6 +27,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         { "tiled-vscroll", "samples/tiled-vscroll/vscroll.rs", "samples/tiled-vscroll/vscroll.tmj", "samples/tiled-vscroll/vscroll.nes", "validation/scenarios/tiled-vscroll.nes.json" },
         { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.nes", "validation/scenarios/tiled-free-scroll.nes.json" },
         { "deadzone-follow", "samples/deadzone-follow/deadzone.rs", "samples/deadzone-follow/deadzone.tmj", "samples/deadzone-follow/deadzone.nes", "validation/scenarios/deadzone-follow.nes.json" },
+        { "platformer-landing", "samples/platformer-landing/src/main.rs", "samples/platformer-landing/assets/platformer-landing.tmj", "samples/platformer-landing/bin/platformer-landing.nes", "validation/scenarios/platformer-landing.nes.json" },
     };
 
     [Fact]
@@ -114,13 +115,43 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         var isHorizontalScrollCanary = sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal);
         var usesBottomOverscanInset = sampleId is "tiled-hscroll-short" or "tiled-hscroll-full";
         var sourcePath = RepositoryFile(sourceRelativePath);
-        var sourceDirectory = Path.GetDirectoryName(sourcePath)
+        var sourceDirectory = sampleId == "platformer-landing"
+            ? Path.GetDirectoryName(Path.GetDirectoryName(sourcePath))
+            : Path.GetDirectoryName(sourcePath);
+        sourceDirectory = sourceDirectory
             ?? throw new InvalidOperationException($"Could not locate '{sourceRelativePath}'.");
+        var source = File.ReadAllText(sourcePath);
+        NesVideoProgram? platformerProgram = null;
+        NesRomBuildReport? platformerBuildReport = null;
+        byte[] regeneratedRom;
+        if (sampleId == "platformer-landing")
+        {
+            platformerProgram = RetroSharp.NES.NesRomCompiler.PrepareVideoProgram(
+                source,
+                sourceDirectory,
+                RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+                null,
+                [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+                null).VideoProgram;
+            var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+                source,
+                sourceDirectory,
+                RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+                null,
+                [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+                null);
+            platformerBuildReport = build.Report;
+            regeneratedRom = build.Rom;
+        }
+        else
+        {
+            regeneratedRom = NesRomCompiler.CompileSource(source, sourceDirectory);
+        }
         var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
-        var regeneratedRom = NesRomCompiler.CompileSource(File.ReadAllText(sourcePath), sourceDirectory);
         Assert.Equal(trackedRom, regeneratedRom);
 
-        var map = NesTiledWorldImporter.Load(RepositoryFile(mapRelativePath), NesVideoProgram.FirstSpriteTile);
+        var map = platformerProgram?.PackedWorld?.LoweredWorld
+            ?? NesTiledWorldImporter.Load(RepositoryFile(mapRelativePath), NesVideoProgram.FirstSpriteTile);
         Assert.True(map.Width > 0);
         Assert.InRange(map.Height, 1, 60);
         if (isHorizontalScrollCanary)
@@ -130,20 +161,22 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         Assert.Equal(sampleId, scenario.SampleId);
-        var factory = new PackedNesMachineFactory();
+        var factory = new PackedNesMachineFactory(platformerProgram, platformerBuildReport);
         var adapter = new NesFunctionalRomAdapter(
             factory,
             new FunctionalAdapterCapabilities(
                 GameplayTicks: true,
+                InputTimeline: sampleId == "platformer-landing",
                 CameraLifecycle: true,
                 BankRestoration: true,
                 Background: true,
+                SpriteOam: sampleId == "platformer-landing",
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
             new FunctionalRomArtifact(romRelativePath, trackedRom),
             adapter,
-            new AuthoredTiledBackgroundOracle(map, factory));
+            new AuthoredTiledBackgroundOracle(map, factory, platformerProgram, scenario));
 
         output.WriteLine($"{report.ScenarioId}: {report.Summary}");
         foreach (var check in report.TimingChecks)
@@ -262,7 +295,9 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
     }
 
-    private sealed class PackedNesMachineFactory : IFunctionalRomMachineFactory
+    private sealed class PackedNesMachineFactory(
+        NesVideoProgram? platformerProgram = null,
+        NesRomBuildReport? platformerBuildReport = null) : IFunctionalRomMachineFactory
     {
         public byte[]? LoadedRom { get; private set; }
 
@@ -282,6 +317,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 VisibleCameraByFrame,
                 AppliedScrollYByFrame,
                 AppliedScrollXByFrame,
+                platformerProgram,
+                platformerBuildReport,
                 resetCount => ResetCount = resetCount);
         }
     }
@@ -291,6 +328,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         IDictionary<int, (int X, int Y)> visibleCameraByFrame,
         ICollection<(int Frame, int Y)> appliedScrollYByFrame,
         ICollection<(int Frame, int X)> appliedScrollXByFrame,
+        NesVideoProgram? platformerProgram,
+        NesRomBuildReport? platformerBuildReport,
         Action<int> publishResetCount) : IFunctionalRomMachine
     {
         private readonly NesTestCpu cpu = new(exactRom);
@@ -302,6 +341,11 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private long cameraRequestSequence;
         private long visibleSequence;
         private bool nextScrollWriteIsX = true;
+        private readonly IReadOnlyDictionary<string, NesRuntimeUserVariable> variables =
+            platformerBuildReport?.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal)
+            ?? new Dictionary<string, NesRuntimeUserVariable>(StringComparer.Ordinal);
+        private readonly NesCompiledSpriteAsset? playerAsset = platformerProgram?.SpriteAssets
+            .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
 
         public FunctionalFrameObservation ObserveInitial()
         {
@@ -373,6 +417,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 ["directoryWorkInCommit"] = cpu.Ram(DirectoryWorkInCommit),
                 ["decodeWorkInCommit"] = cpu.Ram(DecodeWorkInCommit),
             };
+            AddPlatformerState(state);
+            var sprites = CapturePlatformerSprites();
             var bank = new FunctionalBankObservation(
                 cpu.CurrentR6Bank,
                 cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
@@ -392,9 +438,61 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 camera,
                 bank,
                 CaptureBackground(visibleCamera),
+                Sprites: sprites,
                 VideoWrites: videoWrites,
                 OamWrites: oamWrites);
         }
+
+        private void AddPlatformerState(IDictionary<string, long> state)
+        {
+            if (playerAsset is null)
+            {
+                return;
+            }
+
+            var playerY = VariableWord("player.y");
+            state["playerX"] = VariableWord("player.x");
+            state["playerY"] = playerY;
+            state["worldFootY"] = playerY + 31;
+            state["grounded"] = VariableByte("player.grounded");
+            state["jumpCount"] = VariableByte("player.jumpCount");
+            state["landingCount"] = VariableByte("player.landingCount");
+            state["gameplayResetCount"] = VariableByte("player.gameplayResetCount");
+            state["supportProbeCount"] = VariableByte("player.supportProbeCount");
+            state["wallContactCount"] = VariableByte("player.wallContactCount");
+            state["sourceCameraX"] = VariableWord("view.x");
+            state["sourceCameraY"] = VariableWord("view.y");
+            state["displayEnabled"] = cpu.RenderingEnabled ? 1 : 0;
+        }
+
+        private IReadOnlyList<FunctionalSpriteObservation>? CapturePlatformerSprites()
+        {
+            if (playerAsset is null)
+            {
+                return null;
+            }
+
+            var playerOamBytes = playerAsset.Pieces.Count * 4;
+            var actualPlayer = Enumerable.Range(0, playerOamBytes)
+                .Select(offset => (int)cpu.Oam((byte)offset))
+                .ToArray();
+            var actualUnused = Enumerable.Range(playerOamBytes, 256 - playerOamBytes)
+                .Select(offset => (int)cpu.Oam((byte)offset))
+                .ToArray();
+            return
+            [
+                new FunctionalSpriteObservation("player", OamVisible(actualPlayer), actualPlayer, 0),
+                new FunctionalSpriteObservation("unused-oam", OamVisible(actualUnused), actualUnused, playerAsset.Pieces.Count),
+            ];
+        }
+
+        private int VariableWord(string name) => VariableByte(name) | (VariableByte(name, 1) << 8);
+
+        private byte VariableByte(string name, int offset = 0) =>
+            cpu.Ram(checked((ushort)(variables[name].Address + offset)));
+
+        private static bool OamVisible(IReadOnlyList<int> oam) =>
+            oam.Chunk(4).Any(piece => piece[0] < 239);
 
         private FunctionalCameraLifecycleObservation CameraObservation(
             (int X, int Y) requested,
@@ -499,8 +597,16 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
     private sealed class AuthoredTiledBackgroundOracle(
         NesTiledWorld map,
-        PackedNesMachineFactory factory) : IFunctionalFrameOracle
+        PackedNesMachineFactory factory,
+        NesVideoProgram? platformerProgram = null,
+        FunctionalScenario? scenario = null) : IFunctionalFrameOracle
     {
+        private readonly NesCompiledSpriteAsset? playerAsset = platformerProgram?.SpriteAssets
+            .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
+        private readonly PlatformerLandingReferenceTimeline? platformerTimeline = platformerProgram is null || scenario is null
+            ? null
+            : new PlatformerLandingReferenceTimeline(scenario, cameraY: 80);
+
         public FunctionalFrameExpectation ExpectedFrame(int frame)
         {
             var camera = factory.VisibleCameraByFrame[frame];
@@ -524,8 +630,47 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                                 paletteSlot,
                                 map.BackgroundPalette.Skip(paletteSlot * 4).Take(4).Select(value => (int)value).ToArray()));
                     }))
-                    .ToArray());
+                    .ToArray(),
+                PlatformerSprites(frame));
         }
+
+        private IReadOnlyList<FunctionalSpriteExpectation>? PlatformerSprites(int frame)
+        {
+            if (playerAsset is null || platformerTimeline is null)
+            {
+                return null;
+            }
+
+            var state = platformerTimeline.ExpectedDrawState(frame);
+            var screenX = state.PlayerX - state.CameraX;
+            var screenY = state.PlayerY - state.CameraY;
+            var spriteFrame = state.Grounded ? 0 : 4;
+            var expectedPlayer = playerAsset.Pieces.SelectMany(piece =>
+            {
+                var pieceX = state.FlipX
+                    ? playerAsset.LogicalWidth - 8 - piece.XOffset
+                    : piece.XOffset;
+                return new[]
+                {
+                    (screenY + piece.YOffset - 1) & 0xFF,
+                    playerAsset.FirstTile + spriteFrame * playerAsset.TilesPerFrame + piece.TileOffset,
+                    piece.PaletteSlotOffset | (state.FlipX ? 0x40 : 0),
+                    (screenX + pieceX) & 0xFF,
+                };
+            }).ToArray();
+            return
+            [
+                new FunctionalSpriteExpectation("player", OamVisible(expectedPlayer), expectedPlayer, 0),
+                new FunctionalSpriteExpectation(
+                    "unused-oam",
+                    false,
+                    Enumerable.Repeat(255, 256 - expectedPlayer.Length).ToArray(),
+                    playerAsset.Pieces.Count),
+            ];
+        }
+
+        private static bool OamVisible(IReadOnlyList<int> oam) =>
+            oam.Chunk(4).Any(piece => piece[0] < 239);
 
         private int AuthoredPaletteSlot(int x, int y)
         {

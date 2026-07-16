@@ -1,0 +1,9 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/platformer-landing.gb",
+    "nes": "bin/platformer-landing.nes"
+  },
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": ["src/main.rs"]
+}

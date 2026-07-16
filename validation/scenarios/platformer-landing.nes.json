@@ -1,0 +1,44 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "platformer-landing-nes-functional",
+  "sampleId": "platformer-landing",
+  "target": "nes",
+  "warmUpFrames": 160,
+  "observationFrames": 1080,
+  "inputs": [
+    { "id": "approach-wall", "startFrame": 161, "durationFrames": 400, "buttons": ["RIGHT"], "responseSignal": "playerX" },
+    { "id": "return-from-wall", "startFrame": 561, "durationFrames": 266, "buttons": ["LEFT"], "responseSignal": "playerX" },
+    { "id": "full-jump", "startFrame": 847, "durationFrames": 40, "buttons": ["A"], "responseSignal": "jumpCount" },
+    { "id": "authored-fall", "startFrame": 997, "durationFrames": 159, "buttons": ["LEFT"], "responseSignal": "playerX" }
+  ],
+  "checkpoints": [
+    { "id": "spawn-grounded", "frame": 160, "expectedSignals": { "playerX": 72, "playerY": 273, "worldFootY": 304, "grounded": 1, "jumpCount": 0, "landingCount": 0, "gameplayResetCount": 0, "supportProbeCount": 1, "wallContactCount": 0, "sourceCameraX": 0, "visibleCameraX": 0, "displayEnabled": 1 } },
+    { "id": "wall-after-column-and-chunk-boundaries", "frame": 560, "expectedSignals": { "playerX": 366, "playerY": 273, "worldFootY": 304, "grounded": 1, "gameplayResetCount": 0, "wallContactCount": 106, "sourceCameraX": 270, "visibleCameraX": 270, "displayEnabled": 1 } },
+    { "id": "returned-without-reset", "frame": 826, "expectedSignals": { "playerX": 100, "playerY": 273, "grounded": 1, "gameplayResetCount": 0, "sourceCameraX": 36, "visibleCameraX": 36 } },
+    { "id": "jump-apex", "frame": 875, "expectedSignals": { "playerX": 100, "playerY": 202, "grounded": 0, "jumpCount": 1, "landingCount": 0, "gameplayResetCount": 0, "sourceCameraX": 36, "visibleCameraX": 36 } },
+    { "id": "apex-and-landing-complete", "frame": 996, "expectedSignals": { "playerX": 100, "playerY": 273, "worldFootY": 304, "grounded": 1, "jumpCount": 1, "landingCount": 1, "gameplayResetCount": 0, "sourceCameraX": 36, "visibleCameraX": 36 } },
+    { "id": "one-authored-fall-reset", "frame": 1240, "expectedSignals": { "playerX": 72, "playerY": 273, "worldFootY": 304, "grounded": 1, "jumpCount": 1, "landingCount": 1, "gameplayResetCount": 1, "sourceCameraX": 0, "visibleCameraX": 0, "displayEnabled": 1 } }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": true,
+    "safeVideoWrites": true
+  },
+  "audio": { "serviceExpectedByDefault": false, "authoredSilence": [] },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "The shared platformer requests at most one horizontal camera pixel per gameplay tick. Packed preparation remains outside NMI; each edge publication and the six-piece player OAM DMA stay inside bounded NES VBlank windows.",
+    "productionTraceRationale": "The exact tracked platformer-landing.nes runs the same shared wall, return, full-jump, landing, and authored-fall timeline through word-wide Y=304 ground and horizontal packed boundaries. The budgets retain the established pre-Large-Worlds 95 percent cadence floor, one missed-tick ceiling, one-frame input response, and two-frame camera publication ceiling used by the focused acceptance rungs."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 2
+  }
+}
