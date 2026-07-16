@@ -1,0 +1,42 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "shots-simple-gb-functional",
+  "sampleId": "shots-simple",
+  "target": "gb",
+  "warmUpFrames": 20,
+  "observationFrames": 240,
+  "inputs": [],
+  "checkpoints": [
+    {
+      "id": "pool-contract",
+      "frame": 260,
+      "expectedSignals": {
+        "poolCapacity": 2,
+        "requestCapacity": 2
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": false,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "A 70224-cycle DMG frame permits one complete fixed-pool update plus a VBlank OAM projection; accepted logical spawns must reach retained OAM by the following frame.",
+    "productionTraceRationale": "The production timer requests a shot every ten ticks; the two-slot hero pool must drop requests while full, despawn offscreen, reuse both slots, and publish each accepted spawn within one frame."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumSpawnToVisibleFrames": 1
+  }
+}

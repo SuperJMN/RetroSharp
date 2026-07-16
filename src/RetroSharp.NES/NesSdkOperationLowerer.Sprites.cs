@@ -7,10 +7,9 @@ internal sealed partial class NesSdkOperationLowerer
 {
     public void EmitOamShadowClear()
     {
-        var clearLabel = builder.CreateLabel("oam_clear");
-
         if (useDirectOamWrites)
         {
+            var clearLabel = builder.CreateLabel("oam_clear");
             builder.LoadAImmediate(0);
             builder.StoreAAbsolute(0x2003);
             builder.LoadAImmediate(0xFF);
@@ -22,13 +21,36 @@ internal sealed partial class NesSdkOperationLowerer
             return;
         }
 
+        EmitOamShadowReset(clearCompletePage: true);
+        EmitOamDma();
+    }
+
+    internal void EmitOamShadowReset(bool clearCompletePage = false)
+    {
+        var byteCount = clearCompletePage ? 256 : retainedOamByteCount;
+        if (byteCount == 0)
+        {
+            return;
+        }
+
+        var clearLabel = builder.CreateLabel("oam_shadow_reset");
         builder.LoadAImmediate(0xFF);
+        if (byteCount < 256)
+        {
+            builder.LoadXImmediate(0);
+            builder.Label(clearLabel);
+            builder.StoreAAbsoluteX(NesRuntimeMemoryLayout.Sprite.OamShadow);
+            builder.IncrementX();
+            builder.CompareXImmediate(byteCount);
+            builder.BranchRelative(0xD0, clearLabel); // BNE clearLabel
+            return;
+        }
+
         builder.LoadXImmediate(0);
         builder.Label(clearLabel);
         builder.StoreAAbsoluteX(NesRuntimeMemoryLayout.Sprite.OamShadow);
         builder.IncrementX();
         builder.BranchRelative(0xD0, clearLabel);   // BNE clearLabel
-        EmitOamDma();
     }
 
     private int SpriteWidth(string assetName)
@@ -195,10 +217,8 @@ internal sealed partial class NesSdkOperationLowerer
             EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 3));
         }
 
-        if (!useDirectOamWrites)
-        {
-            EmitOamDma();
-        }
+        // Shadow OAM is published once by the next frame boundary. Keeping draw calls as
+        // RAM-only updates preserves complete logical ordering without visible-scanline DMA.
     }
 
     private void EmitSpriteDrawY(SdkByteExpression yExpression, int offset, ushort oamAddress)

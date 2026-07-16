@@ -24,6 +24,8 @@ internal sealed partial class NesSdkOperationLowerer
     private readonly bool useFourScreenNametables;
     private readonly bool usePackedCamera;
     private readonly bool useDirectOamWrites;
+    private readonly bool usesRetainedOam;
+    private readonly int retainedOamByteCount;
     private int nextHardwareSprite;
     private bool packedCollisionAtScratchSubroutineReferenced;
     private bool packedCollisionFlagsSubroutineReferenced;
@@ -45,6 +47,13 @@ internal sealed partial class NesSdkOperationLowerer
         this.useFourScreenNametables = useFourScreenNametables;
         this.usePackedCamera = usePackedCamera;
         this.useDirectOamWrites = useDirectOamWrites;
+        usesRetainedOam = !useDirectOamWrites
+            && program.SdkOperationStream.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
+        retainedOamByteCount = Math.Min(
+            256,
+            program.SdkOperationStream
+                .OfType<Sdk2DOperation.DrawLogicalSprite>()
+                .Sum(operation => program.SpriteAssets[operation.SpriteId].Pieces.Count * 4));
     }
 
     public void Emit(Sdk2DOperation operation)

@@ -175,6 +175,13 @@ public static class FunctionalScenarioRunner
             }
         }
 
+        if (scenario.Budgets.MaximumSpawnToVisibleFrames is { } spawnLimit)
+        {
+            var spawns = ActivatedSpawnSequences(frames, start, end);
+            var observed = MaximumSpawnLatency(spawns, frames, end, spawnLimit);
+            checks.Add(MaximumCheck("spawn-to-visible", observed, spawnLimit));
+        }
+
         return checks;
     }
 
@@ -239,6 +246,11 @@ public static class FunctionalScenarioRunner
             {
                 spriteExpectationCount += expectation?.Sprites?.Count ?? 0;
                 CompareSprites(frame, expectation?.Sprites, observation.Sprites, failures);
+            }
+
+            if (scenario.Budgets.MaximumSpawnToVisibleFrames is not null && observation.Spawn is null)
+            {
+                failures.Add(new("missing-spawn-observation", frame, "The scenario requires accepted-spawn lifecycle observations."));
             }
 
             if (scenario.ExpectedFeatures.SafeVideoWrites)
@@ -309,6 +321,11 @@ public static class FunctionalScenarioRunner
         if (scenario.ExpectedFeatures.CameraLifecycle)
         {
             ValidateCameraLifecycle(frames, start - 1, end, frames.Count - 1, failures);
+        }
+
+        if (scenario.Budgets.MaximumSpawnToVisibleFrames is { } spawnLimit)
+        {
+            ValidateSpawnLifecycle(frames, start - 1, end, spawnLimit, failures);
         }
 
         foreach (var checkpoint in scenario.Checkpoints)
@@ -432,6 +449,14 @@ public static class FunctionalScenarioRunner
                     "sprite-visibility",
                     frame,
                     $"{pair.Key}: expected visible={pair.Value.Visible}, observed visible={observed.Visible}."));
+            }
+
+            if (pair.Value.OamSlot >= 0 && pair.Value.OamSlot != observed.OamSlot)
+            {
+                failures.Add(new(
+                    "sprite-oam-slot",
+                    frame,
+                    $"{pair.Key}: expected OAM slot {pair.Value.OamSlot}, observed {observed.OamSlot}."));
             }
 
             if (!pair.Value.Oam.SequenceEqual(observed.Oam))
@@ -706,6 +731,103 @@ public static class FunctionalScenarioRunner
 
             return end - request.Frame + 1;
         });
+    }
+
+    private static IReadOnlyList<(long Sequence, int Frame)> ActivatedSpawnSequences(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int start,
+        int end)
+    {
+        var spawns = new List<(long Sequence, int Frame)>();
+        var seen = new HashSet<long>();
+        var previous = frames[start].Spawn?.ActivatedSequence;
+        for (var frame = start + 1; frame <= end; frame++)
+        {
+            var current = frames[frame].Spawn?.ActivatedSequence;
+            foreach (var sequence in SequenceTransitions(previous, current))
+            {
+                if (seen.Add(sequence))
+                {
+                    spawns.Add((sequence, frame));
+                }
+            }
+
+            previous = current;
+        }
+
+        return spawns;
+    }
+
+    private static int MaximumSpawnLatency(
+        IReadOnlyList<(long Sequence, int Frame)> spawns,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int end,
+        int limit)
+    {
+        if (spawns.Count == 0)
+        {
+            return limit + 1;
+        }
+
+        return spawns.Max(spawn =>
+        {
+            for (var frame = spawn.Frame; frame <= end; frame++)
+            {
+                if (frames[frame].Spawn?.VisibleSequence == spawn.Sequence)
+                {
+                    return frame - spawn.Frame;
+                }
+            }
+
+            return limit + 1;
+        });
+    }
+
+    private static void ValidateSpawnLifecycle(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int start,
+        int end,
+        int limit,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        var spawns = ActivatedSpawnSequences(frames, start, end);
+        if (spawns.Count == 0)
+        {
+            failures.Add(new(
+                "missing-spawn-transition",
+                start + 1,
+                "A spawn-to-visible budget requires at least one accepted spawn transition in the measurement window."));
+            return;
+        }
+
+        long? previousVisible = frames[start].Spawn?.VisibleSequence;
+        for (var frame = start + 1; frame <= end; frame++)
+        {
+            var visible = frames[frame].Spawn?.VisibleSequence;
+            if (visible is { } current && previousVisible is { } previous && current > previous + 1)
+            {
+                failures.Add(new(
+                    "spawn-visible-sequence-gap",
+                    frame,
+                    $"Visible spawn watermark jumped from {previous} to {current}; later visibility cannot complete a missing earlier spawn."));
+            }
+
+            previousVisible = visible;
+        }
+
+        foreach (var spawn in spawns)
+        {
+            var completionEnd = Math.Min(end, spawn.Frame + limit);
+            var completed = Enumerable.Range(spawn.Frame, completionEnd - spawn.Frame + 1)
+                .Any(frame => frames[frame].Spawn?.VisibleSequence == spawn.Sequence);
+            if (!completed)
+            {
+                failures.Add(new(
+                    "spawn-not-visible-within-budget",
+                    spawn.Frame,
+                    $"Accepted spawn sequence {spawn.Sequence} did not become the contiguous visible watermark within {limit} frame(s)."));
+            }
+        }
     }
 
     private static FunctionalTimingCheck MinimumCheck(string metric, double observed, double limit) =>

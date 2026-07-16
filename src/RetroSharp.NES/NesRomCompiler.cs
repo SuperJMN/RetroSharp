@@ -141,7 +141,7 @@ public static class NesRomCompiler
         Sdk2DOperation.CameraScreenAabbTiles or
         Sdk2DOperation.CameraScreenAabbHitTop;
 
-    private static (NesVideoProgram VideoProgram, PreparedTargetProgram FrontendProgram) PrepareVideoProgram(
+    internal static (NesVideoProgram VideoProgram, PreparedTargetProgram FrontendProgram) PrepareVideoProgram(
         string source,
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,

@@ -45,6 +45,8 @@ internal sealed partial class GameBoySdkOperationLowerer
         GameBoyVideoProgram.RequireArity(call, 5);
         var args = call.Parameters.ToList();
         var spriteId = CheckedRange(GameBoyVideoProgram.ConstValue(args[0], "sprite_set argument 1"), 0, 39, "sprite_set argument 1");
+        // The legacy raw sprite_set intrinsic keeps its direct OAM compatibility behavior. The
+        // portable logical draw surface owns the shadow-OAM/DMA contract.
         var oamAddress = (ushort)(0xFE00 + spriteId * 4);
 
         context.EmitSourceExpressionToA(args[2]);

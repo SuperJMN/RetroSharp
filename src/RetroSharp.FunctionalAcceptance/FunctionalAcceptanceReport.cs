@@ -139,6 +139,13 @@ public sealed record FunctionalAcceptanceReport(
                 .Append(Sequence(camera.VisibleSequence));
         }
 
+        if (observed.Spawn is { } spawn)
+        {
+            builder.Append(" spawn=")
+                .Append(Sequence(spawn.ActivatedSequence)).Append('/')
+                .Append(Sequence(spawn.VisibleSequence));
+        }
+
         if (observed.Bank is { } bank)
         {
             builder.Append(" bank=").Append(bank.Domain).Append(':')
@@ -188,8 +195,8 @@ public sealed record FunctionalAcceptanceReport(
 
         var values = sprites.Select(sprite => sprite switch
         {
-            FunctionalSpriteObservation observed => $"{observed.Id}:{Boolean(observed.Visible)}:{string.Join('.', observed.Oam)}",
-            FunctionalSpriteExpectation expected => $"{expected.Id}:{Boolean(expected.Visible)}:{string.Join('.', expected.Oam)}",
+            FunctionalSpriteObservation observed => $"{observed.Id}:slot={observed.OamSlot}:{Boolean(observed.Visible)}:{string.Join('.', observed.Oam)}",
+            FunctionalSpriteExpectation expected => $"{expected.Id}:slot={expected.OamSlot}:{Boolean(expected.Visible)}:{string.Join('.', expected.Oam)}",
             _ => throw new ArgumentOutOfRangeException(nameof(sprites)),
         }).Order(StringComparer.Ordinal);
         builder.Append(name).Append("=[").Append(string.Join(',', values)).Append(']');

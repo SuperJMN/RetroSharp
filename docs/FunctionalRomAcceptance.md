@@ -2,7 +2,8 @@
 
 Status: implemented shared contract for CSL-2 / #337, with the canonical
 static/source-camera rung bound by CSL-3 / #338 and the packed Tiled
-production matrix bound by RPH-3.5 / #339.
+production matrix bound by RPH-3.5 / #339. CSL-6 / #341 adds the sustained
+actor/projectile sprite-integrity rung.
 
 This document defines the functional acceptance boundary for canonical RetroSharp sample ROMs. Compilation and final-state checks remain useful, but they cannot prove sustained gameplay cadence, transient visual integrity, legal video writes, or correct camera publication. Functional acceptance runs the exact emitted ROM and evaluates every retained observation through one target-neutral contract.
 
@@ -41,7 +42,7 @@ Scenarios live under `validation/scenarios/` and conform to `functional-scenario
 | `expectedFeatures` | Observations the adapter must supply for this scenario. |
 | `audio` | Scenario-owned service expectation plus explicit authored-silence spans. |
 | `budgetEvidence` | Reviewed baseline commit, hardware rationale, and production-trace rationale. |
-| `budgets` | Reviewed absolute timing limits; never learned from the current build. |
+| `budgets` | Reviewed absolute timing limits, including optional spawn-to-visible latency; never learned from the current build. |
 
 `FunctionalScenarioLoader` rejects malformed values, duplicate input/checkpoint ids, out-of-window events, unknown JSON properties, missing audio budgets, and camera scenarios without a relevant residency or visibility deadline. `validation/scenarios/fixtures/contract-probe.json` is the minimal complete example; it is a contract fixture, not a canonical sample migration.
 
@@ -53,6 +54,7 @@ Warm-up affects timing only. The runner captures frame zero, executes every phys
 - A missed gameplay frame is a frame with no positive gameplay-counter delta; the longest consecutive streak is checked.
 - Authored-silent audio frames declared by the scenario do not count as starvation. The adapter cannot label a stalled frame as silence. Active frames check the longest zero-service streak and absolute cumulative drift from one service tick per active frame.
 - Input latency starts on the first frame of an input span and ends on the first change of its declared response signal.
+- Spawn latency starts at each monotonically sequenced logical activation and ends when that same sequence first appears in retained OAM. An unresolved activation, a visibility sequence that overtakes an earlier spawn, or a gap in either sequence fails independently of the numeric deadline.
 - Camera latency starts when a new request sequence appears and ends when the same sequence becomes resident or visible. Requested, resident, committed, and visible sequence counts remain separate in the report.
 - If the final observation-window request is still in flight, the runner drains only the declared request-to-resident/request-to-visible budget. Drain frames receive no input, cannot improve gameplay or integrity measurements, and are counted separately in `totalPhysicalFrames`; they exist only so a legal final request can prove its bounded completion.
 
@@ -65,7 +67,7 @@ Integrity is strict within the declared observation window and is reported separ
 - Any additional reset fails.
 - An independent scenario oracle supplies authored background and logical-sprite expectations; the machine adapter supplies only actual retained state.
 - Expected and observed background tile plus palette identities must match at every retained location.
-- Logical sprite visibility and complete OAM projections must match; stale, missing, or unexpected sprites fail.
+- Logical sprite visibility, assigned hardware slot, and complete OAM projections must match; stale, missing, reordered, or unexpected sprites fail. The oracle declares the slot instead of allowing the adapter to match identical sprites by content.
 - Unsafe visible-time VRAM/PPU or OAM writes fail. Every reported write retains its address, safety verdict, absolute cycle, scanline, dot, PPU/LCD phase, and display-enabled state.
 - Selected bank/mapper state must match its expected shadow/restored state.
 - Required observations that an adapter omits fail explicitly.
@@ -118,6 +120,29 @@ variant of the complete fixture. These scenarios remove player, input, audio,
 collision queries, and sprites while retaining exact authored tile and palette
 checks across chunk, circular background, and X=256 boundaries. The offset
 variant is the golden rung between zero-Y horizontal scrolling and the runner.
+
+CSL-6 binds `actor-framework`, `shots-simple`, `shots-bouncy`, and
+`runner-projectile` on both Game Boy and NES to eight checked-in scenarios and
+the exact tracked cartridge bytes. Every physical frame in the forward/reverse
+actor traversal and projectile timelines checks the authored background,
+logical visibility, exact hardware-slot order, every OAM byte, and timed video
+and OAM writes. The shared lifecycle evidence separately proves actor
+tile-contact and grounded world-Y state, fixed-pool saturation, dropped
+requests, slot reuse, bounces, and muzzle-effect expiry; the timing
+evidence adds explicit tick, input-to-state, and spawn-to-visible budgets. A
+controlled stale-OAM contract probe proves that a retained sprite from an
+unexecuted draw path fails immediately instead of being hidden by a later good
+frame. The accepted hashes and external emulator checkpoints are recorded in
+[`ActorProjectileFunctionalAcceptance.md`](ActorProjectileFunctionalAcceptance.md).
+
+The production targets retain logical sprites before publication. Game Boy
+logical draws update the `$C600` shadow page and a ten-byte HRAM routine starts
+one `$FF46` DMA at the accepted VBlank boundary; the CPU remains in HRAM for the
+complete transfer. NES logical draws update page `$0200`, publish it once from
+`Video.WaitVBlank()`, and reset the statically used call-site bytes to `$FF`
+for the next frame so an unexecuted branch cannot retain a sprite. Transitional
+raw/direct OAM intrinsics keep their existing compatibility paths and are not
+silently reinterpreted as retained logical draws.
 
 ## CI tiers
 

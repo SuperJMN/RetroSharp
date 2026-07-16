@@ -13,6 +13,16 @@ internal readonly record struct NesPpuWrite(
 
 internal readonly record struct NesOamWrite(ushort Address, byte Value, long Cycle, bool RenderingEnabled);
 
+internal readonly record struct NesOamDmaTransfer(
+    byte SourcePage,
+    long Cycle,
+    byte[] RamSnapshot,
+    byte[] SourceSnapshot,
+    byte ScrollX,
+    byte ScrollY,
+    byte PpuControl,
+    bool RenderingEnabled);
+
 internal sealed class NesTestCpu
 {
     private const long PpuCyclesPerFrame = 341 * 262;
@@ -83,6 +93,8 @@ internal sealed class NesTestCpu
     public List<NesPpuWrite> PpuWrites { get; } = [];
 
     public List<NesOamWrite> OamWrites { get; } = [];
+
+    public List<NesOamDmaTransfer> OamDmaTransfers { get; } = [];
 
     public List<long> PpuStatusReadCycles { get; } = [];
 
@@ -532,10 +544,14 @@ internal sealed class NesTestCpu
         if (address == 0x4014)
         {
             var source = value << 8;
+            var sourceSnapshot = Enumerable.Range(0, 256)
+                .Select(index => Read((ushort)(source + index)))
+                .ToArray();
+            OamDmaTransfers.Add(new(value, cycles, (byte[])ram.Clone(), sourceSnapshot, scrollX, scrollY, ppuControl, RenderingEnabled));
             for (var index = 0; index < 256; index++)
             {
                 var target = oamAddress++;
-                oam[target] = Read((ushort)(source + index));
+                oam[target] = sourceSnapshot[index];
                 OamWrites.Add(new NesOamWrite((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + target), oam[target], cycles, RenderingEnabled));
             }
 

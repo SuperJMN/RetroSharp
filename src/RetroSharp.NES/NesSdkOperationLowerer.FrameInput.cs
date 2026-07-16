@@ -69,6 +69,11 @@ internal sealed partial class NesSdkOperationLowerer
             {
                 EmitApplyPendingCameraScrollAtVBlank();
             }
+            if (usesRetainedOam)
+            {
+                EmitOamDma();
+                EmitOamShadowReset();
+            }
 
             return;
         }
@@ -84,6 +89,11 @@ internal sealed partial class NesSdkOperationLowerer
         if (applyPendingCameraScroll)
         {
             EmitApplyPendingCameraScrollAtVBlank();
+        }
+        if (usesRetainedOam)
+        {
+            EmitOamDma();
+            EmitOamShadowReset();
         }
     }
 

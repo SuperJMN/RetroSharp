@@ -25,8 +25,10 @@ public sealed class GameBoyRuntimeMemoryLayoutTests
                 ("audio channel-1 shadow", (ushort)0xC210, 0x0005),
                 ("collision memo state", (ushort)0xC220, 0x00C0),
                 ("WorldPack staging", (ushort)0xC300, 0x022A),
+                ("sprite OAM shadow", (ushort)0xC600, 0x00A0),
                 ("WRAM echo", (ushort)0xE000, 0x1E00),
-                ("stack/HRAM", (ushort)0xFF80, 0x0080),
+                ("OAM DMA HRAM routine", (ushort)0xFF80, 0x000A),
+                ("stack/HRAM", (ushort)0xFF8A, 0x0076),
             ],
             GameBoyRuntimeMemoryLayout.ReservedRanges
                 .Select(range => (range.Name, range.Start, range.Length)));
@@ -40,7 +42,7 @@ public sealed class GameBoyRuntimeMemoryLayoutTests
             GameBoyRuntimeMemoryLayout.NamedAddresses.Count,
             GameBoyRuntimeMemoryLayout.NamedAddresses.Select(address => address.Address).Distinct().Count());
         Assert.Equal(
-            ["WorldPack", "audio", "banking", "camera", "collision", "input", "packed camera", "runtime"],
+            ["WorldPack", "audio", "banking", "camera", "collision", "input", "packed camera", "runtime", "sprites"],
             GameBoyRuntimeMemoryLayout.NamedAddresses
                 .Select(address => address.Domain)
                 .Distinct(StringComparer.Ordinal)

@@ -802,6 +802,16 @@ internal sealed partial class GameBoyRuntimeCompiler
         return IsWordBackedType(type) ? 2 : 1;
     }
 
+    internal IReadOnlyList<GameBoyRuntimeUserVariable> UserVariables => variables
+        .Select(variable => new GameBoyRuntimeUserVariable(
+            variable.Key,
+            variableTypes[variable.Key],
+            variable.Value,
+            StorageSize(variableTypes[variable.Key])))
+        .OrderBy(variable => variable.Address)
+        .ThenBy(variable => variable.Name, StringComparer.Ordinal)
+        .ToArray();
+
     private string VariableStorageType(string name)
     {
         var scopedName = ScopedVariableName(name);

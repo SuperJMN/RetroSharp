@@ -14,6 +14,7 @@ internal sealed partial class GameBoySdkOperationLowerer
     private readonly GameBoyRomLayout romLayout;
     private readonly GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout;
     private readonly bool usesPackedCameraRuntime;
+    private readonly bool usesShadowOam;
     private readonly bool usesPackedCollisionRuntime;
 
     public GameBoySdkOperationLowerer(
@@ -23,7 +24,8 @@ internal sealed partial class GameBoySdkOperationLowerer
         GameBoySdkLoweringContext context,
         GameBoyRomLayout romLayout,
         GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout,
-        bool usesPackedCameraRuntime)
+        bool usesPackedCameraRuntime,
+        bool usesShadowOam = false)
     {
         this.builder = builder;
         this.program = program;
@@ -32,6 +34,7 @@ internal sealed partial class GameBoySdkOperationLowerer
         this.romLayout = romLayout;
         this.packedWorldRuntimeLayout = packedWorldRuntimeLayout;
         this.usesPackedCameraRuntime = usesPackedCameraRuntime;
+        this.usesShadowOam = usesShadowOam;
         usesPackedCollisionRuntime = usesPackedCameraRuntime
                                      && program.SdkOperations.Any(operation => operation is
                                          Sdk2DOperation.CameraAabbTiles or

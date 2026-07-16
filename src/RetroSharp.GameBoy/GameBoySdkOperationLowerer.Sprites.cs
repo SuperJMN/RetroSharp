@@ -17,26 +17,11 @@ internal sealed partial class GameBoySdkOperationLowerer
             throw new InvalidOperationException("Game Boy sprite_draw calls exceed the 40 hardware sprite OAM limit.");
         }
 
-        var skipDraw = usesPackedCameraRuntime
-            ? builder.CreateLabel("sprite_draw_skip_after_packed_commit")
-            : null;
-        if (skipDraw is not null)
-        {
-            builder.LoadA(GameBoyRuntimeMemoryLayout.PackedCamera.CommitSucceeded);
-            builder.CompareImmediate(0);
-            builder.JumpAbsolute(0xC2, skipDraw);
-        }
-
-        if (usesPackedCameraRuntime)
-        {
-            GameBoyRomBuilder.EmitEnterVBlank(builder);
-        }
-
         state.NextHardwareSprite += asset.Pieces.Count;
         for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
         {
             var piece = asset.Pieces[pieceIndex];
-            var oamAddress = (ushort)(0xFE00 + (firstHardwareSprite + pieceIndex) * 4);
+            var oamAddress = (ushort)(GameBoyRuntimeMemoryLayout.Sprites.OamShadowStart + (firstHardwareSprite + pieceIndex) * 4);
 
             context.EmitByteExpressionToA(operation.Y);
             builder.AddAImmediate(16 + piece.YOffset);
@@ -50,11 +35,6 @@ internal sealed partial class GameBoySdkOperationLowerer
             builder.StoreA((ushort)(oamAddress + 2));
 
             EmitSpriteDrawAttributes(operation.FlipX, operation.PaletteSlot, (ushort)(oamAddress + 3));
-        }
-
-        if (skipDraw is not null)
-        {
-            builder.Label(skipDraw);
         }
     }
 

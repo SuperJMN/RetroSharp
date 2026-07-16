@@ -22,6 +22,7 @@ internal sealed partial class GameBoyRuntimeCompiler
     private readonly GameBoyVideoProgram program;
     private readonly GameBoyRomLayout romLayout;
     private readonly bool usesPackedCameraRuntime;
+    private readonly bool usesShadowOam;
     private readonly Sdk2DStreamReader sdkOperations;
     private readonly SdkAudioStreamReader sdkAudioOperations;
     private readonly Dictionary<string, ushort> variables = [];
@@ -50,6 +51,7 @@ internal sealed partial class GameBoyRuntimeCompiler
         this.program = program;
         this.romLayout = romLayout ?? GameBoyRomLayout.RomOnly;
         this.usesPackedCameraRuntime = usesPackedCameraRuntime;
+        usesShadowOam = program.SdkOperations.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
         sdkOperations = Sdk2DStreamReader.ForProgram(program);
         sdkAudioOperations = SdkAudioStreamReader.ForProgram(program);
         sdkOperationLowerer = new GameBoySdkOperationLowerer(
@@ -65,7 +67,8 @@ internal sealed partial class GameBoyRuntimeCompiler
                 ConstRuntimeValue),
             this.romLayout,
             packedWorldRuntimeLayout,
-            usesPackedCameraRuntime);
+            usesPackedCameraRuntime,
+            usesShadowOam);
     }
 
     public void Emit(BlockSyntax block)

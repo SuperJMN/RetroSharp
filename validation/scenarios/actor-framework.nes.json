@@ -1,0 +1,65 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "actor-framework-nes-functional",
+  "sampleId": "actor-framework",
+  "target": "nes",
+  "warmUpFrames": 20,
+  "observationFrames": 321,
+  "inputs": [
+    {
+      "id": "move-right",
+      "startFrame": 21,
+      "durationFrames": 160,
+      "buttons": [
+        "right"
+      ],
+      "responseSignal": "sourceCameraX"
+    },
+    {
+      "id": "reverse-left",
+      "startFrame": 181,
+      "durationFrames": 161,
+      "buttons": [
+        "left"
+      ],
+      "responseSignal": "sourceCameraX"
+    }
+  ],
+  "checkpoints": [
+    {
+      "id": "returned-after-reverse",
+      "frame": 341,
+      "expectedSignals": {
+        "sourceCameraX": 0,
+        "visibleCameraX": 0,
+        "poolCapacity": 2
+      }
+    }
+  ],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": false,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": false,
+    "safeVideoWrites": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": false,
+    "authoredSilence": []
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "An NTSC NES frame permits one complete fixed-pool update plus VBlank OAM publication; accepted logical spawns must reach retained OAM by the following frame.",
+    "productionTraceRationale": "The exact actor-framework NES ROM follows the same forward/reverse camera and fixed-slot timeline while retaining stable hardware-sprite order."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 0.95,
+    "maximumConsecutiveMissedGameplayTicks": 1,
+    "maximumInputToStateFrames": 1,
+    "maximumRequestToResidentFrames": 1,
+    "maximumRequestToVisibleFrames": 2,
+    "maximumSpawnToVisibleFrames": 1
+  }
+}

@@ -222,6 +222,10 @@
         "maximumAudioDriftTicks": {
           "type": "integer",
           "minimum": 0
+        },
+        "maximumSpawnToVisibleFrames": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     }

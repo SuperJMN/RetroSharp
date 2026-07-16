@@ -40,11 +40,11 @@ public sealed class GameBoySdkOperationBoundaryTests
 
         var bytes = builder.Build();
         Assert.True(
-            ContainsSequence(bytes, [0x3E, 0x18, 0xC6, 0x08, 0xEA, 0x01, 0xFE]),
-            "Runtime emission should use the collected sprite operation operand.");
+            ContainsSequence(bytes, [0x3E, 0x18, 0xC6, 0x08, 0xEA, 0x01, 0xC6]),
+            "Runtime emission should use the collected sprite operation operand in shadow OAM.");
         Assert.False(
-            ContainsSequence(bytes, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xFE]),
-            "Runtime emission should not re-read the sprite operand from the AST call.");
+            ContainsSequence(bytes, [0x3E, 0x48, 0xC6, 0x08, 0xEA, 0x01, 0xC6]),
+            "Runtime emission should not re-read the sprite operand from the AST call into shadow OAM.");
     }
 
     [Fact]

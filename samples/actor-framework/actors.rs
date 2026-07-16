@@ -30,13 +30,18 @@ void Main()
         {
             cameraX += 1;
         }
+        else if (Input.IsDown(Button.Left) && cameraX > 0)
+        {
+            cameraX -= 1;
+        }
 
         Camera.SetPosition(cameraX, 0);
+        // Apply presentation immediately after the frame boundary, before actor simulation work.
+        Camera.Apply();
         Actors.SpawnLayer(enemies, "actors.tmj", "actors");
         enemies.Update();
         enemies.TouchTiles(0, 1);
         enemies.LandOnTiles(4, 12, 1);
-        Camera.Apply();
         enemies.Draw();
     }
 }

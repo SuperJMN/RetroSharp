@@ -205,6 +205,15 @@ This document preserves project knowledge that previously lived only in agent me
   GameboyMcp/NesMcp checkpoints on the
   same emitted bytes independently cover the moving samples and both wrap
   boundaries. See `docs/SimpleSampleFunctionalAcceptance.md`.
+- CSL-6 / #341 binds `actor-framework`, `shots-simple`, `shots-bouncy`, and
+  `runner-projectile` on both cartridge targets to eight full-timeline
+  scenarios. Exact hardware-slot/OAM order, authored backgrounds, safe write
+  timing, fixed-pool drop/reuse/bounce/effect lifecycles, and a one-frame
+  spawn-to-visible deadline are checked on every retained frame. Game Boy
+  logical sprites publish `$C600` through an HRAM `$FF46` DMA boundary; NES
+  logical sprites publish `$0200` once per VBlank and reset unexecuted call
+  sites to `$FF`. Raw/direct compatibility OAM paths remain separate. See
+  `docs/ActorProjectileFunctionalAcceptance.md`.
 - Code baseline immediately before the AF-4.3 documentation closeout:
   `f0398452fd0e3b93d4d77e6aeac5749dbf1322ed`.
 - 2026-07-14 runner update: `stage1.tsx` tile 30 marks the existing green
@@ -409,6 +418,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | How do we debug with the runner as the GB test app? | `docs/GameBoyRunnerDebugging.md` |
 | Which samples are portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | How do canonical ROM scenarios measure cadence and transient integrity? | `docs/FunctionalRomAcceptance.md` |
+| How are actor/projectile OAM order and pool lifecycles gated over time? | `docs/ActorProjectileFunctionalAcceptance.md` |
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
 | How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |
 | How do we implement free 2-axis scroll on NES? | `docs/NesFreeScrollRoadmap.md` |
