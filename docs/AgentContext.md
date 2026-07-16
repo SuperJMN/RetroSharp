@@ -7,6 +7,15 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-10 / #373 removes the post-refactor ownership residue. Actor, spawn,
+  projectile, effect, and generated-call mutable facts live in five private
+  domain state modules; the root Actor Framework state retains target,
+  capability, role/intrinsic, camera, and domain-orchestration facts only.
+  Generated structs, constants, functions, and names enter
+  `ActorFrameworkLowerer.GeneratedProgram.cs` through one ordered domain
+  contribution catalog. Architecture tests inspect compiled symbols and IL
+  call edges for Actor/root and target SDK/runtime ownership, so private helper
+  and partial-file renames do not require synchronized text expectations.
 - AIN-8 / #364 deepens the NES SDK lowering seam: one production
   `NesSdkOperationLowerer` instance owns frame/input, logical-sprite and OAM,
   camera movement/streaming, packed camera scheduling, and camera/world
@@ -37,13 +46,15 @@ This document preserves project knowledge that previously lived only in agent me
   Cross-domain pool dispatch, camera projection, and stable sprite
   draw primitives live under the neutral
   `ActorFrameworkLowerer.SharedGeneration.cs`.
-  `ActorFrameworkLowerer.GeneratedProgram.cs` aggregates the generated-name
-  facts from those modules, then assembles structs, constants, lookup helpers,
-  and rewritten functions in the preserved source order.
+  `ActorFrameworkLowerer.GeneratedProgram.cs` assembles generated structs,
+  constants, lookup helpers, and generated names through the ordered domain
+  contribution catalog; rewritten user functions remain a direct, separate
+  source-order pass.
   `ActorFrameworkLowerer.cs` remains the single public lowering interface and
-  keeps the one staged `ActorFrameworkLoweringPlan`, shared state, traversal,
-  expression rewriting, and generic syntax constructors used throughout the
-  lowering pipeline. Focused GB
+  keeps the one staged `ActorFrameworkLoweringPlan`, root orchestration,
+  traversal, expression rewriting, and generic syntax constructors used
+  throughout the lowering pipeline; mutable feature facts live in the five
+  domain state modules described above. Focused GB
   and NES regressions now live in `ActorFrameworkActorsTests.cs`,
   `ActorFrameworkProjectilesTests.cs`, and (where applicable)
   `ActorFrameworkEffectsTests.cs` instead of the monolithic ROM compiler test
@@ -361,6 +372,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | Question | Read |
 | --- | --- |
 | What layer should this feature live in? | `docs/ArchitectureRoadmap.md` |
+| Where do frontend preparation, Actor domain ownership, and target SDK lowering live? | `docs/SdkArchitecture.md` |
 | What is SDK v1 supposed to expose? | `docs/Portable2DSdkV1.md` |
 | What does Game Boy support today? | `docs/GameBoyTarget.md` |
 | What does NES support today? | `docs/NesTarget.md` |
@@ -458,11 +470,11 @@ Progress (2026-06-14):
   preserves the existing map row table and VRAM write byte shape, and NES lowers horizontal
   column streaming into `$2006`/`$2007` writes across a two-nametable buffer.
 - Operation stream decision implemented 2026-06-14 and deepened by AIN-7:
-  `GameBoyRuntimeCompiler` walks the collected operation list with a cursor for
-  migrated statement calls and `World.TileFlagsAt(...)`, then routes them through
-  its single `GameBoySdkOperationLowerer`. The lowerer owns emission, while the
-  compiler still fails if the next operation type does not match the source call
-  or if operations remain unconsumed after runtime emission.
+  `GameBoyRuntimeCompiler` uses `Sdk2DStreamReader` and `SdkAudioStreamReader`
+  over each program's main stream and named subroutine streams, then routes
+  migrated calls through its single `GameBoySdkOperationLowerer`. The lowerer
+  owns emission, while the stream readers still fail on mismatched calls,
+  unconsumed subroutine items, or leftovers after runtime emission.
 - Operand contract decision implemented 2026-06-14: SDK byte variables preserve the
   value-or-location IR boundary while replacing collector/target string formatting conventions
   with typed `Local`, recursive `Field`, and `IndexedElement` descriptors.

@@ -1,79 +1,76 @@
+using System.Reflection;
+using RetroSharp.GameBoy;
+using RetroSharp.NES;
+using RetroSharp.Sdk;
+
 namespace RetroSharp.Architecture.Tests;
 
 public sealed class TargetFrontendPreparationArchitectureTests
 {
-    private const string SharedPreparationPath = "src/RetroSharp.Sdk.Frontend/TargetFrontendPreparation.cs";
-
-    private static readonly string[] TargetCompilerPaths =
+    private static readonly string[] OrderedPreparationStageTypes =
     [
-        "src/RetroSharp.GameBoy/GameBoyRomCompiler.cs",
-        "src/RetroSharp.NES/NesRomCompiler.cs",
-    ];
-
-    private static readonly string[] OrderedPreparationStages =
-    [
-        "SdkLibrarySource.Merge(",
-        "new SomeParser().Parse(",
-        "TargetProgramSelector.Select(",
-        "SdkImportResolver.ValidateImports(",
-        "ActorFrameworkLowerer.Lower(",
-        "SdkSourcePackageFacadeLowerer.Lower(",
-        "LetTypeInference.ResolveOrThrow(",
-        "FunctionContractValidator.ValidateProgram(",
+        "RetroSharp.Sdk.SdkLibrarySource",
+        "RetroSharp.Parser.SomeParser",
+        "RetroSharp.Sdk.TargetProgramSelector",
+        "RetroSharp.Sdk.SdkImportResolver",
+        "RetroSharp.Sdk.ActorFrameworkLowerer",
+        "RetroSharp.Sdk.SdkSourcePackageFacadeLowerer",
+        "RetroSharp.Parser.LetTypeInference",
+        "RetroSharp.Parser.FunctionContractValidator",
     ];
 
     [Fact]
-    public void Shared_frontend_module_owns_the_complete_ordered_preparation_sequence()
+    public void Shared_frontend_symbol_owns_the_complete_ordered_preparation_sequence()
     {
-        var root = RepositoryRoot();
-        var sharedPath = Path.Combine(root, SharedPreparationPath);
+        var assembly = typeof(ActorFrameworkLowerer).Assembly;
+        var preparation = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.TargetFrontendPreparation");
+        var options = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.TargetFrontendPreparationOptions");
+        var preparedProgram = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.PreparedTargetProgram");
+        var calls = ArchitectureSymbolAssertions.CalledMethods(preparation).ToList();
 
-        Assert.True(File.Exists(sharedPath), $"Shared frontend preparation module '{SharedPreparationPath}' must exist.");
-
-        var sharedSource = File.ReadAllText(sharedPath);
-        Assert.DoesNotContain("public sealed record TargetFrontendPreparationOptions", sharedSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("public sealed class PreparedTargetProgram", sharedSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("public static class TargetFrontendPreparation", sharedSource, StringComparison.Ordinal);
+        Assert.False(preparation.IsPublic);
+        Assert.False(options.IsPublic);
+        Assert.False(preparedProgram.IsPublic);
 
         var previousStageIndex = -1;
-        foreach (var stage in OrderedPreparationStages)
+        foreach (var stageTypeName in OrderedPreparationStageTypes)
         {
-            var stageIndex = sharedSource.IndexOf(stage, StringComparison.Ordinal);
-            Assert.True(stageIndex >= 0, $"Shared frontend preparation must own stage '{stage}'.");
-            Assert.True(stageIndex > previousStageIndex, $"Shared frontend stage '{stage}' is out of order.");
+            var stageIndex = calls.FindIndex(call => call.DeclaringType?.FullName == stageTypeName);
+            Assert.True(stageIndex >= 0, $"Shared frontend preparation must call stage type '{stageTypeName}'.");
+            Assert.True(stageIndex > previousStageIndex, $"Shared frontend stage type '{stageTypeName}' is out of order.");
             previousStageIndex = stageIndex;
         }
 
-        foreach (var compilerPath in TargetCompilerPaths)
-        {
-            var compilerSource = File.ReadAllText(Path.Combine(root, compilerPath));
-            Assert.Contains("TargetFrontendPreparation.Prepare(", compilerSource, StringComparison.Ordinal);
-            Assert.All(
-                OrderedPreparationStages,
-                stage => Assert.DoesNotContain(stage, compilerSource, StringComparison.Ordinal));
-        }
+        AssertTargetRoutesThroughPreparation(typeof(GameBoyRomCompiler), preparation);
+        AssertTargetRoutesThroughPreparation(typeof(NesRomCompiler), preparation);
     }
 
     [Fact]
     public void Shared_frontend_reuses_one_actor_framework_plan_for_lowering_and_late_budget_validation()
     {
-        var root = RepositoryRoot();
-        var sharedSource = File.ReadAllText(Path.Combine(root, SharedPreparationPath));
+        var lowerer = typeof(ActorFrameworkLowerer);
+        var assembly = lowerer.Assembly;
+        var preparation = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.TargetFrontendPreparation");
+        var preparedProgram = ArchitectureSymbolAssertions.RequiredType(assembly, "RetroSharp.Sdk.PreparedTargetProgram");
+        var plan = ArchitectureSymbolAssertions.RequiredNestedType(lowerer, "ActorFrameworkLoweringPlan");
+        var preparationActorCalls = ArchitectureSymbolAssertions.CalledMethods(preparation)
+            .Where(call => call.DeclaringType == lowerer)
+            .ToList();
 
-        Assert.Contains("var actorFrameworkPlan = ActorFrameworkLowerer.Analyze(", sharedSource, StringComparison.Ordinal);
-        Assert.Contains("ActorFrameworkLowerer.Lower(targetProgram, actorFrameworkPlan)", sharedSource, StringComparison.Ordinal);
-        Assert.Contains("ActorFrameworkLowerer.ValidatePoolSpriteBudgets(\n            actorFrameworkPlan,", sharedSource, StringComparison.Ordinal);
-        Assert.DoesNotContain("selectedPreActorProgram", sharedSource, StringComparison.Ordinal);
+        Assert.Contains(preparationActorCalls, call => call is MethodInfo method && method.ReturnType == plan);
+        Assert.Contains(preparationActorCalls, call => call.GetParameters().Any(parameter => parameter.ParameterType == plan));
+        Assert.Single(preparedProgram
+            .GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .Where(field => field.FieldType == plan));
+        Assert.Contains(
+            ArchitectureSymbolAssertions.CalledMethods(preparedProgram),
+            call => call.DeclaringType == lowerer && call.GetParameters().Any(parameter => parameter.ParameterType == plan));
     }
 
-    private static string RepositoryRoot()
+    private static void AssertTargetRoutesThroughPreparation(Type targetCompiler, Type preparation)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "RetroSharp.sln")))
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName ?? throw new InvalidOperationException("Could not locate repository root.");
+        Assert.Contains(
+            ArchitectureSymbolAssertions.CalledMethods(targetCompiler),
+            call => call.DeclaringType == preparation);
     }
 }

@@ -10,6 +10,14 @@ Read `AGENTS.md` and `docs/AgentContext.md` first for repo discipline and
 validation commands. Read `docs/GameBoyTarget.md` and `docs/NesTarget.md` for the
 current supported subset per target.
 
+Navigation after AIN-7/AIN-8: the completed task cards below preserve the file
+names and line ranges used when the work landed; they are historical evidence,
+not the current ownership map. New target work starts at
+`GameBoySdkOperationLowerer*` / `NesSdkOperationLowerer*` for portable SDK
+emission, `GameBoyRuntimeCompiler*` / `NesRuntimeCompiler*` for source/runtime
+traversal, and the target runtime-memory/layout modules for addresses and
+placement. See `docs/SdkArchitecture.md` and the target guide before editing.
+
 ## TL;DR for the agent
 
 - **Do NOT start from scratch on Game Boy.** Vertical scroll is already
@@ -43,7 +51,9 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   fine scroll + movement budget, and `StreamMapRow` requires `ScrollAxes.Vertical`
   + write budget — `src/RetroSharp.Core/Sdk/Sdk2DOperationValidator.cs:111-130`.
 - GB runtime fully lowers Y:
-  - Y state init: `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs:2923-2936`
+  - Y state initialization and emission now live in the Game Boy SDK-lowerer
+    camera/streaming partials; the historical implementation was at
+    `src/RetroSharp.GameBoy/GameBoyRomBuilder.cs:2923-2936`
     (`CameraYLow/High`, `CameraFineY`, top/bottom background+source row addresses).
   - `EmitSetCameraPosition` applies Y via up/down move steps: `:2939-2964`.
   - `EmitApplyCamera` writes `SCY` (`0x42`) and drains the pending row stream
@@ -317,8 +327,9 @@ context for why NES Y needed a separate substrate decision.
     the 240 wrap.
   - [ ] In `Apply`, write the Y nametable bit to `$2000` and the Y scroll to the
     second `$2005` write.
-  - [ ] Add the `StreamMapRow` lowering case to `NesSdkOperationLowerer` (it
-    currently throws `NotSupportedException`).
+  - [x] Add the `StreamMapRow` lowering case to `NesSdkOperationLowerer`; the
+    completed implementation is now partitioned across its camera/streaming
+    partials.
 - Verify: golden-byte NES tests for the row/attribute writes; emulator shows clean
   vertical scroll; horizontal regression green.
 

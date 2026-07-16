@@ -76,7 +76,7 @@ public static partial class ActorFrameworkLowerer
                 throw new InvalidOperationException($"{pool.Name}.Request kind must be an effect identifier.");
             }
 
-            state.EffectDef(kind.Identifier);
+            state.Effects.Definition(kind.Identifier);
             return EnqueueStatements(
                 pool,
                 kind,
@@ -84,7 +84,7 @@ public static partial class ActorFrameworkLowerer
                 Constant(0),
                 parameters[2],
                 Constant(0),
-                state.NextEffectRequestPrefix(pool, "request"));
+                state.GeneratedCalls.NextEffectRequestPrefix(pool, "request"));
         }
 
         public static IReadOnlyList<StatementSyntax> EnqueueStatements(
@@ -127,7 +127,7 @@ public static partial class ActorFrameworkLowerer
             RequireEffectDefs(state, $"{pool.Name}.ProcessRequests");
 
             var requestIndex = $"__{pool.Name}_process_request_i";
-            var branches = state.EffectDefs
+            var branches = state.Effects.Definitions
                 .Select(def => new KindBranch(def.Name, new BlockSyntax(EffectSpawnFromRequestStatements(pool, requestIndex, def).ToList())))
                 .ToList();
 
@@ -181,7 +181,7 @@ public static partial class ActorFrameworkLowerer
 
         private static void RequireEffectDefs(ActorFrameworkState state, string callName)
         {
-            if (state.EffectDefs.Count == 0)
+            if (state.Effects.Definitions.Count == 0)
             {
                 throw new InvalidOperationException($"{callName} requires at least one Effects.Def declaration.");
             }

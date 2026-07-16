@@ -33,10 +33,10 @@ public static partial class ActorFrameworkLowerer
             switch (statement)
             {
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } call }:
-                    state.AddProjectilePool(ReadPool(call));
+                    state.Projectiles.AddPool(ReadPool(call));
                     break;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } call }:
-                    state.AddProjectileDef(ReadDefinition(call));
+                    state.Projectiles.AddDefinition(ReadDefinition(call));
                     break;
             }
         }
@@ -137,13 +137,13 @@ public static partial class ActorFrameworkLowerer
             switch (statement)
             {
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Pool" } call }:
-                    statements = ProjectilePoolDeclarations(state.ProjectilePool(ReadPool(call).Name));
+                    statements = ProjectilePoolDeclarations(state.Projectiles.Pool(ReadPool(call).Name));
                     return true;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax { Qualifier: "Projectiles", Method: "Def" } }:
                     statements = [];
                     return true;
                 case ExpressionStatementSyntax { Expression: QualifiedCallSyntax call }
-                    when state.TryProjectilePool(call.Qualifier, out var pool):
+                    when state.Projectiles.TryPool(call.Qualifier, out var pool):
                     statements = call.Method switch
                     {
                         "Request" => ProjectileRequestStatements(pool, call, state),
@@ -185,19 +185,19 @@ public static partial class ActorFrameworkLowerer
 
         public static void ValidateEffects(ActorFrameworkState state)
         {
-            foreach (var pool in state.ProjectilePools)
+            foreach (var pool in state.Projectiles.Pools)
             {
-                if (pool.EffectPoolName is not null && !state.TryEffectPool(pool.EffectPoolName, out _))
+                if (pool.EffectPoolName is not null && !state.Effects.TryPool(pool.EffectPoolName, out _))
                 {
                     throw new InvalidOperationException($"Projectiles.Pool for '{pool.Name}' references unknown effect pool '{pool.EffectPoolName}'. Declare Effects.Pool({pool.EffectPoolName}, ...).");
                 }
             }
 
-            foreach (var def in state.ProjectileDefs)
+            foreach (var def in state.Projectiles.Definitions)
             {
                 foreach (var effectName in def.EffectNames())
                 {
-                    if (!state.EffectDefs.Any(effect => effect.Name == effectName))
+                    if (!state.Effects.Definitions.Any(effect => effect.Name == effectName))
                     {
                         throw new InvalidOperationException($"Projectiles.Def for '{def.Name}' references unknown effect kind '{effectName}'. Declare Effects.Def({effectName}, ...).");
                     }
@@ -207,7 +207,7 @@ public static partial class ActorFrameworkLowerer
 
         public static void AddGeneratedStructs(ActorFrameworkState state, IList<StructSyntax> structs)
         {
-            if (state.ProjectilePools.Count == 0)
+            if (state.Projectiles.Pools.Count == 0)
             {
                 return;
             }
@@ -306,23 +306,23 @@ public static partial class ActorFrameworkLowerer
 
         public static IEnumerable<GeneratedName> GeneratedNames(ActorFrameworkState state)
         {
-            if (state.ProjectilePools.Count != 0)
+            if (state.Projectiles.Pools.Count != 0)
             {
                 yield return new GeneratedName(ProjectileStructName, "framework struct 'Projectile'");
                 yield return new GeneratedName(ProjectileSpawnRequestStructName, "framework struct 'ProjectileSpawnRequest'");
             }
 
-            foreach (var team in state.ProjectileDefs.Select(def => def.Team).Distinct(StringComparer.Ordinal))
+            foreach (var team in state.Projectiles.Definitions.Select(def => def.Team).Distinct(StringComparer.Ordinal))
             {
                 yield return new GeneratedName(team, $"projectile team '{team}' constant");
             }
 
-            foreach (var behavior in state.ProjectileDefs.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
+            foreach (var behavior in state.Projectiles.Definitions.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
             {
                 yield return new GeneratedName(behavior, $"projectile behavior '{behavior}' constant");
             }
 
-            foreach (var def in state.ProjectileDefs)
+            foreach (var def in state.Projectiles.Definitions)
             {
                 yield return new GeneratedName(def.Name, $"Projectiles.Def '{def.Name}' kind constant");
                 yield return new GeneratedName($"{def.Name}Team", $"Projectiles.Def '{def.Name}' team constant");

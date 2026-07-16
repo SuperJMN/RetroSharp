@@ -18,7 +18,7 @@ public static partial class ActorFrameworkLowerer
             Func<string, ActorMetaspriteGeometry> metaspriteGeometry)
         {
 
-            if (state.Pools.Count == 0 || state.EnemyDefs.Count == 0)
+            if (state.Actors.Pools.Count == 0 || state.Actors.EnemyDefs.Count == 0)
             {
                 return;
             }
@@ -28,7 +28,7 @@ public static partial class ActorFrameworkLowerer
                 return;
             }
 
-            var enemyBudgets = state.EnemyDefs
+            var enemyBudgets = state.Actors.EnemyDefs
                 .Where(def => def.Sprite is not null)
                 .Select(def =>
                 {
@@ -45,7 +45,7 @@ public static partial class ActorFrameworkLowerer
                 return;
             }
 
-            foreach (var pool in state.Pools.Where(pool => drawnPools.Contains(pool.Name)))
+            foreach (var pool in state.Actors.Pools.Where(pool => drawnPools.Contains(pool.Name)))
             {
                 ValidatePoolSpriteBudget(capabilities, pool, enemyBudgets);
             }
@@ -140,7 +140,7 @@ public static partial class ActorFrameworkLowerer
                 case FunctionCall call:
                     if (state.Roles.TryRole(call, out var actorCall) && EnemyLookupFunctions.ContainsKey(actorCall.Role))
                     {
-                        state.RecordEnemyLookupMethod(actorCall.Role);
+                        state.Actors.RecordEnemyLookupMethod(actorCall.Role);
                     }
 
                     foreach (var parameter in call.Parameters)
@@ -505,7 +505,7 @@ public static partial class ActorFrameworkLowerer
             }
 
             RequireEnemyDefs(state, $"{pool.Name}.Draw");
-            var missingSprite = state.EnemyDefs.FirstOrDefault(def => def.Sprite is null);
+            var missingSprite = state.Actors.EnemyDefs.FirstOrDefault(def => def.Sprite is null);
             if (missingSprite is not null)
             {
                 throw new InvalidOperationException($"{pool.Name}.Draw requires Enemies.Def for '{missingSprite.Name}' to declare a sprite identifier.");
@@ -513,7 +513,7 @@ public static partial class ActorFrameworkLowerer
 
             var indexName = $"__{pool.Name}_draw_i";
             var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, "draw", state.ScreenWidth, state.ScreenHeight, margin: 0);
-            var branches = state.EnemyDefs
+            var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(
                     def.Name,
                     pool.Capacity == 1
@@ -662,7 +662,7 @@ public static partial class ActorFrameworkLowerer
             var yOffset = RequiredLiteralByte(parameters[0], $"{pool.Name}.TouchTiles argument 1");
             var indexName = $"__{pool.Name}_touch_i";
             var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, "touch", state.ScreenWidth, state.ScreenHeight, margin: 0);
-            var branches = state.EnemyDefs
+            var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(def.Name, TouchTilesBlock(pool, indexName, def, yOffset, parameters[1], projection, state)))
                 .ToList();
             var activeStatements = projection.Declarations
@@ -718,7 +718,7 @@ public static partial class ActorFrameworkLowerer
             var searchHeight = RequiredLiteralByte(parameters[1], $"{pool.Name}.LandOnTiles argument 2");
             var indexName = $"__{pool.Name}_land_i";
             var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, "land", state.ScreenWidth, state.ScreenHeight, margin: 0);
-            var branches = state.EnemyDefs
+            var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(def.Name, LandOnTilesBlock(pool, indexName, def, searchTopOffset, searchHeight, parameters[2], projection, state)))
                 .ToList();
             var activeStatements = projection.Declarations
@@ -794,7 +794,7 @@ public static partial class ActorFrameworkLowerer
 
             var indexName = $"__{pool.Name}_player_i";
             var projection = BuildPooledScreenProjection(pool.Name, indexName, pool.Name, "player", state.ScreenWidth, state.ScreenHeight, margin: 0);
-            var branches = state.EnemyDefs
+            var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(def.Name, TouchPlayerBlock(pool, indexName, def, playerX, playerY, playerRight, playerBottom, projection)))
                 .ToList();
             var activeStatements = projection.Declarations
@@ -1122,7 +1122,7 @@ public static partial class ActorFrameworkLowerer
 
         public static void RequireEnemyDefs(ActorFrameworkState state, string callName)
         {
-            if (state.EnemyDefs.Count == 0)
+            if (state.Actors.EnemyDefs.Count == 0)
             {
                 throw new InvalidOperationException($"{callName} requires at least one Enemies.Def declaration.");
             }
@@ -1179,12 +1179,12 @@ public static partial class ActorFrameworkLowerer
                 throw new InvalidOperationException($"{call.DisplayName} can only be used as a statement.");
             }
 
-            if (state.EnemyDefs.Count == 0)
+            if (state.Actors.EnemyDefs.Count == 0)
             {
                 throw new InvalidOperationException($"{lookup.DisplayName} requires at least one Enemies.Def declaration.");
             }
 
-            state.RecordEnemyLookupMethod(call.Role);
+            state.Actors.RecordEnemyLookupMethod(call.Role);
             return new FunctionCall(lookup.FunctionName, call.Parameters.Select(parameter => RewriteExpression(parameter, state)));
         }
 

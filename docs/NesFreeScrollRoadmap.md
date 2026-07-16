@@ -10,6 +10,14 @@ what to change, where, and how to verify it. Read `AGENTS.md`,
 `docs/AgentContext.md`, `docs/NesTarget.md`, and
 `docs/CameraVerticalScrollRoadmap.md` first.
 
+Navigation after AIN-2/AIN-8: the completed phase cards retain historical
+`NesRomBuilder.cs` hotspots as landing evidence. Current address ownership is
+`NesRuntimeMemoryLayout`; syntax/control-flow traversal is
+`NesRuntimeCompiler*`; portable camera/streaming emission is
+`NesSdkOperationLowerer*`; and cartridge/layout/byte assembly lives in
+`NesRomBuilder`, `NesCartridgeLayout`, and `PrgBuilder`. Use
+`docs/SdkArchitecture.md` and `docs/NesTarget.md` for new changes.
+
 ## TL;DR for the agent
 
 - **Free 2-axis scroll fundamentally needs 4 distinct nametables.** The NES PPU
@@ -243,9 +251,9 @@ crosses a horizontal boundary, the queued column and row are drained across
 separate `Camera.Apply()` calls so no single VBlank combines both edges.
 
 - Layer: NES target.
-- Files: `src/RetroSharp.NES/NesRomBuilder.cs` (stream helpers),
-  `src/RetroSharp.NES/NesSdkOperationLowerer.cs` (add `StreamMapRow` case — it
-  currently throws), `src/RetroSharp.Core/Sdk/Sdk2DOperationValidator.cs`.
+- Current modules: `src/RetroSharp.NES/NesSdkOperationLowerer.CameraStreaming.cs`
+  and `.StreamingRuntime.cs`, plus
+  `src/RetroSharp.Core/Sdk/Sdk2DOperationValidator.cs`.
 - Steps:
   - [x] On a vertical tile-boundary crossing, stream the next world row into the
     off-screen (stacked) nametable via `$2006`/`$2007`, handling the 240 wrap and

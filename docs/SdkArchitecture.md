@@ -35,22 +35,35 @@ resolved metasprite geometry for the existing post-asset actor pool budget check
 without rediscovering directives or retaining the selected pre-Actor program.
 
 Actor Framework generation keeps that one lowering plan and the public
-`ActorFrameworkLowerer` interface, but its internal gameplay policy is local to
-feature-owned partial modules in `RetroSharp.Sdk.Frontend`. The
-`ActorFrameworkLowerer.Actors.cs`, `.Projectiles.cs`, and `.Effects.cs` files own
-directive policy for actors/Tiled spawns, projectile pools/definitions, and
-effect pools/definitions respectively, together with rewrite dispatch and the
-declarations assembled directly from those directives. Each paired
-`.Generation.cs` file owns the deeper domain lowering, validation, and AST
-builders invoked by that dispatch. The neutral
+`ActorFrameworkLowerer` interface, but its internal gameplay policy and mutable
+facts are local to feature-owned partial modules in `RetroSharp.Sdk.Frontend`.
+The actor, spawn, projectile, effect, and generated-call state modules own their
+lookup dictionaries, insertion-order lists, and generated-call counters; the
+root state retains only target/capability, role/intrinsic, camera configuration,
+and domain orchestration facts. `ActorFrameworkLowerer.Actors.cs`,
+`.Projectiles.cs`, and `.Effects.cs` own directive policy for actors/Tiled
+spawns, projectile pools/definitions, and effect pools/definitions respectively,
+together with rewrite dispatch and the declarations assembled directly from
+those directives. Each paired `.Generation.cs` file owns the deeper domain
+lowering, validation, and AST builders invoked by that dispatch. The neutral
 `ActorFrameworkLowerer.SharedGeneration.cs` centralizes cross-domain pool
 dispatch, camera projection, and stable sprite-draw primitives.
-`ActorFrameworkLowerer.GeneratedProgram.cs` aggregates generated-name facts from
-the feature modules before ordered generated-program assembly and name-collision
-checks. The root `ActorFrameworkLowerer.cs` retains only the public interface,
-one plan/state model, AST traversal and rewriting, and primitives shared across
-the entire lowering pipeline; the modules do not introduce target-specific actor
-intrinsics or separate public lowering entry points.
+`ActorFrameworkLowerer.GeneratedProgram.cs` consumes one ordered domain
+contribution catalog for generated structs, constants, functions, and names
+before name-collision checks. Adding a domain therefore adds one contribution
+instead of parallel aggregation chains. The root `ActorFrameworkLowerer.cs`
+retains only the public interface, one staged plan, AST traversal and rewriting,
+and primitives shared across the entire lowering pipeline; the modules do not
+introduce target-specific actor intrinsics or separate public lowering entry
+points.
+
+For ownership changes, start in `ActorFrameworkDomainArchitectureTests` and the
+compiled-symbol helpers in `RetroSharp.Architecture.Tests`, then follow the
+domain state/contribution symbol into its feature partial. Target SDK ownership
+uses the same compiled-symbol and IL-call-edge guard: runtime compilers may
+consume streams and route operations, but the lowerer must not call back into a
+runtime compiler. Exact paths remain tests only when physical separation itself
+is the contract.
 
 The concrete compiler adapters remain responsible for target catalogs and
 capabilities, final `GameBoyVideoProgram` / `NesVideoProgram` construction,

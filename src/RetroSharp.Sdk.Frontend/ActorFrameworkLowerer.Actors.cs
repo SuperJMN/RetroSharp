@@ -67,14 +67,14 @@ public static partial class ActorFrameworkLowerer
             switch (call.Role)
             {
                 case ActorFrameworkRole.ActorPool:
-                    state.AddPool(ReadPool(call));
+                    state.Actors.AddPool(ReadPool(call));
                     break;
                 case ActorFrameworkRole.ActorEnemyDef:
-                    state.AddEnemyDef(ReadDefinition(call));
+                    state.Actors.AddEnemyDef(ReadDefinition(call));
                     break;
                 case ActorFrameworkRole.ActorSpawnLayer:
                 case ActorFrameworkRole.ActorSpawnWindow:
-                    state.AddSpawnLayer(ReadSpawnDirective(call, state.BaseDirectory));
+                    state.Spawns.AddLayer(ReadSpawnDirective(call, state.BaseDirectory));
                     break;
             }
         }
@@ -192,7 +192,7 @@ public static partial class ActorFrameworkLowerer
                         statements = RewriteSpawnDirective(call, state);
                         return true;
                     case ActorFrameworkRole.ActorPool:
-                        statements = PoolDeclarations(state.Pool(ReadPool(call).Name), state);
+                        statements = PoolDeclarations(state.Actors.Pool(ReadPool(call).Name), state);
                         return true;
                     case ActorFrameworkRole.ActorEnemyDef:
                         statements = [];
@@ -201,7 +201,7 @@ public static partial class ActorFrameworkLowerer
             }
 
             if (statement is ExpressionStatementSyntax { Expression: QualifiedCallSyntax poolCall }
-                && state.TryPool(poolCall.Qualifier, out var pool))
+                && state.Actors.TryPool(poolCall.Qualifier, out var pool))
             {
                 statements = poolCall.Method switch
                 {
@@ -246,7 +246,7 @@ public static partial class ActorFrameworkLowerer
             RequireEnemyDefs(state, $"{pool.Name}.Update");
 
             var indexName = $"__{pool.Name}_update_i";
-            var branches = state.EnemyDefs
+            var branches = state.Actors.EnemyDefs
                 .Select(def => new KindBranch(
                     def.Name,
                     new BlockSyntax(UpdateStatementsFor(pool, indexName, def).ToList())))
@@ -263,9 +263,9 @@ public static partial class ActorFrameworkLowerer
 
         public static void ValidateSpawnLayers(ActorFrameworkState state)
         {
-            foreach (var layer in state.SpawnLayers)
+            foreach (var layer in state.Spawns.Layers)
             {
-                if (!state.TryPool(layer.PoolName, out var pool))
+                if (!state.Actors.TryPool(layer.PoolName, out var pool))
                 {
                     throw new InvalidOperationException($"Actors.SpawnLayer references undeclared pool '{layer.PoolName}'.");
                 }
@@ -284,7 +284,7 @@ public static partial class ActorFrameworkLowerer
 
                 foreach (var spawn in layer.Spawns)
                 {
-                    if (!state.EnemyDefs.Any(def => def.Name == spawn.Kind))
+                    if (!state.Actors.EnemyDefs.Any(def => def.Name == spawn.Kind))
                     {
                         throw new InvalidOperationException($"Actors.SpawnLayer layer '{layer.LayerName}' references unknown actor kind '{spawn.Kind}'. Declare Enemies.Def({spawn.Kind}, ...).");
                     }
@@ -294,7 +294,7 @@ public static partial class ActorFrameworkLowerer
 
         public static void AddGeneratedStructs(ActorFrameworkState state, IList<StructSyntax> structs)
         {
-            if (state.Pools.Count == 0)
+            if (state.Actors.Pools.Count == 0)
             {
                 return;
             }
@@ -334,13 +334,13 @@ public static partial class ActorFrameworkLowerer
         }
 
         public static IEnumerable<FunctionSyntax> GeneratedFunctions(ActorFrameworkState state) =>
-            GeneratedLookupFunctions(state.EnemyDefs, state.UsedEnemyLookupMethods)
-                .Concat(GeneratedSpawnLookupFunctions(state.SpawnLayers));
+            GeneratedLookupFunctions(state.Actors.EnemyDefs, state.Actors.UsedEnemyLookupMethods)
+                .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers));
 
         private static IReadOnlyList<StatementSyntax> RewriteSpawnDirective(ActorFrameworkCall call, ActorFrameworkState state)
         {
-            var layer = state.SpawnLayer(SpawnLayerKey(call));
-            return RuntimeSpawnActivationStatements(layer, state.NextActivationPrefix(layer), state.ScreenWidth);
+            var layer = state.Spawns.Layer(SpawnLayerKey(call));
+            return RuntimeSpawnActivationStatements(layer, state.GeneratedCalls.NextActivationPrefix(layer), state.ScreenWidth);
         }
 
         private static ActorSpawnLayerKey SpawnLayerKey(ActorFrameworkCall call)
@@ -394,7 +394,7 @@ public static partial class ActorFrameworkLowerer
         private static IReadOnlyList<StatementSyntax> PoolDeclarations(ActorPool pool, ActorFrameworkState state)
         {
             var declarations = new List<StatementSyntax> { PoolDeclaration(pool) };
-            foreach (var spawnLayer in state.SpawnLayersFor(pool.Name).Where(layer => layer.Spawns.Count != 0))
+            foreach (var spawnLayer in state.Spawns.LayersFor(pool.Name).Where(layer => layer.Spawns.Count != 0))
             {
                 declarations.Add(new DeclarationSyntax(
                     "u8",
@@ -511,17 +511,17 @@ public static partial class ActorFrameworkLowerer
 
         public static IEnumerable<GeneratedName> GeneratedNames(ActorFrameworkState state)
         {
-            if (state.Pools.Count != 0)
+            if (state.Actors.Pools.Count != 0)
             {
                 yield return new GeneratedName(ActorStructName, "framework struct 'Actor'");
             }
 
-            foreach (var behavior in state.EnemyDefs.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
+            foreach (var behavior in state.Actors.EnemyDefs.Select(def => def.Behavior).Distinct(StringComparer.Ordinal))
             {
                 yield return new GeneratedName(behavior, $"actor behavior '{behavior}' constant");
             }
 
-            foreach (var def in state.EnemyDefs)
+            foreach (var def in state.Actors.EnemyDefs)
             {
                 yield return new GeneratedName(def.Name, $"Enemies.Def '{def.Name}' kind constant");
                 yield return new GeneratedName($"{def.Name}Behavior", $"Enemies.Def '{def.Name}' behavior constant");
@@ -533,12 +533,12 @@ public static partial class ActorFrameworkLowerer
                 yield return new GeneratedName($"{def.Name}HitboxHeight", $"Enemies.Def '{def.Name}' hitbox height constant");
             }
 
-            foreach (var lookup in EnemyLookupFunctions.Where(pair => state.UsedEnemyLookupMethods.Contains(pair.Key)))
+            foreach (var lookup in EnemyLookupFunctions.Where(pair => state.Actors.UsedEnemyLookupMethods.Contains(pair.Key)))
             {
                 yield return new GeneratedName(lookup.Value.FunctionName, $"{lookup.Value.DisplayName} lookup helper function");
             }
 
-            foreach (var layer in state.SpawnLayers.Where(layer => layer.Spawns.Count != 0))
+            foreach (var layer in state.Spawns.Layers.Where(layer => layer.Spawns.Count != 0))
             {
                 yield return new GeneratedName($"{layer.RuntimeName}_used", $"Actors.{layer.MethodName} layer '{layer.LayerName}' used array");
                 foreach (var fieldName in SpawnLookupFieldNames())
@@ -567,6 +567,19 @@ public static partial class ActorFrameworkLowerer
                     new StructFieldSyntax("u8", "animTick"),
                     new StructFieldSyntax("u8", "health"),
                 ]);
+        }
+
+        public static string DisplayName(ActorFrameworkRole role)
+        {
+            return role switch
+            {
+                ActorFrameworkRole.ActorPool => "Actors.Pool",
+                ActorFrameworkRole.ActorSpawnLayer => "Actors.SpawnLayer",
+                ActorFrameworkRole.ActorSpawnWindow => "Actors.SpawnWindow",
+                ActorFrameworkRole.ActorEnemyDef => "Enemies.Def",
+                _ when LookupDisplayName(role) is { } lookupDisplayName => lookupDisplayName,
+                _ => role.ToString(),
+            };
         }
     }
 
@@ -650,26 +663,13 @@ public static partial class ActorFrameworkLowerer
         {
             if (rolesByFunction.TryGetValue(call.Name, out var role))
             {
-                actorCall = new ActorFrameworkCall(role, call.Parameters.ToList(), DisplayName(role));
+                actorCall = new ActorFrameworkCall(role, call.Parameters.ToList(), Actors.DisplayName(role));
                 return true;
             }
 
             actorCall = null!;
             return false;
         }
-    }
-
-    private static string DisplayName(ActorFrameworkRole role)
-    {
-        return role switch
-        {
-            ActorFrameworkRole.ActorPool => "Actors.Pool",
-            ActorFrameworkRole.ActorSpawnLayer => "Actors.SpawnLayer",
-            ActorFrameworkRole.ActorSpawnWindow => "Actors.SpawnWindow",
-            ActorFrameworkRole.ActorEnemyDef => "Enemies.Def",
-            _ when Actors.LookupDisplayName(role) is { } lookupDisplayName => lookupDisplayName,
-            _ => role.ToString(),
-        };
     }
 
     private sealed record ActorPool(string Name, int Capacity);

@@ -13,10 +13,12 @@ public static partial class ActorFrameworkLowerer
                 return program;
             }
 
+            var contributions = ActorFrameworkDomains.Contributions;
             var structs = program.Structs.ToList();
-            Actors.AddGeneratedStructs(state, structs);
-            Projectiles.AddGeneratedStructs(state, structs);
-            Effects.AddGeneratedStructs(state, structs);
+            foreach (var contribution in contributions)
+            {
+                contribution.AddGeneratedStructs(state, structs);
+            }
 
             var rewrittenFunctions = program.Functions
                 .Select(function => new FunctionSyntax(
@@ -31,39 +33,37 @@ public static partial class ActorFrameworkLowerer
                     function.Attributes))
                 .ToList();
 
-            ValidateNameCollisions(program, state);
+            ValidateNameCollisions(program, contributions.SelectMany(contribution => contribution.GeneratedNames(state)));
 
             var functions = rewrittenFunctions
-                .Concat(Actors.GeneratedFunctions(state))
+                .Concat(contributions.SelectMany(contribution => contribution.GeneratedFunctions(state)))
                 .ToList();
 
             return new ProgramSyntax(
                 program.Imports,
                 program.TypeAliases,
                 program.Constants
-                    .Concat(Actors.GeneratedConstants(state.EnemyDefs))
-                    .Concat(Projectiles.GeneratedConstants(state.ProjectileDefs))
-                    .Concat(Effects.GeneratedConstants(state.EffectDefs))
+                    .Concat(contributions.SelectMany(contribution => contribution.GeneratedConstants(state)))
                     .ToList(),
                 program.Enums,
                 structs,
                 functions);
         }
 
-        public static void ValidateNameCollisions(ProgramSyntax program, ActorFrameworkState state)
+        public static void ValidateNameCollisions(ProgramSyntax program, IEnumerable<GeneratedName> generatedNames)
         {
             var userSymbols = UserSymbols(program);
-            var generatedNames = new Dictionary<string, string>(StringComparer.Ordinal);
-            foreach (var generatedName in GeneratedNames(state))
+            var generatedSymbols = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var generatedName in generatedNames)
             {
                 if (userSymbols.TryGetValue(generatedName.Name, out var userSymbol))
                 {
                     throw new InvalidOperationException($"actor framework cannot generate {generatedName.Origin} named '{generatedName.Name}' because {userSymbol} is already declared.");
                 }
 
-                if (!generatedNames.TryAdd(generatedName.Name, generatedName.Origin))
+                if (!generatedSymbols.TryAdd(generatedName.Name, generatedName.Origin))
                 {
-                    throw new InvalidOperationException($"actor framework cannot generate {generatedName.Origin} named '{generatedName.Name}' because {generatedNames[generatedName.Name]} also generates '{generatedName.Name}'.");
+                    throw new InvalidOperationException($"actor framework cannot generate {generatedName.Origin} named '{generatedName.Name}' because {generatedSymbols[generatedName.Name]} also generates '{generatedName.Name}'.");
                 }
             }
         }
@@ -101,12 +101,43 @@ public static partial class ActorFrameworkLowerer
 
         public static IEnumerable<GeneratedName> GeneratedNames(ActorFrameworkState state)
         {
-            return Actors.GeneratedNames(state)
-                .Concat(Projectiles.GeneratedNames(state))
-                .Concat(Effects.GeneratedNames(state));
+            return ActorFrameworkDomains.Contributions
+                .SelectMany(contribution => contribution.GeneratedNames(state));
         }
 
     }
+
+    private static class ActorFrameworkDomains
+    {
+        public static IReadOnlyList<GeneratedProgramContribution> Contributions { get; } =
+        [
+            new(
+                "Actors",
+                Actors.AddGeneratedStructs,
+                static state => Actors.GeneratedConstants(state.Actors.EnemyDefs),
+                Actors.GeneratedFunctions,
+                Actors.GeneratedNames),
+            new(
+                "Projectiles",
+                Projectiles.AddGeneratedStructs,
+                static state => Projectiles.GeneratedConstants(state.Projectiles.Definitions),
+                static _ => [],
+                Projectiles.GeneratedNames),
+            new(
+                "Effects",
+                Effects.AddGeneratedStructs,
+                static state => Effects.GeneratedConstants(state.Effects.Definitions),
+                static _ => [],
+                Effects.GeneratedNames),
+        ];
+    }
+
+    private sealed record GeneratedProgramContribution(
+        string Domain,
+        Action<ActorFrameworkState, IList<StructSyntax>> AddGeneratedStructs,
+        Func<ActorFrameworkState, IEnumerable<ConstDeclarationSyntax>> GeneratedConstants,
+        Func<ActorFrameworkState, IEnumerable<FunctionSyntax>> GeneratedFunctions,
+        Func<ActorFrameworkState, IEnumerable<GeneratedName>> GeneratedNames);
 
     private sealed record GeneratedName(string Name, string Origin);
 }

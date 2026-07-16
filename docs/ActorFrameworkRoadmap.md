@@ -12,6 +12,14 @@ Scalable Platformer Actor Framework Ergonomics** (`docs/ArchitectureRoadmap.md`)
 It breaks AR-14.1..AR-14.4 into concrete, verifiable tasks, records what is
 already landed on this branch, and tracks the remaining follow-ups in Phase 5.
 
+Navigation after AIN-5/AIN-6/AIN-10: historical task cards below may name the
+pre-partition `ActorFrameworkLowerer.cs` hotspot. For current work, enter through
+the single staged plan in that root, then follow the actor/spawn/projectile/effect
+state and feature symbols; shared pool projection/dispatch lives in
+`ActorFrameworkLowerer.SharedGeneration.cs`, and generated artifacts join through
+the ordered contribution catalog in `ActorFrameworkLowerer.GeneratedProgram.cs`.
+Use `docs/SdkArchitecture.md` as the current ownership map.
+
 The goal: let a game declare a small, fixed actor pool and several enemy types
 (sprite, hitbox, animation, behavior, constants), then update and draw the
 active pool through stable calls — **without** a hand-written global
@@ -329,7 +337,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   When the camera scrolls, enemies stay glued to the screen instead of to world
   tiles. The acceptance sample hides this with a tiny non-scrolling world.
 - Layer: framework (+ language if world X needs more than one byte).
-- Candidate files: `ActorFrameworkLowerer.cs` (draw + spawn lowering), camera
+- Candidate modules: actor/spawn feature state and generation partials, camera
   state access, GB/NES emitted-code tests, sample.
 - Steps:
   - [x] Store actor positions in world coordinates; if world X exceeds 255, use
@@ -352,7 +360,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Problem: `TouchTiles`/`LandOnTiles` apply a fixed literal `screenX` to every
   actor, ignoring each actor's own `x`, so collision is tested at one column.
 - Layer: framework.
-- Candidate files: `ActorFrameworkLowerer.cs` (collision lowering), tests, sample.
+- Candidate modules: actor generation partials, tests, sample.
 - Steps:
   - [x] Use each actor's (camera-relative) `x` for the collision AABB instead of
     a fixed column, keeping camera-relative AABB capability gating.
@@ -384,7 +392,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   ignoring metasprite size, so dense pools of multi-sprite enemies can be
   accepted past the target budget. (Tightens AF-4.1.)
 - Layer: portable SDK / targeting.
-- Candidate files: capability checks in `ActorFrameworkLowerer.cs`, `Target2DCapabilities`,
+- Candidate modules: actor generation budget checks, `Target2DCapabilities`,
   tests.
 - Steps:
   - [x] Account for each enemy def's resolved metasprite hardware-sprite count
@@ -436,7 +444,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   site. This is correct and byte-reproducible, but unnecessarily repeats work
   when a frame uses several actor helpers.
 - Layer: framework source-to-source lowering.
-- Candidate files: `ActorFrameworkLowerer.cs`, GB/NES emitted-code tests.
+- Candidate modules: shared/actor generation partials, GB/NES emitted-code tests.
 - Steps:
   - [x] Introduce a lowering-local projection helper or per-loop cached values
     without adding a new `Sdk2DOperation`.
@@ -452,7 +460,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   `screenX + width` wraps, a wide or near-right-edge actor can produce an
   incorrect X overlap result.
 - Layer: framework source-to-source lowering / byte expression guards.
-- Candidate files: `ActorFrameworkLowerer.cs`, GB/NES helper tests.
+- Candidate modules: actor generation partials, GB/NES helper tests.
 - Steps:
   - [x] Detect or avoid byte overflow in the actor-right-edge comparison.
   - [x] Keep player arguments and enemy hitbox dimensions literal bytes unless a
@@ -468,7 +476,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   That is intentional for the first slice, but games may need explicit
   reactivation or respawn policy.
 - Layer: framework API / sample policy.
-- Candidate files: `ActorFrameworkLowerer.cs`, `samples/actor-framework/README.md`,
+- Candidate modules: actor/spawn state and generation partials, `samples/actor-framework/README.md`,
   target docs.
 - Steps:
   - [ ] Decide whether v1 keeps one-shot activation as the stable default or adds
@@ -505,7 +513,7 @@ slice, but they should stay visible:
   source-level policy.
 - AF-5.10: runtime activation currently scans authored spawns each frame.
 - AF-5.11: `Projectiles.*` and `Effects.*` still have compiler-owned public
-  directive recognition in `ActorFrameworkLowerer`; migrate them behind
+  directive recognition in the Actor Framework projectile/effect feature modules; migrate them behind
   package-declared metadata in a separate slice if their lifecycle surface needs
   the same source-only facade boundary as actors.
 - Design note: actor pool scanline diagnostics are conservative. They charge pool

@@ -46,6 +46,9 @@ in `NesRomBuilder`, `NesCartridgeLayout`, `NesRuntimeCompiler*`,
 `NesSdkOperationLowerer*`, `NesSdkStreamReader`, and `PrgBuilder`
 respectively. This is an internal ownership split; mapper selection, PPU
 scheduling, public operations, timing, and ROM layout are unchanged.
+`NesSdkLoweringArchitectureTests` checks the split from compiled operation
+symbols and call edges, so feature-partial file and private emitter renames do
+not weaken or require changes to the ownership guard.
 
 Runtime sprite lowering is implemented for logical PNG sprite sheets and transitional JSON assets through `Sdk2DOperation.DrawLogicalSprite`; `Sprite.Draw(...)` is provided by the SDK library over a role-bearing `sprite_draw` target intrinsic. `Audio.Init()`, `Audio.Update()`, `Music.Play(name)`, `Music.Stop()`, and `Sfx.Play(name)` are also provided by the SDK library over the `audio_init`/`audio_update`/`music_play`/`music_stop`/`sfx_play` target intrinsics (`music_play` and `sfx_play` carry the audio asset as a compile-time `AssetRef` operand), and `Music.Asset(...)` / `Sfx.Asset(...)` are package resource declarations. Camera-relative `Camera.AabbTiles(...)` and `Camera.AabbHitTop(...)`, plus screen-space `Camera.ScreenAabbTiles(...)` and `Camera.ScreenAabbHitTop(...)`, are likewise provided by the SDK library over role-bearing `camera_aabb_tiles`/`camera_aabb_hit_top`/`camera_screen_aabb_tiles`/`camera_screen_aabb_hit_top` target intrinsics matching the Game Boy target.
 
