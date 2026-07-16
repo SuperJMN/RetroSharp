@@ -7,6 +7,15 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-9 / #365 freezes the AI-navigable architecture acceptance in
+  `docs/AiNavigableArchitecture.md`: it maps the runtime-memory, shared frontend,
+  Actor Framework, and target SDK-emission owners to their production and test
+  seams, records reproducible CodeGraph probes, and keeps the final measurements
+  descriptive rather than turning line counts into gates. Architecture tests now
+  reject duplicate target RAM ownership, direct target frontend-stage execution,
+  target-lowerer backedges, and Actor root-state/contribution leaks. The Game Boy
+  monolithic regression helper consumes the real `PrepareVideoProgram` adapter
+  instead of reconstructing the frontend sequence.
 - AIN-10 / #373 removes the post-refactor ownership residue. Actor, spawn,
   projectile, effect, and generated-call mutable facts live in five private
   domain state modules; the root Actor Framework state retains target,
@@ -353,9 +362,11 @@ This document preserves project knowledge that previously lived only in agent me
   drains one pending camera stream phase at VBlank entry in `Video.WaitVBlank()`
   before sprite DMA, restores PPUCTRL/PPUSCROLL before rendering resumes, and splits
   a runtime row into four 8-tile `$2007` phases (plus a separate attribute phase) so
-  no single VBlank overruns budget. Regression tests live in `NesRomCompilerTests`
-  (`Nes_video_wait_vblank_applies_pending_camera_scroll_before_sprite_dma`,
-  `Nes_runtime_row_streaming_is_split_across_vblanks`).
+  no single VBlank overruns budget. Regression tests now live in the focused
+  `NesSdkFrameInputLoweringTests`
+  (`Nes_video_wait_vblank_applies_pending_camera_scroll_before_sprite_dma`) and
+  `NesSdkCameraStreamingLoweringTests`
+  (`Nes_runtime_row_streaming_is_split_across_vblanks`) suites.
 
 ## Project Shape
 

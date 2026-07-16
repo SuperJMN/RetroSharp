@@ -2,6 +2,7 @@ namespace RetroSharp.NES.Tests;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
+using RetroSharp.Parser;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
@@ -11,12 +12,39 @@ public sealed class NesSdkFrameInputLoweringTests
     public void Lowers_wait_frame_operation_to_existing_nes_vblank_routine()
     {
         var builder = new PrgBuilder();
-        var compiler = CreateRuntimeCompiler(builder);
+        var lowerer = CreateLowerer(builder);
 
-        compiler.SdkOperationLowerer.Emit(new Sdk2DOperation.WaitFrame());
+        lowerer.Emit(new Sdk2DOperation.WaitFrame());
 
         Assert.Equal([0x2C, 0x02, 0x20, 0x30, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB], builder.Build());
     }
+
+    private static NesSdkOperationLowerer CreateLowerer(PrgBuilder builder)
+    {
+        var program = NesVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));
+        return new NesSdkOperationLowerer(
+            builder,
+            program,
+            new NesSdkLoweringContext(
+                _ => throw UnusedContext(),
+                NoSourceConstant,
+                _ => throw UnusedContext(),
+                _ => throw UnusedContext(),
+                (_, _) => throw UnusedContext(),
+                (_, _) => throw UnusedContext()),
+            useFourScreenNametables: false,
+            usePackedCamera: false,
+            useDirectOamWrites: false);
+    }
+
+    private static bool NoSourceConstant(ExpressionSyntax _, out int value)
+    {
+        value = 0;
+        return false;
+    }
+
+    private static InvalidOperationException UnusedContext() =>
+        new("Wait-frame lowering must not use source operand context.");
 
     [Fact]
     public void Lowers_poll_input_operation_to_deterministic_nes_bytes()

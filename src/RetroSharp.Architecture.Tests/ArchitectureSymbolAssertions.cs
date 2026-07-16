@@ -56,6 +56,118 @@ internal static class ArchitectureSymbolAssertions
             method.MetadataToken == operationEntryPoint.MetadataToken);
     }
 
+    public static void AssertRuntimeMemoryOwnership(
+        Assembly assembly,
+        string layoutTypeName)
+    {
+        var layout = RequiredType(assembly, layoutTypeName);
+        var reservedRanges = RequiredEnumerableProperty(layout, "ReservedRanges")
+            .Cast<object>()
+            .Select(RangeBounds)
+            .ToList();
+        var aliasRanges = layout
+            .GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+            .Where(property => property.Name.StartsWith("Intentional", StringComparison.Ordinal))
+            .SelectMany(property => property.GetValue(null) is System.Collections.IEnumerable values
+                ? values.Cast<object>()
+                : [])
+            .Select(alias => alias.GetType().GetProperty("Alias")?.GetValue(alias))
+            .Where(alias => alias is not null)
+            .Select(alias => RangeBounds(alias!))
+            .ToHashSet();
+        var canonicalRanges = reservedRanges
+            .Where(range => !aliasRanges.Contains(range))
+            .ToList();
+        var namedAddressesProperty = layout.GetProperty(
+            "NamedAddresses",
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(namedAddressesProperty);
+        var namedAddresses = Assert.IsAssignableFrom<System.Collections.IEnumerable>(namedAddressesProperty.GetValue(null))
+            .Cast<object>()
+            .Select(address =>
+            {
+                var type = address.GetType();
+                var name = Assert.IsType<string>(type.GetProperty("Name")?.GetValue(address));
+                var value = Convert.ToUInt16(type.GetProperty("Address")?.GetValue(address));
+                return (Name: name, Address: value);
+            })
+            .ToHashSet();
+
+        var leakedFields = assembly
+            .GetTypes()
+            .Where(type => !IsOwnedBy(type, layout))
+            .SelectMany(type => type.GetFields(DeclaredMethods))
+            .Where(field => field.IsLiteral && !field.IsSpecialName)
+            .Select(field => (Field: field, Value: NumericConstant(field)))
+            .Where(candidate => candidate.Value.HasValue)
+            .Where(candidate =>
+                candidate.Field.FieldType == typeof(ushort) &&
+                canonicalRanges.Any(range => candidate.Value >= range.Start && candidate.Value < range.EndExclusive) ||
+                candidate.Field.FieldType == typeof(byte) &&
+                namedAddresses.Contains((candidate.Field.Name, checked((ushort)candidate.Value!.Value))))
+            .ToList();
+
+        Assert.Empty(leakedFields.Select(candidate =>
+            $"{candidate.Field.DeclaringType?.FullName}.{candidate.Field.Name}=0x{candidate.Value:X4}"));
+    }
+
+    public static void AssertExclusiveFrontendPreparation(
+        Type preparation,
+        IReadOnlyCollection<Type> preparationStages,
+        params Type[] targetCompilers)
+    {
+        var stageSet = preparationStages.ToHashSet();
+        var preparationCalls = CalledMethods(preparation);
+        Assert.All(
+            preparationStages,
+            stage => Assert.Contains(preparationCalls, call => call.DeclaringType == stage));
+        Assert.All(
+            targetCompilers,
+            targetCompiler => Assert.DoesNotContain(
+                CalledMethods(targetCompiler),
+                call => call.DeclaringType is not null && stageSet.Contains(call.DeclaringType)));
+    }
+
+    private static bool IsOwnedBy(Type candidate, Type owner)
+    {
+        for (var current = candidate; current is not null; current = current.DeclaringType)
+        {
+            if (current == owner)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static long? NumericConstant(FieldInfo field)
+    {
+        if (field.FieldType != typeof(byte) && field.FieldType != typeof(ushort))
+        {
+            return null;
+        }
+
+        return Convert.ToInt64(field.GetRawConstantValue());
+    }
+
+    private static System.Collections.IEnumerable RequiredEnumerableProperty(Type owner, string name)
+    {
+        var property = owner.GetProperty(
+            name,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(property);
+        return Assert.IsAssignableFrom<System.Collections.IEnumerable>(property.GetValue(null));
+    }
+
+    private static (long Start, long EndExclusive) RangeBounds(object range)
+    {
+        var type = range.GetType();
+        return (
+            Convert.ToInt64(type.GetProperty("Start")?.GetValue(range)),
+            Convert.ToInt64(type.GetProperty("EndExclusive")?.GetValue(range)));
+    }
+
     public static void AssertDomainStateOwnership(
         Type root,
         Type rootState,

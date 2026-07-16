@@ -64,7 +64,7 @@ public static class GameBoyRomCompiler
         return PrepareVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry).SdkAudioOperations;
     }
 
-    private static GameBoyVideoProgram PrepareVideoProgram(
+    internal static GameBoyVideoProgram PrepareVideoProgram(
         string source,
         string? baseDirectory,
         SdkLibraryImportMode sdkImportMode,
