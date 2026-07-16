@@ -7,6 +7,16 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- AIN-7 / #363 deepens the Game Boy SDK lowering seam: one production
+  `GameBoySdkOperationLowerer` instance now owns substantive frame/input,
+  logical-sprite, camera/streaming, world-flag, and camera-AABB emission in
+  feature partials. `GameBoyRuntimeCompiler` consumes the collected statement
+  and value streams and routes them through that instance; it supplies only a
+  small concrete `GameBoySdkLoweringContext` for shared operand/storage
+  primitives. Cartridge layout/placement, runtime compilation, stream readers,
+  and `GbBuilder` now live in purpose-named modules, with the runtime and SDK
+  implementations partitioned by feature. Raw and transitional calls reuse
+  lowerer-owned internal target methods without adding portable operations.
 - AIN-6 / #362 partitions Actor Framework generation behind feature-owned
   partial internal modules in `RetroSharp.Sdk.Frontend`: each of
   `ActorFrameworkLowerer.Actors.cs`, `ActorFrameworkLowerer.Projectiles.cs`, and
@@ -398,8 +408,11 @@ Operation-driven lowering pattern (already proven, replicate it):
   into target-neutral `Sdk2DOperation` records; `Sdk2DOperationValidator` checks them
   against each target's `Target2DCapabilities` before lowering.
 - A per-target lowerer (`GameBoySdkOperationLowerer`, `NesSdkOperationLowerer`) maps an
-  operation to target emission. The runtime compiler routes a source call via
-  `EmitSdkOperation(op)` instead of re-deriving it from the AST.
+  operation to target emission. On Game Boy, the lowerer is one stateful production
+  instance whose feature partials own the frame/input, sprite, camera/streaming,
+  world-flag, and AABB bytes; the runtime compiler only consumes the stream and
+  routes each operation through `EmitSdkOperation(op)` instead of re-deriving it
+  from the AST.
 - Operand IR is `SdkByteExpression` (`Constant | Variable`). `Variable` carries a typed
   `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`); targets convert that
   descriptor to their runtime local-map key only at the backend boundary. Do NOT add general
@@ -433,10 +446,12 @@ Progress (2026-06-14):
   target/source columns are `SdkByteExpression`, Y/Height remain constants, Game Boy lowering
   preserves the existing map row table and VRAM write byte shape, and NES lowers horizontal
   column streaming into `$2006`/`$2007` writes across a two-nametable buffer.
-- Operation stream decision implemented 2026-06-14: `GameBoyRuntimeCompiler` walks the collected
-  operation list with a cursor for migrated statement calls and `World.TileFlagsAt(...)`; it
-  fails if the next operation type does not match the source call or if operations remain
-  unconsumed after runtime emission.
+- Operation stream decision implemented 2026-06-14 and deepened by AIN-7:
+  `GameBoyRuntimeCompiler` walks the collected operation list with a cursor for
+  migrated statement calls and `World.TileFlagsAt(...)`, then routes them through
+  its single `GameBoySdkOperationLowerer`. The lowerer owns emission, while the
+  compiler still fails if the next operation type does not match the source call
+  or if operations remain unconsumed after runtime emission.
 - Operand contract decision implemented 2026-06-14: SDK byte variables preserve the
   value-or-location IR boundary while replacing collector/target string formatting conventions
   with typed `Local`, recursive `Field`, and `IndexedElement` descriptors.
