@@ -13,6 +13,14 @@ public sealed class ArchitectureSymbolAssertionsTests
     }
 
     [Fact]
+    public void Runtime_memory_guard_rejects_a_renamed_byte_address_declared_outside_the_layout()
+    {
+        Assert.ThrowsAny<Exception>(() => ArchitectureSymbolAssertions.AssertRuntimeMemoryOwnership(
+            typeof(ArchitectureSymbolAssertionsTests).Assembly,
+            typeof(FixtureByteRuntimeMemoryLayout).FullName!));
+    }
+
+    [Fact]
     public void Frontend_guard_rejects_a_target_that_repeats_a_preparation_stage()
     {
         Assert.ThrowsAny<Exception>(() => ArchitectureSymbolAssertions.AssertExclusiveFrontendPreparation(
@@ -116,6 +124,29 @@ public sealed class ArchitectureSymbolAssertionsTests
     private sealed class LeakingRuntimeMemoryMap
     {
         private const ushort RenamedCursor = 0x0201;
+    }
+
+    private static class FixtureByteRuntimeMemoryLayout
+    {
+        public static IReadOnlyList<FixtureRuntimeRange> ReservedRanges { get; } =
+        [
+            new(0x00F0, 0x0001),
+        ];
+
+        public static IReadOnlyList<FixtureRuntimeAddress> NamedAddresses { get; } =
+        [
+            new("Current", 0x00F0),
+        ];
+
+        public static class Input
+        {
+            public const byte Current = 0xF0;
+        }
+    }
+
+    private sealed class LeakingByteRuntimeMemoryMap
+    {
+        private const byte RenamedInput = 0xF0;
     }
 
     private static class FixtureParser

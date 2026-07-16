@@ -58,9 +58,11 @@ internal static class ArchitectureSymbolAssertions
 
     public static void AssertRuntimeMemoryOwnership(
         Assembly assembly,
-        string layoutTypeName)
+        string layoutTypeName,
+        params string[] allowedByteConstants)
     {
         var layout = RequiredType(assembly, layoutTypeName);
+        var allowedByteConstantSet = allowedByteConstants.ToHashSet(StringComparer.Ordinal);
         var reservedRanges = RequiredEnumerableProperty(layout, "ReservedRanges")
             .Cast<object>()
             .Select(RangeBounds)
@@ -78,20 +80,13 @@ internal static class ArchitectureSymbolAssertions
         var canonicalRanges = reservedRanges
             .Where(range => !aliasRanges.Contains(range))
             .ToList();
-        var namedAddressesProperty = layout.GetProperty(
-            "NamedAddresses",
-            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-        Assert.NotNull(namedAddressesProperty);
-        var namedAddresses = Assert.IsAssignableFrom<System.Collections.IEnumerable>(namedAddressesProperty.GetValue(null))
+        var namedAddressValues = RequiredEnumerableProperty(layout, "NamedAddresses")
             .Cast<object>()
-            .Select(address =>
-            {
-                var type = address.GetType();
-                var name = Assert.IsType<string>(type.GetProperty("Name")?.GetValue(address));
-                var value = Convert.ToUInt16(type.GetProperty("Address")?.GetValue(address));
-                return (Name: name, Address: value);
-            })
+            .Select(address => Convert.ToInt64(address.GetType().GetProperty("Address")?.GetValue(address)))
             .ToHashSet();
+        var byteAddressRanges = canonicalRanges
+            .Where(range => namedAddressValues.Any(address => address >= range.Start && address < range.EndExclusive))
+            .ToList();
 
         var leakedFields = assembly
             .GetTypes()
@@ -101,14 +96,20 @@ internal static class ArchitectureSymbolAssertions
             .Select(field => (Field: field, Value: NumericConstant(field)))
             .Where(candidate => candidate.Value.HasValue)
             .Where(candidate =>
+                candidate.Field.FieldType != typeof(byte) ||
+                !allowedByteConstantSet.Contains(FieldId(candidate.Field)))
+            .Where(candidate =>
                 candidate.Field.FieldType == typeof(ushort) &&
                 canonicalRanges.Any(range => candidate.Value >= range.Start && candidate.Value < range.EndExclusive) ||
                 candidate.Field.FieldType == typeof(byte) &&
-                namedAddresses.Contains((candidate.Field.Name, checked((ushort)candidate.Value!.Value))))
+                byteAddressRanges.Any(range => candidate.Value >= range.Start && candidate.Value < range.EndExclusive))
             .ToList();
 
-        Assert.Empty(leakedFields.Select(candidate =>
-            $"{candidate.Field.DeclaringType?.FullName}.{candidate.Field.Name}=0x{candidate.Value:X4}"));
+        Assert.True(
+            leakedFields.Count == 0,
+            $"Runtime-memory constants escaped '{layout.FullName}':{Environment.NewLine}" +
+            string.Join(Environment.NewLine, leakedFields.Select(candidate =>
+                $"{FieldId(candidate.Field)}=0x{candidate.Value:X4}")));
     }
 
     public static void AssertExclusiveFrontendPreparation(
@@ -150,6 +151,8 @@ internal static class ArchitectureSymbolAssertions
 
         return Convert.ToInt64(field.GetRawConstantValue());
     }
+
+    private static string FieldId(FieldInfo field) => $"{field.DeclaringType?.FullName}.{field.Name}";
 
     private static System.Collections.IEnumerable RequiredEnumerableProperty(Type owner, string name)
     {

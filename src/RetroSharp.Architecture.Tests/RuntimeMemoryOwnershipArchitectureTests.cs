@@ -18,6 +18,9 @@ public sealed class RuntimeMemoryOwnershipArchitectureTests
     {
         ArchitectureSymbolAssertions.AssertRuntimeMemoryOwnership(
             typeof(NesRomCompiler).Assembly,
-            "RetroSharp.NES.NesRuntimeMemoryLayout");
+            "RetroSharp.NES.NesRuntimeMemoryLayout",
+            // Byte-valued stream/state sentinels share $FF numerically but are not RAM addresses.
+            "RetroSharp.NES.NesSoundEffectAssetCompiler.EndOfEffectMarker",
+            "RetroSharp.NES.NesPackedCameraRuntime.NoSlot");
     }
 }

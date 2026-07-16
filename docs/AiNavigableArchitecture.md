@@ -80,27 +80,54 @@ in the table, not `GameBoyRomCompilerTests.cs` or `NesRomCompilerTests.cs`.
 
 ## CodeGraph probes
 
-When `.codegraph/` exists, run these from the repository root before opening a
-complete backend. They name both ends deliberately so the result contains the
-authority, production route, and focused test surface even when reflection-only
-architecture edges cannot be inferred:
+When `.codegraph/` exists, run this exact file-mode probe from the repository
+root before opening a complete backend. File mode is deliberate: semantic
+search can rank a high-fan-out production symbol ahead of a reflection-only or
+Python test edge. `--symbols-only` loads each exact module and its dependents
+without dumping a complete backend:
 
 ```bash
-codegraph explore "GameBoyRuntimeMemoryLayout GameBoyRuntimeCompiler GameBoyRuntimeMemoryLayoutTests"
-codegraph explore "NesRuntimeMemoryLayout NesRuntimeAbiProjection NesRuntimeMemoryLayoutTests test_runtime_abi"
-codegraph explore "TargetFrontendPreparation PrepareVideoProgram TargetFrontendPreparationArchitectureTests CrossTargetFrontendPreparationTests"
-codegraph explore "ActorFrameworkLoweringPlan ActorFrameworkDomains GeneratedProgramContribution ActorFrameworkLoweringPlanTests ActorFrameworkDomainArchitectureTests"
-codegraph explore "GameBoySdkOperationLowerer GameBoyRuntimeCompiler GameBoySdkOperationBoundaryTests GameBoySdkLoweringArchitectureTests"
-codegraph explore "NesSdkOperationLowerer NesRuntimeCompiler NesSdkOperationBoundaryTests NesSdkLoweringArchitectureTests"
+files=(
+  src/RetroSharp.GameBoy/GameBoyRuntimeMemoryLayout.cs
+  src/RetroSharp.GameBoy/GameBoyRuntimeCompiler.cs
+  src/RetroSharp.GameBoy.Tests/GameBoyRuntimeMemoryLayoutTests.cs
+  src/RetroSharp.NES/NesRuntimeMemoryLayout.cs
+  src/RetroSharp.NES/NesRuntimeAbiProjection.cs
+  src/RetroSharp.NES/NesRuntimeCompiler.cs
+  src/RetroSharp.NES.Tests/NesRuntimeMemoryLayoutTests.cs
+  src/RetroSharp.NES.Tests/NesRuntimeAbiProjectionTests.cs
+  tools/nes/runtime_abi.py
+  tools/nes/tests/test_runtime_abi.py
+  src/RetroSharp.Sdk.Frontend/TargetFrontendPreparation.cs
+  src/RetroSharp.GameBoy/GameBoyRomCompiler.cs
+  src/RetroSharp.NES/NesRomCompiler.cs
+  src/RetroSharp.Architecture.Tests/TargetFrontendPreparationArchitectureTests.cs
+  src/RetroSharp.NES.Tests/CrossTargetFrontendPreparationTests.cs
+  src/RetroSharp.Sdk.Frontend/ActorFrameworkLowerer.cs
+  src/RetroSharp.Sdk.Frontend/ActorFrameworkLowerer.GeneratedProgram.cs
+  src/RetroSharp.GameBoy.Tests/ActorFrameworkLoweringPlanTests.cs
+  src/RetroSharp.Architecture.Tests/ActorFrameworkDomainArchitectureTests.cs
+  src/RetroSharp.GameBoy/GameBoySdkOperationLowerer.cs
+  src/RetroSharp.GameBoy.Tests/GameBoySdkFrameInputLoweringTests.cs
+  src/RetroSharp.GameBoy.Tests/GameBoySdkOperationBoundaryTests.cs
+  src/RetroSharp.Architecture.Tests/GameBoySdkLoweringArchitectureTests.cs
+  src/RetroSharp.NES/NesSdkOperationLowerer.cs
+  src/RetroSharp.NES.Tests/NesSdkFrameInputLoweringTests.cs
+  src/RetroSharp.NES.Tests/NesSdkOperationBoundaryTests.cs
+  src/RetroSharp.Architecture.Tests/NesSdkLoweringArchitectureTests.cs
+)
+
+for path in "${files[@]}"; do
+  codegraph node -p . --file "$path" --symbols-only
+done
 ```
 
-The AIN-9 acceptance run used the current 901-file index. The directed probes
-located both memory authorities and their consumers, the shared preparation
-adapter, Actor plan/contribution modules, and both target lowerers without first
-loading either complete ROM builder. CodeGraph may label tests that reach an
-internal lowerer through a runtime-owned property as having no inferred coverage;
-the focused test symbol named in the query and the compiled IL ownership guard
-are the authoritative evidence in that case.
+The AIN-9 acceptance run used the current 901-file index. All 27 file probes
+returned the requested symbol map. Together they locate each authority, its
+production route, and its focused C# or Python tests without loading either
+complete ROM builder. The direct frame/input lowerer tests expose an explicit
+constructor edge; the boundary/architecture files pin the end-to-end stream
+seam and compiled ownership guard separately.
 
 ## Final measurements
 
@@ -117,7 +144,7 @@ not become arbitrary size gates.
 | `NesRomCompilerTests.cs` | 5,110 | 3,503 |
 
 The final tree has 11 Game Boy SDK-lowerer modules, 8 NES SDK-lowerer modules,
-14 Actor Framework modules, and 26 architecture `[Fact]`/`[Theory]`
+14 Actor Framework modules, and 27 architecture `[Fact]`/`[Theory]`
 declarations. Validation results and exact runner hashes belong in the closing
 PR/epic record because they are execution evidence, not permanent design limits.
 

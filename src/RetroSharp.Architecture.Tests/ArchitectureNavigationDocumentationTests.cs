@@ -14,10 +14,14 @@ public sealed class ArchitectureNavigationDocumentationTests
         "ActorFrameworkLoweringPlan",
         "ActorFrameworkDomainArchitectureTests",
         "GameBoySdkOperationLowerer.Emit",
+        "GameBoySdkFrameInputLoweringTests",
         "GameBoySdkLoweringArchitectureTests",
         "NesSdkOperationLowerer.Emit",
+        "NesSdkFrameInputLoweringTests",
         "NesSdkLoweringArchitectureTests",
-        "codegraph explore",
+        "tools/nes/tests/test_runtime_abi.py",
+        "codegraph node -p . --file",
+        "--symbols-only",
     ];
 
     [Fact]
