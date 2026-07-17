@@ -39,12 +39,19 @@ hardware state. Every retained frame checks:
   dropped requests, reuse, bounce, and effect expiry;
 - one logical tick per physical frame within the reviewed cadence budget.
 
-`maximumSpawnToVisibleFrames` is 1 for all eight scenarios. The shared runner
-requires monotonically ordered activation and visibility sequence IDs, rejects
-gaps and unresolved final activations, and reports the observed maximum. All
-scenarios require at least a 0.95 gameplay-tick ratio and at most one
-consecutive missed tick. Actor and input-driven runner scenarios additionally
-require input-to-state response within one frame.
+`maximumSpawnToVisibleFrames` is 1 for Game Boy projectile scenarios, both
+actor-framework scenarios, and runner-projectile. NES `shots-simple` and
+`shots-bouncy` declare 2 after GCP-2.1 because their production loop publishes
+retained OAM at `Video.WaitVBlank()` before `shots.Draw()` and accepts new
+requests after that draw phase. A request accepted after `Draw()` cannot enter
+shadow OAM until the following `Draw()` and is legally published at the next
+VBlank; faster target code may expose that real two-frame path without
+changing logical projectile behavior. The shared runner requires
+monotonically ordered activation and visibility sequence IDs, rejects gaps and
+unresolved final activations, and reports the observed maximum. All scenarios
+require at least a 0.95 gameplay-tick ratio and at most one consecutive missed
+tick. Actor and input-driven runner scenarios additionally require
+input-to-state response within one frame.
 
 ## Retained OAM ownership
 
@@ -61,9 +68,13 @@ projectile, or effect call site cannot retain the prior frame. Raw/direct NES
 OAM programs keep the existing `$2003/$2004` behavior and startup profile.
 
 Actor draw generation uses stable definition call sites for every pool size and
-projects inactive or off-window actors to hidden coordinates. This is portable
-frontend policy; retained-page placement and DMA timing remain target lowering
-details.
+projects inactive or off-window actors to hidden coordinates. Projectile/effect
+draws follow the same retained-OAM publication boundary: `Draw()` contributes
+only the current shadow page, while later `Request()`/`ProcessRequests()` calls
+create logical state for a later draw phase. GCP-2.1 keeps that source order
+observable instead of fusing draw/request/update phases to hide the latency.
+This is portable frontend policy; retained-page placement and DMA timing remain
+target lowering details.
 
 ## Regression proof
 

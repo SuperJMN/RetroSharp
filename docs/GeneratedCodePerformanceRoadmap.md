@@ -161,7 +161,13 @@ materialization, camera/projection preparation, and dispatch work that may be
 reusable without changing the phase ordering.
 
 The optimization contract is trace equivalence first. Loop fusion is not a
-requirement when it changes all-actors-per-phase semantics.
+requirement when it changes all-actors-per-phase semantics. GCP-2.1 also fixed
+the retained-OAM phase contract exposed by GCP-2.3: a production loop that
+publishes retained OAM at `Video.WaitVBlank()`, draws, and only then accepts a
+new request cannot make that new logical slot visible until a later `Draw()`
+and following publication boundary. Shared actor/projectile lowering must not
+reorder `Draw()` with request processing merely to preserve an accidental
+one-frame visibility measurement.
 
 ### 3.5 Current frame budgets omit CPU work
 
@@ -498,6 +504,18 @@ GCP-0.1 reproducible baseline
   while preserving exact phase ordering.
 - **Layer:** shared Actor Framework lowering.
 - **Depends on:** `GCP-0.1`.
+- **Remote owner:**
+  [GCP-2.1 / #399](https://github.com/SuperJMN/RetroSharp/issues/399).
+- **Accepted shape (GCP-2.1 / #399):** the shared phase contract remains
+  all-actors-per-phase and source-order preserving. `Draw()` is the only phase
+  that contributes retained OAM for the current frame; `Request()` and
+  `ProcessRequests()` calls that occur later in source order create logical
+  state for a later draw phase, not for the already-published retained page.
+  NES `shots-simple` and `shots-bouncy` therefore declare a two-frame
+  spawn-to-visible budget. This is not a target-specific API change and does
+  not add a hidden scheduler, mutable runtime object, or actor-specific SDK
+  operation. Any future shared optimization must preserve these traces rather
+  than fuse draw/request/update phases.
 - **Candidate modules:** `ActorFrameworkLowerer.Actors.cs`,
   `ActorFrameworkLowerer.Actors.Generation.cs`,
   `ActorFrameworkLowerer.SharedGeneration.cs`, generated-program
@@ -692,22 +710,27 @@ threshold changes rather than becoming a second independent contract.
   regresses, and the roadmap/target docs match the merged implementation.
 - Parent non-goals: no direct production implementation, no arbitrary-program
   WCET claim, no public cycle API, and no unrelated builder/mapper cleanup.
-- Initial native graph:
+- Current native graph:
   - [#388 — GCP-0.1: freeze reproducible generated-code performance
-    baselines](https://github.com/SuperJMN/RetroSharp/issues/388) is the only
-    open, unblocked child.
-  - [#389 — GCP-0.2: define the target CPU-work budget and diagnostic
-    contract](https://github.com/SuperJMN/RetroSharp/issues/389) is blocked by
-    #388.
-  - [#390 — GCP-1.1: emit constant-cost ROM spawn record
-    lookups](https://github.com/SuperJMN/RetroSharp/issues/390) is blocked by
-    #388.
-  - Existing [#244 — AF-5.10: reduce actor spawn activation scan cost for wide
-    maps](https://github.com/SuperJMN/RetroSharp/issues/244) is a native child of
-    #387 and is blocked by #390; no duplicate GCP issue exists.
-- Later tasks `GCP-2.1` through `GCP-3.2` remain issue-ready here but are not
-  seeded until the measurement and CPU-work contracts make their final remote
-  bodies stable.
+    baselines](https://github.com/SuperJMN/RetroSharp/issues/388),
+    [#389 — GCP-0.2: define the target CPU-work budget and diagnostic
+    contract](https://github.com/SuperJMN/RetroSharp/issues/389),
+    [#390 — GCP-1.1: emit constant-cost ROM spawn record
+    lookups](https://github.com/SuperJMN/RetroSharp/issues/390), existing
+    [#244 — AF-5.10: reduce actor spawn activation scan cost for wide
+    maps](https://github.com/SuperJMN/RetroSharp/issues/244), and
+    [#394 — GCP-2.2: bound Game Boy runtime struct-array addressing
+    cost](https://github.com/SuperJMN/RetroSharp/issues/394) are closed
+    children of #387.
+  - [#399 — GCP-2.1: remove redundant actor-pool phase work without semantic
+    reordering](https://github.com/SuperJMN/RetroSharp/issues/399) owns the
+    shared Draw/OAM phase contract required before #395 can claim final NES
+    addressing acceptance.
+  - [#395 — GCP-2.3: bound NES runtime struct-array addressing
+    cost](https://github.com/SuperJMN/RetroSharp/issues/395) remains open and
+    resumes after #399 merges.
+- `GCP-3.1` and `GCP-3.2` remain issue-ready here and should be seeded only
+  after `GCP-2.1` and `GCP-2.3` merge.
 
 ## 11. Durable validation
 

@@ -8,15 +8,18 @@ This document preserves project knowledge that previously lived only in agent me
 ## Recent Baseline
 
 - GCP planning / epic #387 publishes the measured generated-code performance
-  roadmap through PR #386. The synthetic discovery baseline falls to 50/100
-  ticks at 32 distant spawns on Game Boy and at eight active one-piece actors
-  on both targets. Milestone 13 owns the execution chain. GCP-0.1 / #388 is the
-  only initial unblocked child; GCP-0.2 / #389 and constant-cost spawn records
-  GCP-1.1 / #390 are natively blocked by #388; existing AF-5.10 / #244 is a
-  native child blocked by #390. Later GCP-2.x/GCP-3.x issues remain deliberately
-  unseeded until the measurement and CPU-work contracts stabilize their bodies.
-  Start from `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch epic
-  #387 as an implementation task or duplicate #244.
+  roadmap through PR #386. Milestone 13 owns the execution chain. GCP-0.1 /
+  #388, GCP-0.2 / #389, GCP-1.1 / #390, existing AF-5.10 / #244, and Game Boy
+  struct-array addressing GCP-2.2 / #394 are closed. GCP-2.1 / #399 records the
+  shared retained-OAM phase contract exposed by NES GCP-2.3 / #395: production
+  loops that call `Video.WaitVBlank()`, then `Draw()`, then accept projectile or
+  effect requests cannot make those newly accepted logical slots visible until a
+  later draw plus the following retained-OAM publication boundary. NES
+  `shots-simple` and `shots-bouncy` therefore use a two-frame spawn-to-visible
+  budget instead of depending on accidental slower code. #395 resumes after
+  #399 merges; GCP-3.1 and GCP-3.2 remain unseeded until GCP-2.1 and GCP-2.3
+  close. Start from `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch
+  epic #387 as an implementation task or duplicate #244.
 - AIN-12 / #378 makes the remaining architecture guardrails rename-safe.
   Target SDK and Actor ownership remain compiled-symbol/IL contracts; all seven
   Game Boy and four NES focused lowering suites declare typed test-ownership

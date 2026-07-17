@@ -31,12 +31,12 @@
   },
   "budgetEvidence": {
     "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
-    "hardwareTimingRationale": "An NTSC NES frame permits one complete fixed-pool update plus VBlank OAM publication; accepted logical spawns must reach retained OAM by the following frame.",
-    "productionTraceRationale": "The production timer requests a shot every ten ticks; the NES two-slot hero pool must preserve the same drop, despawn, reuse, and retained-OAM contract."
+    "hardwareTimingRationale": "An NTSC NES frame publishes retained OAM at Video.WaitVBlank() before this sample runs shots.Draw(), shots.Request(), and shots.ProcessRequests(). A shot accepted after Draw cannot enter shadow OAM until the following Draw and is legally published at the next VBlank, so the retained-OAM contract allows two sampled frames without reordering Draw or request processing.",
+    "productionTraceRationale": "The production timer requests a shot every ten ticks; the NES two-slot hero pool must preserve the same drop, despawn, reuse, and retained-OAM contract. GCP-2.1 records the two-frame draw-after-request phase contract so target addressing optimizations do not depend on accidental slower timing."
   },
   "budgets": {
     "minimumGameplayTickRatio": 0.95,
     "maximumConsecutiveMissedGameplayTicks": 1,
-    "maximumSpawnToVisibleFrames": 1
+    "maximumSpawnToVisibleFrames": 2
   }
 }
