@@ -31,6 +31,24 @@ The NES target exposes `NesTarget.Capabilities` for portable 2D capability check
 | BGM formats | VGM/VGZ 2A03 register logs for pulse, triangle, noise, DMC/DPCM, `$4015`, and `$4017`; expansion audio is ignored/deferred |
 | SFX formats | VGM/VGZ 2A03 register logs as pulse 1 one-shot multi-frame traces with a ring-out linger |
 
+## Generated CPU-Work Policy
+
+GCP-0.2 accepts 29,780 6502 CPU cycles as the conservative whole-cycle floor
+of the NTSC frame model. On the canonical mapper-0 fixture, only the physical
+OAM DMA transfer is isolated at 513..514 cycles. It is a non-additive detail
+under `sprite.publish`, not the complete contributor: the emitted immediate
+load and `$4014` store wrapper still require a selected-profile descriptor.
+Thus 29,266..29,267 is only a transfer-subtracted arithmetic remainder, not
+available headroom. Input, camera, collision, logical draw preparation, and
+generated actor work also remain uncalibrated. MMC3 sequential publication
+must use a different descriptor, and idle wait time is excluded.
+
+The common range algebra, no-blanket-reserve rule, stable contributor ids,
+future `GCP1001`/`GCP1002` policy, exact GCP-0.1 named-work calculations, and
+calibration-debt table live in
+[`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
+GCP-0.2 adds no current compiler diagnostic or ROM change.
+
 The descriptor records NES sprite, palette, X/Y fine-scroll, horizontal background-column streaming, four-screen camera movement, vertical row streaming, and camera-relative collision-query support. Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over NES target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`), while the collector still records the matching `Sdk2DOperation` values for validation and frame-budget boundaries.
 
 Those collected operations remain complete for capability validation, while a

@@ -33,6 +33,23 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | SFX formats | VGM/VGZ DMG register logs as channel-1 one-shot APU traces (BGM-priority ducking on channel 1) |
 | Cartridge size | 32 KiB ROM-only when possible; transparent MBC1 banked code, read-only data, and music up to 512 KiB ROMs |
 
+## Generated CPU-Work Policy
+
+GCP-0.2 accepts a 70,224 LR35902 T-cycle window. On the canonical ROM-only
+fixture, only the physical OAM DMA transfer is isolated at 640 cycles. It is a
+non-additive detail under `sprite.publish`, not the complete contributor: the
+emitted `CALL`, page/register setup, HRAM wait loop, and `RET` still require a
+selected-profile descriptor. Thus 69,584 is only a transfer-subtracted
+arithmetic remainder, not available headroom. Input, camera, collision,
+logical draw preparation, and generated actor work also remain uncalibrated.
+Busy VBlank polling outside the active publication path is idle slack.
+
+The common range algebra, no-blanket-reserve rule, stable contributor ids,
+future `GCP1001`/`GCP1002` policy, exact GCP-0.1 named-work calculations, and
+calibration-debt table live in
+[`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
+GCP-0.2 adds no current compiler diagnostic or ROM change.
+
 ## SDK Operation Boundary
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` exposes the first compiler boundary where portable 2D calls become semantic `Sdk2DOperation` records before Game Boy ROM lowering. The current boundary recognizes:
