@@ -229,7 +229,7 @@ internal static class GameBoyRomBuilder
         IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
     {
         var segments = BuildInlineProgramSegments(builder, program, programLength, inlineWorldPack);
-        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments, BuildFixedSymbols(builder), userVariables);
+        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments, BuildFixedSymbols(builder), userVariables, program);
     }
 
     private static GameBoyRomBuildReport BuildBankedReport(
@@ -271,7 +271,7 @@ internal static class GameBoyRomBuilder
             AddPhysicalSegments(segments, $"sfx:{placement.Name}", placement.Bank * BankSize, placement.Data.Length);
         }
 
-        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments, BuildFixedSymbols(builder), userVariables);
+        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments, BuildFixedSymbols(builder), userVariables, program);
     }
 
     private static IReadOnlyList<GameBoyRomBuildSegment> BuildInlineProgramSegments(
@@ -378,14 +378,22 @@ internal static class GameBoyRomBuilder
         int romSize,
         IEnumerable<GameBoyRomBuildSegment> segments,
         IReadOnlyDictionary<string, ushort> fixedSymbols,
-        IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
+        IReadOnlyList<GameBoyRuntimeUserVariable> userVariables,
+        GameBoyVideoProgram program)
     {
         var ordered = segments
             .OrderBy(segment => segment.PhysicalStart)
             .ThenBy(segment => segment.Owner, StringComparer.Ordinal)
             .ToArray();
         var occupiedBanks = ordered.Select(segment => segment.Bank).Distinct().Order().ToArray();
-        return new GameBoyRomBuildReport(selectedProfile, romSize, ordered, occupiedBanks, fixedSymbols, userVariables);
+        return new GameBoyRomBuildReport(
+            selectedProfile,
+            romSize,
+            ordered,
+            occupiedBanks,
+            fixedSymbols,
+            userVariables,
+            SdkCpuWorkReportFactory.ForGameBoy(selectedProfile, program.SdkOperations));
     }
 
     private static IReadOnlyDictionary<string, ushort> BuildFixedSymbols(GbBuilder builder)

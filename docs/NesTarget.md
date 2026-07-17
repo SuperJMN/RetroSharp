@@ -47,7 +47,15 @@ The common range algebra, no-blanket-reserve rule, stable contributor ids,
 future `GCP1001`/`GCP1002` policy, exact GCP-0.1 named-work calculations, and
 calibration-debt table live in
 [`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
-GCP-0.2 adds no current compiler diagnostic or ROM change.
+GCP-3.1 exposes the first executable projection on the internal ROM build
+report as `CpuWork`: `target=nes`, profile equal to the selected cartridge
+profile, unit `cpu-cycles`, frame window `29,780`, and status `incomplete`.
+Reachable streams that use `Sprite.Draw(...)` add `sprite.publish.transfer` as
+the numeric `513..514` contributor; programs with no retained sprite
+publication do not claim that transfer. The report also names the remaining
+stable generated/runtime/user-loop unknowns, so arbitrary source loops are not
+assigned fabricated exact costs. There is no public source cycle API, and the
+CLI does not reject current programs merely because coverage is incomplete.
 
 GCP-2.3 bounds dynamic fixed-struct-array addressing without changing that
 storage or the runtime ABI. A direct zero-page index now uses a binary
@@ -61,8 +69,9 @@ canonical Actor stride 13 shape falls from 41 bytes / 68 cycles to 15 bytes /
 exactly the same array and index, the NES lowerer materializes X once before
 any draw branch and reuses it for those fields; a different index disables the
 cursor. These numbers calibrate the non-additive
-`target.struct-array-address` detail for the mapper-0 profile; GCP-3.1 remains
-the owner of composing that detail under an actor-phase subtotal.
+`target.struct-array-address` detail for the mapper-0 profile. The current
+GCP-3.1 report keeps it as stable unknown coverage until the owning
+`actor.phase.*` subtotal has a complete descriptor.
 
 The descriptor records NES sprite, palette, X/Y fine-scroll, horizontal background-column streaming, four-screen camera movement, vertical row streaming, and camera-relative collision-query support. Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over NES target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`), while the collector still records the matching `Sdk2DOperation` values for validation and frame-budget boundaries.
 

@@ -48,7 +48,16 @@ The common range algebra, no-blanket-reserve rule, stable contributor ids,
 future `GCP1001`/`GCP1002` policy, exact GCP-0.1 named-work calculations, and
 calibration-debt table live in
 [`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
-GCP-0.2 adds no current compiler diagnostic or ROM change.
+GCP-3.1 exposes the first executable projection on the internal ROM build
+report as `CpuWork`: `target=gb`, profile equal to the selected cartridge
+profile, unit `t-cycles`, frame window `70,224`, and status `incomplete`.
+Reachable streams that use `Sprite.Draw(...)` add `sprite.publish.transfer` as
+the numeric `640..640` contributor; programs with no retained sprite
+publication do not claim that transfer.
+The report also names the remaining stable generated/runtime/user-loop
+unknowns, so arbitrary source loops are not assigned fabricated exact costs.
+There is no public source cycle API, and the CLI does not reject current
+programs merely because coverage is incomplete.
 
 GCP-2.2 bounds dynamic fixed-struct-array address materialization with a
 target-owned binary constant multiply. For stride `m > 1`, the emitted LR35902
@@ -72,10 +81,11 @@ For stride 4, each repeated operand falls from 13 bytes / 60 T-cycles to 4
 bytes / 20 T-cycles; for stride 13 it falls from 16 bytes / 72 T-cycles to 4
 bytes / 20 T-cycles.
 
-GCP-3.1 can expose this target-owned work as the stable
-`target.struct-array-address` child detail. It is non-additive beneath its
-owning `actor.phase.*` subtotal, so a phase diagnostic must not charge the same
-address instructions a second time.
+The current GCP-3.1 report keeps this target-owned work as stable unknown
+coverage until its owning `actor.phase.*` subtotal has a complete descriptor.
+When exposed numerically, it remains the stable `target.struct-array-address`
+child detail and is non-additive beneath that phase, so a phase diagnostic must
+not charge the same address instructions a second time.
 
 The canonical Actor struct has stride 13. One byte-local indexed address is now
 16 emitted bytes and 72 T-cycles instead of 23 bytes and 100 T-cycles: seven

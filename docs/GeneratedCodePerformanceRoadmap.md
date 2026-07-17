@@ -2,11 +2,10 @@
 
 Status: **active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
 and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); discovery
-baseline reproduced on 2026-07-17.** The first seeded frontier is
-[GCP-0.1 / #388](https://github.com/SuperJMN/RetroSharp/issues/388), and
-[GCP-0.2 / #389](https://github.com/SuperJMN/RetroSharp/issues/389) accepts the
-CPU-work representation and future diagnostic policy. Later waves remain
-intentionally unseeded until that decision is merged into their remote bodies.
+baseline reproduced on 2026-07-17.** GCP-0.1 through GCP-3.1 now cover the
+reproducible baseline, CPU-work contract, generated-shape optimizations, and
+initial executable CPU-work report. GCP-3.2 remains the final joint acceptance
+closeout.
 
 This roadmap turns the measured Actor Framework code-generation bottlenecks
 into bounded work for Game Boy and NES. It covers compiler-generated work whose
@@ -215,9 +214,9 @@ These constraints apply to every task in this epic:
 
 ## 5. GCP-0.2 decision gate: CPU-work contract
 
-Decision status: **accepted by GCP-0.2 / #389.** The canonical policy is
-[`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md). GCP-0.2
-changes no executable validator or ROM bytes; GCP-3.1 owns that implementation.
+Decision status: **accepted by GCP-0.2 / #389; initial executable report
+projection implemented by GCP-3.1 / #402.** The canonical policy is
+[`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
 
 The accepted representation uses checked inclusive ranges in target-native
 cycles: LR35902 T-cycles for Game Boy and 6502 CPU cycles for NES. The physical
@@ -234,20 +233,24 @@ exclusive branch paths form a range rather than an additive sum. CPU cycles
 remain orthogonal to the current background-write and sprite/scanline budgets,
 so the same emitted work is not charged twice.
 
-The future GCP-3.1 policy is also fixed. A known lower bound above the target
+The GCP-3.1 report policy is also fixed. A known lower bound above the target
 window is error `GCP1001`; a finite range that crosses the window is warning
 `GCP1002`; a fitting known range emits no default diagnostic. Unknown work does
 not receive a fabricated count or warn on every ordinary program; an explicit
-report marks coverage `incomplete` and never claims whole-program cadence.
-Stable semantic contributor ids and the deterministic report schema live in
-the contract document.
+report marks coverage `incomplete` and never claims whole-program cadence. The
+initial implementation attaches this report to the GB/NES build reports and
+adds the calibrated OAM transfer detail only when retained sprite publication
+is reachable, so current valid samples remain accepted with incomplete coverage
+rather than a false static fit. Stable
+semantic contributor ids and the deterministic report schema live in the
+contract document.
 
 The contract classifies all 13 GCP-0.1 fixtures per target. It preserves the
 exact observed 24/32-spawn Game Boy boundary, 48/64-spawn NES boundary, and
 four/eight-active-actor boundary as calibration evidence without treating
-physical scheduling intervals as static instruction costs. GCP-3.1 can now be
-specified and implemented without reopening the cost representation,
-composition, unknown-work, or diagnostic-policy decisions.
+physical scheduling intervals as static instruction costs. GCP-3.1 implements
+the first projection without reopening the cost representation, composition,
+unknown-work, or diagnostic-policy decisions.
 
 The representative calculation is explicit rather than implied: the contract
 tabulates authored-record visits, 13-field materializations, current conditional
@@ -255,7 +258,7 @@ lookup equality counts, pool/slot visits, phase visits, collision call sites,
 and logical draws for every canonical scale. Its currently isolated numeric
 evidence is only the non-additive OAM transfer detail: 640 Game Boy T-cycles or
 513..514 NES CPU cycles. The `sprite.publish` parent remains incomplete until
-GCP-3.1 calibrates its call/setup/wait/return boundary, and the remaining
+future calibration accepts its call/setup/wait/return boundary, and the remaining
 contributor table names the other emitted-code descriptors required instead of
 inventing source-level cycle prices.
 
@@ -581,9 +584,11 @@ GCP-0.1 reproducible baseline
   claim of this target-only task. Separate emission/runtime regressions pin
   same-index reuse, different-index non-reuse, operation-scope invalidation,
   and resulting OAM values. Each repeated field costs 4 bytes / 20 T-cycles,
-  down from 13 / 60 at stride 4 or 16 / 72 at stride 13. GCP-3.1 should report
-  the shape as non-additive `target.struct-array-address` child detail beneath
-  its owning `actor.phase.*` subtotal, never as a second phase charge.
+  down from 13 / 60 at stride 4 or 16 / 72 at stride 13. The GCP-3.1 report
+  keeps this shape as stable unknown coverage until its owning `actor.phase.*`
+  subtotal has a complete descriptor; when numeric, it remains non-additive
+  `target.struct-array-address` child detail beneath that phase, never a second
+  phase charge.
 - **Validation:** Game Boy struct-array emitted bytes and runtime values;
   `GCP-0.1`; actor exact-ROM acceptance; full tests; ROM dry-run;
   `git diff --check`.
@@ -647,17 +652,23 @@ GCP-0.1 reproducible baseline
 - **Layer:** shared capability/budget model plus both target validators.
 - **Depends on:** `GCP-0.2`, AF-5.10 / #244, `GCP-2.1`, `GCP-2.2`, and
   `GCP-2.3`.
+- **Remote:** [#402](https://github.com/SuperJMN/RetroSharp/issues/402), child
+  of epic #387.
 - **Candidate modules:** the modules selected by `GCP-0.2`, target compilers,
   focused budget suites, CLI/report surfaces, and target docs.
-- **Work:** implement accepted cost descriptors and composition; charge
-  compiler-generated actor/spawn work after optimization; expose stable
-  contributor names; handle unknown user work exactly as the accepted contract
-  requires; add below/at/above-boundary tests on both targets.
-- **Acceptance:** the known failing discovery shapes are either rejected/warned
-  with the accepted contributor breakdown before optimization or accepted with
-  measured headroom after optimization; current valid samples remain accepted;
-  arbitrary user loops are not assigned fabricated exact costs; existing
-  tile/sprite diagnostics remain stable.
+- **Work:** implements the shared `SdkCpuWorkReport` model with checked
+  inclusive ranges, target-native frame windows, status classification
+  (`fits`, `crosses`, `exceeds`, `incomplete`), stable contributor names, and
+  explicit unknown coverage. Game Boy and NES build reports attach the initial
+  target/profile projection: named unknowns for the rest of section 5's
+  generated, SDK-runtime, target-runtime, and user-loop coverage, plus the
+  calibrated non-additive OAM transfer detail under `sprite.publish` only when
+  retained sprite publication is reachable.
+- **Acceptance:** current valid samples remain accepted because the initial
+  report is honest `incomplete` coverage, not a fabricated whole-program fit.
+  Arbitrary user loops are reported as unknown rather than exact CPU work.
+  Existing tile/sprite diagnostics remain stable, and below/at/above window
+  classification is covered by focused shared tests for both target windows.
 - **Validation:** focused budget tests; `GCP-0.1`; representative CLI builds;
   target exact-ROM acceptance; full tests; `git diff --check`.
 - **Compatibility:** compile `samples/runner/runner.retrosharp.json` for both
@@ -742,12 +753,14 @@ threshold changes rather than becoming a second independent contract.
     children of #387.
   - [#399 — GCP-2.1: remove redundant actor-pool phase work without semantic
     reordering](https://github.com/SuperJMN/RetroSharp/issues/399) closes the
-    shared Draw/OAM phase contract required by NES GCP-2.3.
+  shared Draw/OAM phase contract required by NES GCP-2.3.
   - [#395 — GCP-2.3: bound NES runtime struct-array addressing
     cost](https://github.com/SuperJMN/RetroSharp/issues/395) is the accepted
-    NES addressing slice; after it merges, `GCP-3.1` is unblocked.
-- `GCP-3.1` and `GCP-3.2` remain issue-ready here and should be seeded only
-  after #395 merges.
+    NES addressing slice.
+  - [#402 — GCP-3.1: diagnose compiler-known CPU work that exceeds frame
+    budgets](https://github.com/SuperJMN/RetroSharp/issues/402) is the initial
+    executable CPU-work report projection.
+- `GCP-3.2` remains the closeout issue after #402 merges.
 
 ## 11. Durable validation
 

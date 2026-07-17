@@ -686,8 +686,9 @@ internal static class NesRomBuilder
             0xFFFA);
         var orderedSegments = segments.OrderBy(segment => segment.PhysicalStart).ToArray();
         ValidateReportedSegments(layout, orderedSegments);
+        var selectedProfile = layout.EmitMmc3Foundation ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current";
         return new NesRomBuildReport(
-            layout.EmitMmc3Foundation ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
+            selectedProfile,
             layout.PrgRomSize,
             layout.ChrRomSize,
             prgBuild.FixedPayloadBytes,
@@ -697,7 +698,8 @@ internal static class NesRomBuilder
             orderedSegments,
             prgBuild.FixedSymbols,
             prgBuild.UserVariables,
-            DescribeRuntimeRegions(worldPackRuntime));
+            DescribeRuntimeRegions(worldPackRuntime),
+            SdkCpuWorkReportFactory.ForNes(selectedProfile, program.SdkOperationStream));
     }
 
     private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(

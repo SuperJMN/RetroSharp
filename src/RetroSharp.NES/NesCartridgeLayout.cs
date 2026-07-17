@@ -1,3 +1,5 @@
+using RetroSharp.Core.Sdk;
+
 namespace RetroSharp.NES;
 
 internal enum NesCartridgeProfile
@@ -47,7 +49,8 @@ internal sealed record NesRomBuildReport(
     IReadOnlyList<NesRomBuildSegment> Segments,
     IReadOnlyDictionary<string, ushort> FixedSymbols,
     IReadOnlyList<NesRuntimeUserVariable> UserVariables,
-    IReadOnlyList<NesRuntimeRegion> RuntimeRegions);
+    IReadOnlyList<NesRuntimeRegion> RuntimeRegions,
+    SdkCpuWorkReport CpuWork);
 
 internal sealed record NesRuntimeUserVariable(
     string Name,

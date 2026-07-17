@@ -1,12 +1,18 @@
 # Generated Code CPU-Work Contract
 
-Status: **accepted by GCP-0.2 / GitHub #389 on 2026-07-17.**
+Status: **accepted by GCP-0.2 / GitHub #389 and given an initial executable
+report projection by GCP-3.1 / GitHub #402 on 2026-07-17.**
 
 This document fixes the v1 contract for classifying compiler-known CPU work on
-the Game Boy and NES targets. It is the policy input for GCP-3.1; it does not
-claim that the compiler already emits CPU-work diagnostics. The existing
-`Sdk2DFrameBudget` tile/sprite checks remain current behavior until GCP-3.1
-implements this separate CPU-work model.
+the Game Boy and NES targets. GCP-3.1 implements the first build-report
+projection of the model as `SdkCpuWorkReport`, attached to the internal Game
+Boy and NES ROM build reports. The initial target reports expose stable unknown
+coverage, target/profile windows, and the policy status; when the reachable SDK
+stream uses retained sprite publication, they also expose the calibrated
+`sprite.publish.transfer` detail. They intentionally stay `incomplete` until
+remaining descriptors are calibrated, so they do not claim whole-program
+cadence or available headroom. The existing `Sdk2DFrameBudget` tile/sprite
+checks remain independent current behavior.
 
 The contract deliberately estimates only work whose emitted multiplicity and
 target instruction shape the compiler owns. It is not whole-program WCET, does
@@ -180,10 +186,15 @@ stable id for contributors sharing the same source position. Target-specific
 children use the same ordering rule. Tests may assert ids, counts, ranges,
 status, and calibration revision; they must not assert private C# symbol names.
 
-## 6. Diagnostic and report policy for GCP-3.1
+## 6. Diagnostic and report policy
 
-This section specifies future GCP-3.1 behavior. **No warning, error, CLI flag,
-or executable validator is added by GCP-0.2.**
+GCP-3.1 implements this policy in the shared `SdkCpuWorkReport` model and
+attaches it to Game Boy and NES build reports. The current target compilers do
+not yet have a complete bounded descriptor whose finite range crosses or
+exceeds the frame window, so current production samples compile with status
+`incomplete` rather than warning or erroring. There is still no public
+RetroSharp source syntax for cycle counts and no public CLI cycle flag; the
+report is compiler/tooling metadata.
 
 Let `window` be section 2's target value and let `known-lower` and
 `known-upper` be the composed numeric subtotal of calibrated coverage. An
@@ -191,7 +202,7 @@ unknown remainder is excluded, but an accepted numeric subcomponent of an
 incomplete parent is projected exactly once into that known subtotal. Thus the
 known range is not a bound for the whole tick whenever `unknown[]` is non-empty:
 
-| Condition | Future compilation behavior | Report status |
+| Condition | Compilation/report behavior | Report status |
 | --- | --- | --- |
 | `known-lower > window` | Error `GCP1001`: the compiler-known work cannot fit even on its cheapest accepted path. | `exceeds` |
 | `known-lower <= window < known-upper` | Warning `GCP1002`: at least one accepted compiler-known path can exceed the frame. | `crosses` |
@@ -228,11 +239,21 @@ known range, and the contributors that make the range cross/exceed it. The
 report is tooling/compiler metadata only; there is no public RetroSharp source
 syntax for cycles.
 
+The initial GCP-3.1 report uses that schema directly. Game Boy reports
+`target=gb`, unit `t-cycles`, and frame window `70,224`; NES reports
+`target=nes`, unit `cpu-cycles`, and frame window `29,780`. If the reachable
+SDK stream can publish retained sprites, Game Boy adds
+`sprite.publish.transfer` at `640..640` below `sprite.publish`, while NES adds
+the same stable contributor at `513..514`. Programs with no retained sprite
+publication do not claim that transfer. Both reports keep the rest of section
+5's generated, SDK-runtime, target-runtime, and user-loop coverage as explicit
+`unknown[]` entries.
+
 ## 7. Current calibration evidence
 
 The v1 representation is calibrated from emitted ROMs and target test CPUs,
 not AST node counts. These existing gates are evidence and starting
-descriptors; GCP-3.1 owns their executable projection into the report model.
+descriptors; GCP-3.1 starts their executable projection in the report model.
 
 | Evidence | Accepted fact used by this contract |
 | --- | --- |
@@ -258,27 +279,28 @@ the calibration revision.
 
 ## 8. Calibration completeness and representative subtotals
 
-GCP-0.2 does not pretend that every contributor already has a numeric cycle
-descriptor. On the exact GCP-0.1 profiles, the only reusable per-frame numeric
-subcomponent currently isolated by both emitted behavior and a target CPU test
-is the physical OAM transfer. It is non-additive detail under the still-
-incomplete `sprite.publish` parent:
+The current GCP-3.1 executable report does not pretend that every contributor
+already has a numeric cycle descriptor. On the exact GCP-0.1 profiles, the only
+reusable per-frame numeric subcomponent currently isolated by both emitted
+behavior and a target CPU test is the physical OAM transfer. It is non-additive
+detail under the still-incomplete `sprite.publish` parent:
 
 | Target/profile | Numeric non-additive detail | Partial transfer-only known lower | Arithmetic remainder after transfer only (not headroom) |
 | --- | --- | ---: | ---: |
 | `gb` / `gb-rom-only-current` | `sprite.publish.transfer` = one 640 T-cycle DMA | `sprite.publish` >= 640 T-cycles, upper unknown | 69,584 T-cycles |
 | `nes` / `nes-mapper-0-current` | `sprite.publish.transfer` = one 513..514-cycle DMA | `sprite.publish` >= 513 CPU cycles, upper unknown | 29,266..29,267 CPU cycles |
 
-Those transfer-only lower bounds are deliberately `incomplete`: they omit the
+Those transfer-only lower bounds are reported and deliberately classified
+`incomplete`: they omit the
 rest of the publication boundary as well as generated spawn/phase instructions,
 input, camera, collision, and logical draw preparation. They prove only the
 partial arithmetic and cannot classify either ROM as statically fitting or
 state usable remaining budget. The exact-ROM cadence result remains the
-classification evidence until GCP-3.1 projects the missing descriptors.
+classification evidence until later descriptors complete the report.
 
-The boundary between accepted GCP-0.2 policy and GCP-3.1 calibration is:
+The boundary between the initial GCP-3.1 report and remaining calibration is:
 
-| Contributor family | What is exact or numeric now | Descriptor GCP-3.1 must produce | Why no cycle number is claimed here |
+| Contributor family | What is exact or numeric now | Remaining descriptor needed | Why no complete cycle number is claimed here |
 | --- | --- | --- | --- |
 | `actor.spawn.recycle` / `actor.spawn.scan` | Literal pool/spawn visit counts from generated `for` bounds. | Target/profile lower and upper cycles per complete traversal, including loop control and active/used branch paths. | These loops are inline in `Main`; there is no isolated emitted symbol or current test-CPU timing boundary. |
 | `actor.spawn.record-read` | Exactly 13 field materializations per unused record; the historical conditional equality counts below are derivable from the pre-GCP-1.1 generated expression tree. | Per-record target range covering the historical inline condition ladders and current ROM/window reads after GCP-1.1. | Equality counts are target-neutral work units, not LR35902/6502 cycles; branch direction, inline loads, and bank access decide cycles. |
@@ -291,12 +313,12 @@ The boundary between accepted GCP-0.2 policy and GCP-3.1 calibration is:
 | `sprite.publish` | Only child detail `sprite.publish.transfer` is numeric: 640 GB T-cycles or 513..514 NES CPU cycles for these profiles. The parent has that partial lower bound and an unknown upper bound. | Calibrate the complete emitted boundary: call/setup, register write, transfer-overlapped wait where applicable, and return, counting overlap once; add a distinct MMC3 sequential-publication descriptor when selected. | The CPU tests timestamp the DMA transfer itself, not all instructions surrounding publication. The child remains non-additive once the full parent is known. |
 | `audio.update` | Count zero in every GCP-0.1 case. | Selected-asset maximum due-body plus bank/channel-restore range when audio is present. | No audio work belongs in the canonical fixture subtotal, and no blanket reserve may stand in for a future asset-specific descriptor. |
 
-This table closes policy without hiding calibration debt: any absent descriptor
-enters the future report as `runtime.uncalibrated-state` (or the matching
-generated unknown), keeping status `incomplete`. Adding the emitted-code timing
-seams and populating these target ranges is GCP-3.1 implementation work. It does
-not change the accepted unit, range algebra, stable ids, composition rules, or
-`GCP1001`/`GCP1002` thresholds.
+This table closes policy without hiding calibration debt: every absent
+descriptor enters the GCP-3.1 report as `runtime.uncalibrated-state` or the
+matching stable generated/user unknown, keeping status `incomplete`. Adding
+the emitted-code timing seams and populating complete target ranges remains
+future calibration work. It does not change the accepted unit, range algebra,
+stable ids, composition rules, or `GCP1001`/`GCP1002` thresholds.
 
 ## 9. GCP-0.1 pre-optimization fixture classification
 
@@ -320,7 +342,7 @@ with `S - 1` equality nodes. Evaluating it for every authored index performs
 (`x` and `xHi`), so its upper equality subtotal is
 `(S - 1) * (S + 2)`. Active-pool has only non-uniform `x`, so its corresponding
 upper subtotal is `(P - 1) * (P + 2) / 2`. These are named generated-work
-units; target branch/load cycles remain the GCP-3.1 descriptors above.
+units; target branch/load cycles remain the descriptor work above.
 
 Every case also has one `input.poll`, one `camera.position`, one
 `camera.apply`, zero `audio.update`, one `sprite.publish`, and at most `P`
@@ -385,8 +407,8 @@ frames per completed tick on both targets. These measurements prove that the
 stable contributors need target-owned calibration; they do not become static
 whole-program cycle claims.
 
-The table exercises every contract outcome needed to write GCP-3.1: known
-literal multiplicities, target-specific windows, finite branch ranges,
+The table exercises every contract outcome the GCP-3.1 report model needs:
+known literal multiplicities, target-specific windows, finite branch ranges,
 fixture-specific runtime contributors, and exact-ROM evidence that can disagree
-with a future incomplete static report. GCP-3.1 can therefore implement the
-model and policy above without reopening representation or diagnostic policy.
+with an incomplete static report. GCP-3.1 therefore implements the model and
+policy above without reopening representation or diagnostic policy.
