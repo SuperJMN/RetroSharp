@@ -16,10 +16,13 @@ This document preserves project knowledge that previously lived only in agent me
   effect requests cannot make those newly accepted logical slots visible until a
   later draw plus the following retained-OAM publication boundary. NES
   `shots-simple` and `shots-bouncy` therefore use a two-frame spawn-to-visible
-  budget instead of depending on accidental slower code. #395 resumes after
-  #399 merges; GCP-3.1 and GCP-3.2 remain unseeded until GCP-2.1 and GCP-2.3
-  close. Start from `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch
-  epic #387 as an implementation task or duplicate #244.
+  budget instead of depending on accidental slower code. NES GCP-2.3 / #395
+  bounds dynamic fixed-struct-array addressing with a binary shift/add
+  materializer plus a draw-local cursor for matching `Sprite.Draw(...)`
+  runtime fields; active-pool-8 now reaches 100/100 on NES. GCP-3.1 and
+  GCP-3.2 remain unseeded until #395 closes. Start from
+  `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch epic #387 as an
+  implementation task or duplicate #244.
 - AIN-12 / #378 makes the remaining architecture guardrails rename-safe.
   Target SDK and Actor ownership remain compiled-symbol/IL contracts; all seven
   Game Boy and four NES focused lowering suites declare typed test-ownership

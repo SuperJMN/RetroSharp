@@ -307,11 +307,31 @@ internal sealed partial class NesRuntimeCompiler
             return;
         }
 
-        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
-        for (var count = 1; count < multiplier; count++)
+        var highestBit = 0;
+        for (var remaining = multiplier; remaining > 1; remaining >>= 1)
         {
-            builder.ClearCarry();
-            builder.AddZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+            highestBit++;
+        }
+
+        if ((multiplier & (multiplier - 1)) == 0)
+        {
+            for (var bit = 0; bit < highestBit; bit++)
+            {
+                builder.ShiftLeftA();
+            }
+
+            return;
+        }
+
+        builder.StoreAZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+        for (var bit = highestBit - 1; bit >= 0; bit--)
+        {
+            builder.ShiftLeftA();
+            if ((multiplier & (1 << bit)) != 0)
+            {
+                builder.ClearCarry();
+                builder.AddZeroPage(NesRuntimeMemoryLayout.Runtime.IndexScratch);
+            }
         }
     }
 

@@ -32,6 +32,7 @@ internal sealed partial class NesSdkOperationLowerer
     private bool packedWideSourceColumnSubroutineReferenced;
     private int packedWideSourceColumnMapWidth;
     private NesCameraConfig? cameraConfig;
+    private RuntimeIndexedFieldCursor? activeRuntimeIndexedFieldCursor;
 
     public NesSdkOperationLowerer(
         PrgBuilder builder,
@@ -103,6 +104,8 @@ internal sealed partial class NesSdkOperationLowerer
         int StreamY,
         int StreamHeight,
         bool UseFourScreenNametables);
+
+    private readonly record struct RuntimeIndexedFieldCursor(string BaseName, SdkByteExpression Index);
 
     private void EmitExpressionToA(ExpressionSyntax expression) => context.EmitExpressionToA(expression);
 

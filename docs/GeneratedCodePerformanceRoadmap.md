@@ -601,16 +601,34 @@ GCP-0.1 reproducible baseline
   stride-proportional repeated-add multiply for each field on NES.
 - **Layer:** NES target runtime/compiler lowering.
 - **Depends on:** `GCP-0.1`.
+- **Remote:** [#395](https://github.com/SuperJMN/RetroSharp/issues/395), child
+  of epic #387.
 - **Candidate modules:** `NesRuntimeCompiler.Expressions.cs`, storage/layout
   modules, `PrgBuilder`, NES struct-array emitted-code tests, and
   `ActorFrameworkActorsTests`.
-- **Work:** choose a bounded multiply, X/address cursor, or loop-aware reuse
-  seam; cover mixed-width fields and SDK byte-expression indices; preserve
-  zero-page scratch/liveness and existing storage layout; record bytes/cycles.
-- **Acceptance:** lookup cost is bounded independently of struct stride or one
-  accepted logarithmic/constant target shape is documented; repeated fields for
-  one slot reuse safe index work; general struct-array byte/value traces remain
-  exact; actor cadence improves without new public semantics.
+- **Work:** implemented a left-to-right binary `ASL`/`ADC` constant multiply
+  and a draw-local X cursor that is enabled only when all runtime-indexed draw
+  operands share the same array and byte-expression index. Mixed byte/word
+  field reads and writes retain exact runtime values, and a different draw
+  index disables reuse. The existing `IndexScratch`, registers, fixed layout,
+  mapper profiles, and runtime ABI are unchanged.
+- **Acceptance:** the direct zero-page index shape is bounded at 33 bytes / 57
+  CPU cycles across strides `1..255`. Actor stride 13 falls from 41 bytes / 68
+  cycles to 15 bytes / 24 cycles. Four matching runtime fields in one draw fall
+  from four materializations (164 bytes / 272 cycles) to one (15 / 24). The
+  canonical active-pool fixed payload and cadence changed as follows:
+
+  | Capacity | Fixed bytes before | Fixed bytes after | Observed CPU cycles per completed tick before | After | Cadence before | After |
+  | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 1 | 13,176 | 10,044 | 29,780.50 | 29,780.51 | 100/100 | 100/100 |
+  | 2 | 13,243 | 10,111 | 29,780.51 | 29,780.51 | 100/100 | 100/100 |
+  | 4 | 13,377 | 10,245 | 29,780.51 | 29,780.49 | 100/100 | 100/100 |
+  | 8 | 13,645 | 10,513 | 59,561.02 | 29,780.49 | 50/100 | 100/100 |
+
+  The cycle-per-tick columns are exact GCP-0.1 scheduling intervals
+  (`observation-cycles / completed ticks`), not a whole-program WCET or static
+  headroom claim. All mapper-0 ROMs remain 40,976 bytes because the cartridge
+  image is padded; the fixed-payload column records the emitted-code delta.
 - **Validation:** NES struct-array emitted bytes and runtime values;
   `GCP-0.1`; actor exact-ROM acceptance; full tests; ROM dry-run;
   `git diff --check`.
@@ -723,14 +741,13 @@ threshold changes rather than becoming a second independent contract.
     cost](https://github.com/SuperJMN/RetroSharp/issues/394) are closed
     children of #387.
   - [#399 — GCP-2.1: remove redundant actor-pool phase work without semantic
-    reordering](https://github.com/SuperJMN/RetroSharp/issues/399) owns the
-    shared Draw/OAM phase contract required before #395 can claim final NES
-    addressing acceptance.
+    reordering](https://github.com/SuperJMN/RetroSharp/issues/399) closes the
+    shared Draw/OAM phase contract required by NES GCP-2.3.
   - [#395 — GCP-2.3: bound NES runtime struct-array addressing
-    cost](https://github.com/SuperJMN/RetroSharp/issues/395) remains open and
-    resumes after #399 merges.
+    cost](https://github.com/SuperJMN/RetroSharp/issues/395) is the accepted
+    NES addressing slice; after it merges, `GCP-3.1` is unblocked.
 - `GCP-3.1` and `GCP-3.2` remain issue-ready here and should be seeded only
-  after `GCP-2.1` and `GCP-2.3` merge.
+  after #395 merges.
 
 ## 11. Durable validation
 
