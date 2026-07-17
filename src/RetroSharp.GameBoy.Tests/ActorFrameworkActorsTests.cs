@@ -808,30 +808,48 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var program = ParseGameBoySourceWithPortable2D(source);
-        var lowered = ActorFrameworkLowerer.Lower(
-            program,
-            GameBoyTarget.Capabilities,
-            supportsUpdate: true,
-            supportsDraw: true,
-            baseDirectory);
+        var program = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+            source,
+            baseDirectory,
+            SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: null,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            sdkPluginRegistry: null);
 
-        var kind = Assert.Single(lowered.Functions, function => function.Name == "__enemies_spawn_0_kind");
-        var kindTable = Assert.Single(kind.Attributes, attribute => attribute.Name == "compiler_generated_rom_table");
-        Assert.Equal(["1", "2", "1"], kindTable.Arguments.Cast<ConstantSyntax>().Select(value => value.Value));
+        var kind = program.Functions["__enemies_spawn_0_kind"];
+        Assert.Equal([1, 2, 1], program.GeneratedRomTables[kind.Name].Data);
         var kindVisitor = new PrintNodeVisitor();
         kind.Accept(kindVisitor);
         Assert.DoesNotContain("index==", kindVisitor.ToString());
 
-        var facing = Assert.Single(lowered.Functions, function => function.Name == "__enemies_spawn_0_facing");
-        var facingTable = Assert.Single(facing.Attributes, attribute => attribute.Name == "compiler_generated_rom_table");
-        Assert.Equal(["1", "0", "2"], facingTable.Arguments.Cast<ConstantSyntax>().Select(value => value.Value));
+        var facing = program.Functions["__enemies_spawn_0_facing"];
+        Assert.Equal([1, 0, 2], program.GeneratedRomTables[facing.Name].Data);
 
-        var y = Assert.Single(lowered.Functions, function => function.Name == "__enemies_spawn_0_y");
-        Assert.DoesNotContain(y.Attributes, attribute => attribute.Name == "compiler_generated_rom_table");
+        var y = program.Functions["__enemies_spawn_0_y"];
+        Assert.DoesNotContain(y.Name, program.GeneratedRomTables.Keys);
         var yVisitor = new PrintNodeVisitor();
         y.Accept(yVisitor);
         Assert.Contains("=>40;", yVisitor.ToString());
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void User_source_cannot_declare_compiler_generated_rom_tables()
+    {
+        const string source = """
+                              inline [compiler_generated_rom_table(1, 2)] u8 lookup(u8 index) => 0;
+
+                              void Main() {
+                                  u8 value = lookup(1);
+                              }
+                              """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            GameBoyRomCompiler.CompileSource(
+                source,
+                sdkLibraryImports: [SdkImportResolver.Portable2D]));
+
+        Assert.Contains("reserved for compiler-generated functions", exception.Message);
     }
 
     [Fact]
@@ -895,17 +913,17 @@ public partial class GameBoyRomCompilerTests
                              const Goomba = 1;
                              const Bat = 2;
 
-                             inline [compiler_generated_rom_table(1, 2)] u8 __enemies_spawn_0_kind(u8 index) => Goomba;
+                             inline u8 __enemies_spawn_0_kind(u8 index) => Goomba;
                              inline u8 __enemies_spawn_0_x(u8 index) => 24;
-                             inline [compiler_generated_rom_table(0, 1)] u8 __enemies_spawn_0_xHi(u8 index) => 0;
-                             inline [compiler_generated_rom_table(40, 32)] u8 __enemies_spawn_0_y(u8 index) => 40;
+                             inline u8 __enemies_spawn_0_xHi(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_y(u8 index) => 40;
                              inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
                              inline u8 __enemies_spawn_0_active(u8 index) => 1;
                              inline u8 __enemies_spawn_0_vx(u8 index) => 0;
                              inline u8 __enemies_spawn_0_vy(u8 index) => 0;
                              inline u8 __enemies_spawn_0_state(u8 index) => 0;
                              inline u8 __enemies_spawn_0_timer(u8 index) => 0;
-                             inline [compiler_generated_rom_table(0, 1)] u8 __enemies_spawn_0_facing(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_facing(u8 index) => 0;
                              inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 
@@ -939,7 +957,17 @@ public partial class GameBoyRomCompilerTests
                                    }
                                    """;
 
-        var expected = GameBoyRomCompiler.CompileSource(manualSource);
+        var manualRomTables = new Dictionary<string, CompilerGeneratedRomTable>(StringComparer.Ordinal)
+        {
+            ["__enemies_spawn_0_kind"] = new("__enemies_spawn_0_kind", [1, 2]),
+            ["__enemies_spawn_0_xHi"] = new("__enemies_spawn_0_xHi", [0, 1]),
+            ["__enemies_spawn_0_y"] = new("__enemies_spawn_0_y", [40, 32]),
+            ["__enemies_spawn_0_facing"] = new("__enemies_spawn_0_facing", [0, 1]),
+        };
+        var expected = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            manualSource,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            generatedRomTablesOverride: manualRomTables).Rom;
         var actual = GameBoyRomCompiler.CompileSource(actorSource, baseDirectory);
         var firstDifference = Enumerable.Range(0x150, expected.Length - 0x150).FirstOrDefault(index => expected[index] != actual[index], -1);
 

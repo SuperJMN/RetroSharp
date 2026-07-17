@@ -28,6 +28,7 @@ internal sealed class PreparedTargetProgram
     internal PreparedTargetProgram(
         ActorFrameworkLowerer.ActorFrameworkLoweringPlan actorFrameworkPlan,
         ProgramSyntax loweredProgram,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable> generatedRomTables,
         TargetIntrinsicCatalog targetIntrinsics,
         SdkResourceDeclarationRegistry resourceDeclarations,
         Target2DCapabilities capabilities,
@@ -35,6 +36,7 @@ internal sealed class PreparedTargetProgram
     {
         this.actorFrameworkPlan = actorFrameworkPlan;
         LoweredProgram = loweredProgram;
+        GeneratedRomTables = generatedRomTables;
         TargetIntrinsics = targetIntrinsics;
         ResourceDeclarations = resourceDeclarations;
         Capabilities = capabilities;
@@ -42,6 +44,8 @@ internal sealed class PreparedTargetProgram
     }
 
     public ProgramSyntax LoweredProgram { get; }
+
+    public IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedRomTables { get; }
 
     public TargetIntrinsicCatalog TargetIntrinsics { get; }
 
@@ -80,6 +84,7 @@ internal static class TargetFrontendPreparation
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
+        CompilerGeneratedRomTable.RejectUserAuthoredAttributes(targetProgram.Functions);
         SdkImportResolver.ValidateImports(targetProgram, libraryRegistry);
         var actorFrameworkPlan = ActorFrameworkLowerer.Analyze(
             targetProgram,
@@ -88,6 +93,7 @@ internal static class TargetFrontendPreparation
             supportsDraw: true,
             options.BaseDirectory);
         var actorProgram = ActorFrameworkLowerer.Lower(targetProgram, actorFrameworkPlan);
+        var generatedRomTables = actorFrameworkPlan.GeneratedRomTables;
         var loweredProgram = SdkSourcePackageFacadeLowerer.Lower(actorProgram);
         loweredProgram = LetTypeInference.ResolveOrThrow(loweredProgram);
         var contractErrors = FunctionContractValidator.ValidateProgram(loweredProgram).ToList();
@@ -99,6 +105,7 @@ internal static class TargetFrontendPreparation
         return new PreparedTargetProgram(
             actorFrameworkPlan,
             loweredProgram,
+            generatedRomTables,
             targetIntrinsics,
             resourceDeclarations,
             options.Capabilities,

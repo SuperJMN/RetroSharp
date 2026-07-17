@@ -337,6 +337,16 @@ public static partial class ActorFrameworkLowerer
             GeneratedLookupFunctions(state.Actors.EnemyDefs, state.Actors.UsedEnemyLookupMethods)
                 .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers, state.Actors.EnemyDefs));
 
+        public static IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedSpawnRomTables(
+            IReadOnlyList<ActorSpawnLayer> spawnLayers,
+            IReadOnlyList<EnemyDef> enemyDefs) =>
+            SpawnLookupColumns(spawnLayers, enemyDefs)
+                .Where(column => !column.IsUniform)
+                .Select(column => new CompilerGeneratedRomTable(
+                    column.FunctionName,
+                    column.Values.Select(value => checked((byte)value)).ToArray()))
+                .ToDictionary(table => table.FunctionName, StringComparer.Ordinal);
+
         private static IReadOnlyList<StatementSyntax> RewriteSpawnDirective(ActorFrameworkCall call, ActorFrameworkState state)
         {
             var layer = state.Spawns.Layer(SpawnLayerKey(call));
@@ -430,6 +440,11 @@ public static partial class ActorFrameworkLowerer
 
         private static IEnumerable<FunctionSyntax> GeneratedSpawnLookupFunctions(
             IReadOnlyList<ActorSpawnLayer> spawnLayers,
+            IReadOnlyList<EnemyDef> enemyDefs) =>
+            SpawnLookupColumns(spawnLayers, enemyDefs).Select(SpawnLookupFunction);
+
+        private static IEnumerable<SpawnLookupColumn> SpawnLookupColumns(
+            IReadOnlyList<ActorSpawnLayer> spawnLayers,
             IReadOnlyList<EnemyDef> enemyDefs)
         {
             var kindValues = enemyDefs
@@ -437,50 +452,45 @@ public static partial class ActorFrameworkLowerer
                 .ToDictionary(item => item.Name, item => item.Value, StringComparer.Ordinal);
             foreach (var layer in spawnLayers.Where(layer => layer.Spawns.Count != 0))
             {
-                yield return SpawnLookupFunction(layer, "kind", spawn =>
+                yield return CreateSpawnLookupColumn(layer, "kind", spawn =>
                     kindValues.TryGetValue(spawn.Kind, out var value)
                         ? value
                         : throw new InvalidOperationException($"Unknown actor spawn kind '{spawn.Kind}'."));
-                yield return SpawnLookupFunction(layer, "x", spawn => SplitWorldX(spawn.X, "actor spawn X").Low);
-                yield return SpawnLookupFunction(layer, "xHi", spawn => SplitWorldX(spawn.X, "actor spawn X").High);
-                yield return SpawnLookupFunction(layer, "y", spawn => SplitWorldY(spawn.Y, "actor spawn Y").Low);
-                yield return SpawnLookupFunction(layer, "yHi", spawn => SplitWorldY(spawn.Y, "actor spawn Y").High);
+                yield return CreateSpawnLookupColumn(layer, "x", spawn => SplitWorldX(spawn.X, "actor spawn X").Low);
+                yield return CreateSpawnLookupColumn(layer, "xHi", spawn => SplitWorldX(spawn.X, "actor spawn X").High);
+                yield return CreateSpawnLookupColumn(layer, "y", spawn => SplitWorldY(spawn.Y, "actor spawn Y").Low);
+                yield return CreateSpawnLookupColumn(layer, "yHi", spawn => SplitWorldY(spawn.Y, "actor spawn Y").High);
                 foreach (var fieldName in SpawnInitialFieldNames)
                 {
-                    yield return SpawnLookupFunction(layer, fieldName, spawn => SpawnInitialFieldValue(spawn, fieldName));
+                    yield return CreateSpawnLookupColumn(layer, fieldName, spawn => SpawnInitialFieldValue(spawn, fieldName));
                 }
             }
         }
 
-        private static FunctionSyntax SpawnLookupFunction(
+        private static SpawnLookupColumn CreateSpawnLookupColumn(
             ActorSpawnLayer layer,
             string fieldName,
-            Func<LogicalActorSpawn, int> selector)
-        {
-            var values = layer.Spawns.Select(selector).ToArray();
-            var isUniform = values.All(value => value == values[0]);
-            var attributes = isUniform
-                ? Array.Empty<FunctionAttributeSyntax>()
-                :
-                [
-                    new FunctionAttributeSyntax(
-                        CompilerGeneratedRomTable.AttributeName,
-                        values
-                            .Select(value => (ExpressionSyntax)new ConstantSyntax(value.ToString(CultureInfo.InvariantCulture)))
-                            .ToArray()),
-                ];
-
-            return new FunctionSyntax(
-                "u8",
+            Func<LogicalActorSpawn, int> selector) =>
+            new(
                 $"{layer.RuntimeName}_{fieldName}",
+                layer.Spawns.Select(selector).ToArray());
+
+        private static FunctionSyntax SpawnLookupFunction(SpawnLookupColumn column) =>
+            new(
+                "u8",
+                column.FunctionName,
                 [new ParameterSyntax("u8", "index")],
                 new BlockSyntax([
                     new ReturnSyntax(Maybe.From<ExpressionSyntax>(
-                        new ConstantSyntax(values[0].ToString(CultureInfo.InvariantCulture)))),
+                        new ConstantSyntax(column.Values[0].ToString(CultureInfo.InvariantCulture)))),
                 ]),
                 isExpressionBodied: true,
                 isInline: true,
-                attributes: attributes);
+                attributes: []);
+
+        private sealed record SpawnLookupColumn(string FunctionName, int[] Values)
+        {
+            public bool IsUniform => Values.All(value => value == Values[0]);
         }
 
         private static int SpawnInitialFieldValue(LogicalActorSpawn spawn, string fieldName)

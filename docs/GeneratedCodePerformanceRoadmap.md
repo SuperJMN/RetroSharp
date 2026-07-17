@@ -439,7 +439,9 @@ GCP-0.1 reproducible baseline
   redesign, or active-pool loop optimization.
 - **Implementation evidence (2026-07-17):** every varying spawn field is a
   deterministic byte column in cartridge ROM; all-uniform columns still lower
-  to immediates. Focused 16/64/128/240-record tests compare all 13 columns in
+  to immediates. The column payload travels as typed compiler metadata from the
+  shared Actor Framework plan to each target; user source cannot declare or
+  forge that metadata. Focused 16/64/128/240-record tests compare all 13 columns in
   authored order and verify a single fixed instruction shape per lookup. The
   direct Game Boy shape costs 56 cycles; the old 16-record ladder ranged from
   60 to 608 cycles, so the last-record delta is -552 cycles. NES costs 9 cycles

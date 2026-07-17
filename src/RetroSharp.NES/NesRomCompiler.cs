@@ -35,7 +35,8 @@ public static class NesRomCompiler
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null,
         byte[]? packedWorldOverride = null,
-        NesWorldPackProbe? worldPackProbe = null)
+        NesWorldPackProbe? worldPackProbe = null,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride = null)
     {
         return CompileSourceCore(
             source,
@@ -46,7 +47,8 @@ public static class NesRomCompiler
             sdkPluginRegistry,
             forcedCartridgeProfile: null,
             packedWorldOverride,
-            worldPackProbe);
+            worldPackProbe,
+            generatedRomTablesOverride);
     }
 
     internal static byte[] CompileSourceForMmc3TvromTests(
@@ -85,7 +87,8 @@ public static class NesRomCompiler
             sdkPluginRegistry,
             NesCartridgeProfile.Mmc3Tvrom,
             packedWorldOverride,
-            worldPackProbe);
+            worldPackProbe,
+            generatedRomTablesOverride: null);
     }
 
     private static NesRomBuildResult CompileSourceCore(
@@ -97,7 +100,8 @@ public static class NesRomCompiler
         SdkPluginRegistry? sdkPluginRegistry,
         NesCartridgeProfile? forcedCartridgeProfile,
         byte[]? packedWorldOverride,
-        NesWorldPackProbe? worldPackProbe)
+        NesWorldPackProbe? worldPackProbe,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride)
     {
         var preparedVideoProgram = PrepareVideoProgram(
             source,
@@ -105,7 +109,8 @@ public static class NesRomCompiler
             sdkImportMode,
             sdkLibraryRegistry,
             sdkLibraryImports,
-            sdkPluginRegistry);
+            sdkPluginRegistry,
+            generatedRomTablesOverride);
         var videoProgram = preparedVideoProgram.VideoProgram;
         preparedVideoProgram.FrontendProgram.ValidateActorPoolSpriteBudgets(
             spriteId => ActorMetaspriteGeometry(videoProgram, spriteId));
@@ -147,7 +152,8 @@ public static class NesRomCompiler
         SdkLibraryImportMode sdkImportMode,
         SdkLibraryRegistry? sdkLibraryRegistry,
         IReadOnlyList<string>? sdkLibraryImports,
-        SdkPluginRegistry? sdkPluginRegistry)
+        SdkPluginRegistry? sdkPluginRegistry,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride = null)
     {
         var prepared = TargetFrontendPreparation.Prepare(new TargetFrontendPreparationOptions(
             source,
@@ -164,7 +170,8 @@ public static class NesRomCompiler
             prepared.LoweredProgram,
             prepared.BaseDirectory,
             prepared.TargetIntrinsics,
-            prepared.ResourceDeclarations);
+            prepared.ResourceDeclarations,
+            generatedRomTablesOverride ?? prepared.GeneratedRomTables);
         return (videoProgram, prepared);
     }
 
@@ -426,7 +433,8 @@ internal sealed class NesVideoProgram
         ProgramSyntax program,
         string? baseDirectory = null,
         TargetIntrinsicCatalog? targetIntrinsics = null,
-        SdkResourceDeclarationRegistry? resourceDeclarations = null)
+        SdkResourceDeclarationRegistry? resourceDeclarations = null,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTables = null)
     {
         targetIntrinsics ??= NesTarget.Intrinsics;
         resourceDeclarations ??= SdkResourceDeclarationRegistry.Default;
@@ -459,7 +467,7 @@ internal sealed class NesVideoProgram
             Functions = functions,
             Enums = enums,
             Structs = structs,
-            GeneratedRomTables = CompilerGeneratedRomTable.Read(functions.Values),
+            GeneratedRomTables = CompilerGeneratedRomTable.Validate(generatedRomTables, functions),
             MainBlock = main.Block,
             TargetIntrinsics = targetIntrinsics,
             ResourceDeclarations = resourceDeclarations,

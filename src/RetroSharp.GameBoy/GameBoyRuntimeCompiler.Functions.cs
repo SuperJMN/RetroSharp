@@ -158,11 +158,11 @@ internal sealed partial class GameBoyRuntimeCompiler
 
     private static string SubroutineTrampolineLabel(string functionName) => $"user_fn_{functionName}_trampoline";
 
-    private static bool IsRuntimeReadOnlyDataLabel(string label)
+    private bool IsRuntimeReadOnlyDataLabel(string label)
     {
         return label.StartsWith("map_row_", StringComparison.Ordinal)
                || label.StartsWith("background_stream_row_", StringComparison.Ordinal)
-               || label.StartsWith("generated_rom_table_", StringComparison.Ordinal);
+               || program.GeneratedRomTables.Values.Any(table => table.Label == label);
     }
 
     private static string ReadOnlyDataByteReaderLabel(string label) => $"read_data_{label}";
