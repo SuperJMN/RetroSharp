@@ -2236,8 +2236,8 @@ public partial class NesRomCompilerTests
         Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x07, 0x85, 0x05]), "actors[1].active should store at base + sizeof(Actor) + offsetof(active).");
         Assert.True(ContainsSequence(prg, [0xA5, 0x05, 0x85, 0x0A]), "constant indexed field reads should use the flattened field address directly.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x01, 0x18, 0x69, 0x01, 0x95, 0x01]), "actors[i].y should compute X from i * sizeof(Actor) and use the y-field base address.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x85, 0x0B]), "runtime indexed field reads should compute X from i * sizeof(Actor) and use the field base address.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x0A, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x01, 0x18, 0x69, 0x01, 0x95, 0x01]), "actors[i].y should compute X from i * sizeof(Actor) with logarithmic shift/add work and use the y-field base address.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x0A, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x85, 0x0B]), "runtime indexed field reads should compute X from i * sizeof(Actor) with logarithmic shift/add work and use the field base address.");
     }
 
     [Fact]
@@ -2267,8 +2267,8 @@ public partial class NesRomCompilerTests
 
         Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0xC9, 0x03]), "pool loop should compare the byte index with countof(actors), not use an iterator object.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x02, 0xC9, 0x00]), "active checks should read actors[i].active through the fixed field base plus i * stride.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x18, 0x69, 0x01, 0x95, 0x00]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x0A, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x02, 0xC9, 0x00]), "active checks should read actors[i].active through the fixed field base plus logarithmically materialized i * stride.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x09, 0x85, 0xE8, 0x0A, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x00, 0x18, 0x69, 0x01, 0x95, 0x00]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
     }
 
     [Fact]
@@ -2296,7 +2296,46 @@ public partial class NesRomCompilerTests
         Assert.Equal(40976, rom.Length);
         Assert.True(ContainsSequence(prg, [0xA9, 0x2C, 0x85, 0x03, 0xA9, 0x01, 0x85, 0x04]), "actors[1].worldX should store low/high at base + sizeof(Actor).");
         Assert.True(ContainsSequence(prg, [0xA9, 0x07, 0x85, 0x05]), "actors[1].y should be placed after the two-byte worldX field.");
-        Assert.True(ContainsSequence(prg, [0xA5, 0x06, 0x85, 0xE8, 0x18, 0x65, 0xE8, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x02, 0x18, 0x69, 0x01, 0x95, 0x02]), "actors[i].y should use the mixed-width struct stride.");
+        Assert.True(ContainsSequence(prg, [0xA5, 0x06, 0x85, 0xE8, 0x0A, 0x18, 0x65, 0xE8, 0xAA, 0xB5, 0x02, 0x18, 0x69, 0x01, 0x95, 0x02]), "actors[i].y should use the mixed-width struct stride with logarithmic shift/add work.");
+    }
+
+    [Fact]
+    public void Runtime_struct_array_addressing_preserves_mixed_width_values_and_mutations()
+    {
+        const string source = """
+                              struct Entry {
+                                  u8 tag;
+                                  u16 worldX;
+                                  u8 y;
+                                  bool active;
+                              }
+
+                              void Main() {
+                                  Entry entries[4];
+                                  u8 i = 3;
+                                  entries[i].tag = 0xA5;
+                                  entries[i].worldX = 0x1234u16;
+                                  entries[i].y = 7;
+                                  entries[i].y += 2;
+                                  entries[i].active = true;
+                                  u8 tagCopy = entries[i].tag;
+                                  u16 worldXCopy = entries[i].worldX;
+                                  u8 yCopy = entries[i].y;
+                                  bool activeCopy = entries[i].active;
+                              }
+                              """;
+
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(source);
+        var variables = result.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var cpu = new NesTestCpu(result.Rom);
+
+        cpu.RunFrames(6);
+
+        Assert.Equal(0xA5, cpu.Ram(variables["tagCopy"].Address));
+        Assert.Equal(0x34, cpu.Ram(variables["worldXCopy"].Address));
+        Assert.Equal(0x12, cpu.Ram((ushort)(variables["worldXCopy"].Address + 1)));
+        Assert.Equal(9, cpu.Ram(variables["yCopy"].Address));
+        Assert.Equal(1, cpu.Ram(variables["activeCopy"].Address));
     }
 
     [Fact]

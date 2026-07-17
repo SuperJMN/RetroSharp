@@ -511,7 +511,13 @@ internal sealed partial class NesSdkOperationLowerer
         switch (location)
         {
             case SdkStorageLocation.RuntimeIndexedField runtimeIndexed:
-                EmitRuntimeMemberIndexToX(runtimeIndexed.BaseName, runtimeIndexed.Index);
+                if (activeRuntimeIndexedFieldCursor is not { } cursor
+                    || cursor.BaseName != runtimeIndexed.BaseName
+                    || cursor.Index != runtimeIndexed.Index)
+                {
+                    EmitRuntimeMemberIndexToX(runtimeIndexed.BaseName, runtimeIndexed.Index);
+                }
+
                 builder.LoadAZeroPageX(RuntimeIndexedMemberBaseAddress(runtimeIndexed.BaseName, runtimeIndexed.FieldName));
                 break;
             default:

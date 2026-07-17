@@ -10,6 +10,66 @@ public sealed class NesSdkSpriteLoweringTests
 {
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    public void Runtime_struct_array_sprite_fields_share_one_logarithmic_address_materialization()
+    {
+        var baseDirectory = WriteSpriteAsset(
+            "hero.nes.json",
+            """
+            {
+              "platforms": {
+                "nes": {
+                  "frames": [[
+                    "11111111", "11111111", "11111111", "11111111",
+                    "11111111", "11111111", "11111111", "11111111"
+                  ]]
+                }
+              }
+            }
+            """);
+        const string source = """
+                              struct Actor {
+                                  u8 x;
+                                  u8 y;
+                                  u8 frame;
+                                  bool flip;
+                                  u8 kind;
+                                  u8 active;
+                                  u8 state;
+                                  u8 timer;
+                                  u8 facing;
+                                  u8 animTick;
+                                  u8 health;
+                                  i8 vx;
+                                  i8 vy;
+                              }
+
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(hero, "hero.nes.json");
+                                  Actor actors[2];
+                                  u8 i = 1;
+                                  Sprite.Draw(hero, actors[i].x, actors[i].y, actors[i].frame, actors[i].flip, 0);
+                              }
+                              """;
+
+        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
+        var prg = rom.Skip(16).Take(32 * 1024).ToArray();
+        var repeatedAddMaterialization = new List<byte> { 0xA5, 0x1A, 0x85, 0xE8 };
+        for (var count = 1; count < 13; count++)
+        {
+            repeatedAddMaterialization.AddRange([0x18, 0x65, 0xE8]);
+        }
+
+        repeatedAddMaterialization.Add(0xAA);
+
+        Assert.Equal(0, CountOccurrences(prg, repeatedAddMaterialization));
+        Assert.Equal(
+            1,
+            CountOccurrences(prg, [0xA5, 0x1A, 0x85, 0xE8, 0x0A, 0x18, 0x65, 0xE8, 0x0A, 0x0A, 0x18, 0x65, 0xE8, 0xAA]));
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Golden_sprite_draw_emission_is_pinned_nes()
     {
         var baseDirectory = WriteSpriteAsset(

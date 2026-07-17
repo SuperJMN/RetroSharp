@@ -56,3 +56,10 @@ GCP-2.x actor-phase/struct-addressing path.
 
 The TSV serializer always writes literal LF line endings so the exact report is
 independent of the host operating system.
+
+GCP-2.3 deliberately refreshes the NES rows after bounding runtime
+struct-array address materialization. Capacities 1, 2, and 4 retain 100/100;
+capacity 8 improves from 50/100 with a one-frame longest miss to 100/100 with
+no miss. The NES ROM container remains 40,976 bytes, while the active-pool
+fixed payload is 3,132 bytes smaller at every recorded capacity. Game Boy rows
+remain the independent target snapshot.

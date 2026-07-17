@@ -49,6 +49,21 @@ calibration-debt table live in
 [`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
 GCP-0.2 adds no current compiler diagnostic or ROM change.
 
+GCP-2.3 bounds dynamic fixed-struct-array addressing without changing that
+storage or the runtime ABI. A direct zero-page index now uses a binary
+left-to-right `ASL`/`ADC` chain: powers of two need only shifts, while any
+other accepted stride uses at most seven shifts and seven adds. The complete
+direct-index materialization, including `LDA index` and `TAX`, is therefore at
+most 33 emitted bytes / 57 CPU cycles for the existing one-byte offset limit,
+rather than growing linearly to 767 bytes / 1,278 cycles at stride 255. The
+canonical Actor stride 13 shape falls from 41 bytes / 68 cycles to 15 bytes /
+24 cycles. When two or more runtime-indexed `Sprite.Draw(...)` operands share
+exactly the same array and index, the NES lowerer materializes X once before
+any draw branch and reuses it for those fields; a different index disables the
+cursor. These numbers calibrate the non-additive
+`target.struct-array-address` detail for the mapper-0 profile; GCP-3.1 remains
+the owner of composing that detail under an actor-phase subtotal.
+
 The descriptor records NES sprite, palette, X/Y fine-scroll, horizontal background-column streaming, four-screen camera movement, vertical row streaming, and camera-relative collision-query support. Projects load `RetroSharp.Portable2D` from manifest `libraries`; standalone files can use `import RetroSharp.Portable2D;` as the explicit source-level form. Unknown imports fail compilation, and SDK dot-calls require a loaded source package. `Video.WaitVBlank()` and `Input.Poll()` are provided by that SDK source library as inline wrappers over NES target intrinsics (`wait_frame`/`wait_vblank` and `poll_input`), while the collector still records the matching `Sdk2DOperation` values for validation and frame-budget boundaries.
 
 Those collected operations remain complete for capability validation, while a
@@ -152,7 +167,7 @@ source and the equivalent explicit declaration emit identical NES bytes.
 
 `sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive types and the reserved internal `sizeof(ptr<T>)` pointer-size marker; and the sum of field sizes for plain structs. `ptr<T>` is not a public storage, signature, field, or cast type in gameplay source. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. Plain local structs and struct arrays are flattened to adjacent zero-page byte slots using mixed-width field offsets. For example, `struct Actor { u16 worldX; u8 y; }` has stride 3, `actors[0].worldX` occupies low/high bytes at offsets 0/1, and `actors[0].y` is offset 2.
 
-Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to zero-fill plus direct field stores in declaration order; shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are flattened the same way. Runtime element access transfers `i * sizeof(element)` to `X`, and runtime struct-field access transfers `i * targetStructStride` to `X`; there is no implicit bounds check, heap object, or helper call. Direct 16-bit assignment, add/sub, and comparisons preserve both bytes; APIs that still consume byte expressions read the low byte.
+Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to zero-fill plus direct field stores in declaration order; shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are flattened the same way. Runtime element access transfers `i * sizeof(element)` to `X`, and runtime struct-field access transfers `i * targetStructStride` to `X`; constant factors use a bounded binary shift/add chain rather than one addition per stride byte. Safe groups of `Sprite.Draw(...)` field operands with the same runtime slot reuse one precomputed X cursor. There is no implicit bounds check, heap object, helper call, storage-layout change, or new scratch allocation. Direct 16-bit assignment, add/sub, and comparisons preserve both bytes; APIs that still consume byte expressions read the low byte.
 
 `+=` and `-=` lower to direct zero-page arithmetic and store for simple operands; `x += y` uses the same zero-page load/add/store shape as `x = x + y`. Byte-backed runtime subtraction and comparisons are general expression features in the NES target, not actor-framework-only lowering. Constant and direct zero-page operands use immediate or zero-page opcodes. Nested variable-vs-variable forms preserve the left operand with `PHA` while the right operand is evaluated, then store the completed right operand in the expression scratch byte immediately before `PLA` and `CMP`/`SBC`, so the scratch byte is not live across recursive expression emission.
 

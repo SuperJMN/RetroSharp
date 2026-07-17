@@ -199,23 +199,55 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         nextHardwareSprite += asset.Pieces.Count;
-        for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
+        var cursor = SharedRuntimeIndexedFieldCursor(operation.X, operation.Y, operation.Frame, operation.FlipX);
+        if (cursor is { } sharedCursor)
         {
-            var piece = asset.Pieces[pieceIndex];
-            var oamAddress = (ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + (firstHardwareSprite + pieceIndex) * 4);
+            EmitRuntimeMemberIndexToX(sharedCursor.BaseName, sharedCursor.Index);
+            activeRuntimeIndexedFieldCursor = sharedCursor;
+        }
 
-            EmitSpriteDrawY(operation.Y, piece.YOffset, oamAddress);
+        try
+        {
+            for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
+            {
+                var piece = asset.Pieces[pieceIndex];
+                var oamAddress = (ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + (firstHardwareSprite + pieceIndex) * 4);
 
-            EmitSpriteTile(operation.Frame, asset, piece.TileOffset);
-            EmitStoreOamByte((ushort)(oamAddress + 1));
+                EmitSpriteDrawY(operation.Y, piece.YOffset, oamAddress);
 
-            EmitSpriteDrawAttributes(operation.FlipX, physicalPaletteSlot + piece.PaletteSlotOffset, (ushort)(oamAddress + 2));
+                EmitSpriteTile(operation.Frame, asset, piece.TileOffset);
+                EmitStoreOamByte((ushort)(oamAddress + 1));
 
-            EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 3));
+                EmitSpriteDrawAttributes(operation.FlipX, physicalPaletteSlot + piece.PaletteSlotOffset, (ushort)(oamAddress + 2));
+
+                EmitSpriteDrawX(operation.X, operation.FlipX, asset, piece, (ushort)(oamAddress + 3));
+            }
+        }
+        finally
+        {
+            activeRuntimeIndexedFieldCursor = null;
         }
 
         // Shadow OAM is published once by the next frame boundary. Keeping draw calls as
         // RAM-only updates preserves complete logical ordering without visible-scanline DMA.
+    }
+
+    private static RuntimeIndexedFieldCursor? SharedRuntimeIndexedFieldCursor(params SdkByteExpression?[] expressions)
+    {
+        var fields = expressions
+            .OfType<SdkByteExpression.Variable>()
+            .Select(variable => variable.Location)
+            .OfType<SdkStorageLocation.RuntimeIndexedField>()
+            .ToArray();
+        if (fields.Length < 2)
+        {
+            return null;
+        }
+
+        var first = fields[0];
+        return fields.All(field => field.BaseName == first.BaseName && field.Index == first.Index)
+            ? new RuntimeIndexedFieldCursor(first.BaseName, first.Index)
+            : null;
     }
 
     private void EmitSpriteDrawY(SdkByteExpression yExpression, int offset, ushort oamAddress)
