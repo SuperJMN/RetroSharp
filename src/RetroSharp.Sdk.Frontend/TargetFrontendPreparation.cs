@@ -84,7 +84,6 @@ internal static class TargetFrontendPreparation
         }
 
         var targetProgram = TargetProgramSelector.Select(parse.Value, targetIntrinsics);
-        CompilerGeneratedRomTable.RejectUserAuthoredAttributes(targetProgram.Functions);
         SdkImportResolver.ValidateImports(targetProgram, libraryRegistry);
         var actorFrameworkPlan = ActorFrameworkLowerer.Analyze(
             targetProgram,

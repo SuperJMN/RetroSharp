@@ -4,20 +4,7 @@ namespace RetroSharp.Sdk;
 
 internal sealed record CompilerGeneratedRomTable(string FunctionName, byte[] Data)
 {
-    internal const string ReservedAttributeName = "compiler_generated_rom_table";
-
     public string Label => $"generated_rom_table_{FunctionName}";
-
-    internal static void RejectUserAuthoredAttributes(IEnumerable<FunctionSyntax> functions)
-    {
-        var function = functions.FirstOrDefault(candidate =>
-            candidate.Attributes.Any(attribute => attribute.Name == ReservedAttributeName));
-        if (function is not null)
-        {
-            throw new InvalidOperationException(
-                $"Attribute '{ReservedAttributeName}' on function '{function.Name}' is reserved for compiler-generated functions.");
-        }
-    }
 
     internal static IReadOnlyDictionary<string, CompilerGeneratedRomTable> Validate(
         IReadOnlyDictionary<string, CompilerGeneratedRomTable>? tables,

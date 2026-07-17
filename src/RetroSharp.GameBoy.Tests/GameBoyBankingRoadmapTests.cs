@@ -414,7 +414,7 @@ public sealed class GameBoyBankingRoadmapTests
         Assert.Equal(CartridgeMbc1, rom[0x147]);
         Assert.True(
             ContainsBankedMapRowReader(rom),
-            "banked map rows should be read by a fixed-bank helper that selects the data bank and restores the program bank");
+            "banked map rows should be read by a fixed-bank helper that selects the data bank and restores the actual visible bank");
         Assert.Equal(7, cpu.Oam(0xFE02));
     }
 
@@ -765,32 +765,38 @@ public sealed class GameBoyBankingRoadmapTests
 
     private static bool ContainsBankedMapRowReader(byte[] rom)
     {
-        for (var offset = 0x0150; offset <= 0x4000 - 28; offset++)
+        for (var offset = 0x0150; offset <= 0x4000 - 32; offset++)
         {
             if (rom[offset] == 0x5F &&
                 rom[offset + 1] == 0x16 &&
                 rom[offset + 2] == 0x00 &&
-                rom[offset + 3] == 0x3E &&
-                rom[offset + 4] > 1 &&
-                rom[offset + 5] == 0xEA &&
-                rom[offset + 6] == 0xFA &&
-                rom[offset + 7] == 0xC1 &&
-                rom[offset + 8] == 0xEA &&
-                rom[offset + 9] == 0x00 &&
-                rom[offset + 10] == 0x20 &&
-                rom[offset + 11] == 0x21 &&
-                rom[offset + 14] == 0x19 &&
-                rom[offset + 15] == 0x7E &&
-                rom[offset + 16] == 0x47 &&
-                rom[offset + 17] == 0xFA &&
-                rom[offset + 20] == 0xEA &&
-                rom[offset + 21] == 0xFA &&
+                rom[offset + 3] == 0xFA &&
+                rom[offset + 4] == 0xFA &&
+                rom[offset + 5] == 0xC1 &&
+                rom[offset + 6] == 0x4F &&
+                rom[offset + 7] == 0xC5 &&
+                rom[offset + 8] == 0x3E &&
+                rom[offset + 9] > 1 &&
+                rom[offset + 10] == 0xEA &&
+                rom[offset + 11] == 0xFA &&
+                rom[offset + 12] == 0xC1 &&
+                rom[offset + 13] == 0xEA &&
+                rom[offset + 14] == 0x00 &&
+                rom[offset + 15] == 0x20 &&
+                rom[offset + 16] == 0x21 &&
+                rom[offset + 19] == 0x19 &&
+                rom[offset + 20] == 0x7E &&
+                rom[offset + 21] == 0x57 &&
                 rom[offset + 22] == 0xC1 &&
-                rom[offset + 23] == 0xEA &&
-                rom[offset + 24] == 0x00 &&
-                rom[offset + 25] == 0x20 &&
-                rom[offset + 26] == 0x78 &&
-                rom[offset + 27] == 0xC9)
+                rom[offset + 23] == 0x79 &&
+                rom[offset + 24] == 0xEA &&
+                rom[offset + 25] == 0xFA &&
+                rom[offset + 26] == 0xC1 &&
+                rom[offset + 27] == 0xEA &&
+                rom[offset + 28] == 0x00 &&
+                rom[offset + 29] == 0x20 &&
+                rom[offset + 30] == 0x7A &&
+                rom[offset + 31] == 0xC9)
             {
                 return true;
             }

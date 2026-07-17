@@ -834,7 +834,7 @@ public partial class GameBoyRomCompilerTests
 
     [Fact]
     [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
-    public void User_source_cannot_declare_compiler_generated_rom_tables()
+    public void Source_attribute_named_like_generated_rom_table_is_ordinary_metadata_only()
     {
         const string source = """
                               inline [compiler_generated_rom_table(1, 2)] u8 lookup(u8 index) => 0;
@@ -844,12 +844,11 @@ public partial class GameBoyRomCompilerTests
                               }
                               """;
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
-            GameBoyRomCompiler.CompileSource(
-                source,
-                sdkLibraryImports: [SdkImportResolver.Portable2D]));
+        var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
-        Assert.Contains("reserved for compiler-generated functions", exception.Message);
+        Assert.DoesNotContain(build.Report.Segments, segment => segment.Owner.StartsWith("generated-rom-table:", StringComparison.Ordinal));
     }
 
     [Fact]
