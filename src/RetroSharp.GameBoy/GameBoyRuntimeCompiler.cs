@@ -11,6 +11,7 @@ namespace RetroSharp.GameBoy;
 internal sealed partial class GameBoyRuntimeCompiler
 {
     private sealed record StructArrayLayout(int Stride, IReadOnlyDictionary<string, int> FieldOffsets);
+
     private const byte MusicActiveUgeRows = 1;
     private const byte MusicActiveApuTrace = 2;
     private const int MusicHeaderLength = 3;
@@ -36,6 +37,7 @@ internal sealed partial class GameBoyRuntimeCompiler
     private readonly Stack<LoopTarget> loopTargets = [];
     private readonly GameBoySdkLoweringState sdkLoweringState = new();
     private readonly GameBoySdkOperationLowerer sdkOperationLowerer;
+    private GameBoyRuntimeIndexedAddressReuse? runtimeIndexedAddressReuse;
     private int nextInlineVariableScopeId;
     private ushort nextVariableAddress = GameBoyRuntimeMemoryLayout.UserLocals.Start;
 
@@ -64,7 +66,9 @@ internal sealed partial class GameBoyRuntimeCompiler
                 EmitExpressionToA,
                 EmitStoreSplitWordImmediate,
                 TryConst,
-                ConstRuntimeValue),
+                ConstRuntimeValue,
+                BeginRuntimeIndexedAddressReuse,
+                EndRuntimeIndexedAddressReuse),
             this.romLayout,
             packedWorldRuntimeLayout,
             usesPackedCameraRuntime,

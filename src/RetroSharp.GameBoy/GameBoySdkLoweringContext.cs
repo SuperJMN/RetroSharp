@@ -3,13 +3,17 @@ namespace RetroSharp.GameBoy;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Parser;
 
+internal readonly record struct GameBoyRuntimeIndexedAddressReuse(string BaseName, string IndexName);
+
 internal sealed class GameBoySdkLoweringContext(
     Action<SdkByteExpression> emitByteExpressionToA,
     Action<SdkWordExpression, bool> emitWordExpressionToA,
     Action<ExpressionSyntax> emitSourceExpressionToA,
     Action<ushort, ushort, int> emitStoreSplitWordImmediate,
     TryGameBoySourceConstant trySourceConstant,
-    Func<ExpressionSyntax, string, int> constRuntimeValue)
+    Func<ExpressionSyntax, string, int> constRuntimeValue,
+    Action<GameBoyRuntimeIndexedAddressReuse>? beginRuntimeIndexedAddressReuse = null,
+    Action? endRuntimeIndexedAddressReuse = null)
 {
     public void EmitByteExpressionToA(SdkByteExpression expression) => emitByteExpressionToA(expression);
 
@@ -26,6 +30,25 @@ internal sealed class GameBoySdkLoweringContext(
 
     public int ConstRuntimeValue(ExpressionSyntax expression, string context) =>
         constRuntimeValue(expression, context);
+
+    public void EmitWithRuntimeIndexedAddressReuse(GameBoyRuntimeIndexedAddressReuse reuse, Action emit)
+    {
+        if (beginRuntimeIndexedAddressReuse is null || endRuntimeIndexedAddressReuse is null)
+        {
+            emit();
+            return;
+        }
+
+        beginRuntimeIndexedAddressReuse(reuse);
+        try
+        {
+            emit();
+        }
+        finally
+        {
+            endRuntimeIndexedAddressReuse();
+        }
+    }
 }
 
 internal delegate bool TryGameBoySourceConstant(ExpressionSyntax expression, out int value);

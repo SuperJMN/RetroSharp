@@ -6,6 +6,18 @@ internal sealed partial class GameBoySdkOperationLowerer
 {
     private void EmitDrawLogicalSprite(Sdk2DOperation.DrawLogicalSprite operation)
     {
+        var reuse = RuntimeIndexedAddressReuseFor(operation);
+        if (reuse is null)
+        {
+            EmitDrawLogicalSpriteCore(operation);
+            return;
+        }
+
+        context.EmitWithRuntimeIndexedAddressReuse(reuse.Value, () => EmitDrawLogicalSpriteCore(operation));
+    }
+
+    private void EmitDrawLogicalSpriteCore(Sdk2DOperation.DrawLogicalSprite operation)
+    {
         if (!program.SpriteAssets.TryGetValue(operation.SpriteId, out var asset))
         {
             throw new InvalidOperationException($"Unknown Game Boy sprite asset '{operation.SpriteId}'. Declare it with sprite_asset(...).");
@@ -36,6 +48,28 @@ internal sealed partial class GameBoySdkOperationLowerer
 
             EmitSpriteDrawAttributes(operation.FlipX, operation.PaletteSlot, (ushort)(oamAddress + 3));
         }
+    }
+
+    private static GameBoyRuntimeIndexedAddressReuse? RuntimeIndexedAddressReuseFor(
+        Sdk2DOperation.DrawLogicalSprite draw)
+    {
+        var fields = new[] { draw.X, draw.Y, draw.Frame, draw.FlipX }
+            .OfType<SdkByteExpression.Variable>()
+            .Select(variable => variable.Location)
+            .OfType<SdkStorageLocation.RuntimeIndexedField>()
+            .ToArray();
+        if (fields.Length < 2
+            || fields[0].Index is not SdkByteExpression.Variable { Location: SdkStorageLocation.Local firstIndex })
+        {
+            return null;
+        }
+
+        return fields.All(field =>
+                field.BaseName == fields[0].BaseName
+                && field.Index is SdkByteExpression.Variable { Location: SdkStorageLocation.Local index }
+                && index.Name == firstIndex.Name)
+            ? new GameBoyRuntimeIndexedAddressReuse(fields[0].BaseName, firstIndex.Name)
+            : null;
     }
 
     private void EmitSpriteDrawX(

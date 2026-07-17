@@ -50,6 +50,51 @@ calibration-debt table live in
 [`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md).
 GCP-0.2 adds no current compiler diagnostic or ROM change.
 
+GCP-2.2 bounds dynamic fixed-struct-array address materialization with a
+target-owned binary constant multiply. For stride `m > 1`, the emitted LR35902
+shape keeps the original byte index in `B` and evaluates the remaining bits
+with `floor(log2(m))` `ADD A,A` operations plus `popcount(m) - 1` `ADD A,B`
+operations. Its cost is logarithmic in the stride, uses no helper call or
+runtime scratch, and is shared by ordinary source expressions and SDK
+`RuntimeIndexedField` operands. The existing AoS WRAM layout, byte wrapping,
+register result (`HL`), bank/window behavior, and lack of an implicit bounds
+check are unchanged.
+
+Within one `Sprite.Draw(...)` lowering, two or more direct runtime struct-field
+operands with the same array and the same byte-local index share the computed
+`index * stride` offset in `DE`. The offset is initialized eagerly before any
+target-emitted flip branch; each operand loads its own field base and adds the
+retained offset. A different base or index disables reuse for the whole
+operation, and the scope is always cleared when that operation finishes. It
+therefore cannot cross a source call or statement, does not depend on which
+internal branch executes, and introduces no persistent or WRAM cache state.
+For stride 4, each repeated operand falls from 13 bytes / 60 T-cycles to 4
+bytes / 20 T-cycles; for stride 13 it falls from 16 bytes / 72 T-cycles to 4
+bytes / 20 T-cycles.
+
+GCP-3.1 can expose this target-owned work as the stable
+`target.struct-array-address` child detail. It is non-additive beneath its
+owning `actor.phase.*` subtotal, so a phase diagnostic must not charge the same
+address instructions a second time.
+
+The canonical Actor struct has stride 13. One byte-local indexed address is now
+16 emitted bytes and 72 T-cycles instead of 23 bytes and 100 T-cycles: seven
+bytes and 28 T-cycles are removed every time the generic address materializer
+is emitted/executed. The GCP-0.1 active-pool programs contain 116 such emitted
+sites at every capacity. Their exact ROM-only measurements are:
+
+| Active capacity | Program bytes before | Program bytes after | Address cycles per materialization | Logical waits / 100 frames before | After |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9,231 | 8,419 | 100 -> 72 | 100 | 100 |
+| 2 | 9,310 | 8,498 | 100 -> 72 | 100 | 100 |
+| 4 | 9,450 | 8,638 | 100 -> 72 | 100 | 100 |
+| 8 | 9,730 | 8,918 | 100 -> 72 | 50 | 77 |
+
+The 32 KiB cartridge allocation is unchanged; `program bytes` is the final
+link report's emitted `program` segment total. The capacity-eight cadence gain
+is attributable to this target-only address shape, while final 100/100 active-
+pool acceptance remains joint GCP-3.2 work after the shared and NES slices.
+
 ## SDK Operation Boundary
 
 `GameBoyRomCompiler.CollectSdkOperations(...)` exposes the first compiler boundary where portable 2D calls become semantic `Sdk2DOperation` records before Game Boy ROM lowering. The current boundary recognizes:
@@ -163,7 +208,7 @@ the equivalent explicit declaration emit identical Game Boy bytes.
 
 `sizeof(type)` returns the compile-time byte size used by the current layout model: 1 for byte-backed primitives, `bool`, and enums; 2 for 16-bit primitive types and the reserved internal `sizeof(ptr<T>)` pointer-size marker; and the sum of field sizes for plain structs. `ptr<T>` is not a public storage, signature, field, or cast type in gameplay source. `offsetof(type, field)` returns the matching direct-field byte offset for plain structs. Plain local structs and struct arrays are flattened to adjacent WRAM byte slots using mixed-width field offsets. For example, `struct Actor { u16 worldX; u8 y; }` has stride 3, `actors[0].worldX` occupies low/high bytes at offsets 0/1, and `actors[0].y` is offset 2.
 
-Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to zero-fill plus direct field stores in declaration order; shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are also flattened to adjacent WRAM byte slots. Runtime element access computes `HL = base + i * sizeof(element)` and runtime struct-field access computes `HL = fieldBase + i * targetStructStride`; there is no implicit bounds check, heap object, or helper call. Direct 16-bit assignment, add/sub, and comparisons preserve both bytes; APIs that still consume byte expressions read the low byte.
+Struct initializer lists such as `Vec2 position = { y: seed + 1, x: 2 };` lower to zero-fill plus direct field stores in declaration order; shorthand fields such as `{ x, y: seed + 1 }` are parsed as `x: x`, and omitted fields remain zero. Fixed-size local arrays are also flattened to adjacent WRAM byte slots. Runtime element access computes `HL = base + i * sizeof(element)` and runtime struct-field access computes `HL = fieldBase + i * targetStructStride`; constant multiplication uses the bounded binary shape described under Generated CPU-Work Policy instead of a stride-proportional repeated-add ladder. There is no implicit bounds check, heap object, helper call, or persistent address-cache state. Direct 16-bit assignment, add/sub, and comparisons preserve both bytes; APIs that still consume byte expressions read the low byte.
 
 `++` and `--` are statement-only source sugar over `+= 1` and `-= 1`. They can be used as standalone statements or as the increment in a `for` loop, and lower to the same direct load/arithmetic/store sequences as the expanded compound assignment.
 

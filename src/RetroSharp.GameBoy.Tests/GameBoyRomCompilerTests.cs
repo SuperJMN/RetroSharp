@@ -2749,8 +2749,8 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x05, 0xC0]), "actors[1].active should store at base + sizeof(Actor) + offsetof(active).");
         Assert.True(ContainsSequence(rom, [0xFA, 0x05, 0xC0, 0xEA, 0x0A, 0xC0]), "constant indexed field reads should use the flattened field address directly.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x01, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should compute HL from the y-field base plus i * sizeof(Actor).");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xEA, 0x0B, 0xC0]), "runtime indexed field reads should compute HL from the field base plus i * sizeof(Actor).");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x01, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should compute HL from the y-field base plus i * sizeof(Actor).");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xEA, 0x0B, 0xC0]), "runtime indexed field reads should compute HL from the field base plus i * sizeof(Actor).");
     }
 
     [Fact]
@@ -2778,8 +2778,8 @@ public partial class GameBoyRomCompilerTests
 
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0xFE, 0x03]), "pool loop should compare the byte index with countof(actors), not use an iterator object.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xFE, 0x00]), "active checks should read actors[i].active through the fixed field base plus i * stride.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xFE, 0x00]), "active checks should read actors[i].active through the fixed field base plus i * stride.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x00, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "updates should mutate actors[i].x through fixed storage with no actor object or dispatch table.");
     }
 
     [Fact]
@@ -2805,7 +2805,90 @@ public partial class GameBoyRomCompilerTests
         Assert.Equal(32768, rom.Length);
         Assert.True(ContainsSequence(rom, [0x3E, 0x2C, 0xEA, 0x03, 0xC0, 0x3E, 0x01, 0xEA, 0x04, 0xC0]), "actors[1].worldX should store low/high at base + sizeof(Actor).");
         Assert.True(ContainsSequence(rom, [0x3E, 0x07, 0xEA, 0x05, 0xC0]), "actors[1].y should be placed after the two-byte worldX field.");
-        Assert.True(ContainsSequence(rom, [0xFA, 0x06, 0xC0, 0x47, 0x80, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should use the mixed-width struct stride.");
+        Assert.True(ContainsSequence(rom, [0xFA, 0x06, 0xC0, 0x47, 0x87, 0x80, 0x21, 0x02, 0xC0, 0x5F, 0x16, 0x00, 0x19, 0x7E, 0xC6, 0x01, 0x77]), "actors[i].y should use the mixed-width struct stride.");
+    }
+
+    [Fact]
+    public void Runtime_struct_array_addressing_does_not_repeat_stride_proportional_addition()
+    {
+        const string source = """
+                              struct Actor {
+                                  u16 worldX;
+                                  u8 y;
+                                  u8 active;
+                                  u8 state0;
+                                  u8 state1;
+                                  u8 state2;
+                                  u8 state3;
+                                  u8 state4;
+                                  u8 state5;
+                                  u8 state6;
+                                  u8 state7;
+                                  u8 kind;
+                              }
+
+                              void Main() {
+                                  Actor actors[2];
+                                  u8 i = 1;
+                                  actors[i].active += 1;
+                                  actors[i].state7 += 1;
+                                  actors[i].y += 1;
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+
+        Assert.Equal(32768, rom.Length);
+        Assert.True(
+            ContainsSequence(rom, [0xFA, 0x1A, 0xC0, 0x47, 0x87, 0x80, 0x87, 0x87, 0x80, 0x21, 0x03, 0xC0, 0x5F, 0x16, 0x00, 0x19]),
+            "a 13-byte struct stride should use the accepted bounded binary multiply before forming the field address.");
+        Assert.False(
+            ContainsSequence(rom, [0x47, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80]),
+            "a 13-byte struct stride must not emit twelve repeated ADD A,B instructions for every runtime field access.");
+    }
+
+    [Fact]
+    public void Runtime_struct_array_addressing_preserves_mixed_width_values_and_mutations()
+    {
+        const string source = """
+                              struct Actor {
+                                  u16 worldX;
+                                  u8 y;
+                                  u8 active;
+                                  u8 state0;
+                                  u8 state1;
+                                  u8 state2;
+                                  u8 state3;
+                                  u8 state4;
+                                  u8 state5;
+                                  u8 state6;
+                                  u8 state7;
+                                  u8 kind;
+                              }
+
+                              void Main() {
+                                  Video.Init();
+                                  Actor actors[3];
+                                  u8 i = 2;
+                                  actors[i].worldX = 0x1234u16;
+                                  actors[i].active = 7;
+                                  actors[i].active += 5;
+                                  u16 wordCopy = actors[i].worldX;
+                                  u8 byteCopy = actors[i].active;
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        Assert.Equal(0x1234, cpu.Wram(0xC01A) | cpu.Wram(0xC01B) << 8);
+        Assert.Equal(12, cpu.Wram(0xC01D));
+        Assert.Equal(0x1234, cpu.Wram(0xC028) | cpu.Wram(0xC029) << 8);
+        Assert.Equal(12, cpu.Wram(0xC02A));
     }
 
     [Fact]

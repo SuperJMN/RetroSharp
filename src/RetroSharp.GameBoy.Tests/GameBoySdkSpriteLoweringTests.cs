@@ -341,6 +341,146 @@ public sealed class GameBoySdkSpriteLoweringTests
 
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    public void Sprite_draw_reuses_one_runtime_struct_index_inside_the_operation()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123")));
+        const string source = """
+                              struct Pose {
+                                  u8 x;
+                                  u8 y;
+                                  u8 frame;
+                                  bool flipX;
+                              }
+
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Pose poses[2];
+                                  u8 i = 1;
+                                  poses[i].x = 32;
+                                  poses[i].y = 48;
+                                  poses[i].frame = 0;
+                                  poses[i].flipX = true;
+                                  Sprite.Draw(player, poses[i].x, poses[i].y, poses[i].frame, poses[i].flipX);
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        Assert.Equal(
+            5,
+            CountSequence(rom, [0xFA, 0x08, 0xC0, 0x47, 0x87, 0x87]));
+        Assert.Equal(64, cpu.Oam(0xFE00));
+        Assert.Equal(40, cpu.Oam(0xFE01));
+        Assert.Equal(0x20, cpu.Oam(0xFE03));
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    public void Sprite_draw_does_not_reuse_runtime_struct_offsets_for_different_indices()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123")));
+        const string source = """
+                              struct Pose {
+                                  u8 x;
+                                  u8 y;
+                                  u8 frame;
+                                  bool flipX;
+                              }
+
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Pose poses[2];
+                                  u8 i = 0;
+                                  u8 j = 1;
+                                  Sprite.Draw(player, poses[i].x, poses[j].y, 0, false);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(1, CountSequence(rom, [0xFA, 0x08, 0xC0, 0x47, 0x87, 0x87]));
+        Assert.Equal(1, CountSequence(rom, [0xFA, 0x09, 0xC0, 0x47, 0x87, 0x87]));
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    public void Sprite_draw_runtime_struct_offset_reuse_ends_with_each_operation()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(8, 16, "01230123")));
+        const string source = """
+                              struct Pose {
+                                  u8 x;
+                                  u8 y;
+                                  u8 frame;
+                                  bool flipX;
+                              }
+
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Pose poses[2];
+                                  u8 i = 0;
+                                  Sprite.Draw(player, poses[i].x, poses[i].y, 0, false);
+                                  Sprite.Draw(player, poses[i].x, poses[i].y, 0, false);
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+
+        Assert.Equal(2, CountSequence(rom, [0xFA, 0x08, 0xC0, 0x47, 0x87, 0x87]));
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    public void Sprite_draw_initializes_runtime_struct_offset_before_internal_flip_branches()
+    {
+        var baseDirectory = WriteSpriteJsonAsset(
+            "player.sprite.json",
+            SpriteJson(Rows(16, 32)));
+        const string source = """
+                              struct Pose {
+                                  u8 x;
+                                  u8 frame;
+                              }
+
+                              void Main() {
+                                  Video.Init();
+                                  Sprite.Asset(player, "player.sprite.json");
+                                  Pose poses[2];
+                                  poses[1].x = 32;
+                                  poses[1].frame = 0;
+                                  u8 i = 1;
+                                  bool flipX = false;
+                                  Sprite.Draw(player, poses[i].x, 48, poses[i].frame, flipX);
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        Assert.Equal(1, CountSequence(rom, [0xFA, 0x04, 0xC0, 0x47, 0x87]));
+        Assert.Equal(40, cpu.Oam(0xFE01));
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compilation_rejects_sprite_draws_that_exceed_one_frame_hardware_sprite_budget()
     {
         var draws = string.Join(
@@ -391,4 +531,17 @@ public sealed class GameBoySdkSpriteLoweringTests
             exception.Message);
     }
 
+    private static int CountSequence(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> sequence)
+    {
+        var count = 0;
+        for (var index = 0; index <= bytes.Length - sequence.Length; index++)
+        {
+            if (bytes.Slice(index, sequence.Length).SequenceEqual(sequence))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
 }
