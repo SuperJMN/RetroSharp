@@ -2,7 +2,7 @@
 
 Status: **feature-complete for the first scrolling platformer slice on branch
 `feature/actor-framework`; AF-5.9 is closed with one-shot v1 semantics and
-AF-5.10 remains under the generated-code performance roadmap.**
+AF-5.10 is implemented under the generated-code performance roadmap.**
 Phases 1-4 and AF-5.1..AF-5.8 landed as a working, byte-reproducible
 Game Boy/NES actor-framework acceptance slice. Phase 5 moved the framework from
 the early non-scrolling closure to world-space actors, per-actor collision,
@@ -490,10 +490,17 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Remote: [#243](https://github.com/SuperJMN/RetroSharp/issues/243), closed as
   already implemented on 2026-07-17.
 
-#### AF-5.10: Reduce O(spawns)/frame activation scan cost (non-blocking)
+#### AF-5.10: Reduce O(spawns)/frame activation scan cost (closed)
 - Historical problem: every `Actors.SpawnLayer(...)` /
-  `Actors.SpawnWindow(...)` call scans all authored spawns in that layer each
-  frame. This remains open, but its issue-ready contract no longer lives here.
+  `Actors.SpawnWindow(...)` call scanned all authored spawns in that layer each
+  frame.
+- Accepted shape: small layers with 32 or fewer spawns keep the simple full
+  scan. Wider layers emit compiler-owned ROM candidate tables keyed by camera
+  bucket; activation selects the current bucket from the literal/default window
+  edge, loops only that bucket's source-ordered spawn indices, and then uses the
+  same visibility test, pool scan, retry behavior, and post-claim `used[]` mark
+  as the original one-shot path. No new public source API or mutable O(spawns)
+  RAM was introduced.
 - Remote: [#244](https://github.com/SuperJMN/RetroSharp/issues/244). The broader
   baseline, canonical AF-5.10 task card, constant-cost record prerequisite,
   CPU-work decision gate, and joint cadence gate live only in
@@ -508,8 +515,9 @@ slice, but they should stay visible:
 - AF-5.9 decision: spawn activation is intentionally one-shot in v1. A future
   reactivation mode requires an explicit source API rather than changing the
   default implicitly.
-- AF-5.10: runtime activation currently scans authored spawns each frame; the
-  complete performance graph is `docs/GeneratedCodePerformanceRoadmap.md`.
+- AF-5.10: wide runtime activation now uses compiler-owned ROM candidate
+  indexes; the complete performance graph is
+  `docs/GeneratedCodePerformanceRoadmap.md`.
 - AF-5.11: `Projectiles.*` and `Effects.*` still have compiler-owned public
   directive recognition in the Actor Framework projectile/effect feature modules; migrate them behind
   package-declared metadata in a separate slice if their lifecycle surface needs

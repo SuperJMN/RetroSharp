@@ -845,6 +845,11 @@ public static partial class ActorFrameworkLowerer
 
         private static IReadOnlyList<StatementSyntax> SpawnActivationStatements(ActorSpawnLayer layer, string prefix, int windowLeft, int windowWidth)
         {
+            if (BuildSpawnSpatialIndex(layer, windowWidth) is { } spatialIndex)
+            {
+                return SpawnSpatialIndexedActivationStatements(layer, prefix, windowLeft, windowWidth, spatialIndex);
+            }
+
             var indexName = $"{prefix}_i";
             var used = new IndexExpressionSyntax($"{layer.RuntimeName}_used", new IdentifierSyntax(indexName));
             var declarations = SpawnValueDeclarations(layer, prefix, indexName).ToList();
@@ -894,6 +899,158 @@ public static partial class ActorFrameworkLowerer
                 .Append(loop)
                 .ToList();
         }
+
+        private static IReadOnlyList<StatementSyntax> SpawnSpatialIndexedActivationStatements(
+            ActorSpawnLayer layer,
+            string prefix,
+            int windowLeft,
+            int windowWidth,
+            SpawnSpatialIndex spatialIndex)
+        {
+            var statements = SpawnCameraXDeclarations(prefix, windowLeft).ToList();
+            var bucketName = $"{prefix}_bucket";
+            var candidateCountName = $"{prefix}_candidate_count";
+            statements.Add(new DeclarationSyntax("u8", bucketName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(255))));
+            statements.Add(new DeclarationSyntax("u8", candidateCountName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))));
+            foreach (var bucket in spatialIndex.Buckets)
+            {
+                statements.Add(new IfElseSyntax(
+                    CameraWithinBucket(prefix, bucket),
+                    new BlockSyntax([
+                        new ExpressionStatementSyntax(new AssignmentSyntax(new IdentifierLValue(bucketName), "=", Constant(bucket.Ordinal))),
+                        new ExpressionStatementSyntax(new AssignmentSyntax(new IdentifierLValue(candidateCountName), "=", Constant(bucket.SpawnIndices.Count))),
+                    ]),
+                    Maybe<BlockSyntax>.None));
+            }
+
+            statements.Add(SpawnSelectedCandidateLoop(layer, prefix, windowLeft, windowWidth, spatialIndex));
+            return statements;
+        }
+
+        private static ForSyntax SpawnSelectedCandidateLoop(
+            ActorSpawnLayer layer,
+            string prefix,
+            int windowLeft,
+            int windowWidth,
+            SpawnSpatialIndex spatialIndex)
+        {
+            var bucketName = $"{prefix}_bucket";
+            var candidateCountName = $"{prefix}_candidate_count";
+            var candidateName = $"{prefix}_candidate";
+            var indexName = $"{prefix}_i";
+            var used = new IndexExpressionSyntax($"{layer.RuntimeName}_used", new IdentifierSyntax(indexName));
+            var body = new List<StatementSyntax>
+            {
+                new DeclarationSyntax("u8", indexName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+            };
+            body.AddRange(spatialIndex.Buckets.Select(bucket => new IfElseSyntax(
+                new BinaryExpressionSyntax(new IdentifierSyntax(bucketName), Constant(bucket.Ordinal), Operator.Equal),
+                new BlockSyntax([
+                    new ExpressionStatementSyntax(new AssignmentSyntax(
+                        new IdentifierLValue(indexName),
+                        "=",
+                        new FunctionCall(SpawnCandidateFunctionName(layer, bucket), [new IdentifierSyntax(candidateName)]))),
+                ]),
+                Maybe<BlockSyntax>.None)));
+            body.Add(new IfElseSyntax(
+                new BinaryExpressionSyntax(used, Constant(0), Operator.Equal),
+                new BlockSyntax(SpawnCandidateStatements(layer, prefix, indexName, prefix, windowLeft, windowWidth).ToList()),
+                Maybe<BlockSyntax>.None));
+
+            return new ForSyntax(
+                Maybe.From<StatementSyntax>(new DeclarationSyntax("u8", candidateName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0)))),
+                Maybe.From<ExpressionSyntax>(new BinaryExpressionSyntax(
+                    new IdentifierSyntax(candidateName),
+                    new IdentifierSyntax(candidateCountName),
+                    Operator.LessThan)),
+                Maybe.From<ExpressionSyntax>(new AssignmentSyntax(new IdentifierLValue(candidateName), "+=", Constant(1))),
+                new BlockSyntax(body));
+        }
+
+        private static IReadOnlyList<StatementSyntax> SpawnCandidateStatements(
+            ActorSpawnLayer layer,
+            string valuePrefix,
+            string indexName,
+            string cameraPrefix,
+            int windowLeft,
+            int windowWidth)
+        {
+            var declarations = SpawnValueDeclarations(layer, valuePrefix, indexName).ToList();
+            var projection = BuildSpawnScreenProjection(
+                new IdentifierSyntax($"{valuePrefix}_x_value"),
+                new IdentifierSyntax($"{valuePrefix}_xHi_value"),
+                valuePrefix,
+                windowLeft,
+                windowWidth,
+                cameraPrefix);
+            declarations.AddRange(projection.Declarations);
+
+            var assignedName = $"{valuePrefix}_assigned";
+            var slotName = $"{valuePrefix}_slot";
+            var assignSlot = new IfElseSyntax(
+                new BinaryExpressionSyntax(new IdentifierSyntax(assignedName), Constant(0), Operator.Equal),
+                new BlockSyntax([
+                    new IfElseSyntax(
+                        new BinaryExpressionSyntax(PoolField(layer.PoolName, slotName, "active"), Constant(0), Operator.Equal),
+                        new BlockSyntax(SpawnSlotAssignments(layer, valuePrefix, indexName, slotName, assignedName).ToList()),
+                        Maybe<BlockSyntax>.None),
+                ]),
+                Maybe<BlockSyntax>.None);
+
+            declarations.Add(new IfElseSyntax(
+                projection.Visible,
+                new BlockSyntax([
+                    new DeclarationSyntax("u8", assignedName, Maybe<ExpressionSyntax>.None, Maybe.From<ExpressionSyntax>(Constant(0))),
+                    PoolLoop(new ActorPool(layer.PoolName, 0), slotName, assignSlot),
+                ]),
+                Maybe<BlockSyntax>.None));
+
+            return declarations;
+        }
+
+        private static ExpressionSyntax CameraWithinBucket(string prefix, SpawnSpatialBucket bucket)
+        {
+            var high = new IdentifierSyntax($"{prefix}_camera_x_hi");
+            var low = new IdentifierSyntax($"{prefix}_camera_x_lo");
+            return And(
+                Unsigned16GreaterThanOrEqual(high, low, bucket.CameraStart),
+                Unsigned16LessThan(high, low, bucket.CameraEndExclusive));
+        }
+
+        private static ExpressionSyntax Unsigned16GreaterThanOrEqual(ExpressionSyntax high, ExpressionSyntax low, int value)
+        {
+            if (value <= 0)
+            {
+                return AlwaysTrue();
+            }
+
+            var highValue = value >> 8;
+            var lowValue = value & 0xFF;
+            return Or(
+                new BinaryExpressionSyntax(high, Constant(highValue), Operator.Get(">")),
+                And(
+                    new BinaryExpressionSyntax(high, Constant(highValue), Operator.Equal),
+                    new BinaryExpressionSyntax(low, Constant(lowValue), Operator.GreaterThanOrEqual)));
+        }
+
+        private static ExpressionSyntax Unsigned16LessThan(ExpressionSyntax high, ExpressionSyntax low, int value)
+        {
+            if (value >= 65536)
+            {
+                return AlwaysTrue();
+            }
+
+            var highValue = value >> 8;
+            var lowValue = value & 0xFF;
+            return Or(
+                new BinaryExpressionSyntax(high, Constant(highValue), Operator.LessThan),
+                And(
+                    new BinaryExpressionSyntax(high, Constant(highValue), Operator.Equal),
+                    new BinaryExpressionSyntax(low, Constant(lowValue), Operator.LessThan)));
+        }
+
+        private static ExpressionSyntax AlwaysTrue() =>
+            new BinaryExpressionSyntax(Constant(0), Constant(0), Operator.Equal);
 
         private static IEnumerable<StatementSyntax> SpawnValueDeclarations(ActorSpawnLayer layer, string prefix, string indexName)
         {
@@ -952,10 +1109,12 @@ public static partial class ActorFrameworkLowerer
             ExpressionSyntax worldXHigh,
             string prefix,
             int windowLeft,
-            int windowWidth)
+            int windowWidth,
+            string? cameraPrefix = null)
         {
-            var cameraXLow = $"{prefix}_camera_x_lo";
-            var cameraXHigh = $"{prefix}_camera_x_hi";
+            var cameraVariablePrefix = cameraPrefix ?? prefix;
+            var cameraXLow = $"{cameraVariablePrefix}_camera_x_lo";
+            var cameraXHigh = $"{cameraVariablePrefix}_camera_x_hi";
             var declarations = new List<StatementSyntax>();
 
             var screenX = $"{prefix}_screen_x";
