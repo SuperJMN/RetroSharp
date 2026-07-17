@@ -1,0 +1,45 @@
+{
+  "type": "map",
+  "orientation": "orthogonal",
+  "infinite": false,
+  "width": 40,
+  "height": 2,
+  "tilewidth": 8,
+  "tileheight": 8,
+  "properties": [
+    { "name": "retrosharpStreamY", "type": "int", "value": 10 },
+    { "name": "retrosharpWorldY", "type": "int", "value": 0 },
+    { "name": "retrosharpWorldHeight", "type": "int", "value": 2 }
+  ],
+  "layers": [
+    {
+      "type": "tilelayer",
+      "name": "world",
+      "width": 40,
+      "height": 2,
+      "data": [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+      ]
+    },
+    {
+      "type": "tilelayer",
+      "name": "collision",
+      "width": 40,
+      "height": 2,
+      "data": [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+      ]
+    },
+    {
+      "type": "objectgroup",
+      "name": "actors",
+      "objects": [
+        { "id": 1, "type": "Goomba", "x": 1000, "y": 8 },
+        { "id": 2, "type": "Goomba", "x": 1200, "y": 8 },
+        { "id": 3, "type": "Goomba", "x": 1400, "y": 8 }
+      ]
+    }
+  ]
+}

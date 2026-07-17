@@ -1,0 +1,5 @@
+{
+  "targets": ["gb", "nes"],
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": ["src/main.rs"]
+}

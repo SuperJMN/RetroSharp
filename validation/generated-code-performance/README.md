@@ -1,0 +1,45 @@
+# Generated-code performance baseline
+
+This directory owns the `GCP-0.1` Actor Framework characterization fixture and
+its refreshable exact report. It is validation input, not a sample or a public
+benchmark API.
+
+`fixture.retrosharp.json`, `src/main.rs`, and `assets/` are a complete valid
+two-target project. The validation materializer preserves that full Actor
+Framework program and changes only the isolated discovery dimension:
+
+- `wide-spawn-{3,8,16,24,32,48,64,96,128}` keeps pool capacity 2 and places
+  `Goomba` objects at `x = 1000 + i * 200`, `y = 8`;
+- `active-pool-{1,2,4,8}` gives the pool and object layer the same count and
+  places objects at `x = 16 + i * 16`, `y = 8`.
+
+Every logical iteration retains this order: `Actors.SpawnLayer`, `Update`,
+`TouchTiles`, `LandOnTiles`, `Draw`. The one-piece actor declaration means the
+pool capacity is also the declared hardware-sprite and worst-case scanline
+count; each report row records that declaration beside the target limit.
+
+Each materialized project is compiled by `CliRunner` to a temporary ROM. The
+target test also compiles the same composed source through the target compiler
+report seam, requires byte equality with the CLI ROM, and obtains the selected
+cartridge profile. No synthetic ROM is checked in.
+
+The observation protocol is 20 physical warm-up frames followed by 100
+physical observation frames on `GameBoyTestCpu` or `NesTestCpu`. A logical tick
+is the delta of the CPU's completed VBlank/frame waits. `longest-miss` is the
+longest consecutive physical-frame run without a new completed wait.
+`observation-cycles` is the modeled test-CPU cycle delta across only the 100
+observed frames; it is not wall-clock time or a whole-program WCET claim. Game
+Boy's normal reset baseline is 0 and NES's boot reset baseline is 1. Failure to
+reach warm-up, reset-vector re-entry, or zero completed waits is an explicit
+protocol failure and cannot become a performance row.
+
+`baseline.tsv` contains exactly 26 data rows: the 13 fixtures for Game Boy and
+then the same 13 for NES. Tests run every target matrix twice and require
+identical ROM hashes and serialized rows. The file is an intentional
+characterization snapshot, not a permanent success threshold for the current
+cliffs. A later optimization refreshes it deliberately by reviewing the full
+new report; it must not preserve slow tick counts merely to keep this file
+unchanged.
+
+The TSV serializer always writes literal LF line endings so the exact report is
+independent of the host operating system.
