@@ -78,6 +78,11 @@ hardware VBlank check. That path is bounded to 38 hardware sprites/152 bytes
 and 1,983 NTSC CPU cycles. Both paths then reset the statically allocated
 logical call-site bytes to `$FF`, so an unexecuted conditional draw cannot
 retain an earlier sprite. Startup initializes the full shadow and hardware OAM;
+source calls that accept projectile/effect requests after their `Draw()` phase
+cannot publish those new logical slots until a later `Draw()` and the following
+retained-OAM publication boundary. GCP-2.1 records that source-order contract
+explicitly so target-side addressing optimizations do not need to preserve an
+accidental one-frame visibility measurement.
 raw/direct compatibility operations remain separate.
 
 The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. In mapper-backed packed builds, request preparation completes outside VBlank and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 32 column tiles plus 9 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.

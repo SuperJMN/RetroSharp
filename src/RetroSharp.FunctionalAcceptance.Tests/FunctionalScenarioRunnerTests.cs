@@ -420,6 +420,35 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Spawn_to_visible_budget_can_model_draw_after_request_retained_oam_latency()
+    {
+        var scenario = IntegrityScenario(spriteOam: true) with
+        {
+            ObservationFrames = 3,
+            Budgets = new(0, 2, MaximumSpawnToVisibleFrames: 2),
+        };
+        var hidden = Sprite("projectile-0", false, [160, 8, 6, 0]);
+        var visible = Sprite("projectile-0", true, [64, 40, 6, 0]);
+        var observations = new[]
+        {
+            Frame(0, sprites: [hidden], spawn: new(null, null)),
+            Frame(1, sprites: [hidden], spawn: new(1, null)),
+            Frame(2, sprites: [hidden], spawn: new(1, null)),
+            Frame(3, sprites: [visible], spawn: new(1, 1)),
+        };
+        var oracle = new ScriptedOracle(frame => new(
+            frame,
+            Sprites: frame == 3
+                ? [ExpectedSprite("projectile-0", true, [64, 40, 6, 0])]
+                : [ExpectedSprite("projectile-0", false, [160, 8, 6, 0])]));
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations), oracle);
+
+        Assert.True(report.Passed, report.ToHumanReadable());
+        Assert.Equal(2, Assert.Single(report.TimingChecks, check => check.Metric == "spawn-to-visible").Observed);
+    }
+
+    [Fact]
     public void Spawn_budget_rejects_a_window_without_any_accepted_spawn()
     {
         var scenario = IntegrityScenario(spriteOam: true) with
