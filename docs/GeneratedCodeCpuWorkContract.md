@@ -245,6 +245,11 @@ descriptors; GCP-3.1 owns their executable projection into the report model.
 | `NesLargeWorldCameraTests` | Resident complete-stage column preparation <= 13,000 and bounded packed column commit <= 2,136 CPU cycles. |
 | `validation/generated-code-performance/baseline.tsv` | Exact ROM/profile/hash plus 20 warm-up and 100-frame cadence classification for the 13 canonical cases per target. |
 
+`baseline.tsv` is the refreshable current snapshot. In a post-GCP-1.1 tree it
+contains the constant-cost ROM-lookup results. The pre-GCP-1.1 equality counts
+and cadence observations retained in section 9 remain frozen GCP-0.2
+calibration evidence rather than a description of the current lookup shape.
+
 Thresholds owned by a particular packed-world or cartridge profile must not be
 silently reused for another profile. New descriptors require a focused
 emitted-code/runtime test that measures the exact production bytes and records
@@ -275,7 +280,7 @@ The boundary between accepted GCP-0.2 policy and GCP-3.1 calibration is:
 | Contributor family | What is exact or numeric now | Descriptor GCP-3.1 must produce | Why no cycle number is claimed here |
 | --- | --- | --- | --- |
 | `actor.spawn.recycle` / `actor.spawn.scan` | Literal pool/spawn visit counts from generated `for` bounds. | Target/profile lower and upper cycles per complete traversal, including loop control and active/used branch paths. | These loops are inline in `Main`; there is no isolated emitted symbol or current test-CPU timing boundary. |
-| `actor.spawn.record-read` | Exactly 13 field materializations per unused record; conditional equality counts below are derivable from the generated expression tree. | Per-record target range including inline condition ladders today and ROM/window reads after GCP-1.1. | Equality counts are target-neutral work units, not LR35902/6502 cycles; branch direction, inline loads, and bank access decide cycles. |
+| `actor.spawn.record-read` | Exactly 13 field materializations per unused record; the historical conditional equality counts below are derivable from the pre-GCP-1.1 generated expression tree. | Per-record target range covering the historical inline condition ladders and current ROM/window reads after GCP-1.1. | Equality counts are target-neutral work units, not LR35902/6502 cycles; branch direction, inline loads, and bank access decide cycles. |
 | `actor.spawn.slot-search` | Literal pool-capacity loop for every eligible unused record. | Empty/full/success target branch range, multiplied by the compiler-known maximum eligible candidates. | The emitted loop continues through its fixed capacity after assignment; source-level candidate count alone is not a cycle price. |
 | `actor.phase.*` | Literal pool-capacity visits for `Update`, `TouchTiles`, `LandOnTiles`, and `Draw`; query/draw call-site bounds below. | Target/profile range for inactive/active/kind paths, with `target.struct-array-address` as non-additive child detail. | Phases inline target operations and repeated dynamic struct addressing; counting AST statements would be false precision. |
 | `input.poll` | Exactly one call in every canonical tick. | One target-owned finite emitted-path range for the complete input snapshot/update. | Current tests validate values and hardware reads, but do not isolate total operation cycles as a reusable descriptor. |
@@ -292,7 +297,7 @@ seams and populating these target ranges is GCP-3.1 implementation work. It does
 not change the accepted unit, range algebra, stable ids, composition rules, or
 `GCP1001`/`GCP1002` thresholds.
 
-## 9. GCP-0.1 fixture classification
+## 9. GCP-0.1 pre-optimization fixture classification
 
 The canonical source executes `WaitVBlank`, `Input.Poll`, camera position/apply,
 spawn activation, `Update`, `TouchTiles`, `LandOnTiles`, and `Draw` in that
@@ -307,9 +312,9 @@ order. Let `S` be authored spawn count and `P` pool capacity.
   collision/sprite paths. The spawn upper path still includes unused-record
   reads and slot search because that path can occur on a valid later tick.
 
-The current generated lookup shape also gives an exact target-neutral work
-calculation. A non-uniform field is a conditional chain with `S - 1` equality
-nodes. Evaluating it for every authored index performs
+The pre-GCP-1.1 generated lookup shape frozen by GCP-0.2 also gives an exact
+target-neutral work calculation. A non-uniform field is a conditional chain
+with `S - 1` equality nodes. Evaluating it for every authored index performs
 `(S - 1) * (S + 2) / 2` equality checks. Wide-spawn has two non-uniform fields
 (`x` and `xHi`), so its upper equality subtotal is
 `(S - 1) * (S + 2)`. Active-pool has only non-uniform `x`, so its corresponding
@@ -349,8 +354,9 @@ Spawn scan and pool traversal counts remain exact; stable draw call-site counts
 retain their literal upper bound regardless of those states.
 
 The final two columns are observed scheduling intervals (`100 / logical ticks`)
-from GCP-0.1, not static instruction-cost estimates. `fit` means 100/100;
-`overrun` means the exact ROM missed at least one physical-frame cadence gate.
+from the pre-GCP-1.1 GCP-0.1 snapshot, not static instruction-cost estimates.
+`fit` means 100/100; `overrun` means the exact ROM missed at least one
+physical-frame cadence gate.
 
 | Case | Compiler-known classification basis | GB observation | NES observation |
 | --- | --- | --- | --- |

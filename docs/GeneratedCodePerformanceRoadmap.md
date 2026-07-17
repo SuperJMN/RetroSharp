@@ -52,7 +52,7 @@ The 100/100 figures are deterministic harness gates, not claims about wall-clock
 emulator scheduling. `GCP-0.1` owns the canonical fixture and observation
 protocol before later tasks may use those figures as acceptance evidence.
 
-## 2. Discovery baseline
+## 2. Historical discovery baseline (pre-GCP-1.1)
 
 The 2026-07-17 audit compiled synthetic programs through the current CLI and
 ran their exact ROM bytes on the in-process cycle-aware Game Boy and NES test
@@ -67,9 +67,12 @@ The audit deliberately isolates two dimensions:
 - **active pool:** every declared slot active, one-piece actor geometry, and
   pool capacity increasing from one to eight.
 
-These artifacts currently live outside the repository and are discovery
-evidence only. `GCP-0.1` must replace them with repository-owned source fixtures
-and a deterministic report.
+These figures are the frozen pre-optimization discovery evidence used to
+calibrate GCP-0.2. GCP-0.1 has since replaced the external artifacts with
+repository-owned source fixtures and a deterministic report. The refreshable
+`validation/generated-code-performance/baseline.tsv` snapshot records the
+current emitted ROMs; after GCP-1.1 it therefore differs intentionally from the
+historical tables below.
 
 ### Wide spawn table
 
@@ -441,10 +444,11 @@ GCP-0.1 reproducible baseline
   deterministic byte column in cartridge ROM; all-uniform columns still lower
   to immediates. The column payload travels as typed compiler metadata from the
   shared Actor Framework plan to each target; user source cannot declare or
-  forge that metadata. Focused 16/64/128/240-record tests compare all 13 columns in
-  authored order and verify a single fixed instruction shape per lookup. The
-  direct Game Boy shape costs 56 cycles; the old 16-record ladder ranged from
-  60 to 608 cycles, so the last-record delta is -552 cycles. NES costs 9 cycles
+  forge that metadata. Focused 16/64/128/240-record tests compare all 13
+  columns in authored order and verify a single fixed instruction shape per
+  lookup. The direct Game Boy shape costs 56 cycles; the old 16-record ladder
+  ranged from 60 to 608 cycles, so the last-record delta is -552 cycles. NES
+  costs 9 cycles
   without an indexed page crossing and 10 with one; the old 16-record ladder
   ranged from 12 to 122 cycles, so the conservative last-record delta is -112
   cycles. For the focused 16-record/two-varying-column wide-spawn probe, Game
