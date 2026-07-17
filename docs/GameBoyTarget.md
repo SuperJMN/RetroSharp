@@ -93,17 +93,23 @@ bytes and 28 T-cycles are removed every time the generic address materializer
 is emitted/executed. The GCP-0.1 active-pool programs contain 116 such emitted
 sites at every capacity. Their exact ROM-only measurements are:
 
-| Active capacity | Program bytes before | Program bytes after | Address cycles per materialization | Logical waits / 100 frames before | After |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 1 | 9,231 | 8,419 | 100 -> 72 | 100 | 100 |
-| 2 | 9,310 | 8,498 | 100 -> 72 | 100 | 100 |
-| 4 | 9,450 | 8,638 | 100 -> 72 | 100 | 100 |
-| 8 | 9,730 | 8,918 | 100 -> 72 | 50 | 77 |
+| Active capacity | Program bytes before | Program bytes after GCP-2.2 | Address cycles per materialization | Logical waits / 100 frames before | After GCP-2.2 | Final GCP-3.2 |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9,231 | 8,419 | 100 -> 72 | 100 | 100 | 100 |
+| 2 | 9,310 | 8,498 | 100 -> 72 | 100 | 100 | 100 |
+| 4 | 9,450 | 8,638 | 100 -> 72 | 100 | 100 | 100 |
+| 8 | 9,730 | 8,918 | 100 -> 72 | 50 | 77 | 100 |
 
 The 32 KiB cartridge allocation is unchanged; `program bytes` is the final
 link report's emitted `program` segment total. The capacity-eight cadence gain
-is attributable to this target-only address shape, while final 100/100 active-
-pool acceptance remains joint GCP-3.2 work after the shared and NES slices.
+through GCP-2.2 is attributable to this target-only address shape.
+GCP-3.2 closes the remaining active-pool gap by specializing screen-space
+camera AABB collision reads on small maps: when the generated `WorldMap2D`
+proves a sampled source row has no requested flags, or that every column in
+the row has at least one requested flag, the Game Boy lowering skips the
+per-column flag-table probes. This is still a target-owned lowering of
+`Camera.ScreenAabbTiles(...)` and `Camera.ScreenAabbHitTop(...)`, not a public
+source API, mutable cache, or actor phase reorder.
 
 ## SDK Operation Boundary
 
@@ -515,6 +521,13 @@ for the #332 baseline/master/final measurements.
 The preferred `Camera.AabbTiles(...)`, `Camera.AabbHitTop(...)`, `Camera.ScreenAabbTiles(...)`, and `Camera.ScreenAabbHitTop(...)` spellings are declared by the `RetroSharp.Portable2D` source package as inline helpers over Game Boy target intrinsics. Those descriptors carry the hidden `"default"` world id and requested flag mask as compile-time operands while preserving the SDK operation shape and capability checks.
 
 `Camera.ScreenAabbTiles(screenX, screenY, width, height, flags)` and `Camera.ScreenAabbHitTop(screenX, screenY, width, height, flags)` use fully projected screen-space AABBs, adding the current camera X/Y state inside the backend. They are the actor-framework collision form for wide world Y actors; hit-top returns a screen-pixel top so the framework can add camera Y back into `y`/`yHi`.
+
+For small generated collision maps, the Game Boy lowering also uses
+compile-time row coverage from `WorldMap2D`: a row with no requested flags can
+return no hit without column reads, while a row whose every column contains one
+requested flag can return hit or hit-top after only the row check. Mixed rows
+fall back to the normal source-column flag probes, preserving exact AABB
+semantics.
 
 Although screen hit-top is semantically byte-range, its source signature and
 descriptor are `I16`. Under the accepted word ABI, a word destination receives

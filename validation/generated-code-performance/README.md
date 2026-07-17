@@ -63,3 +63,13 @@ capacity 8 improves from 50/100 with a one-frame longest miss to 100/100 with
 no miss. The NES ROM container remains 40,976 bytes, while the active-pool
 fixed payload is 3,132 bytes smaller at every recorded capacity. Game Boy rows
 remain the independent target snapshot.
+
+GCP-3.2 deliberately refreshes the Game Boy rows after bounding screen-space
+camera AABB collision checks on small maps with compile-time row facts. The
+canonical active-pool map has an empty row and a fully solid row for the
+requested flags, so `Camera.ScreenAabbTiles(...)` and
+`Camera.ScreenAabbHitTop(...)` can skip flag-table column probes when the row
+alone determines the result. The Game Boy `active-pool-8` row improves from
+77/100 with a one-frame longest miss to 100/100 with no miss; the wide-spawn
+128 row remains 100/100. NES rows remain the independent target snapshot from
+GCP-2.3.
