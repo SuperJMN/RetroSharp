@@ -524,13 +524,35 @@ GCP-0.1 reproducible baseline
 - **Candidate modules:** `GameBoyRuntimeCompiler.Expressions.cs`, storage/layout
   modules, `GbBuilder`, Game Boy struct-array emitted-code tests, and
   `ActorFrameworkActorsTests`.
-- **Work:** choose a bounded multiply, address cursor, or loop-aware reuse seam;
-  cover mixed-width fields and SDK byte-expression indices; preserve register
-  liveness and existing storage layout; record bytes/cycles.
-- **Acceptance:** lookup cost is bounded independently of struct stride or one
-  accepted logarithmic/constant target shape is documented; repeated fields for
-  one slot reuse safe address/index work; general struct-array byte/value traces
-  remain exact; actor cadence improves without new public semantics.
+- **Accepted shape (GCP-2.2 / #394):** the Game Boy target keeps the original
+  byte index in `B` and lowers multiplication by constant stride `m` as a
+  binary chain of `floor(log2(m))` doublings plus `popcount(m) - 1` additions
+  of that retained index. Ordinary and SDK `RuntimeIndexedField` paths share
+  this materializer. It is logarithmic in stride, uses no helper, scratch RAM,
+  hidden cursor, layout change, or public semantic, and preserves the existing
+  modulo-byte address result in `A` before forming `HL`. Within one
+  `Sprite.Draw`, two or more direct fields from the same array and byte-local
+  index reuse that offset in `DE`; a different base/index disables reuse and a
+  `finally`-bounded operation scope prevents it from crossing source calls or
+  statements. The offset is emitted eagerly before internal flip branches, so
+  reuse never depends on code-generator traversal order or the runtime path.
+- **Measured result:** the canonical stride-13 Actor address falls from 23
+  bytes / 100 T-cycles to 16 bytes / 72 T-cycles per materialization. Each
+  active-pool ROM has 116 emitted sites, reducing its final `program` segments
+  by 812 bytes: capacities 1/2/4/8 move from
+  9,231/9,310/9,450/9,730 to 8,419/8,498/8,638/8,918 bytes. Exact logical waits
+  over 100 observed frames remain 100/100 at capacities 1, 2, and 4 and improve
+  from 50 to 77 at capacity 8; the cartridge allocation remains 32 KiB.
+- **Acceptance evidence:** mixed-width byte/word runtime mutation traces remain
+  exact; Actor lowering exercises SDK byte-expression indices; the refreshed
+  GCP-0.1 Game Boy rows pin deterministic hashes and cadence. Final 100/100 at
+  capacity 8 remains the joint result of the remaining Wave 2 slices, not a
+  claim of this target-only task. Separate emission/runtime regressions pin
+  same-index reuse, different-index non-reuse, operation-scope invalidation,
+  and resulting OAM values. Each repeated field costs 4 bytes / 20 T-cycles,
+  down from 13 / 60 at stride 4 or 16 / 72 at stride 13. GCP-3.1 should report
+  the shape as non-additive `target.struct-array-address` child detail beneath
+  its owning `actor.phase.*` subtotal, never as a second phase charge.
 - **Validation:** Game Boy struct-array emitted bytes and runtime values;
   `GCP-0.1`; actor exact-ROM acceptance; full tests; ROM dry-run;
   `git diff --check`.

@@ -431,12 +431,34 @@ internal sealed partial class GameBoyRuntimeCompiler
         var layout = StructArrayLayoutFor(baseIdentifier);
         _ = layout.FieldOffsets[fieldName];
         var baseAddress = VariableAddress(IndexedMemberName(baseIdentifier, 0, fieldName));
+        if (runtimeIndexedAddressReuse is
+            {
+                BaseName: var reuseBase,
+                IndexName: var reuseIndex,
+            }
+            && reuseBase == baseIdentifier
+            && index is SdkByteExpression.Variable { Location: SdkStorageLocation.Local local }
+            && reuseIndex == local.Name)
+        {
+            builder.LoadHl(baseAddress);
+            builder.AddHlDe();
+            return;
+        }
+
         EmitSdkByteExpressionToA(index);
         EmitMultiplyA(layout.Stride);
         builder.LoadHl(baseAddress);
         builder.LoadEFromA();
         builder.LoadDImmediate(0);
         builder.AddHlDe();
+    }
+
+    private void EmitRuntimeIndexedAddressReuseOffset(GameBoyRuntimeIndexedAddressReuse reuse)
+    {
+        builder.LoadA(VariableAddress(reuse.IndexName));
+        EmitMultiplyA(StructArrayLayoutFor(reuse.BaseName).Stride);
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
     }
 
     private void EmitMultiplyA(int multiplier)
@@ -447,9 +469,19 @@ internal sealed partial class GameBoyRuntimeCompiler
         }
 
         builder.LoadBFromA();
-        for (var count = 1; count < multiplier; count++)
+        var highestBit = 1;
+        while (highestBit <= multiplier / 2)
         {
-            builder.AddAFromB();
+            highestBit <<= 1;
+        }
+
+        for (var bit = highestBit >> 1; bit != 0; bit >>= 1)
+        {
+            builder.AddAFromA();
+            if ((multiplier & bit) != 0)
+            {
+                builder.AddAFromB();
+            }
         }
     }
 

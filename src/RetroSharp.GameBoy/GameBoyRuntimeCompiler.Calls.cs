@@ -66,6 +66,22 @@ internal sealed partial class GameBoyRuntimeCompiler
         sdkOperationLowerer.Emit(operation);
     }
 
+    private void BeginRuntimeIndexedAddressReuse(GameBoyRuntimeIndexedAddressReuse reuse)
+    {
+        if (runtimeIndexedAddressReuse is not null)
+        {
+            throw new InvalidOperationException("Game Boy runtime indexed address reuse scopes cannot be nested.");
+        }
+
+        EmitRuntimeIndexedAddressReuseOffset(reuse);
+        runtimeIndexedAddressReuse = reuse;
+    }
+
+    private void EndRuntimeIndexedAddressReuse()
+    {
+        runtimeIndexedAddressReuse = null;
+    }
+
     private void EmitSdkAudioOperation(SdkAudioOperation operation)
     {
         GameBoySdkAudioOperationLowerer.Emit(this, operation);
