@@ -15,6 +15,7 @@
 - [docs/ProjectOverview.md](docs/ProjectOverview.md): reader-facing overview of the language, framework, targets, and objectives.
 - [docs/ArchitectureRoadmap.md](docs/ArchitectureRoadmap.md): language vs portable SDK vs target-intrinsics boundaries.
 - [docs/LargeWorldsRoadmap.md](docs/LargeWorldsRoadmap.md): executable full-stage1 plan for packed worlds, 16-bit addressing, Game Boy MBC1 data, NES mappers, and bounded streaming.
+- [docs/GeneratedCodePerformanceRoadmap.md](docs/GeneratedCodePerformanceRoadmap.md): measured Actor Framework code-generation cliffs, target CPU-work contract, issue graph, and joint GB/NES cadence acceptance plan.
 - [docs/FunctionalRomAcceptance.md](docs/FunctionalRomAcceptance.md): shared exact-ROM scenario schema, timing budgets, strict transient integrity, GB/NES adapters, and CI tiers.
 - [docs/ActorProjectileFunctionalAcceptance.md](docs/ActorProjectileFunctionalAcceptance.md): eight exact actor/projectile GB/NES timelines, retained OAM publication, pool lifecycle checks, and MCP parity evidence.
 - [docs/NesLargeWorldsCartridgeProfile.md](docs/NesLargeWorldsCartridgeProfile.md): accepted LW-0.3 mapper-4/TVROM NES profile, measured stage1 bank layout, restoration invariant, mapper-0 policy, and emulator evidence.

@@ -11,7 +11,7 @@ For generic repo orientation, read `../AGENTS.md` first. For memory-derived cont
 
 - Architecture and broad iteration backlog: `docs/ArchitectureRoadmap.md`
 - Dedicated epic execution plans: linked `docs/*Roadmap.md` files such as
-  `docs/LargeWorldsRoadmap.md`
+  `docs/LargeWorldsRoadmap.md` and `docs/GeneratedCodePerformanceRoadmap.md`
 - Agent entrypoint: `AGENTS.md`
 - Agent memory/context: `docs/AgentContext.md`
 - Issue seeding script: `tools/roadmap/seed_github_issues.py`
