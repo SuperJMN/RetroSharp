@@ -7,6 +7,16 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- GCP planning / epic #387 publishes the measured generated-code performance
+  roadmap through PR #386. The synthetic discovery baseline falls to 50/100
+  ticks at 32 distant spawns on Game Boy and at eight active one-piece actors
+  on both targets. Milestone 13 owns the execution chain. GCP-0.1 / #388 is the
+  only initial unblocked child; GCP-0.2 / #389 and constant-cost spawn records
+  GCP-1.1 / #390 are natively blocked by #388; existing AF-5.10 / #244 is a
+  native child blocked by #390. Later GCP-2.x/GCP-3.x issues remain deliberately
+  unseeded until the measurement and CPU-work contracts stabilize their bodies.
+  Start from `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch epic
+  #387 as an implementation task or duplicate #244.
 - AIN-12 / #378 makes the remaining architecture guardrails rename-safe.
   Target SDK and Actor ownership remain compiled-symbol/IL contracts; all seven
   Game Boy and four NES focused lowering suites declare typed test-ownership

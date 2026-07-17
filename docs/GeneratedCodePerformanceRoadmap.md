@@ -1,8 +1,11 @@
 # Generated Code Performance Roadmap (Game Boy and NES)
 
-Status: **proposed execution plan; discovery baseline reproduced on 2026-07-17.**
-Remote milestone, epic, and first-wave issue links are added after this document
-lands on `master`.
+Status: **active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
+and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); discovery
+baseline reproduced on 2026-07-17.** The first seeded frontier is
+[GCP-0.1 / #388](https://github.com/SuperJMN/RetroSharp/issues/388); later waves
+remain intentionally unseeded until the measurement and CPU-work contracts
+stabilize their remote bodies.
 
 This roadmap turns the measured Actor Framework code-generation bottlenecks
 into bounded work for Game Boy and NES. It covers compiler-generated work whose
@@ -285,6 +288,8 @@ GCP-0.1 reproducible baseline
   the wide-spawn and active-pool scaling cliffs on exact generated GB/NES ROMs.
 - **Layer:** validation and measurement.
 - **Depends on:** none.
+- **Remote:** [#388](https://github.com/SuperJMN/RetroSharp/issues/388), the
+  initial unblocked child of epic #387.
 - **Candidate modules:** focused Actor Framework tests; Game Boy and NES test
   CPUs; `src/RetroSharp.FunctionalAcceptance`; a purpose-named performance
   fixture/report module under `validation/` or the target test projects.
@@ -325,7 +330,10 @@ GCP-0.1 reproducible baseline
   charged, in which target-owned units, how unknown user work is represented,
   and when compilation warns or fails.
 - **Layer:** shared capability model plus target-specific cost policy.
-- **Depends on:** `GCP-0.1`.
+- **Depends on:** [GCP-0.1 / #388](https://github.com/SuperJMN/RetroSharp/issues/388)
+  through a native blocked-by relationship.
+- **Remote:** [#389](https://github.com/SuperJMN/RetroSharp/issues/389), child
+  of epic #387.
 - **Candidate modules:** `Sdk2DFrameBudget`, `Sdk2DOperationCollector`,
   `Sdk2DOperationValidator`, `Target2DCapabilities`, target compilers, target
   acceptance docs, and a focused ADR/contract document if the decision does
@@ -363,7 +371,10 @@ GCP-0.1 reproducible baseline
 - **Outcome:** loading one authored spawn record has a cost independent of the
   total layer length on both targets.
 - **Layer:** Actor Framework asset/lowering plus target-owned ROM data access.
-- **Depends on:** `GCP-0.1`.
+- **Depends on:** [GCP-0.1 / #388](https://github.com/SuperJMN/RetroSharp/issues/388)
+  through a native blocked-by relationship.
+- **Remote:** [#390](https://github.com/SuperJMN/RetroSharp/issues/390), child
+  of epic #387 and native blocker of AF-5.10 / #244.
 - **Candidate modules:** `ActorFrameworkLowerer.Actors.cs`,
   `ActorFrameworkLowerer.Actors.Generation.cs`, generated-program
   contributions, Game Boy/NES runtime compilers and cartridge data placement,
@@ -584,24 +595,32 @@ threshold changes rather than becoming a second independent contract.
 
 ## 10. Remote tracking
 
-- Planned milestone: **Generated Code Performance v1**. Its description states
-  that it owns measurement, bounded generated-work optimization, CPU-work
-  diagnostics, and joint GB/NES cadence acceptance; it remains open until
-  `GCP-3.2` merges.
-- Planned parent/integrator issue: **EPIC: Generated Code Performance v1 —
-  predictable GB/NES frame cadence**. Its body links this roadmap, names the
-  destination in section 1, lists only native child state/dependencies, assigns
-  sequencing and final validation to the integrator, and repeats that the
-  parent must never be dispatched as an implementation task.
+- Milestone: [Generated Code Performance v1 — milestone
+  13](https://github.com/SuperJMN/RetroSharp/milestone/13). It owns measurement,
+  bounded generated-work optimization, CPU-work diagnostics, and joint GB/NES
+  cadence acceptance; it remains open until `GCP-3.2` merges.
+- Parent/integrator issue: [#387 — EPIC: Generated Code Performance v1 —
+  predictable GB/NES frame cadence](https://github.com/SuperJMN/RetroSharp/issues/387).
+  Its native subissues and blocked-by edges own live state; the parent must
+  never be dispatched as an implementation task.
 - Parent acceptance: every section 1 destination has a closed child/evidence
   link, `GCP-3.2` records the final exact-ROM report, no current functional gate
   regresses, and the roadmap/target docs match the merged implementation.
 - Parent non-goals: no direct production implementation, no arbitrary-program
   WCET claim, no public cycle API, and no unrelated builder/mapper cleanup.
-- Initial frontier to seed after publication: `GCP-0.1`, `GCP-0.2`, and
-  `GCP-1.1`; attach existing
-  [AF-5.10 / #244](https://github.com/SuperJMN/RetroSharp/issues/244) as a native
-  blocked child.
+- Initial native graph:
+  - [#388 — GCP-0.1: freeze reproducible generated-code performance
+    baselines](https://github.com/SuperJMN/RetroSharp/issues/388) is the only
+    open, unblocked child.
+  - [#389 — GCP-0.2: define the target CPU-work budget and diagnostic
+    contract](https://github.com/SuperJMN/RetroSharp/issues/389) is blocked by
+    #388.
+  - [#390 — GCP-1.1: emit constant-cost ROM spawn record
+    lookups](https://github.com/SuperJMN/RetroSharp/issues/390) is blocked by
+    #388.
+  - Existing [#244 — AF-5.10: reduce actor spawn activation scan cost for wide
+    maps](https://github.com/SuperJMN/RetroSharp/issues/244) is a native child of
+    #387 and is blocked by #390; no duplicate GCP issue exists.
 - Later tasks `GCP-2.1` through `GCP-3.2` remain issue-ready here but are not
   seeded until the measurement and CPU-work contracts make their final remote
   bodies stable.

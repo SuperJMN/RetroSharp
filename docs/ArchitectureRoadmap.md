@@ -31,8 +31,9 @@ active one-piece actors on both targets, even though those scenes can satisfy
 the existing sprite, scanline, and background-write budgets. The executable
 measurement, constant-cost table, target address-lowering, CPU-work diagnostic,
 and joint acceptance graph lives in
-`docs/GeneratedCodePerformanceRoadmap.md`. Existing AF-5.10 / #244 is reused as
-the spatial spawn-index task rather than duplicated.
+`docs/GeneratedCodePerformanceRoadmap.md` under [GitHub epic
+#387](https://github.com/SuperJMN/RetroSharp/issues/387). Existing AF-5.10 / #244
+is reused as the spatial spawn-index task rather than duplicated.
 
 The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
 contract as deterministic 8x8 source-metatile chunks with independently
@@ -1736,8 +1737,11 @@ Acceptance criteria:
 
 ### Iteration 16: Predictable Generated-Code CPU Cost
 
-Status: proposed under `docs/GeneratedCodePerformanceRoadmap.md`; remote epic
-tracking is created after the dedicated roadmap lands.
+Status: active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
+and [Generated Code Performance v1 milestone
+13](https://github.com/SuperJMN/RetroSharp/milestone/13). The first native
+frontier is GCP-0.1 / #388; GCP-0.2 / #389 and GCP-1.1 / #390 are blocked by
+#388, while existing AF-5.10 / #244 is blocked by #390.
 
 Purpose: keep high-level Actor Framework ergonomics honestly zero-cost by
 making their emitted runtime work scale with active/local content, improving
