@@ -139,6 +139,54 @@ internal static class FunctionalScenarioValidator
             throw new InvalidOperationException(
                 $"Functional scenario '{scenario.Id}' audio.serviceExpectedByDefault must match expectedFeatures.audioService.");
         }
+        if (scenario.Audio.MinimumRegisterEvents < 0 ||
+            scenario.Audio.MaximumRegisterEvents < 0 ||
+            scenario.Audio.MaximumRegisterEventGapFrames < 0 ||
+            scenario.Audio.MinimumSoundEffectStarts < 0 ||
+            scenario.Audio.MaximumSoundEffectStarts < 0 ||
+            scenario.Audio.MinimumSoundEffectCompletions < 0 ||
+            scenario.Audio.MaximumSoundEffectCompletions < 0 ||
+            scenario.Audio.MaximumSoundEffectRestarts < 0 ||
+            scenario.Audio.MinimumDpcmStarts < 0 ||
+            scenario.Audio.MaximumDpcmStarts < 0 ||
+            scenario.Audio.MinimumDpcmCompletions < 0 ||
+            scenario.Audio.MaximumDpcmCompletions < 0 ||
+            scenario.Audio.MaximumDpcmRestarts < 0)
+        {
+            throw new InvalidOperationException($"Functional scenario '{scenario.Id}' audio progress budgets cannot be negative.");
+        }
+        if (scenario.ExpectedFeatures.AudioProgress &&
+            (scenario.Audio.MaximumRegisterEvents is null ||
+             scenario.Audio.MaximumRegisterEventGapFrames is null ||
+             scenario.Audio.MaximumSoundEffectStarts is null ||
+             scenario.Audio.MaximumSoundEffectCompletions is null ||
+             scenario.Audio.MaximumDpcmStarts is null ||
+             scenario.Audio.MaximumDpcmCompletions is null ||
+             scenario.Audio.MusicActiveAtEnd is null ||
+             scenario.Audio.SoundEffectActiveAtEnd is null ||
+             scenario.Audio.DpcmActiveAtEnd is null ||
+             string.IsNullOrWhiteSpace(scenario.Audio.OrderedRegisterEventSha256)))
+        {
+            throw new InvalidOperationException(
+                $"Functional scenario '{scenario.Id}' audio progress acceptance requires exact upper bounds, end lifecycle states, and an ordered register-event digest.");
+        }
+        if (scenario.ExpectedFeatures.AudioProgress &&
+            (scenario.Audio.MaximumRegisterEvents < scenario.Audio.MinimumRegisterEvents ||
+             scenario.Audio.MaximumSoundEffectStarts < scenario.Audio.MinimumSoundEffectStarts ||
+             scenario.Audio.MaximumSoundEffectCompletions < scenario.Audio.MinimumSoundEffectCompletions ||
+             scenario.Audio.MaximumDpcmStarts < scenario.Audio.MinimumDpcmStarts ||
+             scenario.Audio.MaximumDpcmCompletions < scenario.Audio.MinimumDpcmCompletions))
+        {
+            throw new InvalidOperationException(
+                $"Functional scenario '{scenario.Id}' audio progress maximums cannot be lower than their minimums.");
+        }
+        if (scenario.ExpectedFeatures.AudioProgress &&
+            (scenario.Audio.OrderedRegisterEventSha256!.Length != 64 ||
+             scenario.Audio.OrderedRegisterEventSha256.Any(character => !Uri.IsHexDigit(character))))
+        {
+            throw new InvalidOperationException(
+                $"Functional scenario '{scenario.Id}' orderedRegisterEventSha256 must be a 64-character SHA-256 hex digest.");
+        }
 
         if (scenario.ExpectedFeatures.CameraLifecycle &&
             scenario.Budgets.MaximumRequestToResidentFrames is null &&

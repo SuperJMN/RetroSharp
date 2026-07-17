@@ -2,7 +2,8 @@
 
 Status: implemented shared contract for CSL-2 / #337, with the canonical
 static/source-camera rung bound by CSL-3 / #338 and the packed Tiled
-production matrix bound by RPH-3.5 / #339. CSL-6 / #341 adds the sustained
+production matrix bound by RPH-3.5 / #339. CSL-5 / #340 adds ordered audio
+progress and the shared mixed-load rung, CSL-6 / #341 adds the sustained
 actor/projectile sprite-integrity rung, and CSL-7 / #342 adds the shared
 platformer landing/reset rung.
 
@@ -53,7 +54,7 @@ Warm-up affects timing only. The runner captures frame zero, executes every phys
 
 - Gameplay ratio is `gameplay tick delta / observation frames`.
 - A missed gameplay frame is a frame with no positive gameplay-counter delta; the longest consecutive streak is checked.
-- Authored-silent audio frames declared by the scenario do not count as starvation. The adapter cannot label a stalled frame as silence. Active frames check the longest zero-service streak and absolute cumulative drift from one service tick per active frame.
+- Audio service and audible progression are separate. When service is enabled, every physical frame requires its heartbeat; authored silence cannot excuse a missing `Audio.Update`. Authored-silence spans apply only to ordered register-event gap expectations. Active frames check the longest zero-service streak and absolute cumulative drift.
 - Input latency starts on the first frame of an input span and ends on the first change of its declared response signal.
 - Spawn latency starts at each monotonically sequenced logical activation and ends when that same sequence first appears in retained OAM. An unresolved activation, a visibility sequence that overtakes an earlier spawn, or a gap in either sequence fails independently of the numeric deadline.
 - Camera latency starts when a new request sequence appears and ends when the same sequence becomes resident or visible. Requested, resident, committed, and visible sequence counts remain separate in the report.
@@ -145,6 +146,15 @@ reset. Every retained frame also checks the authored packed background, the
 complete player metasprite and unused OAM, bank/mapper restoration, and legal
 video/OAM timing. See
 [`PlatformerLandingFunctionalAcceptance.md`](PlatformerLandingFunctionalAcceptance.md).
+
+CSL-5 binds `audio-mixed-load` on Game Boy and NES to one neutral production
+loop with BGM, two completed SFX, airborne work, collision probes, two moving
+metasprites, packed background/camera work, and exact physical-frame counters.
+The contract separately checks service heartbeat, deterministic ordered APU
+events, SFX/DPCM lifecycle, gameplay cadence, retained visuals, bank state,
+and legal writes. It also gates the exact runner over eleven input-start phases
+and rejects controlled starvation. See
+[`AudioMixedLoadFunctionalAcceptance.md`](AudioMixedLoadFunctionalAcceptance.md).
 
 The production targets retain logical sprites before publication. Game Boy
 logical draws update the `$C600` shadow page and a ten-byte HRAM routine starts

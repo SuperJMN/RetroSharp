@@ -30,18 +30,18 @@ physical frames.
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | `tiled-tall` GB | `db0266c27ec411c8ce40dcf85845e7234f52f328b47086284d7c0cea9e2de958` | 360 | 360 / 360 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-short` GB | `0dfd933e05d4c6c9081125558b4c6d11921695789afa898adde9f690ab25dbd5` | 1024 | 1024 / 1024 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-short` NES | `8b11c98cef004d26542a944a3aedb1d2d4cad699b7a44ed02dbcb16eaeed728a` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-short` NES | `ca20dd28cf999978fff791109b5255764584b884f9e110edde772e97bace4f22` | 1024 | 1018 / 1024 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-full` GB | `f712f72b53955fecf5d501624469d8acb72e0bcb9ea322751660dda9f938cc9c` | 2584 | 2584 / 2584 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-full` NES | `72591693ba0e5347dd356f679e3544e25f47741399b1b4e87e3d42344548381c` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
+| `tiled-hscroll-full` NES | `344ae867796fef03691baaeba9167950a645bbb72756d41404561beac4256073` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-offset` GB | `8f948c2e55a8b7833244005ed3199d73f20bd78028332f2f6741e334b2301c9c` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
-| `tiled-hscroll-offset` NES | `a69e0b6a85e11990cf5933cc8d71f8a649db7a8ad7e1d420b9b5e19f9282cabc` | 420 | 418 / 420 (0.995) | 1 | 0 / 1 | 0 |
+| `tiled-hscroll-offset` NES | `e0a0a7865d1594d19a4412bf5bc167b975eb1caf7dcfe5ca0c567cab1679d942` | 420 | 418 / 420 (0.995) | 1 | 0 / 2 | 0 |
 | `tiled-vscroll` GB | `ad9e91a65d9b4ac1f3c741115ec364834205d603d1191bec2d8722f96e24e193` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
-| `tiled-vscroll` NES | `9738cd74d6ecae7a25afd7e6072ab8d2d950e0ccfb4509f2a67976f0bc2b9644` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
+| `tiled-vscroll` NES | `cbf9fbf1f5159a52258431403f7ef9fcf2532055808d5d6fa82bf159eaddde74` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
 | `tiled-diagonal` GB | `a940a0bc5058e04c64e31c00d34405e3817bf1c3b21a437d47e18f658dee5344` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
 | `tiled-free-scroll` GB | `b3306969a5d7c65dd51424b1554c5a75bf30795ea16b13589042e58aa8d27ca9` | 360 | 349 / 360 (0.969) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` NES | `3c96e6936f096805088fa73836b5c2861200aa270361e1fa6555e861be3a1d11` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
-| `deadzone-follow` GB | `8eba7e630dd390d80674b16490c331bb20a30c0ed5330967e2be36a482d9d862` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
-| `deadzone-follow` NES | `5b722e19e47ff638a6239ffc805e2f516c1620b034733dd8d540d93ca95c5ccd` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
+| `tiled-free-scroll` NES | `3a1ef1859dceaf0b64e4dfec3d50c1f503c58b54fd70d9126b60b8fe19a03edd` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
+| `deadzone-follow` GB | `09af55cc4a7c10f8793aef3965256cffc1b33a9ac82d76c07702dad648327b0b` | 400 | 380 / 400 (0.950) | 1 | 2 / 2 | 0 |
+| `deadzone-follow` NES | `7c7d79ba3fccc70608f4788009a206dde5d646cc05486bc8079e47958ee22124` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
 The exact pre-Large-Worlds Game Boy dead-zone cartridge completes 400/400
 source waits after the same warm-up. Its production packed gate therefore
@@ -112,9 +112,13 @@ nametable wrap. All four exact ROMs retain zero tile/palette mismatches and
 zero unsafe video writes across the complete 1024/2584-frame traversal and
 return windows. Camera visibility remains bounded to two frames, the gameplay
 miss streak remains at most one frame, and the steady-state ratio remains at
-least 0.994. Game Boy output remains unchanged; the NES ROM hashes change only
-because the target-owned safe-area inset now keys off the effective camera
-window rather than the complete backing-map height.
+least 0.994. Game Boy output remains unchanged. The #339 NES hashes originally
+changed when the target-owned safe-area inset began keying off the effective
+camera window rather than the complete backing-map height. CSL-5 / #340 later
+regenerated the NES rows with the stale-NMI publication, bounded OAM publisher,
+and DPCM-link placement corrections. The matrix above records those current
+tracked bytes; the complete nine-test NES packed suite was remeasured and the
+gameplay, camera-latency, trajectory, and integrity results remain as shown.
 
 The `tiled-hscroll-offset` rung keeps the same full collision-free fixture but
 uses a 40-row camera window, settling at visible Y 176 on Game Boy and Y 80 on

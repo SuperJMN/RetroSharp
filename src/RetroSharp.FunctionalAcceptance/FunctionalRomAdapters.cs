@@ -21,6 +21,7 @@ public enum FunctionalExecutionSource
 public sealed record FunctionalAdapterCapabilities(
     bool GameplayTicks = false,
     bool AudioService = false,
+    bool AudioProgress = false,
     bool InputTimeline = false,
     bool CameraLifecycle = false,
     bool Background = false,

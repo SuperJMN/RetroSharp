@@ -7,14 +7,17 @@ internal sealed partial class NesSdkOperationLowerer
 {
     public void EmitOamShadowClear()
     {
-        if (useDirectOamWrites)
+        if (useSequentialOamPublication)
         {
+            // Rendering is still disabled during initialization, so a compact
+            // loop can initialize the shadow and hardware OAM together.
             var clearLabel = builder.CreateLabel("oam_clear");
             builder.LoadAImmediate(0);
             builder.StoreAAbsolute(0x2003);
             builder.LoadAImmediate(0xFF);
             builder.LoadXImmediate(0);
             builder.Label(clearLabel);
+            builder.StoreAAbsoluteX(NesRuntimeMemoryLayout.Sprite.OamShadow);
             builder.StoreAAbsolute(0x2004);
             builder.IncrementX();
             builder.BranchRelative(0xD0, clearLabel); // BNE clearLabel
@@ -196,12 +199,6 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         nextHardwareSprite += asset.Pieces.Count;
-        if (useDirectOamWrites)
-        {
-            builder.LoadAImmediate(firstHardwareSprite * 4);
-            builder.StoreAAbsolute(0x2003);
-        }
-
         for (var pieceIndex = 0; pieceIndex < asset.Pieces.Count; pieceIndex++)
         {
             var piece = asset.Pieces[pieceIndex];
@@ -318,7 +315,7 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitStoreOamByte(ushort shadowAddress)
     {
-        builder.StoreAAbsolute(useDirectOamWrites ? (ushort)0x2004 : shadowAddress);
+        builder.StoreAAbsolute(shadowAddress);
     }
 
     private void EmitMultiplyAByConstant(int factor)
@@ -388,6 +385,38 @@ internal sealed partial class NesSdkOperationLowerer
     {
         builder.LoadAImmediate((NesRuntimeMemoryLayout.Sprite.OamShadow >> 8) & 0xFF);
         builder.StoreAAbsolute(OamDmaAddress);
+    }
+
+    internal void EmitOamPublication()
+    {
+        if (!useSequentialOamPublication)
+        {
+            EmitOamDma();
+            return;
+        }
+
+        // AprNes does not complete mapper-4 page-$02 OAM DMA. Start X at
+        // 256-byteCount and bias the absolute-X source so X wrapping ends the
+        // loop without a compare. The mixed-load canary's 152 retained bytes
+        // cost 1,983 cycles including setup and fit inside NTSC VBlank without
+        // exposing mainline draw writes.
+        if (retainedOamByteCount > 152)
+        {
+            throw new InvalidOperationException(
+                "NES MMC3 retained OAM publication supports at most 38 hardware sprites within the current VBlank budget.");
+        }
+
+        var startIndex = 256 - retainedOamByteCount;
+        var biasedShadowAddress = checked((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow - startIndex));
+        var publish = builder.CreateLabel("oam_shadow_publish");
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(0x2003);
+        builder.LoadXImmediate(startIndex);
+        builder.Label(publish);
+        builder.LoadAAbsoluteX(biasedShadowAddress);
+        builder.StoreAAbsolute(0x2004);
+        builder.IncrementX();
+        builder.BranchRelative(0xD0, publish);
     }
 
 }

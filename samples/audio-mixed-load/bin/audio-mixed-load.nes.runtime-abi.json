@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "e22a5fa74b088fcd9d1538cf2ad10ad02aef36fbd3338bbdee209ad0a5f57737",
-  "romSha256": "68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53",
+  "abiFingerprint": "008492b160955b553ff5f087436b83af09b9eb8f4a1e95a4c75349354b4e73f5",
+  "romSha256": "8c991317bc4ce82116371dca40e00cf74a94bdca6269c93a9004549988ee62a4",
   "ranges": [
     {
       "id": "UserLocals",
@@ -1739,213 +1739,231 @@
   ],
   "userVariables": [
     {
-      "name": "player.x",
+      "name": "playerX",
       "type": "i16",
       "address": 0,
       "size": 2
     },
     {
-      "name": "player.y",
+      "name": "playerY",
       "type": "i16",
       "address": 2,
       "size": 2
     },
     {
-      "name": "player.velocityY",
-      "type": "i8",
+      "name": "cameraX",
+      "type": "i16",
       "address": 4,
-      "size": 1
+      "size": 2
     },
     {
-      "name": "player.grounded",
-      "type": "bool",
-      "address": 5,
-      "size": 1
-    },
-    {
-      "name": "player.displayFrame",
+      "name": "cameraY",
       "type": "i16",
       "address": 6,
       "size": 2
     },
     {
-      "name": "player.displayFlipX",
-      "type": "bool",
-      "address": 8,
-      "size": 1
-    },
-    {
-      "name": "player.animTick",
+      "name": "verticalSubpixel",
       "type": "i16",
-      "address": 9,
+      "address": 8,
       "size": 2
     },
     {
-      "name": "player.jumping",
+      "name": "velocityY",
+      "type": "i8",
+      "address": 10,
+      "size": 1
+    },
+    {
+      "name": "grounded",
       "type": "bool",
       "address": 11,
       "size": 1
     },
     {
-      "name": "player.verticalSubpixel",
-      "type": "i16",
-      "address": 12,
-      "size": 2
-    },
-    {
-      "name": "view.x",
-      "type": "i16",
-      "address": 14,
-      "size": 2
-    },
-    {
-      "name": "view.y",
-      "type": "i16",
-      "address": 16,
-      "size": 2
-    },
-    {
-      "name": "view.moving",
+      "name": "patrolLeft",
       "type": "bool",
+      "address": 12,
+      "size": 1
+    },
+    {
+      "name": "patrolX",
+      "type": "u8",
+      "address": 13,
+      "size": 1
+    },
+    {
+      "name": "gameplayTick",
+      "type": "u8",
+      "address": 14,
+      "size": 1
+    },
+    {
+      "name": "audioTick",
+      "type": "u8",
+      "address": 15,
+      "size": 1
+    },
+    {
+      "name": "sfxCount",
+      "type": "u8",
+      "address": 16,
+      "size": 1
+    },
+    {
+      "name": "collisionProbeCount",
+      "type": "u8",
+      "address": 17,
+      "size": 1
+    },
+    {
+      "name": "collisionCadence",
+      "type": "u8",
       "address": 18,
       "size": 1
     },
     {
-      "name": "view.speed",
+      "name": "retainedPlayerScreenX",
       "type": "i16",
       "address": 19,
       "size": 2
     },
     {
-      "name": "view.direction",
+      "name": "retainedPlayerScreenY",
       "type": "i16",
       "address": 21,
       "size": 2
     },
     {
-      "name": "view.movementRemainder",
-      "type": "i16",
+      "name": "retainedPlayerFrame",
+      "type": "u8",
       "address": 23,
-      "size": 2
+      "size": 1
     },
     {
-      "name": "frame.resetRequested",
-      "type": "bool",
+      "name": "retainedPatrolScreenX",
+      "type": "u8",
+      "address": 24,
+      "size": 1
+    },
+    {
+      "name": "retainedPatrolFrame",
+      "type": "u8",
       "address": 25,
       "size": 1
     },
     {
-      "name": "__retrosharp_inline_12_screenX",
-      "type": "i16",
+      "name": "retainedPatrolLeft",
+      "type": "bool",
       "address": 26,
+      "size": 1
+    },
+    {
+      "name": "publishedPlayerScreenX",
+      "type": "i16",
+      "address": 27,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_12_screenY",
+      "name": "publishedPlayerScreenY",
       "type": "i16",
-      "address": 28,
+      "address": 29,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_16_previousFootWorldY",
-      "type": "i16",
-      "address": 30,
-      "size": 2
+      "name": "publishedPlayerFrame",
+      "type": "u8",
+      "address": 31,
+      "size": 1
     },
     {
-      "name": "__retrosharp_inline_18_verticalMotion",
-      "type": "i16",
+      "name": "publishedPatrolScreenX",
+      "type": "u8",
       "address": 32,
-      "size": 2
+      "size": 1
     },
     {
-      "name": "__retrosharp_inline_16_footWorldY",
-      "type": "i16",
+      "name": "publishedPatrolFrame",
+      "type": "u8",
+      "address": 33,
+      "size": 1
+    },
+    {
+      "name": "publishedPatrolLeft",
+      "type": "bool",
       "address": 34,
+      "size": 1
+    },
+    {
+      "name": "playerScreenX",
+      "type": "i16",
+      "address": 35,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_16_screenX",
+      "name": "playerScreenY",
       "type": "i16",
-      "address": 36,
+      "address": 37,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_19_footTile",
-      "type": "i16",
-      "address": 38,
-      "size": 2
+      "name": "playerFrame",
+      "type": "u8",
+      "address": 39,
+      "size": 1
     },
     {
-      "name": "__retrosharp_inline_21_headProbeY",
-      "type": "i16",
+      "name": "patrolScreenX",
+      "type": "u8",
       "address": 40,
-      "size": 2
+      "size": 1
     },
     {
-      "name": "__retrosharp_inline_27_screenY",
+      "name": "patrolFrame",
+      "type": "u8",
+      "address": 41,
+      "size": 1
+    },
+    {
+      "name": "motion",
       "type": "i16",
       "address": 42,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_27_maxScrollY",
+      "name": "footProbeY",
       "type": "i16",
       "address": 44,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_16_movementFootWorldY",
+      "name": "wallProbeY",
       "type": "i16",
       "address": 46,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_31_wallProbeY",
-      "type": "i16",
+      "name": "collisionScreenX",
+      "type": "u8",
       "address": 48,
-      "size": 2
+      "size": 1
     },
     {
-      "name": "__retrosharp_inline_31_desiredDirection",
+      "name": "wallScreenX",
+      "type": "u8",
+      "address": 49,
+      "size": 1
+    },
+    {
+      "name": "feet",
       "type": "i16",
       "address": 50,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_43_collisionCameraX",
+      "name": "wall",
       "type": "i16",
       "address": 52,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_43_steps",
-      "type": "u8",
-      "address": 54,
-      "size": 1
-    },
-    {
-      "name": "__retrosharp_inline_45_screenX",
-      "type": "i16",
-      "address": 55,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_45_rightProbeX",
-      "type": "i16",
-      "address": 57,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_47_screenX",
-      "type": "i16",
-      "address": 59,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_47_leftProbeX",
-      "type": "i16",
-      "address": 61,
       "size": 2
     }
   ]

@@ -64,6 +64,7 @@ public sealed class NesLargeWorldCameraTests
                 while (true) {
                     Video.WaitVBlank();
                     Camera.Apply();
+                    Camera.SetPosition(0, 0);
                 }
             }
             """;
@@ -441,7 +442,7 @@ public sealed class NesLargeWorldCameraTests
     }
 
     [Fact]
-    public void Packed_wait_frame_discards_a_stale_signal_before_waiting_for_the_next_nmi()
+    public void Packed_wait_frame_consumes_a_stale_signal_without_publishing_until_a_fresh_nmi()
     {
         var directory = RepositoryDirectory("samples/tiled-tall");
         var packed = NesTiledWorldImporter.CompileWorldPack(
@@ -466,13 +467,54 @@ public sealed class NesLargeWorldCameraTests
         Assert.True(
             ContainsSequence(
                 result.Rom,
+                [0xAD, 0x8F, 0x03, 0xF0, 0x0B, 0xA9, 0x80, 0x8D, 0x09, 0x03, 0xCE, 0x8F, 0x03, 0x4C]),
+            "Packed WaitFrame must consume an already-pending frame, suppress a following Camera.Apply, and return without entering the publication path.");
+        Assert.True(
+            ContainsSequence(result.Rom, [0x2C, 0x09, 0x03, 0x30]),
+            "Camera.SetPosition must retain packed visible-camera state after a stale NMI until the next safe publication boundary.");
+        Assert.True(
+            ContainsSequence(
+                result.Rom,
                 [
-                    0xA9, 0x00, 0x8D, 0x8F, 0x03,
                     0xAD, 0x8F, 0x03, 0xF0, 0xFB,
                     0xCE, 0x8F, 0x03,
                     0x2C, 0x02, 0x20, 0x10, 0xFB,
                 ]),
-            "Packed WaitFrame must discard a coalesced signal before waiting for a fresh NMI/VBlank edge.");
+            "Only the freshly awaited NMI path may recheck hardware VBlank and publish camera/OAM state.");
+        Assert.False(
+            ContainsSequence(result.Rom, [0xA9, 0x00, 0x8D, 0x8F, 0x03, 0xAD, 0x8F, 0x03, 0xF0, 0xFB]),
+            "Packed WaitFrame must not discard a stale signal and force an extra whole-frame wait.");
+    }
+
+    [Fact]
+    public void Mmc3_packed_retained_oam_rejects_more_than_38_hardware_sprites()
+    {
+        var draws = string.Join(
+            Environment.NewLine,
+            Enumerable.Range(0, 39).Select(index =>
+                $"Sprite.Draw(marker, {8 + index * 5 % 232}, {8 + index * 5 % 216}, 0, false, 0);"));
+        var source = $$"""
+            void Main() {
+                World.Load("tall.tmj");
+                Camera.Init(16, 0, 40);
+                Sprite.Asset(marker, "../cross-target-camera/marker.json");
+                while (true) {
+                    Video.WaitVBlank();
+                    {{draws}}
+                    Camera.Apply();
+                }
+            }
+            """;
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+                source,
+                RepositoryDirectory("samples/tiled-tall"),
+                sdkLibraryImports: [SdkImportResolver.Portable2D]));
+
+        Assert.Equal(
+            "NES MMC3 retained OAM publication supports at most 38 hardware sprites within the current VBlank budget.",
+            exception.Message);
     }
 
     [Fact]

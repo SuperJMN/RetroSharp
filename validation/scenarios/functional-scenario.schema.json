@@ -137,7 +137,8 @@
         "background": { "type": "boolean" },
         "spriteOam": { "type": "boolean" },
         "bankRestoration": { "type": "boolean" },
-        "safeVideoWrites": { "type": "boolean" }
+        "safeVideoWrites": { "type": "boolean" },
+        "audioProgress": { "type": "boolean" }
       }
     },
     "audio": {
@@ -149,6 +150,26 @@
         "authoredSilence": {
           "type": "array",
           "items": { "$ref": "#/$defs/frameSpan" }
+        },
+        "minimumRegisterEvents": { "type": "integer", "minimum": 0 },
+        "maximumRegisterEvents": { "type": "integer", "minimum": 0 },
+        "maximumRegisterEventGapFrames": { "type": "integer", "minimum": 0 },
+        "minimumSoundEffectStarts": { "type": "integer", "minimum": 0 },
+        "maximumSoundEffectStarts": { "type": "integer", "minimum": 0 },
+        "minimumSoundEffectCompletions": { "type": "integer", "minimum": 0 },
+        "maximumSoundEffectCompletions": { "type": "integer", "minimum": 0 },
+        "maximumSoundEffectRestarts": { "type": "integer", "minimum": 0 },
+        "minimumDpcmStarts": { "type": "integer", "minimum": 0 },
+        "maximumDpcmStarts": { "type": "integer", "minimum": 0 },
+        "minimumDpcmCompletions": { "type": "integer", "minimum": 0 },
+        "maximumDpcmCompletions": { "type": "integer", "minimum": 0 },
+        "maximumDpcmRestarts": { "type": "integer", "minimum": 0 },
+        "musicActiveAtEnd": { "type": "boolean" },
+        "soundEffectActiveAtEnd": { "type": "boolean" },
+        "dpcmActiveAtEnd": { "type": "boolean" },
+        "orderedRegisterEventSha256": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{64}$"
         }
       }
     },

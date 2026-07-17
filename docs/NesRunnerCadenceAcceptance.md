@@ -67,7 +67,18 @@ section marker.
   `255 <-> 256` contracts.
 - AprNes reported PPUCTRL `$80`, PPUMASK `$18`, visible OAM, four-screen
   nametable data, R6/R7 shadows `0/1`, no `$A000` write, and no `$4014` OAM DMA.
+  MMC3 logical sprites now enter retained `$0200` shadow state and publish its
+  bounded used prefix sequentially through `$2004` only after a fresh NMI and
+  `$2002` VBlank check.
   APU writes covered `$4000-$4017`, including DPCM `$4010/$4012/$4013/$4015`.
+
+CSL-5 / #340 adds the missing phase-sensitive gate. The prior exact tracked
+runner lost one gameplay/audio tick at delays `0,2,10,12,16,20` after a
+500-frame settle. The current exact runner SHA
+`68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53`
+passes all eleven even delays `0..20`: each of 120 physical frames advances
+both `$03FA` and `$03FB` exactly once while A is held for the first 40. See
+[`AudioMixedLoadFunctionalAcceptance.md`](AudioMixedLoadFunctionalAcceptance.md).
 
 The generated cadence manifest is opt-in:
 

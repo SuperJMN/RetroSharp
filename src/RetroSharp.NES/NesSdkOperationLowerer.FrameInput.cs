@@ -54,8 +54,26 @@ internal sealed partial class NesSdkOperationLowerer
     {
         if (usePackedCamera)
         {
-            builder.LoadAImmediate(0);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
+            // A pending signal means the mainline already crossed an NMI edge.
+            // Consume it and resume gameplay/audio immediately, but do not use
+            // it as permission to publish camera or OAM state: the beam can
+            // already be outside VBlank. Publication remains exclusive to the
+            // path that waits for a fresh NMI and rechecks PPUSTATUS below.
+            var awaitFreshFrame = builder.CreateLabel("nes_packed_await_fresh_frame");
+            var end = builder.CreateLabel("nes_packed_wait_frame_end");
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
+            builder.BranchRelative(0xF0, awaitFreshFrame);
+            if (applyPendingCameraScroll && cameraConfig is not null)
+            {
+                // Distinguish a stale boundary from a freshly applied one. A
+                // following explicit apply and position operations must both
+                // retain their output until the next safe VBlank publication.
+                builder.LoadAImmediate(0x80);
+                builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
+            }
+            builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
+            builder.JumpAbsolute(end);
+            builder.Label(awaitFreshFrame);
             var pending = builder.CreateLabel("nes_packed_frame_pending");
             builder.Label(pending);
             builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
@@ -71,9 +89,10 @@ internal sealed partial class NesSdkOperationLowerer
             }
             if (usesRetainedOam)
             {
-                EmitOamDma();
+                EmitOamPublication();
                 EmitOamShadowReset();
             }
+            builder.Label(end);
 
             return;
         }
@@ -92,7 +111,7 @@ internal sealed partial class NesSdkOperationLowerer
         }
         if (usesRetainedOam)
         {
-            EmitOamDma();
+            EmitOamPublication();
             EmitOamShadowReset();
         }
     }

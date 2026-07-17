@@ -240,6 +240,20 @@ internal static class NesRomBuilder
         bool includeLegacyWorldData)
     {
         var builder = new PrgBuilder(layout.FixedRuntimeCpuBaseAddress);
+        DpcmSampleLayout? fixedDpcmLayout = null;
+        if (layout.EmitMmc3Foundation)
+        {
+            // Reserve the hardware-aligned DPCM window before the fixed runtime.
+            // Reset/NMI/IRQ vectors target labels, so the runtime does not need
+            // to begin at $C000. Placing samples first avoids losing a second
+            // 64-byte alignment gap when the runtime grows near the trailer.
+            fixedDpcmLayout = BuildDpcmSampleLayout(
+                layout.FixedRuntimeCpuBaseAddress,
+                program.MusicAssetsInLoadOrder,
+                layout.FixedTrailerStartAddress,
+                fixedProfileName: layout.Name);
+            EmitDpcmSampleBlocks(builder, fixedDpcmLayout.Placements);
+        }
         var usePackedCamera = worldPackRuntime is not null && program.UsesCameraRuntime;
         var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
         if (layout.EmitMmc3Foundation)
@@ -286,7 +300,7 @@ internal static class NesRomBuilder
             longWhileLoopIds,
             layout.UseFourScreenNametables,
             usePackedCamera,
-            useDirectOamWrites: layout.EmitMmc3Foundation && usePackedCamera);
+            useSequentialOamPublication: layout.EmitMmc3Foundation && usePackedCamera);
         runtimeCompiler.EmitInitialization();
         if (worldPackRuntime is not null)
         {
@@ -371,11 +385,8 @@ internal static class NesRomBuilder
         if (layout.EmitMmc3Foundation)
         {
             EnsureFixedDataBeforeTrailer(layout, builder.CurrentAddress);
-            var dpcmLayout = BuildDpcmSampleLayout(
-                builder.CurrentAddress,
-                program.MusicAssetsInLoadOrder,
-                layout.FixedTrailerStartAddress,
-                fixedProfileName: layout.Name);
+            var dpcmLayout = fixedDpcmLayout
+                ?? throw new InvalidOperationException("MMC3 DPCM layout was not reserved before fixed runtime emission.");
             var pinnedBuilder = new PrgBuilder(0xA000);
             EmitPinnedRuntimeData(
                 pinnedBuilder,
@@ -393,7 +404,6 @@ internal static class NesRomBuilder
                     $"NES MMC3/TVROM pinned R7 section overflow: {pinnedDataBytes.Length} bytes emitted, {8 * 1_024} bytes available.");
             }
 
-            EmitDpcmSampleBlocks(builder, dpcmLayout.Placements);
             dpcmPlacements = dpcmLayout.Placements
                 .Select(placement => new NesDpcmBuildPlacement(
                     placement.Block.SourceAddress,

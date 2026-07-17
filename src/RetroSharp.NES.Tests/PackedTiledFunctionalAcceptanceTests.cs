@@ -91,7 +91,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             scenario,
             new FunctionalRomArtifact("samples/runner/bin/runner.nes", trackedRom),
             adapter,
-            new AuthoredTiledBackgroundOracle(map, factory));
+            new AuthoredTiledBackgroundOracle(map, factory.VisibleCameraByFrame));
 
         var trajectory = factory.VisibleCameraByFrame
             .OrderBy(item => item.Key)
@@ -101,6 +101,92 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         var rightmost = Array.IndexOf(trajectory, trajectory.Max());
         Assert.Contains(0, trajectory[(rightmost + 1)..]);
         Assert.True(report.Passed, Diagnostic(report));
+    }
+
+    [Fact]
+    public void Exact_audio_mixed_load_rom_passes_packed_functional_acceptance()
+    {
+        var sourcePath = RepositoryFile("samples/audio-mixed-load/src/main.rs");
+        var sourceDirectory = Path.GetDirectoryName(Path.GetDirectoryName(sourcePath))
+            ?? throw new InvalidOperationException("Could not locate the audio-mixed-load sample directory.");
+        var source = File.ReadAllText(sourcePath);
+        var program = RetroSharp.NES.NesRomCompiler.PrepareVideoProgram(
+            source,
+            sourceDirectory,
+            RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+            null,
+            [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+            null).VideoProgram;
+        var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            source,
+            sourceDirectory,
+            RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+            null,
+            [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+            null);
+        var romRelativePath = "samples/audio-mixed-load/bin/audio-mixed-load.nes";
+        var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
+        Assert.Equal(trackedRom, build.Rom);
+        Assert.Equal("nes-mmc3-tvrom-v1", build.Report.SelectedProfile);
+        var soundEffect = Assert.Single(program.SoundEffectAssetsInLoadOrder);
+        var soundEffectFrames = 0;
+        for (var offset = 0; soundEffect.Data[offset] != 0xFF; soundEffectFrames++)
+        {
+            offset += 1 + soundEffect.Data[offset] * 2;
+        }
+        Assert.Equal(9, soundEffectFrames);
+        Assert.Equal(30, soundEffect.LingerFrames);
+        Assert.Equal(
+            1_282,
+            Assert.Single(program.MusicAssetsInLoadOrder).DpcmBlocks.Sum(block => block.Data.Length));
+        output.WriteLine(
+            $"NES SFX lifecycle: registerFrames={soundEffectFrames}, lingerFrames={soundEffect.LingerFrames}");
+
+        var map = program.PackedWorld?.LoweredWorld
+            ?? throw new InvalidOperationException("The audio-mixed-load sample must retain its authored packed world.");
+        var scenario = FunctionalScenarioLoader.Load(RepositoryFile("validation/scenarios/audio-mixed-load.nes.json"));
+        Assert.Equal("audio-mixed-load", scenario.SampleId);
+        var factory = new AudioMixedLoadNesMachineFactory(program, build.Report);
+        var adapter = new NesFunctionalRomAdapter(
+            factory,
+            new FunctionalAdapterCapabilities(
+                GameplayTicks: true,
+                AudioService: true,
+                AudioProgress: true,
+                InputTimeline: true,
+                CameraLifecycle: true,
+                Background: true,
+                SpriteOam: true,
+                BankRestoration: true,
+                VideoWriteTiming: true));
+
+        var report = FunctionalScenarioRunner.Run(
+            scenario,
+            new FunctionalRomArtifact(romRelativePath, trackedRom),
+            adapter,
+            new AuthoredTiledBackgroundOracle(map, factory.VisibleCameraByFrame, program, scenario));
+
+        output.WriteLine($"{report.ScenarioId}: {report.Summary}");
+        foreach (var check in report.TimingChecks)
+        {
+            output.WriteLine($"{check.Metric}: observed={check.Observed:0.###} limit={check.Limit:0.###} headroom={check.Headroom:0.###}");
+        }
+        foreach (var failure in report.IntegrityFailures.Where(failure => failure.Code.StartsWith("audio-", StringComparison.Ordinal)))
+        {
+            output.WriteLine($"{failure.Code}: {failure.Detail}");
+        }
+        var apuEvents = report.FrameEvidence
+            .SelectMany(evidence => evidence.Observed.AudioProgress?.RegisterEvents ?? [])
+            .ToArray();
+        Assert.Contains(apuEvents, item => item.Address == 0x4010);
+        Assert.Contains(apuEvents, item => item.Address == 0x4012);
+        Assert.Contains(apuEvents, item => item.Address == 0x4013);
+        Assert.Contains(apuEvents, item => item.Address == 0x4015 && (item.Value & 0x10) != 0);
+        Assert.True(report.Passed, Diagnostic(report));
+        Assert.Equal(trackedRom, factory.LoadedRom);
+        Assert.Equal(1, factory.ResetCount);
+        Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
+        Assert.Empty(report.IntegrityFailures);
     }
 
     [Theory]
@@ -176,7 +262,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             scenario,
             new FunctionalRomArtifact(romRelativePath, trackedRom),
             adapter,
-            new AuthoredTiledBackgroundOracle(map, factory, platformerProgram, scenario));
+            new AuthoredTiledBackgroundOracle(map, factory.VisibleCameraByFrame, platformerProgram, scenario));
 
         output.WriteLine($"{report.ScenarioId}: {report.Summary}");
         foreach (var check in report.TimingChecks)
@@ -197,7 +283,10 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         {
             var firstCheckpointFrame = scenario.Checkpoints.Min(checkpoint => checkpoint.Frame);
             var appliedScrollY = factory.AppliedScrollYByFrame
-                .Where(item => item.Frame >= firstCheckpointFrame)
+                // The checkpoint establishes the retained logical camera. The
+                // following physical frame is the first hardware publication
+                // required to carry the bottom-overscan inset.
+                .Where(item => item.Frame > firstCheckpointFrame)
                 .ToArray();
             Assert.NotEmpty(appliedScrollY);
             Assert.All(appliedScrollY, item => Assert.Equal(ExpectedBottomOverscanInsetPixels, item.Y));
@@ -244,11 +333,12 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             Assert.Contains(byte.MaxValue, cadenceDeltas);
             foreach (var (previous, current) in appliedScrollCadence.Zip(appliedScrollCadence.Skip(1)))
             {
+                var elapsedPhysicalFrames = current.Frame - previous.Frame;
+                var forwardPixels = (byte)(current.X - previous.X);
+                var backwardPixels = (byte)(previous.X - current.X);
                 Assert.True(
-                    current.X == previous.X ||
-                    current.X == (byte)(previous.X + 1) ||
-                    current.X == (byte)(previous.X - 1),
-                    $"Successive applied PPUSCROLL X writes must move by at most one pixel after framing; "
+                    Math.Min(forwardPixels, backwardPixels) <= elapsedPhysicalFrames,
+                    $"Applied PPUSCROLL X must move by at most one pixel per physical frame after framing; "
                     + $"frame {previous.Frame} was {previous.X}, frame {current.Frame} was {current.X}.");
             }
         }
@@ -293,6 +383,388 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         }
 
         throw new InvalidOperationException($"Could not find repository file '{relativePath}'.");
+    }
+
+    private sealed class AudioMixedLoadNesMachineFactory(
+        NesVideoProgram program,
+        NesRomBuildReport buildReport) : IFunctionalRomMachineFactory
+    {
+        public byte[]? LoadedRom { get; private set; }
+
+        public int ResetCount { get; private set; }
+
+        public Dictionary<int, (int X, int Y)> VisibleCameraByFrame { get; } = [];
+
+        public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
+        {
+            LoadedRom = exactRom.ToArray();
+            return new AudioMixedLoadNesMachine(
+                LoadedRom,
+                VisibleCameraByFrame,
+                program,
+                buildReport,
+                resetCount => ResetCount = resetCount);
+        }
+    }
+
+    private sealed class AudioMixedLoadNesMachine(
+        byte[] exactRom,
+        IDictionary<int, (int X, int Y)> visibleCameraByFrame,
+        NesVideoProgram program,
+        NesRomBuildReport buildReport,
+        Action<int> publishResetCount) : IFunctionalRomMachine
+    {
+        private readonly NesTestCpu cpu = new(exactRom);
+        private readonly IReadOnlyDictionary<string, NesRuntimeUserVariable> variables =
+            buildReport.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        private readonly NesCompiledSpriteAsset playerAsset = program.SpriteAssets
+            .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
+        private readonly NesDpcmPlaybackTracker dpcm = new();
+        private int lastFrame;
+        private int processedPpuWrites;
+        private int processedOamWrites;
+        private int processedApuWrites;
+        private (int X, int Y)? previousRequestedCamera;
+        private readonly Dictionary<(int X, int Y), long> requestSequenceByPosition = [];
+        private long requestSequence;
+        private long visibleSequence;
+        private long registerEventCount;
+        private bool previousMusicActive;
+        private bool previousSfxActive;
+        private long musicStarts;
+        private long musicCompletions;
+        private long musicRestarts;
+        private long sfxStarts;
+        private long sfxCompletions;
+        private long sfxRestarts;
+        private byte previousSourceSfxStarts;
+        private byte previousGameplayTick;
+        private byte previousAudioTick;
+        private long gameplayTicks;
+        private long audioTicks;
+
+        public FunctionalFrameObservation ObserveInitial()
+        {
+            cpu.RunFrames(0);
+            return Observe(0);
+        }
+
+        public FunctionalFrameObservation AdvanceFrame(int frame, IReadOnlySet<string> heldInputs)
+        {
+            if (frame != lastFrame + 1)
+            {
+                throw new InvalidOperationException($"Expected frame {lastFrame + 1}, received {frame}.");
+            }
+
+            cpu.Held.Clear();
+            cpu.Held.UnionWith(heldInputs);
+            cpu.RunFrames(frame);
+            lastFrame = frame;
+            return Observe(frame);
+        }
+
+        public void Dispose() => publishResetCount(cpu.ResetCount);
+
+        private FunctionalFrameObservation Observe(int frame)
+        {
+            var visibleCamera = (
+                X: Word(VisibleCameraXLow, VisibleCameraXHigh),
+                Y: Word(VisibleCameraYLow, VisibleCameraYHigh));
+            visibleCameraByFrame[frame] = visibleCamera;
+            var rawPpuWrites = cpu.PpuWrites.Skip(processedPpuWrites).ToArray();
+            var videoWrites = rawPpuWrites
+                .Where(write => write.Register is 0x2000 or 0x2005 or 0x2006 or 0x2007)
+                .Select(VideoWrite)
+                .ToArray();
+            var oamWrites = cpu.OamWrites.Skip(processedOamWrites).Select(OamWrite).ToArray();
+            processedPpuWrites = cpu.PpuWrites.Count;
+            processedOamWrites = cpu.OamWrites.Count;
+
+            var rawApuWrites = cpu.ApuWrites.Skip(processedApuWrites).Where(IsApuRegister).ToArray();
+            var registerEvents = rawApuWrites
+                .Select(write => new FunctionalAudioRegisterEvent("nes-apu", write.Register, write.Value))
+                .ToArray();
+            processedApuWrites = cpu.ApuWrites.Count;
+            registerEventCount += registerEvents.Length;
+            dpcm.Observe(rawApuWrites, cpu.Cycles);
+            var sourceGameplayTick = VariableByte("gameplayTick");
+            var sourceAudioTick = VariableByte("audioTick");
+            gameplayTicks += (byte)(sourceGameplayTick - previousGameplayTick);
+            audioTicks += (byte)(sourceAudioTick - previousAudioTick);
+            previousGameplayTick = sourceGameplayTick;
+            previousAudioTick = sourceAudioTick;
+
+            var state = new Dictionary<string, long>(StringComparer.Ordinal)
+            {
+                ["playerX"] = VariableWord("playerX"),
+                ["playerY"] = VariableWord("playerY"),
+                ["cameraX"] = VariableWord("cameraX"),
+                ["cameraY"] = VariableWord("cameraY"),
+                ["grounded"] = VariableByte("grounded"),
+                ["patrolX"] = VariableByte("patrolX"),
+                ["gameplayTick"] = sourceGameplayTick,
+                ["audioTick"] = sourceAudioTick,
+                ["sfxCount"] = VariableByte("sfxCount"),
+                ["collisionProbeCount"] = VariableByte("collisionProbeCount"),
+                ["visibleCameraX"] = visibleCamera.X,
+                ["visibleCameraY"] = visibleCamera.Y,
+                ["requestCount"] = cpu.Ram(RequestCount),
+                ["residentCount"] = cpu.Ram(ResidentCount),
+                ["commitCount"] = cpu.Ram(CommitCount),
+                ["releaseCount"] = cpu.Ram(ReleaseCount),
+                ["bankWorkInCommit"] = cpu.Ram(BankWorkInCommit),
+                ["directoryWorkInCommit"] = cpu.Ram(DirectoryWorkInCommit),
+                ["decodeWorkInCommit"] = cpu.Ram(DecodeWorkInCommit),
+            };
+
+            var musicActive = cpu.Ram(NesRuntimeMemoryLayout.Audio.MusicOrderPointerHigh) != 0;
+            var sfxActive = cpu.Ram(NesRuntimeMemoryLayout.Audio.SfxActive) != 0;
+            UpdateLifecycle(
+                musicActive,
+                previousMusicActive,
+                ref musicStarts,
+                ref musicCompletions,
+                ref musicRestarts);
+            var sourceSfxStarts = VariableByte("sfxCount");
+            var newSfxStarts = (byte)(sourceSfxStarts - previousSourceSfxStarts);
+            sfxStarts += newSfxStarts;
+            if (previousSfxActive)
+            {
+                sfxRestarts += newSfxStarts;
+            }
+            if (previousSfxActive && !sfxActive)
+            {
+                sfxCompletions++;
+            }
+            previousMusicActive = musicActive;
+            previousSfxActive = sfxActive;
+            previousSourceSfxStarts = sourceSfxStarts;
+            state["musicActive"] = musicActive ? 1 : 0;
+            state["sfxActive"] = sfxActive ? 1 : 0;
+            state["dpcmActive"] = dpcm.Active ? 1 : 0;
+
+            var camera = CameraObservation(
+                (Word(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh),
+                    Word(NesRuntimeMemoryLayout.Camera.Y, NesRuntimeMemoryLayout.Camera.YHigh)),
+                visibleCamera);
+            var bank = new FunctionalBankObservation(
+                cpu.CurrentR6Bank,
+                cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
+                cpu.CurrentR6Bank == cpu.Ram(NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow),
+                "nes-prg-r6");
+            var audioProgress = new FunctionalAudioProgressObservation(
+                registerEventCount,
+                registerEvents,
+                new(musicActive, musicStarts, musicCompletions, musicRestarts),
+                new(sfxActive, sfxStarts, sfxCompletions, sfxRestarts),
+                new(dpcm.Active, dpcm.Starts, dpcm.Completions, dpcm.Restarts));
+
+            return new FunctionalFrameObservation(
+                frame,
+                gameplayTicks,
+                audioTicks,
+                cpu.ResetCount,
+                state,
+                camera,
+                bank,
+                CaptureBackground(visibleCamera),
+                Sprites: CaptureSprites(),
+                VideoWrites: videoWrites,
+                OamWrites: oamWrites,
+                AudioProgress: audioProgress);
+        }
+
+        private FunctionalCameraLifecycleObservation CameraObservation(
+            (int X, int Y) requestedCamera,
+            (int X, int Y) visibleCamera)
+        {
+            if (previousRequestedCamera != requestedCamera)
+            {
+                requestSequence++;
+                previousRequestedCamera = requestedCamera;
+                requestSequenceByPosition[requestedCamera] = requestSequence;
+            }
+
+            if (requestSequenceByPosition.TryGetValue(visibleCamera, out var matchingRequest))
+            {
+                visibleSequence = matchingRequest;
+            }
+
+            return new(requestSequence, requestSequence, visibleSequence, visibleSequence);
+        }
+
+        private IReadOnlyList<FunctionalSpriteObservation> CaptureSprites()
+        {
+            var metaspriteBytes = playerAsset.Pieces.Count * 4;
+            var usedBytes = metaspriteBytes * 2;
+            var player = Enumerable.Range(0, metaspriteBytes).Select(offset => (int)cpu.Oam((byte)offset)).ToArray();
+            var patrol = Enumerable.Range(metaspriteBytes, metaspriteBytes).Select(offset => (int)cpu.Oam((byte)offset)).ToArray();
+            var unused = Enumerable.Range(usedBytes, 256 - usedBytes).Select(offset => (int)cpu.Oam((byte)offset)).ToArray();
+            return
+            [
+                new("player", OamVisible(player), player, 0),
+                new("patrol", OamVisible(patrol), patrol, playerAsset.Pieces.Count),
+                new("unused-oam", OamVisible(unused), unused, playerAsset.Pieces.Count * 2),
+            ];
+        }
+
+        private IReadOnlyList<FunctionalBackgroundObservation> CaptureBackground((int X, int Y) camera)
+        {
+            var width = camera.X % 8 == 0 ? 32 : 33;
+            var height = camera.Y % 8 == 0 ? 30 : 31;
+            var startColumn = camera.X / 8;
+            var startRow = camera.Y / 8;
+            return Enumerable.Range(0, height)
+                .SelectMany(y => Enumerable.Range(0, width).Select(x =>
+                    new FunctionalBackgroundObservation(
+                        $"screen:{x:D2},{y:D2}",
+                        cpu.PpuVram(BackgroundAddress(startColumn + x, startRow + y)),
+                        ObservedPaletteIdentity(startColumn + x, startRow + y))))
+                .ToArray();
+        }
+
+        private ushort BackgroundAddress(int x, int y)
+        {
+            var cell = BackgroundCell(x, y);
+            return (ushort)(cell.NameTable + cell.Row * 32 + cell.Column);
+        }
+
+        private int ObservedPaletteIdentity(int x, int y)
+        {
+            var cell = BackgroundCell(x, y);
+            var attributeAddress = (ushort)(cell.NameTable + 0x3C0 + (cell.Row / 4 * 8) + (cell.Column / 4));
+            var shift = ((cell.Row & 2) != 0 ? 4 : 0) + ((cell.Column & 2) != 0 ? 2 : 0);
+            var paletteSlot = (cpu.PpuVram(attributeAddress) >> shift) & 0x03;
+            var colors = Enumerable.Range(0, 4)
+                .Select(offset => (int)cpu.PpuVram((ushort)(0x3F00 + paletteSlot * 4 + offset)))
+                .ToArray();
+            return PaletteIdentity(paletteSlot, colors);
+        }
+
+        private static (ushort NameTable, int Column, int Row) BackgroundCell(int x, int y)
+        {
+            var column = Mod(x, 64);
+            var row = Mod(y, 60);
+            return (
+                (ushort)(0x2000 + row / 30 * 0x800 + column / 32 * 0x400),
+                column % 32,
+                row % 30);
+        }
+
+        private static bool OamVisible(IReadOnlyList<int> oam) =>
+            oam.Chunk(4).Any(piece => piece[0] < 239);
+
+        private FunctionalVideoWriteObservation VideoWrite(NesPpuWrite write)
+        {
+            var timing = Timing(write.Cycle, write.RenderingEnabled);
+            return new(
+                $"nes-ppu-${write.Register:X4}",
+                write.VramAddress ?? write.Register,
+                !write.RenderingEnabled || timing.Phase == "vblank",
+                timing);
+        }
+
+        private FunctionalOamWriteObservation OamWrite(NesOamWrite write)
+        {
+            var timing = Timing(write.Cycle, write.RenderingEnabled);
+            return new(
+                write.Address,
+                !write.RenderingEnabled || timing.Phase == "vblank",
+                timing);
+        }
+
+        private FunctionalWriteTimingObservation Timing(long cycle, bool renderingEnabled)
+        {
+            var position = cpu.PpuTiming(cycle, renderingEnabled);
+            return new(cycle, position.Scanline, position.Dot, position.Phase, renderingEnabled);
+        }
+
+        private int VariableWord(string name) => VariableByte(name) | (VariableByte(name, 1) << 8);
+
+        private byte VariableByte(string name, int offset = 0) =>
+            cpu.Ram(checked((ushort)(variables[name].Address + offset)));
+
+        private int Word(ushort low, ushort high) => cpu.Ram(low) | (cpu.Ram(high) << 8);
+
+        private static bool IsApuRegister(NesApuWrite write) =>
+            write.Register is >= 0x4000 and <= 0x4013 or 0x4015 or 0x4017;
+
+        private static void UpdateLifecycle(
+            bool active,
+            bool previousActive,
+            ref long starts,
+            ref long completions,
+            ref long restarts)
+        {
+            if (active && !previousActive) starts++;
+            if (!active && previousActive) completions++;
+            _ = restarts;
+        }
+    }
+
+    private sealed class NesDpcmPlaybackTracker
+    {
+        private static readonly int[] NtscPeriods =
+            [428, 380, 340, 320, 286, 254, 226, 214, 190, 160, 142, 128, 106, 85, 72, 54];
+        private byte control;
+        private byte length;
+        private long endCycle;
+
+        public bool Active { get; private set; }
+
+        public long Starts { get; private set; }
+
+        public long Completions { get; private set; }
+
+        public long Restarts { get; private set; }
+
+        public void Observe(IReadOnlyList<NesApuWrite> writes, long currentCycle)
+        {
+            foreach (var write in writes)
+            {
+                AdvanceTo(write.Cycle);
+                switch (write.Register)
+                {
+                    case 0x4010:
+                        control = write.Value;
+                        break;
+                    case 0x4013:
+                        length = write.Value;
+                        break;
+                    case 0x4015 when (write.Value & 0x10) == 0:
+                        if (Active)
+                        {
+                            Active = false;
+                            Completions++;
+                        }
+                        break;
+                    case 0x4015 when !Active:
+                        Active = true;
+                        Starts++;
+                        endCycle = checked(write.Cycle + DurationCycles());
+                        break;
+                }
+            }
+
+            AdvanceTo(currentCycle);
+        }
+
+        private void AdvanceTo(long cycle)
+        {
+            while (Active && cycle >= endCycle)
+            {
+                Completions++;
+                if ((control & 0x40) == 0)
+                {
+                    Active = false;
+                    return;
+                }
+
+                endCycle = checked(endCycle + DurationCycles());
+            }
+        }
+
+        private long DurationCycles() => checked(((long)length * 16 + 1) * 8 * NtscPeriods[control & 0x0F]);
     }
 
     private sealed class PackedNesMachineFactory(
@@ -597,19 +1069,24 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
     private sealed class AuthoredTiledBackgroundOracle(
         NesTiledWorld map,
-        PackedNesMachineFactory factory,
+        IReadOnlyDictionary<int, (int X, int Y)> visibleCameraByFrame,
         NesVideoProgram? platformerProgram = null,
         FunctionalScenario? scenario = null) : IFunctionalFrameOracle
     {
         private readonly NesCompiledSpriteAsset? playerAsset = platformerProgram?.SpriteAssets
             .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
-        private readonly PlatformerLandingReferenceTimeline? platformerTimeline = platformerProgram is null || scenario is null
+        private readonly PlatformerLandingReferenceTimeline? platformerTimeline =
+            platformerProgram is null || scenario?.SampleId != "platformer-landing"
             ? null
             : new PlatformerLandingReferenceTimeline(scenario, cameraY: 80);
+        private readonly AudioMixedLoadReferenceTimeline? audioMixedTimeline =
+            platformerProgram is null || scenario?.SampleId != "audio-mixed-load"
+                ? null
+                : new AudioMixedLoadReferenceTimeline(scenario);
 
         public FunctionalFrameExpectation ExpectedFrame(int frame)
         {
-            var camera = factory.VisibleCameraByFrame[frame];
+            var camera = visibleCameraByFrame[frame];
             var width = camera.X % 8 == 0 ? 32 : 33;
             var height = camera.Y % 8 == 0 ? 30 : 31;
             var startColumn = camera.X / 8;
@@ -631,12 +1108,38 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                                 map.BackgroundPalette.Skip(paletteSlot * 4).Take(4).Select(value => (int)value).ToArray()));
                     }))
                     .ToArray(),
-                PlatformerSprites(frame));
+                Sprites(frame));
         }
 
-        private IReadOnlyList<FunctionalSpriteExpectation>? PlatformerSprites(int frame)
+        private IReadOnlyList<FunctionalSpriteExpectation>? Sprites(int frame)
         {
-            if (playerAsset is null || platformerTimeline is null)
+            if (playerAsset is null)
+            {
+                return null;
+            }
+
+            if (audioMixedTimeline is not null)
+            {
+                var audioState = audioMixedTimeline.ExpectedDrawState(frame);
+                var player = SpriteOam(
+                    audioState.PlayerScreenX,
+                    audioState.PlayerScreenY,
+                    audioState.Grounded ? 0 : 4,
+                    false);
+                var patrol = SpriteOam(audioState.PatrolX, 96, 1, audioState.PatrolLeft);
+                return
+                [
+                    new("player", OamVisible(player), player, 0),
+                    new("patrol", OamVisible(patrol), patrol, playerAsset.Pieces.Count),
+                    new(
+                        "unused-oam",
+                        false,
+                        Enumerable.Repeat(255, 256 - player.Length - patrol.Length).ToArray(),
+                        playerAsset.Pieces.Count * 2),
+                ];
+            }
+
+            if (platformerTimeline is null)
             {
                 return null;
             }
@@ -668,6 +1171,21 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                     playerAsset.Pieces.Count),
             ];
         }
+
+        private int[] SpriteOam(int screenX, int screenY, int spriteFrame, bool flipX) =>
+            playerAsset!.Pieces.SelectMany(piece =>
+            {
+                var pieceX = flipX
+                    ? playerAsset.LogicalWidth - 8 - piece.XOffset
+                    : piece.XOffset;
+                return new[]
+                {
+                    (screenY + piece.YOffset - 1) & 0xFF,
+                    playerAsset.FirstTile + spriteFrame * playerAsset.TilesPerFrame + piece.TileOffset,
+                    piece.PaletteSlotOffset | (flipX ? 0x40 : 0),
+                    (screenX + pieceX) & 0xFF,
+                };
+            }).ToArray();
 
         private static bool OamVisible(IReadOnlyList<int> oam) =>
             oam.Chunk(4).Any(piece => piece[0] < 239);
@@ -743,6 +1261,154 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             return lowerRowCounts[candidate] > lowerRowCounts[incumbent];
         }
     }
+
+    private sealed class AudioMixedLoadReferenceTimeline
+    {
+        // Video/palette/world/audio initialization consumes the first twenty-four
+        // physical frames before the source enters its first retained loop.
+        private const int FirstGameplayFrame = 25;
+        private const int GroundY = 113;
+        private const int TakeoffVelocity = -56;
+        private const int HeldGravityThreshold = -32;
+        private const int HeldGravity = 1;
+        private const int ReleasedGravity = 5;
+        private const int TerminalVelocity = 69;
+        private const int Subpixel = 16;
+        private readonly IReadOnlyDictionary<int, AudioMixedLoadDrawState> drawStateByFrame;
+
+        public AudioMixedLoadReferenceTimeline(FunctionalScenario scenario)
+        {
+            if (scenario.SampleId != "audio-mixed-load")
+            {
+                throw new ArgumentException("The reference timeline only supports audio-mixed-load.", nameof(scenario));
+            }
+
+            var state = new MutableAudioMixedState();
+            var result = new Dictionary<int, AudioMixedLoadDrawState>();
+            var previousButtons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var lastFrame = checked(scenario.WarmUpFrames + scenario.ObservationFrames);
+            for (var frame = 1; frame <= lastFrame; frame++)
+            {
+                if (frame < FirstGameplayFrame)
+                {
+                    continue;
+                }
+
+                // The source retains both metasprites before polling input and updating gameplay.
+                result[frame] = state.DrawState();
+                var heldButtons = scenario.Inputs
+                    .Where(input => frame >= input.StartFrame && frame < input.StartFrame + input.DurationFrames)
+                    .SelectMany(input => input.Buttons)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                Advance(state, heldButtons, previousButtons);
+                previousButtons = heldButtons;
+            }
+
+            drawStateByFrame = result;
+        }
+
+        public AudioMixedLoadDrawState ExpectedDrawState(int frame) =>
+            drawStateByFrame.TryGetValue(frame, out var state)
+                ? state
+                : throw new ArgumentOutOfRangeException(nameof(frame), frame, "Frame is outside audio-mixed-load.");
+
+        private static void Advance(
+            MutableAudioMixedState state,
+            IReadOnlySet<string> heldButtons,
+            IReadOnlySet<string> previousButtons)
+        {
+            if (heldButtons.Contains("A") && !previousButtons.Contains("A") && state.Grounded)
+            {
+                state.VelocityY = TakeoffVelocity;
+                state.VerticalSubpixel = 0;
+                state.Grounded = false;
+            }
+
+            if (!state.Grounded)
+            {
+                state.VelocityY = heldButtons.Contains("A") && state.VelocityY < HeldGravityThreshold
+                    ? state.VelocityY + HeldGravity
+                    : Math.Min(TerminalVelocity, state.VelocityY + ReleasedGravity);
+                var motion = state.VerticalSubpixel + state.VelocityY;
+                while (motion < 0)
+                {
+                    state.PlayerY--;
+                    motion += Subpixel;
+                }
+                while (motion >= Subpixel)
+                {
+                    state.PlayerY++;
+                    motion -= Subpixel;
+                }
+                state.VerticalSubpixel = motion;
+                if (state.PlayerY >= GroundY)
+                {
+                    state.PlayerY = GroundY;
+                    state.VerticalSubpixel = 0;
+                    state.VelocityY = 0;
+                    state.Grounded = true;
+                }
+            }
+
+            var playerScreenX = state.PlayerX - state.CameraX;
+            if (heldButtons.Contains("RIGHT"))
+            {
+                state.PlayerX++;
+                if (playerScreenX >= 96)
+                {
+                    state.CameraX++;
+                }
+            }
+
+            if (state.PatrolLeft)
+            {
+                state.PatrolX--;
+                if (state.PatrolX <= 112)
+                {
+                    state.PatrolLeft = false;
+                }
+            }
+            else
+            {
+                state.PatrolX++;
+                if (state.PatrolX >= 184)
+                {
+                    state.PatrolLeft = true;
+                }
+            }
+        }
+
+        private sealed class MutableAudioMixedState
+        {
+            public int PlayerX { get; set; } = 72;
+
+            public int PlayerY { get; set; } = GroundY;
+
+            public int CameraX { get; set; }
+
+            public int CameraY { get; }
+
+            public int VelocityY { get; set; }
+
+            public int VerticalSubpixel { get; set; }
+
+            public bool Grounded { get; set; } = true;
+
+            public int PatrolX { get; set; } = 144;
+
+            public bool PatrolLeft { get; set; }
+
+            public AudioMixedLoadDrawState DrawState() =>
+                new(PlayerX - CameraX, PlayerY - CameraY, Grounded, PatrolX, PatrolLeft);
+        }
+    }
+
+    private sealed record AudioMixedLoadDrawState(
+        int PlayerScreenX,
+        int PlayerScreenY,
+        bool Grounded,
+        int PatrolX,
+        bool PatrolLeft);
 
     private static int Mod(int value, int modulus) => ((value % modulus) + modulus) % modulus;
 

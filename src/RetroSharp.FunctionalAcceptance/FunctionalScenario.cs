@@ -48,11 +48,29 @@ public sealed record FunctionalExpectedFeatures(
     [property: JsonRequired] bool Background = false,
     [property: JsonRequired] bool SpriteOam = false,
     [property: JsonRequired] bool BankRestoration = false,
-    [property: JsonRequired] bool SafeVideoWrites = false);
+    [property: JsonRequired] bool SafeVideoWrites = false,
+    bool AudioProgress = false);
 
 public sealed record FunctionalAudioExpectation(
     bool ServiceExpectedByDefault,
-    IReadOnlyList<FunctionalFrameSpan> AuthoredSilence);
+    IReadOnlyList<FunctionalFrameSpan> AuthoredSilence,
+    int MinimumRegisterEvents = 0,
+    int? MaximumRegisterEvents = null,
+    int? MaximumRegisterEventGapFrames = null,
+    int MinimumSoundEffectStarts = 0,
+    int? MaximumSoundEffectStarts = null,
+    int MinimumSoundEffectCompletions = 0,
+    int? MaximumSoundEffectCompletions = null,
+    int MaximumSoundEffectRestarts = 0,
+    int MinimumDpcmStarts = 0,
+    int? MaximumDpcmStarts = null,
+    int MinimumDpcmCompletions = 0,
+    int? MaximumDpcmCompletions = null,
+    int MaximumDpcmRestarts = 0,
+    bool? MusicActiveAtEnd = null,
+    bool? SoundEffectActiveAtEnd = null,
+    bool? DpcmActiveAtEnd = null,
+    string? OrderedRegisterEventSha256 = null);
 
 public sealed record FunctionalFrameSpan(int StartFrame, int DurationFrames);
 
@@ -85,7 +103,23 @@ public sealed record FunctionalFrameObservation(
     IReadOnlyList<FunctionalSpriteObservation>? Sprites = null,
     IReadOnlyList<FunctionalVideoWriteObservation>? VideoWrites = null,
     IReadOnlyList<FunctionalOamWriteObservation>? OamWrites = null,
-    FunctionalSpawnLifecycleObservation? Spawn = null);
+    FunctionalSpawnLifecycleObservation? Spawn = null,
+    FunctionalAudioProgressObservation? AudioProgress = null);
+
+public sealed record FunctionalAudioProgressObservation(
+    long RegisterEventCount,
+    IReadOnlyList<FunctionalAudioRegisterEvent> RegisterEvents,
+    FunctionalAudioPlaybackObservation Music,
+    FunctionalAudioPlaybackObservation SoundEffect,
+    FunctionalAudioPlaybackObservation Dpcm);
+
+public sealed record FunctionalAudioRegisterEvent(string Domain, int Address, int Value);
+
+public sealed record FunctionalAudioPlaybackObservation(
+    bool Active,
+    long Starts,
+    long Completions,
+    long Restarts);
 
 public sealed record FunctionalSpawnLifecycleObservation(
     long? ActivatedSequence,

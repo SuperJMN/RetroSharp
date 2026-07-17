@@ -11,8 +11,8 @@
     { "id": "first-horizontal-chunk-window", "frame": 184, "expectedSignals": { "visibleCameraX": 79 } },
     { "id": "circular-buffer-wrap-window", "frame": 304, "expectedSignals": { "visibleCameraX": 199 } },
     { "id": "later-horizontal-chunk-window", "frame": 424, "expectedSignals": { "visibleCameraX": 319 } },
-    { "id": "near-right-edge", "frame": 2362, "expectedSignals": { "visibleCameraX": 2237 } },
-    { "id": "return-after-reversal", "frame": 2550, "expectedSignals": { "visibleCameraX": 2049 } }
+    { "id": "near-right-edge", "frame": 2362, "expectedSignals": { "visibleCameraX": 2224 } },
+    { "id": "return-after-reversal", "frame": 2550, "expectedSignals": { "visibleCameraX": 2036 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,

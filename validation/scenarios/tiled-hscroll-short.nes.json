@@ -10,9 +10,9 @@
     { "id": "bottom-aligned-start", "frame": 40, "expectedSignals": { "visibleCameraY": 0 } },
     { "id": "first-horizontal-chunk-window", "frame": 185, "expectedSignals": { "visibleCameraX": 102 } },
     { "id": "circular-buffer-wrap-window", "frame": 305, "expectedSignals": { "visibleCameraX": 222 } },
-    { "id": "later-horizontal-chunk-window", "frame": 426, "expectedSignals": { "visibleCameraX": 342 } },
-    { "id": "right-edge-reversal", "frame": 857, "expectedSignals": { "visibleCameraX": 768 } },
-    { "id": "return-after-reversal", "frame": 970, "expectedSignals": { "visibleCameraX": 656 } }
+    { "id": "later-horizontal-chunk-window", "frame": 426, "expectedSignals": { "visibleCameraX": 343 } },
+    { "id": "right-edge-reversal", "frame": 857, "expectedSignals": { "visibleCameraX": 763 } },
+    { "id": "return-after-reversal", "frame": 970, "expectedSignals": { "visibleCameraX": 650 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,

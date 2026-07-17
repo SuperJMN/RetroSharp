@@ -1,0 +1,9 @@
+{
+  "targets": ["gb", "nes"],
+  "outputs": {
+    "gb": "bin/audio-mixed-load.gb",
+    "nes": "bin/audio-mixed-load.nes"
+  },
+  "libraries": ["RetroSharp.Portable2D"],
+  "sources": ["src/main.rs"]
+}

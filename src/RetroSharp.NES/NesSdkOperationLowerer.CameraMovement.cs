@@ -158,8 +158,6 @@ internal sealed partial class NesSdkOperationLowerer
     {
         var config = EnsureCameraConfigured("camera_set_position");
 
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
         var horizontalFitsByte = Math.Max(0, (config.MapWidth - NesTarget.Capabilities.ScreenTiles.Width) * 8) <= byte.MaxValue;
         if (ShouldStreamColumnsForCamera(config))
         {
@@ -269,6 +267,9 @@ internal sealed partial class NesSdkOperationLowerer
                     "nes_camera_y");
             }
         }
+
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
     }
 
     // Walks the camera axis one pixel per step toward the target held in A on entry, driving the

@@ -7,6 +7,13 @@ using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedC
 
 public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper output)
 {
+    private sealed record AudioMixedDrawState(
+        int PlayerX,
+        int PlayerY,
+        int PlayerFrame,
+        int PatrolX,
+        int PatrolFrame,
+        bool PatrolFlipX);
 
     public static TheoryData<string, string, string, string, string> ProductionSamples => new()
     {
@@ -19,6 +26,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.gb", "validation/scenarios/tiled-free-scroll.gb.json" },
         { "deadzone-follow", "samples/deadzone-follow/deadzone.rs", "samples/deadzone-follow/deadzone.tmj", "samples/deadzone-follow/deadzone.gb", "validation/scenarios/deadzone-follow.gb.json" },
         { "platformer-landing", "samples/platformer-landing/src/main.rs", "samples/platformer-landing/assets/platformer-landing.tmj", "samples/platformer-landing/bin/platformer-landing.gb", "validation/scenarios/platformer-landing.gb.json" },
+        { "audio-mixed-load", "samples/audio-mixed-load/src/main.rs", "samples/tiled-hscroll/stage1-short.tmj", "samples/audio-mixed-load/bin/audio-mixed-load.gb", "validation/scenarios/audio-mixed-load.gb.json" },
     };
 
     [Theory]
@@ -31,7 +39,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         string scenarioRelativePath)
     {
         var sourcePath = RepositoryFile(sourceRelativePath);
-        var sourceDirectory = sampleId == "platformer-landing"
+        var usesPortableSdk = sampleId is "platformer-landing" or "audio-mixed-load";
+        var sourceDirectory = usesPortableSdk
             ? Path.GetDirectoryName(Path.GetDirectoryName(sourcePath))
             : Path.GetDirectoryName(sourcePath);
         sourceDirectory = sourceDirectory
@@ -40,7 +49,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         GameBoyVideoProgram? platformerProgram = null;
         GameBoyRomBuildReport? platformerBuildReport = null;
         byte[] regeneratedRom;
-        if (sampleId == "platformer-landing")
+        if (usesPortableSdk)
         {
             platformerProgram = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
                 source,
@@ -74,16 +83,18 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         Assert.Equal(sampleId, scenario.SampleId);
-        var factory = new PackedGameBoyMachineFactory(platformerProgram, platformerBuildReport);
+        var factory = new PackedGameBoyMachineFactory(platformerProgram, platformerBuildReport, scenario);
         var adapter = new GameBoyFunctionalRomAdapter(
             factory,
             new FunctionalAdapterCapabilities(
                 GameplayTicks: true,
-                InputTimeline: sampleId == "platformer-landing",
+                AudioService: sampleId == "audio-mixed-load",
+                AudioProgress: sampleId == "audio-mixed-load",
+                InputTimeline: usesPortableSdk,
                 CameraLifecycle: true,
                 BankRestoration: true,
                 Background: true,
-                SpriteOam: sampleId == "platformer-landing",
+                SpriteOam: usesPortableSdk,
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
@@ -124,6 +135,58 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             });
     }
 
+    [Fact]
+    public void Audio_mixed_load_canary_rejects_one_frozen_physical_service_frame()
+    {
+        const string sourceRelativePath = "samples/audio-mixed-load/src/main.rs";
+        var sourcePath = RepositoryFile(sourceRelativePath);
+        var sourceDirectory = Path.GetDirectoryName(Path.GetDirectoryName(sourcePath))
+            ?? throw new InvalidOperationException($"Could not locate '{sourceRelativePath}'.");
+        var source = File.ReadAllText(sourcePath);
+        var program = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+            source,
+            sourceDirectory,
+            RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+            null,
+            [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+            null);
+        var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            sourceDirectory,
+            RetroSharp.Sdk.SdkLibraryImportMode.ExplicitOnly,
+            null,
+            [RetroSharp.Sdk.SdkImportResolver.Portable2D],
+            null);
+        var scenario = FunctionalScenarioLoader.Load(RepositoryFile("validation/scenarios/audio-mixed-load.gb.json"));
+        var map = GameBoyTiledMapImporter.Load(RepositoryFile("samples/tiled-hscroll/stage1-short.tmj"));
+        var factory = new PackedGameBoyMachineFactory(program, build.Report, scenario);
+        var adapter = new GameBoyFunctionalRomAdapter(
+            new FrozenServiceMachineFactory(factory, scenario.WarmUpFrames + 10),
+            new FunctionalAdapterCapabilities(
+                GameplayTicks: true,
+                AudioService: true,
+                AudioProgress: true,
+                InputTimeline: true,
+                CameraLifecycle: true,
+                BankRestoration: true,
+                Background: true,
+                SpriteOam: true,
+                VideoWriteTiming: true));
+        var rom = File.ReadAllBytes(RepositoryFile("samples/audio-mixed-load/bin/audio-mixed-load.gb"));
+
+        var report = FunctionalScenarioRunner.Run(
+            scenario,
+            new FunctionalRomArtifact("samples/audio-mixed-load/bin/audio-mixed-load.gb", rom),
+            adapter,
+            new AuthoredTiledBackgroundOracle(map, factory, program, scenario));
+
+        Assert.False(report.Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "gameplay-tick-ratio").Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "gameplay-missed-streak").Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-service-gap").Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-drift").Passed);
+    }
+
     private static string Diagnostic(FunctionalAcceptanceReport report)
     {
         var failureFrames = report.IntegrityFailures.Select(failure => failure.Frame).Distinct().Take(5).ToHashSet();
@@ -157,11 +220,14 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
     private sealed class PackedGameBoyMachineFactory(
         GameBoyVideoProgram? platformerProgram,
-        GameBoyRomBuildReport? platformerBuildReport) : IFunctionalRomMachineFactory
+        GameBoyRomBuildReport? platformerBuildReport,
+        FunctionalScenario scenario) : IFunctionalRomMachineFactory
     {
         public byte[]? LoadedRom { get; private set; }
 
         public Dictionary<int, (int X, int Y)> VisibleCameraByFrame { get; } = [];
+
+        public Dictionary<int, AudioMixedDrawState> AudioDrawStateByFrame { get; } = [];
 
         public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom)
         {
@@ -169,16 +235,47 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             return new PackedGameBoyMachine(
                 LoadedRom,
                 VisibleCameraByFrame,
+                AudioDrawStateByFrame,
                 platformerProgram,
-                platformerBuildReport);
+                platformerBuildReport,
+                scenario.SampleId == "audio-mixed-load");
         }
+    }
+
+    private sealed class FrozenServiceMachineFactory(IFunctionalRomMachineFactory inner, int frozenFrame)
+        : IFunctionalRomMachineFactory
+    {
+        public IFunctionalRomMachine Create(ReadOnlyMemory<byte> exactRom) =>
+            new FrozenServiceMachine(inner.Create(exactRom), frozenFrame);
+    }
+
+    private sealed class FrozenServiceMachine(IFunctionalRomMachine inner, int frozenFrame)
+        : IFunctionalRomMachine
+    {
+        public FunctionalFrameObservation ObserveInitial() => inner.ObserveInitial();
+
+        public FunctionalFrameObservation AdvanceFrame(int frame, IReadOnlySet<string> heldInputs)
+        {
+            var observation = inner.AdvanceFrame(frame, heldInputs);
+            return frame < frozenFrame
+                ? observation
+                : observation with
+                {
+                    GameplayTicks = observation.GameplayTicks - 1,
+                    AudioServiceTicks = observation.AudioServiceTicks - 1,
+                };
+        }
+
+        public void Dispose() => inner.Dispose();
     }
 
     private sealed class PackedGameBoyMachine(
         byte[] exactRom,
         IDictionary<int, (int X, int Y)> visibleCameraByFrame,
+        IDictionary<int, AudioMixedDrawState> audioDrawStateByFrame,
         GameBoyVideoProgram? platformerProgram,
-        GameBoyRomBuildReport? platformerBuildReport) : IFunctionalRomMachine
+        GameBoyRomBuildReport? platformerBuildReport,
+        bool isAudioMixedLoad) : IFunctionalRomMachine
     {
         private readonly GameBoyTestCpu cpu = new(exactRom)
         {
@@ -188,6 +285,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private int lastFrame;
         private int processedVramWrites;
         private int processedOamWrites;
+        private int processedApuWrites;
         private byte previousRequestCount;
         private byte previousResidentCount;
         private byte previousCommitCount;
@@ -196,6 +294,22 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         private long commitSequence;
         private long visibleSequence;
         private (int X, int Y)? previousVisibleCamera;
+        private (int X, int Y)? previousAudioRequestedCamera;
+        private readonly Dictionary<(int X, int Y), long> audioRequestSequenceByPosition = [];
+        private long audioRequestSequence;
+        private long audioVisibleSequence;
+        private bool previousMusicActive;
+        private bool previousSfxActive;
+        private long musicStarts;
+        private long musicCompletions;
+        private long musicRestarts;
+        private long sfxCompletions;
+        private long sfxRestarts;
+        private byte previousSfxStarts;
+        private byte previousGameplayTick;
+        private long gameplaySequence;
+        private byte previousAudioServiceTick;
+        private long audioServiceSequence;
         private readonly IReadOnlyDictionary<string, GameBoyRuntimeUserVariable> variables =
             platformerBuildReport?.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal)
             ?? new Dictionary<string, GameBoyRuntimeUserVariable>(StringComparer.Ordinal);
@@ -224,6 +338,16 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         private FunctionalFrameObservation Observe(int frame)
         {
+            if (isAudioMixedLoad)
+            {
+                var currentGameplayTick = VariableByte("gameplayTick");
+                var delta = (byte)(currentGameplayTick - previousGameplayTick);
+                gameplaySequence += delta;
+                previousGameplayTick = currentGameplayTick;
+                var currentAudioServiceTick = cpu.Wram(PackedCameraMemory.AudioTickCount);
+                audioServiceSequence += (byte)(currentAudioServiceTick - previousAudioServiceTick);
+                previousAudioServiceTick = currentAudioServiceTick;
+            }
             var visibleCamera = (X: Word(PackedCameraMemory.VisibleCameraXLow, PackedCameraMemory.VisibleCameraXHigh), Y: Word(PackedCameraMemory.VisibleCameraYLow, PackedCameraMemory.VisibleCameraYHigh));
             visibleCameraByFrame[frame] = visibleCamera;
             var videoWrites = cpu.VramWrites.Skip(processedVramWrites).Select(VideoWrite).ToArray();
@@ -251,7 +375,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 ["decodeWorkInVBlank"] = cpu.Wram(PackedCameraMemory.DecodeWorkInVBlank),
             };
             AddPlatformerState(state);
-            var sprites = CapturePlatformerSprites();
+            AddAudioMixedState(frame, state);
+            var sprites = CaptureSprites(frame);
             var shadowBank = cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
             var effectiveShadowBank = shadowBank == 0 ? 1 : shadowBank;
             var bank = new FunctionalBankObservation(
@@ -259,24 +384,17 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 effectiveShadowBank,
                 cpu.CurrentRomBank == effectiveShadowBank,
                 "gb-mbc1");
-            var requested = UpdateSequence(PackedCameraMemory.RequestCount, ref previousRequestCount, ref requestSequence);
-            var resident = UpdateSequence(PackedCameraMemory.ResidentCount, ref previousResidentCount, ref residentSequence);
-            var committed = UpdateSequence(PackedCameraMemory.CommitCount, ref previousCommitCount, ref commitSequence);
-            if (commitSequence != 0
-                && previousVisibleCamera is { } previousVisible
-                && visibleCamera != previousVisible)
-            {
-                visibleSequence = commitSequence;
-            }
+            var camera = isAudioMixedLoad
+                ? AudioCameraObservation(
+                    (VariableWord("cameraX"), VariableWord("cameraY")),
+                    visibleCamera)
+                : PackedCameraObservation(visibleCamera);
 
-            previousVisibleCamera = visibleCamera;
-            long? visible = visibleSequence == 0 ? null : visibleSequence;
-            var camera = new FunctionalCameraLifecycleObservation(requested, resident, committed, visible);
-
+            var audioProgress = CaptureAudioProgress();
             return new FunctionalFrameObservation(
                 frame,
-                cpu.SourceWaitCompletions,
-                cpu.AudioUpdateCalls,
+                isAudioMixedLoad ? gameplaySequence : cpu.SourceWaitCompletions,
+                isAudioMixedLoad ? audioServiceSequence : cpu.AudioUpdateCalls,
                 cpu.ResetCount,
                 state,
                 camera,
@@ -284,12 +402,90 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 CaptureBackground(visibleCamera),
                 Sprites: sprites,
                 VideoWrites: videoWrites,
-                OamWrites: oamWrites);
+                OamWrites: oamWrites,
+                AudioProgress: audioProgress);
+        }
+
+        private void AddAudioMixedState(int frame, IDictionary<string, long> state)
+        {
+            if (!isAudioMixedLoad)
+            {
+                return;
+            }
+
+            foreach (var name in new[]
+                     {
+                         "playerX", "playerY", "cameraX", "cameraY", "grounded", "patrolX",
+                         "gameplayTick", "audioTick", "sfxCount", "collisionProbeCount",
+                         "playerScreenX", "playerScreenY", "playerFrame", "patrolScreenX", "patrolFrame",
+                         "publishedPlayerScreenX", "publishedPlayerScreenY", "publishedPlayerFrame",
+                         "publishedPatrolScreenX", "publishedPatrolFrame", "publishedPatrolLeft",
+                     })
+            {
+                state[name] = variables[name].Size == 1 ? VariableByte(name) : VariableWord(name);
+            }
+
+            state["musicActive"] = cpu.Wram(GameBoyRuntimeMemoryLayout.Audio.MusicActive);
+            state["sfxActive"] = cpu.Wram(GameBoyRuntimeMemoryLayout.Audio.SfxActive);
+            audioDrawStateByFrame[frame] = new(
+                VariableWord("publishedPlayerScreenX"),
+                VariableWord("publishedPlayerScreenY"),
+                VariableByte("publishedPlayerFrame"),
+                VariableByte("publishedPatrolScreenX"),
+                VariableByte("publishedPatrolFrame"),
+                VariableByte("publishedPatrolLeft") != 0);
+        }
+
+        private FunctionalAudioProgressObservation? CaptureAudioProgress()
+        {
+            if (!isAudioMixedLoad)
+            {
+                return null;
+            }
+
+            var events = cpu.ApuWrites.Skip(processedApuWrites)
+                .Select(write => new FunctionalAudioRegisterEvent("gb-apu", write.Register, write.Value))
+                .ToArray();
+            processedApuWrites = cpu.ApuWrites.Count;
+            var musicActive = cpu.Wram(GameBoyRuntimeMemoryLayout.Audio.MusicActive) != 0;
+            var sfxActive = cpu.Wram(GameBoyRuntimeMemoryLayout.Audio.SfxActive) != 0;
+            UpdateLifecycle(musicActive, previousMusicActive, ref musicStarts, ref musicCompletions, ref musicRestarts);
+            var sourceSfxStarts = VariableByte("sfxCount");
+            var newSfxStarts = (byte)(sourceSfxStarts - previousSfxStarts);
+            if (previousSfxActive)
+            {
+                sfxRestarts += newSfxStarts;
+            }
+            if (previousSfxActive && !sfxActive)
+            {
+                sfxCompletions++;
+            }
+            previousMusicActive = musicActive;
+            previousSfxActive = sfxActive;
+            previousSfxStarts = sourceSfxStarts;
+            return new(
+                cpu.ApuWrites.Count,
+                events,
+                new(musicActive, musicStarts, musicCompletions, musicRestarts),
+                new(sfxActive, sourceSfxStarts, sfxCompletions, sfxRestarts),
+                new(false, 0, 0, 0));
+        }
+
+        private static void UpdateLifecycle(
+            bool active,
+            bool previousActive,
+            ref long starts,
+            ref long completions,
+            ref long restarts)
+        {
+            if (active && !previousActive) starts++;
+            if (!active && previousActive) completions++;
+            _ = restarts;
         }
 
         private void AddPlatformerState(IDictionary<string, long> state)
         {
-            if (playerAsset is null)
+            if (playerAsset is null || isAudioMixedLoad)
             {
                 return;
             }
@@ -309,26 +505,35 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             state["displayEnabled"] = (cpu.IoRegister(0xFF40) & 0x80) != 0 ? 1 : 0;
         }
 
-        private IReadOnlyList<FunctionalSpriteObservation>? CapturePlatformerSprites()
+        private IReadOnlyList<FunctionalSpriteObservation>? CaptureSprites(int frame)
         {
             if (playerAsset is null)
             {
                 return null;
             }
 
+            var spriteCount = isAudioMixedLoad ? 2 : 1;
             var playerOamBytes = playerAsset.Pieces.Count * 4;
+            var usedOamBytes = playerOamBytes * spriteCount;
             var actualPlayer = Enumerable.Range(0, playerOamBytes)
                 .Select(offset => (int)cpu.Oam((ushort)(0xFE00 + offset)))
                 .ToArray();
-            var actualUnused = Enumerable.Range(playerOamBytes, 160 - playerOamBytes)
+            var actualPatrol = Enumerable.Range(playerOamBytes, isAudioMixedLoad ? playerOamBytes : 0)
                 .Select(offset => (int)cpu.Oam((ushort)(0xFE00 + offset)))
                 .ToArray();
-
-            return
-            [
-                new FunctionalSpriteObservation("player", OamVisible(actualPlayer), actualPlayer, 0),
-                new FunctionalSpriteObservation("unused-oam", OamVisible(actualUnused), actualUnused, playerAsset.Pieces.Count),
-            ];
+            var actualUnused = Enumerable.Range(usedOamBytes, 160 - usedOamBytes)
+                .Select(offset => (int)cpu.Oam((ushort)(0xFE00 + offset)))
+                .ToArray();
+            var result = new List<FunctionalSpriteObservation>
+            {
+                new("player", OamVisible(actualPlayer), actualPlayer, 0),
+            };
+            if (isAudioMixedLoad)
+            {
+                result.Add(new("patrol", OamVisible(actualPatrol), actualPatrol, playerAsset.Pieces.Count));
+            }
+            result.Add(new("unused-oam", OamVisible(actualUnused), actualUnused, playerAsset.Pieces.Count * spriteCount));
+            return result;
         }
 
         private int VariableWord(string name) => VariableByte(name) | (VariableByte(name, 1) << 8);
@@ -364,6 +569,43 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             sequence += (byte)(current - previous);
             previous = current;
             return sequence == 0 ? null : sequence;
+        }
+
+        private FunctionalCameraLifecycleObservation PackedCameraObservation((int X, int Y) visibleCamera)
+        {
+            var requested = UpdateSequence(PackedCameraMemory.RequestCount, ref previousRequestCount, ref requestSequence);
+            var resident = UpdateSequence(PackedCameraMemory.ResidentCount, ref previousResidentCount, ref residentSequence);
+            var committed = UpdateSequence(PackedCameraMemory.CommitCount, ref previousCommitCount, ref commitSequence);
+            if (commitSequence != 0
+                && previousVisibleCamera is { } previousVisible
+                && visibleCamera != previousVisible)
+            {
+                visibleSequence = commitSequence;
+            }
+
+            previousVisibleCamera = visibleCamera;
+            long? visible = visibleSequence == 0 ? null : visibleSequence;
+            return new(requested, resident, committed, visible);
+        }
+
+        private FunctionalCameraLifecycleObservation AudioCameraObservation(
+            (int X, int Y) requestedCamera,
+            (int X, int Y) visibleCamera)
+        {
+            if (previousAudioRequestedCamera != requestedCamera)
+            {
+                audioRequestSequence++;
+                previousAudioRequestedCamera = requestedCamera;
+                audioRequestSequenceByPosition[requestedCamera] = audioRequestSequence;
+            }
+
+            if (audioRequestSequenceByPosition.TryGetValue(visibleCamera, out var matchingRequest))
+            {
+                audioVisibleSequence = matchingRequest;
+            }
+
+            long? visible = audioVisibleSequence == 0 ? null : audioVisibleSequence;
+            return new(audioRequestSequence, audioRequestSequence, visible, visible);
         }
 
         private static FunctionalVideoWriteObservation VideoWrite(VramWrite write) => new(
@@ -413,7 +655,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         ];
         private readonly GameBoyCompiledSpriteAsset? playerAsset = platformerProgram?.SpriteAssets
             .Single(pair => pair.Key.EndsWith("player_sprite", StringComparison.Ordinal)).Value;
-        private readonly PlatformerLandingReferenceTimeline? platformerTimeline = platformerProgram is null
+        private readonly PlatformerLandingReferenceTimeline? platformerTimeline = platformerProgram is null || scenario.SampleId != "platformer-landing"
             ? null
             : new PlatformerLandingReferenceTimeline(
                 scenario,
@@ -438,12 +680,22 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                             AuthoredTile(startColumn + x, startRow + y),
                             0xE4)))
                     .ToArray(),
-                PlatformerSprites(frame));
+                Sprites(frame));
         }
 
-        private IReadOnlyList<FunctionalSpriteExpectation>? PlatformerSprites(int frame)
+        private IReadOnlyList<FunctionalSpriteExpectation>? Sprites(int frame)
         {
-            if (playerAsset is null || platformerTimeline is null)
+            if (playerAsset is null)
+            {
+                return null;
+            }
+
+            if (scenario.SampleId == "audio-mixed-load")
+            {
+                return AudioMixedSprites(frame);
+            }
+
+            if (platformerTimeline is null)
             {
                 return null;
             }
@@ -475,6 +727,38 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                     playerAsset.Pieces.Count),
             ];
         }
+
+        private IReadOnlyList<FunctionalSpriteExpectation> AudioMixedSprites(int frame)
+        {
+            var state = factory.AudioDrawStateByFrame[frame];
+            var player = SpriteOam(state.PlayerX, state.PlayerY, state.PlayerFrame, false);
+            var patrol = SpriteOam(state.PatrolX, 96, state.PatrolFrame, state.PatrolFlipX);
+            return
+            [
+                new("player", OamVisible(player), player, 0),
+                new("patrol", OamVisible(patrol), patrol, playerAsset!.Pieces.Count),
+                new(
+                    "unused-oam",
+                    false,
+                    Enumerable.Repeat(0, 160 - player.Length - patrol.Length).ToArray(),
+                    playerAsset.Pieces.Count * 2),
+            ];
+        }
+
+        private int[] SpriteOam(int screenX, int screenY, int spriteFrame, bool flipX) =>
+            playerAsset!.Pieces.SelectMany(piece =>
+            {
+                var pieceX = flipX
+                    ? playerAsset.LogicalWidth - 8 - piece.XOffset
+                    : piece.XOffset;
+                return new[]
+                {
+                    (screenY + piece.YOffset + 16) & 0xFF,
+                    (screenX + pieceX + 8) & 0xFF,
+                    playerAsset.FirstTile + spriteFrame * playerAsset.TilesPerFrame + piece.TileOffset,
+                    flipX ? 0x20 : 0,
+                };
+            }).ToArray();
 
         private static bool OamVisible(IReadOnlyList<int> oam) =>
             oam.Chunk(4).Any(piece => piece[0] is > 0 and < 160);

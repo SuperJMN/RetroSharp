@@ -191,8 +191,14 @@ supersede the run-speed staircase revision hashes above.
 
 | Target | Tracked artifact | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
-| Game Boy | `samples/runner/bin/runner.gb` | 131072 | `e640cd502689b70c0c0f6ca89e9997494b0a5d4228982c54a55aafe8f3cf7fe5` |
-| NES | `samples/runner/bin/runner.nes` | 81936 | `7464aea0f068869d6786ef4591445c75d85800a394f830b9dc607af62c9ec5c7` |
+| Game Boy | `samples/runner/bin/runner.gb` | 131072 | `8380505914850759123430543e0dba6be2ac6a8770cd05cb6acb695200608944` |
+| NES | `samples/runner/bin/runner.nes` | 81936 | `68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53` |
+
+The current Game Boy hash incorporates later target work without changing the
+landing contract. The current NES hash incorporates CSL-5 / #340's
+stale-NMI publication, bounded OAM publisher, and DPCM-link placement
+corrections. The exact landing, staircase, gravity, and jump-rise regressions
+remain green against these tracked cartridges.
 
 ## Validation
 

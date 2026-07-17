@@ -144,7 +144,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.Equal(6_208, result.Report.PinnedR7Bytes);
         Assert.Equal(4_128, result.Report.BootR7Bytes);
         Assert.Equal(3_056, result.Report.ResidentChrBytes);
-        Assert.Equal(4_903, result.Report.FixedPayloadBytes);
+        Assert.Equal(4_875, result.Report.FixedPayloadBytes);
         Assert.Equal(64 * 1_024, result.Report.PrgRomSize);
         Assert.Equal(16 * 1_024, result.Report.ChrRomSize);
         Assert.Equal(16 + 64 * 1_024 + 16 * 1_024, result.Rom.Length);
@@ -247,7 +247,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.DoesNotContain(
             runtimeProbe.Report.Segments,
             item => item.Owner.StartsWith("pinned:world-column-attributes:", StringComparison.Ordinal));
-        Assert.Equal(8_999, runtimeProbe.Report.FixedPayloadBytes);
+        Assert.Equal(8_982, runtimeProbe.Report.FixedPayloadBytes);
         Assert.Equal(7_310, runtimeProbe.Report.PinnedR7Bytes);
         Assert.Equal(1_536, runtimeProbe.Report.ResidentChrBytes);
         Assert.Equal(runtimeProbe.Rom, rebuiltRuntimeProbe.Rom);
