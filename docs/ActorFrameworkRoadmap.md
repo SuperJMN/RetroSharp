@@ -1,7 +1,8 @@
 # Actor Framework Roadmap (scalable platformer actors / enemies)
 
 Status: **feature-complete for the first scrolling platformer slice on branch
-`feature/actor-framework`; AF-5.9..AF-5.10 remain non-blocking follow-ups.**
+`feature/actor-framework`; AF-5.9 is closed with one-shot v1 semantics and
+AF-5.10 remains under the generated-code performance roadmap.**
 Phases 1-4 and AF-5.1..AF-5.8 landed as a working, byte-reproducible
 Game Boy/NES actor-framework acceptance slice. Phase 5 moved the framework from
 the early non-scrolling closure to world-space actors, per-actor collision,
@@ -320,7 +321,8 @@ Candidate file names are guidance; inspect the real code paths first.
   - [x] Classify the new sample in `samples/manifest.json`.
   - [x] Flip Iteration 14 status in `ArchitectureRoadmap.md` to
     feature-complete for the first scrolling platformer slice while preserving
-    AF-5.9..AF-5.10 as open non-blocking follow-ups.
+    AF-5.9..AF-5.10 as the then-open non-blocking follow-ups. AF-5.9 is now
+    closed and AF-5.10 is routed through the generated-code performance roadmap.
 - Verification:
   - [x] `git diff --check`; manifest-reading tests pass.
 - Depends on: AF-4.2.
@@ -469,7 +471,7 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
   - [x] Tests cover a near-viewport-edge actor whose right edge wraps in the
     current byte expression shape.
 
-#### AF-5.9: Decide one-shot versus reactivation spawn policy (non-blocking)
+#### AF-5.9: Decide one-shot versus reactivation spawn policy (closed)
 - Problem: authored Tiled spawns are currently one-shot. `used[]` is set only
   after a spawn successfully claims a slot; recycled slots do not clear that
   spawn's used bit, so scrolling back does not respawn the same authored object.
@@ -479,39 +481,35 @@ vtables, function pointers, closures, or genre-specific `Sdk2DOperation` cases.
 - Candidate modules: actor/spawn state and generation partials, `samples/actor-framework/README.md`,
   target docs.
 - Steps:
-  - [ ] Decide whether v1 keeps one-shot activation as the stable default or adds
-    an explicit reactivation mode.
-  - [ ] Document the selected policy and make any alternate mode explicit in the
-    source API.
+  - [x] Keep one-shot activation as the stable v1 default. Any later
+    reactivation mode requires an explicit source API and concrete use case.
+  - [x] Document the selected policy in `docs/Portable2DSdkV1.md`.
 - Verification:
-  - [ ] Tests prove one-shot behavior remains stable or the new explicit mode
-    reactivates predictably.
+  - [x] Existing GB/NES lowering and exact actor lifecycle acceptance preserve
+    `used[]` across slot recycling and return-to-origin timelines.
+- Remote: [#243](https://github.com/SuperJMN/RetroSharp/issues/243), closed as
+  already implemented on 2026-07-17.
 
 #### AF-5.10: Reduce O(spawns)/frame activation scan cost (non-blocking)
-- Problem: every `Actors.SpawnLayer(...)` / `Actors.SpawnWindow(...)` call scans
-  all authored spawns in that layer each frame, guarded by `used[]` and the
-  camera window. This is predictable and small for the first sample, but wide
-  levels need an indexed or cursor-based activation strategy.
-- Layer: framework asset/lowering.
-- Candidate files: spawn-table generation, Tiled spawn importer, GB/NES emitted-code
-  tests.
-- Steps:
-  - [ ] Group or sort spawn data so activation can skip clearly distant objects.
-  - [ ] Preserve deterministic fixed-slot activation and explicit capacity
-    diagnostics.
-- Verification:
-  - [ ] Tests cover equivalent activation with fewer per-frame spawn checks on a
-    wider map.
+- Historical problem: every `Actors.SpawnLayer(...)` /
+  `Actors.SpawnWindow(...)` call scans all authored spawns in that layer each
+  frame. This remains open, but its issue-ready contract no longer lives here.
+- Remote: [#244](https://github.com/SuperJMN/RetroSharp/issues/244). The broader
+  baseline, canonical AF-5.10 task card, constant-cost record prerequisite,
+  CPU-work decision gate, and joint cadence gate live only in
+  `docs/GeneratedCodePerformanceRoadmap.md`.
 
 ## Known limitations and follow-ups
 
-AF-5.1 through AF-5.8 are closed, and the branch is feature-complete for the first
+AF-5.1 through AF-5.9 are closed, and the branch is feature-complete for the first
 scrolling platformer slice. The remaining limitations are not blockers for that
 slice, but they should stay visible:
 
-- AF-5.9: spawn activation is intentionally one-shot; reactivation is not yet a
-  source-level policy.
-- AF-5.10: runtime activation currently scans authored spawns each frame.
+- AF-5.9 decision: spawn activation is intentionally one-shot in v1. A future
+  reactivation mode requires an explicit source API rather than changing the
+  default implicitly.
+- AF-5.10: runtime activation currently scans authored spawns each frame; the
+  complete performance graph is `docs/GeneratedCodePerformanceRoadmap.md`.
 - AF-5.11: `Projectiles.*` and `Effects.*` still have compiler-owned public
   directive recognition in the Actor Framework projectile/effect feature modules; migrate them behind
   package-declared metadata in a separate slice if their lifecycle surface needs

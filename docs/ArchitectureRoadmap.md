@@ -1,7 +1,7 @@
 # RetroSharp Architecture Roadmap
 
 Status: proposed architecture roadmap.
-Last updated: 2026-07-11.
+Last updated: 2026-07-17.
 
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
@@ -23,6 +23,16 @@ The active SDK v1 stabilization backlog is now narrower than the original #106 e
 Separate design debts: #104 tracks type-system soundness and #105 tracks the remaining Tiled import/world-flattening coupling. #103 and #200 are now resolved: SDK public facade names are declared in source packages, `DeclaredStaticMethodIndex` lowers declared `Type.Method(...)` static calls, and receiver-method lowering handles remaining receiver dot-calls without a compiler registry of public SDK facade names. For #105, the structural half is extracted: `RetroSharp.Core.Sdk.Tiled.LogicalTiledMapImporter` now owns target-neutral Tiled parsing, tileset descriptors, geometry/world-slice resolution, and collision-flag interpretation, producing a `LogicalTiledMap` of source-tile references. The Game Boy importer consumes it and keeps only pixel generation, deduplication, 8x8 expansion, and per-pixel background composition. The NES importer (`NesTiledWorldImporter`) now consumes the same neutral map. `WorldMap2D` no longer carries target tile numbers: the portable resource now owns only dimensions plus per-tile `WorldTileFlags` (collision), while each target's already-lowered background tile numbers live in a separate `WorldTileGrid` produced by the target importer and consumed by that target's rendering path. This removes the last piece of the #105 coupling on the portable type; the residual work is purely internal (the target tile numbers are still assigned during import rather than deferred to lowering, which is acceptable because pixel dedup/CHR allocation is inherently target-specific).
 
 Iteration 15, scalable large-world assets and banked streaming, is complete through joint acceptance. The complete runner `stage1` design exposed three separate ceilings—one-byte world addressing/collision facts, monolithic expanded map payloads, and NES mapper-0 PRG capacity. Waves 0 and 1 accepted and implemented the measured shared contracts. Game Boy production tasks `LW-2.1` through `LW-2.5` prove deterministic MBC1 placement, a fixed-bank reader, bounded slots, bank restoration, staged camera commits, and full-`stage1` acceptance. NES `LW-3.1` through `LW-3.4` prove the target-private MMC3/TVROM fixed-runtime foundation, mapper-0-first final-link selection, canonical ordered multi-R6 placement, the fixed-bank `WorldPack` reader, exact R6 restoration, and bounded four-screen streaming. `LW-3.5` migrated the shared runner and regenerated both tracked ROMs from the complete map. The complete task graph lives in `docs/LargeWorldsRoadmap.md`; target banking and streaming remain target building blocks, not substitutes for the shared packed-world contract.
+
+Iteration 16 addresses measured generated-code performance cliffs without
+changing the public actor API. The discovery baseline falls from 100/100 to
+50/100 logical ticks at 32 distant authored spawns on Game Boy and at eight
+active one-piece actors on both targets, even though those scenes can satisfy
+the existing sprite, scanline, and background-write budgets. The executable
+measurement, constant-cost table, target address-lowering, CPU-work diagnostic,
+and joint acceptance graph lives in
+`docs/GeneratedCodePerformanceRoadmap.md`. Existing AF-5.10 / #244 is reused as
+the spatial spawn-index task rather than duplicated.
 
 The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
 contract as deterministic 8x8 source-metatile chunks with independently
@@ -1563,7 +1573,7 @@ Acceptance criteria:
 
 ### Iteration 14: Scalable Platformer Actor Framework Ergonomics
 
-Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (fixed struct arrays with mixed-width `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.8 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative, with the one-slot runner draw hiding inactive/off-window sprite slots and collision/contact/spawn activation culling or recycling by camera window; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite; and `TouchPlayer` avoids byte overflow in the actor-right-edge comparison. Non-blocking follow-ups remain documented in `docs/ActorFrameworkRoadmap.md`: AF-5.9 decides one-shot versus reactivation spawn policy, and AF-5.10 reduces the current O(spawns)/frame activation scan cost.
+Status: feature-complete for the first scrolling platformer slice; not fully closed. The language/storage prerequisite (fixed struct arrays with mixed-width `arr[i].field` access), actor pool/definition frontend, Game Boy/NES basic behavior `Update`/`Draw`, actor animation/camera-AABB helpers, Tiled object-layer spawn data, runtime camera-window activation, player-contact helper coverage, conservative actor scanline budgeting, and target pool/sprite-count diagnostics landed on branch `feature/actor-framework`. Phase 5.1 through Phase 5.8 are implemented: actor positions use world-space X split as `x` low byte plus `xHi`; draw, tile collision, landing, player contact, and spawn activation are camera-relative, with the one-slot runner draw hiding inactive/off-window sprite slots and collision/contact/spawn activation culling or recycling by camera window; actor pool capability checks use target-resolved metasprite geometry instead of counting each actor as one hardware sprite; and `TouchPlayer` avoids byte overflow in the actor-right-edge comparison. AF-5.9 is closed with one-shot activation as the explicit v1 policy. AF-5.10 remains open under `docs/GeneratedCodePerformanceRoadmap.md` and reduces the current O(spawns)/frame activation scan cost as one part of the broader generated-code performance graph.
 
 Purpose: make complex platformer characters and enemy behaviors practical without asking game authors to hand-write one large `switch` over every enemy kind. This is a framework/SDK ergonomics goal, not a managed object model. The implementation should preserve the current 8-bit contract: fixed storage, predictable update cost, explicit caps, and no heap allocation or runtime polymorphism.
 
@@ -1723,6 +1733,49 @@ Acceptance criteria:
   bank/mapper/window details inside their target linkers and runtimes.
 - The final epic acceptance preserves the complete authored map, BGM, collision,
   and target capability diagnostics without sample-specific degradation.
+
+### Iteration 16: Predictable Generated-Code CPU Cost
+
+Status: proposed under `docs/GeneratedCodePerformanceRoadmap.md`; remote epic
+tracking is created after the dedicated roadmap lands.
+
+Purpose: keep high-level Actor Framework ergonomics honestly zero-cost by
+making their emitted runtime work scale with active/local content, improving
+the general fixed-struct-array lowering used by both targets, and diagnosing
+compiler-known work that cannot complete within the accepted target frame
+budget.
+
+The durable boundary is:
+
+- measurements come from exact generated ROM bytes on deterministic target
+  CPUs, not generated-source size alone;
+- authored spawn payload and spatial metadata stay immutable ROM data, with
+  one-shot `used[]` semantics and O(1) additional mutable layer state;
+- fixed struct-array indexing remains a general language/storage lowering
+  concern, with target-owned instruction selection;
+- actor phase optimization preserves all-actors-per-phase ordering and exact
+  lifecycle/OAM traces unless a separate public contract explicitly changes it;
+- CPU-work diagnostics charge only bounded compiler-known work and state their
+  treatment of arbitrary user loops honestly;
+- the language and portable source API do not expose cycles, registers,
+  pointers, banks, or target-specific actor operations;
+- existing functional ROM gates remain authoritative for behavior while the
+  new performance fixtures add cadence and generated-work evidence.
+
+The detailed `GCP-0.1` through `GCP-3.2` task contracts, wave dependencies,
+discovery matrix, stop conditions, and final acceptance thresholds live only in
+`docs/GeneratedCodePerformanceRoadmap.md`.
+
+Acceptance criteria:
+
+- the canonical 128-spawn and eight-active-actor workloads sustain one logical
+  tick per physical frame on both targets;
+- AF-5.10's 240-spawn reference timelines examine a bounded local candidate
+  set and remain trace-equivalent;
+- compiler-known generated work follows an accepted target-specific CPU budget
+  and diagnostic policy without pretending to prove arbitrary-program WCET;
+- runner, actor/projectile, audio, packed-world, OAM/video safety, and
+  deterministic ROM acceptance do not regress.
 
 ## Large Worlds completion checkpoint
 

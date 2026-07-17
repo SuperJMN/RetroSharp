@@ -69,7 +69,9 @@ diagnostics.
 
 See [Portable2DSdkV1.md](Portable2DSdkV1.md) for the API reference and
 [ActorFrameworkRoadmap.md](ActorFrameworkRoadmap.md) for the actor-framework
-direction.
+direction. The measured code-generation scaling cliffs, target CPU-work
+contract, and GB/NES cadence closeout plan live in
+[GeneratedCodePerformanceRoadmap.md](GeneratedCodePerformanceRoadmap.md).
 
 ## Targets
 
