@@ -52,7 +52,7 @@ The 100/100 figures are deterministic harness gates, not claims about wall-clock
 emulator scheduling. `GCP-0.1` owns the canonical fixture and observation
 protocol before later tasks may use those figures as acceptance evidence.
 
-## 2. Discovery baseline
+## 2. Historical discovery baseline (pre-GCP-1.1)
 
 The 2026-07-17 audit compiled synthetic programs through the current CLI and
 ran their exact ROM bytes on the in-process cycle-aware Game Boy and NES test
@@ -67,9 +67,12 @@ The audit deliberately isolates two dimensions:
 - **active pool:** every declared slot active, one-piece actor geometry, and
   pool capacity increasing from one to eight.
 
-These artifacts currently live outside the repository and are discovery
-evidence only. `GCP-0.1` must replace them with repository-owned source fixtures
-and a deterministic report.
+These figures are the frozen pre-optimization discovery evidence used to
+calibrate GCP-0.2. GCP-0.1 has since replaced the external artifacts with
+repository-owned source fixtures and a deterministic report. The refreshable
+`validation/generated-code-performance/baseline.tsv` snapshot records the
+current emitted ROMs; after GCP-1.1 it therefore differs intentionally from the
+historical tables below.
 
 ### Wide spawn table
 
@@ -115,7 +118,7 @@ rather than objects plausibly intersecting the camera window. Existing
 [AF-5.10 / #244](https://github.com/SuperJMN/RetroSharp/issues/244) owns the
 spatial-index behavior and equivalence contract.
 
-### 3.2 Spawn fields lower to length-dependent conditional ladders
+### 3.2 Spawn fields lowered to length-dependent conditional ladders before GCP-1.1
 
 `ActorFrameworkLowerer.Actors.cs` generates 13 inline lookup functions per
 non-empty spawn layer: `kind`, split X/Y bytes, and eight initial state fields.
@@ -124,6 +127,12 @@ conditional chain. Activation therefore pays a length-dependent lookup cost
 inside the length-dependent scan. Spatial candidate selection alone is not a
 complete fix if each selected record still traverses a table-length branch
 ladder.
+
+GCP-1.1 replaces that historical shape with one immutable ROM column for each
+varying field. Uniform fields remain direct constants. Game Boy emits one
+bounded indexed read (or its bank-preserving read-only-data helper when the
+table is banked); NES emits `LDA index; TAX; LDA table,X`. The complete-table
+scan remains intentionally unchanged for AF-5.10 / #244.
 
 ### 3.3 Dynamic struct-array addressing repeats stride work
 
@@ -402,23 +411,23 @@ GCP-0.1 reproducible baseline
   contributions, Game Boy/NES runtime compilers and cartridge data placement,
   focused `ActorFrameworkActorsTests` suites.
 - **Work:**
-  - [ ] Replace the 13 nested conditional lookup ladders with one compact,
+  - [x] Replace the 13 nested conditional lookup ladders with one compact,
     deterministic record/table representation or an equivalent bounded shape.
-  - [ ] Keep authored order and all current split-coordinate/initial-field
+  - [x] Keep authored order and all current split-coordinate/initial-field
     values exact.
-  - [ ] Place immutable payload/index data in ROM without duplicating complete
+  - [x] Place immutable payload/index data in ROM without duplicating complete
     spawn records in RAM.
-  - [ ] Preserve small constant/uniform cases when they are genuinely cheaper
+  - [x] Preserve small constant/uniform cases when they are genuinely cheaper
     and prove selection deterministically.
-  - [ ] Record ROM-size and per-record cycle deltas for both targets.
+  - [x] Record ROM-size and per-record cycle deltas for both targets.
 - **Acceptance:**
-  - [ ] Per-record lookup instruction/cycle cost does not grow with 16, 64, 128,
+  - [x] Per-record lookup instruction/cycle cost does not grow with 16, 64, 128,
     or 240 total records.
-  - [ ] Reference-versus-new traces agree on every loaded field and authored
+  - [x] Reference-versus-new traces agree on every loaded field and authored
     index.
-  - [ ] No new public source API, dynamic allocation, O(spawns) mutable RAM, or
+  - [x] No new public source API, dynamic allocation, O(spawns) mutable RAM, or
     bank-unsound executable path is introduced.
-  - [ ] Current actor sample ROM behavior and deterministic generation remain
+  - [x] Current actor sample ROM behavior and deterministic generation remain
     stable unless the issue deliberately records expected byte changes.
 - **Validation:** focused shared/frontend and GB/NES emitted-code tests;
   `GCP-0.1` report; actor exact-ROM scenarios; ROM regeneration dry-run;
@@ -431,6 +440,24 @@ GCP-0.1 reproducible baseline
   unchanged.
 - **Non-goals:** spatial candidate selection, spawn reactivation, mapper
   redesign, or active-pool loop optimization.
+- **Implementation evidence (2026-07-17):** every varying spawn field is a
+  deterministic byte column in cartridge ROM; all-uniform columns still lower
+  to immediates. The column payload travels as typed compiler metadata from the
+  shared Actor Framework plan to each target; user source cannot declare or
+  forge that metadata. Focused 16/64/128/240-record tests compare all 13
+  columns in authored order and verify a single fixed instruction shape per
+  lookup. The direct Game Boy shape costs 56 cycles; the old 16-record ladder
+  ranged from 60 to 608 cycles, so the last-record delta is -552 cycles. NES
+  costs 9 cycles
+  without an indexed page crossing and 10 with one; the old 16-record ladder
+  ranged from 12 to 122 cycles, so the conservative last-record delta is -112
+  cycles. For the focused 16-record/two-varying-column wide-spawn probe, Game
+  Boy occupied payload falls from 1,986 to 1,646 bytes (-340), and NES fixed
+  payload from 2,656 to 2,366 bytes (-290). The refreshed exact GCP-0.1
+  snapshot reaches 100/100 through 64 records and 50/100 at 96/128 on Game Boy,
+  and 100/100 through 128 on NES; the remaining Game Boy scan cost belongs to
+  #244. The tracked actor-framework GB/NES ROMs were deliberately regenerated;
+  their exact production scenarios and the shared runner cadence gates pass.
 
 ### GCP-1.2 / AF-5.10: Index spawn activation by camera window
 

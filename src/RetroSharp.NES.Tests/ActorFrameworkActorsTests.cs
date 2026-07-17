@@ -666,17 +666,17 @@ public partial class NesRomCompilerTests
                              const Goomba = 1;
                              const Bat = 2;
 
-                             inline u8 __enemies_spawn_0_kind(u8 index) => index == 0 ? Goomba : Bat;
+                             inline u8 __enemies_spawn_0_kind(u8 index) => Goomba;
                              inline u8 __enemies_spawn_0_x(u8 index) => 24;
-                             inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
-                             inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline u8 __enemies_spawn_0_xHi(u8 index) => 0;
+                             inline u8 __enemies_spawn_0_y(u8 index) => 40;
                              inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
                              inline u8 __enemies_spawn_0_active(u8 index) => 1;
                              inline u8 __enemies_spawn_0_vx(u8 index) => 0;
                              inline u8 __enemies_spawn_0_vy(u8 index) => 0;
                              inline u8 __enemies_spawn_0_state(u8 index) => 0;
                              inline u8 __enemies_spawn_0_timer(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_facing(u8 index) => index == 0 ? 0 : 1;
+                             inline u8 __enemies_spawn_0_facing(u8 index) => 0;
                              inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 
@@ -712,7 +712,17 @@ public partial class NesRomCompilerTests
                                    }
                                    """;
 
-        var expected = NesRomCompiler.CompileSource(manualSource);
+        var manualRomTables = new Dictionary<string, CompilerGeneratedRomTable>(StringComparer.Ordinal)
+        {
+            ["__enemies_spawn_0_kind"] = new("__enemies_spawn_0_kind", [1, 2]),
+            ["__enemies_spawn_0_xHi"] = new("__enemies_spawn_0_xHi", [0, 1]),
+            ["__enemies_spawn_0_y"] = new("__enemies_spawn_0_y", [40, 32]),
+            ["__enemies_spawn_0_facing"] = new("__enemies_spawn_0_facing", [0, 1]),
+        };
+        var expected = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            manualSource,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            generatedRomTablesOverride: manualRomTables).Rom;
         var actual = NesRomCompiler.CompileSource(actorSource, baseDirectory);
         var firstDifference = Enumerable.Range(16, expected.Length - 16).FirstOrDefault(index => expected[index] != actual[index], -1);
 

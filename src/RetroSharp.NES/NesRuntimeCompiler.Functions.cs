@@ -87,6 +87,11 @@ internal sealed partial class NesRuntimeCompiler
 
     private bool TryEmitUserValueFunction(FunctionCall call)
     {
+        if (TryEmitGeneratedRomTableLookup(call))
+        {
+            return true;
+        }
+
         if (!program.Functions.TryGetValue(call.Name, out var function))
         {
             return false;
@@ -111,6 +116,20 @@ internal sealed partial class NesRuntimeCompiler
             userFunctionCallStack.Remove(function.Name);
         }
 
+        return true;
+    }
+
+    private bool TryEmitGeneratedRomTableLookup(FunctionCall call)
+    {
+        if (!program.GeneratedRomTables.TryGetValue(call.Name, out var table))
+        {
+            return false;
+        }
+
+        NesVideoProgram.RequireArity(call, 1);
+        EmitExpressionToA(call.Parameters.Single());
+        builder.TransferAToX();
+        builder.LdaAbsoluteX(table.Label);
         return true;
     }
 

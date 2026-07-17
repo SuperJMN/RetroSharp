@@ -34,9 +34,17 @@ public static class GameBoyRomCompiler
         SdkLibraryRegistry? sdkLibraryRegistry = null,
         IReadOnlyList<string>? sdkLibraryImports = null,
         SdkPluginRegistry? sdkPluginRegistry = null,
-        byte[]? packedWorldOverride = null)
+        byte[]? packedWorldOverride = null,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride = null)
     {
-        var videoProgram = PrepareVideoProgram(source, baseDirectory, sdkImportMode, sdkLibraryRegistry, sdkLibraryImports, sdkPluginRegistry);
+        var videoProgram = PrepareVideoProgram(
+            source,
+            baseDirectory,
+            sdkImportMode,
+            sdkLibraryRegistry,
+            sdkLibraryImports,
+            sdkPluginRegistry,
+            generatedRomTablesOverride);
         ValidateSdkOperations(videoProgram);
         ValidateSdkAudioOperations(videoProgram.SdkAudioOperations);
         return GameBoyRomBuilder.BuildWithReport(videoProgram, packedWorldOverride);
@@ -70,7 +78,8 @@ public static class GameBoyRomCompiler
         SdkLibraryImportMode sdkImportMode,
         SdkLibraryRegistry? sdkLibraryRegistry,
         IReadOnlyList<string>? sdkLibraryImports,
-        SdkPluginRegistry? sdkPluginRegistry)
+        SdkPluginRegistry? sdkPluginRegistry,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTablesOverride = null)
     {
         var prepared = TargetFrontendPreparation.Prepare(new TargetFrontendPreparationOptions(
             source,
@@ -87,7 +96,8 @@ public static class GameBoyRomCompiler
             prepared.LoweredProgram,
             prepared.BaseDirectory,
             prepared.TargetIntrinsics,
-            prepared.ResourceDeclarations);
+            prepared.ResourceDeclarations,
+            generatedRomTablesOverride ?? prepared.GeneratedRomTables);
         prepared.ValidateActorPoolSpriteBudgets(spriteId => ActorMetaspriteGeometry(videoProgram, spriteId));
         return videoProgram;
     }
@@ -275,6 +285,8 @@ internal sealed class GameBoyVideoProgram
 
     public required IReadOnlyDictionary<string, StructSyntax> Structs { get; init; }
 
+    public required IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedRomTables { get; init; }
+
     public required BlockSyntax MainBlock { get; init; }
 
     public required TargetIntrinsicCatalog TargetIntrinsics { get; init; }
@@ -295,7 +307,8 @@ internal sealed class GameBoyVideoProgram
         ProgramSyntax program,
         string? baseDirectory = null,
         TargetIntrinsicCatalog? targetIntrinsics = null,
-        SdkResourceDeclarationRegistry? resourceDeclarations = null)
+        SdkResourceDeclarationRegistry? resourceDeclarations = null,
+        IReadOnlyDictionary<string, CompilerGeneratedRomTable>? generatedRomTables = null)
     {
         targetIntrinsics ??= GameBoyTarget.Intrinsics;
         resourceDeclarations ??= SdkResourceDeclarationRegistry.Default;
@@ -323,6 +336,7 @@ internal sealed class GameBoyVideoProgram
             Functions = functions,
             Enums = enums,
             Structs = structs,
+            GeneratedRomTables = CompilerGeneratedRomTable.Validate(generatedRomTables, functions),
             MainBlock = main.Block,
             TargetIntrinsics = targetIntrinsics,
             ResourceDeclarations = resourceDeclarations,

@@ -297,9 +297,15 @@ internal static class GameBoyRomBuilder
             var nextAsset = program.MusicAssetsInLoadOrder
                 .Select(asset => builder.TryLabelOffset(MusicLabel(asset.Name), out var offset) ? offset : int.MaxValue)
                 .Concat(program.SoundEffectAssetsInLoadOrder.Select(asset => builder.TryLabelOffset(SoundEffectLabel(asset.Name), out var offset) ? offset : int.MaxValue))
+                .Concat(program.GeneratedRomTables.Values.Select(table => builder.TryLabelOffset(table.Label, out var offset) ? offset : int.MaxValue))
                 .Append(programLength)
                 .Min();
             known.Add((mapStart, nextAsset - mapStart, "legacy-world-data:default"));
+        }
+
+        foreach (var table in program.GeneratedRomTables.Values)
+        {
+            AddKnownInlineRange(known, builder, table.Label, table.Data.Length, $"generated-rom-table:{table.FunctionName}");
         }
 
         foreach (var asset in program.MusicAssetsInLoadOrder)
@@ -632,6 +638,10 @@ internal static class GameBoyRomBuilder
         {
             EmitMapData(builder, program);
         }
+        if (!layout.UsesBankedReadOnlyData)
+        {
+            EmitGeneratedRomTables(builder, program);
+        }
         if (!layout.UsesBankedMusic)
         {
             EmitAudioData(builder, program);
@@ -721,7 +731,19 @@ internal static class GameBoyRomBuilder
         {
             AddMapReadOnlyData(data, program);
         }
+        data.AddRange(program.GeneratedRomTables.Values
+            .OrderBy(table => table.FunctionName, StringComparer.Ordinal)
+            .Select(table => new GameBoyReadOnlyDataBlob(table.Label, table.Data)));
         return data;
+    }
+
+    private static void EmitGeneratedRomTables(GbBuilder builder, GameBoyVideoProgram program)
+    {
+        foreach (var table in program.GeneratedRomTables.Values.OrderBy(table => table.FunctionName, StringComparer.Ordinal))
+        {
+            builder.Label(table.Label);
+            builder.Emit(table.Data);
+        }
     }
 
     private static void AddMapReadOnlyData(List<GameBoyReadOnlyDataBlob> data, GameBoyVideoProgram program)

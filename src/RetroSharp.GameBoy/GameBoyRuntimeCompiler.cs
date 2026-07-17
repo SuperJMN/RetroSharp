@@ -148,18 +148,19 @@ internal sealed partial class GameBoyRuntimeCompiler
             builder.Label(ReadOnlyDataByteReaderLabel(placement.Label));
             builder.LoadEFromA();
             builder.LoadDImmediate(0);
+            builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank);
+            builder.LoadCFromA();
+            builder.Emit(0xC5); // PUSH BC
             builder.LoadAImmediate(placement.Bank);
             EmitSelectRomBankFromA();
             builder.LoadHl(placement.Address);
             builder.AddHlDe();
             builder.LoadAFromHl();
-            if (romLayout.ProgramTailBankCount > 0)
-            {
-                builder.LoadBFromA();
-                builder.LoadA(GameBoyRuntimeMemoryLayout.Banking.ProgramCurrentBank);
-                EmitSelectRomBankFromA();
-                builder.LoadAFromB();
-            }
+            builder.LoadDFromA();
+            builder.Emit(0xC1); // POP BC
+            builder.LoadAFromC();
+            EmitSelectRomBankFromA();
+            builder.LoadAFromD();
 
             builder.Emit(0xC9); // RET
         }
