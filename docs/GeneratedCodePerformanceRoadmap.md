@@ -3,9 +3,10 @@
 Status: **active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
 and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); discovery
 baseline reproduced on 2026-07-17.** The first seeded frontier is
-[GCP-0.1 / #388](https://github.com/SuperJMN/RetroSharp/issues/388); later waves
-remain intentionally unseeded until the measurement and CPU-work contracts
-stabilize their remote bodies.
+[GCP-0.1 / #388](https://github.com/SuperJMN/RetroSharp/issues/388), and
+[GCP-0.2 / #389](https://github.com/SuperJMN/RetroSharp/issues/389) accepts the
+CPU-work representation and future diagnostic policy. Later waves remain
+intentionally unseeded until that decision is merged into their remote bodies.
 
 This roadmap turns the measured Actor Framework code-generation bottlenecks
 into bounded work for Game Boy and NES. It covers compiler-generated work whose
@@ -194,28 +195,49 @@ These constraints apply to every task in this epic:
 
 ## 5. GCP-0.2 decision gate: CPU-work contract
 
-Decision status: **open**. `GCP-0.2` is the sole gate that converts the
-categories below into an accepted cost representation, target calibration, and
-error/warning/report policy. `GCP-3.1` must not be seeded or implemented until
-that decision merges and this section records the accepted contract. The
-roadmap therefore owns a real decision gate without presenting an undecided
-budget as current compiler behavior.
+Decision status: **accepted by GCP-0.2 / #389.** The canonical policy is
+[`GeneratedCodeCpuWorkContract.md`](GeneratedCodeCpuWorkContract.md). GCP-0.2
+changes no executable validator or ROM bytes; GCP-3.1 owns that implementation.
 
-`GCP-0.2` must settle the exact representation, but every acceptable design
-must distinguish these categories:
+The accepted representation uses checked inclusive ranges in target-native
+cycles: LR35902 T-cycles for Game Boy and 6502 CPU cycles for NES. The physical
+windows are 70,224 and a conservative 29,780 respectively. There is no blanket
+percentage reserve: active frame service, OAM publication, input, audio,
+camera/world phases, collision, and generated actor work are stable
+contributors charged once. Busy VBlank waiting is idle slack, while arbitrary
+user loops and uncalibrated state-dependent runtime remain explicitly unknown.
 
-| Category | Required treatment |
-| --- | --- |
-| Fixed compiler-generated loop with literal capacity | Charge a target-calibrated worst-case or declared branch-path bound. |
-| Generated ROM table lookup | Charge the emitted access shape, including bank/window overhead when applicable. |
-| Target SDK operation with existing bounded runtime | Reuse or extend a target-owned cost descriptor. |
-| Dynamic user loop or helper with unknown trip count | Mark as unknown; do not invent a precise cycle count. |
-| Audio, camera streaming, or other state-dependent runtime | Compose only through an accepted conservative contract; otherwise report separately. |
+Every contributor is `Exact`, `Bounded`, or `Unknown`, keyed by target and
+selected cartridge/runtime profile. Fixed generated loops include their
+literal multiplicity; ROM lookup bounds include bank/window overhead; mutually
+exclusive branch paths form a range rather than an additive sum. CPU cycles
+remain orthogonal to the current background-write and sprite/scanline budgets,
+so the same emitted work is not charged twice.
 
-The design must decide whether the first diagnostic is an error, warning, or
-explicit report. Whatever policy is selected must be deterministic, explain
-the charged contributors, and avoid rejecting arbitrary user code based on a
-false precision claim.
+The future GCP-3.1 policy is also fixed. A known lower bound above the target
+window is error `GCP1001`; a finite range that crosses the window is warning
+`GCP1002`; a fitting known range emits no default diagnostic. Unknown work does
+not receive a fabricated count or warn on every ordinary program; an explicit
+report marks coverage `incomplete` and never claims whole-program cadence.
+Stable semantic contributor ids and the deterministic report schema live in
+the contract document.
+
+The contract classifies all 13 GCP-0.1 fixtures per target. It preserves the
+exact observed 24/32-spawn Game Boy boundary, 48/64-spawn NES boundary, and
+four/eight-active-actor boundary as calibration evidence without treating
+physical scheduling intervals as static instruction costs. GCP-3.1 can now be
+specified and implemented without reopening the cost representation,
+composition, unknown-work, or diagnostic-policy decisions.
+
+The representative calculation is explicit rather than implied: the contract
+tabulates authored-record visits, 13-field materializations, current conditional
+lookup equality counts, pool/slot visits, phase visits, collision call sites,
+and logical draws for every canonical scale. Its currently isolated numeric
+evidence is only the non-additive OAM transfer detail: 640 Game Boy T-cycles or
+513..514 NES CPU cycles. The `sprite.publish` parent remains incomplete until
+GCP-3.1 calibrates its call/setup/wait/return boundary, and the remaining
+contributor table names the other emitted-code descriptors required instead of
+inventing source-level cycle prices.
 
 ## 6. Execution contract
 
@@ -339,30 +361,30 @@ GCP-0.1 reproducible baseline
   acceptance docs, and a focused ADR/contract document if the decision does
   not fit here.
 - **Work:**
-  - [ ] Inventory compiler-generated fixed loops and bounded target SDK/runtime
+  - [x] Inventory compiler-generated fixed loops and bounded target SDK/runtime
     operations relevant to the two fixtures.
-  - [ ] Choose exact cycles, conservative ranges, or named work units per
+  - [x] Choose exact cycles, conservative ranges, or named work units per
     category and document calibration evidence.
-  - [ ] Decide error versus warning/report behavior and the treatment of
+  - [x] Decide error versus warning/report behavior and the treatment of
     unknown dynamic user work.
-  - [ ] Define composition with audio and camera/world streaming without
+  - [x] Define composition with audio and camera/world streaming without
     double-charging existing tile/sprite budgets.
-  - [ ] Specify a stable diagnostic breakdown suitable for emitted-code tests.
+  - [x] Specify a stable diagnostic breakdown suitable for emitted-code tests.
 - **Acceptance:**
-  - [ ] The contract can classify both discovery fixtures without claiming
+  - [x] The contract can classify both discovery fixtures without claiming
     whole-program WCET.
-  - [ ] Game Boy and NES budgets name their target-specific available window
+  - [x] Game Boy and NES budgets name their target-specific available window
     and reserved runtime assumptions.
-  - [ ] The accepted policy explains how conservative estimates avoid both
+  - [x] The accepted policy explains how conservative estimates avoid both
     silent cadence loss and false-precision rejection.
-  - [ ] `GCP-3.1` can be written without reopening the core policy.
+  - [x] `GCP-3.1` can be written without reopening the core policy.
 - **Validation:** focused contract/model tests or ADR review; representative
   cost calculations against `GCP-0.1`; `git diff --check`.
 - **Compatibility:** no runtime emission changes are expected; still build the
   runner manifest for both targets if the contract patch changes executable
   model or validator code.
-- **Documentation:** the accepted decision must replace the open status and
-  categories in section 5 and update target docs with the selected policy.
+- **Documentation:** the accepted decision is recorded in section 5,
+  `GeneratedCodeCpuWorkContract.md`, and both target docs.
 - **Non-goals:** no complete arbitrary-program timing analyzer and no public
   source syntax for cycles.
 
