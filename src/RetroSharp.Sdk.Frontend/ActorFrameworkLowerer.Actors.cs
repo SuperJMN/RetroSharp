@@ -335,7 +335,7 @@ public static partial class ActorFrameworkLowerer
 
         public static IEnumerable<FunctionSyntax> GeneratedFunctions(ActorFrameworkState state) =>
             GeneratedLookupFunctions(state.Actors.EnemyDefs, state.Actors.UsedEnemyLookupMethods)
-                .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers));
+                .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers, state.Actors.EnemyDefs));
 
         private static IReadOnlyList<StatementSyntax> RewriteSpawnDirective(ActorFrameworkCall call, ActorFrameworkState state)
         {
@@ -428,55 +428,59 @@ public static partial class ActorFrameworkLowerer
             }
         }
 
-        private static IEnumerable<FunctionSyntax> GeneratedSpawnLookupFunctions(IReadOnlyList<ActorSpawnLayer> spawnLayers)
+        private static IEnumerable<FunctionSyntax> GeneratedSpawnLookupFunctions(
+            IReadOnlyList<ActorSpawnLayer> spawnLayers,
+            IReadOnlyList<EnemyDef> enemyDefs)
         {
+            var kindValues = enemyDefs
+                .Select((def, index) => (def.Name, Value: index + 1))
+                .ToDictionary(item => item.Name, item => item.Value, StringComparer.Ordinal);
             foreach (var layer in spawnLayers.Where(layer => layer.Spawns.Count != 0))
             {
-                yield return SpawnLookupFunction(layer, "kind", spawn => new IdentifierSyntax(spawn.Kind));
-                yield return SpawnLookupFunction(layer, "x", spawn => new ConstantSyntax(SplitWorldX(spawn.X, "actor spawn X").Low.ToString(CultureInfo.InvariantCulture)));
-                yield return SpawnLookupFunction(layer, "xHi", spawn => new ConstantSyntax(SplitWorldX(spawn.X, "actor spawn X").High.ToString(CultureInfo.InvariantCulture)));
-                yield return SpawnLookupFunction(layer, "y", spawn => new ConstantSyntax(SplitWorldY(spawn.Y, "actor spawn Y").Low.ToString(CultureInfo.InvariantCulture)));
-                yield return SpawnLookupFunction(layer, "yHi", spawn => new ConstantSyntax(SplitWorldY(spawn.Y, "actor spawn Y").High.ToString(CultureInfo.InvariantCulture)));
+                yield return SpawnLookupFunction(layer, "kind", spawn =>
+                    kindValues.TryGetValue(spawn.Kind, out var value)
+                        ? value
+                        : throw new InvalidOperationException($"Unknown actor spawn kind '{spawn.Kind}'."));
+                yield return SpawnLookupFunction(layer, "x", spawn => SplitWorldX(spawn.X, "actor spawn X").Low);
+                yield return SpawnLookupFunction(layer, "xHi", spawn => SplitWorldX(spawn.X, "actor spawn X").High);
+                yield return SpawnLookupFunction(layer, "y", spawn => SplitWorldY(spawn.Y, "actor spawn Y").Low);
+                yield return SpawnLookupFunction(layer, "yHi", spawn => SplitWorldY(spawn.Y, "actor spawn Y").High);
                 foreach (var fieldName in SpawnInitialFieldNames)
                 {
-                    yield return SpawnLookupFunction(layer, fieldName, spawn => new ConstantSyntax(SpawnInitialFieldValue(spawn, fieldName).ToString(CultureInfo.InvariantCulture)));
+                    yield return SpawnLookupFunction(layer, fieldName, spawn => SpawnInitialFieldValue(spawn, fieldName));
                 }
             }
         }
 
-        private static FunctionSyntax SpawnLookupFunction(ActorSpawnLayer layer, string fieldName, Func<LogicalActorSpawn, ExpressionSyntax> selector)
+        private static FunctionSyntax SpawnLookupFunction(
+            ActorSpawnLayer layer,
+            string fieldName,
+            Func<LogicalActorSpawn, int> selector)
         {
-            var values = layer.Spawns.Select(selector).ToList();
-            ExpressionSyntax value = values[^1];
-            var firstKey = ExpressionKey(values[0]);
-            if (firstKey is null || values.Any(expression => ExpressionKey(expression) != firstKey))
-            {
-                for (var index = values.Count - 2; index >= 0; index--)
-                {
-                    value = new ConditionalExpressionSyntax(
-                        new BinaryExpressionSyntax(new IdentifierSyntax("index"), new ConstantSyntax(index.ToString(CultureInfo.InvariantCulture)), Operator.Equal),
-                        values[index],
-                        value);
-                }
-            }
+            var values = layer.Spawns.Select(selector).ToArray();
+            var isUniform = values.All(value => value == values[0]);
+            var attributes = isUniform
+                ? Array.Empty<FunctionAttributeSyntax>()
+                :
+                [
+                    new FunctionAttributeSyntax(
+                        CompilerGeneratedRomTable.AttributeName,
+                        values
+                            .Select(value => (ExpressionSyntax)new ConstantSyntax(value.ToString(CultureInfo.InvariantCulture)))
+                            .ToArray()),
+                ];
 
             return new FunctionSyntax(
                 "u8",
                 $"{layer.RuntimeName}_{fieldName}",
                 [new ParameterSyntax("u8", "index")],
-                new BlockSyntax([new ReturnSyntax(Maybe.From(value))]),
+                new BlockSyntax([
+                    new ReturnSyntax(Maybe.From<ExpressionSyntax>(
+                        new ConstantSyntax(values[0].ToString(CultureInfo.InvariantCulture)))),
+                ]),
                 isExpressionBodied: true,
-                isInline: true);
-        }
-
-        private static string? ExpressionKey(ExpressionSyntax expression)
-        {
-            return expression switch
-            {
-                ConstantSyntax constant => $"const:{constant.Value}",
-                IdentifierSyntax identifier => $"identifier:{identifier.Identifier}",
-                _ => null,
-            };
+                isInline: true,
+                attributes: attributes);
         }
 
         private static int SpawnInitialFieldValue(LogicalActorSpawn spawn, string fieldName)

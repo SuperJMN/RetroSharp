@@ -347,6 +347,8 @@ internal static class NesRomBuilder
             EmitMmc3IrqHandler(builder);
         }
 
+        EmitGeneratedRomTables(builder, program);
+
         if (!layout.EmitMmc3Foundation)
         {
             builder.Label("palette");
@@ -486,6 +488,10 @@ internal static class NesRomBuilder
             fixedSymbols[WorldPackCommitEdgeLabel] = builder.AddressOfLabel(WorldPackCommitEdgeLabel);
             fixedSymbols[WorldPackReleaseReversedEdgeLabel] = builder.AddressOfLabel(WorldPackReleaseReversedEdgeLabel);
         }
+        foreach (var table in program.GeneratedRomTables.Values)
+        {
+            fixedSymbols[table.Label] = builder.AddressOfLabel(table.Label);
+        }
         return new NesPrgBuild(
             prg,
             code.Length,
@@ -495,6 +501,15 @@ internal static class NesRomBuilder
             fixedPayloadBytes,
             fixedSymbols,
             runtimeCompiler.UserVariables);
+    }
+
+    private static void EmitGeneratedRomTables(PrgBuilder builder, NesVideoProgram program)
+    {
+        foreach (var table in program.GeneratedRomTables.Values.OrderBy(table => table.FunctionName, StringComparer.Ordinal))
+        {
+            builder.Label(table.Label);
+            builder.Emit(table.Data);
+        }
     }
 
     private static void EnsureFixedDataBeforeTrailer(NesCartridgeLayout layout, int currentAddress)

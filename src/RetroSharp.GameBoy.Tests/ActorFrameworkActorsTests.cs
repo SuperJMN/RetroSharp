@@ -788,6 +788,53 @@ public partial class GameBoyRomCompilerTests
     }
 
     [Fact]
+    [Trait("RetroSharp.TestOwnership", "FocusedFrontend")]
+    public void Spawn_lookup_uses_columnar_rom_tables_only_for_varying_fields()
+    {
+        var baseDirectory = WriteActorSpawnMap(
+            """
+            [
+              { "id": 1, "type": "Goomba", "x": 24, "y": 40, "properties": [ { "name": "facing", "type": "int", "value": 1 } ] },
+              { "id": 2, "type": "Bat", "x": 72, "y": 40 },
+              { "id": 3, "type": "Goomba", "x": 120, "y": 40, "properties": [ { "name": "facing", "type": "int", "value": 2 } ] }
+            ]
+            """);
+        const string source = """
+                              void Main() {
+                                  Actors.Pool(enemies, 3);
+                                  Enemies.Def(Goomba, behavior: Walker);
+                                  Enemies.Def(Bat, behavior: Flyer);
+                                  Actors.SpawnLayer(enemies, "level.tmj", "actors");
+                              }
+                              """;
+
+        var program = ParseGameBoySourceWithPortable2D(source);
+        var lowered = ActorFrameworkLowerer.Lower(
+            program,
+            GameBoyTarget.Capabilities,
+            supportsUpdate: true,
+            supportsDraw: true,
+            baseDirectory);
+
+        var kind = Assert.Single(lowered.Functions, function => function.Name == "__enemies_spawn_0_kind");
+        var kindTable = Assert.Single(kind.Attributes, attribute => attribute.Name == "compiler_generated_rom_table");
+        Assert.Equal(["1", "2", "1"], kindTable.Arguments.Cast<ConstantSyntax>().Select(value => value.Value));
+        var kindVisitor = new PrintNodeVisitor();
+        kind.Accept(kindVisitor);
+        Assert.DoesNotContain("index==", kindVisitor.ToString());
+
+        var facing = Assert.Single(lowered.Functions, function => function.Name == "__enemies_spawn_0_facing");
+        var facingTable = Assert.Single(facing.Attributes, attribute => attribute.Name == "compiler_generated_rom_table");
+        Assert.Equal(["1", "0", "2"], facingTable.Arguments.Cast<ConstantSyntax>().Select(value => value.Value));
+
+        var y = Assert.Single(lowered.Functions, function => function.Name == "__enemies_spawn_0_y");
+        Assert.DoesNotContain(y.Attributes, attribute => attribute.Name == "compiler_generated_rom_table");
+        var yVisitor = new PrintNodeVisitor();
+        y.Accept(yVisitor);
+        Assert.Contains("=>40;", yVisitor.ToString());
+    }
+
+    [Fact]
     public void Compiles_actor_spawn_layer_into_runtime_activation_table()
     {
         var baseDirectory = WriteActorSpawnMap(
@@ -848,17 +895,17 @@ public partial class GameBoyRomCompilerTests
                              const Goomba = 1;
                              const Bat = 2;
 
-                             inline u8 __enemies_spawn_0_kind(u8 index) => index == 0 ? Goomba : Bat;
+                             inline [compiler_generated_rom_table(1, 2)] u8 __enemies_spawn_0_kind(u8 index) => Goomba;
                              inline u8 __enemies_spawn_0_x(u8 index) => 24;
-                             inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
-                             inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline [compiler_generated_rom_table(0, 1)] u8 __enemies_spawn_0_xHi(u8 index) => 0;
+                             inline [compiler_generated_rom_table(40, 32)] u8 __enemies_spawn_0_y(u8 index) => 40;
                              inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
                              inline u8 __enemies_spawn_0_active(u8 index) => 1;
                              inline u8 __enemies_spawn_0_vx(u8 index) => 0;
                              inline u8 __enemies_spawn_0_vy(u8 index) => 0;
                              inline u8 __enemies_spawn_0_state(u8 index) => 0;
                              inline u8 __enemies_spawn_0_timer(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_facing(u8 index) => index == 0 ? 0 : 1;
+                             inline [compiler_generated_rom_table(0, 1)] u8 __enemies_spawn_0_facing(u8 index) => 0;
                              inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 

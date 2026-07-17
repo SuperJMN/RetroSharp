@@ -161,7 +161,8 @@ internal sealed partial class GameBoyRuntimeCompiler
     private static bool IsRuntimeReadOnlyDataLabel(string label)
     {
         return label.StartsWith("map_row_", StringComparison.Ordinal)
-               || label.StartsWith("background_stream_row_", StringComparison.Ordinal);
+               || label.StartsWith("background_stream_row_", StringComparison.Ordinal)
+               || label.StartsWith("generated_rom_table_", StringComparison.Ordinal);
     }
 
     private static string ReadOnlyDataByteReaderLabel(string label) => $"read_data_{label}";
@@ -323,6 +324,11 @@ internal sealed partial class GameBoyRuntimeCompiler
 
     private bool TryEmitUserValueFunction(FunctionCall call)
     {
+        if (TryEmitGeneratedRomTableLookup(call))
+        {
+            return true;
+        }
+
         if (!program.Functions.TryGetValue(call.Name, out var function))
         {
             return false;
@@ -347,6 +353,29 @@ internal sealed partial class GameBoyRuntimeCompiler
             userFunctionCallStack.Remove(function.Name);
         }
 
+        return true;
+    }
+
+    private bool TryEmitGeneratedRomTableLookup(FunctionCall call)
+    {
+        if (!program.GeneratedRomTables.TryGetValue(call.Name, out var table))
+        {
+            return false;
+        }
+
+        GameBoyVideoProgram.RequireArity(call, 1);
+        EmitExpressionToA(call.Parameters.Single());
+        if (romLayout.TryReadOnlyDataPlacement(table.Label, out _))
+        {
+            builder.JumpAbsolute(0xCD, ReadOnlyDataByteReaderLabel(table.Label)); // CALL nn
+            return true;
+        }
+
+        builder.LoadEFromA();
+        builder.LoadDImmediate(0);
+        builder.LoadHl(table.Label);
+        builder.AddHlDe();
+        builder.LoadAFromHl();
         return true;
     }
 

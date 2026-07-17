@@ -275,6 +275,8 @@ internal sealed class GameBoyVideoProgram
 
     public required IReadOnlyDictionary<string, StructSyntax> Structs { get; init; }
 
+    public required IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedRomTables { get; init; }
+
     public required BlockSyntax MainBlock { get; init; }
 
     public required TargetIntrinsicCatalog TargetIntrinsics { get; init; }
@@ -323,6 +325,7 @@ internal sealed class GameBoyVideoProgram
             Functions = functions,
             Enums = enums,
             Structs = structs,
+            GeneratedRomTables = CompilerGeneratedRomTable.Read(functions.Values),
             MainBlock = main.Block,
             TargetIntrinsics = targetIntrinsics,
             ResourceDeclarations = resourceDeclarations,

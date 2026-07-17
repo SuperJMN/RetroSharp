@@ -666,17 +666,17 @@ public partial class NesRomCompilerTests
                              const Goomba = 1;
                              const Bat = 2;
 
-                             inline u8 __enemies_spawn_0_kind(u8 index) => index == 0 ? Goomba : Bat;
+                             inline [compiler_generated_rom_table(1, 2)] u8 __enemies_spawn_0_kind(u8 index) => Goomba;
                              inline u8 __enemies_spawn_0_x(u8 index) => 24;
-                             inline u8 __enemies_spawn_0_xHi(u8 index) => index == 0 ? 0 : 1;
-                             inline u8 __enemies_spawn_0_y(u8 index) => index == 0 ? 40 : 32;
+                             inline [compiler_generated_rom_table(0, 1)] u8 __enemies_spawn_0_xHi(u8 index) => 0;
+                             inline [compiler_generated_rom_table(40, 32)] u8 __enemies_spawn_0_y(u8 index) => 40;
                              inline u8 __enemies_spawn_0_yHi(u8 index) => 0;
                              inline u8 __enemies_spawn_0_active(u8 index) => 1;
                              inline u8 __enemies_spawn_0_vx(u8 index) => 0;
                              inline u8 __enemies_spawn_0_vy(u8 index) => 0;
                              inline u8 __enemies_spawn_0_state(u8 index) => 0;
                              inline u8 __enemies_spawn_0_timer(u8 index) => 0;
-                             inline u8 __enemies_spawn_0_facing(u8 index) => index == 0 ? 0 : 1;
+                             inline [compiler_generated_rom_table(0, 1)] u8 __enemies_spawn_0_facing(u8 index) => 0;
                              inline u8 __enemies_spawn_0_animTick(u8 index) => 0;
                              inline u8 __enemies_spawn_0_health(u8 index) => 0;
 

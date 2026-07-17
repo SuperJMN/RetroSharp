@@ -41,5 +41,12 @@ cliffs. A later optimization refreshes it deliberately by reviewing the full
 new report; it must not preserve slow tick counts merely to keep this file
 unchanged.
 
+The 2026-07-17 GCP-1.1 refresh records the expected ROM-byte changes from
+constant-cost spawn columns. NES now sustains 100/100 through the 128-record
+wide-spawn case. Game Boy sustains 100/100 through 64 records and 50/100 at 96
+and 128 records; its remaining complete-layer activation scan is owned by
+AF-5.10 / #244. Active-pool cadence is unchanged because GCP-1.1 does not alter
+pool-phase traversal.
+
 The TSV serializer always writes literal LF line endings so the exact report is
 independent of the host operating system.
