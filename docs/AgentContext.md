@@ -19,8 +19,13 @@ This document preserves project knowledge that previously lived only in agent me
   budget instead of depending on accidental slower code. NES GCP-2.3 / #395
   bounds dynamic fixed-struct-array addressing with a binary shift/add
   materializer plus a draw-local cursor for matching `Sprite.Draw(...)`
-  runtime fields; active-pool-8 now reaches 100/100 on NES. GCP-3.1 and
-  GCP-3.2 remain unseeded until #395 closes. Start from
+  runtime fields; active-pool-8 now reaches 100/100 on NES. GCP-3.1 / #402
+  exposes the first shared `SdkCpuWorkReport` on internal GB/NES build reports:
+  target/profile frame windows, stable contributor ids, explicit unknown
+  coverage, and calibrated OAM transfer detail only when retained sprite
+  publication is reachable. It stays `incomplete` and does not reject current
+  samples or fabricate exact costs for arbitrary user loops. GCP-3.2 remains
+  the closeout slice. Start from
   `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch epic #387 as an
   implementation task or duplicate #244.
 - AIN-12 / #378 makes the remaining architecture guardrails rename-safe.

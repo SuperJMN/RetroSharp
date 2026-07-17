@@ -16,7 +16,8 @@ internal sealed record GameBoyRomBuildReport(
     IReadOnlyList<GameBoyRomBuildSegment> Segments,
     IReadOnlyList<int> OccupiedBanks,
     IReadOnlyDictionary<string, ushort> FixedSymbols,
-    IReadOnlyList<GameBoyRuntimeUserVariable> UserVariables);
+    IReadOnlyList<GameBoyRuntimeUserVariable> UserVariables,
+    SdkCpuWorkReport CpuWork);
 
 internal sealed record GameBoyRuntimeUserVariable(
     string Name,
