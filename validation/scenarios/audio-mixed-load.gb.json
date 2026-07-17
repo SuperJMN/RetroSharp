@@ -1,0 +1,59 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "audio-mixed-load-gb-functional",
+  "sampleId": "audio-mixed-load",
+  "target": "gb",
+  "warmUpFrames": 100,
+  "observationFrames": 360,
+  "inputs": [
+    { "id": "camera-load", "startFrame": 101, "durationFrames": 31, "buttons": ["RIGHT"], "responseSignal": "playerX" },
+    { "id": "sfx-1", "startFrame": 101, "durationFrames": 4, "buttons": ["A"] },
+    { "id": "sfx-2", "startFrame": 281, "durationFrames": 4, "buttons": ["A"] }
+  ],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": true,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": true,
+    "safeVideoWrites": true,
+    "audioProgress": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": true,
+    "authoredSilence": [],
+    "minimumRegisterEvents": 616,
+    "maximumRegisterEvents": 616,
+    "maximumRegisterEventGapFrames": 4,
+    "minimumSoundEffectStarts": 2,
+    "maximumSoundEffectStarts": 2,
+    "minimumSoundEffectCompletions": 2,
+    "maximumSoundEffectCompletions": 2,
+    "maximumSoundEffectRestarts": 0,
+    "minimumDpcmStarts": 0,
+    "maximumDpcmStarts": 0,
+    "minimumDpcmCompletions": 0,
+    "maximumDpcmCompletions": 0,
+    "maximumDpcmRestarts": 0,
+    "musicActiveAtEnd": true,
+    "soundEffectActiveAtEnd": false,
+    "dpcmActiveAtEnd": false,
+    "orderedRegisterEventSha256": "b2dfc95e7a8248ca1bf747c0b744b0845c561de7aa80bfa3f6ea4387e58b9248"
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "The small canary services gameplay and audio exactly once per physical DMG frame; no missed service frame or cumulative drift is audible headroom.",
+    "productionTraceRationale": "The exact production ROM keeps target-variant BGM active through two completed SFX lifecycles, two airborne arcs, two moving metasprites, collision probes and sub-tile camera/background work. Authored silence is empty, so every physical observation requires one service tick."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 1.0,
+    "maximumConsecutiveMissedGameplayTicks": 0,
+    "maximumInputToStateFrames": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2,
+    "maximumUnplannedAudioGapFrames": 0,
+    "maximumAudioDriftTicks": 0
+  }
+}

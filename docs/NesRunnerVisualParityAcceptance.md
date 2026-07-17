@@ -168,8 +168,10 @@ rendering resumed.
 The NES lowering now enforces these concrete invariants:
 
 - `Video.WaitVBlank()` treats `FramePending` only as a coalesced NMI signal. It
-  discards any stale signal before waiting for a new NMI edge, then rechecks
-  `$2002`, so a late main loop cannot enter a commit partway through VBlank.
+  consumes an already-stale saturated signal without publishing and suppresses
+  the immediately following explicit `Camera.Apply()`. A path without a signal
+  waits for a new NMI edge and rechecks `$2002`, so a late main loop cannot
+  enter a commit or publish OAM partway through VBlank.
 - Every column commit resets the shared `$2005/$2006` latch from `$2002`, uses
   `PPUCTRL=$84` only while streaming vertical PPUDATA segments, and reloads
   PPUADDR at physical row boundaries 30/60.
@@ -181,9 +183,9 @@ The NES lowering now enforces these concrete invariants:
   budget. Bank selection, WorldPack directory lookup, and raw/RLE decode remain
   outside the commit.
 
-The frozen complete-stage runtime probe is 8,999 fixed bytes after preserving
+The frozen complete-stage runtime probe is 8,982 fixed bytes after preserving
 the vertical attribute stride, specializing prepared 2x2 column traversal, and
-selecting the physical 30-row attribute table for columns; pinned R7 is 7,306
+selecting the physical 30-row attribute table for columns; pinned R7 is 7,310
 bytes. It still selects
 the same `nes-mmc3-tvrom-v1` profile and retains the same ROM size, mapper
 header, resident CHR budget, and bank ownership.
@@ -207,5 +209,6 @@ git diff --check
 
 The emitted-code regression records `$2000/$2006/$2007`, resolved VRAM
 addresses, payload bytes, and CPU cycles. It checks the exact 32 tile and 8
-attribute identities and also proves that packed `WaitFrame` discards a stale
-coalesced signal before waiting for a new NMI and rechecking hardware VBlank.
+attribute identities and also proves that packed `WaitFrame` consumes a stale
+coalesced signal without publishing, while the fresh-signal path rechecks
+hardware VBlank before camera or OAM publication.

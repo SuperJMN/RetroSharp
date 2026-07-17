@@ -36,7 +36,7 @@ public sealed class NesSdkFrameInputLoweringTests
                 (_, _) => throw UnusedContext()),
             useFourScreenNametables: false,
             usePackedCamera: false,
-            useDirectOamWrites: false);
+            useSequentialOamPublication: false);
     }
 
     private static bool NoSourceConstant(ExpressionSyntax _, out int value)

@@ -89,6 +89,25 @@ public sealed class SampleApiQuarantineTests
     }
 
     [Fact]
+    public void Audio_mixed_load_is_a_canonical_cross_target_acceptance_sample()
+    {
+        var sample = Assert.Single(LoadManifest().Samples, sample => sample.Id == "audio-mixed-load");
+
+        Assert.Equal("samples/audio-mixed-load/audio-mixed-load.retrosharp.json", sample.Path);
+        Assert.Equal("samples/audio-mixed-load/README.md", sample.Readme);
+        Assert.Equal("target-acceptance", sample.Layer);
+        Assert.Equal(new[] { "gb", "nes" }, sample.Targets);
+        var source = File.ReadAllText(RepositoryFile("samples/audio-mixed-load/src/main.rs"));
+        Assert.Contains("Music.Play(load_theme);", source, StringComparison.Ordinal);
+        Assert.Contains("Sfx.Play(load_sfx);", source, StringComparison.Ordinal);
+        Assert.Contains("Audio.Update();", source, StringComparison.Ordinal);
+        Assert.Contains("Input.Poll();", source, StringComparison.Ordinal);
+        Assert.Contains("Sprite.Draw(player_sprite", source, StringComparison.Ordinal);
+        Assert.Contains("Camera.SetPosition(cameraX, cameraY);", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("[target(", source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Portable_samples_do_not_use_transitional_or_target_intrinsic_calls()
     {
         var manifest = LoadManifest();

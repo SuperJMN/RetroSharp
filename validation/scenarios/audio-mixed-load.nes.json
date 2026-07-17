@@ -1,0 +1,59 @@
+{
+  "$schema": "functional-scenario.schema.json",
+  "id": "audio-mixed-load-nes-functional",
+  "sampleId": "audio-mixed-load",
+  "target": "nes",
+  "warmUpFrames": 100,
+  "observationFrames": 360,
+  "inputs": [
+    { "id": "camera-load", "startFrame": 101, "durationFrames": 32, "buttons": ["RIGHT"], "responseSignal": "playerX" },
+    { "id": "sfx-1", "startFrame": 101, "durationFrames": 4, "buttons": ["A"] },
+    { "id": "sfx-2", "startFrame": 281, "durationFrames": 4, "buttons": ["A"] }
+  ],
+  "checkpoints": [],
+  "expectedFeatures": {
+    "gameplayTicks": true,
+    "audioService": true,
+    "cameraLifecycle": true,
+    "background": true,
+    "spriteOam": true,
+    "bankRestoration": true,
+    "safeVideoWrites": true,
+    "audioProgress": true
+  },
+  "audio": {
+    "serviceExpectedByDefault": true,
+    "authoredSilence": [],
+    "minimumRegisterEvents": 407,
+    "maximumRegisterEvents": 407,
+    "maximumRegisterEventGapFrames": 15,
+    "minimumSoundEffectStarts": 2,
+    "maximumSoundEffectStarts": 2,
+    "minimumSoundEffectCompletions": 2,
+    "maximumSoundEffectCompletions": 2,
+    "maximumSoundEffectRestarts": 0,
+    "minimumDpcmStarts": 14,
+    "maximumDpcmStarts": 14,
+    "minimumDpcmCompletions": 14,
+    "maximumDpcmCompletions": 14,
+    "maximumDpcmRestarts": 0,
+    "musicActiveAtEnd": true,
+    "soundEffectActiveAtEnd": false,
+    "dpcmActiveAtEnd": false,
+    "orderedRegisterEventSha256": "b1f78ea09c83f7d1879bce64609d1aedfc06a7f66b0802ecee033cfe995c96d7"
+  },
+  "budgetEvidence": {
+    "baselineCommit": "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
+    "hardwareTimingRationale": "The small canary services gameplay and audio exactly once per physical NTSC frame; no missed service frame or cumulative drift is audible headroom.",
+    "productionTraceRationale": "The exact production ROM keeps target-variant BGM and DPCM active through two independently completed pulse-1 SFX lifecycles, two airborne arcs, two moving metasprites, collision probes and a bounded packed-camera/background burst. Authored silence is empty, so every physical observation requires one service tick."
+  },
+  "budgets": {
+    "minimumGameplayTickRatio": 1.0,
+    "maximumConsecutiveMissedGameplayTicks": 0,
+    "maximumInputToStateFrames": 1,
+    "maximumRequestToResidentFrames": 2,
+    "maximumRequestToVisibleFrames": 2,
+    "maximumUnplannedAudioGapFrames": 0,
+    "maximumAudioDriftTicks": 0
+  }
+}

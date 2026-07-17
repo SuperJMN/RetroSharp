@@ -1276,9 +1276,9 @@ public sealed class CrossTargetCliAcceptanceTests
     {
         return target switch
         {
-            "gb" when sampleId == "runner" => 131072,
+            "gb" when sampleId is "runner" or "audio-mixed-load" => 131072,
             "gb" => 32768,
-            "nes" when sampleId is "runner" or "tiled-hscroll-full" or "tiled-hscroll-offset" => 81936,
+            "nes" when sampleId is "runner" or "audio-mixed-load" or "tiled-hscroll-full" or "tiled-hscroll-offset" => 81936,
             "nes" => 40976,
             _ => throw new InvalidOperationException($"Unexpected sample target '{target}'."),
         };

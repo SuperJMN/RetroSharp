@@ -44,6 +44,16 @@
       "targets": ["gb"]
     },
     {
+      "id": "audio-mixed-load",
+      "path": "samples/audio-mixed-load/audio-mixed-load.retrosharp.json",
+      "readme": "samples/audio-mixed-load/README.md",
+      "layer": "target-acceptance",
+      "targets": ["gb", "nes"],
+      "runtimeAbiOutputs": {
+        "nes": "samples/audio-mixed-load/bin/audio-mixed-load.nes.runtime-abi.json"
+      }
+    },
+    {
       "id": "source-vscroll",
       "path": "samples/source-vscroll/vscroll.rs",
       "readme": "samples/source-vscroll/README.md",

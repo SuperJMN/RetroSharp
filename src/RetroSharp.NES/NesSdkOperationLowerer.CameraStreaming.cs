@@ -163,9 +163,9 @@ internal sealed partial class NesSdkOperationLowerer
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
                 EmitDecrementCameraTile(config.MapWidth);
                 EmitDecrementCameraPixel(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh, usesWordCameraX);
-                builder.JumpAbsolute(endLabel);
-                builder.Label(queued);
                 builder.JumpAbsolute(publishPackedLabel);
+                builder.Label(queued);
+                builder.JumpAbsolute(endLabel);
             }
         }
         else if (usePackedCamera)
@@ -193,9 +193,9 @@ internal sealed partial class NesSdkOperationLowerer
                 builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
                 EmitIncrementCameraTile(config.MapWidth);
                 EmitIncrementCameraPixel(NesRuntimeMemoryLayout.Camera.X, NesRuntimeMemoryLayout.Camera.XHigh, usesWordCameraX);
-                builder.JumpAbsolute(endLabel);
-                builder.Label(queued);
                 builder.JumpAbsolute(publishPackedLabel);
+                builder.Label(queued);
+                builder.JumpAbsolute(endLabel);
             }
         }
         else if (usePackedCamera)
@@ -753,6 +753,12 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitPublishVisibleCameraX()
     {
+        var doneLabel = builder.CreateLabel("nes_packed_camera_defer_publish_x");
+        builder.Emit(
+            0x2C,
+            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
+            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
+        builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.X);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow);
         if (cameraConfig is { MapWidth: <= byte.MaxValue })
@@ -770,10 +776,17 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileColumn);
+        builder.Label(doneLabel);
     }
 
     private void EmitPublishVisibleCameraY()
     {
+        var doneLabel = builder.CreateLabel("nes_packed_camera_defer_publish_y");
+        builder.Emit(
+            0x2C,
+            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
+            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
+        builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.Y);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow);
         if (cameraConfig is { MapHeight: <= byte.MaxValue })
@@ -791,6 +804,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYHigh);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileRow);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileRow);
+        builder.Label(doneLabel);
     }
 
     private void EmitPublishCommittedPackedCameraAxis(byte axis)

@@ -146,6 +146,18 @@ public sealed record FunctionalAcceptanceReport(
                 .Append(Sequence(spawn.VisibleSequence));
         }
 
+        if (observed.AudioProgress is { } audio)
+        {
+            builder.Append(" audioProgress=")
+                .Append(audio.RegisterEventCount)
+                .Append(" music=").Append(Boolean(audio.Music.Active)).Append('/')
+                .Append(audio.Music.Starts).Append('/').Append(audio.Music.Completions).Append('/').Append(audio.Music.Restarts)
+                .Append(" sfx=").Append(Boolean(audio.SoundEffect.Active)).Append('/')
+                .Append(audio.SoundEffect.Starts).Append('/').Append(audio.SoundEffect.Completions).Append('/').Append(audio.SoundEffect.Restarts)
+                .Append(" dpcm=").Append(Boolean(audio.Dpcm.Active)).Append('/')
+                .Append(audio.Dpcm.Starts).Append('/').Append(audio.Dpcm.Completions).Append('/').Append(audio.Dpcm.Restarts);
+        }
+
         if (observed.Bank is { } bank)
         {
             builder.Append(" bank=").Append(bank.Domain).Append(':')

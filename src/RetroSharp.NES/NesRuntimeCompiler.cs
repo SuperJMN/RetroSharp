@@ -42,7 +42,7 @@ internal sealed partial class NesRuntimeCompiler
         IReadOnlySet<int>? longWhileLoopIds = null,
         bool useFourScreenNametables = false,
         bool usePackedCamera = false,
-        bool useDirectOamWrites = false)
+        bool useSequentialOamPublication = false)
     {
         NesRuntimeMemoryLayout.Validate();
         this.builder = builder;
@@ -63,7 +63,7 @@ internal sealed partial class NesRuntimeCompiler
                 EmitRuntimeMemberIndexToX),
             useFourScreenNametables,
             usePackedCamera,
-            useDirectOamWrites);
+            useSequentialOamPublication);
     }
 
     public void EmitInitialization()

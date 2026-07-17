@@ -14,7 +14,7 @@ dispatch was added.
 | Target | Tracked ROM | Profile | Bytes | SHA-256 |
 | --- | --- | --- | ---: | --- |
 | Game Boy | `samples/platformer-landing/bin/platformer-landing.gb` | `gb-rom-only-current` | 32,768 | `8955273d1ee3596389f6c5219995d360097a5d9e9b40b7612e91050e4f373e54` |
-| NES | `samples/platformer-landing/bin/platformer-landing.nes` | `nes-mapper-0-current` | 40,976 | `3804d522da1fa8cc613d44c3b40949b8449e55bbc9cf68f94456a071dd43ce44` |
+| NES | `samples/platformer-landing/bin/platformer-landing.nes` | `nes-mapper-0-current` | 40,976 | `7dcd7b5f943183390397d03ab2de182eced50b7b3a3576d8bac45c7c22dbd26f` |
 
 The CLI acceptance test compiles
 `samples/platformer-landing/platformer-landing.retrosharp.json` for both targets

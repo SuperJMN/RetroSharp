@@ -164,7 +164,7 @@ This document preserves project knowledge that previously lived only in agent me
   while leaving tile IDs correct. The runtime keeps the global table for row
   commits and emits a page-aligned physical table for columns; the complete
   `stage1` probe now measures a 3,158-byte runtime index, 7,310 pinned R7 bytes,
-  and 8,999 fixed bytes. The exact runner regression holds RIGHT to visible X
+  and 8,982 fixed bytes. The exact runner regression holds RIGHT to visible X
   100 and returns LEFT to X 0 at Y 80. FCEUmm reproduced that path with zero
   visible tile/palette mismatches. See
   `docs/PackedTiledFunctionalAcceptance.md`.
@@ -222,6 +222,15 @@ This document preserves project knowledge that previously lived only in agent me
   scenarios retain at least 0.95 gameplay cadence, one-frame input response,
   two-frame-or-better visibility, and zero background/sprite/write/bank
   failures. See `docs/PlatformerLandingFunctionalAcceptance.md`.
+- CSL-5 / #340 adds `audio-mixed-load`, the neutral GB/NES BGM+SFX canary.
+  Both targets require one gameplay and audio-service tick per physical frame,
+  exact ordered APU-event and SFX/DPCM lifecycles, retained background and two
+  metasprites, restored bank state, and legal video/OAM writes. Packed NES
+  `WaitFrame` consumes a stale saturated NMI signal without publishing and
+  publishes only after a fresh NMI/VBlank check; MMC3 packed logical sprites
+  use a retained `$0200` shadow plus bounded sequential `$2004` publication,
+  because AprNes does not complete mapper-4 page-$02 DMA. See
+  `docs/AudioMixedLoadFunctionalAcceptance.md`.
 - Code baseline immediately before the AF-4.3 documentation closeout:
   `f0398452fd0e3b93d4d77e6aeac5749dbf1322ed`.
 - 2026-07-14 runner update: `stage1.tsx` tile 30 marks the existing green
@@ -275,9 +284,10 @@ This document preserves project knowledge that previously lived only in agent me
   The final transient acceptance retains all 47 commit-centered five-frame
   windows in AprNes/Nes.Mcp 0.0.7, FCEUmm, and Nestopia, plus five complete PPU
   traces with zero PPUDATA writes outside VBlank. The fix bounds the
-  32-tile/8-attribute column commit to 2136 CPU cycles and makes packed
-  `Video.WaitVBlank()` discard stale coalesced state before waiting for a fresh
-  NMI/VBlank edge. RetroArch automation is shared with the power-on harness
+  32-tile/8-attribute column commit to 2136 CPU cycles. Packed
+  `Video.WaitVBlank()` now consumes stale coalesced state without publishing,
+  while the publication path still waits for a fresh NMI/VBlank edge.
+  RetroArch automation is shared with the power-on harness
   and guards persistent `retroarch.cfg` plus `FCEUmm.opt` by hash.
 - The Game Boy vertical camera path is now proven by `samples/source-vscroll/vscroll.rs`,
   a ROM/VRAM acceptance test, and a shared-row-streamer emission fix. Game Boy
@@ -428,6 +438,7 @@ The Game Boy runner is the main acceptance path for playable behavior. It is val
 | How do we debug with the runner as the GB test app? | `docs/GameBoyRunnerDebugging.md` |
 | Which samples are portable evidence? | `samples/README.md` and `samples/manifest.json` |
 | How do canonical ROM scenarios measure cadence and transient integrity? | `docs/FunctionalRomAcceptance.md` |
+| How is mixed BGM/SFX load and exact physical-frame service gated? | `docs/AudioMixedLoadFunctionalAcceptance.md` |
 | How are actor/projectile OAM order and pool lifecycles gated over time? | `docs/ActorProjectileFunctionalAcceptance.md` |
 | How should agents execute roadmap issues? | `docs/AgentExecution.md` |
 | How do we implement vertical camera scroll (AR-5)? | `docs/CameraVerticalScrollRoadmap.md` |

@@ -1,5 +1,8 @@
 namespace RetroSharp.FunctionalAcceptance.Tests;
 
+using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Xunit;
 
@@ -230,7 +233,106 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
-    public void Scenario_owned_authored_silence_is_excluded_from_audio_timing()
+    public void Ordered_audio_progress_accepts_the_exact_register_and_lifecycle_trace()
+    {
+        var observations = HealthyAudioProgressFrames();
+        var scenario = AudioProgressScenario(observations);
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations));
+
+        Assert.True(report.Passed, report.ToHumanReadable());
+        Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
+    }
+
+    [Fact]
+    public void Ordered_audio_progress_rejects_a_frozen_register_stream()
+    {
+        var healthy = HealthyAudioProgressFrames();
+        var scenario = AudioProgressScenario(healthy);
+        var frozen = healthy.Select((frame, index) => index < 3
+                ? frame
+                : frame with
+                {
+                    AudioProgress = frame.AudioProgress! with
+                    {
+                        RegisterEventCount = frame.AudioProgress!.RegisterEventCount - 1,
+                        RegisterEvents = index == 3 ? [] : frame.AudioProgress.RegisterEvents,
+                    },
+                })
+            .ToArray();
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(frozen));
+
+        Assert.False(report.Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-register-events").Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "audio-register-order");
+    }
+
+    [Fact]
+    public void Ordered_audio_progress_rejects_restart_storms_and_a_stuck_sound_effect()
+    {
+        var healthy = HealthyAudioProgressFrames();
+        var scenario = AudioProgressScenario(healthy);
+        var degraded = healthy.Select((frame, index) => index < 3
+                ? frame
+                : frame with
+                {
+                    AudioProgress = frame.AudioProgress! with
+                    {
+                        SoundEffect = new(
+                            Active: true,
+                            Starts: index == 3 ? 3 : 4,
+                            Completions: 1,
+                            Restarts: index == 3 ? 1 : 2),
+                    },
+                })
+            .ToArray();
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(degraded));
+
+        Assert.False(report.Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-sfx-starts-maximum").Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-sfx-completions").Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-sfx-restarts").Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "audio-sfx-active");
+    }
+
+    [Fact]
+    public void Ordered_audio_progress_rejects_reordered_registers_and_truncated_dpcm()
+    {
+        var healthy = HealthyAudioProgressFrames();
+        var scenario = AudioProgressScenario(healthy);
+        var degraded = healthy.Select((frame, index) => index switch
+            {
+                3 => frame with
+                {
+                    AudioProgress = frame.AudioProgress! with
+                    {
+                        RegisterEvents = [new("apu", 0x11, 0x7F)],
+                        Dpcm = new(Active: true, Starts: 1, Completions: 0, Restarts: 0),
+                    },
+                },
+                >= 3 => frame with
+                {
+                    AudioProgress = frame.AudioProgress! with
+                    {
+                        Dpcm = new(Active: true, Starts: 1, Completions: 0, Restarts: 0),
+                    },
+                },
+                _ => frame,
+            })
+            .ToArray();
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(degraded));
+
+        Assert.False(report.Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-dpcm-completions").Passed);
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "audio-dpcm-active");
+        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "audio-register-order");
+    }
+
+    [Fact]
+    public void Scenario_owned_authored_silence_still_requires_audio_service_heartbeat()
     {
         var scenario = TimingScenario() with
         {
@@ -242,8 +344,9 @@ public sealed class FunctionalScenarioRunnerTests
 
         var report = FunctionalScenarioRunner.Run(scenario, Rom(), GameBoyAdapter(observations));
 
-        Assert.True(report.Passed, report.ToHumanReadable());
-        Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
+        Assert.False(report.Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-service-gap").Passed);
+        Assert.False(Assert.Single(report.TimingChecks, check => check.Metric == "audio-drift").Passed);
     }
 
     [Fact]
@@ -773,6 +876,38 @@ public sealed class FunctionalScenarioRunnerTests
         BudgetEvidence: Evidence(),
         Budgets: new(0.5, 1));
 
+    private static FunctionalScenario AudioProgressScenario(IReadOnlyList<FunctionalFrameObservation> frames) => new(
+        "audio-progress-probe-gb",
+        "audio-progress-probe",
+        FunctionalTarget.GameBoy,
+        WarmUpFrames: 0,
+        ObservationFrames: 4,
+        Inputs: [],
+        Checkpoints: [],
+        ExpectedFeatures: new(AudioProgress: true),
+        Audio: new(
+            ServiceExpectedByDefault: false,
+            AuthoredSilence: [],
+            MinimumRegisterEvents: 3,
+            MaximumRegisterEvents: 3,
+            MaximumRegisterEventGapFrames: 1,
+            MinimumSoundEffectStarts: 2,
+            MaximumSoundEffectStarts: 2,
+            MinimumSoundEffectCompletions: 2,
+            MaximumSoundEffectCompletions: 2,
+            MaximumSoundEffectRestarts: 0,
+            MinimumDpcmStarts: 1,
+            MaximumDpcmStarts: 1,
+            MinimumDpcmCompletions: 1,
+            MaximumDpcmCompletions: 1,
+            MaximumDpcmRestarts: 0,
+            MusicActiveAtEnd: true,
+            SoundEffectActiveAtEnd: false,
+            DpcmActiveAtEnd: false,
+            OrderedRegisterEventSha256: OrderedAudioEventSha256(frames, 1, 4)),
+        BudgetEvidence: Evidence(),
+        Budgets: new(0, 4));
+
     private static FunctionalBudgetEvidence Evidence() => new(
         "95f166886713ff3b88bc1e17c03ef0ffe93d649a",
         "Synthetic contract probe: healthy observations advance once per physical frame; degraded observations advance every other frame.",
@@ -788,6 +923,7 @@ public sealed class FunctionalScenarioRunnerTests
     private static FunctionalAdapterCapabilities AllCapabilities() => new(
         GameplayTicks: true,
         AudioService: true,
+        AudioProgress: true,
         InputTimeline: true,
         CameraLifecycle: true,
         Background: true,
@@ -817,7 +953,8 @@ public sealed class FunctionalScenarioRunnerTests
         IReadOnlyList<FunctionalSpriteObservation>? sprites = null,
         IReadOnlyList<FunctionalVideoWriteObservation>? videoWrites = null,
         IReadOnlyList<FunctionalOamWriteObservation>? oamWrites = null,
-        FunctionalSpawnLifecycleObservation? spawn = null) =>
+        FunctionalSpawnLifecycleObservation? spawn = null,
+        FunctionalAudioProgressObservation? audioProgress = null) =>
         new(
             frame,
             gameplayTicks,
@@ -830,7 +967,54 @@ public sealed class FunctionalScenarioRunnerTests
             sprites,
             videoWrites,
             oamWrites,
-            spawn);
+            spawn,
+            audioProgress);
+
+    private static IReadOnlyList<FunctionalFrameObservation> HealthyAudioProgressFrames()
+    {
+        var music = new FunctionalAudioPlaybackObservation(Active: true, Starts: 1, Completions: 0, Restarts: 0);
+        return
+        [
+            Frame(0, audioProgress: new(0, [], music,
+                new(false, 0, 0, 0), new(false, 0, 0, 0))),
+            Frame(1, audioProgress: new(1, [new("apu", 0x10, 0x01)], music,
+                new(true, 1, 0, 0), new(true, 1, 0, 0))),
+            Frame(2, audioProgress: new(1, [], music,
+                new(false, 1, 1, 0), new(true, 1, 0, 0))),
+            Frame(3, audioProgress: new(2, [new("apu", 0x11, 0x02)], music,
+                new(true, 2, 1, 0), new(false, 1, 1, 0))),
+            Frame(4, audioProgress: new(3, [new("apu", 0x12, 0x03)], music,
+                new(false, 2, 2, 0), new(false, 1, 1, 0))),
+        ];
+    }
+
+    private static string OrderedAudioEventSha256(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int start,
+        int end)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (var frame = start; frame <= end; frame++)
+        {
+            foreach (var item in frames[frame].AudioProgress!.RegisterEvents)
+            {
+                AppendInt32LittleEndian(hash, frame - start + 1);
+                hash.AppendData(Encoding.UTF8.GetBytes(item.Domain));
+                hash.AppendData([0]);
+                AppendInt32LittleEndian(hash, item.Address);
+                AppendInt32LittleEndian(hash, item.Value);
+            }
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    private static void AppendInt32LittleEndian(IncrementalHash hash, int value)
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes, value);
+        hash.AppendData(bytes);
+    }
 
     private static FunctionalBackgroundObservation Background(string location, int tile, int palette) =>
         new(location, tile, palette);

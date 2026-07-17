@@ -64,10 +64,15 @@ public sealed class NesRunnerAcceptanceTests
         Assert.Equal(result.Report.Segments, forced.Report.Segments);
         Assert.False(
             ContainsSequence(forced.Rom, [0xA9, 0x02, 0x8D, 0x14, 0x40]),
-            "MMC3 must avoid AprNes' corrupt page-$02 OAM DMA path.");
+            "MMC3 must avoid AprNes' non-completing page-$02 OAM DMA path.");
         Assert.True(
-            ContainsSequence(forced.Rom, [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA9, 0xFF, 0xA2, 0x00, 0x8D, 0x04, 0x20]),
-            "MMC3 should clear OAM sequentially through $2003/$2004 before rendering starts.");
+            ContainsSequence(
+                forced.Rom,
+                [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA2, 0xB4, 0xBD, 0x4C, 0x01, 0x8D, 0x04, 0x20, 0xE8, 0xD0, 0xF7]),
+            "MMC3 logical sprites must publish retained page-$02 bytes sequentially only at an accepted frame boundary.");
+        Assert.True(
+            ContainsSequence(forced.Rom, [0x8D, 0x00, 0x02]),
+            "MMC3 logical sprite draw sites must update the retained OAM shadow rather than $2004 directly.");
     }
 
     [Fact]

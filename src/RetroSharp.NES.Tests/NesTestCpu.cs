@@ -23,6 +23,8 @@ internal readonly record struct NesOamDmaTransfer(
     byte PpuControl,
     bool RenderingEnabled);
 
+internal readonly record struct NesApuWrite(ushort Register, byte Value, long Cycle);
+
 internal sealed class NesTestCpu
 {
     private const long PpuCyclesPerFrame = 341 * 262;
@@ -95,6 +97,8 @@ internal sealed class NesTestCpu
     public List<NesOamWrite> OamWrites { get; } = [];
 
     public List<NesOamDmaTransfer> OamDmaTransfers { get; } = [];
+
+    public List<NesApuWrite> ApuWrites { get; } = [];
 
     public List<long> PpuStatusReadCycles { get; } = [];
 
@@ -533,6 +537,11 @@ internal sealed class NesTestCpu
         {
             ram[address & 0x07FF] = value;
             return;
+        }
+
+        if (address is >= 0x4000 and <= 0x4017)
+        {
+            ApuWrites.Add(new(address, value, cycles));
         }
 
         if (address < 0x4000)

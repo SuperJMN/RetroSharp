@@ -1,6 +1,8 @@
 namespace RetroSharp.FunctionalAcceptance;
 
+using System.Buffers.Binary;
 using System.Security.Cryptography;
+using System.Text;
 
 public static class FunctionalScenarioRunner
 {
@@ -151,6 +153,28 @@ public static class FunctionalScenarioRunner
                 scenario.Budgets.MaximumAudioDriftTicks!.Value));
         }
 
+        if (scenario.ExpectedFeatures.AudioProgress
+            && frames.Skip(start).Take(end - start + 1).All(frame => frame.AudioProgress is not null))
+        {
+            var startProgress = frames[start].AudioProgress!;
+            var endProgress = frames[end].AudioProgress!;
+            var registerEvents = endProgress.RegisterEventCount - startProgress.RegisterEventCount;
+            checks.Add(MinimumCheck("audio-register-events", registerEvents, scenario.Audio.MinimumRegisterEvents));
+            checks.Add(MaximumCheck("audio-register-events-maximum", registerEvents, scenario.Audio.MaximumRegisterEvents!.Value));
+            checks.Add(MaximumCheck(
+                "audio-register-event-gap",
+                MaximumAudioRegisterEventGap(scenario, frames, start, end),
+                scenario.Audio.MaximumRegisterEventGapFrames!.Value));
+            AddAudioLifecycleChecks(checks, "sfx", startProgress.SoundEffect, endProgress.SoundEffect,
+                scenario.Audio.MinimumSoundEffectStarts, scenario.Audio.MaximumSoundEffectStarts!.Value,
+                scenario.Audio.MinimumSoundEffectCompletions, scenario.Audio.MaximumSoundEffectCompletions!.Value,
+                scenario.Audio.MaximumSoundEffectRestarts);
+            AddAudioLifecycleChecks(checks, "dpcm", startProgress.Dpcm, endProgress.Dpcm,
+                scenario.Audio.MinimumDpcmStarts, scenario.Audio.MaximumDpcmStarts!.Value,
+                scenario.Audio.MinimumDpcmCompletions, scenario.Audio.MaximumDpcmCompletions!.Value,
+                scenario.Audio.MaximumDpcmRestarts);
+        }
+
         var responseInputs = scenario.Inputs.Where(input => input.ResponseSignal is not null).ToArray();
         if (responseInputs.Length > 0)
         {
@@ -219,6 +243,11 @@ public static class FunctionalScenarioRunner
             if (scenario.ExpectedFeatures.CameraLifecycle && observation.Camera is null)
             {
                 failures.Add(new("missing-camera-observation", frame, "The scenario requires camera lifecycle observations."));
+            }
+
+            if (scenario.ExpectedFeatures.AudioProgress && observation.AudioProgress is null)
+            {
+                failures.Add(new("missing-audio-progress", frame, "The scenario requires ordered APU/audio progression observations."));
             }
 
             if (scenario.ExpectedFeatures.BankRestoration)
@@ -318,6 +347,23 @@ public static class FunctionalScenarioRunner
                 "The independent oracle supplied no logical sprites in the measurement window."));
         }
 
+        if (scenario.ExpectedFeatures.AudioProgress
+            && frames.Skip(start - 1).Take(end - start + 2).All(frame => frame.AudioProgress is not null))
+        {
+            var final = frames[end].AudioProgress!;
+            CompareAudioActive("music", scenario.Audio.MusicActiveAtEnd, final.Music.Active, end, failures);
+            CompareAudioActive("sfx", scenario.Audio.SoundEffectActiveAtEnd, final.SoundEffect.Active, end, failures);
+            CompareAudioActive("dpcm", scenario.Audio.DpcmActiveAtEnd, final.Dpcm.Active, end, failures);
+            var actualDigest = OrderedAudioEventSha256(frames, start, end);
+            if (!string.Equals(actualDigest, scenario.Audio.OrderedRegisterEventSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add(new(
+                    "audio-register-order",
+                    end,
+                    $"Expected ordered per-frame register digest {scenario.Audio.OrderedRegisterEventSha256}, observed {actualDigest}."));
+            }
+        }
+
         if (scenario.ExpectedFeatures.CameraLifecycle)
         {
             ValidateCameraLifecycle(frames, start - 1, end, frames.Count - 1, failures);
@@ -369,6 +415,71 @@ public static class FunctionalScenarioRunner
         timing.Scanline >= 0 &&
         timing.Dot >= 0 &&
         !string.IsNullOrWhiteSpace(timing.Phase);
+
+    private static void AddAudioLifecycleChecks(
+        ICollection<FunctionalTimingCheck> checks,
+        string domain,
+        FunctionalAudioPlaybackObservation start,
+        FunctionalAudioPlaybackObservation end,
+        int minimumStarts,
+        int maximumStarts,
+        int minimumCompletions,
+        int maximumCompletions,
+        int maximumRestarts)
+    {
+        var starts = end.Starts - start.Starts;
+        var completions = end.Completions - start.Completions;
+        var restarts = end.Restarts - start.Restarts;
+        checks.Add(MinimumCheck($"audio-{domain}-starts", starts, minimumStarts));
+        checks.Add(MaximumCheck($"audio-{domain}-starts-maximum", starts, maximumStarts));
+        checks.Add(MinimumCheck($"audio-{domain}-completions", completions, minimumCompletions));
+        checks.Add(MaximumCheck($"audio-{domain}-completions-maximum", completions, maximumCompletions));
+        checks.Add(MaximumCheck($"audio-{domain}-restarts", restarts, maximumRestarts));
+    }
+
+    private static void CompareAudioActive(
+        string domain,
+        bool? expected,
+        bool actual,
+        int frame,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        if (expected is { } value && value != actual)
+        {
+            failures.Add(new(
+                $"audio-{domain}-active",
+                frame,
+                $"Expected {domain} active={value}, observed active={actual}."));
+        }
+    }
+
+    private static string OrderedAudioEventSha256(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int start,
+        int end)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        for (var frame = start; frame <= end; frame++)
+        {
+            foreach (var item in frames[frame].AudioProgress!.RegisterEvents)
+            {
+                AppendInt32LittleEndian(hash, frame - start + 1);
+                hash.AppendData(Encoding.UTF8.GetBytes(item.Domain));
+                hash.AppendData([0]);
+                AppendInt32LittleEndian(hash, item.Address);
+                AppendInt32LittleEndian(hash, item.Value);
+            }
+        }
+
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    private static void AppendInt32LittleEndian(IncrementalHash hash, int value)
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes, value);
+        hash.AppendData(bytes);
+    }
 
     private static void CompareBackground(
         int frame,
@@ -885,17 +996,72 @@ public static class FunctionalScenarioRunner
             throw new InvalidOperationException(
                 $"Frame {expectedFrame} regressed a cumulative gameplay, audio-service, or reset counter.");
         }
+        if (observation.AudioProgress is { } currentAudio)
+        {
+            if (currentAudio.RegisterEvents.Any(item =>
+                    string.IsNullOrWhiteSpace(item.Domain) || item.Address < 0 || item.Value is < 0 or > 255))
+            {
+                throw new InvalidOperationException($"Frame {expectedFrame} contains an invalid ordered audio register event.");
+            }
+
+            if (previous?.AudioProgress is { } previousAudio)
+            {
+                var currentCounters = AudioCounters(currentAudio);
+                var previousCounters = AudioCounters(previousAudio);
+                if (currentCounters.Where((value, index) => value < previousCounters[index]).Any())
+                {
+                    throw new InvalidOperationException($"Frame {expectedFrame} regressed a cumulative audio-progress counter.");
+                }
+
+                if (currentAudio.RegisterEventCount - previousAudio.RegisterEventCount != currentAudio.RegisterEvents.Count)
+                {
+                    throw new InvalidOperationException(
+                        $"Frame {expectedFrame} register event count does not match its ordered per-frame event list.");
+                }
+            }
+        }
     }
 
+    private static long[] AudioCounters(FunctionalAudioProgressObservation audio) =>
+    [
+        audio.RegisterEventCount,
+        audio.Music.Starts, audio.Music.Completions, audio.Music.Restarts,
+        audio.SoundEffect.Starts, audio.SoundEffect.Completions, audio.SoundEffect.Restarts,
+        audio.Dpcm.Starts, audio.Dpcm.Completions, audio.Dpcm.Restarts,
+    ];
+
     private static bool AudioServiceExpected(FunctionalScenario scenario, int frame)
+        => scenario.Audio.ServiceExpectedByDefault;
+
+    private static int MaximumAudioRegisterEventGap(
+        FunctionalScenario scenario,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        int start,
+        int end)
     {
-        if (!scenario.Audio.ServiceExpectedByDefault)
+        var maximum = 0;
+        var current = 0;
+        for (var frame = start + 1; frame <= end; frame++)
         {
-            return false;
+            if (scenario.Audio.AuthoredSilence.Any(span =>
+                    frame >= span.StartFrame && frame < checked(span.StartFrame + span.DurationFrames)))
+            {
+                current = 0;
+                continue;
+            }
+
+            if (frames[frame].AudioProgress!.RegisterEventCount == frames[frame - 1].AudioProgress!.RegisterEventCount)
+            {
+                current++;
+                maximum = Math.Max(maximum, current);
+            }
+            else
+            {
+                current = 0;
+            }
         }
 
-        return !scenario.Audio.AuthoredSilence.Any(span =>
-            frame >= span.StartFrame && frame < checked(span.StartFrame + span.DurationFrames));
+        return maximum;
     }
 
     private static void ValidateCapabilities(FunctionalScenario scenario, IFunctionalRomAdapter adapter)
@@ -905,6 +1071,7 @@ public static class FunctionalScenarioRunner
         if (scenario.Inputs.Count > 0 && !capabilities.InputTimeline) missing.Add("input-timeline");
         if (scenario.ExpectedFeatures.GameplayTicks && !capabilities.GameplayTicks) missing.Add("gameplay-ticks");
         if (scenario.ExpectedFeatures.AudioService && !capabilities.AudioService) missing.Add("audio-service");
+        if (scenario.ExpectedFeatures.AudioProgress && !capabilities.AudioProgress) missing.Add("audio-progress");
         if (scenario.ExpectedFeatures.CameraLifecycle && !capabilities.CameraLifecycle) missing.Add("camera-lifecycle");
         if (scenario.ExpectedFeatures.Background && !capabilities.Background) missing.Add("background");
         if (scenario.ExpectedFeatures.SpriteOam && !capabilities.SpriteOam) missing.Add("sprite-oam");

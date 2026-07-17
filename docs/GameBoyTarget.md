@@ -78,6 +78,12 @@ fall reset. Its exact ROM, steady-state cadence, two-frame camera deadline,
 background/OAM oracle, and SameBoy checkpoint are recorded in
 [`PlatformerLandingFunctionalAcceptance.md`](PlatformerLandingFunctionalAcceptance.md).
 
+`samples/audio-mixed-load/` is the shared BGM+SFX `target-acceptance` canary.
+Its 360-frame window requires 360 gameplay ticks and 360 audio-service ticks,
+616 ordered DMG APU writes, two completed SFX with no restart, two intact
+metasprites, and zero visual, bank, reset, or unsafe-write failures. See
+[`AudioMixedLoadFunctionalAcceptance.md`](AudioMixedLoadFunctionalAcceptance.md).
+
 Sample portability is tracked in `samples/manifest.json`. `samples/cross-target-camera/camera.rs` is the current `portable-sdk` sample and is intentionally free of raw calls. `samples/static-drawing/drawing.rs` has one neutral identity for both cartridge targets, but remains a `target-intrinsic` fixture: private compile-time target variants preserve each original raw palette/tilemap projection without claiming portable SDK coverage. The HUD, music, vertical, diagonal, free-scroll, and actor samples remain focused target-specific or target-acceptance fixtures. `samples/runner/runner.retrosharp.json` is the richest shared Game Boy/NES `target-acceptance` project: game-owned helper/state files load complete 156x20-cell `stage1.tmj` (312x40 hardware tiles), retain target VGM/VGZ audio, and exercise the packed 2-axis camera and collision path.
 
 ## Supported Runtime Subset

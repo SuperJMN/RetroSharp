@@ -23,7 +23,7 @@ internal sealed partial class NesSdkOperationLowerer
     private readonly NesSdkLoweringContext context;
     private readonly bool useFourScreenNametables;
     private readonly bool usePackedCamera;
-    private readonly bool useDirectOamWrites;
+    private readonly bool useSequentialOamPublication;
     private readonly bool usesRetainedOam;
     private readonly int retainedOamByteCount;
     private int nextHardwareSprite;
@@ -39,16 +39,15 @@ internal sealed partial class NesSdkOperationLowerer
         NesSdkLoweringContext context,
         bool useFourScreenNametables,
         bool usePackedCamera,
-        bool useDirectOamWrites)
+        bool useSequentialOamPublication)
     {
         this.builder = builder;
         this.program = program;
         this.context = context;
         this.useFourScreenNametables = useFourScreenNametables;
         this.usePackedCamera = usePackedCamera;
-        this.useDirectOamWrites = useDirectOamWrites;
-        usesRetainedOam = !useDirectOamWrites
-            && program.SdkOperationStream.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
+        this.useSequentialOamPublication = useSequentialOamPublication;
+        usesRetainedOam = program.SdkOperationStream.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
         retainedOamByteCount = Math.Min(
             256,
             program.SdkOperationStream
