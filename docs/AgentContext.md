@@ -24,8 +24,14 @@ This document preserves project knowledge that previously lived only in agent me
   target/profile frame windows, stable contributor ids, explicit unknown
   coverage, and calibrated OAM transfer detail only when retained sprite
   publication is reachable. It stays `incomplete` and does not reject current
-  samples or fabricate exact costs for arbitrary user loops. GCP-3.2 remains
-  the closeout slice. Start from
+  samples or fabricate exact costs for arbitrary user loops. GCP-3.2 / #404
+  closes the remaining Game Boy active-pool gap by using compile-time
+  `WorldMap2D` row facts in the target-owned lowering of
+  `Camera.ScreenAabbTiles(...)` and `Camera.ScreenAabbHitTop(...)`: small-map
+  rows known empty for the requested flags skip column probes, and rows whose
+  every column contains one requested flag return hit/hit-top directly. The
+  final exact GCP baseline pins wide-spawn-128 and active-pool-8 at 100/100
+  with no miss on both GB and NES. Start from
   `docs/GeneratedCodePerformanceRoadmap.md`; do not dispatch epic #387 as an
   implementation task or duplicate #244.
 - AIN-12 / #378 makes the remaining architecture guardrails rename-safe.

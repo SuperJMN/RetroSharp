@@ -269,6 +269,40 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
+    public void Screen_camera_aabb_uses_static_small_map_rows_without_changing_results_on_game_boy()
+    {
+        const string source = """
+                              void Main() {
+                                  World.Column(0, 0, 4);
+                                  World.Column(1, 0, 4);
+                                  World.Flags(0, 0, 1);
+                                  World.Flags(1, 0, 1);
+                                  World.Map(2, 0, 2);
+                                  Camera.Init(2, 0, 2);
+
+                                  u8 empty = Camera.ScreenAabbTiles(0, 0, 8, 8, 1);
+                                  u8 solid = Camera.ScreenAabbTiles(0, 8, 8, 8, 1);
+                                  u8 top = Camera.ScreenAabbHitTop(0, 8, 8, 8, 1);
+
+                                  while (true) {
+                                      Video.WaitVBlank();
+                                  }
+                              }
+                              """;
+
+        var rom = GameBoyRomCompiler.CompileSource(source);
+        var cpu = new GameBoyTestCpu(rom);
+        cpu.RunFrames(2);
+
+        Assert.Equal(0, cpu.Wram(0xC000));
+        Assert.Equal(1, cpu.Wram(0xC001));
+        Assert.Equal(8, cpu.Wram(0xC002));
+        Assert.True(ContainsSequence(rom, [0xFE, 0x01, 0xCA]), "Screen AABB lowering should branch directly on a fully covered source row.");
+        Assert.True(ContainsSequence(rom, [0xFE, 0x00, 0xCA]), "Screen AABB lowering should branch directly on an empty source row.");
+    }
+
+    [Fact]
+    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_rejects_unsafe_byte_narrowing_on_tall_game_boy_world()
     {
         var source = CollisionHitContractSource(

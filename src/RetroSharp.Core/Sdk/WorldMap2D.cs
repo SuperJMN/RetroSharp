@@ -41,6 +41,62 @@ public sealed class WorldMap2D
 
     public WorldTileFlags FlagsAt(int x, int y) => tileFlags[IndexOf(x, y)];
 
+    internal bool ContainsAnyFlags(WorldTileFlags flags)
+    {
+        if (flags == WorldTileFlags.Empty)
+        {
+            return false;
+        }
+
+        foreach (var tileFlag in tileFlags)
+        {
+            if ((tileFlag & flags) != WorldTileFlags.Empty)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal bool RowContainsAnyFlags(int y, WorldTileFlags flags)
+    {
+        if (flags == WorldTileFlags.Empty)
+        {
+            return false;
+        }
+
+        var start = RowStart(y);
+        for (var x = 0; x < Width; x++)
+        {
+            if ((tileFlags[start + x] & flags) != WorldTileFlags.Empty)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal bool RowAllColumnsContainAnyFlags(int y, WorldTileFlags flags)
+    {
+        if (flags == WorldTileFlags.Empty)
+        {
+            return false;
+        }
+
+        var start = RowStart(y);
+        for (var x = 0; x < Width; x++)
+        {
+            if ((tileFlags[start + x] & flags) == WorldTileFlags.Empty)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private int IndexOf(int x, int y)
     {
         if (x < 0 || x >= Width)
@@ -54,5 +110,15 @@ public sealed class WorldMap2D
         }
 
         return y * Width + x;
+    }
+
+    private int RowStart(int y)
+    {
+        if (y < 0 || y >= Height)
+        {
+            throw new ArgumentOutOfRangeException(nameof(y), y, $"World map row must be between 0 and {Height - 1}.");
+        }
+
+        return y * Width;
     }
 }

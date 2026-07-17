@@ -1,11 +1,11 @@
 # Generated Code Performance Roadmap (Game Boy and NES)
 
 Status: **active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
-and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); discovery
-baseline reproduced on 2026-07-17.** GCP-0.1 through GCP-3.1 now cover the
-reproducible baseline, CPU-work contract, generated-shape optimizations, and
-initial executable CPU-work report. GCP-3.2 remains the final joint acceptance
-closeout.
+and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); final
+GCP-3.2 closeout evidence reproduced on 2026-07-17.** GCP-0.1 through GCP-3.2
+cover the reproducible baseline, CPU-work contract, generated-shape
+optimizations, initial executable CPU-work report, and joint exact-ROM cadence
+acceptance.
 
 This roadmap turns the measured Actor Framework code-generation bottlenecks
 into bounded work for Game Boy and NES. It covers compiler-generated work whose
@@ -686,16 +686,36 @@ GCP-0.1 reproducible baseline
 - **Layer:** joint validation and documentation.
 - **Depends on:** AF-5.10 / #244, `GCP-2.1`, `GCP-2.2`, `GCP-2.3`, and
   `GCP-3.1`.
+- **Remote:** [#404](https://github.com/SuperJMN/RetroSharp/issues/404), final
+  child of epic #387; closeout PR
+  [#405](https://github.com/SuperJMN/RetroSharp/pull/405).
 - **Candidate modules:** `GCP-0.1` performance fixtures/report, functional ROM
   acceptance adapters, target acceptance suites, this roadmap, target docs,
   and `docs/AgentContext.md`.
-- **Work:** run the complete matrix; pin the final 128-spawn and eight-active
-  100/100 gates; preserve the #244 record bound; run current runner,
-  actor/projectile, audio, packed-world, and deterministic ROM checks; record
-  hashes, bytes, cycles/ticks, and any accepted estimator headroom.
+- **Accepted shape:** the final Game Boy gap was in target-owned screen-space
+  camera AABB lowering, not in a public source API or actor phase reorder.
+  `Camera.ScreenAabbTiles(...)` and `Camera.ScreenAabbHitTop(...)` now compute
+  the source row once per sampled Y offset and, for small collision maps, skip
+  per-column flag reads when the resource proves the row is empty for the
+  requested flags or every column in that row contains one of those flags. The
+  shortcut is a compile-time fact from `WorldMap2D`, preserves screen-space
+  AABB semantics, and introduces no hidden scheduler, mutable cache, public
+  cycle API, or target-specific source spelling. The canonical two-row
+  active-pool fixture has row 0 empty and row 1 fully solid, so its repeated
+  `TouchTiles`/`LandOnTiles` queries avoid the expensive flag-table probes.
 - **Acceptance:** every destination bullet in section 1 is evidenced; no exact
   functional scenario regresses; generated ROMs are deterministic; the
   milestone and parent epic can close without an unowned performance gap.
+- **Final cadence evidence:** `validation/generated-code-performance/baseline.tsv`
+  records deterministic 20-frame warm-up plus 100-frame observation rows for
+  both targets. The closeout rows are:
+
+  | Target | Case | Logical waits / 100 frames | Longest miss | ROM bytes | ROM SHA-256 |
+  | --- | --- | ---: | ---: | ---: | --- |
+  | Game Boy | `wide-spawn-128` | 100 | 0 | 32,768 | `562c7b0556048c46077c07bb5eb8ca1776317cb79a7c834313801d7078cf39b0` |
+  | Game Boy | `active-pool-8` | 100 | 0 | 32,768 | `f731be5c442001c173fea588489d1a216d9b02d8433fb64415a1efd5df98347c` |
+  | NES | `wide-spawn-128` | 100 | 0 | 40,976 | `9f47fa4e34b7241df418aa61cdddd6e4b008788961903a60daae7fbd9be192e0` |
+  | NES | `active-pool-8` | 100 | 0 | 40,976 | `b62fb39979cadcb34f7386eafb164352567a0a26d98e5037b79aba8e3ed60e14` |
 - **Validation:** all focused performance and functional scenarios;
   `tools/gameboy/generate_sample_roms.py --dry-run`; deliberate regeneration
   only if tracked source changed; `dotnet test RetroSharp.sln -m:1`;
@@ -714,15 +734,15 @@ Section 1 is the canonical source for thresholds. This matrix indexes the proof
 that closes each destination clause; it must be updated by reference when a
 threshold changes rather than becoming a second independent contract.
 
-| Concern | Required proof |
+| Concern | Accepted proof |
 | --- | --- |
-| Measurement | Repository-owned source fixtures compile exact GB/NES ROMs through the canonical observation protocol. |
-| Wide spawn cadence | Evidence closes destination **D1**. |
-| Active pool cadence | Evidence closes destination **D2**. |
-| Spatial bound | Reference-trace evidence closes destination **D3**. |
-| Existing ROM acceptance | Runner, actor/projectile, audio-mixed-load, packed worlds, video/OAM safety, and deterministic generation close destination **D4**. |
-| Static guard | The implemented target policy and contributor breakdown close destination **D5**. |
-| Spawn and phase semantics | One-shot/retry/order traces plus actor state and OAM traces close destination **D6**. |
+| Measurement | `validation/generated-code-performance/baseline.tsv` has 26 exact rows. GB and NES target tests compile every fixture twice through the CLI/build-report seam, require byte-equal ROMs and identical serialized reports, and observe 20 warm-up plus 100 physical frames. |
+| Wide spawn cadence | Destination **D1** is closed by `wide-spawn-128` at 100/100 with no miss on both targets: GB hash `562c7b0556048c46077c07bb5eb8ca1776317cb79a7c834313801d7078cf39b0`, NES hash `9f47fa4e34b7241df418aa61cdddd6e4b008788961903a60daae7fbd9be192e0`. |
+| Active pool cadence | Destination **D2** is closed by `active-pool-8` at 100/100 with no miss on both targets: GB hash `f731be5c442001c173fea588489d1a216d9b02d8433fb64415a1efd5df98347c`, NES hash `b62fb39979cadcb34f7386eafb164352567a0a26d98e5037b79aba8e3ed60e14`. |
+| Spatial bound | Destination **D3** is closed by AF-5.10 / #244: wide layers use ROM candidate indexes, retain one-shot/retry/source-order semantics, and examine at most 32 plausible records in the 240-spawn reference windows. |
+| Existing ROM acceptance | Destination **D4** remains owned by the current runner, actor/projectile, audio-mixed-load, packed-world, safe-write, deterministic-generation, and full-solution gates; GCP-3.2 changes no public source spelling and regenerates tracked ROMs only when validation proves emitted bytes changed. |
+| Static guard | Destination **D5** is closed by GCP-3.1 / #402: the internal build report exposes stable target/profile CPU-work windows, deterministic contributor ids, calibrated retained-sprite transfer detail, and explicit `incomplete` unknown coverage rather than a false whole-program WCET. |
+| Spawn and phase semantics | Destination **D6** is closed by #390, #244, #399, #394, #395, and #404 together: spawn columns and candidate indexes remain immutable ROM data, actor phases remain all-actors-per-phase, retained-OAM publication stays source-order accurate, and the GCP-3.2 GB row shortcut uses only static collision-row facts. |
 
 ## 10. Remote tracking
 
@@ -760,7 +780,11 @@ threshold changes rather than becoming a second independent contract.
   - [#402 — GCP-3.1: diagnose compiler-known CPU work that exceeds frame
     budgets](https://github.com/SuperJMN/RetroSharp/issues/402) is the initial
     executable CPU-work report projection.
-- `GCP-3.2` remains the closeout issue after #402 merges.
+  - [#404 — GCP-3.2: prove joint GB/NES generated-code cadence
+    acceptance](https://github.com/SuperJMN/RetroSharp/issues/404) records the
+    final exact-ROM closeout evidence through
+    [PR #405](https://github.com/SuperJMN/RetroSharp/pull/405) and is the last
+    child required before #387 can close.
 
 ## 11. Durable validation
 
