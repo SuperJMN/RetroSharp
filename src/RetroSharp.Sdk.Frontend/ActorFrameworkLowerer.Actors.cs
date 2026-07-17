@@ -14,6 +14,7 @@ public static partial class ActorFrameworkLowerer
         private const string ActorStructName = "Actor";
         private const string AnimationFrameIntrinsic = "animation_frame";
         private const string CameraScreenAabbHitTopIntrinsic = "camera_screen_aabb_hit_top";
+        private const int SpawnSpatialIndexThreshold = 32;
 
         private static readonly IReadOnlyDictionary<string, int> BehaviorIds = new Dictionary<string, int>(StringComparer.Ordinal)
         {
@@ -51,6 +52,10 @@ public static partial class ActorFrameworkLowerer
         private sealed record EnemyLookupDescriptor(string FunctionName, string ConstantSuffix, string DisplayName);
 
         private sealed record EnemySpriteBudget(EnemyDef Def, ActorMetaspriteGeometry Geometry, int BusiestRelativeScanlineSprites);
+
+        private sealed record SpawnSpatialIndex(IReadOnlyList<SpawnSpatialBucket> Buckets);
+
+        private sealed record SpawnSpatialBucket(int Ordinal, int CameraStart, int CameraEndExclusive, IReadOnlyList<int> SpawnIndices);
 
         public static string? LookupDisplayName(ActorFrameworkRole role)
         {
@@ -335,16 +340,17 @@ public static partial class ActorFrameworkLowerer
 
         public static IEnumerable<FunctionSyntax> GeneratedFunctions(ActorFrameworkState state) =>
             GeneratedLookupFunctions(state.Actors.EnemyDefs, state.Actors.UsedEnemyLookupMethods)
-                .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers, state.Actors.EnemyDefs));
+                .Concat(GeneratedSpawnLookupFunctions(state.Spawns.Layers, state.Actors.EnemyDefs))
+                .Concat(GeneratedSpawnCandidateFunctions(state.Spawns.Layers, state.ScreenWidth));
 
         public static IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedSpawnRomTables(
             IReadOnlyList<ActorSpawnLayer> spawnLayers,
-            IReadOnlyList<EnemyDef> enemyDefs) =>
+            IReadOnlyList<EnemyDef> enemyDefs,
+            int screenWidth) =>
             SpawnLookupColumns(spawnLayers, enemyDefs)
                 .Where(column => !column.IsUniform)
-                .Select(column => new CompilerGeneratedRomTable(
-                    column.FunctionName,
-                    column.Values.Select(value => checked((byte)value)).ToArray()))
+                .Concat(SpawnCandidateColumns(spawnLayers, screenWidth))
+                .Select(CreateCompilerGeneratedRomTable)
                 .ToDictionary(table => table.FunctionName, StringComparer.Ordinal);
 
         private static IReadOnlyList<StatementSyntax> RewriteSpawnDirective(ActorFrameworkCall call, ActorFrameworkState state)
@@ -443,6 +449,11 @@ public static partial class ActorFrameworkLowerer
             IReadOnlyList<EnemyDef> enemyDefs) =>
             SpawnLookupColumns(spawnLayers, enemyDefs).Select(SpawnLookupFunction);
 
+        private static IEnumerable<FunctionSyntax> GeneratedSpawnCandidateFunctions(
+            IReadOnlyList<ActorSpawnLayer> spawnLayers,
+            int screenWidth) =>
+            SpawnCandidateColumns(spawnLayers, screenWidth).Select(SpawnLookupFunction);
+
         private static IEnumerable<SpawnLookupColumn> SpawnLookupColumns(
             IReadOnlyList<ActorSpawnLayer> spawnLayers,
             IReadOnlyList<EnemyDef> enemyDefs)
@@ -474,6 +485,77 @@ public static partial class ActorFrameworkLowerer
             new(
                 $"{layer.RuntimeName}_{fieldName}",
                 layer.Spawns.Select(selector).ToArray());
+
+        private static IEnumerable<SpawnLookupColumn> SpawnCandidateColumns(
+            IReadOnlyList<ActorSpawnLayer> spawnLayers,
+            int screenWidth)
+        {
+            foreach (var layer in spawnLayers)
+            {
+                var index = BuildSpawnSpatialIndex(layer, layer.WindowWidth ?? screenWidth);
+                if (index is null)
+                {
+                    continue;
+                }
+
+                foreach (var bucket in index.Buckets)
+                {
+                    yield return new SpawnLookupColumn(
+                        SpawnCandidateFunctionName(layer, bucket),
+                        bucket.SpawnIndices.ToArray());
+                }
+            }
+        }
+
+        private static CompilerGeneratedRomTable CreateCompilerGeneratedRomTable(SpawnLookupColumn column) =>
+            new(column.FunctionName, column.Values.Select(value => checked((byte)value)).ToArray());
+
+        private static SpawnSpatialIndex? BuildSpawnSpatialIndex(ActorSpawnLayer layer, int windowWidth)
+        {
+            if (layer.Spawns.Count <= SpawnSpatialIndexThreshold || windowWidth <= 0)
+            {
+                return null;
+            }
+
+            var spawnPositions = layer.Spawns
+                .Select((spawn, index) =>
+                {
+                    var x = SplitWorldX(spawn.X, "actor spawn X");
+                    return (Index: index, X: x.Low + (x.High << 8));
+                })
+                .ToArray();
+            var minX = spawnPositions.Min(spawn => spawn.X);
+            var maxX = spawnPositions.Max(spawn => spawn.X);
+            var firstBucket = Math.Max(0, (minX - windowWidth + 1) / windowWidth);
+            var lastBucket = maxX / windowWidth;
+            var buckets = new List<SpawnSpatialBucket>();
+
+            for (var bucket = firstBucket; bucket <= lastBucket; bucket++)
+            {
+                var cameraStart = bucket * windowWidth;
+                if (cameraStart >= 65536)
+                {
+                    break;
+                }
+
+                var cameraEndExclusive = Math.Min(65536, cameraStart + windowWidth);
+                var candidateEndExclusive = Math.Min(65536, cameraEndExclusive + windowWidth - 1);
+                var candidates = spawnPositions
+                    .Where(spawn => spawn.X >= cameraStart && spawn.X < candidateEndExclusive)
+                    .Select(spawn => spawn.Index)
+                    .ToArray();
+
+                if (candidates.Length != 0)
+                {
+                    buckets.Add(new SpawnSpatialBucket(buckets.Count, cameraStart, cameraEndExclusive, candidates));
+                }
+            }
+
+            return buckets.Count == 0 ? null : new SpawnSpatialIndex(buckets);
+        }
+
+        private static string SpawnCandidateFunctionName(ActorSpawnLayer layer, SpawnSpatialBucket bucket) =>
+            $"{layer.RuntimeName}_candidate_{bucket.Ordinal}";
 
         private static FunctionSyntax SpawnLookupFunction(SpawnLookupColumn column) =>
             new(
@@ -558,6 +640,16 @@ public static partial class ActorFrameworkLowerer
                 foreach (var fieldName in SpawnLookupFieldNames())
                 {
                     yield return new GeneratedName($"{layer.RuntimeName}_{fieldName}", $"Actors.{layer.MethodName} layer '{layer.LayerName}' {fieldName} lookup function");
+                }
+
+                if (BuildSpawnSpatialIndex(layer, layer.WindowWidth ?? state.ScreenWidth) is { } index)
+                {
+                    foreach (var bucket in index.Buckets)
+                    {
+                        yield return new GeneratedName(
+                            SpawnCandidateFunctionName(layer, bucket),
+                            $"Actors.{layer.MethodName} layer '{layer.LayerName}' spatial candidate lookup function");
+                    }
                 }
             }
         }

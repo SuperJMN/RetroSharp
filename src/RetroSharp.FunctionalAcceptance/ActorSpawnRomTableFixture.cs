@@ -49,6 +49,10 @@ internal static class ActorSpawnRomTableFixture
             return $"{{\"id\":{index + 1},\"type\":\"{(index % 2 == 0 ? "Goomba" : "Bat")}\",\"x\":{index * 257},\"y\":{index * 257},\"properties\":[{properties}]}}";
         })) + "]";
 
+    public static string SpacedObjectsJson(int recordCount, int spacing) =>
+        "[" + string.Join(",", Enumerable.Range(0, recordCount).Select(index =>
+            $"{{\"id\":{index + 1},\"type\":\"Goomba\",\"x\":{index * spacing},\"y\":40}}")) + "]";
+
     public static string ActorSource(bool includeReturn) =>
         $$"""
           void Main() {

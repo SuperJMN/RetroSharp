@@ -48,5 +48,11 @@ and 128 records; its remaining complete-layer activation scan is owned by
 AF-5.10 / #244. Active-pool cadence is unchanged because GCP-1.1 does not alter
 pool-phase traversal.
 
+The later 2026-07-17 AF-5.10 / #244 refresh records the ROM-byte/hash changes
+from camera-window spawn candidate indexes. The wide-spawn matrix now sustains
+100/100 through the 128-record case on both Game Boy and NES. Active-pool rows
+remain unchanged; their remaining eight-slot cadence work belongs to the
+GCP-2.x actor-phase/struct-addressing path.
+
 The TSV serializer always writes literal LF line endings so the exact report is
 independent of the host operating system.

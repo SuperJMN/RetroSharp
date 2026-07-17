@@ -173,6 +173,16 @@ the same call uses the target's bank-preserving read-only-data helper and never
 executes from the data bank. The 16-record/two-varying-column GCP-1.1 probe
 reduces occupied payload from 1,986 to 1,646 bytes; uniform fields still emit no
 table.
+
+For spawn layers wider than 32 authored records, Game Boy activation also uses
+compiler-generated ROM candidate-index tables. The table entries are authored
+spawn indices, ordered exactly as the Tiled object layer, and the runtime
+selects the current camera bucket from `Actors.SpawnLayer(...)`'s 160 px screen
+window or from the literal `Actors.SpawnWindow(...)` left/width. The candidate
+loop still runs the normal exact visibility check before claiming a pool slot,
+and `used[]` is set only inside that successful slot claim; recycling never
+clears it. No per-spawn mutable state is added beyond the existing fixed
+`used[]` bytes.
 - Projectile/effect framework MVP: `Projectiles.Pool(...)`, `Projectiles.Def(...)`, `pool.Request(...)`, `pool.ProcessRequests()`, `pool.Update()`, `pool.Draw()`, `pool.TouchTiles(...)`, `pool.TouchActors(...)`, `pool.TouchHero(...)`, `Effects.Pool(...)`, `Effects.Def(...)`, and `effects.*` lifecycle calls expand before Game Boy lowering to fixed hero/enemy `Projectile` arrays, fixed visual `Effect` arrays, fixed request queues, inactive-slot initialization, literal metadata constants, deterministic queue/pool-full handling, signed vertical projectile movement, camera-margin projectile culling, tile bounce/expiration responses through `Camera.ScreenAabbTiles(...)`, page-aware projectile-vs-actor collision, accumulated hero damage, optional projectile spawn/impact/expiration effect requests, and camera-relative `Sprite.Draw(...)`; sounds, richer effect behavior, homing/target-seeking movement, and actor-emitter helpers remain follow-up work
 - Constant initializers
 - Assignment and compound assignment (`+=`, `-=`, `&=`, `|=`, `^=`) to local variables, `struct.field` lvalues, constant or byte-backed runtime array indices, and fixed struct-array field lvalues

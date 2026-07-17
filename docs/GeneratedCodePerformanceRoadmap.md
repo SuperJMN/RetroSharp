@@ -105,18 +105,23 @@ write diagnostics.
 
 ## 3. Confirmed cost centers
 
-### 3.1 Every activation call scans the complete authored table
+### 3.1 Wide activation uses a ROM candidate index after AF-5.10
 
-`ActorFrameworkLowerer.Actors.Generation.cs` emits a counted loop from zero to
-the layer's full spawn count for every `Actors.SpawnLayer(...)` or
-`Actors.SpawnWindow(...)` call. Each unused record loads its fields, projects
-its position, and, when visible, scans the fixed pool for a free slot.
+Before AF-5.10, `ActorFrameworkLowerer.Actors.Generation.cs` emitted a counted
+loop from zero to the layer's full spawn count for every
+`Actors.SpawnLayer(...)` or `Actors.SpawnWindow(...)` call. Each unused record
+loaded its fields, projected its position, and, when visible, scanned the fixed
+pool for a free slot.
 
 The one-shot `used[]` contract is not the problem and must remain stable. The
-problem is candidate selection: cost currently follows total authored objects
-rather than objects plausibly intersecting the camera window. Existing
-[AF-5.10 / #244](https://github.com/SuperJMN/RetroSharp/issues/244) owns the
-spatial-index behavior and equivalence contract.
+AF-5.10 implementation keeps that contract and replaces the complete-table
+activation scan for wide layers with compiler-generated ROM candidate tables.
+Layers with at most 32 authored spawns keep the compact full-scan shape. Wider
+layers select the current camera bucket from the literal/default activation
+window, loop only that bucket's source-ordered candidate indices, then apply
+the same projection, pool scan, retry, and successful-claim `used[]` update as
+the historical path. The 240-spawn fixture now has at most 32 plausible records
+per representative Game Boy/NES activation window.
 
 ### 3.2 Spawn fields lowered to length-dependent conditional ladders before GCP-1.1
 
@@ -132,7 +137,7 @@ GCP-1.1 replaces that historical shape with one immutable ROM column for each
 varying field. Uniform fields remain direct constants. Game Boy emits one
 bounded indexed read (or its bank-preserving read-only-data helper when the
 table is banked); NES emits `LDA index; TAX; LDA table,X`. The complete-table
-scan remains intentionally unchanged for AF-5.10 / #244.
+scan is now replaced for wide layers by AF-5.10 / #244's ROM candidate index.
 
 ### 3.3 Dynamic struct-array addressing repeats stride work
 
@@ -453,11 +458,13 @@ GCP-0.1 reproducible baseline
   ranged from 12 to 122 cycles, so the conservative last-record delta is -112
   cycles. For the focused 16-record/two-varying-column wide-spawn probe, Game
   Boy occupied payload falls from 1,986 to 1,646 bytes (-340), and NES fixed
-  payload from 2,656 to 2,366 bytes (-290). The refreshed exact GCP-0.1
-  snapshot reaches 100/100 through 64 records and 50/100 at 96/128 on Game Boy,
-  and 100/100 through 128 on NES; the remaining Game Boy scan cost belongs to
-  #244. The tracked actor-framework GB/NES ROMs were deliberately regenerated;
-  their exact production scenarios and the shared runner cadence gates pass.
+  payload from 2,656 to 2,366 bytes (-290). The GCP-1.1 snapshot reached 100/100
+  through 64 records and 50/100 at 96/128 on Game Boy, and 100/100 through 128
+  on NES; AF-5.10 / #244 later replaced the remaining wide activation scan with
+  a ROM candidate index, so the refreshed exact GCP-0.1 wide-spawn rows now
+  reach 100/100 through 128 records on both targets. The tracked
+  actor-framework GB/NES ROMs were deliberately regenerated; their exact
+  production scenarios and the shared runner cadence gates pass.
 
 ### GCP-1.2 / AF-5.10: Index spawn activation by camera window
 
@@ -471,6 +478,12 @@ GCP-0.1 reproducible baseline
   at-most-32-record bound, one-shot semantics, reverse/jump/equal-X timelines,
   retry behavior, fixed RAM, ROM directory/index, and reference-trace
   equivalence. Do not create a duplicate GCP issue.
+- **Accepted shape (#244):** layers with 32 or fewer spawns retain the previous
+  full scan; wider layers emit ROM candidate-index tables named after the
+  generated spawn layer. Each activation call selects one camera bucket from
+  the current camera/window edge, loops that bucket's authored indices in source
+  order, and then runs the existing exact visibility/pool-claim path. The only
+  mutable per-spawn state remains `used[]`.
 - **Additional epic acceptance:** the `GCP-0.1` 128-spawn cadence fixture reaches
   100/100 on both targets after `GCP-1.1` and #244 are integrated.
 - **Compatibility:** compile the shared runner manifest for both targets and run

@@ -123,6 +123,15 @@ The NES runtime spike supports type aliases normalized to their underlying type 
 - `Input.WasReleased(button)`
 - `Input.HoldTicks(button)`
 
+For spawn layers wider than 32 authored records, NES activation uses the same
+compiler-generated ROM candidate-index shape as Game Boy. Candidate tables store
+authored spawn indices in source order; `Actors.SpawnLayer(...)` buckets use the
+256 px NES screen width, while `Actors.SpawnWindow(...)` uses its literal
+left/width. The runtime selects the current bucket, loops only its candidates,
+then applies the existing exact visibility and pool-claim logic. The one-shot
+contract is unchanged: `used[]` is set only after a free slot is claimed, a full
+pool leaves the spawn retryable, and recycling does not clear `used[]`.
+
 `Input.Poll()` snapshots the previous controller state, strobes controller port `$4016`, reads the current serial button state, and updates per-button hold counters. The `button` argument is a member of the built-in `Button` enum (`Button.A`, `Button.B`, `Button.Select`, `Button.Start`, `Button.Right`, `Button.Left`, `Button.Up`, `Button.Down`), shared with the Game Boy input surface. `Input.IsDown`, `Input.WasPressed`, and `Input.WasReleased` return `bool`; `Input.HoldTicks` returns the hold count. Direct snake_case button calls and bare lowercase identifiers are rejected at the public source layer.
 
 Scalar locals use fixed-width zero-page storage: `u8`, `i8`, `bool`, and enums reserve one byte; `u16` and `i16` reserve two adjacent little-endian bytes. Type aliases are normalized to their underlying type before NES lowering, so `type Pixel = i16;` has the same two-byte runtime shape as `i16`. Top-level constants, block-local constants, `sizeof(type)`, `offsetof(type, field)`, `countof(array)`, and enum members are substituted before ROM lowering and do not reserve zero-page storage.

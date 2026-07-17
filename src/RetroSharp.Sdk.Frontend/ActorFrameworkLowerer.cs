@@ -517,7 +517,7 @@ public static partial class ActorFrameworkLowerer
         internal string[] DrawnActorPoolNames => drawnActorPools.Order(StringComparer.Ordinal).ToArray();
         internal string[] GeneratedNames => GeneratedProgramArtifacts.GeneratedNames(state).Select(name => name.Name).ToArray();
         internal IReadOnlyDictionary<string, CompilerGeneratedRomTable> GeneratedRomTables =>
-            Actors.GeneratedSpawnRomTables(state.Spawns.Layers, state.Actors.EnemyDefs);
+            Actors.GeneratedSpawnRomTables(state.Spawns.Layers, state.Actors.EnemyDefs, state.ScreenWidth);
 
         private Target2DCapabilities Capabilities { get; }
 
