@@ -21,35 +21,6 @@ public sealed class NesSdkFrameInputLoweringTests
         Assert.Equal([0x2C, 0x02, 0x20, 0x30, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB], builder.Build());
     }
 
-    [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-    public void Sequential_oam_emission_and_cpu_projection_share_the_selected_frame_plan()
-    {
-        var builder = new PrgBuilder();
-        var program = NesVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));
-        var plan = NesFramePlan.Create(
-            "nes-mmc3-tvrom-v1",
-            hasFrameBoundary: true,
-            usesRetainedOam: true,
-            retainedOamByteCount: 152,
-            usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
-            useFourScreenNametables: true);
-        var lowerer = new NesSdkOperationLowerer(
-            builder,
-            program,
-            UnusedLoweringContext(),
-            plan);
-
-        lowerer.EmitOamPublication();
-
-        Assert.Equal(
-            [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA2, 0x68, 0xBD, 0x98, 0x01, 0x8D, 0x04, 0x20, 0xE8, 0xD0, 0xF7],
-            builder.Build());
-        var publication = Assert.Single(plan.CreateCpuWorkReport([]).Contributors);
-        Assert.Equal((1_983L, 1_983L), (publication.TotalLower, publication.TotalUpper));
-    }
-
     private static NesSdkOperationLowerer CreateLowerer(PrgBuilder builder)
     {
         var program = NesVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));

@@ -48,7 +48,8 @@ internal sealed partial class NesRuntimeCompiler
             program,
             longForLoopIds,
             longWhileLoopIds,
-            NesFramePlan.Create(
+            NesPhysicalFrameScheduler.Create(
+                builder,
                 program,
                 useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
                 useFourScreenNametables,
@@ -62,15 +63,15 @@ internal sealed partial class NesRuntimeCompiler
         NesVideoProgram program,
         IReadOnlySet<int>? longForLoopIds,
         IReadOnlySet<int>? longWhileLoopIds,
-        NesFramePlan framePlan)
+        NesPhysicalFrameScheduler frameScheduler)
     {
-        ArgumentNullException.ThrowIfNull(framePlan);
+        ArgumentNullException.ThrowIfNull(frameScheduler);
         NesRuntimeMemoryLayout.Validate();
         this.builder = builder;
         this.program = program;
         this.longForLoopIds = longForLoopIds ?? new HashSet<int>();
         this.longWhileLoopIds = longWhileLoopIds ?? new HashSet<int>();
-        usePackedCamera = framePlan.UsesPackedCameraRuntime;
+        usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
         sdkOperations = new NesSdkStreamReader(program.SdkOperationStream);
         sdkOperationLowerer = new NesSdkOperationLowerer(
             builder,
@@ -82,7 +83,7 @@ internal sealed partial class NesRuntimeCompiler
                 VariableAddress,
                 RuntimeIndexedMemberBaseAddress,
                 EmitRuntimeMemberIndexToX),
-            framePlan);
+            frameScheduler);
     }
 
     public void EmitInitialization()

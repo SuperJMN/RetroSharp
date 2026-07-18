@@ -538,8 +538,7 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitCommitPendingCameraRowStream(NesCameraConfig config)
     {
-        var tilesPerPhase = framePlan.PackedCameraRowTileWritesPerFrame;
-        var attributePhase = framePlan.PackedCameraRowAttributePhase;
+        var (tilesPerPhase, attributePhase) = frameScheduler.PackedCameraRowSchedule();
         var tilesLabel = builder.CreateLabel("nes_camera_row_tiles");
         var attributesLabel = builder.CreateLabel("nes_camera_row_attrs");
         var doneLabel = builder.CreateLabel("nes_camera_row_done");

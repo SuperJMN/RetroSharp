@@ -32,7 +32,9 @@ internal sealed record NesPrgBuild(
     IReadOnlyList<NesDpcmBuildPlacement> DpcmPlacements,
     int FixedPayloadBytes,
     IReadOnlyDictionary<string, ushort> FixedSymbols,
-    IReadOnlyList<NesRuntimeUserVariable> UserVariables);
+    IReadOnlyList<NesRuntimeUserVariable> UserVariables,
+    string FrameProfile,
+    SdkCpuWorkReport FrameCpuWork);
 
 internal sealed record NesDpcmBuildPlacement(ushort SourceAddress, ushort CpuAddress, int Length);
 

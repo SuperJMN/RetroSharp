@@ -9,7 +9,6 @@ using RetroSharp.Parser;
 internal sealed partial class NesSdkOperationLowerer
 {
     private const int BottomOverscanInsetPixels = 8;
-    private const ushort OamDmaAddress = 0x4014;
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
@@ -20,12 +19,9 @@ internal sealed partial class NesSdkOperationLowerer
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly NesSdkLoweringContext context;
-    private readonly NesFramePlan framePlan;
+    private readonly NesPhysicalFrameScheduler frameScheduler;
     private readonly bool useFourScreenNametables;
     private readonly bool usePackedCamera;
-    private readonly bool useSequentialOamPublication;
-    private readonly bool usesRetainedOam;
-    private readonly int retainedOamByteCount;
     private int nextHardwareSprite;
     private bool packedCollisionAtScratchSubroutineReferenced;
     private bool packedCollisionFlagsSubroutineReferenced;
@@ -45,7 +41,8 @@ internal sealed partial class NesSdkOperationLowerer
             builder,
             program,
             context,
-            NesFramePlan.Create(
+            NesPhysicalFrameScheduler.Create(
+                builder,
                 program,
                 useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
                 useFourScreenNametables,
@@ -58,18 +55,15 @@ internal sealed partial class NesSdkOperationLowerer
         PrgBuilder builder,
         NesVideoProgram program,
         NesSdkLoweringContext context,
-        NesFramePlan framePlan)
+        NesPhysicalFrameScheduler frameScheduler)
     {
-        ArgumentNullException.ThrowIfNull(framePlan);
+        ArgumentNullException.ThrowIfNull(frameScheduler);
         this.builder = builder;
         this.program = program;
         this.context = context;
-        this.framePlan = framePlan;
-        useFourScreenNametables = framePlan.UseFourScreenNametables;
-        usePackedCamera = framePlan.UsesPackedCameraRuntime;
-        useSequentialOamPublication = framePlan.UseSequentialOamPublication;
-        usesRetainedOam = framePlan.UsesRetainedOam;
-        retainedOamByteCount = framePlan.RetainedOamByteCount;
+        this.frameScheduler = frameScheduler;
+        useFourScreenNametables = frameScheduler.UseFourScreenNametables;
+        usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
     }
 
     public void Emit(Sdk2DOperation operation)
@@ -77,7 +71,7 @@ internal sealed partial class NesSdkOperationLowerer
         switch (operation)
         {
             case Sdk2DOperation.WaitFrame:
-                EmitWaitFrame(applyPendingCameraScroll: true);
+                frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.Gameplay, this);
                 break;
             case Sdk2DOperation.PollInput:
                 EmitPollInput();

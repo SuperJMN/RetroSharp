@@ -9,7 +9,8 @@ public sealed class NesSdkLoweringArchitectureTests
     private static readonly PhysicalFileContract[] PhysicalModules =
     [
         new("src/RetroSharp.NES/NesCartridgeLayout.cs", "Cartridge layout and placement have a dedicated physical navigation root.", [typeof(NesCartridgeLayout)]),
-        new("src/RetroSharp.NES/NesFramePlan.cs", "Physical frame scheduling has one target-private authority.", [typeof(NesFramePlan)]),
+        new("src/RetroSharp.NES/NesPhysicalFrameScheduler.cs", "Physical frame scheduling has one executable target-private authority.", [typeof(NesPhysicalFrameScheduler)]),
+        new("src/RetroSharp.NES/NesFramePlan.cs", "Validated frame policy remains private to the executable scheduler.", [typeof(NesFramePlan)]),
         new("src/RetroSharp.NES/NesRuntimeCompiler.cs", "Runtime compilation has a dedicated physical navigation root.", [typeof(NesRuntimeCompiler)]),
         new("src/RetroSharp.NES/NesSdkStreamReader.cs", "Collected SDK stream consumption has a dedicated physical navigation root.", [typeof(NesSdkStreamReader)]),
         new("src/RetroSharp.NES/NesSdkOperationLowerer.cs", "Portable SDK emission has a dedicated physical navigation root.", [typeof(NesSdkOperationLowerer)]),
@@ -33,14 +34,24 @@ public sealed class NesSdkLoweringArchitectureTests
     }
 
     [Fact]
-    public void Nes_rom_builder_consumes_frame_planning_without_owning_cpu_window_policy()
+    public void Nes_rom_builder_and_lowerer_consume_the_scheduler_without_owning_frame_policy()
     {
         var calls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesRomBuilder));
         var lowererCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesSdkOperationLowerer));
 
-        Assert.Contains(calls, method => method.DeclaringType == typeof(NesFramePlan));
-        Assert.Contains(lowererCalls, method => method.DeclaringType == typeof(NesFramePlan));
+        Assert.Contains(calls, method => method.DeclaringType == typeof(NesPhysicalFrameScheduler));
+        Assert.Contains(lowererCalls, method => method.DeclaringType == typeof(NesPhysicalFrameScheduler));
+        Assert.DoesNotContain(calls, method => method.DeclaringType == typeof(NesFramePlan));
+        Assert.DoesNotContain(lowererCalls, method => method.DeclaringType == typeof(NesFramePlan));
         Assert.DoesNotContain(calls, method => method.DeclaringType == typeof(SdkCpuWorkReportFactory));
+    }
+
+    [Fact]
+    public void Nes_frame_scheduler_is_the_executable_frame_policy_authority()
+    {
+        var schedulerCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler));
+
+        Assert.Contains(schedulerCalls, method => method.DeclaringType == typeof(NesFramePlan));
     }
 
     [Fact]

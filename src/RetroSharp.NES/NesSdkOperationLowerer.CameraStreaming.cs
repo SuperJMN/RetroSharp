@@ -25,7 +25,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
         EmitSdkByteExpressionToA(operation.SourceColumn);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
-        EmitWaitFrame();
+        frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, this);
         EmitStreamColumnFromAddresses(new NesCameraConfig(worldMap.Width, worldMap.Height, y, height, UseFourScreenNametables: false));
     }
 
@@ -51,7 +51,7 @@ internal sealed partial class NesSdkOperationLowerer
             NesTarget.Capabilities,
             new Sdk2DOperation.StreamMapRow(targetRow, sourceRow, x, width));
 
-        EmitWaitFrame();
+        frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, this);
         builder.LoadAAbsolute(0x2002);              // reset PPU address latch
         var remaining = width;
         var segmentX = x;
