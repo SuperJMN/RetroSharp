@@ -105,6 +105,9 @@ internal static class GameBoyRomBuilder
     private static GameBoyRomBuildResult BuildWithReportCore(GameBoyVideoProgram program, byte[]? packedWorldBytes)
     {
         var readOnlyData = BuildReadOnlyData(program, packedWorldBytes is not null);
+        var packedCameraColumnTiles = packedWorldBytes is not null && ProgramUsesCameraStreaming(program)
+            ? GameBoyWorldPackRuntimePlan.Create(packedWorldBytes).ColumnTiles
+            : null;
         GbBuilder builder;
         byte[] programBytes;
         if (packedWorldBytes is null || packedWorldBytes.Length <= ushort.MaxValue)
@@ -124,13 +127,13 @@ internal static class GameBoyRomBuilder
             }
         }
 
-        var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes);
+        var bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes, packedCameraColumnTiles);
         builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes, out var bankedUserVariables);
         programBytes = builder.Build();
         var programTailBanks = CalculateProgramTailBanks(programBytes.Length);
         if (programTailBanks > 1)
         {
-            bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes, bankReadOnlyData: true);
+            bankedLayout = GameBoyRomLayout.CreateBankedMusicLayout(program, readOnlyData, packedWorldBytes, packedCameraColumnTiles, bankReadOnlyData: true);
             builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes, out bankedUserVariables);
             programBytes = builder.Build();
             programTailBanks = CalculateProgramTailBanks(programBytes.Length);
@@ -143,6 +146,7 @@ internal static class GameBoyRomBuilder
                 program,
                 readOnlyData,
                 packedWorldBytes,
+                packedCameraColumnTiles,
                 programTailBanks,
                 bankedLayout.UsesBankedReadOnlyData);
             builder = BuildProgram(program, bankedLayout, readOnlyData, packedWorldBytes, out bankedUserVariables);
@@ -170,6 +174,14 @@ internal static class GameBoyRomBuilder
                 worldPackPlacement.SerializedBytes.AsSpan(segment.RelativeOffset, segment.Length).CopyTo(
                     bankedRom.AsSpan(segment.Bank * BankSize + segment.Address - BankedWindowStart, segment.Length));
             }
+        }
+
+        if (bankedLayout.WorldPackColumnPlanePlacement is { } columnPlanePlacement)
+        {
+            columnPlanePlacement.Bytes.CopyTo(
+                bankedRom.AsSpan(
+                    columnPlanePlacement.Bank * BankSize + columnPlanePlacement.Address - BankedWindowStart,
+                    columnPlanePlacement.Bytes.Length));
         }
 
         foreach (var placement in bankedLayout.ReadOnlyDataPlacements.Values)
@@ -255,6 +267,14 @@ internal static class GameBoyRomBuilder
                     segment.Bank * BankSize + segment.Address - BankedWindowStart,
                     segment.Length);
             }
+        }
+        if (layout.WorldPackColumnPlanePlacement is { } columnPlanePlacement)
+        {
+            AddPhysicalSegments(
+                segments,
+                "worldpack-column-plane:default",
+                columnPlanePlacement.Bank * BankSize + columnPlanePlacement.Address - BankedWindowStart,
+                columnPlanePlacement.Bytes.Length);
         }
         foreach (var placement in layout.ReadOnlyDataPlacements.Values.OrderBy(item => item.Bank).ThenBy(item => item.Address).ThenBy(item => item.Label, StringComparer.Ordinal))
         {

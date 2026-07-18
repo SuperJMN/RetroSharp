@@ -19,7 +19,7 @@ The Game Boy target exposes `GameBoyTarget.Capabilities` for portable 2D capabil
 | Background buffer | 32x32 tiles |
 | Fine scroll | X and Y |
 | Background tile write budget | 21 tile writes per explicit stream edge; packed commits write one 19-tile column or one 21-tile row per VBlank |
-| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable edge slots, preserve same-axis order across consecutive VBlanks, and serialize diagonal preparation column-first then staggered |
+| Camera stream scheduling | Raw same-axis crossings retain their optimized two-edge `Camera.Apply()` path. Packed crossings use two immutable edge slots, preserve same-axis order across consecutive VBlanks, and serialize diagonal preparation column-first then staggered. Word-wide-map columns admit a syntactically valid slot to VBlank before metadata validation; narrow columns and rows retain validate-then-admit ordering |
 | Camera positioning | `Camera.SetPosition(x, y)` walks the camera toward the requested position one pixel at a time, bounded to at most two tile crossings (16 px) per axis per call so a single call per frame reaches runner-scale targets without stale edges |
 | Attribute write budget | 0 per frame on the current DMG target |
 | Hardware sprites | 40 total, 10 per scanline |
@@ -433,6 +433,22 @@ when the packed runtime starts and increments after every real BGM/SFX update.
 Together with the lifecycle and forbidden-work counters at `$C152-$C159` and
 `$C19C`, it lets tests and external debuggers prove frame cadence without
 inferring it from tracker cursors.
+
+For packed camera worlds whose complete hardware-tile column plane is at most
+16 KiB and fits immediately after the final WorldPack segment in one ROM
+window, the linker emits that immutable target-private derived plane and column
+preparation copies 19 contiguous or wrapped tiles with one bank selection.
+WorldPack v1 bytes remain unchanged. Row edges and all non-column/fallback
+paths keep generic preparation, while a diagonal's column component may use
+the plane. Maps at most 255 hardware columns wide, outside the 19-255
+hardware-row range, or whose layout does not fit keep the existing chunk
+decoder. For a word-wide-map column, a pending slot id is checked for the
+syntactic 0/1 range before any VBlank wait, admitted before resident-tag
+validation, and re-read afterward; `NoSlot` therefore never waits. Narrow-map
+columns and every row keep the prior validate-then-admit order, and the LY148
+safety threshold is unchanged. The exact Right+B runner gate and isolated
+with/without-plane measurements are recorded in
+[`GameBoyRunnerCadenceAcceptance.md`](GameBoyRunnerCadenceAcceptance.md).
 
 LW-2.5 proves this path against the complete 156x20 authored `stage1` through
 a non-destructive test fixture. The fixture copies and normalizes the map,

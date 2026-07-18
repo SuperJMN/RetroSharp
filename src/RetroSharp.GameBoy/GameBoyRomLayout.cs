@@ -36,6 +36,8 @@ internal readonly record struct GameBoyFarAddress(byte Bank, ushort Address);
 
 internal sealed record GameBoyWorldPackSegment(int RelativeOffset, byte Bank, ushort Address, int Length);
 
+internal sealed record GameBoyWorldPackColumnPlanePlacement(byte Bank, ushort Address, byte[] Bytes);
+
 internal sealed class GameBoyWorldPackPlacement
 {
     private const int BankSize = 16 * 1024;
@@ -133,6 +135,7 @@ internal sealed class GameBoyRomLayout
         int romSize,
         byte romSizeCode,
         GameBoyWorldPackPlacement? worldPackPlacement,
+        GameBoyWorldPackColumnPlanePlacement? worldPackColumnPlanePlacement,
         IReadOnlyDictionary<string, GameBoyReadOnlyDataPlacement> readOnlyDataPlacements,
         IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> musicPlacements,
         IReadOnlyDictionary<string, GameBoyBankedAudioPlacement> soundEffectPlacements)
@@ -142,6 +145,7 @@ internal sealed class GameBoyRomLayout
         RomSize = romSize;
         RomSizeCode = romSizeCode;
         WorldPackPlacement = worldPackPlacement;
+        WorldPackColumnPlanePlacement = worldPackColumnPlanePlacement;
         ReadOnlyDataPlacements = readOnlyDataPlacements;
         MusicPlacements = musicPlacements;
         SoundEffectPlacements = soundEffectPlacements;
@@ -153,6 +157,7 @@ internal sealed class GameBoyRomLayout
         romSize: 32 * 1024,
         romSizeCode: 0x00,
         worldPackPlacement: null,
+        worldPackColumnPlanePlacement: null,
         readOnlyDataPlacements: new Dictionary<string, GameBoyReadOnlyDataPlacement>(),
         musicPlacements: new Dictionary<string, GameBoyBankedAudioPlacement>(),
         soundEffectPlacements: new Dictionary<string, GameBoyBankedAudioPlacement>());
@@ -166,6 +171,8 @@ internal sealed class GameBoyRomLayout
     public byte RomSizeCode { get; }
 
     public GameBoyWorldPackPlacement? WorldPackPlacement { get; }
+
+    public GameBoyWorldPackColumnPlanePlacement? WorldPackColumnPlanePlacement { get; }
 
     public bool UsesBankedWorldPack => WorldPackPlacement is not null;
 
@@ -200,6 +207,7 @@ internal sealed class GameBoyRomLayout
         GameBoyVideoProgram program,
         IReadOnlyList<GameBoyReadOnlyDataBlob> readOnlyData,
         byte[]? packedWorldBytes,
+        byte[]? packedCameraColumnTiles,
         int programTailBankCount = 0,
         bool bankReadOnlyData = false)
     {
@@ -209,12 +217,24 @@ internal sealed class GameBoyRomLayout
         var nextBank = 1 + programTailBankCount;
         var nextAddress = BankedWindowStart;
         GameBoyWorldPackPlacement? worldPackPlacement = null;
+        GameBoyWorldPackColumnPlanePlacement? worldPackColumnPlanePlacement = null;
         if (packedWorldBytes is not null)
         {
             worldPackPlacement = GameBoyWorldPackPlacement.Create(
                 checked((byte)nextBank),
                 checked((ushort)nextAddress),
                 packedWorldBytes);
+            var finalPackSegment = worldPackPlacement.Segments[^1];
+            var columnPlaneAddress = finalPackSegment.Address + finalPackSegment.Length;
+            if (packedCameraColumnTiles is { Length: <= BankSize }
+                && columnPlaneAddress + packedCameraColumnTiles.Length <= BankedWindowEnd)
+            {
+                worldPackColumnPlanePlacement = new GameBoyWorldPackColumnPlanePlacement(
+                    finalPackSegment.Bank,
+                    checked((ushort)columnPlaneAddress),
+                    packedCameraColumnTiles);
+            }
+
             nextBank = worldPackPlacement.Segments[^1].Bank + 1;
             nextAddress = BankedWindowStart;
         }
@@ -274,6 +294,7 @@ internal sealed class GameBoyRomLayout
             romSize: bankCount * BankSize,
             romSizeCode: ToRomSizeCode(bankCount),
             worldPackPlacement: worldPackPlacement,
+            worldPackColumnPlanePlacement: worldPackColumnPlanePlacement,
             readOnlyDataPlacements: readOnlyPlacements,
             musicPlacements: placements,
             soundEffectPlacements: soundEffectPlacements);

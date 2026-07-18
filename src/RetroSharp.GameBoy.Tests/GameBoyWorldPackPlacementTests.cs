@@ -9,6 +9,78 @@ using Xunit;
 public sealed class GameBoyWorldPackPlacementTests
 {
     [Fact]
+    public void Column_plane_falls_back_to_generic_runtime_above_the_byte_height_iterator()
+    {
+        var plan = GameBoyWorldPackRuntimePlan.Create(
+            CreateSyntheticWorldPackWithDimensions(8, 256),
+            enablePackedCameraCache: true,
+            enableDiagonalVisualCache: true);
+
+        Assert.Null(plan.ColumnTiles);
+    }
+
+    [Fact]
+    public void Column_plane_falls_back_to_generic_runtime_for_a_byte_wide_world()
+    {
+        var plan = GameBoyWorldPackRuntimePlan.Create(
+            CreateSyntheticWorldPackWithDimensions(248, 40),
+            enablePackedCameraCache: true,
+            enableDiagonalVisualCache: true);
+
+        Assert.Null(plan.ColumnTiles);
+    }
+
+    [Fact]
+    public void Runner_embeds_a_distinct_column_major_hardware_tile_plane_after_the_unchanged_world_pack()
+    {
+        var mapPath = Path.Combine(RunnerSample.Directory, "assets/maps/stage1.tmj");
+        var canonical = GameBoyTiledMapImporter.CompileWorldPack(
+            mapPath,
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var originalSerializedBytes = canonical.SerializedBytes.ToArray();
+
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
+        var columnPlaneSegment = Assert.Single(
+            result.Report.Segments,
+            segment => segment.Owner == "worldpack-column-plane:default");
+        var expectedColumnTiles = CreateColumnMajorHardwareTiles(canonical.Pack);
+
+        Assert.Equal(2_568, originalSerializedBytes.Length);
+        Assert.Equal(12_480, expectedColumnTiles.Length);
+        Assert.Equal(new[] { 0, 1, 2, 3, 4, 5 }, result.Report.OccupiedBanks);
+        Assert.Equal("gb-simple-mbc1-current", result.Report.SelectedProfile);
+        Assert.Equal(128 * 1024, result.Rom.Length);
+        Assert.Equal(2, packSegment.Bank);
+        Assert.Equal(0x4000, packSegment.CpuAddress);
+        Assert.Equal(originalSerializedBytes.Length, packSegment.Length);
+        Assert.Equal(2, columnPlaneSegment.Bank);
+        Assert.Equal(0x4A08, columnPlaneSegment.CpuAddress);
+        Assert.Equal(expectedColumnTiles.Length, columnPlaneSegment.Length);
+        Assert.Equal(packSegment.PhysicalStart + packSegment.Length, columnPlaneSegment.PhysicalStart);
+        Assert.Equal(
+            originalSerializedBytes,
+            result.Rom.AsSpan(packSegment.PhysicalStart, packSegment.Length).ToArray());
+        Assert.Equal(
+            expectedColumnTiles,
+            result.Rom.AsSpan(columnPlaneSegment.PhysicalStart, columnPlaneSegment.Length).ToArray());
+        Assert.Equal(originalSerializedBytes, canonical.SerializedBytes);
+
+        foreach (var x in new[] { 0, 255, 256, 311 })
+        {
+            Assert.Equal(
+                Enumerable.Range(0, canonical.Pack.Descriptor.HardwareHeight)
+                    .Select(y => HardwareTileAt(canonical.Pack, x, y)),
+                expectedColumnTiles.AsSpan(
+                    x * canonical.Pack.Descriptor.HardwareHeight,
+                    canonical.Pack.Descriptor.HardwareHeight).ToArray());
+        }
+    }
+
+    [Fact]
     public void Pack_relative_offsets_continue_across_a_16_kib_window()
     {
         var bytes = Enumerable.Range(0, 16 * 1024 + 37).Select(value => (byte)value).ToArray();
@@ -243,6 +315,93 @@ public sealed class GameBoyWorldPackPlacementTests
             pair => Assert.True(
                 pair.First.PhysicalStart + pair.First.Length <= pair.Second.PhysicalStart,
                 $"{pair.First.Owner} overlaps {pair.Second.Owner}"));
+    }
+
+    private static byte[] CreateColumnMajorHardwareTiles(WorldPack pack)
+    {
+        var descriptor = pack.Descriptor;
+        var result = new byte[checked(descriptor.HardwareWidth * descriptor.HardwareHeight)];
+        for (var x = 0; x < descriptor.HardwareWidth; x++)
+        {
+            for (var y = 0; y < descriptor.HardwareHeight; y++)
+            {
+                result[x * descriptor.HardwareHeight + y] = HardwareTileAt(pack, x, y);
+            }
+        }
+
+        return result;
+    }
+
+    private static byte HardwareTileAt(WorldPack pack, int x, int y)
+    {
+        var coordinate = pack.Locate(x, y);
+        var descriptor = pack.Descriptor;
+        var expansionIndex = checked(
+            (pack.VisualIdAt(x, y) * descriptor.MetatileWidth * descriptor.MetatileHeight
+             + coordinate.SubcellIndex) * descriptor.TargetCellStride);
+        return pack.TargetExpansions.Span[expansionIndex];
+    }
+
+    private static byte[] CreateSyntheticWorldPackWithDimensions(int hardwareWidth, int hardwareHeight)
+    {
+        Assert.Equal(0, hardwareWidth % 8);
+        Assert.Equal(0, hardwareHeight % 8);
+        const int cellsPerChunk = 64;
+        var chunkColumns = hardwareWidth / 8;
+        var chunkRows = hardwareHeight / 8;
+        var chunkCount = chunkColumns * chunkRows;
+        var collisionProfilesOffset = (uint)WorldPackDescriptor.V1HeaderBytes;
+        var targetExpansionsOffset = collisionProfilesOffset + 2;
+        var directoryOffset = targetExpansionsOffset + 2;
+        var chunkDataOffset = directoryOffset + (uint)(chunkCount * WorldPackDescriptor.V1DirectoryEntryBytes);
+        var nextOffset = chunkDataOffset;
+        var ids = Enumerable.Range(0, cellsPerChunk).Select(index => (ushort)(index & 1)).ToArray();
+        var chunks = new List<WorldPackChunk>(chunkCount);
+        for (var chunk = 0; chunk < chunkCount; chunk++)
+        {
+            var directory = new WorldPackChunkDirectoryEntry(
+                nextOffset,
+                cellsPerChunk,
+                cellsPerChunk,
+                nextOffset + cellsPerChunk,
+                cellsPerChunk,
+                cellsPerChunk,
+                8,
+                8,
+                WorldPackCodec.Raw,
+                WorldPackCodec.Raw);
+            chunks.Add(new WorldPackChunk(directory, ids, ids));
+            nextOffset += cellsPerChunk * 2;
+        }
+
+        var descriptor = new WorldPackDescriptor
+        {
+            HardwareWidth = hardwareWidth,
+            HardwareHeight = hardwareHeight,
+            MetatileWidth = 1,
+            MetatileHeight = 1,
+            ChunkColumns = chunkColumns,
+            ChunkRows = chunkRows,
+            VisualMetatileCount = 2,
+            CollisionProfileCount = 2,
+            VisualIdBytes = 1,
+            CollisionIdBytes = 1,
+            TargetCellStride = 1,
+            CollisionProfilesOffset = collisionProfilesOffset,
+            TargetExpansionsOffset = targetExpansionsOffset,
+            DirectoryOffset = directoryOffset,
+            ChunkDataOffset = chunkDataOffset,
+            PackLength = nextOffset,
+        };
+        var pack = new WorldPack(
+            descriptor,
+            [
+                new WorldPackCollisionProfile([WorldTileFlags.Empty]),
+                new WorldPackCollisionProfile([WorldTileFlags.Solid]),
+            ],
+            new byte[] { 0, 1 },
+            chunks);
+        return WorldPackSerializer.Serialize(pack);
     }
 
     internal static byte[] CreateSyntheticWorldPack(int chunkColumns = 128)

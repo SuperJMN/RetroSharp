@@ -112,7 +112,9 @@ public sealed class GameBoyRunnerAudioTempoTests
 
         cpu.Held.Add("right");
         cpu.Held.Add("b");
-        for (var jump = 0; jump < 9; jump++)
+        // The restored source cadence reaches the authored first-stair stop within the old 9+2
+        // physical jump cycles. Sample 3+2 cycles so this remains a dead-zone-follow assertion.
+        for (var jump = 0; jump < 3; jump++)
         {
             RunJumpCycle(cpu);
         }
@@ -124,6 +126,7 @@ public sealed class GameBoyRunnerAudioTempoTests
         }
 
         var worldXAfterSecondRun = cpu.Wram(0xC14D) | cpu.Wram(0xC14E) << 8;
+        var playerXAfterSecondRun = cpu.Wram(0xC000) | cpu.Wram(0xC001) << 8;
 
         Assert.Equal(0, idleWorldX);
         Assert.Equal(176, idleWorldY);
@@ -134,6 +137,9 @@ public sealed class GameBoyRunnerAudioTempoTests
         Assert.True(
             worldXAfterSecondRun > worldXAfterFirstRun,
             $"Runner camera should continue following right input through the next ramp jump: first={worldXAfterFirstRun}, second={worldXAfterSecondRun}.");
+        Assert.True(
+            playerXAfterSecondRun < 430,
+            $"Dead-zone checkpoints must precede the authored first-stair stop: player={playerXAfterSecondRun}.");
 
         static void RunJumpCycle(GameBoyTestCpu cpu)
         {

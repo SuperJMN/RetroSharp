@@ -216,6 +216,9 @@ internal sealed partial class GameBoySdkOperationLowerer
         ushort secondSlotAddress,
         GameBoyCameraConfig config)
     {
+        var admitVBlank = axis == GameBoyPackedCameraRuntime.Column && config.MapWidth > byte.MaxValue
+            ? builder.CreateLabel("packed_camera_commit_admit_vblank")
+            : null;
         var validateSlot0 = builder.CreateLabel("packed_camera_commit_validate_slot_0");
         var validateSlot1 = builder.CreateLabel("packed_camera_commit_validate_slot_1");
         var commit = builder.CreateLabel("packed_camera_commit_edge");
@@ -230,10 +233,22 @@ internal sealed partial class GameBoySdkOperationLowerer
 
         builder.LoadA(slotAddress);
         builder.CompareImmediate(0);
-        builder.JumpAbsolute(0xCA, validateSlot0);
+        builder.JumpAbsolute(0xCA, admitVBlank ?? validateSlot0);
         builder.CompareImmediate(1);
-        builder.JumpAbsolute(0xCA, validateSlot1);
+        builder.JumpAbsolute(0xCA, admitVBlank ?? validateSlot1);
         builder.JumpAbsolute(invalid);
+
+        if (admitVBlank is not null)
+        {
+            builder.Label(admitVBlank);
+            GameBoyRomBuilder.EmitEnterVBlank(builder);
+            builder.LoadA(slotAddress);
+            builder.CompareImmediate(0);
+            builder.JumpAbsolute(0xCA, validateSlot0);
+            builder.CompareImmediate(1);
+            builder.JumpAbsolute(0xCA, validateSlot1);
+            builder.JumpAbsolute(invalid);
+        }
 
         builder.Label(validateSlot0);
         EmitValidatePackedSlot(
@@ -270,7 +285,11 @@ internal sealed partial class GameBoySdkOperationLowerer
         EmitIncrementPackedCounter(GameBoyRuntimeMemoryLayout.PackedCamera.CommitCount);
         builder.LoadAImmediate(0);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.LastCommitVramWrites);
-        GameBoyRomBuilder.EmitEnterVBlank(builder);
+        if (admitVBlank is null)
+        {
+            GameBoyRomBuilder.EmitEnterVBlank(builder);
+        }
+
         builder.LoadAImmediate(1);
         builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.CriticalSection);
         EmitCopyPackedEdgeToVram(axis);
