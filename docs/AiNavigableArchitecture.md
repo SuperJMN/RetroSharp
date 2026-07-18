@@ -19,21 +19,32 @@ Keep the language, portable 2D SDK, and target-intrinsic layers separate.
 | Actor Framework analysis and generation | `ActorFrameworkLowerer.Analyze(...)`, `Lower(...)`, and one `ActorFrameworkLoweringPlan`; Actor/Spawn/Projectile/Effect/GeneratedCall state modules own mutable facts; `ActorFrameworkDomains.Contributions` is the ordered generated-program seam | `TargetFrontendPreparation` analyzes once, lowers through the plan, and retains that plan only for late metasprite-aware pool-budget validation | `ActorFrameworkLoweringPlanTests`, `ActorFrameworkDomainArchitectureTests`, and the `ActorFrameworkActors`, `ActorFrameworkProjectiles`, `ActorFrameworkEffects`, and `ActorFrameworkCrossDomain` suites |
 | Game Boy portable SDK emission | `GameBoySdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `GameBoySdkLoweringContext` supplies only operand/storage primitives | `GameBoyRuntimeCompiler` owns one lowerer and routes its collected `Sdk2DProgram` through `GameBoySdkStreamReader`; the lowerer must not call back into the runtime compiler | `GameBoySdkLoweringArchitectureTests`, `GameBoySdkOperationBoundaryTests`, and the `GameBoySdk{FrameInput,Sprite,Animation,CameraRuntime,CameraStreaming,CollisionRuntime,Collision}LoweringTests` suites |
 | NES portable SDK emission | `NesSdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `NesSdkLoweringContext` supplies only operand/storage primitives | `NesRuntimeCompiler` owns one lowerer and routes its collected `SdkOperationStream` through `NesSdkStreamReader`; the lowerer must not call back into the runtime compiler | `NesSdkLoweringArchitectureTests`, `NesSdkOperationBoundaryTests`, and `NesSdk{FrameInput,Sprite,CameraStreaming,Collision}LoweringTests` |
+| Target physical frame planning | Each target-private static frame plan owns physical windows, mandatory work, and explicitly bounded staging; shared code owns only report vocabulary and checked range arithmetic | Target runtime compilers and lowerers consume the selected plan; ROM builders supply facts and orchestrate output but never reconstruct scheduling policy | Target frame-plan suites, per-window CPU-work report tests, architecture ownership guards, and exact-ROM timing acceptance |
+| Functional cartridge observation | `GameBoyFunctionalObservationEngine` and `NesFunctionalObservationEngine` project target-native exact-ROM events into normalized semantic frame observations; `FunctionalScenarioRunMode` selects full evidence or bounded fail-fast collection | Functional scenario runners consume observations without embedding emulator- or hardware-register rules | Target observation-engine tests plus cross-target functional scenario acceptance |
 
 The target cartridge modules are deliberately physical as well as conceptual.
-For Game Boy, the five documented physical navigation roots for
-layout/placement, runtime compilation, SDK stream reading, SDK emission, and
-byte building are `GameBoyRomLayout.cs`,
+For Game Boy, the six documented physical navigation roots for
+layout/placement, frame planning, runtime compilation, SDK stream reading, SDK
+emission, and byte building are `GameBoyRomLayout.cs`, `GameBoyFramePlan.cs`,
 `GameBoyRuntimeCompiler.cs`, `GameBoySdkStreamReader.cs`,
 `GameBoySdkOperationLowerer.cs`, and `GbBuilder.cs`. The NES equivalents are
-`NesCartridgeLayout.cs`, `NesRuntimeCompiler.cs`, `NesSdkStreamReader.cs`,
-`NesSdkOperationLowerer.cs`, and `PrgBuilder.cs`. Feature partials are the next
+`NesCartridgeLayout.cs`, `NesFramePlan.cs`, `NesRuntimeCompiler.cs`,
+`NesSdkStreamReader.cs`, `NesSdkOperationLowerer.cs`, and `PrgBuilder.cs`.
+Feature partials are the next
 navigation hop, but their file names are not architecture contracts; the ROM
 builders are link/orchestration modules, not the owner of those extracted
 concerns. `GameBoyRomBuilder.cs` and `NesRomBuilder.cs` are therefore explicit
 physical non-owner paths: the compiled owner types above must be declared in
 their contracted root files and must not be declared in either target's ROM
 builder.
+
+Physical frame planning follows the same ownership direction. A target plan is
+selected from compiler-known facts before emission and is consumed by emission,
+CPU-work projection, and diagnostics. Lowerer feature partials may implement the
+selected operations, but they must not independently decide whether work moves
+between physical windows. Functional observation engines form a separate
+outbound test seam: they translate target events but do not own scheduling
+policy or acceptance thresholds.
 
 ## Guard taxonomy
 
@@ -45,7 +56,7 @@ metadata, so method and source-file renames do not require architecture-test
 edits. Focused tests that intentionally exercise frontend stages declare the
 same metadata on the calling method instead of relying on a source fragment.
 
-Physical guards use exact repository paths only for the ten navigation roots
+Physical guards use exact repository paths only for the twelve navigation roots
 and two ROM-builder non-owner paths listed above. Each owner root is paired with
 its compiled `Type` symbol, and generic declaration matching proves the symbol
 is declared there and absent from the target ROM builder. Feature-partial names,
@@ -132,9 +143,13 @@ without dumping a complete backend:
 ```bash
 files=(
   src/RetroSharp.GameBoy/GameBoyRuntimeMemoryLayout.cs
+  src/RetroSharp.GameBoy/GameBoyFramePlan.cs
+  src/RetroSharp.GameBoy.Tests/GameBoyFramePlanTests.cs
   src/RetroSharp.GameBoy/GameBoyRuntimeCompiler.cs
   src/RetroSharp.GameBoy.Tests/GameBoyRuntimeMemoryLayoutTests.cs
   src/RetroSharp.NES/NesRuntimeMemoryLayout.cs
+  src/RetroSharp.NES/NesFramePlan.cs
+  src/RetroSharp.NES.Tests/NesFramePlanTests.cs
   src/RetroSharp.NES/NesRuntimeAbiProjection.cs
   src/RetroSharp.NES/NesRuntimeCompiler.cs
   src/RetroSharp.NES.Tests/NesRuntimeMemoryLayoutTests.cs
@@ -161,6 +176,9 @@ files=(
   src/RetroSharp.NES.Tests/NesSdkFrameInputLoweringTests.cs
   src/RetroSharp.NES.Tests/NesSdkOperationBoundaryTests.cs
   src/RetroSharp.Architecture.Tests/NesSdkLoweringArchitectureTests.cs
+  src/RetroSharp.FunctionalAcceptance/FunctionalRomAdapters.cs
+  src/RetroSharp.FunctionalAcceptance/FunctionalScenarioRunOptions.cs
+  src/RetroSharp.FunctionalAcceptance.Tests/FunctionalScenarioRunnerTests.cs
 )
 
 for file in "${files[@]}"; do
@@ -170,7 +188,9 @@ done
 
 The AIN-9 acceptance run used the then-current 901-file index and all 27 file
 probes returned the requested symbol map. AIN-11 adds the three new focused
-Game Boy suite probes, bringing the reproducible recipe to 30 files. Together
+Game Boy suite probes. The physical-frame and observation-engine slice adds seven
+target plan/test and functional observation probes, bringing the reproducible
+recipe to 37 files. Together
 they locate each authority, its production route, and its focused C# or Python
 tests without loading either complete ROM builder. The direct frame/input
 lowerer tests expose an explicit constructor edge; the boundary/architecture
@@ -192,8 +212,8 @@ not become arbitrary size gates.
 
 The final tree has 11 Game Boy SDK-lowerer modules, 8 NES SDK-lowerer modules,
 7 focused Game Boy SDK-lowering suites, 4 focused NES SDK-lowering suites,
-14 Actor Framework modules, and 30 architecture `[Fact]`/`[Theory]`
-declarations: 29 discovered tests plus one deliberately undiscovered compiled-
+14 Actor Framework modules, and 32 architecture `[Fact]`/`[Theory]`
+declarations: 31 discovered tests plus one deliberately undiscovered compiled-
 metadata fixture used by a negative ownership test. Validation results and exact
 runner hashes belong in the closing PR/epic record because they are execution
 evidence, not permanent design limits.

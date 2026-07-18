@@ -1,7 +1,7 @@
 # Autonomous Agent Execution
 
 Status: operational guide.
-Last updated: 2026-07-10.
+Last updated: 2026-07-18.
 
 This document explains how to turn `docs/ArchitectureRoadmap.md` into GitHub milestones, labels, and issues that agents can execute with minimal coordination overhead.
 
@@ -76,6 +76,56 @@ one observable result and normally one PR. If new work crosses a declared layer
 or target boundary, stop and return it to the integrator instead of expanding
 the child silently.
 
+## Issue Kinds And Dispatch Boundary
+
+Every executable issue declares one of these kinds:
+
+- `epic/integrator`: owns dependency state and integration, never a corrective
+  implementation.
+- `implementation`: owns one target, one architectural seam, and one observable
+  behavior; normally one pull request and one agent invocation.
+- `certification-gate`: evaluates an ordered acceptance ladder, never implements
+  a discovered fix.
+- `investigation`: produces bounded evidence or a decision and does not silently
+  turn into implementation.
+
+A certification gate stops at its first red rung. It records the exact failing
+command, cartridge hash when applicable, first failing frame/cycle, and owner
+seam, then links exactly one implementation child. One invocation handles one
+implementation child; after that child is complete, control returns to the
+integrator instead of chaining into the next rung.
+
+An implementation issue must name its owner seam, single observable, exact RED
+reproduction, verification commands, and handoff destination before dispatch.
+If diagnosis discovers a second target, owner seam, or independently reviewable
+observable, split it instead of expanding the issue.
+
+## Active-Time Checkpoints
+
+The default active engineering budget is 90/120 minutes:
+
+1. At 90 active minutes, checkpoint the exact RED command, cartridge hash when
+   applicable, first failing frame/cycle, current owner seam, and next falsifiable
+   hypothesis.
+2. At 120 active minutes, stop forming new hypotheses and stop making new edits
+   unless the focused acceptance is already green. Preserve the worktree and
+   hand off or split the remaining work.
+3. When the focused acceptance is green before the hard stop, only the issue's
+   predetermined full validation or CI may continue past it.
+
+Active time is diagnosis, editing, and focused local verification. External
+agent waits, queued CI, and infrastructure waits are recorded separately and do
+not consume the active budget. A long build or test does not authorize unrelated
+exploration while it runs.
+
+## Worktree Ownership
+
+Use one named worktree per implementation child. Creating another worktree
+requires a distinct, independently dispatched issue; a scratch tree is not a
+substitute for splitting scope. Record the worktree path and branch in the
+checkpoint/handoff. Remove a worktree only after its branch is clean and its
+work is merged or explicitly abandoned by the integrator.
+
 ## Execution Roles
 
 ### Integrator Agent
@@ -93,7 +143,7 @@ Responsibilities:
 
 ### Implementation Agent
 
-An implementation agent owns one issue or a small contiguous group of issues.
+An implementation agent owns one implementation issue.
 
 Responsibilities:
 
