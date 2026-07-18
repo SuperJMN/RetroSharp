@@ -91,6 +91,66 @@ public sealed class SdkCpuWorkReportTests
         Assert.Equal(1, report.KnownUpper);
     }
 
+    [Fact]
+    public void Existing_report_creation_keeps_window_projection_additive()
+    {
+        var report = CreateReport("gb", "t-cycles", 70_224, 1, 1, []);
+
+        Assert.Empty(report.Windows);
+    }
+
+    [Theory]
+    [InlineData(100, 99, 99, false, SdkCpuWorkStatuses.Fits)]
+    [InlineData(100, 100, 101, false, SdkCpuWorkStatuses.Crosses)]
+    [InlineData(100, 101, 101, false, SdkCpuWorkStatuses.Exceeds)]
+    [InlineData(100, 99, 99, true, SdkCpuWorkStatuses.Incomplete)]
+    public void Physical_window_uses_the_same_checked_status_contract(
+        long capacity,
+        long lower,
+        long upper,
+        bool hasUnknown,
+        string expectedStatus)
+    {
+        var window = SdkCpuWorkWindowReport.Create(
+            SdkCpuWorkWindowIds.VideoSafe,
+            capacity,
+            [TestContributor(lower, upper)],
+            hasUnknown
+                ? [new SdkCpuWorkUnknown(SdkCpuWorkContributorIds.RuntimeUncalibratedState, "not calibrated")]
+                : []);
+
+        Assert.Equal(SdkCpuWorkWindowIds.VideoSafe, window.Id);
+        Assert.Equal(capacity, window.Capacity);
+        Assert.Equal(lower, window.KnownLower);
+        Assert.Equal(upper, window.KnownUpper);
+        Assert.Equal(expectedStatus, window.Status);
+    }
+
+    [Fact]
+    public void Report_retains_ordered_physical_windows_without_changing_whole_frame_fields()
+    {
+        var videoSafe = SdkCpuWorkWindowReport.Create(
+            SdkCpuWorkWindowIds.VideoSafe,
+            capacity: 4_560,
+            [TestContributor(120, 140)],
+            []);
+
+        var report = SdkCpuWorkReport.Create(
+            "nes",
+            profile: "nes-test",
+            unit: "cpu-cycles",
+            frameWindow: 29_780,
+            [TestContributor(1_000, 1_200)],
+            [],
+            [videoSafe]);
+
+        Assert.Equal(29_780, report.FrameWindow);
+        Assert.Equal(1_000, report.KnownLower);
+        Assert.Equal(1_200, report.KnownUpper);
+        Assert.Equal(SdkCpuWorkStatuses.Fits, report.Status);
+        Assert.Same(videoSafe, Assert.Single(report.Windows));
+    }
+
     private static SdkCpuWorkReport CreateReport(
         string target,
         string unit,
@@ -103,15 +163,16 @@ public sealed class SdkCpuWorkReportTests
             profile: $"{target}-test",
             unit,
             frameWindow,
-            [
-                SdkCpuWorkContributor.Create(
-                    "generated.test",
-                    SdkCpuWorkContributorCategories.Generated,
-                    "one test contributor",
-                    count: 1,
-                    unitLower: lower,
-                    unitUpper: upper,
-                    calibration: "test/v1"),
-            ],
+            [TestContributor(lower, upper)],
             unknowns);
+
+    private static SdkCpuWorkContributor TestContributor(long lower, long upper) =>
+        SdkCpuWorkContributor.Create(
+            "generated.test",
+            SdkCpuWorkContributorCategories.Generated,
+            "one test contributor",
+            count: 1,
+            unitLower: lower,
+            unitUpper: upper,
+            calibration: "test/v1");
 }
