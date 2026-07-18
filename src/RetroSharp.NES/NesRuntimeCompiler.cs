@@ -51,7 +51,6 @@ internal sealed partial class NesRuntimeCompiler
             NesPhysicalFrameScheduler.Create(
                 builder,
                 program,
-                useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
                 useFourScreenNametables,
                 usePackedCamera,
                 useSequentialOamPublication))

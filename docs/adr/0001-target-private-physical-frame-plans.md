@@ -29,7 +29,9 @@ runtime compilers, and lowerers receive the scheduler and cannot consume the
 plan directly. The scheduler owns runtime NMI/VBlank admission, retained OAM
 publication, video-safe transfer ordering, and bounded camera staging. NES
 lowerer partials retain only the byte-emission mechanics selected through
-closed scheduler commands.
+closed scheduler commands. Raw four-screen and packed camera rows share one
+declared staging policy, and the scheduler validates that its deadline matches
+the tile/attribute phase schedule it emits.
 
 ROM builders may supply compiler-known facts and orchestrate output, but they
 do not own or reconstruct scheduling policy.

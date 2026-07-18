@@ -68,11 +68,26 @@ internal sealed partial class NesSdkOperationLowerer
             case NesVideoSafeTransfer.StreamRow row:
                 EmitStreamMapRowTransfer(row.TargetRow, row.SourceRow, row.X, row.Width);
                 break;
+            case NesVideoSafeTransfer.PendingColumn column:
+                EmitPendingCameraColumn(column.Config);
+                break;
+            case NesVideoSafeTransfer.BeginPackedCommit:
+                EmitBeginPackedCameraCommit();
+                break;
+            case NesVideoSafeTransfer.PublishPackedColumn:
+                EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Column);
+                break;
+            case NesVideoSafeTransfer.PublishPackedRow:
+                EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Row);
+                break;
             case NesVideoSafeTransfer.StagedRowTiles rowTiles:
                 EmitStagedCameraRowTiles(rowTiles.Config, rowTiles.TilesPerPhase);
                 break;
             case NesVideoSafeTransfer.StagedRowAttributes rowAttributes:
                 EmitStagedCameraRowAttributes(rowAttributes.Config);
+                break;
+            case NesVideoSafeTransfer.RestoreCameraScroll restore:
+                EmitRestoreCameraScroll(restore.Config);
                 break;
             default:
                 throw new NotSupportedException($"Unsupported NES video-safe transfer {transfer.GetType().Name}.");
@@ -93,16 +108,6 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         EmitStreamMapRowAttributes(targetRow, x, width);
-    }
-
-    private static bool ShouldStreamColumnsForCamera(NesCameraConfig config)
-    {
-        return config.UseFourScreenNametables ? config.MapWidth > 64 : config.MapWidth > 32;
-    }
-
-    private static bool ShouldStreamRowsForCamera(NesCameraConfig config)
-    {
-        return config.UseFourScreenNametables && config.MapHeight > 60;
     }
 
     private void EmitTrackCameraXPosition(NesCameraConfig config)
@@ -249,7 +254,7 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitTrackCameraYPosition(NesCameraConfig config)
     {
-        var streamRows = ShouldStreamRowsForCamera(config);
+        var streamRows = config.CanStreamRows;
         var usesWordCameraY = Math.Max(0, (config.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) > byte.MaxValue;
         var moveDownLabel = builder.CreateLabel("nes_camera_move_down");
         var moveUpLabel = builder.CreateLabel("nes_camera_move_up");

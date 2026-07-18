@@ -127,6 +127,27 @@ public sealed class NesSdkLoweringArchitectureTests
     }
 
     [Fact]
+    public void Nes_scheduler_selects_automatic_camera_transfer_order_through_closed_commands()
+    {
+        var apply = Assert.Single(
+            typeof(NesSdkOperationLowerer)
+                .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                .Where(method => method.GetParameters() is [{ ParameterType: var parameterType }] &&
+                                 parameterType == typeof(Sdk2DOperation.ApplyCamera)));
+        Assert.Contains(
+            ArchitectureSymbolAssertions.CalledMethods(apply),
+            method => method.DeclaringType == typeof(NesPhysicalFrameScheduler));
+
+        var schedulerLowererCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler))
+            .Where(method => method.DeclaringType == typeof(NesSdkOperationLowerer))
+            .ToArray();
+        Assert.NotEmpty(schedulerLowererCalls);
+        Assert.All(schedulerLowererCalls, method => Assert.Contains(
+            method.GetParameters(),
+            parameter => parameter.ParameterType == typeof(NesVideoSafeTransfer)));
+    }
+
+    [Fact]
     public void Lowering_regressions_are_owned_by_the_declared_focused_sdk_suites()
     {
         ArchitectureSymbolAssertions.AssertFocusedTestOwnership(

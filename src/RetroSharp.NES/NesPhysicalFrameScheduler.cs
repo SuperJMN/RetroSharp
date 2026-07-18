@@ -13,7 +13,19 @@ internal readonly record struct NesCameraConfig(
     int MapHeight,
     int StreamY,
     int StreamHeight,
-    bool UseFourScreenNametables);
+    bool UseFourScreenNametables)
+{
+    internal bool CanStreamColumns => UseFourScreenNametables ? MapWidth > 64 : MapWidth > 32;
+
+    internal bool CanStreamRows => UseFourScreenNametables && MapHeight > 60;
+}
+
+internal enum NesPendingCameraStream : byte
+{
+    None = 0,
+    Column = 1,
+    Row = 2,
+}
 
 internal abstract record NesVideoSafeTransfer
 {
@@ -21,18 +33,28 @@ internal abstract record NesVideoSafeTransfer
 
     internal sealed record StreamRow(int TargetRow, int SourceRow, int X, int Width) : NesVideoSafeTransfer;
 
+    internal sealed record PendingColumn(NesCameraConfig Config) : NesVideoSafeTransfer;
+
+    internal sealed record BeginPackedCommit : NesVideoSafeTransfer;
+
+    internal sealed record PublishPackedColumn : NesVideoSafeTransfer;
+
+    internal sealed record PublishPackedRow : NesVideoSafeTransfer;
+
     internal sealed record StagedRowTiles(NesCameraConfig Config, int TilesPerPhase) : NesVideoSafeTransfer;
 
     internal sealed record StagedRowAttributes(NesCameraConfig Config) : NesVideoSafeTransfer;
+
+    internal sealed record RestoreCameraScroll(NesCameraConfig Config) : NesVideoSafeTransfer;
 }
 
 internal sealed class NesPhysicalFrameScheduler
 {
     private const ushort OamDmaAddress = 0x4014;
-    private const byte PendingStreamRow = 2;
     internal const string FrameSignalNmiHandlerLabel = "nes_frame_signal_nmi_handler";
     private readonly PrgBuilder builder;
     private readonly NesFramePlan plan;
+    private readonly NesStagedFrameWork? cameraRowStaging;
 
     internal NesPhysicalFrameScheduler(PrgBuilder builder, NesFramePlan plan)
     {
@@ -40,6 +62,21 @@ internal sealed class NesPhysicalFrameScheduler
         ArgumentNullException.ThrowIfNull(plan);
         this.builder = builder;
         this.plan = plan;
+        if (plan.UsesPackedCameraRuntime || plan.UseFourScreenNametables)
+        {
+            cameraRowStaging = plan.StagedWork.SingleOrDefault(work =>
+                work.Id == NesFramePlan.CameraRowStagingId)
+                ?? throw new InvalidOperationException("NES camera row scheduling requires one declared staging deadline.");
+            if (cameraRowStaging.MaximumPhysicalFrames != plan.CameraRowAttributePhase + 1)
+            {
+                throw new InvalidOperationException(
+                    "NES camera row staging deadline must match the emitted tile and attribute phase schedule.");
+            }
+        }
+        else if (plan.StagedWork.Count != 0)
+        {
+            throw new InvalidOperationException("NES frame policy declares staged work for a runtime without camera-row scheduling.");
+        }
     }
 
     internal static NesPhysicalFrameScheduler Create(
@@ -48,6 +85,20 @@ internal sealed class NesPhysicalFrameScheduler
         NesCartridgeLayout layout,
         bool usesPackedCameraRuntime) =>
         new(builder, NesFramePlan.Create(program, layout, usesPackedCameraRuntime));
+
+    internal static NesPhysicalFrameScheduler Create(
+        PrgBuilder builder,
+        NesVideoProgram program,
+        bool useFourScreenNametables,
+        bool usesPackedCameraRuntime,
+        bool useSequentialOamPublication) =>
+        Create(
+            builder,
+            program,
+            useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
+            useFourScreenNametables,
+            usesPackedCameraRuntime,
+            useSequentialOamPublication);
 
     internal static NesPhysicalFrameScheduler Create(
         PrgBuilder builder,
@@ -79,16 +130,17 @@ internal sealed class NesPhysicalFrameScheduler
 
     internal void EmitFrameBoundary(NesFrameBoundaryPurpose purpose)
     {
-        EmitFrameBoundary(purpose, frameEmitter: null);
+        EmitFrameBoundary(purpose, frameEmitter: null, cameraConfig: null);
     }
 
     internal void EmitFrameBoundary(
         NesFrameBoundaryPurpose purpose,
-        NesSdkOperationLowerer? frameEmitter)
+        NesSdkOperationLowerer? frameEmitter,
+        NesCameraConfig? cameraConfig)
     {
         if (plan.UsesPackedCameraRuntime)
         {
-            EmitPackedFrameBoundary(purpose, frameEmitter);
+            EmitPackedFrameBoundary(purpose, frameEmitter, cameraConfig);
             return;
         }
 
@@ -100,7 +152,7 @@ internal sealed class NesPhysicalFrameScheduler
         builder.Label(setLabel);
         builder.Emit(0x2C, 0x02, 0x20);
         builder.BranchRelative(0x10, setLabel);
-        EmitPendingCameraWork(purpose, frameEmitter);
+        EmitPendingCameraWork(purpose, frameEmitter, cameraConfig);
         EmitRetainedOamWork();
     }
 
@@ -110,11 +162,38 @@ internal sealed class NesPhysicalFrameScheduler
     {
         ArgumentNullException.ThrowIfNull(transfer);
         ArgumentNullException.ThrowIfNull(frameEmitter);
-        EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, frameEmitter);
+        EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, frameEmitter, cameraConfig: null);
         frameEmitter.EmitVideoSafeTransfer(transfer);
     }
 
-    internal void EmitStagedCameraRowCommit(
+    internal void EmitCameraSchedulingInitialization()
+    {
+        builder.LoadAImmediate((byte)NesPendingCameraStream.Column);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
+    }
+
+    internal void EmitCameraApplication(
+        NesSdkOperationLowerer frameEmitter,
+        NesCameraConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(frameEmitter);
+        if (plan.UsesPackedCameraRuntime)
+        {
+            frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.BeginPackedCommit());
+            frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.PublishPackedColumn());
+            frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.PublishPackedRow());
+        }
+        else
+        {
+            EmitRawPendingCameraCommit(frameEmitter, config);
+        }
+
+        frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.RestoreCameraScroll(config));
+        builder.LoadAImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
+    }
+
+    private void EmitStagedCameraRowCommit(
         NesSdkOperationLowerer frameEmitter,
         NesCameraConfig config)
     {
@@ -124,13 +203,13 @@ internal sealed class NesPhysicalFrameScheduler
         var doneLabel = builder.CreateLabel("nes_camera_row_done");
 
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
-        builder.CompareImmediate(plan.PackedCameraRowAttributePhase);
+        builder.CompareImmediate(CameraRowAttributePhase);
         builder.BranchRelative(0xD0, tilesLabel);
         builder.JumpAbsolute(attributesLabel);
 
         builder.Label(tilesLabel);
         frameEmitter.EmitVideoSafeTransfer(
-            new NesVideoSafeTransfer.StagedRowTiles(config, plan.PackedCameraRowTileWritesPerFrame));
+            new NesVideoSafeTransfer.StagedRowTiles(config, plan.CameraRowTileWritesPerFrame));
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
         builder.ClearCarry();
         builder.AddImmediate(1);
@@ -142,7 +221,7 @@ internal sealed class NesPhysicalFrameScheduler
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(0xFF ^ PendingStreamRow);
+        builder.AndImmediate(0xFF ^ (byte)NesPendingCameraStream.Row);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
 
         builder.Label(doneLabel);
@@ -154,9 +233,13 @@ internal sealed class NesPhysicalFrameScheduler
         NesPackedCameraRuntimeEmitter.Emit(
             builder,
             runtimePlan,
-            plan.PackedCameraRowTileWritesPerFrame,
-            plan.PackedCameraRowAttributePhase);
+            plan.CameraRowTileWritesPerFrame,
+            CameraRowAttributePhase);
     }
+
+    private int CameraRowAttributePhase =>
+        cameraRowStaging?.MaximumPhysicalFrames - 1
+        ?? throw new InvalidOperationException("NES camera-row phase emission requires validated staging policy.");
 
     internal void EmitOamShadowClear()
     {
@@ -197,15 +280,17 @@ internal sealed class NesPhysicalFrameScheduler
 
     private void EmitPackedFrameBoundary(
         NesFrameBoundaryPurpose purpose,
-        NesSdkOperationLowerer? frameEmitter)
+        NesSdkOperationLowerer? frameEmitter,
+        NesCameraConfig? cameraConfig)
     {
         var awaitFreshFrame = builder.CreateLabel("nes_packed_await_fresh_frame");
         var end = builder.CreateLabel("nes_packed_wait_frame_end");
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
         builder.BranchRelative(0xF0, awaitFreshFrame);
-        if (purpose == NesFrameBoundaryPurpose.Gameplay)
+        if (purpose == NesFrameBoundaryPurpose.Gameplay && cameraConfig is not null)
         {
-            frameEmitter?.EmitRetainPendingCameraAcrossStaleBoundary();
+            builder.LoadAImmediate(0x80);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
         }
         builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
         builder.JumpAbsolute(end);
@@ -219,18 +304,139 @@ internal sealed class NesPhysicalFrameScheduler
         builder.Label(hardwareVBlank);
         builder.Emit(0x2C, 0x02, 0x20);
         builder.BranchRelative(0x10, hardwareVBlank);
-        EmitPendingCameraWork(purpose, frameEmitter);
+        EmitPendingCameraWork(purpose, frameEmitter, cameraConfig);
         EmitRetainedOamWork();
         builder.Label(end);
     }
 
-    private static void EmitPendingCameraWork(
+    private void EmitPendingCameraWork(
         NesFrameBoundaryPurpose purpose,
-        NesSdkOperationLowerer? frameEmitter)
+        NesSdkOperationLowerer? frameEmitter,
+        NesCameraConfig? cameraConfig)
     {
-        if (purpose == NesFrameBoundaryPurpose.Gameplay)
+        if (purpose == NesFrameBoundaryPurpose.Gameplay &&
+            frameEmitter is not null &&
+            cameraConfig is { } config)
         {
-            frameEmitter?.EmitApplyPendingCameraScrollAtVBlank();
+            EmitCameraApplication(frameEmitter, config);
+        }
+    }
+
+    private void EmitRawPendingCameraCommit(
+        NesSdkOperationLowerer frameEmitter,
+        NesCameraConfig config)
+    {
+        if (!config.CanStreamColumns && !config.CanStreamRows)
+        {
+            return;
+        }
+
+        if (config.CanStreamColumns && config.CanStreamRows)
+        {
+            EmitStaggeredPendingCameraCommit(frameEmitter, config);
+            return;
+        }
+
+        EmitSinglePendingCameraCommit(
+            frameEmitter,
+            config,
+            config.CanStreamColumns ? NesPendingCameraStream.Column : NesPendingCameraStream.Row);
+    }
+
+    private void EmitSinglePendingCameraCommit(
+        NesSdkOperationLowerer frameEmitter,
+        NesCameraConfig config,
+        NesPendingCameraStream kind)
+    {
+        var commitLabel = builder.CreateLabel("nes_camera_commit_pending");
+        var doneLabel = builder.CreateLabel("nes_camera_commit_done");
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        builder.AndImmediate((byte)kind);
+        builder.CompareImmediate((byte)NesPendingCameraStream.None);
+        builder.BranchRelative(0xD0, commitLabel);
+        builder.JumpAbsolute(doneLabel);
+
+        builder.Label(commitLabel);
+        EmitPendingCameraStream(frameEmitter, config, kind);
+
+        builder.Label(doneLabel);
+    }
+
+    private void EmitStaggeredPendingCameraCommit(
+        NesSdkOperationLowerer frameEmitter,
+        NesCameraConfig config)
+    {
+        var checkRowLabel = builder.CreateLabel("nes_camera_commit_check_row");
+        var columnPendingLabel = builder.CreateLabel("nes_camera_commit_column_pending");
+        var bothPendingLabel = builder.CreateLabel("nes_camera_commit_both_pending");
+        var rowNextLabel = builder.CreateLabel("nes_camera_commit_row_next");
+        var rowPendingLabel = builder.CreateLabel("nes_camera_commit_row_pending");
+        var commitColumnLabel = builder.CreateLabel("nes_camera_commit_column");
+        var commitRowLabel = builder.CreateLabel("nes_camera_commit_row");
+        var doneLabel = builder.CreateLabel("nes_camera_commit_done");
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        builder.AndImmediate((byte)NesPendingCameraStream.Column);
+        builder.CompareImmediate((byte)NesPendingCameraStream.None);
+        builder.BranchRelative(0xD0, columnPendingLabel);
+        builder.JumpAbsolute(checkRowLabel);
+
+        builder.Label(columnPendingLabel);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        builder.AndImmediate((byte)NesPendingCameraStream.Row);
+        builder.CompareImmediate((byte)NesPendingCameraStream.None);
+        builder.BranchRelative(0xD0, bothPendingLabel);
+        builder.JumpAbsolute(commitColumnLabel);
+
+        builder.Label(bothPendingLabel);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
+        builder.CompareImmediate((byte)NesPendingCameraStream.Row);
+        builder.BranchRelative(0xF0, rowNextLabel);
+        builder.JumpAbsolute(commitColumnLabel);
+
+        builder.Label(rowNextLabel);
+        builder.JumpAbsolute(commitRowLabel);
+
+        builder.Label(checkRowLabel);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        builder.AndImmediate((byte)NesPendingCameraStream.Row);
+        builder.CompareImmediate((byte)NesPendingCameraStream.None);
+        builder.BranchRelative(0xD0, rowPendingLabel);
+        builder.JumpAbsolute(doneLabel);
+
+        builder.Label(rowPendingLabel);
+        builder.JumpAbsolute(commitRowLabel);
+
+        builder.Label(commitColumnLabel);
+        EmitPendingCameraStream(frameEmitter, config, NesPendingCameraStream.Column);
+        builder.LoadAImmediate((byte)NesPendingCameraStream.Row);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
+        builder.JumpAbsolute(doneLabel);
+
+        builder.Label(commitRowLabel);
+        EmitPendingCameraStream(frameEmitter, config, NesPendingCameraStream.Row);
+        builder.LoadAImmediate((byte)NesPendingCameraStream.Column);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
+
+        builder.Label(doneLabel);
+    }
+
+    private void EmitPendingCameraStream(
+        NesSdkOperationLowerer frameEmitter,
+        NesCameraConfig config,
+        NesPendingCameraStream kind)
+    {
+        switch (kind)
+        {
+            case NesPendingCameraStream.Column:
+                frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.PendingColumn(config));
+                return;
+            case NesPendingCameraStream.Row:
+                EmitStagedCameraRowCommit(frameEmitter, config);
+                return;
+            default:
+                throw new NotSupportedException($"Unsupported NES pending camera stream {kind}.");
         }
     }
 

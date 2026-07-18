@@ -50,17 +50,6 @@ internal sealed partial class NesSdkOperationLowerer
         }
     }
 
-    internal void EmitRetainPendingCameraAcrossStaleBoundary()
-    {
-        if (cameraConfig is null)
-        {
-            return;
-        }
-
-        builder.LoadAImmediate(0x80);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
-    }
-
     private void EmitPollInput()
     {
         if (usePackedCamera)

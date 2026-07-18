@@ -9,9 +9,6 @@ using RetroSharp.Parser;
 internal sealed partial class NesSdkOperationLowerer
 {
     private const int BottomOverscanInsetPixels = 8;
-    private const byte PendingStreamNone = 0;
-    private const byte PendingStreamColumn = 1;
-    private const byte PendingStreamRow = 2;
     private const string PackedCollisionAtScratchSubroutineLabel = "nes_packed_collision_at_scratch";
     private const string PackedCollisionFlagsSubroutineLabel = "nes_packed_collision_flags";
     private const string PackedWideSourceColumnSubroutineLabel = "nes_packed_wide_source_column";
@@ -44,7 +41,6 @@ internal sealed partial class NesSdkOperationLowerer
             NesPhysicalFrameScheduler.Create(
                 builder,
                 program,
-                useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
                 useFourScreenNametables,
                 usePackedCamera,
                 useSequentialOamPublication))
@@ -71,7 +67,7 @@ internal sealed partial class NesSdkOperationLowerer
         switch (operation)
         {
             case Sdk2DOperation.WaitFrame:
-                frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.Gameplay, this);
+                frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.Gameplay, this, cameraConfig);
                 break;
             case Sdk2DOperation.PollInput:
                 EmitPollInput();

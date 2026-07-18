@@ -22,8 +22,8 @@ public sealed class NesFramePlanTests
         Assert.Equal(152, plan.RetainedOamByteCount);
         Assert.True(plan.UseSequentialOamPublication);
         Assert.Equal(8, plan.MaximumCameraWalkStepsPerFrame);
-        Assert.Equal(8, plan.PackedCameraRowTileWritesPerFrame);
-        Assert.Equal(4, plan.PackedCameraRowAttributePhase);
+        Assert.Equal(8, plan.CameraRowTileWritesPerFrame);
+        Assert.Equal(4, plan.CameraRowAttributePhase);
         Assert.Equal(
             [
                 (SdkCpuWorkWindowIds.Frame, 29_780L),
@@ -38,7 +38,7 @@ public sealed class NesFramePlanTests
             work.WindowId == SdkCpuWorkWindowIds.VideoSafe);
 
         var staging = Assert.Single(plan.StagedWork);
-        Assert.Equal("packed-camera-edge", staging.Id);
+        Assert.Equal(NesFramePlan.CameraRowStagingId, staging.Id);
         Assert.Equal(5, staging.MaximumPhysicalFrames);
     }
 

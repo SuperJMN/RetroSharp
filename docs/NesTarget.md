@@ -56,7 +56,10 @@ for runtime NMI/VBlank admission, retained OAM publication, explicit video-safe
 transfers, packed-camera staging, and CPU-window projection. ROM/runtime
 builders and SDK lowerers consume the scheduler rather than the plan. Closed
 row/column transfer commands carry mechanics across that seam; phase counts,
-ordering, and deadlines remain scheduler-owned. The report keeps the
+raw column/row arbitration, packed axis publication order, and deadlines remain
+scheduler-owned. Raw four-screen and packed rows use the same finite staging
+contract. Construction rejects a row deadline that disagrees with the emitted
+tile phases plus final attribute phase. The report keeps the
 whole-frame compatibility fields and
 adds ordered `frame` (29,780 CPU cycles) and conservative `video-safe` (2,273
 CPU cycles) windows. The same plan rejects a sequential retained OAM prefix

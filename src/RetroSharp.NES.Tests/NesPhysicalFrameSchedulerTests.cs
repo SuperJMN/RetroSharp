@@ -79,4 +79,29 @@ public sealed class NesPhysicalFrameSchedulerTests
         Assert.Equal(SdkCpuWorkContributorIds.SpritePublish, publication.Id);
         Assert.Equal((1_983L, 1_983L), (publication.TotalLower, publication.TotalUpper));
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Camera_row_deadline_must_match_the_emitted_phase_schedule(bool usesPackedCameraRuntime)
+    {
+        var plan = NesFramePlan.Create(
+            "nes-mmc3-tvrom-v1",
+            hasFrameBoundary: true,
+            usesRetainedOam: false,
+            retainedOamByteCount: 0,
+            usesPackedCameraRuntime,
+            useSequentialOamPublication: false,
+            useFourScreenNametables: true);
+        var staging = Assert.Single(plan.StagedWork);
+        plan = plan with
+        {
+            StagedWork = [staging with { MaximumPhysicalFrames = staging.MaximumPhysicalFrames + 1 }],
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            new NesPhysicalFrameScheduler(new PrgBuilder(), plan));
+
+        Assert.Contains("deadline", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
 }

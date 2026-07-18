@@ -12,8 +12,11 @@ This document preserves project knowledge that previously lived only in agent me
   policy, but production ROM/runtime/lowerer code cannot consume it directly.
   The scheduler owns runtime NMI/VBlank admission, retained OAM publication, explicit
   video-safe row/column commands, packed row phases, and the matching CPU-work
-  projection. Lowerer partials retain target byte mechanics only. Scheduler and
-  architecture tests guard the seam; representative runner, audio-mixed-load,
+  projection. It also owns raw column/row arbitration and packed axis
+  publication order. Raw four-screen and packed rows share one finite staging
+  contract, and a deadline that disagrees with its emitted phases is rejected.
+  Lowerer partials retain target byte mechanics only.
+  Scheduler and architecture tests guard the seam; representative runner, audio-mixed-load,
   and full hscroll NES outputs must remain byte-identical for architecture-only
   changes.
 - RPH-5 / #406 restores the exact tracked Game Boy runner's sustained Right+B

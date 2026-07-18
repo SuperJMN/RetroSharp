@@ -20,17 +20,18 @@ internal sealed record NesFramePlan(
     bool UsesPackedCameraRuntime,
     bool UseSequentialOamPublication,
     byte MaximumCameraWalkStepsPerFrame,
-    int PackedCameraRowTileWritesPerFrame,
-    int PackedCameraRowAttributePhase,
+    int CameraRowTileWritesPerFrame,
+    int CameraRowAttributePhase,
     IReadOnlyList<NesPhysicalFrameWindow> Windows,
     IReadOnlyList<NesFrameWork> MandatoryWork,
     IReadOnlyList<NesStagedFrameWork> StagedWork)
 {
+    internal const string CameraRowStagingId = "camera-row-stream";
     private const long NtscCpuCyclesPerFrame = 29_780;
     private const long NtscCpuCyclesPerVideoSafeWindow = 2_273;
     private const byte CameraWalkStepsPerFrame = 8;
-    private const int PackedRowTileWritesPerFrame = 8;
-    private const int PackedRowAttributePhase = 4;
+    private const int DefaultCameraRowTileWritesPerFrame = 8;
+    private const int DefaultCameraRowAttributePhase = 4;
     private const int MaximumSequentialOamBytes = 152;
 
     internal static NesFramePlan Create(
@@ -140,19 +141,19 @@ internal sealed record NesFramePlan(
             usesPackedCameraRuntime,
             useSequentialOamPublication,
             CameraWalkStepsPerFrame,
-            PackedRowTileWritesPerFrame,
-            PackedRowAttributePhase,
+            DefaultCameraRowTileWritesPerFrame,
+            DefaultCameraRowAttributePhase,
             [
                 new NesPhysicalFrameWindow(SdkCpuWorkWindowIds.Frame, NtscCpuCyclesPerFrame),
                 new NesPhysicalFrameWindow(SdkCpuWorkWindowIds.VideoSafe, NtscCpuCyclesPerVideoSafeWindow),
             ],
             work,
-            usesPackedCameraRuntime
+            usesPackedCameraRuntime || useFourScreenNametables
                 ? [new NesStagedFrameWork(
-                    "packed-camera-edge",
+                    CameraRowStagingId,
                     SdkCpuWorkWindowIds.Frame,
                     SdkCpuWorkWindowIds.VideoSafe,
-                    PackedRowAttributePhase + 1)]
+                    DefaultCameraRowAttributePhase + 1)]
                 : []);
     }
 

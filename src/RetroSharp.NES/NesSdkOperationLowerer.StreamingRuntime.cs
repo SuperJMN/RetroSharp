@@ -82,7 +82,7 @@ internal sealed partial class NesSdkOperationLowerer
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingColumnSourceHigh);
         }
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.OrImmediate(PendingStreamColumn);
+        builder.OrImmediate((byte)NesPendingCameraStream.Column);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
     }
 
@@ -157,7 +157,7 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.OrImmediate(PendingStreamRow);
+        builder.OrImmediate((byte)NesPendingCameraStream.Row);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
@@ -272,127 +272,19 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
     }
 
-    private void EmitCommitPendingCameraStream(NesCameraConfig config)
+    private void EmitBeginPackedCameraCommit()
     {
-        if (usePackedCamera)
-        {
-            builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-            builder.CallSubroutine(NesRomBuilder.WorldPackCommitEdgeLabel);
-            EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Column);
-            EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Row);
-            return;
-        }
-
-        var canStreamColumns = ShouldStreamColumnsForCamera(config);
-        var canStreamRows = ShouldStreamRowsForCamera(config);
-        if (!canStreamColumns && !canStreamRows)
-        {
-            return;
-        }
-
-        if (canStreamColumns && canStreamRows)
-        {
-            EmitCommitStaggeredPendingCameraStream(config);
-            return;
-        }
-
-        if (canStreamColumns)
-        {
-            EmitCommitSinglePendingCameraStream(PendingStreamColumn, config);
-            return;
-        }
-
-        EmitCommitSinglePendingCameraStream(PendingStreamRow, config);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        builder.CallSubroutine(NesRomBuilder.WorldPackCommitEdgeLabel);
     }
 
-    private void EmitCommitSinglePendingCameraStream(byte kind, NesCameraConfig config)
+    private void EmitPendingCameraColumn(NesCameraConfig config)
     {
-        var commitLabel = builder.CreateLabel("nes_camera_commit_pending");
-        var doneLabel = builder.CreateLabel("nes_camera_commit_done");
-
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(kind);
-        builder.CompareImmediate(PendingStreamNone);
-        builder.BranchRelative(0xD0, commitLabel); // BNE commitLabel
-        builder.JumpAbsolute(doneLabel);
-
-        builder.Label(commitLabel);
-        EmitCommitPendingCameraStreamKind(kind, config);
-
-        builder.Label(doneLabel);
-    }
-
-    private void EmitCommitStaggeredPendingCameraStream(NesCameraConfig config)
-    {
-        var checkRowLabel = builder.CreateLabel("nes_camera_commit_check_row");
-        var columnPendingLabel = builder.CreateLabel("nes_camera_commit_column_pending");
-        var bothPendingLabel = builder.CreateLabel("nes_camera_commit_both_pending");
-        var rowNextLabel = builder.CreateLabel("nes_camera_commit_row_next");
-        var rowPendingLabel = builder.CreateLabel("nes_camera_commit_row_pending");
-        var commitColumnLabel = builder.CreateLabel("nes_camera_commit_column");
-        var commitRowLabel = builder.CreateLabel("nes_camera_commit_row");
-        var doneLabel = builder.CreateLabel("nes_camera_commit_done");
-
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(PendingStreamColumn);
-        builder.CompareImmediate(PendingStreamNone);
-        builder.BranchRelative(0xD0, columnPendingLabel); // BNE columnPendingLabel
-        builder.JumpAbsolute(checkRowLabel);
-
-        builder.Label(columnPendingLabel);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(PendingStreamRow);
-        builder.CompareImmediate(PendingStreamNone);
-        builder.BranchRelative(0xD0, bothPendingLabel); // BNE bothPendingLabel
-        builder.JumpAbsolute(commitColumnLabel);
-
-        builder.Label(bothPendingLabel);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
-        builder.CompareImmediate(PendingStreamRow);
-        builder.BranchRelative(0xF0, rowNextLabel); // BEQ rowNextLabel
-        builder.JumpAbsolute(commitColumnLabel);
-
-        builder.Label(rowNextLabel);
-        builder.JumpAbsolute(commitRowLabel);
-
-        builder.Label(checkRowLabel);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(PendingStreamRow);
-        builder.CompareImmediate(PendingStreamNone);
-        builder.BranchRelative(0xD0, rowPendingLabel); // BNE rowPendingLabel
-        builder.JumpAbsolute(doneLabel);
-
-        builder.Label(rowPendingLabel);
-        builder.JumpAbsolute(commitRowLabel);
-
-        builder.Label(commitColumnLabel);
-        EmitCommitPendingCameraStreamKind(PendingStreamColumn, config);
-        builder.LoadAImmediate(PendingStreamRow);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
-        builder.JumpAbsolute(doneLabel);
-
-        builder.Label(commitRowLabel);
-        EmitCommitPendingCameraStreamKind(PendingStreamRow, config);
-        builder.LoadAImmediate(PendingStreamColumn);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
-
-        builder.Label(doneLabel);
-    }
-
-    private void EmitCommitPendingCameraStreamKind(byte kind, NesCameraConfig config)
-    {
-        if (kind == PendingStreamColumn)
-        {
-            EmitLoadPendingCameraColumnToStreamAddresses();
-            EmitStreamColumnFromAddresses(config);
-            EmitStreamColumnAttributes(config);
-            EmitClearPendingCameraStream(kind);
-        }
-        else
-        {
-            EmitCommitPendingCameraRowStream(config);
-        }
+        EmitLoadPendingCameraColumnToStreamAddresses();
+        EmitStreamColumnFromAddresses(config);
+        EmitStreamColumnAttributes(config);
+        EmitClearPendingCameraColumn();
     }
 
     // Refreshes the NES attribute table for the column that was just streamed. Column tile streaming only
@@ -529,16 +421,11 @@ internal sealed partial class NesSdkOperationLowerer
         }
     }
 
-    private void EmitClearPendingCameraStream(byte kind)
+    private void EmitClearPendingCameraColumn()
     {
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-        builder.AndImmediate(kind == PendingStreamColumn ? 0xFE : 0xFD);
+        builder.AndImmediate(0xFF ^ (byte)NesPendingCameraStream.Column);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
-    }
-
-    private void EmitCommitPendingCameraRowStream(NesCameraConfig config)
-    {
-        frameScheduler.EmitStagedCameraRowCommit(this, config);
     }
 
     private void EmitStagedCameraRowTiles(NesCameraConfig config, int tilesPerPhase)

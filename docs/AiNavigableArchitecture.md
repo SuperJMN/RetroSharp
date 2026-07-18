@@ -52,6 +52,11 @@ selected byte-emission mechanics, but they cannot independently decide whether
 work moves between physical windows or which camera phase is current.
 The ROM builder's two rendering-disabled power-on VBlank waits remain bootstrap
 sequencing, outside the runtime frame schedule.
+The scheduler also emits the raw column-versus-row arbitration and packed axis
+publication order. Raw four-screen and packed row streaming share one declared
+row-staging policy. Its constructor validates that the declared maximum
+physical frames equals the emitted tile phases plus the final attribute phase,
+so the deadline cannot drift into dead policy.
 Functional observation engines form a separate
 outbound test seam: they translate target events but do not own scheduling
 policy or acceptance thresholds.
@@ -238,8 +243,8 @@ not become arbitrary size gates.
 
 The final tree has 11 Game Boy SDK-lowerer modules, 8 NES SDK-lowerer modules,
 7 focused Game Boy SDK-lowering suites, 4 focused NES SDK-lowering suites,
-14 Actor Framework modules, and 35 architecture `[Fact]`/`[Theory]`
-declarations: 34 discovered tests plus one deliberately undiscovered compiled-
+14 Actor Framework modules, and 36 architecture `[Fact]`/`[Theory]`
+declarations: 35 discovered tests plus one deliberately undiscovered compiled-
 metadata fixture used by a negative ownership test. Validation results and exact
 runner hashes belong in the closing PR/epic record because they are execution
 evidence, not permanent design limits.
