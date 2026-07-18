@@ -1,12 +1,28 @@
 # AI Agent Project Context
 
 Status: memory-derived project context for AI CLI agents.
-Last updated: 2026-07-17.
+Last updated: 2026-07-18.
 
 This document preserves project knowledge that previously lived only in agent memory and recent runs. It is intentionally practical: it records where to look, which commands have been reliable, and which failure modes should shape future work.
 
 ## Recent Baseline
 
+- RPH-5 / #406 restores the exact tracked Game Boy runner's sustained Right+B
+  cadence over complete `stage1.tmj`: SHA-256
+  `10c60b0df52754da88a50579b547e463108d9ea3d09fdd0c230ad752e552f12d`
+  reaches 250/250 gameplay and audio ticks, X=430/Y=273, camera X=334, exact
+  41/41/41/41/41 packed lifecycle counts, and zero forbidden or unsafe work.
+  Both target-private changes are load-bearing: early VBlank admission alone on
+  the original packed decoder reaches 209/250 gameplay but 250/250 audio, while
+  the derived column plane before early admission reaches 209/250 for both.
+  The plane is emitted only for packed camera worlds wider than 255 columns and
+  19-255 rows when its at-most 16 KiB payload fits after the pack in one ROM
+  window; row edges and all
+  non-column/fallback paths retain generic preparation, while a diagonal's
+  column component may use the plane. Valid slot ids for word-wide-map columns
+  enter VBlank before metadata validation and are re-read afterward; `NoSlot`
+  never waits, while narrow columns and rows keep the prior ordering.
+  Start from `docs/GameBoyRunnerCadenceAcceptance.md` for the isolated evidence.
 - GCP planning / epic #387 publishes the measured generated-code performance
   roadmap through PR #386. Milestone 13 owns the execution chain. GCP-0.1 /
   #388, GCP-0.2 / #389, GCP-1.1 / #390, existing AF-5.10 / #244, and Game Boy

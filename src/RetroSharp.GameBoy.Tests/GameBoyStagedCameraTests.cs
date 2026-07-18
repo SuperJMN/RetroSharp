@@ -3,6 +3,7 @@ namespace RetroSharp.GameBoy.Tests;
 using System;
 using System.IO;
 using System.Linq;
+using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
 using RetroSharp.Sdk;
 using Xunit;
@@ -20,6 +21,184 @@ public sealed class GameBoyStagedCameraTests
     private const byte Row = 2;
     private const byte Positive = 2;
     private const byte Negative = 1;
+
+    [Fact]
+    public void Resident_column_at_LY145_commits_in_the_current_vblank_without_losing_source_cadence()
+    {
+        var directory = RepositoryDirectory("samples/runner");
+        const string source = """
+            void Main() {
+                Video.Init();
+                World.Load("assets/maps/stage1.tmj");
+                Sprite.Asset(player, "assets/mario-player.png", 18, 32);
+                Music.Asset(theme, "assets/music/runner.vgz");
+                Camera.Init(312, 0, 40);
+                Audio.Init();
+                Music.Play(theme);
+                i16 targetY = 0;
+                Camera.SetPosition(8, targetY);
+                u8 phase = 0;
+                while (true) {
+                    Video.WaitVBlank();
+                    phase += 1;
+                    phase += 1;
+                    Camera.Apply();
+                    Audio.Update();
+                    Sprite.Draw(player, 0, 0, 0, false, 0);
+                }
+            }
+            """;
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var cpu = new GameBoyTestCpu(result.Rom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+        cpu.RunUntilWramEquals(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.StateOffset, Resident);
+        var sourceWaitsBefore = cpu.SourceWaitCompletions;
+
+        cpu.RunUntilSourceWaitCompletions(sourceWaitsBefore + 1);
+
+        var sourceMarkerCycle = Assert.Single(cpu.SourceWaitCycles.Skip((int)sourceWaitsBefore));
+        Assert.Equal(145, sourceMarkerCycle / 456 % 154);
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.PrepareCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.ReleaseCount));
+        var audioBefore = cpu.AudioUpdateCalls;
+        var packedAudioBefore = cpu.Wram(PackedCameraMemory.AudioTickCount);
+        var vramWritesBefore = cpu.VramWrites.Count;
+        var oamWritesBefore = cpu.OamWrites.Count;
+
+        cpu.RunUntilSourceWaitCompletions(sourceWaitsBefore + 2);
+
+        var nextSourceMarkerCycle = cpu.SourceWaitCycles[(int)sourceWaitsBefore + 1];
+        Assert.InRange(nextSourceMarkerCycle - sourceMarkerCycle, 1, GameBoyTestCpu.DmgCyclesPerFrame);
+        Assert.Equal(1, cpu.AudioUpdateCalls - audioBefore);
+        Assert.Equal(1, unchecked((byte)(cpu.Wram(PackedCameraMemory.AudioTickCount) - packedAudioBefore)));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.PrepareCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.ReleaseCount));
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
+        Assert.Equal(19, cpu.VramWrites.Count - vramWritesBefore);
+        Assert.All(cpu.VramWrites.Skip(vramWritesBefore), write =>
+        {
+            Assert.True(write.Applied);
+            Assert.InRange(write.Ly, (byte)144, (byte)153);
+            Assert.Equal(sourceMarkerCycle / GameBoyTestCpu.DmgCyclesPerFrame, write.Cycles / GameBoyTestCpu.DmgCyclesPerFrame);
+        });
+        Assert.Equal(0, cpu.OamWrites.Skip(oamWritesBefore).Count(write => write.LcdEnabled && write.Ly is < 144 or > 153));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInVBlank));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(255)]
+    [InlineData(256)]
+    [InlineData(311)]
+    public void Packed_column_plane_copies_nineteen_tiles_contiguously_with_wrapped_y_and_one_table_bank_selection(int worldX)
+    {
+        var directory = RepositoryDirectory("samples/runner");
+        const string source = """
+            void Main() {
+                World.Load("assets/maps/stage1.tmj");
+                Music.Asset(theme, "assets/music/runner.vgz");
+                Camera.Init(312, 0, 40);
+                Audio.Init();
+                Music.Play(theme);
+                i16 target = 0;
+                i16 targetY = 0;
+                while (true) {
+                    Video.WaitVBlank();
+                    Camera.Apply();
+                    Audio.Update();
+                    Input.Poll();
+                    if (Input.IsDown(Button.Right)) {
+                        target = 8;
+                    }
+                    Camera.SetPosition(target, targetY);
+                }
+            }
+            """;
+        var canonical = GameBoyTiledMapImporter.CompileWorldPack(
+            Path.Combine(directory, "assets/maps/stage1.tmj"),
+            GameBoyVideoProgram.FirstGeneratedBackgroundTile);
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var planeSegment = Assert.Single(
+            result.Report.Segments,
+            segment => segment.Owner == "worldpack-column-plane:default");
+        var plan = GameBoyWorldPackRuntimePlan.Create(
+            canonical.SerializedBytes,
+            enablePackedCameraCache: true,
+            enableDiagonalVisualCache: true);
+        var cpu = new GameBoyTestCpu(result.Rom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+        };
+        cpu.RunUntilIoRegisterWrites(0xFF43, 1, 50_000_000);
+        cpu.RunUntilIoRegisterWrites(0xFF43, 1, 50_000_000);
+        SetHorizontalCameraState(
+            cpu,
+            cameraX: 7,
+            screenLeftColumn: 0,
+            rightBackgroundColumn: 21,
+            leftBackgroundColumn: 0,
+            rightSourceColumn: checked((ushort)worldX),
+            leftSourceColumn: 0);
+        cpu.SetWram(CameraMemory.TopSourceRow, 35);
+        cpu.SetWram(CameraMemory.TopBackgroundRow, 3);
+        cpu.SetWram(PackedCameraMemory.WaitAudioEnabled, 0);
+        cpu.SetWram(PackedCameraMemory.PreparedSlot, GameBoyPackedCameraRuntime.NoSlot);
+        cpu.Held.Add("right");
+        cpu.RunUntilWramEquals(PackedCameraMemory.RequestCount, 1, 50_000_000);
+        var bankWritesBefore = cpu.RomBankWrites.Count;
+        var entryBank = cpu.CurrentRomBank;
+
+        cpu.RunUntilWramEquals(PackedCameraMemory.ResidentCount, 1, 50_000_000);
+        cpu.RunUntilWramEquals(PackedCameraMemory.PreparedSlot, 0, 50_000_000);
+        var expected = Enumerable.Range(0, 19)
+            .Select(offset => HardwareTileAt(canonical.Pack, worldX, (35 + offset) % 40))
+            .ToArray();
+        var payload = Enumerable.Range(0, 19)
+            .Select(offset => cpu.Wram(checked((ushort)(plan.Layout.EdgeSlots[0].Start + offset))))
+            .ToArray();
+        var preparationBankWrites = cpu.RomBankWrites.Skip(bankWritesBefore).ToArray();
+
+        Assert.Equal(expected, payload);
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.Slot0 + GameBoyPackedCameraRuntime.PayloadLengthOffset));
+        Assert.True(
+            preparationBankWrites.Count(write => write.SelectedBank == planeSegment.Bank) == 1,
+            $"Expected one table-bank selection; writes={string.Join(",", preparationBankWrites.Select(write => $"{write.SelectedBank}@{write.ProgramCounter:X4}"))}.");
+        Assert.Equal(entryBank, cpu.CurrentRomBank);
+        Assert.Equal(entryBank, cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.RequestCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.PrepareCount));
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.ResidentCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.ReleaseCount));
+
+        cpu.RunUntilWramEquals(PackedCameraMemory.ReleaseCount, 1, 50_000_000);
+        Assert.Equal(1, cpu.Wram(PackedCameraMemory.CommitCount));
+        Assert.Equal(19, cpu.Wram(PackedCameraMemory.LastCommitVramWrites));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.BankWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DecodeWorkInCommit));
+        Assert.Equal(0, cpu.Wram(PackedCameraMemory.DirectoryWorkInVBlank));
+        Assert.Equal(0, cpu.VramWrites.Count(write => write.LcdEnabled && !write.Applied));
+    }
 
     [Fact]
     public void Packed_column_follows_request_prepare_resident_commit_release_before_camera_publication()
@@ -684,6 +863,16 @@ public sealed class GameBoyStagedCameraTests
         GameBoyTiledMapImporter.CompileWorldPack(
             Path.Combine(directory, relativeMapPath),
             GameBoyVideoProgram.FirstGeneratedBackgroundTile).SerializedBytes;
+
+    private static byte HardwareTileAt(WorldPack pack, int x, int y)
+    {
+        var coordinate = pack.Locate(x, y);
+        var descriptor = pack.Descriptor;
+        var expansionIndex = checked(
+            (pack.VisualIdAt(x, y) * descriptor.MetatileWidth * descriptor.MetatileHeight
+             + coordinate.SubcellIndex) * descriptor.TargetCellStride);
+        return pack.TargetExpansions.Span[expansionIndex];
+    }
 
     private static void SetHorizontalCameraState(
         GameBoyTestCpu cpu,

@@ -43,6 +43,8 @@ internal sealed class GameBoyTestCpu
     private readonly List<RomBankWrite> romBankWrites = [];
     private readonly List<long> audioUpdateCycles = [];
     private readonly List<AudioUpdateTrace> audioUpdateTrace = [];
+    private readonly List<long> sourceWaitCycles = [];
+    private readonly List<WramWordWrite> wramWordWrites = [];
     private readonly Queue<FarReadInjection> farReadInjections = [];
     private readonly List<FarReadResult> injectedFarReadResults = [];
 
@@ -71,6 +73,12 @@ internal sealed class GameBoyTestCpu
     public byte CurrentRomBank => (byte)romBank;
 
     public long SourceWaitCompletions { get; private set; }
+
+    public IReadOnlyList<long> SourceWaitCycles => sourceWaitCycles;
+
+    public HashSet<ushort> TracedWramWords { get; } = [];
+
+    public IReadOnlyList<WramWordWrite> WramWordWrites => wramWordWrites;
 
     public ushort? TracedWorldPackCollisionLookupEntry { get; set; }
 
@@ -514,9 +522,12 @@ internal sealed class GameBoyTestCpu
                 return;
             case < 0xE000:
                 wram[addr - 0xC000] = value;
+                TraceWramWord(addr);
                 return;
             case < 0xFE00:
-                wram[addr - 0xE000] = value;
+                var mirroredAddress = checked((ushort)(addr - 0x2000));
+                wram[mirroredAddress - 0xC000] = value;
+                TraceWramWord(mirroredAddress);
                 return;
             case < 0xFEA0:
                 oam[addr - 0xFE00] = value;
@@ -580,6 +591,21 @@ internal sealed class GameBoyTestCpu
         }
     }
 
+    private void TraceWramWord(ushort writtenAddress)
+    {
+        foreach (var lowAddress in TracedWramWords)
+        {
+            if (writtenAddress != lowAddress && writtenAddress != lowAddress + 1)
+            {
+                continue;
+            }
+
+            var low = wram[lowAddress - 0xC000];
+            var high = wram[lowAddress + 1 - 0xC000];
+            wramWordWrites.Add(new WramWordWrite(lowAddress, checked((ushort)(low | high << 8)), cycles));
+        }
+    }
+
     private byte NextByte() => ReadByte(pc++);
 
     private ushort NextWord()
@@ -621,7 +647,10 @@ internal sealed class GameBoyTestCpu
         switch (opcode)
         {
             case 0x00: break;                                   // NOP
-            case 0x40: SourceWaitCompletions++; break;          // LD B,B; compiler source-tick marker
+            case 0x40:                                        // LD B,B; compiler source-tick marker
+                SourceWaitCompletions++;
+                sourceWaitCycles.Add(cycles);
+                break;
             case 0xF3: break;                                   // DI (no interrupts modeled)
             case 0x01: { var v = NextWord(); b = (byte)(v >> 8); c = (byte)v; break; } // LD BC,nn
             case 0x11: { var v = NextWord(); d = (byte)(v >> 8); e = (byte)v; break; } // LD DE,nn
@@ -898,6 +927,8 @@ internal sealed class GameBoyTestCpu
 internal readonly record struct OamWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled);
 
 internal readonly record struct VramWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled, bool Applied);
+
+internal readonly record struct WramWordWrite(ushort LowAddress, ushort Value, long Cycles);
 
 internal readonly record struct RomBankWrite(
     ushort ProgramCounter,

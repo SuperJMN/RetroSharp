@@ -4,6 +4,7 @@ using RetroSharp.Core.Sdk;
 using RetroSharp.GameBoy;
 using RetroSharp.Sdk;
 using Xunit;
+using CameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.Camera;
 using PackedCameraMemory = RetroSharp.GameBoy.GameBoyRuntimeMemoryLayout.PackedCamera;
 
 public sealed class GameBoyRunnerLandingTests
@@ -12,6 +13,8 @@ public sealed class GameBoyRunnerLandingTests
     private const ushort PlayerYLow = 0xC002;
     private const ushort PlayerVelocityY = 0xC004;
     private const ushort PlayerGrounded = 0xC005;
+    private const ushort PlayerDisplayFrameLow = 0xC006;
+    private const ushort PlayerDisplayFlipX = 0xC008;
     private const ushort PlayerJumping = 0xC00B;
     private const ushort PlayerVerticalSubpixelLow = 0xC00C;
     private const int FirstPlatformCameraX = 696;
@@ -175,7 +178,9 @@ public sealed class GameBoyRunnerLandingTests
             RunnerSample.CompiledSource(),
             RunnerSample.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
-        var cpu = new GameBoyTestCpu(result.Rom)
+        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.gb"));
+        Assert.Equal(trackedRom, result.Rom);
+        var cpu = new GameBoyTestCpu(trackedRom)
         {
             CycleAccurateLy = true,
             TracedWorldPackCollisionLookupEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
@@ -272,6 +277,175 @@ public sealed class GameBoyRunnerLandingTests
         Assert.True(
             audioTicks is >= 119 and <= 121 && maximumMissedAudioFrames <= 1,
             $"Runner audio cadence regressed with gameplay load: ticks={audioTicks}/120, maxMissed={maximumMissedAudioFrames}.");
+    }
+
+    [Fact]
+    public void Shared_runner_preserves_source_model_run_cadence_over_physical_frames()
+    {
+        var source = RunnerSample.CompiledSource();
+        var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            source,
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var oracleProgram = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+            source,
+            RunnerSample.Directory,
+            SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: null,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            sdkPluginRegistry: null);
+        var canonical = Assert.IsType<GameBoyTiledWorldPack>(oracleProgram.PackedWorld);
+        var playerSprite = oracleProgram.SpriteAssets["mario_player"];
+        var columnPlaneSegment = Assert.Single(
+            result.Report.Segments,
+            segment => segment.Owner == "worldpack-column-plane:default");
+        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.gb"));
+        Assert.Equal(trackedRom, result.Rom);
+        var cpu = new GameBoyTestCpu(trackedRom)
+        {
+            CycleAccurateLy = true,
+            EnforceVblankVramWrites = true,
+            TracedWorldPackCollisionLookupEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
+        };
+        cpu.RunFrames(500);
+        cpu.RunAdditionalFrames(300);
+
+        var sourceTicksAtStart = cpu.SourceWaitCompletions;
+        var audioTicksAtStart = cpu.AudioUpdateCalls;
+        var packedAudioTicksAtStart = cpu.Wram(PackedCameraMemory.AudioTickCount);
+        var collisionQueriesAtStart = cpu.WorldPackCollisionQueries.Count;
+        var collisionDecodesAtStart = ReadWord(cpu, GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow);
+        var memoHitsAtStart = cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.MemoHitCount);
+        var requestCountAtStart = cpu.Wram(PackedCameraMemory.RequestCount);
+        var prepareCountAtStart = cpu.Wram(PackedCameraMemory.PrepareCount);
+        var residentCountAtStart = cpu.Wram(PackedCameraMemory.ResidentCount);
+        var commitCountAtStart = cpu.Wram(PackedCameraMemory.CommitCount);
+        var releaseCountAtStart = cpu.Wram(PackedCameraMemory.ReleaseCount);
+        var previousRequests = requestCountAtStart;
+        var previousReleases = releaseCountAtStart;
+        var pendingRequests = new Queue<int>();
+        var maximumRequestToVisibleFrames = 0;
+        var maximumMissedGameplayFrames = 0;
+        var missedGameplayFrames = 0;
+        cpu.TracedWramWords.Add(CameraMemory.XLow);
+        cpu.TracedWramWords.Add(PackedCameraMemory.VisibleCameraXLow);
+        var romBankWritesAtStart = cpu.RomBankWrites.Count;
+        cpu.Held.Add("right");
+        cpu.Held.Add("b");
+
+        for (var frame = 0; frame < 250; frame++)
+        {
+            var sourceTicksBefore = cpu.SourceWaitCompletions;
+            var presentedPlayerX = ReadWord(cpu, PlayerXLow);
+            var presentedPlayerY = ReadWord(cpu, PlayerYLow);
+            var presentedFrame = ReadWord(cpu, PlayerDisplayFrameLow);
+            var presentedFlipX = cpu.Wram(PlayerDisplayFlipX) != 0;
+            var presentedCameraX = ReadWord(cpu, CameraMemory.XLow);
+            var presentedCameraY = ReadWord(cpu, CameraMemory.YLow);
+            cpu.RunAdditionalFrames(1);
+
+            var currentRequests = cpu.Wram(PackedCameraMemory.RequestCount);
+            while (previousRequests != currentRequests)
+            {
+                pendingRequests.Enqueue(frame);
+                previousRequests++;
+            }
+
+            var currentReleases = cpu.Wram(PackedCameraMemory.ReleaseCount);
+            while (previousReleases != currentReleases)
+            {
+                Assert.NotEmpty(pendingRequests);
+                maximumRequestToVisibleFrames = Math.Max(
+                    maximumRequestToVisibleFrames,
+                    frame - pendingRequests.Dequeue());
+                previousReleases++;
+            }
+
+            missedGameplayFrames = cpu.SourceWaitCompletions == sourceTicksBefore
+                ? missedGameplayFrames + 1
+                : 0;
+            maximumMissedGameplayFrames = Math.Max(maximumMissedGameplayFrames, missedGameplayFrames);
+            AssertVisibleBackgroundMatchesWorld(cpu, canonical.LoweredMap, frame);
+            AssertRunnerOam(
+                cpu,
+                playerSprite,
+                frame,
+                presentedPlayerX,
+                presentedPlayerY,
+                presentedFrame,
+                presentedFlipX,
+                presentedCameraX,
+                presentedCameraY);
+        }
+
+        var sourceTicks = cpu.SourceWaitCompletions - sourceTicksAtStart;
+        var audioTicks = cpu.AudioUpdateCalls - audioTicksAtStart;
+        var packedAudioTicks = unchecked((byte)(cpu.Wram(PackedCameraMemory.AudioTickCount) - packedAudioTicksAtStart));
+        var collisionQueries = cpu.WorldPackCollisionQueries.Count - collisionQueriesAtStart;
+        var collisionDecodes = ReadWord(cpu, GameBoyRuntimeMemoryLayout.Collision.DecodeCountLow) - collisionDecodesAtStart;
+        var memoHits = unchecked((byte)(cpu.Wram(GameBoyRuntimeMemoryLayout.Collision.MemoHitCount) - memoHitsAtStart));
+        var requests = unchecked((byte)(cpu.Wram(PackedCameraMemory.RequestCount) - requestCountAtStart));
+        var prepares = unchecked((byte)(cpu.Wram(PackedCameraMemory.PrepareCount) - prepareCountAtStart));
+        var residents = unchecked((byte)(cpu.Wram(PackedCameraMemory.ResidentCount) - residentCountAtStart));
+        var commits = unchecked((byte)(cpu.Wram(PackedCameraMemory.CommitCount) - commitCountAtStart));
+        var releases = unchecked((byte)(cpu.Wram(PackedCameraMemory.ReleaseCount) - releaseCountAtStart));
+        var playerX = ReadWord(cpu, PlayerXLow);
+        var playerY = ReadWord(cpu, PlayerYLow);
+        var sourceCameraX = ReadWord(cpu, GameBoyRuntimeMemoryLayout.Camera.XLow);
+        var visibleCameraX = ReadWord(cpu, PackedCameraMemory.VisibleCameraXLow);
+        var sourceCameraBoundary = ObservedWordBoundaryCrossing(cpu, CameraMemory.XLow, 256);
+        var visibleCameraBoundary = ObservedWordBoundaryCrossing(cpu, PackedCameraMemory.VisibleCameraXLow, 256);
+        var selectedColumnPlaneBank = cpu.RomBankWrites
+            .Skip(romBankWritesAtStart)
+            .Any(write => write.SelectedBank == columnPlaneSegment.Bank);
+        var forbiddenWork = new[]
+        {
+            PackedCameraMemory.BankWorkInCommit,
+            PackedCameraMemory.DecodeWorkInCommit,
+            PackedCameraMemory.DirectoryWorkInCommit,
+            PackedCameraMemory.DirectoryWorkInVBlank,
+            PackedCameraMemory.DecodeWorkInVBlank,
+        }.Sum(address => cpu.Wram(address));
+        var unsafeVramWrites = cpu.VramWrites.Count(write => write.LcdEnabled && !write.Applied);
+        var unsafeOamWrites = cpu.OamWrites.Count(write => write.LcdEnabled && write.Ly is < 144 or > 153);
+
+        Assert.True(
+            sourceTicks >= 238
+            && maximumMissedGameplayFrames <= 1
+            && audioTicks is >= 249 and <= 251
+            && packedAudioTicks is >= 249 and <= 251
+            && playerX == 430
+            && playerY == FloorPlayerY
+            && sourceCameraX == 334
+            && visibleCameraX == 334
+            && sourceCameraBoundary == (255, 256)
+            && visibleCameraBoundary == (254, 256)
+            && selectedColumnPlaneBank
+            && requests == 41
+            && requests == prepares
+            && prepares == residents
+            && residents == commits
+            && commits == releases
+            && maximumRequestToVisibleFrames == 0
+            && pendingRequests.Count == 0
+            && collisionQueries > 0
+            && collisionDecodes > 0
+            && memoHits > 0
+            && forbiddenWork == 0
+            && unsafeVramWrites == 0
+            && unsafeOamWrites == 0
+            && cpu.CurrentRomBank == cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank),
+            $"Runner B-speed cadence regressed: gameplay={sourceTicks}/250 maxMiss={maximumMissedGameplayFrames}, "
+            + $"audio={audioTicks}/250 packedAudio={packedAudioTicks}/250, player=({playerX},{playerY}), "
+            + $"camera={sourceCameraX}/{visibleCameraX} boundary={sourceCameraBoundary}/{visibleCameraBoundary} planeBank={selectedColumnPlaneBank}, "
+            + $"collision=queries:{collisionQueries}/memo:{memoHits}/decodes:{collisionDecodes}, "
+            + $"lifecycle={requests}/{prepares}/{residents}/{commits}/{releases} maxPublication={maximumRequestToVisibleFrames}, "
+            + $"forbidden={forbiddenWork} unsafeVideo={unsafeVramWrites}/{unsafeOamWrites} bank={cpu.CurrentRomBank}/{cpu.Wram(GameBoyRuntimeMemoryLayout.Banking.ActualVisibleBank)}.");
+
+        var hardwareChunkWidthPixels = canonical.Pack.Descriptor.ChunkWidth
+            * canonical.Pack.Descriptor.MetatileWidth
+            * 8;
+        Assert.Equal(0, 256 % hardwareChunkWidthPixels);
     }
 
     [Fact]
@@ -480,6 +654,100 @@ public sealed class GameBoyRunnerLandingTests
         }
 
         Assert.Fail($"WRAM word 0x{lowAddress:X4} did not reach {expected} within {maxFrames} frames.");
+    }
+
+    private static int ReadWord(GameBoyTestCpu cpu, ushort lowAddress)
+    {
+        return cpu.Wram(lowAddress) | cpu.Wram((ushort)(lowAddress + 1)) << 8;
+    }
+
+    private static (ushort From, ushort To)? ObservedWordBoundaryCrossing(
+        GameBoyTestCpu cpu,
+        ushort lowAddress,
+        ushort boundary)
+    {
+        var values = cpu.WramWordWrites
+            .Where(write => write.LowAddress == lowAddress)
+            .Select(write => write.Value)
+            .ToArray();
+        for (var index = 0; index < values.Length - 1; index++)
+        {
+            if (index + 2 < values.Length
+                && values[index] < boundary
+                && values[index + 1] == 0
+                && values[index + 2] >= boundary)
+            {
+                return (values[index], values[index + 2]);
+            }
+
+            if (values[index] < boundary && values[index + 1] >= boundary)
+            {
+                return (values[index], values[index + 1]);
+            }
+        }
+
+        return null;
+    }
+
+    private static void AssertVisibleBackgroundMatchesWorld(GameBoyTestCpu cpu, GameBoyTiledMap world, int frame)
+    {
+        var cameraX = ReadWord(cpu, PackedCameraMemory.VisibleCameraXLow);
+        var cameraY = ReadWord(cpu, PackedCameraMemory.VisibleCameraYLow);
+        var firstBufferColumn = cpu.IoRegister(0xFF43) / 8;
+        var firstBufferRow = cpu.IoRegister(0xFF42) / 8;
+        var visibleColumns = 20 + (cpu.IoRegister(0xFF43) % 8 == 0 ? 0 : 1);
+        var visibleRows = 18 + (cpu.IoRegister(0xFF42) % 8 == 0 ? 0 : 1);
+
+        for (var screenRow = 0; screenRow < visibleRows; screenRow++)
+        {
+            var sourceRow = (cameraY + screenRow * 8) / 8 % world.Height;
+            var bufferRow = (firstBufferRow + screenRow) % 32;
+            for (var screenColumn = 0; screenColumn < visibleColumns; screenColumn++)
+            {
+                var sourceColumn = (cameraX + screenColumn * 8) / 8 % world.Width;
+                var bufferColumn = (firstBufferColumn + screenColumn) % 32;
+                var expected = checked((byte)world.WorldTileIds[sourceRow * world.Width + sourceColumn]);
+                var actual = cpu.Vram(checked((ushort)(0x9800 + bufferRow * 32 + bufferColumn)));
+                Assert.True(
+                    actual == expected,
+                    $"Runner background corruption on B-speed frame {frame} at screen ({screenColumn},{screenRow}), source ({sourceColumn},{sourceRow}), "
+                    + $"buffer ({bufferColumn},{bufferRow}): expected=0x{expected:X2}, actual=0x{actual:X2}.");
+            }
+        }
+    }
+
+    private static void AssertRunnerOam(
+        GameBoyTestCpu cpu,
+        GameBoyCompiledSpriteAsset asset,
+        int physicalFrame,
+        int playerX,
+        int playerY,
+        int animationFrame,
+        bool flipX,
+        int cameraX,
+        int cameraY)
+    {
+        Assert.InRange(animationFrame, 0, asset.FrameCount - 1);
+        Assert.False(flipX);
+        var expectedOam = new byte[160];
+        for (var sprite = 0; sprite < asset.Pieces.Count; sprite++)
+        {
+            var piece = asset.Pieces[sprite];
+            var offset = sprite * 4;
+            expectedOam[offset] = checked((byte)(playerY - cameraY + 16 + piece.YOffset));
+            expectedOam[offset + 1] = checked((byte)(playerX - cameraX + 8 + piece.XOffset));
+            expectedOam[offset + 2] = checked((byte)(asset.FirstTile + animationFrame * asset.TilesPerFrame + piece.TileOffset));
+        }
+
+        var actualOam = Enumerable.Range(0, 160)
+            .Select(offset => cpu.Oam(checked((ushort)(0xFE00 + offset))))
+            .ToArray();
+        Assert.True(
+            expectedOam.SequenceEqual(actualOam),
+            $"Runner OAM corruption on B-speed frame {physicalFrame}: player=({playerX},{playerY}) "
+            + $"camera=({cameraX},{cameraY}) animation={animationFrame}, "
+            + $"expected={Convert.ToHexString(expectedOam[..checked(asset.Pieces.Count * 4)])}, "
+            + $"actual={Convert.ToHexString(actualOam[..checked(asset.Pieces.Count * 4)])}.");
     }
 
     private static GameBoyTestCpu RunnerAtFirstPlatform()

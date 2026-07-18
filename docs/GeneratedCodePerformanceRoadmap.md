@@ -2,7 +2,8 @@
 
 Status: **active under [GitHub epic #387](https://github.com/SuperJMN/RetroSharp/issues/387)
 and [milestone 13](https://github.com/SuperJMN/RetroSharp/milestone/13); final
-GCP-3.2 closeout evidence reproduced on 2026-07-17.** GCP-0.1 through GCP-3.2
+GCP-3.2 closeout evidence reproduced on 2026-07-17 and the tracked Game Boy
+runner B-speed D4 gate restored by RPH-5 / #406 on 2026-07-18.** GCP-0.1 through GCP-3.2
 cover the reproducible baseline, CPU-work contract, generated-shape
 optimizations, initial executable CPU-work report, and joint exact-ROM cadence
 acceptance.
@@ -740,7 +741,7 @@ threshold changes rather than becoming a second independent contract.
 | Wide spawn cadence | Destination **D1** is closed by `wide-spawn-128` at 100/100 with no miss on both targets: GB hash `562c7b0556048c46077c07bb5eb8ca1776317cb79a7c834313801d7078cf39b0`, NES hash `9f47fa4e34b7241df418aa61cdddd6e4b008788961903a60daae7fbd9be192e0`. |
 | Active pool cadence | Destination **D2** is closed by `active-pool-8` at 100/100 with no miss on both targets: GB hash `f731be5c442001c173fea588489d1a216d9b02d8433fb64415a1efd5df98347c`, NES hash `b62fb39979cadcb34f7386eafb164352567a0a26d98e5037b79aba8e3ed60e14`. |
 | Spatial bound | Destination **D3** is closed by AF-5.10 / #244: wide layers use ROM candidate indexes, retain one-shot/retry/source-order semantics, and examine at most 32 plausible records in the 240-spawn reference windows. |
-| Existing ROM acceptance | Destination **D4** remains owned by the current runner, actor/projectile, audio-mixed-load, packed-world, safe-write, deterministic-generation, and full-solution gates; GCP-3.2 changes no public source spelling and regenerates tracked ROMs only when validation proves emitted bytes changed. |
+| Existing ROM acceptance | Destination **D4** remains owned by the current runner, actor/projectile, audio-mixed-load, packed-world, safe-write, deterministic-generation, and full-solution gates. RPH-5 / #406 adds the exact tracked Game Boy Right+B gate: SHA-256 `10c60b0df52754da88a50579b547e463108d9ea3d09fdd0c230ad752e552f12d`, 250/250 gameplay and audio ticks over 250 physical frames, X=430/Y=273, camera X=334, 41 exact packed publications, and zero forbidden/unsafe work. Its target-private plane is limited to worlds wider than 255 columns with 19-255 rows, and only those word-wide column commits move VBlank admission before validation; public source spelling and WorldPack bytes are unchanged. See `GameBoyRunnerCadenceAcceptance.md`. |
 | Static guard | Destination **D5** is closed by GCP-3.1 / #402: the internal build report exposes stable target/profile CPU-work windows, deterministic contributor ids, calibrated retained-sprite transfer detail, and explicit `incomplete` unknown coverage rather than a false whole-program WCET. |
 | Spawn and phase semantics | Destination **D6** is closed by #390, #244, #399, #394, #395, and #404 together: spawn columns and candidate indexes remain immutable ROM data, actor phases remain all-actors-per-phase, retained-OAM publication stays source-order accurate, and the GCP-3.2 GB row shortcut uses only static collision-row facts. |
 
