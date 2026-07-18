@@ -241,7 +241,11 @@ internal static class GameBoyRomBuilder
         IReadOnlyList<GameBoyRuntimeUserVariable> userVariables)
     {
         var segments = BuildInlineProgramSegments(builder, program, programLength, inlineWorldPack);
-        return CreateBuildReport("gb-rom-only-current", RomOnlySize, segments, BuildFixedSymbols(builder), userVariables, program);
+        var framePlan = GameBoyFramePlan.Create(
+            program,
+            GameBoyRomLayout.RomOnly,
+            inlineWorldPack is not null && ProgramUsesCameraStreaming(program));
+        return CreateBuildReport(framePlan, RomOnlySize, segments, BuildFixedSymbols(builder), userVariables, program);
     }
 
     private static GameBoyRomBuildReport BuildBankedReport(
@@ -291,7 +295,11 @@ internal static class GameBoyRomBuilder
             AddPhysicalSegments(segments, $"sfx:{placement.Name}", placement.Bank * BankSize, placement.Data.Length);
         }
 
-        return CreateBuildReport("gb-simple-mbc1-current", layout.RomSize, segments, BuildFixedSymbols(builder), userVariables, program);
+        var framePlan = GameBoyFramePlan.Create(
+            program,
+            layout,
+            packedWorldBytes is not null && ProgramUsesCameraStreaming(program));
+        return CreateBuildReport(framePlan, layout.RomSize, segments, BuildFixedSymbols(builder), userVariables, program);
     }
 
     private static IReadOnlyList<GameBoyRomBuildSegment> BuildInlineProgramSegments(
@@ -394,7 +402,7 @@ internal static class GameBoyRomBuilder
     }
 
     private static GameBoyRomBuildReport CreateBuildReport(
-        string selectedProfile,
+        GameBoyFramePlan framePlan,
         int romSize,
         IEnumerable<GameBoyRomBuildSegment> segments,
         IReadOnlyDictionary<string, ushort> fixedSymbols,
@@ -407,13 +415,13 @@ internal static class GameBoyRomBuilder
             .ToArray();
         var occupiedBanks = ordered.Select(segment => segment.Bank).Distinct().Order().ToArray();
         return new GameBoyRomBuildReport(
-            selectedProfile,
+            framePlan.CartridgeProfile,
             romSize,
             ordered,
             occupiedBanks,
             fixedSymbols,
             userVariables,
-            SdkCpuWorkReportFactory.ForGameBoy(selectedProfile, program.SdkOperations));
+            framePlan.CreateCpuWorkReport(program.SdkOperations));
     }
 
     private static IReadOnlyDictionary<string, ushort> BuildFixedSymbols(GbBuilder builder)
@@ -505,6 +513,8 @@ internal static class GameBoyRomBuilder
                 packedWorldBytes,
                 enablePackedCameraCache,
                 enableDiagonalVisualCache);
+        var usesPackedCameraRuntime = worldPackRuntime is not null && ProgramUsesCameraStreaming(program);
+        var framePlan = GameBoyFramePlan.Create(program, layout, usesPackedCameraRuntime);
         var builder = new GbBuilder();
         foreach (var placement in layout.ReadOnlyDataPlacements.Values)
         {
@@ -528,8 +538,7 @@ internal static class GameBoyRomBuilder
 
         builder.Emit(0xAF);                         // XOR A
         builder.Emit(0xE0, 0x40);                   // LDH ($40),A
-        var usesShadowOam = program.SdkOperations.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
-        if (usesShadowOam)
+        if (framePlan.UsesRetainedOam)
         {
             EmitInstallOamDmaRoutine(builder);
         }
@@ -559,7 +568,7 @@ internal static class GameBoyRomBuilder
         }
 
         EmitClearOam(builder, "clear_oam");
-        if (usesShadowOam)
+        if (framePlan.UsesRetainedOam)
         {
             EmitClearOamShadow(builder, "clear_oam_shadow");
         }
@@ -571,13 +580,12 @@ internal static class GameBoyRomBuilder
             builder.Emit(0xE0, 0x40);               // LDH ($40),A
         }
 
-        var usesPackedCameraRuntime = worldPackRuntime is not null && ProgramUsesCameraStreaming(program);
         var runtime = new GameBoyRuntimeCompiler(
             builder,
             program,
             layout,
             worldPackRuntime?.Layout,
-            usesPackedCameraRuntime);
+            framePlan);
         var usesMbc1Foundation = layout.ProgramTailBankCount > 0 || layout.UsesBankedReadOnlyData || layout.UsesBankedMusic || layout.UsesBankedWorldPack;
         runtime.EmitProgramBankInitialization(usesMbc1Foundation);
         if (worldPackRuntime is not null)

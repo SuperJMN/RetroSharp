@@ -51,6 +51,12 @@ calibration-debt table live in
 GCP-3.1 exposes the first executable projection on the internal ROM build
 report as `CpuWork`: `target=gb`, profile equal to the selected cartridge
 profile, unit `t-cycles`, frame window `70,224`, and status `incomplete`.
+The target-private `GameBoyFramePlan` is selected before emission and is the
+single authority for retained OAM publication, packed-camera staging, and CPU
+window projection. The report keeps the whole-frame compatibility fields and
+adds ordered `frame` (70,224 T-cycles) and `video-safe` (4,560 T-cycles)
+windows. The narrower window reports only work assigned there by that plan;
+unknown coverage remains `incomplete` rather than fabricated headroom.
 Reachable streams that use `Sprite.Draw(...)` add `sprite.publish.transfer` as
 the numeric `640..640` contributor; programs with no retained sprite
 publication do not claim that transfer.

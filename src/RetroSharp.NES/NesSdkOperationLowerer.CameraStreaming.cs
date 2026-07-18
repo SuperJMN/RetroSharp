@@ -25,8 +25,10 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
         EmitSdkByteExpressionToA(operation.SourceColumn);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
-        EmitWaitFrame();
-        EmitStreamColumnFromAddresses(new NesCameraConfig(worldMap.Width, worldMap.Height, y, height, UseFourScreenNametables: false));
+        frameScheduler.EmitVideoSafeTransfer(
+            new NesVideoSafeTransfer.StreamColumn(
+                new NesCameraConfig(worldMap.Width, worldMap.Height, y, height, UseFourScreenNametables: false)),
+            this);
     }
 
     internal void EmitStreamMapRow(Sdk2DOperation.StreamMapRow operation)
@@ -51,7 +53,49 @@ internal sealed partial class NesSdkOperationLowerer
             NesTarget.Capabilities,
             new Sdk2DOperation.StreamMapRow(targetRow, sourceRow, x, width));
 
-        EmitWaitFrame();
+        frameScheduler.EmitVideoSafeTransfer(
+            new NesVideoSafeTransfer.StreamRow(targetRow, sourceRow, x, width),
+            this);
+    }
+
+    internal void EmitVideoSafeTransfer(NesVideoSafeTransfer transfer)
+    {
+        switch (transfer)
+        {
+            case NesVideoSafeTransfer.StreamColumn column:
+                EmitStreamColumnFromAddresses(column.Config);
+                break;
+            case NesVideoSafeTransfer.StreamRow row:
+                EmitStreamMapRowTransfer(row.TargetRow, row.SourceRow, row.X, row.Width);
+                break;
+            case NesVideoSafeTransfer.PendingColumn column:
+                EmitPendingCameraColumn(column.Config);
+                break;
+            case NesVideoSafeTransfer.BeginPackedCommit:
+                EmitBeginPackedCameraCommit();
+                break;
+            case NesVideoSafeTransfer.PublishPackedColumn:
+                EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Column);
+                break;
+            case NesVideoSafeTransfer.PublishPackedRow:
+                EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Row);
+                break;
+            case NesVideoSafeTransfer.StagedRowTiles rowTiles:
+                EmitStagedCameraRowTiles(rowTiles.Config, rowTiles.TilesPerPhase);
+                break;
+            case NesVideoSafeTransfer.StagedRowAttributes rowAttributes:
+                EmitStagedCameraRowAttributes(rowAttributes.Config);
+                break;
+            case NesVideoSafeTransfer.RestoreCameraScroll restore:
+                EmitRestoreCameraScroll(restore.Config);
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported NES video-safe transfer {transfer.GetType().Name}.");
+        }
+    }
+
+    private void EmitStreamMapRowTransfer(int targetRow, int sourceRow, int x, int width)
+    {
         builder.LoadAAbsolute(0x2002);              // reset PPU address latch
         var remaining = width;
         var segmentX = x;
@@ -64,16 +108,6 @@ internal sealed partial class NesSdkOperationLowerer
         }
 
         EmitStreamMapRowAttributes(targetRow, x, width);
-    }
-
-    private static bool ShouldStreamColumnsForCamera(NesCameraConfig config)
-    {
-        return config.UseFourScreenNametables ? config.MapWidth > 64 : config.MapWidth > 32;
-    }
-
-    private static bool ShouldStreamRowsForCamera(NesCameraConfig config)
-    {
-        return config.UseFourScreenNametables && config.MapHeight > 60;
     }
 
     private void EmitTrackCameraXPosition(NesCameraConfig config)
@@ -220,7 +254,7 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitTrackCameraYPosition(NesCameraConfig config)
     {
-        var streamRows = ShouldStreamRowsForCamera(config);
+        var streamRows = config.CanStreamRows;
         var usesWordCameraY = Math.Max(0, (config.MapHeight - NesTarget.Capabilities.ScreenTiles.Height) * 8) > byte.MaxValue;
         var moveDownLabel = builder.CreateLabel("nes_camera_move_down");
         var moveUpLabel = builder.CreateLabel("nes_camera_move_up");

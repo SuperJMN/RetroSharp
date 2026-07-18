@@ -8,12 +8,7 @@ using RetroSharp.Parser;
 // and storage primitives that raw compatibility paths also require.
 internal sealed partial class NesSdkOperationLowerer
 {
-    private const byte CameraWalkMaxStepsPerFrame = 8;
     private const int BottomOverscanInsetPixels = 8;
-    private const ushort OamDmaAddress = 0x4014;
-    private const byte PendingStreamNone = 0;
-    private const byte PendingStreamColumn = 1;
-    private const byte PendingStreamRow = 2;
     private const string PackedCollisionAtScratchSubroutineLabel = "nes_packed_collision_at_scratch";
     private const string PackedCollisionFlagsSubroutineLabel = "nes_packed_collision_flags";
     private const string PackedWideSourceColumnSubroutineLabel = "nes_packed_wide_source_column";
@@ -21,11 +16,9 @@ internal sealed partial class NesSdkOperationLowerer
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly NesSdkLoweringContext context;
+    private readonly NesPhysicalFrameScheduler frameScheduler;
     private readonly bool useFourScreenNametables;
     private readonly bool usePackedCamera;
-    private readonly bool useSequentialOamPublication;
-    private readonly bool usesRetainedOam;
-    private readonly int retainedOamByteCount;
     private int nextHardwareSprite;
     private bool packedCollisionAtScratchSubroutineReferenced;
     private bool packedCollisionFlagsSubroutineReferenced;
@@ -41,19 +34,32 @@ internal sealed partial class NesSdkOperationLowerer
         bool useFourScreenNametables,
         bool usePackedCamera,
         bool useSequentialOamPublication)
+        : this(
+            builder,
+            program,
+            context,
+            NesPhysicalFrameScheduler.Create(
+                builder,
+                program,
+                useFourScreenNametables,
+                usePackedCamera,
+                useSequentialOamPublication))
     {
+    }
+
+    internal NesSdkOperationLowerer(
+        PrgBuilder builder,
+        NesVideoProgram program,
+        NesSdkLoweringContext context,
+        NesPhysicalFrameScheduler frameScheduler)
+    {
+        ArgumentNullException.ThrowIfNull(frameScheduler);
         this.builder = builder;
         this.program = program;
         this.context = context;
-        this.useFourScreenNametables = useFourScreenNametables;
-        this.usePackedCamera = usePackedCamera;
-        this.useSequentialOamPublication = useSequentialOamPublication;
-        usesRetainedOam = program.SdkOperationStream.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
-        retainedOamByteCount = Math.Min(
-            256,
-            program.SdkOperationStream
-                .OfType<Sdk2DOperation.DrawLogicalSprite>()
-                .Sum(operation => program.SpriteAssets[operation.SpriteId].Pieces.Count * 4));
+        this.frameScheduler = frameScheduler;
+        useFourScreenNametables = frameScheduler.UseFourScreenNametables;
+        usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
     }
 
     public void Emit(Sdk2DOperation operation)
@@ -61,7 +67,7 @@ internal sealed partial class NesSdkOperationLowerer
         switch (operation)
         {
             case Sdk2DOperation.WaitFrame:
-                EmitWaitFrame(applyPendingCameraScroll: true);
+                frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.Gameplay, this, cameraConfig);
                 break;
             case Sdk2DOperation.PollInput:
                 EmitPollInput();
@@ -97,13 +103,6 @@ internal sealed partial class NesSdkOperationLowerer
                 throw new NotSupportedException($"NES SDK lowering does not support {operation.GetType().Name} yet.");
         }
     }
-
-    private readonly record struct NesCameraConfig(
-        int MapWidth,
-        int MapHeight,
-        int StreamY,
-        int StreamHeight,
-        bool UseFourScreenNametables);
 
     private readonly record struct RuntimeIndexedFieldCursor(string BaseName, SdkByteExpression Index);
 

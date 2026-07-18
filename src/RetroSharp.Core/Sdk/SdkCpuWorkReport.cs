@@ -44,6 +44,12 @@ public static class SdkCpuWorkStatuses
     public const string Incomplete = "incomplete";
 }
 
+public static class SdkCpuWorkWindowIds
+{
+    public const string Frame = "frame";
+    public const string VideoSafe = "video-safe";
+}
+
 public sealed record SdkCpuWorkContributor(
     string Id,
     string Category,
@@ -101,6 +107,45 @@ public sealed record SdkCpuWorkContributor(
 
 public sealed record SdkCpuWorkUnknown(string Id, string Reason);
 
+public sealed record SdkCpuWorkWindowReport(
+    string Id,
+    long Capacity,
+    long KnownLower,
+    long? KnownUpper,
+    string Status,
+    IReadOnlyList<SdkCpuWorkContributor> Contributors,
+    IReadOnlyList<SdkCpuWorkUnknown> Unknowns)
+{
+    public static SdkCpuWorkWindowReport Create(
+        string id,
+        long capacity,
+        IEnumerable<SdkCpuWorkContributor> contributors,
+        IEnumerable<SdkCpuWorkUnknown> unknowns)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        if (capacity < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "CPU-work window capacity must be non-negative.");
+        }
+
+        var orderedContributors = contributors.ToArray();
+        var orderedUnknowns = unknowns.ToArray();
+        var (knownLower, knownUpper, status) = SdkCpuWorkRangeComposition.Compose(
+            capacity,
+            orderedContributors,
+            orderedUnknowns);
+
+        return new SdkCpuWorkWindowReport(
+            id,
+            capacity,
+            knownLower,
+            knownUpper,
+            status,
+            orderedContributors,
+            orderedUnknowns);
+    }
+}
+
 public sealed record SdkCpuWorkReport(
     string Target,
     string Profile,
@@ -112,13 +157,16 @@ public sealed record SdkCpuWorkReport(
     IReadOnlyList<SdkCpuWorkContributor> Contributors,
     IReadOnlyList<SdkCpuWorkUnknown> Unknowns)
 {
+    public IReadOnlyList<SdkCpuWorkWindowReport> Windows { get; init; } = [];
+
     public static SdkCpuWorkReport Create(
         string target,
         string profile,
         string unit,
         long frameWindow,
         IEnumerable<SdkCpuWorkContributor> contributors,
-        IEnumerable<SdkCpuWorkUnknown> unknowns)
+        IEnumerable<SdkCpuWorkUnknown> unknowns,
+        IEnumerable<SdkCpuWorkWindowReport>? windows = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(profile);
@@ -131,9 +179,10 @@ public sealed record SdkCpuWorkReport(
         var orderedContributors = contributors.ToArray();
         var orderedUnknowns = unknowns.ToArray();
 
-        var knownLower = SumLower(orderedContributors);
-        var knownUpper = SumUpper(orderedContributors);
-        var status = Classify(frameWindow, knownLower, knownUpper, orderedUnknowns);
+        var (knownLower, knownUpper, status) = SdkCpuWorkRangeComposition.Compose(
+            frameWindow,
+            orderedContributors,
+            orderedUnknowns);
 
         return new SdkCpuWorkReport(
             target,
@@ -144,7 +193,23 @@ public sealed record SdkCpuWorkReport(
             knownUpper,
             status,
             orderedContributors,
-            orderedUnknowns);
+            orderedUnknowns)
+        {
+            Windows = windows?.ToArray() ?? [],
+        };
+    }
+}
+
+internal static class SdkCpuWorkRangeComposition
+{
+    internal static (long KnownLower, long? KnownUpper, string Status) Compose(
+        long capacity,
+        IReadOnlyCollection<SdkCpuWorkContributor> contributors,
+        IReadOnlyCollection<SdkCpuWorkUnknown> unknowns)
+    {
+        var knownLower = SumLower(contributors);
+        var knownUpper = SumUpper(contributors);
+        return (knownLower, knownUpper, Classify(capacity, knownLower, knownUpper, unknowns));
     }
 
     private static long SumLower(IEnumerable<SdkCpuWorkContributor> contributors)
@@ -175,19 +240,19 @@ public sealed record SdkCpuWorkReport(
     }
 
     private static string Classify(
-        long frameWindow,
+        long capacity,
         long knownLower,
         long? knownUpper,
         IReadOnlyCollection<SdkCpuWorkUnknown> unknowns)
     {
-        if (knownLower > frameWindow)
+        if (knownLower > capacity)
         {
             return SdkCpuWorkStatuses.Exceeds;
         }
 
         if (knownUpper is { } finiteUpper)
         {
-            if (finiteUpper > frameWindow)
+            if (finiteUpper > capacity)
             {
                 return SdkCpuWorkStatuses.Crosses;
             }
@@ -231,32 +296,53 @@ public static class SdkCpuWorkReportFactory
     public static SdkCpuWorkReport ForGameBoy(
         string profile,
         IEnumerable<Sdk2DOperation>? operations = null) =>
-        SdkCpuWorkReport.Create(
+        CreateTargetReport(
             target: "gb",
             profile,
             unit: "t-cycles",
             frameWindow: 70_224,
-            contributors: RetainedOamContributors(
+            RetainedOamContributors(
                 operations,
                 unitLower: 640,
                 unitUpper: 640,
-                calibration: "GameBoyTestCpu.SpriteDma/v1"),
-            unknowns: InitialUnknownCoverage);
+                calibration: "GameBoyTestCpu.SpriteDma/v1"));
 
     public static SdkCpuWorkReport ForNes(
         string profile,
         IEnumerable<Sdk2DOperation>? operations = null) =>
-        SdkCpuWorkReport.Create(
+        CreateTargetReport(
             target: "nes",
             profile,
             unit: "cpu-cycles",
             frameWindow: 29_780,
-            contributors: RetainedOamContributors(
+            RetainedOamContributors(
                 operations,
                 unitLower: 513,
                 unitUpper: 514,
-                calibration: "NesTestCpu.SpriteDma/v1"),
-            unknowns: InitialUnknownCoverage);
+                calibration: "NesTestCpu.SpriteDma/v1"));
+
+    private static SdkCpuWorkReport CreateTargetReport(
+        string target,
+        string profile,
+        string unit,
+        long frameWindow,
+        IReadOnlyList<SdkCpuWorkContributor> contributors)
+    {
+        var frame = SdkCpuWorkWindowReport.Create(
+            SdkCpuWorkWindowIds.Frame,
+            frameWindow,
+            contributors,
+            InitialUnknownCoverage);
+
+        return SdkCpuWorkReport.Create(
+            target,
+            profile,
+            unit,
+            frameWindow,
+            contributors,
+            InitialUnknownCoverage,
+            [frame]);
+    }
 
     private static IReadOnlyList<SdkCpuWorkContributor> RetainedOamContributors(
         IEnumerable<Sdk2DOperation>? operations,

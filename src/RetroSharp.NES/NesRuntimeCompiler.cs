@@ -43,13 +43,34 @@ internal sealed partial class NesRuntimeCompiler
         bool useFourScreenNametables = false,
         bool usePackedCamera = false,
         bool useSequentialOamPublication = false)
+        : this(
+            builder,
+            program,
+            longForLoopIds,
+            longWhileLoopIds,
+            NesPhysicalFrameScheduler.Create(
+                builder,
+                program,
+                useFourScreenNametables,
+                usePackedCamera,
+                useSequentialOamPublication))
     {
+    }
+
+    internal NesRuntimeCompiler(
+        PrgBuilder builder,
+        NesVideoProgram program,
+        IReadOnlySet<int>? longForLoopIds,
+        IReadOnlySet<int>? longWhileLoopIds,
+        NesPhysicalFrameScheduler frameScheduler)
+    {
+        ArgumentNullException.ThrowIfNull(frameScheduler);
         NesRuntimeMemoryLayout.Validate();
         this.builder = builder;
         this.program = program;
         this.longForLoopIds = longForLoopIds ?? new HashSet<int>();
         this.longWhileLoopIds = longWhileLoopIds ?? new HashSet<int>();
-        this.usePackedCamera = usePackedCamera;
+        usePackedCamera = frameScheduler.UsesPackedCameraRuntime;
         sdkOperations = new NesSdkStreamReader(program.SdkOperationStream);
         sdkOperationLowerer = new NesSdkOperationLowerer(
             builder,
@@ -61,9 +82,7 @@ internal sealed partial class NesRuntimeCompiler
                 VariableAddress,
                 RuntimeIndexedMemberBaseAddress,
                 EmitRuntimeMemberIndexToX),
-            useFourScreenNametables,
-            usePackedCamera,
-            useSequentialOamPublication);
+            frameScheduler);
     }
 
     public void EmitInitialization()

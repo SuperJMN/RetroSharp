@@ -244,7 +244,7 @@ internal sealed partial class GameBoySdkOperationLowerer
         var moveNegativeLabel = builder.CreateLabel(endLabelName + "_negative");
         var endLabel = builder.CreateLabel(endLabelName);
 
-        builder.LoadAImmediate(CameraSetPositionMaxStepsPerFrame);
+        builder.LoadAImmediate(framePlan.MaximumCameraWalkStepsPerFrame);
         builder.StoreA(GameBoyRuntimeMemoryLayout.Camera.SetPositionStepsRemaining);
 
         builder.Label(loopLabel);
@@ -659,7 +659,7 @@ internal sealed partial class GameBoySdkOperationLowerer
 
     private void EmitPackedDiagonalPreparationAllowed(byte axis)
     {
-        if (!SerializePackedDiagonalPreparation || !ProgramQueuesDiagonalStreaming())
+        if (!framePlan.SerializePackedDiagonalPreparation || !ProgramQueuesDiagonalStreaming())
         {
             builder.LoadAImmediate(1);
             return;
@@ -686,7 +686,7 @@ internal sealed partial class GameBoySdkOperationLowerer
 
     private void EmitRecordPackedDiagonalPreparedAxis(byte axis)
     {
-        if (!SerializePackedDiagonalPreparation || !ProgramQueuesDiagonalStreaming())
+        if (!framePlan.SerializePackedDiagonalPreparation || !ProgramQueuesDiagonalStreaming())
         {
             return;
         }

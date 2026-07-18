@@ -25,7 +25,6 @@ internal static class NesRomBuilder
     internal const string WorldPackCommitEdgeLabel = "worldpack_commit_edge";
     internal const string WorldPackReleaseReversedEdgeLabel = "worldpack_release_reversed_edge";
     internal const string WorldPackAttributesLabel = "worldpack_attributes";
-    private const string FrameSignalNmiHandlerLabel = "nes_frame_signal_nmi_handler";
     private const string Mmc3IrqHandlerLabel = "mmc3_irq_handler";
 
     public static byte[] Build(
@@ -255,6 +254,7 @@ internal static class NesRomBuilder
             EmitDpcmSampleBlocks(builder, fixedDpcmLayout.Placements);
         }
         var usePackedCamera = worldPackRuntime is not null && program.UsesCameraRuntime;
+        var frameScheduler = NesPhysicalFrameScheduler.Create(builder, program, layout, usePackedCamera);
         var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
         if (layout.EmitMmc3Foundation)
         {
@@ -298,9 +298,7 @@ internal static class NesRomBuilder
             program,
             longForLoopIds,
             longWhileLoopIds,
-            layout.UseFourScreenNametables,
-            usePackedCamera,
-            useSequentialOamPublication: layout.EmitMmc3Foundation && usePackedCamera);
+            frameScheduler);
         runtimeCompiler.EmitInitialization();
         if (worldPackRuntime is not null)
         {
@@ -332,7 +330,7 @@ internal static class NesRomBuilder
                 worldPackRuntime,
                 worldPackPlacement,
                 worldPackProbe,
-                program.UsesCameraRuntime);
+                program.UsesCameraRuntime ? frameScheduler : null);
         }
         if (layout.EmitMmc3Foundation)
         {
@@ -340,7 +338,7 @@ internal static class NesRomBuilder
         }
         if (layout.EmitMmc3Foundation || usePackedCamera)
         {
-            EmitFrameSignalNmiHandler(builder);
+            frameScheduler.EmitFrameSignalNmiHandler();
         }
         if (layout.EmitMmc3Foundation)
         {
@@ -446,7 +444,7 @@ internal static class NesRomBuilder
 
         code.CopyTo(prg, layout.FixedRuntimePhysicalOffset);
         var nmiVector = layout.EmitMmc3Foundation || usePackedCamera
-            ? builder.AddressOfLabel(FrameSignalNmiHandlerLabel)
+            ? builder.AddressOfLabel(NesPhysicalFrameScheduler.FrameSignalNmiHandlerLabel)
             : layout.FixedRuntimeCpuBaseAddress;
         var irqVector = layout.EmitMmc3Foundation
             ? builder.AddressOfLabel(Mmc3IrqHandlerLabel)
@@ -500,7 +498,9 @@ internal static class NesRomBuilder
             dpcmPlacements,
             fixedPayloadBytes,
             fixedSymbols,
-            runtimeCompiler.UserVariables);
+            runtimeCompiler.UserVariables,
+            frameScheduler.SelectedProfile,
+            frameScheduler.CreateCpuWorkReport(program.SdkOperationStream));
     }
 
     private static void EmitGeneratedRomTables(PrgBuilder builder, NesVideoProgram program)
@@ -686,9 +686,8 @@ internal static class NesRomBuilder
             0xFFFA);
         var orderedSegments = segments.OrderBy(segment => segment.PhysicalStart).ToArray();
         ValidateReportedSegments(layout, orderedSegments);
-        var selectedProfile = layout.EmitMmc3Foundation ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current";
         return new NesRomBuildReport(
-            selectedProfile,
+            prgBuild.FrameProfile,
             layout.PrgRomSize,
             layout.ChrRomSize,
             prgBuild.FixedPayloadBytes,
@@ -699,7 +698,7 @@ internal static class NesRomBuilder
             prgBuild.FixedSymbols,
             prgBuild.UserVariables,
             DescribeRuntimeRegions(worldPackRuntime),
-            SdkCpuWorkReportFactory.ForNes(selectedProfile, program.SdkOperationStream));
+            prgBuild.FrameCpuWork);
     }
 
     private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(
@@ -969,21 +968,6 @@ internal static class NesRomBuilder
     {
         EmitMmc3BankHelper(builder, "mmc3_select_r6", register: 6, NesRuntimeMemoryLayout.Banking.Mmc3R6Shadow);
         EmitMmc3BankHelper(builder, "mmc3_select_r7", register: 7, NesRuntimeMemoryLayout.Banking.Mmc3R7Shadow);
-    }
-
-    private static void EmitFrameSignalNmiHandler(PrgBuilder builder)
-    {
-        builder.Label(FrameSignalNmiHandlerLabel);
-        builder.PushA();
-        var frameReady = builder.CreateLabel("nes_frame_signal_nmi_frame_ready");
-        builder.IncrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow);
-        builder.BranchRelative(0xD0, frameReady);
-        builder.IncrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh);
-        builder.Label(frameReady);
-        builder.LoadAImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
-        builder.PullA();
-        builder.Emit(0x40);                          // RTI; fixed-bank, bank-neutral frame signal only.
     }
 
     private static void EmitMmc3IrqHandler(PrgBuilder builder)

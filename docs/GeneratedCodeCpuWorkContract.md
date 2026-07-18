@@ -6,8 +6,9 @@ report projection by GCP-3.1 / GitHub #402 on 2026-07-17.**
 This document fixes the v1 contract for classifying compiler-known CPU work on
 the Game Boy and NES targets. GCP-3.1 implements the first build-report
 projection of the model as `SdkCpuWorkReport`, attached to the internal Game
-Boy and NES ROM build reports. The initial target reports expose stable unknown
-coverage, target/profile windows, and the policy status; when the reachable SDK
+Boy and NES ROM build reports. The target reports expose stable unknown
+coverage, a backward-compatible whole-frame projection, ordered physical
+windows, and the policy status; when the reachable SDK
 stream uses retained sprite publication, they also expose the calibrated
 `sprite.publish.transfer` detail. They intentionally stay `incomplete` until
 remaining descriptors are calibrated, so they do not claim whole-program
@@ -71,6 +72,16 @@ The selected cartridge/runtime profile is part of every calibration key.
 Mapper/MBC window switches, fixed-bank trampolines, sequential versus DMA OAM
 publication, and packed versus raw world paths may produce different bounds
 for the same stable contributor id.
+
+The accepted physical-frame window is the compatibility aggregate, not the
+only legal interval. Each target physical frame policy may additionally declare
+ordered windows such as `video-safe`, with a target-owned calibrated capacity
+and contributor set. Shared code owns the ids, checked range arithmetic, and
+status vocabulary; it does not invent a cross-target VBlank allowance. The same
+work may appear in a whole-frame compatibility projection and in its physical
+window projection because those are alternate views, never additive siblings.
+On NES, `NesPhysicalFrameScheduler` is the only production seam that consumes
+that policy for both emitted work and this projection.
 
 ## 3. Cost representation
 
@@ -196,7 +207,7 @@ exceeds the frame window, so current production samples compile with status
 RetroSharp source syntax for cycle counts and no public CLI cycle flag; the
 report is compiler/tooling metadata.
 
-Let `window` be section 2's target value and let `known-lower` and
+Let `window` be the capacity of the projection being classified and let `known-lower` and
 `known-upper` be the composed numeric subtotal of calibrated coverage. An
 unknown remainder is excluded, but an accepted numeric subcomponent of an
 incomplete parent is projected exactly once into that known subtotal. Thus the
@@ -229,6 +240,8 @@ status
 contributors[] { id, category, basis, count, unit-lower, unit-upper,
                  total-lower, total-upper, calibration, detail-of }
 unknown[]      { id, reason }
+windows[]      { id, capacity, known-lower, known-upper, status,
+                 contributors[], unknown[] }
 ```
 
 An `unknown[]` entry may reference a contributor that still has a numeric
@@ -239,15 +252,27 @@ known range, and the contributors that make the range cross/exceed it. The
 report is tooling/compiler metadata only; there is no public RetroSharp source
 syntax for cycles.
 
+`frame-window`, the top-level known range/status, contributors, and unknowns
+remain the stable whole-frame compatibility view. `windows[]` is additive and
+ordered by the selected target plan. `GCP1001` and `GCP1002` apply independently
+to every accepted window using the same lower-bound and crossing rules; an
+unknown window remains `incomplete` and never claims physical headroom.
+
 The initial GCP-3.1 report uses that schema directly. Game Boy reports
 `target=gb`, unit `t-cycles`, and frame window `70,224`; NES reports
 `target=nes`, unit `cpu-cycles`, and frame window `29,780`. If the reachable
 SDK stream can publish retained sprites, Game Boy adds
 `sprite.publish.transfer` at `640..640` below `sprite.publish`, while NES adds
-the same stable contributor at `513..514`. Programs with no retained sprite
-publication do not claim that transfer. Both reports keep the rest of section
-5's generated, SDK-runtime, target-runtime, and user-loop coverage as explicit
-`unknown[]` entries.
+the same stable contributor at `513..514` for DMA profiles. The NES MMC3
+sequential profile instead projects the complete root `sprite.publish` as the
+exact emitted loop `13 * retained-bytes + 7` (1,983 cycles at the accepted
+152-byte maximum), removes the inapplicable DMA detail, and closes that
+profile's publication unknown. Programs with no retained sprite publication do
+not claim either cost. Both reports currently publish the
+whole-frame view again as the single `frame` entry in `windows[]`; target frame
+plans add narrower physical windows only with calibrated target evidence. Both
+reports keep the rest of section 5's generated, SDK-runtime, target-runtime,
+and user-loop coverage as explicit `unknown[]` entries.
 
 ## 7. Current calibration evidence
 

@@ -27,17 +27,19 @@ public sealed class NesSdkFrameInputLoweringTests
         return new NesSdkOperationLowerer(
             builder,
             program,
-            new NesSdkLoweringContext(
-                _ => throw UnusedContext(),
-                NoSourceConstant,
-                _ => throw UnusedContext(),
-                _ => throw UnusedContext(),
-                (_, _) => throw UnusedContext(),
-                (_, _) => throw UnusedContext()),
+            UnusedLoweringContext(),
             useFourScreenNametables: false,
             usePackedCamera: false,
             useSequentialOamPublication: false);
     }
+
+    private static NesSdkLoweringContext UnusedLoweringContext() => new(
+        _ => throw UnusedContext(),
+        NoSourceConstant,
+        _ => throw UnusedContext(),
+        _ => throw UnusedContext(),
+        (_, _) => throw UnusedContext(),
+        (_, _) => throw UnusedContext());
 
     private static bool NoSourceConstant(ExpressionSyntax _, out int value)
     {

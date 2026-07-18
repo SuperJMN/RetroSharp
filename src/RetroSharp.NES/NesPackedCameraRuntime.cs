@@ -44,10 +44,14 @@ internal static class NesPackedCameraRuntime
 
 internal static class NesPackedCameraRuntimeEmitter
 {
-    internal static void Emit(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    internal static void Emit(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        int rowTileWritesPerPhase,
+        int rowAttributePhase)
     {
         EmitPrepareEdge(builder, plan);
-        EmitCommitEdge(builder, plan);
+        EmitCommitEdge(builder, plan, rowTileWritesPerPhase, rowAttributePhase);
         EmitReleaseReversedEdges(builder);
     }
 
@@ -78,7 +82,11 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(done);
     }
 
-    private static void EmitCommitEdge(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    private static void EmitCommitEdge(
+        PrgBuilder builder,
+        NesWorldPackRuntimePlan plan,
+        int rowTileWritesPerPhase,
+        int rowAttributePhase)
     {
         var invalid = builder.CreateLabel("nes_packed_commit_invalid");
         var column = builder.CreateLabel("nes_packed_commit_column");
@@ -281,7 +289,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.CommitPhaseOffset);
         builder.Label(rowPayloadReady);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.RowPhase);
-        builder.CompareImmediate(4);
+        builder.CompareImmediate(rowAttributePhase);
         builder.JumpIf(0xF0, rowAttributes);
 
         builder.ShiftLeftA();
@@ -292,7 +300,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart);
         builder.AndImmediate(0x3F);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.LoadAImmediate(8);
+        builder.LoadAImmediate(rowTileWritesPerPhase);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
 
         builder.Label(rowTileLoop);

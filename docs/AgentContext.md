@@ -7,6 +7,18 @@ This document preserves project knowledge that previously lived only in agent me
 
 ## Recent Baseline
 
+- NES physical-frame execution is centralized behind
+  `NesPhysicalFrameScheduler`. `NesFramePlan` remains validated immutable
+  policy, but production ROM/runtime/lowerer code cannot consume it directly.
+  The scheduler owns runtime NMI/VBlank admission, retained OAM publication, explicit
+  video-safe row/column commands, packed row phases, and the matching CPU-work
+  projection. It also owns raw column/row arbitration and packed axis
+  publication order. Raw four-screen and packed rows share one finite staging
+  contract, and a deadline that disagrees with its emitted phases is rejected.
+  Lowerer partials retain target byte mechanics only.
+  Scheduler and architecture tests guard the seam; representative runner, audio-mixed-load,
+  and full hscroll NES outputs must remain byte-identical for architecture-only
+  changes.
 - RPH-5 / #406 restores the exact tracked Game Boy runner's sustained Right+B
   cadence over complete `stage1.tmj`: SHA-256
   `10c60b0df52754da88a50579b547e463108d9ea3d09fdd0c230ad752e552f12d`
@@ -55,8 +67,8 @@ This document preserves project knowledge that previously lived only in agent me
   Game Boy and four NES focused lowering suites declare typed test-ownership
   metadata instead of method-name/file-fragment allowlists. Shared reflection
   helpers own executable-member enumeration and IL traversal. Exact paths remain
-  only for the five documented physical navigation roots and explicit ROM-
-  builder non-owner path per target. Each root is bound to compiled owner types;
+  only for the physical navigation roots documented at that point and each
+  explicit ROM-builder non-owner path. Each root is bound to compiled owner types;
   runtime feature-partial and test method names are deliberately free to change.
 - AIN-11 / #377 finishes target SDK-lowering test locality. A regression belongs
   in a focused lowering suite when its primary observable is collected SDK

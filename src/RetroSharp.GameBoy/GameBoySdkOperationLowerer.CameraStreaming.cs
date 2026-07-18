@@ -6,8 +6,6 @@ using RetroSharp.Parser;
 
 internal sealed partial class GameBoySdkOperationLowerer
 {
-    private const bool SerializePackedDiagonalPreparation = true;
-    private const byte CameraSetPositionMaxStepsPerFrame = 16;
     private const byte PendingStreamNone = 0;
     private const byte PendingStreamColumn = 1;
     private const byte PendingStreamRow = 2;
@@ -157,7 +155,7 @@ internal sealed partial class GameBoySdkOperationLowerer
     {
         var config = EnsureCameraConfigured("camera_set_position");
 
-        if (SerializePackedDiagonalPreparation && usesPackedCameraRuntime && ProgramQueuesDiagonalStreaming())
+        if (framePlan.SerializePackedDiagonalPreparation && usesPackedCameraRuntime && ProgramQueuesDiagonalStreaming())
         {
             context.EmitWordExpressionToA(operation.X, highByte: false);
             builder.StoreA(GameBoyRuntimeMemoryLayout.PackedCamera.DiagonalTargetXLow);

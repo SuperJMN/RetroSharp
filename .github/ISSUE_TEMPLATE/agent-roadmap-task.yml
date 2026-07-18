@@ -6,6 +6,18 @@ labels:
   - agent-task
   - needs-integration
 body:
+  - type: dropdown
+    id: issue_kind
+    attributes:
+      label: Issue kind
+      description: Dispatch role for this issue. Only implementation issues own corrective code.
+      options:
+        - implementation
+        - certification-gate
+        - investigation
+        - epic/integrator
+    validations:
+      required: true
   - type: input
     id: roadmap_task
     attributes:
@@ -25,6 +37,42 @@ body:
         - target-intrinsic
         - documentation
         - validation
+    validations:
+      required: true
+  - type: input
+    id: owner_seam
+    attributes:
+      label: Owner seam
+      description: The one module boundary that owns this issue's decision.
+      placeholder: "NesFramePlan profile selection"
+    validations:
+      required: true
+  - type: textarea
+    id: observable
+    attributes:
+      label: Single observable
+      description: One externally observable behavior whose change completes the issue.
+      placeholder: "Retained OAM publication and the camera transaction finish inside the selected video-safe window."
+    validations:
+      required: true
+  - type: textarea
+    id: red_reproduction
+    attributes:
+      label: Exact RED reproduction
+      description: Exact focused command, fixture or cartridge, and expected first failure.
+      placeholder: |
+        dotnet test ... --filter FullyQualifiedName=...
+        ROM: path and expected SHA-256
+        First failure: frame/cycle and assertion
+    validations:
+      required: true
+  - type: dropdown
+    id: active_budget
+    attributes:
+      label: Active engineering budget
+      description: Checkpoint/hard-stop budget; external waits do not count.
+      options:
+        - 90-minute checkpoint / 120-minute hard stop
     validations:
       required: true
   - type: textarea
@@ -72,5 +120,17 @@ body:
       placeholder: |
         - dotnet test RetroSharp.sln
         - dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/gameboy-runner/runner.rs
+    validations:
+      required: true
+  - type: textarea
+    id: handoff
+    attributes:
+      label: Handoff at checkpoint or hard stop
+      description: Where the preserved worktree and evidence return if focused acceptance is not green.
+      placeholder: |
+        Integrator: issue or owner
+        Worktree: ../RetroSharp-...
+        Branch: agent/...
+        Required evidence: RED command, ROM hash, first failing frame/cycle, next hypothesis
     validations:
       required: true

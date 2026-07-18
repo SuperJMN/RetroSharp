@@ -150,8 +150,7 @@ internal sealed partial class NesSdkOperationLowerer
             builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.StreamRemaining);
         }
 
-        builder.LoadAImmediate(PendingStreamColumn);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingNextStream);
+        frameScheduler.EmitCameraSchedulingInitialization();
     }
 
     internal void EmitSetCameraPosition(Sdk2DOperation.SetCameraPosition operation)
@@ -159,7 +158,7 @@ internal sealed partial class NesSdkOperationLowerer
         var config = EnsureCameraConfigured("camera_set_position");
 
         var horizontalFitsByte = Math.Max(0, (config.MapWidth - NesTarget.Capabilities.ScreenTiles.Width) * 8) <= byte.MaxValue;
-        if (ShouldStreamColumnsForCamera(config))
+        if (config.CanStreamColumns)
         {
             if (horizontalFitsByte)
             {
@@ -291,7 +290,7 @@ internal sealed partial class NesSdkOperationLowerer
 
         EmitSdkWordExpressionToA(requestedPosition, highByte: false);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
-        builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
+        frameScheduler.EmitMaximumCameraWalkStepsToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
         builder.Label(loopLabel);
@@ -355,7 +354,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
         EmitSdkWordExpressionToA(requestedPosition, highByte: true);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTargetHigh);
-        builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
+        frameScheduler.EmitMaximumCameraWalkStepsToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
         builder.Label(loopLabel);
@@ -417,36 +416,9 @@ internal sealed partial class NesSdkOperationLowerer
         builder.JumpAbsolute(doneLabel);
 
         builder.Label(applyLabel);
-        EmitApplyCameraNow(config);
-        builder.LoadAImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
+        frameScheduler.EmitCameraApplication(this, config);
 
         builder.Label(doneLabel);
-    }
-
-    private void EmitApplyPendingCameraScrollAtVBlank()
-    {
-        if (cameraConfig is not { } config)
-        {
-            return;
-        }
-
-        EmitApplyCameraNow(config);
-        builder.LoadAImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
-    }
-
-    private void EmitApplyCameraNow(NesCameraConfig config)
-    {
-        EmitCommitPendingCameraStream(config);
-        if (useFourScreenNametables)
-        {
-            EmitRestoreFourScreenCameraScroll();
-        }
-        else
-        {
-            EmitRestoreCameraScroll();
-        }
     }
 
     internal void EmitSdkByteExpressionToA(SdkByteExpression expression)
