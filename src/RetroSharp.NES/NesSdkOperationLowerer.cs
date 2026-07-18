@@ -8,7 +8,6 @@ using RetroSharp.Parser;
 // and storage primitives that raw compatibility paths also require.
 internal sealed partial class NesSdkOperationLowerer
 {
-    private const byte CameraWalkMaxStepsPerFrame = 8;
     private const int BottomOverscanInsetPixels = 8;
     private const ushort OamDmaAddress = 0x4014;
     private const byte PendingStreamNone = 0;
@@ -21,6 +20,7 @@ internal sealed partial class NesSdkOperationLowerer
     private readonly PrgBuilder builder;
     private readonly NesVideoProgram program;
     private readonly NesSdkLoweringContext context;
+    private readonly NesFramePlan framePlan;
     private readonly bool useFourScreenNametables;
     private readonly bool usePackedCamera;
     private readonly bool useSequentialOamPublication;
@@ -41,19 +41,35 @@ internal sealed partial class NesSdkOperationLowerer
         bool useFourScreenNametables,
         bool usePackedCamera,
         bool useSequentialOamPublication)
+        : this(
+            builder,
+            program,
+            context,
+            NesFramePlan.Create(
+                program,
+                useSequentialOamPublication ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current",
+                useFourScreenNametables,
+                usePackedCamera,
+                useSequentialOamPublication))
     {
+    }
+
+    internal NesSdkOperationLowerer(
+        PrgBuilder builder,
+        NesVideoProgram program,
+        NesSdkLoweringContext context,
+        NesFramePlan framePlan)
+    {
+        ArgumentNullException.ThrowIfNull(framePlan);
         this.builder = builder;
         this.program = program;
         this.context = context;
-        this.useFourScreenNametables = useFourScreenNametables;
-        this.usePackedCamera = usePackedCamera;
-        this.useSequentialOamPublication = useSequentialOamPublication;
-        usesRetainedOam = program.SdkOperationStream.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
-        retainedOamByteCount = Math.Min(
-            256,
-            program.SdkOperationStream
-                .OfType<Sdk2DOperation.DrawLogicalSprite>()
-                .Sum(operation => program.SpriteAssets[operation.SpriteId].Pieces.Count * 4));
+        this.framePlan = framePlan;
+        useFourScreenNametables = framePlan.UseFourScreenNametables;
+        usePackedCamera = framePlan.UsesPackedCameraRuntime;
+        useSequentialOamPublication = framePlan.UseSequentialOamPublication;
+        usesRetainedOam = framePlan.UsesRetainedOam;
+        retainedOamByteCount = framePlan.RetainedOamByteCount;
     }
 
     public void Emit(Sdk2DOperation operation)

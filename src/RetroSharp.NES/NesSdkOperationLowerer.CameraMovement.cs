@@ -291,7 +291,7 @@ internal sealed partial class NesSdkOperationLowerer
 
         EmitSdkWordExpressionToA(requestedPosition, highByte: false);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
-        builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
+        builder.LoadAImmediate(framePlan.MaximumCameraWalkStepsPerFrame);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
         builder.Label(loopLabel);
@@ -355,7 +355,7 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTarget);
         EmitSdkWordExpressionToA(requestedPosition, highByte: true);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkTargetHigh);
-        builder.LoadAImmediate(CameraWalkMaxStepsPerFrame);
+        builder.LoadAImmediate(framePlan.MaximumCameraWalkStepsPerFrame);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.WalkSteps);
 
         builder.Label(loopLabel);

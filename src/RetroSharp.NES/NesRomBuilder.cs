@@ -255,6 +255,7 @@ internal static class NesRomBuilder
             EmitDpcmSampleBlocks(builder, fixedDpcmLayout.Placements);
         }
         var usePackedCamera = worldPackRuntime is not null && program.UsesCameraRuntime;
+        var framePlan = NesFramePlan.Create(program, layout, usePackedCamera);
         var nameTableUploadByteCount = layout.UseFourScreenNametables ? 4096 : 2048;
         if (layout.EmitMmc3Foundation)
         {
@@ -298,9 +299,7 @@ internal static class NesRomBuilder
             program,
             longForLoopIds,
             longWhileLoopIds,
-            layout.UseFourScreenNametables,
-            usePackedCamera,
-            useSequentialOamPublication: layout.EmitMmc3Foundation && usePackedCamera);
+            framePlan);
         runtimeCompiler.EmitInitialization();
         if (worldPackRuntime is not null)
         {
@@ -686,9 +685,12 @@ internal static class NesRomBuilder
             0xFFFA);
         var orderedSegments = segments.OrderBy(segment => segment.PhysicalStart).ToArray();
         ValidateReportedSegments(layout, orderedSegments);
-        var selectedProfile = layout.EmitMmc3Foundation ? "nes-mmc3-tvrom-v1" : "nes-mapper-0-current";
+        var framePlan = NesFramePlan.Create(
+            program,
+            layout,
+            worldPackRuntime is not null && program.UsesCameraRuntime);
         return new NesRomBuildReport(
-            selectedProfile,
+            framePlan.CartridgeProfile,
             layout.PrgRomSize,
             layout.ChrRomSize,
             prgBuild.FixedPayloadBytes,
@@ -699,7 +701,7 @@ internal static class NesRomBuilder
             prgBuild.FixedSymbols,
             prgBuild.UserVariables,
             DescribeRuntimeRegions(worldPackRuntime),
-            SdkCpuWorkReportFactory.ForNes(selectedProfile, program.SdkOperationStream));
+            framePlan.CreateCpuWorkReport(program.SdkOperationStream));
     }
 
     private static IReadOnlyList<NesRuntimeRegion> DescribeRuntimeRegions(

@@ -538,8 +538,8 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitCommitPendingCameraRowStream(NesCameraConfig config)
     {
-        const int tilesPerPhase = 8;
-        const int attributePhase = 4;
+        var tilesPerPhase = framePlan.PackedCameraRowTileWritesPerFrame;
+        var attributePhase = framePlan.PackedCameraRowAttributePhase;
         var tilesLabel = builder.CreateLabel("nes_camera_row_tiles");
         var attributesLabel = builder.CreateLabel("nes_camera_row_attrs");
         var doneLabel = builder.CreateLabel("nes_camera_row_done");

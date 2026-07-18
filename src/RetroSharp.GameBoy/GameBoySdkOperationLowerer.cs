@@ -13,6 +13,7 @@ internal sealed partial class GameBoySdkOperationLowerer
     private readonly GameBoySdkLoweringContext context;
     private readonly GameBoyRomLayout romLayout;
     private readonly GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout;
+    private readonly GameBoyFramePlan framePlan;
     private readonly bool usesPackedCameraRuntime;
     private readonly bool usesShadowOam;
     private readonly bool usesPackedCollisionRuntime;
@@ -26,16 +27,43 @@ internal sealed partial class GameBoySdkOperationLowerer
         GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout,
         bool usesPackedCameraRuntime,
         bool usesShadowOam = false)
+        : this(
+            builder,
+            program,
+            state,
+            context,
+            romLayout,
+            packedWorldRuntimeLayout,
+            GameBoyFramePlan.Create(
+                ReferenceEquals(romLayout, GameBoyRomLayout.RomOnly)
+                    ? "gb-rom-only-current"
+                    : "gb-simple-mbc1-current",
+                program.SdkOperations.Any(operation => operation is Sdk2DOperation.WaitFrame),
+                usesShadowOam,
+                usesPackedCameraRuntime))
     {
+    }
+
+    internal GameBoySdkOperationLowerer(
+        GbBuilder builder,
+        GameBoyVideoProgram program,
+        GameBoySdkLoweringState state,
+        GameBoySdkLoweringContext context,
+        GameBoyRomLayout romLayout,
+        GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout,
+        GameBoyFramePlan framePlan)
+    {
+        ArgumentNullException.ThrowIfNull(framePlan);
         this.builder = builder;
         this.program = program;
         this.state = state;
         this.context = context;
         this.romLayout = romLayout;
         this.packedWorldRuntimeLayout = packedWorldRuntimeLayout;
-        this.usesPackedCameraRuntime = usesPackedCameraRuntime;
-        this.usesShadowOam = usesShadowOam;
-        usesPackedCollisionRuntime = usesPackedCameraRuntime
+        this.framePlan = framePlan;
+        usesPackedCameraRuntime = framePlan.UsesPackedCameraRuntime;
+        usesShadowOam = framePlan.UsesRetainedOam;
+        usesPackedCollisionRuntime = framePlan.UsesPackedCameraRuntime
                                      && program.SdkOperations.Any(operation => operation is
                                          Sdk2DOperation.CameraAabbTiles or
                                          Sdk2DOperation.CameraAabbHitTop or

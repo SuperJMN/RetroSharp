@@ -8,7 +8,7 @@ internal sealed partial class GameBoySdkOperationLowerer
 {
     private void EmitApplyPackedCamera(GameBoyCameraConfig config)
     {
-        if (SerializePackedDiagonalPreparation && ProgramQueuesDiagonalStreaming())
+        if (framePlan.SerializePackedDiagonalPreparation && ProgramQueuesDiagonalStreaming())
         {
             EmitResumePackedDiagonalPreparation(config);
         }

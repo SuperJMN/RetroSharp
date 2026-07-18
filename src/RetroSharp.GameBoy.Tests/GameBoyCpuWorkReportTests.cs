@@ -24,6 +24,21 @@ public sealed class GameBoyCpuWorkReportTests
         Assert.Equal(640, report.KnownUpper);
         Assert.Equal(SdkCpuWorkStatuses.Incomplete, report.Status);
 
+        Assert.Equal(
+            [SdkCpuWorkWindowIds.Frame, SdkCpuWorkWindowIds.VideoSafe],
+            report.Windows.Select(window => window.Id));
+        var frame = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.Frame);
+        Assert.Equal(SdkCpuWorkWindowIds.Frame, frame.Id);
+        Assert.Equal(report.FrameWindow, frame.Capacity);
+        Assert.Equal(report.KnownLower, frame.KnownLower);
+        Assert.Equal(report.KnownUpper, frame.KnownUpper);
+        Assert.Equal(report.Status, frame.Status);
+        var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
+        Assert.Equal(4_560, videoSafe.Capacity);
+        Assert.Equal(640, videoSafe.KnownLower);
+        Assert.Equal(640, videoSafe.KnownUpper);
+        Assert.Equal(SdkCpuWorkStatuses.Incomplete, videoSafe.Status);
+
         var transfer = Assert.Single(report.Contributors, contributor => contributor.Id == SdkCpuWorkContributorIds.SpritePublishTransfer);
         Assert.Equal(SdkCpuWorkContributorCategories.TargetRuntime, transfer.Category);
         Assert.Equal("one retained sprite publication transfer", transfer.Basis);

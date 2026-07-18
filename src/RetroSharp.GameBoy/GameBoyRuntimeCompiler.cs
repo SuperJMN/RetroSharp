@@ -47,13 +47,32 @@ internal sealed partial class GameBoyRuntimeCompiler
         GameBoyRomLayout? romLayout = null,
         GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout = null,
         bool usesPackedCameraRuntime = false)
+        : this(
+            builder,
+            program,
+            romLayout ?? GameBoyRomLayout.RomOnly,
+            packedWorldRuntimeLayout,
+            GameBoyFramePlan.Create(
+                program,
+                romLayout ?? GameBoyRomLayout.RomOnly,
+                usesPackedCameraRuntime))
     {
+    }
+
+    internal GameBoyRuntimeCompiler(
+        GbBuilder builder,
+        GameBoyVideoProgram program,
+        GameBoyRomLayout romLayout,
+        GameBoyWorldPackRuntimeLayout? packedWorldRuntimeLayout,
+        GameBoyFramePlan framePlan)
+    {
+        ArgumentNullException.ThrowIfNull(framePlan);
         GameBoyRuntimeMemoryLayout.Validate();
         this.builder = builder;
         this.program = program;
-        this.romLayout = romLayout ?? GameBoyRomLayout.RomOnly;
-        this.usesPackedCameraRuntime = usesPackedCameraRuntime;
-        usesShadowOam = program.SdkOperations.Any(operation => operation is Sdk2DOperation.DrawLogicalSprite);
+        this.romLayout = romLayout;
+        usesPackedCameraRuntime = framePlan.UsesPackedCameraRuntime;
+        usesShadowOam = framePlan.UsesRetainedOam;
         sdkOperations = Sdk2DStreamReader.ForProgram(program);
         sdkAudioOperations = SdkAudioStreamReader.ForProgram(program);
         sdkOperationLowerer = new GameBoySdkOperationLowerer(
@@ -71,8 +90,7 @@ internal sealed partial class GameBoyRuntimeCompiler
                 EndRuntimeIndexedAddressReuse),
             this.romLayout,
             packedWorldRuntimeLayout,
-            usesPackedCameraRuntime,
-            usesShadowOam);
+            framePlan);
     }
 
     public void Emit(BlockSyntax block)

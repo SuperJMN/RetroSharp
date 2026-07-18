@@ -1,5 +1,6 @@
 namespace RetroSharp.Architecture.Tests;
 
+using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
 using RetroSharp.NES.Tests;
 
@@ -8,6 +9,7 @@ public sealed class NesSdkLoweringArchitectureTests
     private static readonly PhysicalFileContract[] PhysicalModules =
     [
         new("src/RetroSharp.NES/NesCartridgeLayout.cs", "Cartridge layout and placement have a dedicated physical navigation root.", [typeof(NesCartridgeLayout)]),
+        new("src/RetroSharp.NES/NesFramePlan.cs", "Physical frame scheduling has one target-private authority.", [typeof(NesFramePlan)]),
         new("src/RetroSharp.NES/NesRuntimeCompiler.cs", "Runtime compilation has a dedicated physical navigation root.", [typeof(NesRuntimeCompiler)]),
         new("src/RetroSharp.NES/NesSdkStreamReader.cs", "Collected SDK stream consumption has a dedicated physical navigation root.", [typeof(NesSdkStreamReader)]),
         new("src/RetroSharp.NES/NesSdkOperationLowerer.cs", "Portable SDK emission has a dedicated physical navigation root.", [typeof(NesSdkOperationLowerer)]),
@@ -28,6 +30,17 @@ public sealed class NesSdkLoweringArchitectureTests
         ArchitecturePhysicalAssertions.AssertModuleOwnership(
             "src/RetroSharp.NES/NesRomBuilder.cs",
             PhysicalModules);
+    }
+
+    [Fact]
+    public void Nes_rom_builder_consumes_frame_planning_without_owning_cpu_window_policy()
+    {
+        var calls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesRomBuilder));
+        var lowererCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesSdkOperationLowerer));
+
+        Assert.Contains(calls, method => method.DeclaringType == typeof(NesFramePlan));
+        Assert.Contains(lowererCalls, method => method.DeclaringType == typeof(NesFramePlan));
+        Assert.DoesNotContain(calls, method => method.DeclaringType == typeof(SdkCpuWorkReportFactory));
     }
 
     [Fact]
