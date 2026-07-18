@@ -74,12 +74,14 @@ publication, and packed versus raw world paths may produce different bounds
 for the same stable contributor id.
 
 The accepted physical-frame window is the compatibility aggregate, not the
-only legal interval. Each target physical frame plan may additionally declare
+only legal interval. Each target physical frame policy may additionally declare
 ordered windows such as `video-safe`, with a target-owned calibrated capacity
 and contributor set. Shared code owns the ids, checked range arithmetic, and
 status vocabulary; it does not invent a cross-target VBlank allowance. The same
 work may appear in a whole-frame compatibility projection and in its physical
 window projection because those are alternate views, never additive siblings.
+On NES, `NesPhysicalFrameScheduler` is the only production seam that consumes
+that policy for both emitted work and this projection.
 
 ## 3. Cost representation
 

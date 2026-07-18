@@ -19,6 +19,19 @@ completed and reviewed in one pull request and one bounded agent session.
 A target-owned, compile-time schedule of mandatory cartridge work and
 explicitly staged work across hardware frame windows.
 
+## Physical frame scheduler
+
+The target-owned executable authority that applies a physical frame plan to
+emission, accounting, and diagnostics. On NES, production code reaches frame
+boundaries, NMI/VBlank work, retained OAM, and staged video transfers only
+through `NesPhysicalFrameScheduler`; the validated plan is private policy data.
+
+## Closed video-safe transfer
+
+A target-private command carrying the complete mechanics needed for one NES
+PPU-safe transfer without exposing phase selection. The scheduler chooses the
+physical window and ordering; the lowerer emits the selected bytes.
+
 ## Physical frame window
 
 A hardware interval in which a declared class of target work or writes is

@@ -21,10 +21,18 @@ Each target owns one private, static physical frame plan selected at compile
 time from compiler-known program and cartridge facts. The plan declares its
 physical windows, mandatory work, and any explicitly bounded staging phases.
 
-The selected plan is the common authority consumed atomically by target
-emission, target CPU-work ledger projection, and target diagnostics. ROM
-builders may select a profile and orchestrate output, but they do not own or
-reconstruct scheduling policy.
+The selected policy must have one executable target-owned authority consumed
+atomically by target emission, target CPU-work ledger projection, and target
+diagnostics. Game Boy currently consumes its plan directly. NES encapsulates
+`NesFramePlan` behind `NesPhysicalFrameScheduler`; production builders,
+runtime compilers, and lowerers receive the scheduler and cannot consume the
+plan directly. The scheduler owns runtime NMI/VBlank admission, retained OAM
+publication, video-safe transfer ordering, and bounded camera staging. NES
+lowerer partials retain only the byte-emission mechanics selected through
+closed scheduler commands.
+
+ROM builders may supply compiler-known facts and orchestrate output, but they
+do not own or reconstruct scheduling policy.
 
 Only vocabulary and checked range arithmetic may be shared across targets.
 No public language or portable SDK API is added by this decision.
@@ -37,7 +45,8 @@ No public language or portable SDK API is added by this decision.
   staging state and deadline.
 - Whole-frame CPU reports remain compatible while gaining per-window evidence.
 - Architecture guards can reject duplicated plan policy in ROM builders or
-  distributed lowerer conditionals.
+  distributed lowerer conditionals, and on NES can reject any direct plan
+  consumption outside the scheduler.
 - Game Boy and NES may use different profiles and implementation structures.
 
 ## Considered alternatives

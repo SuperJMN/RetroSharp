@@ -19,6 +19,8 @@ public sealed class ArchitectureNavigationDocumentationTests
         "GameBoySdkFrameInputLoweringTests",
         "GameBoySdkLoweringArchitectureTests",
         "NesSdkOperationLowerer.Emit",
+        "NesPhysicalFrameScheduler",
+        "NesPhysicalFrameSchedulerTests",
         "NesFramePlan",
         "NesFramePlanTests",
         "NesSdkFrameInputLoweringTests",

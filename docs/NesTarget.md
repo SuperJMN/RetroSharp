@@ -50,9 +50,14 @@ calibration-debt table live in
 GCP-3.1 exposes the first executable projection on the internal ROM build
 report as `CpuWork`: `target=nes`, profile equal to the selected cartridge
 profile, unit `cpu-cycles`, frame window `29,780`, and status `incomplete`.
-The target-private `NesFramePlan` is selected before emission and is the single
-authority for retained OAM publication mode, packed-camera staging, and CPU
-window projection. The report keeps the whole-frame compatibility fields and
+The target-private `NesFramePlan` is selected before emission and immediately
+encapsulated by `NesPhysicalFrameScheduler`, the single executable authority
+for runtime NMI/VBlank admission, retained OAM publication, explicit video-safe
+transfers, packed-camera staging, and CPU-window projection. ROM/runtime
+builders and SDK lowerers consume the scheduler rather than the plan. Closed
+row/column transfer commands carry mechanics across that seam; phase counts,
+ordering, and deadlines remain scheduler-owned. The report keeps the
+whole-frame compatibility fields and
 adds ordered `frame` (29,780 CPU cycles) and conservative `video-safe` (2,273
 CPU cycles) windows. The same plan rejects a sequential retained OAM prefix
 above 152 bytes before emission; incomplete window coverage never claims

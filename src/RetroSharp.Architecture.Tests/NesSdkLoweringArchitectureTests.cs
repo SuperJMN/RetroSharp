@@ -35,15 +35,33 @@ public sealed class NesSdkLoweringArchitectureTests
     }
 
     [Fact]
-    public void Nes_rom_builder_and_lowerer_consume_the_scheduler_without_owning_frame_policy()
+    public void Nes_production_consumes_frame_policy_only_through_the_scheduler()
     {
+        const BindingFlags declaredMembers =
+            BindingFlags.Public |
+            BindingFlags.NonPublic |
+            BindingFlags.Instance |
+            BindingFlags.Static |
+            BindingFlags.DeclaredOnly;
         var calls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesRomBuilder));
         var lowererCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesSdkOperationLowerer));
+        var nonOwners = typeof(NesFramePlan).Assembly
+            .GetTypes()
+            .Where(type => !IsOwnedBy(type, typeof(NesFramePlan)) &&
+                           !IsOwnedBy(type, typeof(NesPhysicalFrameScheduler)))
+            .ToArray();
 
         Assert.Contains(calls, method => method.DeclaringType == typeof(NesPhysicalFrameScheduler));
         Assert.Contains(lowererCalls, method => method.DeclaringType == typeof(NesPhysicalFrameScheduler));
-        Assert.DoesNotContain(calls, method => method.DeclaringType == typeof(NesFramePlan));
-        Assert.DoesNotContain(lowererCalls, method => method.DeclaringType == typeof(NesFramePlan));
+        Assert.DoesNotContain(nonOwners, type =>
+            ArchitectureSymbolAssertions.CalledMethods(type)
+                .Any(method => method.DeclaringType == typeof(NesFramePlan)));
+        Assert.DoesNotContain(nonOwners, type =>
+            type.GetFields(declaredMembers).Any(field => field.FieldType == typeof(NesFramePlan)));
+        Assert.DoesNotContain(nonOwners, type =>
+            type.GetMethods(declaredMembers).Any(method =>
+                method.ReturnType == typeof(NesFramePlan) ||
+                method.GetParameters().Any(parameter => parameter.ParameterType == typeof(NesFramePlan))));
         Assert.DoesNotContain(calls, method => method.DeclaringType == typeof(SdkCpuWorkReportFactory));
     }
 
@@ -95,12 +113,17 @@ public sealed class NesSdkLoweringArchitectureTests
         Assert.DoesNotContain(schedulerMethods, method =>
             method.ReturnType.IsGenericType &&
             method.ReturnType.GetGenericTypeDefinition() == typeof(ValueTuple<,>));
+        var packedRuntimeConsumers = typeof(NesPhysicalFrameScheduler).Assembly
+            .GetTypes()
+            .Where(type => type != typeof(NesPhysicalFrameScheduler) &&
+                           type != typeof(NesPackedCameraRuntimeEmitter))
+            .Where(type => ArchitectureSymbolAssertions.CalledMethods(type)
+                .Any(method => method.DeclaringType == typeof(NesPackedCameraRuntimeEmitter)))
+            .ToArray();
         Assert.Contains(
             ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler)),
             method => method.DeclaringType == typeof(NesPackedCameraRuntimeEmitter));
-        Assert.DoesNotContain(
-            ArchitectureSymbolAssertions.CalledMethods(typeof(NesWorldPackRuntimeEmitter)),
-            method => method.DeclaringType == typeof(NesPackedCameraRuntimeEmitter));
+        Assert.Empty(packedRuntimeConsumers);
     }
 
     [Fact]
@@ -114,5 +137,18 @@ public sealed class NesSdkLoweringArchitectureTests
                 typeof(NesSdkFrameInputLoweringTests),
                 typeof(NesSdkSpriteLoweringTests),
             ]);
+    }
+
+    private static bool IsOwnedBy(Type candidate, Type owner)
+    {
+        for (var current = candidate; current is not null; current = current.DeclaringType)
+        {
+            if (current == owner)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
