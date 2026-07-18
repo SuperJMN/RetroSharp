@@ -10,11 +10,33 @@ public static class FunctionalScenarioRunner
         FunctionalScenario scenario,
         FunctionalRomArtifact rom,
         IFunctionalRomAdapter adapter,
-        IFunctionalFrameOracle? oracle = null)
+        IFunctionalFrameOracle? oracle = null) =>
+        Run(scenario, rom, adapter, oracle, new FunctionalScenarioRunOptions());
+
+    public static FunctionalAcceptanceReport Run(
+        FunctionalScenario scenario,
+        FunctionalRomArtifact rom,
+        IFunctionalRomAdapter adapter,
+        IFunctionalFrameOracle? oracle,
+        FunctionalScenarioRunOptions options)
     {
         ArgumentNullException.ThrowIfNull(scenario);
         ArgumentNullException.ThrowIfNull(rom);
         ArgumentNullException.ThrowIfNull(adapter);
+        ArgumentNullException.ThrowIfNull(options);
+        if (!Enum.IsDefined(options.Mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(options), options.Mode, "Unknown functional scenario run mode.");
+        }
+
+        if (options.EvidenceFramesBeforeFailure <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                options.EvidenceFramesBeforeFailure,
+                "Fail-fast evidence frames before failure must be positive.");
+        }
+
         FunctionalScenarioValidator.Validate(scenario);
         ArgumentException.ThrowIfNullOrWhiteSpace(rom.SourcePath);
         if (rom.Bytes is null || rom.Bytes.Length == 0)
@@ -50,6 +72,17 @@ public static class FunctionalScenarioRunner
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
                 frames.Add(machine.AdvanceFrame(frame, held));
                 ValidateObservationFrame(frames[frame], frame, frames[frame - 1]);
+                if (options.Mode == FunctionalScenarioRunMode.FailFast && frame > scenario.WarmUpFrames)
+                {
+                    var failures = new List<FunctionalIntegrityFailure>();
+                    AddFramePrerequisiteFailures(scenario, frames[frame], frames[0].ResetCount, failures);
+                    AddFramePublicationFailures(scenario, frames[frame], failures);
+                    AddCheckpointFailures(scenario, frames[frame], failures);
+                    if (failures.Count > 0)
+                    {
+                        return CreateFailFastReport(scenario, rom, adapter, oracle, options, frames, failures);
+                    }
+                }
             }
 
             var maximumDrainFrames = scenario.ExpectedFeatures.CameraLifecycle
@@ -83,6 +116,55 @@ public static class FunctionalScenarioRunner
             timingChecks,
             integrity.Failures,
             integrity.Evidence);
+    }
+
+    private static FunctionalAcceptanceReport CreateFailFastReport(
+        FunctionalScenario scenario,
+        FunctionalRomArtifact rom,
+        IFunctionalRomAdapter adapter,
+        IFunctionalFrameOracle? oracle,
+        FunctionalScenarioRunOptions options,
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        IReadOnlyList<FunctionalIntegrityFailure> failures)
+    {
+        var lastFrame = frames.Count - 1;
+        var evidenceStart = Math.Max(
+            scenario.WarmUpFrames + 1,
+            lastFrame - options.EvidenceFramesBeforeFailure);
+        var evidence = new List<FunctionalFrameEvidence>(lastFrame - evidenceStart + 1);
+        for (var frame = evidenceStart; frame <= lastFrame; frame++)
+        {
+            var expectation = oracle?.ExpectedFrame(frame);
+            if (expectation is not null && expectation.Frame != frame)
+            {
+                throw new InvalidOperationException(
+                    $"The independent visual oracle returned frame {expectation.Frame} while frame {frame} was requested.");
+            }
+
+            evidence.Add(new(Normalize(frames[frame]), Normalize(expectation)));
+        }
+
+        var summary = Summarize(
+            frames,
+            failures,
+            scenario.WarmUpFrames,
+            lastFrame);
+        return new FunctionalAcceptanceReport(
+            scenario.Id,
+            scenario.SampleId,
+            scenario.Target,
+            adapter.ExecutionSource,
+            rom.SourcePath,
+            Convert.ToHexString(SHA256.HashData(rom.Bytes)).ToLowerInvariant(),
+            new FunctionalFrameWindow(
+                scenario.WarmUpFrames,
+                lastFrame - scenario.WarmUpFrames,
+                lastFrame),
+            summary,
+            Passed: false,
+            TimingChecks: [],
+            failures,
+            evidence);
     }
 
     private static bool HasIncompleteCameraRequest(
@@ -234,36 +316,7 @@ public static class FunctionalScenarioRunner
             }
 
             evidence.Add(new(Normalize(observation), Normalize(expectation)));
-
-            if (observation.ResetCount > initialResetCount)
-            {
-                failures.Add(new("reset", frame, $"Reset count advanced from {initialResetCount} to {observation.ResetCount}."));
-            }
-
-            if (scenario.ExpectedFeatures.CameraLifecycle && observation.Camera is null)
-            {
-                failures.Add(new("missing-camera-observation", frame, "The scenario requires camera lifecycle observations."));
-            }
-
-            if (scenario.ExpectedFeatures.AudioProgress && observation.AudioProgress is null)
-            {
-                failures.Add(new("missing-audio-progress", frame, "The scenario requires ordered APU/audio progression observations."));
-            }
-
-            if (scenario.ExpectedFeatures.BankRestoration)
-            {
-                if (observation.Bank is null)
-                {
-                    failures.Add(new("missing-bank-observation", frame, "The scenario requires bank restoration observations."));
-                }
-                else if (!observation.Bank.Restored || observation.Bank.SelectedBank != observation.Bank.ShadowBank)
-                {
-                    failures.Add(new(
-                        "bank-restoration",
-                        frame,
-                        $"{observation.Bank.Domain}: selected bank {observation.Bank.SelectedBank} does not match shadow {observation.Bank.ShadowBank}."));
-                }
-            }
+            AddFramePrerequisiteFailures(scenario, observation, initialResetCount, failures);
 
             if (scenario.ExpectedFeatures.Background)
             {
@@ -277,58 +330,8 @@ public static class FunctionalScenarioRunner
                 CompareSprites(frame, expectation?.Sprites, observation.Sprites, failures);
             }
 
-            if (scenario.Budgets.MaximumSpawnToVisibleFrames is not null && observation.Spawn is null)
-            {
-                failures.Add(new("missing-spawn-observation", frame, "The scenario requires accepted-spawn lifecycle observations."));
-            }
+            AddFramePublicationFailures(scenario, observation, failures);
 
-            if (scenario.ExpectedFeatures.SafeVideoWrites)
-            {
-                if (observation.VideoWrites is null || observation.OamWrites is null)
-                {
-                    failures.Add(new("missing-write-timing-observation", frame, "The scenario requires video and OAM write-timing observations."));
-                }
-                else
-                {
-                    foreach (var write in observation.VideoWrites)
-                    {
-                        if (!ValidTiming(write.Timing) || string.IsNullOrWhiteSpace(write.Space) || write.Address < 0)
-                        {
-                            failures.Add(new(
-                                "invalid-video-write-timing",
-                                frame,
-                                $"Invalid video-write evidence for {write.Space} at 0x{write.Address:X4}."));
-                        }
-
-                        if (!write.Safe)
-                        {
-                            failures.Add(new(
-                                "unsafe-video-write",
-                                frame,
-                                $"Unsafe {write.Space} write at 0x{write.Address:X4} ({write.Timing.DiagnosticText(write.Safe)})."));
-                        }
-                    }
-
-                    foreach (var write in observation.OamWrites)
-                    {
-                        if (!ValidTiming(write.Timing) || write.Address < 0)
-                        {
-                            failures.Add(new(
-                                "invalid-oam-write-timing",
-                                frame,
-                                $"Invalid OAM-write evidence at 0x{write.Address:X4}."));
-                        }
-
-                        if (!write.Safe)
-                        {
-                            failures.Add(new(
-                                "unsafe-oam-write",
-                                frame,
-                                $"Unsafe OAM write at 0x{write.Address:X4} ({write.Timing.DiagnosticText(write.Safe)})."));
-                        }
-                    }
-                }
-            }
         }
 
         if (scenario.ExpectedFeatures.Background && backgroundExpectationCount == 0)
@@ -374,22 +377,134 @@ public static class FunctionalScenarioRunner
             ValidateSpawnLifecycle(frames, start - 1, end, spawnLimit, failures);
         }
 
-        foreach (var checkpoint in scenario.Checkpoints)
+        foreach (var checkpointFrame in scenario.Checkpoints.Select(checkpoint => checkpoint.Frame).Distinct())
         {
-            var signals = frames[checkpoint.Frame].StateSignals;
+            AddCheckpointFailures(scenario, frames[checkpointFrame], failures);
+        }
+
+        return (failures, evidence);
+    }
+
+    private static void AddFramePrerequisiteFailures(
+        FunctionalScenario scenario,
+        FunctionalFrameObservation observation,
+        int initialResetCount,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        var frame = observation.Frame;
+        if (observation.ResetCount > initialResetCount)
+        {
+            failures.Add(new("reset", frame, $"Reset count advanced from {initialResetCount} to {observation.ResetCount}."));
+        }
+
+        if (scenario.ExpectedFeatures.CameraLifecycle && observation.Camera is null)
+        {
+            failures.Add(new("missing-camera-observation", frame, "The scenario requires camera lifecycle observations."));
+        }
+
+        if (scenario.ExpectedFeatures.AudioProgress && observation.AudioProgress is null)
+        {
+            failures.Add(new("missing-audio-progress", frame, "The scenario requires ordered APU/audio progression observations."));
+        }
+
+        if (scenario.ExpectedFeatures.BankRestoration)
+        {
+            if (observation.Bank is null)
+            {
+                failures.Add(new("missing-bank-observation", frame, "The scenario requires bank restoration observations."));
+            }
+            else if (!observation.Bank.Restored || observation.Bank.SelectedBank != observation.Bank.ShadowBank)
+            {
+                failures.Add(new(
+                    "bank-restoration",
+                    frame,
+                    $"{observation.Bank.Domain}: selected bank {observation.Bank.SelectedBank} does not match shadow {observation.Bank.ShadowBank}."));
+            }
+        }
+
+    }
+
+    private static void AddFramePublicationFailures(
+        FunctionalScenario scenario,
+        FunctionalFrameObservation observation,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        var frame = observation.Frame;
+        if (scenario.Budgets.MaximumSpawnToVisibleFrames is not null && observation.Spawn is null)
+        {
+            failures.Add(new("missing-spawn-observation", frame, "The scenario requires accepted-spawn lifecycle observations."));
+        }
+
+        if (!scenario.ExpectedFeatures.SafeVideoWrites)
+        {
+            return;
+        }
+
+        if (observation.VideoWrites is null || observation.OamWrites is null)
+        {
+            failures.Add(new("missing-write-timing-observation", frame, "The scenario requires video and OAM write-timing observations."));
+            return;
+        }
+
+        foreach (var write in observation.VideoWrites)
+        {
+            if (!ValidTiming(write.Timing) || string.IsNullOrWhiteSpace(write.Space) || write.Address < 0)
+            {
+                failures.Add(new(
+                    "invalid-video-write-timing",
+                    frame,
+                    $"Invalid video-write evidence for {write.Space} at 0x{write.Address:X4}."));
+            }
+
+            if (!write.Safe)
+            {
+                failures.Add(new(
+                    "unsafe-video-write",
+                    frame,
+                    $"Unsafe {write.Space} write at 0x{write.Address:X4} ({write.Timing.DiagnosticText(write.Safe)})."));
+            }
+        }
+
+        foreach (var write in observation.OamWrites)
+        {
+            if (!ValidTiming(write.Timing) || write.Address < 0)
+            {
+                failures.Add(new(
+                    "invalid-oam-write-timing",
+                    frame,
+                    $"Invalid OAM-write evidence at 0x{write.Address:X4}."));
+            }
+
+            if (!write.Safe)
+            {
+                failures.Add(new(
+                    "unsafe-oam-write",
+                    frame,
+                    $"Unsafe OAM write at 0x{write.Address:X4} ({write.Timing.DiagnosticText(write.Safe)})."));
+            }
+        }
+    }
+
+    private static void AddCheckpointFailures(
+        FunctionalScenario scenario,
+        FunctionalFrameObservation observation,
+        ICollection<FunctionalIntegrityFailure> failures)
+    {
+        foreach (var checkpoint in scenario.Checkpoints.Where(item => item.Frame == observation.Frame))
+        {
             foreach (var expected in checkpoint.ExpectedSignals.OrderBy(pair => pair.Key, StringComparer.Ordinal))
             {
-                if (signals is null || !signals.TryGetValue(expected.Key, out var actual) || actual != expected.Value)
+                if (observation.StateSignals is null ||
+                    !observation.StateSignals.TryGetValue(expected.Key, out var actual) ||
+                    actual != expected.Value)
                 {
                     failures.Add(new(
                         "checkpoint",
                         checkpoint.Frame,
-                        $"{checkpoint.Id}/{expected.Key}: expected {expected.Value}, observed {(signals?.GetValueOrDefault(expected.Key).ToString() ?? "missing")}."));
+                        $"{checkpoint.Id}/{expected.Key}: expected {expected.Value}, observed {(observation.StateSignals?.GetValueOrDefault(expected.Key).ToString() ?? "missing")}."));
                 }
             }
         }
-
-        return (failures, evidence);
     }
 
     private static FunctionalFrameObservation Normalize(FunctionalFrameObservation observation) => observation with
@@ -701,11 +816,20 @@ public static class FunctionalScenarioRunner
     private static FunctionalObservationSummary Summarize(
         FunctionalScenario scenario,
         IReadOnlyList<FunctionalFrameObservation> frames,
-        IReadOnlyList<FunctionalIntegrityFailure> failures)
+        IReadOnlyList<FunctionalIntegrityFailure> failures) =>
+        Summarize(
+            frames,
+            failures,
+            scenario.WarmUpFrames,
+            scenario.WarmUpFrames + scenario.ObservationFrames);
+
+    private static FunctionalObservationSummary Summarize(
+        IReadOnlyList<FunctionalFrameObservation> frames,
+        IReadOnlyList<FunctionalIntegrityFailure> failures,
+        int start,
+        int end)
     {
-        var start = scenario.WarmUpFrames;
-        var end = start + scenario.ObservationFrames;
-        var window = frames.Skip(start + 1).Take(scenario.ObservationFrames).ToArray();
+        var window = frames.Skip(start + 1).Take(end - start).ToArray();
         return new FunctionalObservationSummary(
             frames[end].GameplayTicks - frames[start].GameplayTicks,
             frames[end].AudioServiceTicks - frames[start].AudioServiceTicks,

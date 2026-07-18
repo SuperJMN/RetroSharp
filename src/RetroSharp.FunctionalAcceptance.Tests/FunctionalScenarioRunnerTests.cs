@@ -624,6 +624,64 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Fail_fast_stops_on_the_first_irreversible_structural_failure_and_keeps_bounded_evidence()
+    {
+        var scenario = IntegrityScenario(observationFrames: 5);
+        var observations = new[]
+        {
+            Frame(0),
+            Frame(1),
+            Frame(2),
+            Frame(3, resetCount: 1),
+            Frame(4, resetCount: 1),
+            Frame(5, resetCount: 1),
+        };
+        var factory = new ScriptedMachineFactory(observations);
+        var adapter = new GameBoyFunctionalRomAdapter(factory, AllCapabilities());
+
+        var report = FunctionalScenarioRunner.Run(
+            scenario,
+            Rom(),
+            adapter,
+            oracle: null,
+            options: new FunctionalScenarioRunOptions(
+                FunctionalScenarioRunMode.FailFast,
+                EvidenceFramesBeforeFailure: 1));
+
+        Assert.False(report.Passed);
+        Assert.Equal([1, 2, 3], factory.Session!.InputsByFrame.Keys.Order());
+        Assert.Equal((0, 3, 3), (
+            report.FrameWindow.WarmUpFrames,
+            report.FrameWindow.ObservationFrames,
+            report.FrameWindow.TotalPhysicalFrames));
+        Assert.Equal([2, 3], report.FrameEvidence.Select(item => item.Observed.Frame));
+        var failure = Assert.Single(report.IntegrityFailures);
+        Assert.Equal(("reset", 3), (failure.Code, failure.Frame));
+        Assert.Empty(report.TimingChecks);
+    }
+
+    [Fact]
+    public void Default_run_mode_retains_full_evidence_after_an_irreversible_failure()
+    {
+        var scenario = IntegrityScenario(observationFrames: 4);
+        var observations = new[]
+        {
+            Frame(0),
+            Frame(1, resetCount: 1),
+            Frame(2, resetCount: 1),
+            Frame(3, resetCount: 1),
+            Frame(4, resetCount: 1),
+        };
+        var factory = new ScriptedMachineFactory(observations);
+        var adapter = new GameBoyFunctionalRomAdapter(factory, AllCapabilities());
+
+        var report = FunctionalScenarioRunner.Run(scenario, Rom(), adapter);
+
+        Assert.Equal([1, 2, 3, 4], factory.Session!.InputsByFrame.Keys.Order());
+        Assert.Equal([1, 2, 3, 4], report.FrameEvidence.Select(item => item.Observed.Frame));
+    }
+
+    [Fact]
     public void Input_and_camera_lifecycle_latencies_are_measured_from_observed_transitions()
     {
         var scenario = LifecycleScenario();
@@ -782,6 +840,22 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
+    public void Target_observation_engines_are_the_compatible_exact_rom_adapter_seam()
+    {
+        IFunctionalRomAdapter gameBoy = new GameBoyFunctionalObservationEngine(
+            new ScriptedMachineFactory(Frames([0, 1, 2], [0, 0, 0])),
+            GameplayCapabilities());
+        IFunctionalRomAdapter nes = new NesFunctionalObservationEngine(
+            new ScriptedMachineFactory(Frames([0, 1, 2], [0, 0, 0])),
+            GameplayCapabilities());
+
+        Assert.Equal(FunctionalTarget.GameBoy, gameBoy.Target);
+        Assert.Equal(FunctionalTarget.Nes, nes.Target);
+        Assert.IsAssignableFrom<IFunctionalObservationEngine>(gameBoy);
+        Assert.IsAssignableFrom<IFunctionalObservationEngine>(nes);
+    }
+
+    [Fact]
     public void Adapter_counters_must_be_cumulative_and_monotonic()
     {
         var observations = Frames([1, 0, 1], [0, 0, 0]);
@@ -857,12 +931,13 @@ public sealed class FunctionalScenarioRunnerTests
         bool background = false,
         bool spriteOam = false,
         bool bank = false,
-        bool safeVideoWrites = false) => new(
+        bool safeVideoWrites = false,
+        int observationFrames = 2) => new(
         "integrity-probe-gb",
         "integrity-probe",
         FunctionalTarget.GameBoy,
         WarmUpFrames: 0,
-        ObservationFrames: 2,
+        ObservationFrames: observationFrames,
         Inputs: [],
         Checkpoints: [],
         ExpectedFeatures: new(
@@ -872,7 +947,7 @@ public sealed class FunctionalScenarioRunnerTests
             SafeVideoWrites: safeVideoWrites),
         Audio: new(ServiceExpectedByDefault: false, AuthoredSilence: []),
         BudgetEvidence: Evidence(),
-        Budgets: new(0, 2));
+        Budgets: new(0, observationFrames));
 
     private static FunctionalScenario LifecycleScenario() => new(
         "lifecycle-probe-gb",

@@ -46,7 +46,7 @@ public interface IFunctionalFrameOracle
     FunctionalFrameExpectation ExpectedFrame(int frame);
 }
 
-public interface IFunctionalRomAdapter
+public interface IFunctionalObservationEngine
 {
     FunctionalTarget Target { get; }
 
@@ -57,11 +57,15 @@ public interface IFunctionalRomAdapter
     IFunctionalRomMachine CreateMachine(ReadOnlyMemory<byte> exactRom);
 }
 
-public sealed class GameBoyFunctionalRomAdapter : IFunctionalRomAdapter
+public interface IFunctionalRomAdapter : IFunctionalObservationEngine
+{
+}
+
+public class GameBoyFunctionalObservationEngine : IFunctionalRomAdapter
 {
     private readonly IFunctionalRomMachineFactory machineFactory;
 
-    public GameBoyFunctionalRomAdapter(
+    public GameBoyFunctionalObservationEngine(
         IFunctionalRomMachineFactory machineFactory,
         FunctionalAdapterCapabilities capabilities,
         FunctionalExecutionSource executionSource = FunctionalExecutionSource.InProcess)
@@ -87,11 +91,22 @@ public sealed class GameBoyFunctionalRomAdapter : IFunctionalRomAdapter
     public IFunctionalRomMachine CreateMachine(ReadOnlyMemory<byte> exactRom) => machineFactory.Create(exactRom);
 }
 
-public sealed class NesFunctionalRomAdapter : IFunctionalRomAdapter
+public sealed class GameBoyFunctionalRomAdapter : GameBoyFunctionalObservationEngine
+{
+    public GameBoyFunctionalRomAdapter(
+        IFunctionalRomMachineFactory machineFactory,
+        FunctionalAdapterCapabilities capabilities,
+        FunctionalExecutionSource executionSource = FunctionalExecutionSource.InProcess)
+        : base(machineFactory, capabilities, executionSource)
+    {
+    }
+}
+
+public class NesFunctionalObservationEngine : IFunctionalRomAdapter
 {
     private readonly IFunctionalRomMachineFactory machineFactory;
 
-    public NesFunctionalRomAdapter(
+    public NesFunctionalObservationEngine(
         IFunctionalRomMachineFactory machineFactory,
         FunctionalAdapterCapabilities capabilities,
         FunctionalExecutionSource executionSource = FunctionalExecutionSource.InProcess)
@@ -115,4 +130,15 @@ public sealed class NesFunctionalRomAdapter : IFunctionalRomAdapter
     public FunctionalAdapterCapabilities Capabilities { get; }
 
     public IFunctionalRomMachine CreateMachine(ReadOnlyMemory<byte> exactRom) => machineFactory.Create(exactRom);
+}
+
+public sealed class NesFunctionalRomAdapter : NesFunctionalObservationEngine
+{
+    public NesFunctionalRomAdapter(
+        IFunctionalRomMachineFactory machineFactory,
+        FunctionalAdapterCapabilities capabilities,
+        FunctionalExecutionSource executionSource = FunctionalExecutionSource.InProcess)
+        : base(machineFactory, capabilities, executionSource)
+    {
+    }
 }
