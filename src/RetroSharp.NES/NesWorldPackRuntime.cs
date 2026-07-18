@@ -371,7 +371,7 @@ internal static class NesWorldPackRuntimeEmitter
         NesWorldPackRuntimePlan plan,
         NesWorldPackPlacement? placement,
         NesWorldPackProbe? probe,
-        bool enableStagedCamera)
+        NesPhysicalFrameScheduler? frameScheduler)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(plan);
@@ -385,13 +385,13 @@ internal static class NesWorldPackRuntimeEmitter
         {
             EmitProbe(builder, probe);
         }
-        if (enableStagedCamera)
+        if (frameScheduler is not null)
         {
-            NesPackedCameraRuntimeEmitter.Emit(builder, plan);
+            frameScheduler.EmitPackedCameraRuntime(plan);
         }
         if (placement is null)
         {
-            EmitPinnedLookupData(builder, plan, enableStagedCamera);
+            EmitPinnedLookupData(builder, plan, frameScheduler is not null);
         }
     }
 

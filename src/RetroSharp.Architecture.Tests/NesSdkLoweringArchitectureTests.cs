@@ -1,5 +1,6 @@
 namespace RetroSharp.Architecture.Tests;
 
+using System.Reflection;
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
 using RetroSharp.NES.Tests;
@@ -52,6 +53,54 @@ public sealed class NesSdkLoweringArchitectureTests
         var schedulerCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler));
 
         Assert.Contains(schedulerCalls, method => method.DeclaringType == typeof(NesFramePlan));
+    }
+
+    [Fact]
+    public void Nes_explicit_video_transfers_cross_the_scheduler_as_closed_commands()
+    {
+        var transfer = typeof(NesVideoSafeTransfer);
+
+        foreach (var operationType in new[]
+                 {
+                     typeof(Sdk2DOperation.StreamMapColumn),
+                     typeof(Sdk2DOperation.StreamMapRow),
+                 })
+        {
+            var entryPoint = Assert.Single(
+                typeof(NesSdkOperationLowerer)
+                    .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                    .Where(method => method.GetParameters() is [{ ParameterType: var parameterType }] &&
+                                     parameterType == operationType));
+            Assert.Contains(
+                ArchitectureSymbolAssertions.CalledMethods(entryPoint),
+                method => method.DeclaringType == typeof(NesPhysicalFrameScheduler) &&
+                          method.GetParameters().Any(parameter => parameter.ParameterType == transfer));
+        }
+    }
+
+    [Fact]
+    public void Nes_camera_staging_policy_does_not_leak_phase_constants_to_the_lowerer()
+    {
+        var schedulerMethods = typeof(NesPhysicalFrameScheduler)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+        Assert.Contains(schedulerMethods, method =>
+            method.ReturnType == typeof(void) &&
+            method.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(
+                [typeof(NesSdkOperationLowerer), typeof(NesCameraConfig)]));
+        Assert.Contains(schedulerMethods, method =>
+            method.ReturnType == typeof(void) &&
+            method.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(
+                [typeof(NesWorldPackRuntimePlan)]));
+        Assert.DoesNotContain(schedulerMethods, method =>
+            method.ReturnType.IsGenericType &&
+            method.ReturnType.GetGenericTypeDefinition() == typeof(ValueTuple<,>));
+        Assert.Contains(
+            ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler)),
+            method => method.DeclaringType == typeof(NesPackedCameraRuntimeEmitter));
+        Assert.DoesNotContain(
+            ArchitectureSymbolAssertions.CalledMethods(typeof(NesWorldPackRuntimeEmitter)),
+            method => method.DeclaringType == typeof(NesPackedCameraRuntimeEmitter));
     }
 
     [Fact]

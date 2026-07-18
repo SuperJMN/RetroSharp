@@ -108,13 +108,6 @@ internal sealed partial class NesSdkOperationLowerer
         }
     }
 
-    private readonly record struct NesCameraConfig(
-        int MapWidth,
-        int MapHeight,
-        int StreamY,
-        int StreamHeight,
-        bool UseFourScreenNametables);
-
     private readonly record struct RuntimeIndexedFieldCursor(string BaseName, SdkByteExpression Index);
 
     private void EmitExpressionToA(ExpressionSyntax expression) => context.EmitExpressionToA(expression);

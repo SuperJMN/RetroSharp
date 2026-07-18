@@ -25,8 +25,10 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
         EmitSdkByteExpressionToA(operation.SourceColumn);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.SourceColumn);
-        frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, this);
-        EmitStreamColumnFromAddresses(new NesCameraConfig(worldMap.Width, worldMap.Height, y, height, UseFourScreenNametables: false));
+        frameScheduler.EmitVideoSafeTransfer(
+            new NesVideoSafeTransfer.StreamColumn(
+                new NesCameraConfig(worldMap.Width, worldMap.Height, y, height, UseFourScreenNametables: false)),
+            this);
     }
 
     internal void EmitStreamMapRow(Sdk2DOperation.StreamMapRow operation)
@@ -51,7 +53,34 @@ internal sealed partial class NesSdkOperationLowerer
             NesTarget.Capabilities,
             new Sdk2DOperation.StreamMapRow(targetRow, sourceRow, x, width));
 
-        frameScheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, this);
+        frameScheduler.EmitVideoSafeTransfer(
+            new NesVideoSafeTransfer.StreamRow(targetRow, sourceRow, x, width),
+            this);
+    }
+
+    internal void EmitVideoSafeTransfer(NesVideoSafeTransfer transfer)
+    {
+        switch (transfer)
+        {
+            case NesVideoSafeTransfer.StreamColumn column:
+                EmitStreamColumnFromAddresses(column.Config);
+                break;
+            case NesVideoSafeTransfer.StreamRow row:
+                EmitStreamMapRowTransfer(row.TargetRow, row.SourceRow, row.X, row.Width);
+                break;
+            case NesVideoSafeTransfer.StagedRowTiles rowTiles:
+                EmitStagedCameraRowTiles(rowTiles.Config, rowTiles.TilesPerPhase);
+                break;
+            case NesVideoSafeTransfer.StagedRowAttributes rowAttributes:
+                EmitStagedCameraRowAttributes(rowAttributes.Config);
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported NES video-safe transfer {transfer.GetType().Name}.");
+        }
+    }
+
+    private void EmitStreamMapRowTransfer(int targetRow, int sourceRow, int x, int width)
+    {
         builder.LoadAAbsolute(0x2002);              // reset PPU address latch
         var remaining = width;
         var segmentX = x;

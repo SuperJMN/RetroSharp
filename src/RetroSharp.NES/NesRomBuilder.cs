@@ -330,7 +330,7 @@ internal static class NesRomBuilder
                 worldPackRuntime,
                 worldPackPlacement,
                 worldPackProbe,
-                program.UsesCameraRuntime);
+                program.UsesCameraRuntime ? frameScheduler : null);
         }
         if (layout.EmitMmc3Foundation)
         {

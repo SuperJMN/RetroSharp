@@ -538,35 +538,21 @@ internal sealed partial class NesSdkOperationLowerer
 
     private void EmitCommitPendingCameraRowStream(NesCameraConfig config)
     {
-        var (tilesPerPhase, attributePhase) = frameScheduler.PackedCameraRowSchedule();
-        var tilesLabel = builder.CreateLabel("nes_camera_row_tiles");
-        var attributesLabel = builder.CreateLabel("nes_camera_row_attrs");
-        var doneLabel = builder.CreateLabel("nes_camera_row_done");
+        frameScheduler.EmitStagedCameraRowCommit(this, config);
+    }
 
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
-        builder.CompareImmediate(attributePhase);
-        builder.BranchRelative(0xD0, tilesLabel); // BNE tilesLabel
-        builder.JumpAbsolute(attributesLabel);
-
-        builder.Label(tilesLabel);
+    private void EmitStagedCameraRowTiles(NesCameraConfig config, int tilesPerPhase)
+    {
         EmitLoadPendingCameraRowToStreamAddresses();
         EmitAdvancePendingRowColumnsForPhase(config, tilesPerPhase);
         EmitStreamRowTilesFromAddresses(config, tilesPerPhase);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
-        builder.JumpAbsolute(doneLabel);
+    }
 
-        builder.Label(attributesLabel);
+    private void EmitStagedCameraRowAttributes(NesCameraConfig config)
+    {
         EmitLoadPendingCameraRowToStreamAddresses();
         EmitPrepareRuntimeRowAttributeColumn();
         EmitStreamRuntimeRowAttributes();
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
-        EmitClearPendingCameraStream(PendingStreamRow);
-
-        builder.Label(doneLabel);
     }
 
     private void EmitAdvancePendingRowColumnsForPhase(NesCameraConfig config, int tilesPerPhase)

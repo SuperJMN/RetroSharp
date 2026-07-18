@@ -8,9 +8,28 @@ internal enum NesFrameBoundaryPurpose
     ExplicitVideoTransfer,
 }
 
+internal readonly record struct NesCameraConfig(
+    int MapWidth,
+    int MapHeight,
+    int StreamY,
+    int StreamHeight,
+    bool UseFourScreenNametables);
+
+internal abstract record NesVideoSafeTransfer
+{
+    internal sealed record StreamColumn(NesCameraConfig Config) : NesVideoSafeTransfer;
+
+    internal sealed record StreamRow(int TargetRow, int SourceRow, int X, int Width) : NesVideoSafeTransfer;
+
+    internal sealed record StagedRowTiles(NesCameraConfig Config, int TilesPerPhase) : NesVideoSafeTransfer;
+
+    internal sealed record StagedRowAttributes(NesCameraConfig Config) : NesVideoSafeTransfer;
+}
+
 internal sealed class NesPhysicalFrameScheduler
 {
     private const ushort OamDmaAddress = 0x4014;
+    private const byte PendingStreamRow = 2;
     internal const string FrameSignalNmiHandlerLabel = "nes_frame_signal_nmi_handler";
     private readonly PrgBuilder builder;
     private readonly NesFramePlan plan;
@@ -58,9 +77,6 @@ internal sealed class NesPhysicalFrameScheduler
     internal void EmitMaximumCameraWalkStepsToA() =>
         builder.LoadAImmediate(plan.MaximumCameraWalkStepsPerFrame);
 
-    internal (int TilesPerPhase, int AttributePhase) PackedCameraRowSchedule() =>
-        (plan.PackedCameraRowTileWritesPerFrame, plan.PackedCameraRowAttributePhase);
-
     internal void EmitFrameBoundary(NesFrameBoundaryPurpose purpose)
     {
         EmitFrameBoundary(purpose, frameEmitter: null);
@@ -86,6 +102,60 @@ internal sealed class NesPhysicalFrameScheduler
         builder.BranchRelative(0x10, setLabel);
         EmitPendingCameraWork(purpose, frameEmitter);
         EmitRetainedOamWork();
+    }
+
+    internal void EmitVideoSafeTransfer(
+        NesVideoSafeTransfer transfer,
+        NesSdkOperationLowerer frameEmitter)
+    {
+        ArgumentNullException.ThrowIfNull(transfer);
+        ArgumentNullException.ThrowIfNull(frameEmitter);
+        EmitFrameBoundary(NesFrameBoundaryPurpose.ExplicitVideoTransfer, frameEmitter);
+        frameEmitter.EmitVideoSafeTransfer(transfer);
+    }
+
+    internal void EmitStagedCameraRowCommit(
+        NesSdkOperationLowerer frameEmitter,
+        NesCameraConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(frameEmitter);
+        var tilesLabel = builder.CreateLabel("nes_camera_row_tiles");
+        var attributesLabel = builder.CreateLabel("nes_camera_row_attrs");
+        var doneLabel = builder.CreateLabel("nes_camera_row_done");
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
+        builder.CompareImmediate(plan.PackedCameraRowAttributePhase);
+        builder.BranchRelative(0xD0, tilesLabel);
+        builder.JumpAbsolute(attributesLabel);
+
+        builder.Label(tilesLabel);
+        frameEmitter.EmitVideoSafeTransfer(
+            new NesVideoSafeTransfer.StagedRowTiles(config, plan.PackedCameraRowTileWritesPerFrame));
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
+        builder.ClearCarry();
+        builder.AddImmediate(1);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
+        builder.JumpAbsolute(doneLabel);
+
+        builder.Label(attributesLabel);
+        frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.StagedRowAttributes(config));
+        builder.LoadAImmediate(0);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingRowPhase);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        builder.AndImmediate(0xFF ^ PendingStreamRow);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+
+        builder.Label(doneLabel);
+    }
+
+    internal void EmitPackedCameraRuntime(NesWorldPackRuntimePlan runtimePlan)
+    {
+        ArgumentNullException.ThrowIfNull(runtimePlan);
+        NesPackedCameraRuntimeEmitter.Emit(
+            builder,
+            runtimePlan,
+            plan.PackedCameraRowTileWritesPerFrame,
+            plan.PackedCameraRowAttributePhase);
     }
 
     internal void EmitOamShadowClear()
