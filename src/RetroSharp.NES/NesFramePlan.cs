@@ -133,6 +133,10 @@ internal sealed record NesFramePlan(
                 SdkCpuWorkWindowIds.VideoSafe));
         }
 
+        var packedCameraSchedule = usesPackedCameraRuntime
+            ? NesPackedCameraPhaseSchedule.Create(retainedOamByteCount)
+            : null;
+
         return new NesFramePlan(
             cartridgeProfile,
             useFourScreenNametables,
@@ -153,7 +157,7 @@ internal sealed record NesFramePlan(
                     CameraRowStagingId,
                     SdkCpuWorkWindowIds.Frame,
                     SdkCpuWorkWindowIds.VideoSafe,
-                    DefaultCameraRowAttributePhase + 1)]
+                    packedCameraSchedule?.MaximumRowFrames ?? DefaultCameraRowAttributePhase + 1)]
                 : []);
     }
 

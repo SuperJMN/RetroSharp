@@ -44,9 +44,7 @@ internal abstract record NesVideoSafeTransfer
 
     internal sealed record BeginPackedCommit : NesVideoSafeTransfer;
 
-    internal sealed record PublishPackedColumn : NesVideoSafeTransfer;
-
-    internal sealed record PublishPackedRow : NesVideoSafeTransfer;
+    internal sealed record FinalizePackedCommit : NesVideoSafeTransfer;
 
     internal sealed record StagedRowTiles(NesCameraConfig Config, int TilesPerPhase) : NesVideoSafeTransfer;
 
@@ -62,6 +60,7 @@ internal sealed class NesPhysicalFrameScheduler
     private readonly PrgBuilder builder;
     private readonly NesFramePlan plan;
     private readonly NesOamPublicationSchedule? oamPublicationSchedule;
+    private readonly NesPackedCameraPhaseSchedule? packedCameraPhaseSchedule;
     private readonly NesStagedFrameWork? cameraRowStaging;
 
     internal NesPhysicalFrameScheduler(PrgBuilder builder, NesFramePlan plan)
@@ -77,12 +76,19 @@ internal sealed class NesPhysicalFrameScheduler
                 plan.RetainedOamByteCount);
         }
 
+        if (plan.UsesPackedCameraRuntime)
+        {
+            packedCameraPhaseSchedule = NesPackedCameraPhaseSchedule.Create(plan.RetainedOamByteCount);
+        }
+
         if (plan.UsesPackedCameraRuntime || plan.UseFourScreenNametables)
         {
             cameraRowStaging = plan.StagedWork.SingleOrDefault(work =>
                 work.Id == NesFramePlan.CameraRowStagingId)
                 ?? throw new InvalidOperationException("NES camera row scheduling requires one declared staging deadline.");
-            if (cameraRowStaging.MaximumPhysicalFrames != plan.CameraRowAttributePhase + 1)
+            var expectedDeadline = packedCameraPhaseSchedule?.MaximumRowFrames
+                                   ?? plan.CameraRowAttributePhase + 1;
+            if (cameraRowStaging.MaximumPhysicalFrames != expectedDeadline)
             {
                 throw new InvalidOperationException(
                     "NES camera row staging deadline must match the emitted tile and attribute phase schedule.");
@@ -218,8 +224,6 @@ internal sealed class NesPhysicalFrameScheduler
         if (plan.UsesPackedCameraRuntime)
         {
             frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.BeginPackedCommit());
-            frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.PublishPackedColumn());
-            frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.PublishPackedRow());
         }
         else
         {
@@ -227,6 +231,10 @@ internal sealed class NesPhysicalFrameScheduler
         }
 
         frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.RestoreCameraScroll(config));
+        if (plan.UsesPackedCameraRuntime)
+        {
+            frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.FinalizePackedCommit());
+        }
         builder.LoadAImmediate((byte)NesCameraPublicationState.Applied);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
     }
@@ -271,8 +279,8 @@ internal sealed class NesPhysicalFrameScheduler
         NesPackedCameraRuntimeEmitter.Emit(
             builder,
             runtimePlan,
-            plan.CameraRowTileWritesPerFrame,
-            CameraRowAttributePhase);
+            packedCameraPhaseSchedule
+            ?? throw new InvalidOperationException("Packed camera runtime emission requires a physical phase schedule."));
     }
 
     private int CameraRowAttributePhase =>
@@ -347,8 +355,9 @@ internal sealed class NesPhysicalFrameScheduler
             builder.LoadAImmediate((byte)NesCameraPublicationState.Ready);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
         }
+        EmitOamPublicationIfRetained();
         EmitPendingCameraWork(purpose, frameEmitter, cameraConfig);
-        EmitRetainedOamWork();
+        EmitOamShadowResetIfRetained();
         builder.Label(end);
     }
 
@@ -492,6 +501,22 @@ internal sealed class NesPhysicalFrameScheduler
 
         EmitOamPublication();
         EmitOamShadowReset();
+    }
+
+    private void EmitOamPublicationIfRetained()
+    {
+        if (plan.UsesRetainedOam)
+        {
+            EmitOamPublication();
+        }
+    }
+
+    private void EmitOamShadowResetIfRetained()
+    {
+        if (plan.UsesRetainedOam)
+        {
+            EmitOamShadowReset();
+        }
     }
 
     private void EmitOamPublication()

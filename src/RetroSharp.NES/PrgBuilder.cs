@@ -148,6 +148,8 @@ internal sealed class PrgBuilder
 
     public void SubtractZeroPage(byte address) => Emit(0xE5, address);
 
+    public void SubtractAbsolute(ushort address) => Emit(0xED, Low(address), High(address));
+
     public void PushA() => Emit(0x48);
 
     public void PullA() => Emit(0x68);

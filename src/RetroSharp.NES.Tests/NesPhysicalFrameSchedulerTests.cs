@@ -8,6 +8,64 @@ using static NesSdkOperationBoundaryTests;
 public sealed class NesPhysicalFrameSchedulerTests
 {
     [Fact]
+    public void Standard_runner_column_schedule_pins_physical_boundary_and_combined_attribute_work()
+    {
+        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 76);
+
+        Assert.Equal(
+            [
+                new NesPackedCameraPhase(20, 0),
+                new NesPackedCameraPhase(10, 2),
+                new NesPackedCameraPhase(0, 6),
+            ],
+            schedule.PlanColumn(payloadLength: 30, targetStart: 10));
+        Assert.Equal((9, 10), (schedule.MaximumColumnFrames, schedule.MaximumRowFrames));
+    }
+
+    [Fact]
+    public void Standard_worst_column_schedule_treats_rows_30_and_60_as_phase_boundaries()
+    {
+        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 76);
+
+        Assert.Equal(
+            [
+                new NesPackedCameraPhase(1, 0),
+                new NesPackedCameraPhase(20, 0),
+                new NesPackedCameraPhase(10, 0),
+                new NesPackedCameraPhase(1, 2),
+                new NesPackedCameraPhase(0, 7),
+            ],
+            schedule.PlanColumn(payloadLength: 32, targetStart: 29));
+    }
+
+    [Fact]
+    public void Large_worst_column_schedule_uses_six_tile_and_nine_attribute_phases()
+    {
+        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 152);
+
+        Assert.Equal(
+            [
+                new NesPackedCameraPhase(1, 0),
+                new NesPackedCameraPhase(8, 0),
+                new NesPackedCameraPhase(8, 0),
+                new NesPackedCameraPhase(8, 0),
+                new NesPackedCameraPhase(6, 0),
+                new NesPackedCameraPhase(1, 0),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+                new NesPackedCameraPhase(0, 1),
+            ],
+            schedule.PlanColumn(payloadLength: 32, targetStart: 29));
+        Assert.Equal((29, 56), (schedule.MaximumColumnFrames, schedule.MaximumRowFrames));
+    }
+
+    [Fact]
     public void Mapper_zero_gameplay_boundary_emits_the_existing_fresh_vblank_edge()
     {
         var builder = new PrgBuilder();
@@ -74,17 +132,17 @@ public sealed class NesPhysicalFrameSchedulerTests
 
         Assert.True(IndexOfSequence(
             builder.Build(),
-            [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA2, 0x68, 0xBD, 0x98, 0x01, 0x8D, 0x04, 0x20, 0xE8, 0xD0, 0xF7]) >= 0);
+            [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xAD, 0x00, 0x02, 0x8D, 0x04, 0x20, 0xAD, 0x01, 0x02]) >= 0);
         var report = scheduler.CreateCpuWorkReport([]);
         var publication = Assert.Single(report.Contributors);
         Assert.Equal(SdkCpuWorkContributorIds.SpritePublish, publication.Id);
-        Assert.Equal((2_135L, 2_135L), (publication.TotalLower, publication.TotalUpper));
+        Assert.Equal((1_222L, 1_222L), (publication.TotalLower, publication.TotalUpper));
         Assert.DoesNotContain(report.Contributors, contributor =>
             contributor.Id == SdkCpuWorkContributorIds.SpritePublishTransfer);
         Assert.DoesNotContain(report.Unknowns, unknown =>
             unknown.Id == SdkCpuWorkContributorIds.SpritePublish);
         var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
-        Assert.Equal((2_135L, 2_135L), (videoSafe.KnownLower, videoSafe.KnownUpper));
+        Assert.Equal((1_222L, 1_222L), (videoSafe.KnownLower, videoSafe.KnownUpper));
     }
 
     [Fact]

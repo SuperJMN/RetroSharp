@@ -23,6 +23,7 @@ internal static class NesRomBuilder
     internal const string WorldPackProbeLabel = "worldpack_probe";
     internal const string WorldPackPrepareEdgeLabel = "worldpack_prepare_edge";
     internal const string WorldPackCommitEdgeLabel = "worldpack_commit_edge";
+    internal const string WorldPackFinalizeEdgeLabel = "worldpack_finalize_edge";
     internal const string WorldPackReleaseReversedEdgeLabel = "worldpack_release_reversed_edge";
     internal const string WorldPackAttributesLabel = "worldpack_attributes";
     private const string Mmc3IrqHandlerLabel = "mmc3_irq_handler";
@@ -484,6 +485,7 @@ internal static class NesRomBuilder
         {
             fixedSymbols[WorldPackPrepareEdgeLabel] = builder.AddressOfLabel(WorldPackPrepareEdgeLabel);
             fixedSymbols[WorldPackCommitEdgeLabel] = builder.AddressOfLabel(WorldPackCommitEdgeLabel);
+            fixedSymbols[WorldPackFinalizeEdgeLabel] = builder.AddressOfLabel(WorldPackFinalizeEdgeLabel);
             fixedSymbols[WorldPackReleaseReversedEdgeLabel] = builder.AddressOfLabel(WorldPackReleaseReversedEdgeLabel);
         }
         foreach (var table in program.GeneratedRomTables.Values)

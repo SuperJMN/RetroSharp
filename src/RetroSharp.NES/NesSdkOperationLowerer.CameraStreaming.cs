@@ -74,11 +74,8 @@ internal sealed partial class NesSdkOperationLowerer
             case NesVideoSafeTransfer.BeginPackedCommit:
                 EmitBeginPackedCameraCommit();
                 break;
-            case NesVideoSafeTransfer.PublishPackedColumn:
-                EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Column);
-                break;
-            case NesVideoSafeTransfer.PublishPackedRow:
-                EmitPublishCommittedPackedCameraAxis(NesPackedCameraRuntime.Row);
+            case NesVideoSafeTransfer.FinalizePackedCommit:
+                EmitFinalizePackedCameraCommit();
                 break;
             case NesVideoSafeTransfer.StagedRowTiles rowTiles:
                 EmitStagedCameraRowTiles(rowTiles.Config, rowTiles.TilesPerPhase);
@@ -853,15 +850,25 @@ internal sealed partial class NesSdkOperationLowerer
         }
     }
 
-    private void EmitPublishCommittedPackedCameraAxis(byte axis)
+    private void EmitFinalizePackedCameraCommit()
+    {
+        EmitPublishCompletedPackedCameraAxis(NesPackedCameraRuntime.Column);
+        EmitPublishCompletedPackedCameraAxis(NesPackedCameraRuntime.Row);
+        builder.CallSubroutine(NesRomBuilder.WorldPackFinalizeEdgeLabel);
+    }
+
+    private void EmitPublishCompletedPackedCameraAxis(byte axis)
     {
         var doneLabel = builder.CreateLabel("nes_packed_camera_publish_done");
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CriticalSection);
+        builder.CompareImmediate(NesPackedCameraRuntime.CommitReadyToFinalize);
+        builder.BranchRelative(0xD0, doneLabel);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitAxis);
+        builder.CompareImmediate(axis);
+        builder.BranchRelative(0xD0, doneLabel);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
         builder.AndImmediate(axis);
         builder.BranchRelative(0xF0, doneLabel); // BEQ doneLabel: axis was not pending
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
-        builder.AndImmediate(axis);
-        builder.BranchRelative(0xD0, doneLabel); // BNE doneLabel: commit is incomplete
         // Preparation can yield across frames and the bounded walk can advance farther inside the
         // newly resident tile before the pending camera commit drains it. Publish that latest safe fine-scroll
         // position; restoring the older edge snapshot leaves the visible camera stranded up to seven
