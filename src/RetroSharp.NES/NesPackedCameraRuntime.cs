@@ -261,6 +261,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var tileSegment = builder.CreateLabel("nes_packed_row_tile_segment");
         var tileLoop = builder.CreateLabel("nes_packed_row_tile_phase_loop");
         var tilesRemain = builder.CreateLabel("nes_packed_row_tiles_remain");
+        var writeAttributes = builder.CreateLabel("nes_packed_row_write_attributes");
         var incomplete = builder.CreateLabel("nes_packed_row_phase_incomplete");
         var ready = builder.CreateLabel("nes_packed_row_phase_ready");
         var finish = builder.CreateLabel("nes_packed_row_phase_finish");
@@ -349,7 +350,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(incomplete);
         builder.Label(attributesFit);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
-        EmitRowAttributeWrites(builder, ready, incomplete);
+        builder.JumpAbsolute(writeAttributes);
 
         builder.Label(tilesRemain);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
@@ -359,6 +360,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(attributes);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+        builder.Label(writeAttributes);
         EmitRowAttributeWrites(builder, ready, incomplete);
 
         builder.Label(incomplete);
