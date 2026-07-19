@@ -16,10 +16,10 @@ and packed-camera details.
 | Artifact | SHA-256 |
 | --- | --- |
 | `audio-mixed-load.gb` | `adcef49366405e81912c1de028809662de497e97c2fd630ab11ecf5595dbe1ef` |
-| `audio-mixed-load.nes` | `8c991317bc4ce82116371dca40e00cf74a94bdca6269c93a9004549988ee62a4` |
-| NES runtime ABI sidecar | `09ef8a83c15dba559dd5daf3d8432b821a1a95c62fd5ed267d3e92161e94a62c` |
-| exact tracked `runner.nes` | `68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53` |
-| runner NES runtime ABI sidecar | `c494cb1539769091446c1d971cdd1dc826ac78502b281b423ffda82a20812424` |
+| `audio-mixed-load.nes` | `2c70f5e910916f2541ece692528064c653801ec90c31c1f24d33cae5a1725d17` |
+| NES runtime ABI sidecar | `99e9d062b99b3bfd7a5299af8ed6a22ee1988567e94dbdc91fcf734bcdc77668` |
+| exact tracked `runner.nes` | `3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49` |
+| runner NES runtime ABI sidecar | `39d8603c73304963ba7636fb631c7cf6b5105f9c85ba2ab398c9539f342dc5e6` |
 
 The canary carries BGM, two independently completed SFX starts, two airborne
 arcs, periodic packed collision probes, two moving metasprites, a packed

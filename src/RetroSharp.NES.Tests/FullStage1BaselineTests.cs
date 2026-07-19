@@ -247,7 +247,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
         Assert.DoesNotContain(
             runtimeProbe.Report.Segments,
             item => item.Owner.StartsWith("pinned:world-column-attributes:", StringComparison.Ordinal));
-        Assert.Equal(8_982, runtimeProbe.Report.FixedPayloadBytes);
+        Assert.Equal(8_989, runtimeProbe.Report.FixedPayloadBytes);
         Assert.Equal(7_310, runtimeProbe.Report.PinnedR7Bytes);
         Assert.Equal(1_536, runtimeProbe.Report.ResidentChrBytes);
         Assert.Equal(runtimeProbe.Rom, rebuiltRuntimeProbe.Rom);

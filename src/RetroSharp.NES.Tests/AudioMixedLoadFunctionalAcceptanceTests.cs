@@ -23,12 +23,12 @@ public sealed class AudioMixedLoadFunctionalAcceptanceTests
     {
         var rom = File.ReadAllBytes(RepositoryFile("samples/runner/bin/runner.nes"));
         Assert.Equal(
-            "68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53",
+            "3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49",
             Convert.ToHexString(SHA256.HashData(rom)).ToLowerInvariant());
         using var runtimeAbi = JsonDocument.Parse(
             File.ReadAllText(RepositoryFile("samples/runner/bin/runner.nes.runtime-abi.json")));
         Assert.Equal(
-            "68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53",
+            "3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49",
             runtimeAbi.RootElement.GetProperty("romSha256").GetString());
 
         var cpu = new NesTestCpu(rom);

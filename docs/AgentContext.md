@@ -219,7 +219,7 @@ This document preserves project knowledge that previously lived only in agent me
   while leaving tile IDs correct. The runtime keeps the global table for row
   commits and emits a page-aligned physical table for columns; the complete
   `stage1` probe now measures a 3,158-byte runtime index, 7,310 pinned R7 bytes,
-  and 8,982 fixed bytes. The exact runner regression holds RIGHT to visible X
+  and 8,989 fixed bytes. The exact runner regression holds RIGHT to visible X
   100 and returns LEFT to X 0 at Y 80. FCEUmm reproduced that path with zero
   visible tile/palette mismatches. See
   `docs/PackedTiledFunctionalAcceptance.md`.

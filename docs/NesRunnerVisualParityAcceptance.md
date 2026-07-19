@@ -183,7 +183,7 @@ The NES lowering now enforces these concrete invariants:
   budget. Bank selection, WorldPack directory lookup, and raw/RLE decode remain
   outside the commit.
 
-The frozen complete-stage runtime probe is 8,982 fixed bytes after preserving
+The frozen complete-stage runtime probe is 8,989 fixed bytes after preserving
 the vertical attribute stride, specializing prepared 2x2 column traversal, and
 selecting the physical 30-row attribute table for columns; pinned R7 is 7,310
 bytes. It still selects
