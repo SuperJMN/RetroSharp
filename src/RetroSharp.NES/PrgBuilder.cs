@@ -162,6 +162,8 @@ internal sealed class PrgBuilder
 
     public void IncrementAbsolute(ushort address) => Emit(0xEE, Low(address), High(address));
 
+    public void IncrementAbsoluteX(ushort address) => Emit(0xFE, Low(address), High(address));
+
     public void IncrementX() => Emit(0xE8);
 
     public void DecrementX() => Emit(0xCA);

@@ -46,6 +46,8 @@ internal static class NesPackedCameraRuntime
 
 internal static class NesPackedCameraRuntimeEmitter
 {
+    private const string BeginSelectedPhaseLabel = "nes_packed_begin_selected_phase";
+
     internal static void Emit(
         PrgBuilder builder,
         NesWorldPackRuntimePlan plan,
@@ -54,6 +56,7 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitPrepareEdge(builder, plan);
         EmitCommitEdge(builder, plan, schedule);
         EmitFinalizeEdge(builder);
+        EmitBeginSelectedPhaseRoutine(builder, plan);
         EmitReleaseReversedEdges(builder);
     }
 
@@ -122,6 +125,7 @@ internal static class NesPackedCameraRuntimeEmitter
         NesPackedCameraPhaseSchedule schedule)
     {
         var attributes = builder.CreateLabel("nes_packed_column_phase_attributes");
+        var writeAttributes = builder.CreateLabel("nes_packed_column_phase_write_attributes");
         var tileCountWithinBudget = builder.CreateLabel("nes_packed_column_tile_count_budget");
         var topBoundary = builder.CreateLabel("nes_packed_column_top_boundary");
         var boundaryReady = builder.CreateLabel("nes_packed_column_boundary_ready");
@@ -132,7 +136,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var ready = builder.CreateLabel("nes_packed_column_phase_ready");
         var finish = builder.CreateLabel("nes_packed_column_phase_finish");
 
-        EmitBeginSelectedPhase(builder, plan);
+        builder.CallSubroutine(BeginSelectedPhaseLabel);
         EmitLoadSelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
@@ -197,11 +201,9 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitStoreASelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
         if (schedule.ColumnCombinedAttributeWrites > 0)
         {
-            EmitColumnAttributeWrites(
-                builder,
-                schedule.ColumnCombinedAttributeWrites,
-                ready,
-                incomplete);
+            builder.LoadAImmediate(schedule.ColumnCombinedAttributeWrites);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+            builder.JumpAbsolute(writeAttributes);
         }
         else
         {
@@ -212,11 +214,10 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(incomplete);
 
         builder.Label(attributes);
-        EmitColumnAttributeWrites(
-            builder,
-            schedule.ColumnAttributeWritesPerPhase,
-            ready,
-            incomplete);
+        builder.LoadAImmediate(schedule.ColumnAttributeWritesPerPhase);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+        builder.Label(writeAttributes);
+        EmitColumnAttributeWrites(builder, ready, incomplete);
 
         builder.Label(incomplete);
         builder.LoadAImmediate(0);
@@ -242,7 +243,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var ready = builder.CreateLabel("nes_packed_row_phase_ready");
         var finish = builder.CreateLabel("nes_packed_row_phase_finish");
 
-        EmitBeginSelectedPhase(builder, plan);
+        builder.CallSubroutine(BeginSelectedPhaseLabel);
         EmitLoadSelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
@@ -304,8 +305,9 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Return();
     }
 
-    private static void EmitBeginSelectedPhase(PrgBuilder builder, NesWorldPackRuntimePlan plan)
+    private static void EmitBeginSelectedPhaseRoutine(PrgBuilder builder, NesWorldPackRuntimePlan plan)
     {
+        builder.Label(BeginSelectedPhaseLabel);
         builder.LoadAImmediate(NesPackedCameraRuntime.Committing);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Committing);
         builder.LoadAImmediate(NesPackedCameraRuntime.CommitPpuPhase);
@@ -327,18 +329,17 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.DestinationHigh);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerHigh);
+        builder.Return();
     }
 
     private static void EmitColumnAttributeWrites(
         PrgBuilder builder,
-        int maximumWrites,
         string ready,
         string incomplete)
     {
         var countReady = builder.CreateLabel("nes_packed_column_attr_count_ready");
         var topTarget = builder.CreateLabel("nes_packed_column_attr_top_target");
         var targetReady = builder.CreateLabel("nes_packed_column_attr_target_ready");
-        var targetStored = builder.CreateLabel("nes_packed_column_attr_target_stored");
         var loop = builder.CreateLabel("nes_packed_column_attr_phase_loop");
 
         EmitComputeAttributeCount(builder);
@@ -350,9 +351,9 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.SetCarry();
         builder.SubtractZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
-        builder.CompareImmediate(maximumWrites + 1);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
         builder.JumpIf(0x90, countReady);
-        builder.LoadAImmediate(maximumWrites);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.Label(countReady);
         EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining, NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
@@ -400,7 +401,6 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         builder.JumpIf(0xF0, ready);
         builder.JumpAbsolute(incomplete);
-        builder.Label(targetStored);
     }
 
     private static void EmitRowAttributeWrites(
@@ -506,40 +506,22 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitLoadSelectedMetadata(PrgBuilder builder, int offset)
     {
-        var slot1 = builder.CreateLabel("nes_packed_load_slot_1_metadata");
-        var ready = builder.CreateLabel("nes_packed_load_metadata_ready");
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, slot1);
-        builder.LoadAAbsolute(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
-        builder.JumpAbsolute(ready);
-        builder.Label(slot1);
-        builder.LoadAAbsolute(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot1 + offset)));
-        builder.Label(ready);
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        builder.LoadAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
     }
 
     private static void EmitStoreASelectedMetadata(PrgBuilder builder, int offset)
     {
-        var slot1 = builder.CreateLabel("nes_packed_store_slot_1_metadata");
-        var ready = builder.CreateLabel("nes_packed_store_metadata_ready");
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, slot1);
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.Status, checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
-        builder.JumpAbsolute(ready);
-        builder.Label(slot1);
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.Status, checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot1 + offset)));
-        builder.Label(ready);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.PushA();
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        builder.PullA();
+        builder.StoreAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
     }
 
     private static void EmitIncrementSelectedMetadata(PrgBuilder builder, int offset)
     {
-        EmitLoadSelectedMetadata(builder, offset);
-        builder.ClearCarry();
-        builder.AddImmediate(1);
-        EmitStoreASelectedMetadata(builder, offset);
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        builder.IncrementAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
     }
 
     private static void EmitFinalizeEdge(PrgBuilder builder)
@@ -645,30 +627,25 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(selectSlot0);
         builder.LoadAImmediate(0);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
         builder.JumpAbsolute(done);
         builder.Label(selectSlot1);
         builder.LoadAImmediate(1);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
+        builder.LoadAImmediate(NesPackedCameraRuntime.SlotMetadataBytes);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
         builder.Label(done);
     }
 
     private static void EmitLoadPendingExpectedTags(PrgBuilder builder)
     {
         var done = builder.CreateLabel("nes_packed_pending_tags_done");
-        var selectedSlot1 = builder.CreateLabel("nes_packed_pending_selected_slot_1");
-        var axisReady = builder.CreateLabel("nes_packed_pending_axis_ready");
         var row = builder.CreateLabel("nes_packed_pending_row");
         var sourceReady = builder.CreateLabel("nes_packed_pending_source_ready");
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PendingAxes);
         builder.JumpIf(0xF0, done);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, selectedSlot1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.AxisOffset);
-        builder.JumpAbsolute(axisReady);
-        builder.Label(selectedSlot1);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.AxisOffset);
-        builder.Label(axisReady);
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        builder.LoadAAbsoluteX(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.AxisOffset);
         builder.CompareImmediate(NesPackedCameraRuntime.Row);
         builder.JumpIf(0xF0, row);
         builder.LoadAImmediate(NesRuntimeMemoryLayout.PackedCamera.PendingColumn & 0xFF);
@@ -712,53 +689,35 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitValidateSelectedSlot(PrgBuilder builder, string invalid)
     {
-        var slot1 = builder.CreateLabel("nes_packed_validate_slot_1");
-        var validate = builder.CreateLabel("nes_packed_validate_tags");
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, slot1);
-        builder.LoadAImmediate(NesRuntimeMemoryLayout.PackedCamera.Slot0 & 0xFF);
-        builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
-        builder.LoadAImmediate(NesRuntimeMemoryLayout.PackedCamera.Slot0 >> 8);
-        builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerHigh);
-        builder.JumpAbsolute(validate);
-        builder.Label(slot1);
-        builder.LoadAImmediate(NesRuntimeMemoryLayout.PackedCamera.Slot1 & 0xFF);
-        builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
-        builder.LoadAImmediate(NesRuntimeMemoryLayout.PackedCamera.Slot1 >> 8);
-        builder.StoreAZeroPage(NesRuntimeMemoryLayout.PackedCamera.PointerHigh);
-        builder.Label(validate);
         var stateValid = builder.CreateLabel("nes_packed_validate_state_valid");
-        builder.LoadYImmediate(NesPackedCameraRuntime.StateOffset);
-        builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        builder.LoadAAbsoluteX(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.StateOffset);
         builder.CompareImmediate(NesPackedCameraRuntime.Resident);
         builder.JumpIf(0xF0, stateValid);
         builder.CompareImmediate(NesPackedCameraRuntime.Committing);
         builder.JumpIf(0xD0, invalid);
         builder.Label(stateValid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.AxisOffset, NesRuntimeMemoryLayout.PackedCamera.CommitAxis, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.DirectionOffset, NesRuntimeMemoryLayout.PackedCamera.CommitDirection, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.WorldEdgeLowOffset, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.WorldEdgeHighOffset, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.TargetOffset, NesRuntimeMemoryLayout.PackedCamera.CommitTarget, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.OrthogonalLowOffset, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.OrthogonalHighOffset, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.PayloadLengthOffset, NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, invalid);
-        EmitCompareIndirectMetadata(builder, NesPackedCameraRuntime.TargetStartOffset, NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.AxisOffset, NesRuntimeMemoryLayout.PackedCamera.CommitAxis, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.DirectionOffset, NesRuntimeMemoryLayout.PackedCamera.CommitDirection, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.WorldEdgeLowOffset, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.WorldEdgeHighOffset, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.TargetOffset, NesRuntimeMemoryLayout.PackedCamera.CommitTarget, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.OrthogonalLowOffset, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.OrthogonalHighOffset, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.PayloadLengthOffset, NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, invalid);
+        EmitCompareSelectedMetadata(builder, NesPackedCameraRuntime.TargetStartOffset, NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart, invalid);
     }
 
-    private static void EmitCompareIndirectMetadata(PrgBuilder builder, int offset, byte expected, string invalid)
+    private static void EmitCompareSelectedMetadata(PrgBuilder builder, int offset, byte expected, string invalid)
     {
-        builder.LoadYImmediate(offset);
-        builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
+        builder.LoadAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
         builder.CompareImmediate(expected);
         builder.JumpIf(0xD0, invalid);
     }
 
-    private static void EmitCompareIndirectMetadata(PrgBuilder builder, int offset, ushort expectedAddress, string invalid)
+    private static void EmitCompareSelectedMetadata(PrgBuilder builder, int offset, ushort expectedAddress, string invalid)
     {
-        builder.LoadYImmediate(offset);
-        builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
+        builder.LoadAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
         builder.CompareAbsolute(expectedAddress);
         builder.JumpIf(0xD0, invalid);
     }
@@ -795,14 +754,13 @@ internal static class NesPackedCameraRuntimeEmitter
 
         builder.Label(selectSlot0);
         EmitSelectSlot(builder, plan.Layout.EdgeSlots[0], slot: 0);
-        EmitInitializeSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.Slot0);
         builder.JumpAbsolute(prepare);
 
         builder.Label(selectSlot1);
         EmitSelectSlot(builder, plan.Layout.EdgeSlots[1], slot: 1);
-        EmitInitializeSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.Slot1);
 
         builder.Label(prepare);
+        EmitInitializeSelectedMetadata(builder);
         EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.RequestCount);
         EmitSetSelectedState(builder, NesPackedCameraRuntime.Requested);
         EmitIncrement(builder, NesRuntimeMemoryLayout.PackedCamera.PrepareCount);
@@ -912,27 +870,36 @@ internal static class NesPackedCameraRuntimeEmitter
     {
         builder.LoadAImmediate(slot);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
+        builder.LoadAImmediate(slot * NesPackedCameraRuntime.SlotMetadataBytes);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
         builder.LoadAImmediate(edge.Start & 0xFF);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.DestinationLow);
         builder.LoadAImmediate(edge.Start >> 8);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.DestinationHigh);
     }
 
-    private static void EmitInitializeSelectedMetadata(PrgBuilder builder, ushort metadata)
+    private static void EmitInitializeSelectedMetadata(PrgBuilder builder)
     {
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitAxis, checked((ushort)(metadata + NesPackedCameraRuntime.AxisOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitDirection, checked((ushort)(metadata + NesPackedCameraRuntime.DirectionOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow, checked((ushort)(metadata + NesPackedCameraRuntime.WorldEdgeLowOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh, checked((ushort)(metadata + NesPackedCameraRuntime.WorldEdgeHighOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitTarget, checked((ushort)(metadata + NesPackedCameraRuntime.TargetOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow, checked((ushort)(metadata + NesPackedCameraRuntime.OrthogonalLowOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh, checked((ushort)(metadata + NesPackedCameraRuntime.OrthogonalHighOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, checked((ushort)(metadata + NesPackedCameraRuntime.PayloadLengthOffset)));
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart, checked((ushort)(metadata + NesPackedCameraRuntime.TargetStartOffset)));
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitAxis, NesPackedCameraRuntime.AxisOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitDirection, NesPackedCameraRuntime.DirectionOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow, NesPackedCameraRuntime.WorldEdgeLowOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh, NesPackedCameraRuntime.WorldEdgeHighOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitTarget, NesPackedCameraRuntime.TargetOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow, NesPackedCameraRuntime.OrthogonalLowOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh, NesPackedCameraRuntime.OrthogonalHighOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength, NesPackedCameraRuntime.PayloadLengthOffset);
+        EmitCopyToSelectedMetadata(builder, NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart, NesPackedCameraRuntime.TargetStartOffset);
         builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(checked((ushort)(metadata + NesPackedCameraRuntime.CommitPhaseOffset)));
-        builder.StoreAAbsolute(checked((ushort)(metadata + NesPackedCameraRuntime.PayloadCursorOffset)));
-        EmitCopyFrame(builder, metadata, resident: false);
+        builder.StoreAAbsoluteX(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.CommitPhaseOffset);
+        builder.StoreAAbsoluteX(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.PayloadCursorOffset);
+        EmitCopyFrameToSelectedMetadata(builder, resident: false);
+    }
+
+    private static void EmitCopyToSelectedMetadata(PrgBuilder builder, ushort source, int offset)
+    {
+        builder.LoadAAbsolute(source);
+        builder.StoreAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + offset)));
     }
 
     private static void EmitCopyFrameToSelectedMetadata(PrgBuilder builder, bool resident, bool commit = false)
@@ -944,16 +911,24 @@ internal static class NesPackedCameraRuntimeEmitter
             return;
         }
 
-        var slot1 = builder.CreateLabel("nes_packed_frame_slot_1");
-        var done = builder.CreateLabel("nes_packed_frame_done");
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, slot1);
-        EmitCopyFrame(builder, NesRuntimeMemoryLayout.PackedCamera.Slot0, resident);
-        builder.JumpAbsolute(done);
-        builder.Label(slot1);
-        EmitCopyFrame(builder, NesRuntimeMemoryLayout.PackedCamera.Slot1, resident);
-        builder.Label(done);
+        var lowOffset = resident
+            ? NesPackedCameraRuntime.ResidentFrameLowOffset
+            : NesPackedCameraRuntime.RequestFrameLowOffset;
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow);
+        builder.StoreAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + lowOffset)));
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh);
+        builder.StoreAAbsoluteX(checked((ushort)(NesRuntimeMemoryLayout.PackedCamera.Slot0 + lowOffset + 1)));
+        if (resident)
+        {
+            EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow, NesRuntimeMemoryLayout.PackedCamera.ResidentFrameLow);
+            EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh, NesRuntimeMemoryLayout.PackedCamera.ResidentFrameHigh);
+        }
+        else
+        {
+            EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow, NesRuntimeMemoryLayout.PackedCamera.RequestFrameLow);
+            EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh, NesRuntimeMemoryLayout.PackedCamera.RequestFrameHigh);
+        }
     }
 
     private static void EmitCopyFrame(PrgBuilder builder, ushort metadata, bool resident)
@@ -1263,18 +1238,9 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitSetSelectedState(PrgBuilder builder, byte state)
     {
-        var slot1 = builder.CreateLabel("nes_packed_state_slot_1");
-        var done = builder.CreateLabel("nes_packed_state_done");
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedSlot);
-        builder.CompareImmediate(1);
-        builder.JumpIf(0xF0, slot1);
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.SelectedMetadataOffset);
         builder.LoadAImmediate(state);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.StateOffset);
-        builder.JumpAbsolute(done);
-        builder.Label(slot1);
-        builder.LoadAImmediate(state);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.StateOffset);
-        builder.Label(done);
+        builder.StoreAAbsoluteX(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.StateOffset);
     }
 
     private static void EmitCopy(PrgBuilder builder, ushort source, ushort destination)
