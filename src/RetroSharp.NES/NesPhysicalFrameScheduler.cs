@@ -18,6 +18,8 @@ internal readonly record struct NesCameraConfig(
     internal bool CanStreamColumns => UseFourScreenNametables ? MapWidth > 64 : MapWidth > 32;
 
     internal bool CanStreamRows => UseFourScreenNametables && MapHeight > 60;
+
+    internal bool CanStreamAnyAxis => CanStreamColumns || CanStreamRows;
 }
 
 internal enum NesPendingCameraStream : byte
@@ -221,7 +223,8 @@ internal sealed class NesPhysicalFrameScheduler
         NesCameraConfig config)
     {
         ArgumentNullException.ThrowIfNull(frameEmitter);
-        if (plan.UsesPackedCameraRuntime)
+        var usesPackedStreaming = plan.UsesPackedCameraRuntime && config.CanStreamAnyAxis;
+        if (usesPackedStreaming)
         {
             frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.BeginPackedCommit());
         }
@@ -231,7 +234,7 @@ internal sealed class NesPhysicalFrameScheduler
         }
 
         frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.RestoreCameraScroll(config));
-        if (plan.UsesPackedCameraRuntime)
+        if (usesPackedStreaming)
         {
             frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.FinalizePackedCommit());
         }
@@ -378,7 +381,7 @@ internal sealed class NesPhysicalFrameScheduler
         NesSdkOperationLowerer frameEmitter,
         NesCameraConfig config)
     {
-        if (!config.CanStreamColumns && !config.CanStreamRows)
+        if (!config.CanStreamAnyAxis)
         {
             return;
         }

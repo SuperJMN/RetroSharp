@@ -2,11 +2,55 @@ namespace RetroSharp.NES.Tests;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
+using RetroSharp.Parser;
 using Xunit;
 using static NesSdkOperationBoundaryTests;
 
 public sealed class NesPhysicalFrameSchedulerTests
 {
+    [Fact]
+    public void Packed_camera_without_streamable_axes_restores_scroll_without_empty_commit_lifecycle()
+    {
+        const ushort commitAddress = 0xA100;
+        const ushort finalizeAddress = 0xA200;
+        var builder = new PrgBuilder();
+        builder.DefineExternalLabel(NesRomBuilder.WorldPackCommitEdgeLabel, commitAddress);
+        builder.DefineExternalLabel(NesRomBuilder.WorldPackFinalizeEdgeLabel, finalizeAddress);
+        var program = NesVideoProgram.FromProgram(ParseLoweredProgram("void Main() { }"));
+        var plan = NesFramePlan.Create(
+            "nes-mmc3-tvrom-v1",
+            hasFrameBoundary: true,
+            usesRetainedOam: false,
+            retainedOamByteCount: 0,
+            usesPackedCameraRuntime: true,
+            useSequentialOamPublication: true,
+            useFourScreenNametables: true);
+        var scheduler = new NesPhysicalFrameScheduler(builder, plan);
+        var lowerer = new NesSdkOperationLowerer(builder, program, UnusedLoweringContext(), scheduler);
+        var config = new NesCameraConfig(
+            MapWidth: 40,
+            MapHeight: 60,
+            StreamY: 0,
+            StreamHeight: 60,
+            UseFourScreenNametables: true);
+
+        scheduler.EmitCameraApplication(lowerer, config);
+
+        var bytes = builder.Build();
+        Assert.False(ContainsSequence(bytes, [0x20, (byte)(commitAddress & 0xFF), (byte)(commitAddress >> 8)]));
+        Assert.False(ContainsSequence(bytes, [0x20, (byte)(finalizeAddress & 0xFF), (byte)(finalizeAddress >> 8)]));
+        Assert.Equal(2, CountOccurrences(bytes, [0x8D, 0x05, 0x20]));
+        Assert.True(ContainsSequence(
+            bytes,
+            [
+                0xA9,
+                (byte)NesCameraPublicationState.Applied,
+                0x8D,
+                (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
+                (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8),
+            ]));
+    }
+
     [Fact]
     public void Standard_runner_column_schedule_pins_physical_boundary_and_combined_attribute_work()
     {
@@ -190,5 +234,19 @@ public sealed class NesPhysicalFrameSchedulerTests
             new NesPhysicalFrameScheduler(new PrgBuilder(), plan));
 
         Assert.Contains("deadline", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static NesSdkLoweringContext UnusedLoweringContext() => new(
+        _ => throw new InvalidOperationException("Camera-application scheduling must not lower source expressions."),
+        NoSourceConstant,
+        _ => throw new InvalidOperationException("Camera-application scheduling must not inspect source storage."),
+        _ => throw new InvalidOperationException("Camera-application scheduling must not inspect source storage."),
+        (_, _) => throw new InvalidOperationException("Camera-application scheduling must not inspect runtime fields."),
+        (_, _) => throw new InvalidOperationException("Camera-application scheduling must not lower runtime indices."));
+
+    private static bool NoSourceConstant(ExpressionSyntax _, out int value)
+    {
+        value = 0;
+        return false;
     }
 }
