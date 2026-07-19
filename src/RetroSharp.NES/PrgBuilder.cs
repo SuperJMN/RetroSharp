@@ -9,6 +9,7 @@ internal sealed class PrgBuilder
     private readonly List<(int Offset, string Label, int Addend, bool High)> byteFixups = [];
     private readonly List<(int Offset, string Label)> relativeFixups = [];
     private readonly List<JumpIfFixup> jumpIfFixups = [];
+    private readonly List<PaddingDirective> paddingDirectives = [];
     private int nextLabelId;
 
     public PrgBuilder(ushort baseAddress = 0x8000)
@@ -40,7 +41,13 @@ internal sealed class PrgBuilder
             throw new InvalidOperationException($"NES PRG address ${address:X4} has already been emitted.");
         }
 
-        bytes.AddRange(new byte[address - currentAddress]);
+        var startOffset = bytes.Count;
+        var paddingLength = address - currentAddress;
+        // Keep one layout-only byte for an initially empty pad. A later forward-label
+        // relaxation may still need this directive to grow while labels emitted before
+        // and after the pad remain distinct raw positions.
+        bytes.AddRange(new byte[Math.Max(paddingLength, 1)]);
+        paddingDirectives.Add(new PaddingDirective(startOffset, bytes.Count, address - baseAddress));
     }
 
     public void EmitLabelLowByte(string label, int addend = 0)
@@ -229,16 +236,7 @@ internal sealed class PrgBuilder
     public byte[] Build()
     {
         var layout = CreateBranchLayout();
-        var output = new List<byte>(layout.MapOffset(bytes.Count));
-        for (var offset = 0; offset < bytes.Count; offset++)
-        {
-            if (!layout.IsRemoved(offset))
-            {
-                output.Add(bytes[offset]);
-            }
-        }
-
-        var result = output.ToArray();
+        var result = layout.CreateOutput(bytes);
         foreach (var fixup in byteFixups)
         {
             var address = AddressOf(fixup.Label, layout, fixup.Addend);
@@ -327,15 +325,21 @@ internal sealed class PrgBuilder
                 }
 
                 var fixup = jumpIfFixups[index];
-                // A fixed external address does not move with this builder's layout, so keep the
-                // conservative long form when earlier relaxations could move the branch source.
-                if (!labels.TryGetValue(fixup.Label, out var targetLabel) || targetLabel.IsExternal)
+                if (!labels.TryGetValue(fixup.Label, out var targetLabel) ||
+                    targetLabel.IsExternal ||
+                    PaddingRegion(fixup.Offset) != PaddingRegion(targetLabel.Offset))
                 {
                     continue;
                 }
 
-                var target = baseAddress + MapOffset(targetLabel.Offset, relaxed, index);
-                var branchFrom = baseAddress + MapOffset(fixup.Offset, relaxed, index) + 2;
+                var candidateLayout = new BranchLayout(
+                    jumpIfFixups,
+                    paddingDirectives,
+                    relaxed,
+                    index,
+                    allowPaddingOverrun: true);
+                var target = baseAddress + candidateLayout.MapOffset(targetLabel.Offset);
+                var branchFrom = baseAddress + candidateLayout.MapOffset(fixup.Offset) + 2;
                 var delta = target - branchFrom;
                 if (delta is >= -128 and <= 127)
                 {
@@ -345,7 +349,7 @@ internal sealed class PrgBuilder
 
             if (newlyRelaxed is null)
             {
-                return new BranchLayout(jumpIfFixups, relaxed);
+                break;
             }
 
             foreach (var index in newlyRelaxed)
@@ -353,6 +357,49 @@ internal sealed class PrgBuilder
                 relaxed[index] = true;
             }
         }
+
+        // Same-region internal jumps reach their monotone fixed point first. Then external and
+        // cross-padding targets are considered in source order: once one is decided, no later
+        // relaxation can move its source away from the target, so every accepted short branch
+        // remains in range deterministically.
+        for (var index = 0; index < jumpIfFixups.Count; index++)
+        {
+            var fixup = jumpIfFixups[index];
+            if (!labels.TryGetValue(fixup.Label, out var targetLabel) ||
+                (!targetLabel.IsExternal && PaddingRegion(fixup.Offset) == PaddingRegion(targetLabel.Offset)))
+            {
+                continue;
+            }
+
+            var candidateLayout = new BranchLayout(jumpIfFixups, paddingDirectives, relaxed, index);
+            var target = targetLabel.IsExternal
+                ? baseAddress + targetLabel.Offset
+                : baseAddress + candidateLayout.MapOffset(targetLabel.Offset);
+            var branchFrom = baseAddress + candidateLayout.MapOffset(fixup.Offset) + 2;
+            var delta = target - branchFrom;
+            if (delta is >= -128 and <= 127)
+            {
+                relaxed[index] = true;
+            }
+        }
+
+        return new BranchLayout(jumpIfFixups, paddingDirectives, relaxed);
+    }
+
+    private int PaddingRegion(int offset)
+    {
+        var region = 0;
+        foreach (var padding in paddingDirectives)
+        {
+            if (offset < padding.EndOffset)
+            {
+                break;
+            }
+
+            region++;
+        }
+
+        return region;
     }
 
     private int AddressOf(string label, BranchLayout layout, int addend = 0)
@@ -366,33 +413,63 @@ internal sealed class PrgBuilder
         return baseAddress + offset + addend;
     }
 
-    private int MapOffset(int offset, IReadOnlyList<bool> relaxed, int candidate)
-    {
-        var removed = 0;
-        for (var index = 0; index < jumpIfFixups.Count; index++)
-        {
-            if (relaxed[index] || index == candidate)
-            {
-                removed += Math.Clamp(offset - (jumpIfFixups[index].Offset + 2), 0, 3);
-            }
-        }
-
-        return offset - removed;
-    }
-
     private readonly record struct LabelDefinition(int Offset, bool IsExternal);
 
     private readonly record struct JumpIfFixup(int Offset, byte BranchOpcode, byte InverseOpcode, string Label);
 
-    private sealed class BranchLayout(IReadOnlyList<JumpIfFixup> fixups, IReadOnlyList<bool> relaxed)
+    private readonly record struct PaddingDirective(int StartOffset, int EndOffset, int TargetOffset);
+
+    private sealed class BranchLayout
     {
+        private readonly IReadOnlyList<JumpIfFixup> fixups;
+        private readonly IReadOnlyList<bool> relaxed;
+        private readonly int candidate;
+        private readonly IReadOnlyList<MappedPadding> paddings;
+
+        public BranchLayout(
+            IReadOnlyList<JumpIfFixup> fixups,
+            IReadOnlyList<PaddingDirective> paddingDirectives,
+            IReadOnlyList<bool> relaxed,
+            int candidate = -1,
+            bool allowPaddingOverrun = false)
+        {
+            this.fixups = fixups;
+            this.relaxed = relaxed;
+            this.candidate = candidate;
+
+            var mappedPaddings = new List<MappedPadding>(paddingDirectives.Count);
+            var rawCursor = 0;
+            var outputCursor = 0;
+            foreach (var padding in paddingDirectives)
+            {
+                outputCursor += SurvivingByteCount(rawCursor, padding.StartOffset);
+                var outputLength = padding.TargetOffset - outputCursor;
+                if (outputLength < 0 && !allowPaddingOverrun)
+                {
+                    throw new InvalidOperationException(
+                        $"NES PRG padding target has already been passed by {Math.Abs(outputLength)} byte(s).");
+                }
+
+                mappedPaddings.Add(new MappedPadding(
+                    padding.StartOffset,
+                    padding.EndOffset,
+                    outputCursor,
+                    Math.Max(outputLength, 0),
+                    padding.TargetOffset));
+                outputCursor = padding.TargetOffset;
+                rawCursor = padding.EndOffset;
+            }
+
+            paddings = mappedPaddings;
+        }
+
         public bool IsRelaxed(int index) => relaxed[index];
 
         public bool IsRemoved(int offset)
         {
             for (var index = 0; index < fixups.Count; index++)
             {
-                if (relaxed[index] && offset >= fixups[index].Offset + 2 && offset < fixups[index].Offset + 5)
+                if (IsRelaxedForLayout(index) && offset >= fixups[index].Offset + 2 && offset < fixups[index].Offset + 5)
                 {
                     return true;
                 }
@@ -403,16 +480,83 @@ internal sealed class PrgBuilder
 
         public int MapOffset(int offset)
         {
+            var rawCursor = 0;
+            var outputCursor = 0;
+            foreach (var padding in paddings)
+            {
+                if (offset <= padding.RawStartOffset)
+                {
+                    return outputCursor + SurvivingByteCount(rawCursor, offset);
+                }
+
+                outputCursor = padding.OutputStartOffset;
+                if (offset < padding.RawEndOffset)
+                {
+                    return outputCursor + Math.Min(offset - padding.RawStartOffset, padding.OutputLength);
+                }
+
+                outputCursor = padding.OutputEndOffset;
+                rawCursor = padding.RawEndOffset;
+            }
+
+            return outputCursor + SurvivingByteCount(rawCursor, offset);
+        }
+
+        public byte[] CreateOutput(IReadOnlyList<byte> source)
+        {
+            var output = new List<byte>(MapOffset(source.Count));
+            var rawCursor = 0;
+            foreach (var padding in paddings)
+            {
+                AppendSurvivingBytes(source, output, rawCursor, padding.RawStartOffset);
+                output.AddRange(new byte[padding.OutputLength]);
+                rawCursor = padding.RawEndOffset;
+            }
+
+            AppendSurvivingBytes(source, output, rawCursor, source.Count);
+            return output.ToArray();
+        }
+
+        private int SurvivingByteCount(int startOffset, int endOffset)
+        {
             var removed = 0;
             for (var index = 0; index < fixups.Count; index++)
             {
-                if (relaxed[index])
+                if (!IsRelaxedForLayout(index))
                 {
-                    removed += Math.Clamp(offset - (fixups[index].Offset + 2), 0, 3);
+                    continue;
                 }
+
+                var removedStart = Math.Max(startOffset, fixups[index].Offset + 2);
+                var removedEnd = Math.Min(endOffset, fixups[index].Offset + 5);
+                removed += Math.Max(removedEnd - removedStart, 0);
             }
 
-            return offset - removed;
+            return endOffset - startOffset - removed;
         }
+
+        private void AppendSurvivingBytes(
+            IReadOnlyList<byte> source,
+            ICollection<byte> output,
+            int startOffset,
+            int endOffset)
+        {
+            for (var offset = startOffset; offset < endOffset; offset++)
+            {
+                if (!IsRemoved(offset))
+                {
+                    output.Add(source[offset]);
+                }
+            }
+        }
+
+        private bool IsRelaxedForLayout(int index) => relaxed[index] || index == candidate;
+
+        private readonly record struct MappedPadding(
+            int RawStartOffset,
+            int RawEndOffset,
+            int OutputStartOffset,
+            int OutputLength,
+            int OutputEndOffset);
     }
 }
