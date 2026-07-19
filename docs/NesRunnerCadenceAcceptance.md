@@ -75,7 +75,7 @@ section marker.
 CSL-5 / #340 adds the missing phase-sensitive gate. The prior exact tracked
 runner lost one gameplay/audio tick at delays `0,2,10,12,16,20` after a
 500-frame settle. The current exact runner SHA
-`68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53`
+`3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49`
 passes all eleven even delays `0..20`: each of 120 physical frames advances
 both `$03FA` and `$03FB` exactly once while A is held for the first 40. See
 [`AudioMixedLoadFunctionalAcceptance.md`](AudioMixedLoadFunctionalAcceptance.md).

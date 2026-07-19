@@ -785,14 +785,17 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAZeroPage(targetAddress);
     }
 
-    private void EmitPublishVisibleCameraX()
+    private void EmitPublishVisibleCameraX(bool guardSuppressedTick = true)
     {
         var doneLabel = builder.CreateLabel("nes_packed_camera_defer_publish_x");
-        builder.Emit(
-            0x2C,
-            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
-            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
-        builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
+        if (guardSuppressedTick)
+        {
+            builder.Emit(
+                0x2C,
+                (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
+                (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
+            builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
+        }
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.X);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow);
         if (cameraConfig is { MapWidth: <= byte.MaxValue })
@@ -810,17 +813,23 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileColumn);
-        builder.Label(doneLabel);
+        if (guardSuppressedTick)
+        {
+            builder.Label(doneLabel);
+        }
     }
 
-    private void EmitPublishVisibleCameraY()
+    private void EmitPublishVisibleCameraY(bool guardSuppressedTick = true)
     {
         var doneLabel = builder.CreateLabel("nes_packed_camera_defer_publish_y");
-        builder.Emit(
-            0x2C,
-            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
-            (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
-        builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
+        if (guardSuppressedTick)
+        {
+            builder.Emit(
+                0x2C,
+                (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied & 0xFF),
+                (byte)(NesRuntimeMemoryLayout.Camera.ScrollApplied >> 8));
+            builder.BranchRelative(0x30, doneLabel); // BMI: stale NMI, retain until a fresh VBlank
+        }
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.Y);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow);
         if (cameraConfig is { MapHeight: <= byte.MaxValue })
@@ -838,7 +847,10 @@ internal sealed partial class NesSdkOperationLowerer
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYHigh);
         builder.LoadAZeroPage(NesRuntimeMemoryLayout.Camera.TileRow);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraTileRow);
-        builder.Label(doneLabel);
+        if (guardSuppressedTick)
+        {
+            builder.Label(doneLabel);
+        }
     }
 
     private void EmitPublishCommittedPackedCameraAxis(byte axis)
@@ -856,11 +868,24 @@ internal sealed partial class NesSdkOperationLowerer
         // pixels behind once the requested position has already been reached.
         if (axis == NesPackedCameraRuntime.Column)
         {
-            EmitPublishVisibleCameraX();
+            EmitPublishVisibleCameraX(guardSuppressedTick: false);
         }
         else
         {
-            EmitPublishVisibleCameraY();
+            EmitPublishVisibleCameraY(guardSuppressedTick: false);
+        }
+        if (axis == NesPackedCameraRuntime.Column)
+        {
+            // The branch above proves the column bit is set. With the two-bit axis mask,
+            // decrementing maps Column -> None and Column|Row -> Row in three bytes.
+            builder.DecrementAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+        }
+        else
+        {
+            // The branch above proves the row bit is set, so toggling it clears only Row.
+            builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
+            builder.Emit(0x49, axis); // EOR #axis
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.PendingStreamFlags);
         }
         builder.Label(doneLabel);
     }

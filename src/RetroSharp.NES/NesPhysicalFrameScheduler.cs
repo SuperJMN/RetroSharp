@@ -27,6 +27,13 @@ internal enum NesPendingCameraStream : byte
     Row = 2,
 }
 
+internal enum NesCameraPublicationState : byte
+{
+    Ready = 0,
+    Applied = 1,
+    SuppressedForCurrentTick = 0x80,
+}
+
 internal abstract record NesVideoSafeTransfer
 {
     internal sealed record StreamColumn(NesCameraConfig Config) : NesVideoSafeTransfer;
@@ -220,7 +227,7 @@ internal sealed class NesPhysicalFrameScheduler
         }
 
         frameEmitter.EmitVideoSafeTransfer(new NesVideoSafeTransfer.RestoreCameraScroll(config));
-        builder.LoadAImmediate(1);
+        builder.LoadAImmediate((byte)NesCameraPublicationState.Applied);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
     }
 
@@ -320,7 +327,7 @@ internal sealed class NesPhysicalFrameScheduler
         builder.BranchRelative(0xF0, awaitFreshFrame);
         if (purpose == NesFrameBoundaryPurpose.Gameplay && cameraConfig is not null)
         {
-            builder.LoadAImmediate(0x80);
+            builder.LoadAImmediate((byte)NesCameraPublicationState.SuppressedForCurrentTick);
             builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
         }
         builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.FramePending);
@@ -335,6 +342,11 @@ internal sealed class NesPhysicalFrameScheduler
         builder.Label(hardwareVBlank);
         builder.Emit(0x2C, 0x02, 0x20);
         builder.BranchRelative(0x10, hardwareVBlank);
+        if (purpose == NesFrameBoundaryPurpose.Gameplay && cameraConfig is not null)
+        {
+            builder.LoadAImmediate((byte)NesCameraPublicationState.Ready);
+            builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
+        }
         EmitPendingCameraWork(purpose, frameEmitter, cameraConfig);
         EmitRetainedOamWork();
         builder.Label(end);

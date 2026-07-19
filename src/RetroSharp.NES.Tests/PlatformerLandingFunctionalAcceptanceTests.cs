@@ -28,7 +28,7 @@ public sealed class PlatformerLandingFunctionalAcceptanceTests
         var trackedRom = File.ReadAllBytes(RepositoryFile("samples/platformer-landing/bin/platformer-landing.nes"));
         Assert.Equal(trackedRom, build.Rom);
         Assert.Equal("nes-mapper-0-current", build.Report.SelectedProfile);
-        Assert.Equal("7dcd7b5f943183390397d03ab2de182eced50b7b3a3576d8bac45c7c22dbd26f", Sha256(trackedRom));
+        Assert.Equal("1fadb1ad32e18244f18c52e4bc727387a24c0064c39f0906a06b7b3f6a4adc6d", Sha256(trackedRom));
         Assert.NotNull(program.PackedWorld);
         Assert.Equal(4, program.PackedWorld.Pack.Descriptor.ChunkColumns);
         Assert.Equal(3, program.PackedWorld.Pack.Descriptor.ChunkRows);

@@ -8,7 +8,7 @@ internal sealed partial class NesSdkOperationLowerer
 {
     public void EmitCameraStateInitialization()
     {
-        builder.LoadAImmediate(0);
+        builder.LoadAImmediate((byte)NesCameraPublicationState.Ready);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.X);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.TileColumn);
         builder.StoreAZeroPage(NesRuntimeMemoryLayout.Camera.TargetColumn);
@@ -267,7 +267,7 @@ internal sealed partial class NesSdkOperationLowerer
             }
         }
 
-        builder.LoadAImmediate(0);
+        builder.LoadAImmediate((byte)NesCameraPublicationState.Ready);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
     }
 
@@ -411,7 +411,7 @@ internal sealed partial class NesSdkOperationLowerer
         var doneLabel = builder.CreateLabel("camera_apply_done");
 
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.Camera.ScrollApplied);
-        builder.CompareImmediate(0);
+        builder.CompareImmediate((byte)NesCameraPublicationState.Ready);
         builder.BranchRelative(0xF0, applyLabel); // BEQ applyLabel
         builder.JumpAbsolute(doneLabel);
 

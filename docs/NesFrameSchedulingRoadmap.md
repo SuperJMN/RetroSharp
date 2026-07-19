@@ -159,6 +159,13 @@ The decisive regression performs stale then fresh without another
 `Camera.SetPosition()` and observes exactly one publication, one commit, and one
 release.
 
+Status: implemented by NFS-2.1. The existing `$0309` byte now has named target
+states, the fresh hardware-VBlank branch restores `Ready` before packed work,
+and each completed axis clears its pending flag only after copying the logical
+camera into visible state. The executable regression drives a real packed ROM
+through stale then fresh with one `Camera.SetPosition(8, 0)` and observes visible
+X `8`, one commit, one release, a released slot, and no pending axis/flag.
+
 ## NFS-3.1 — Implement the bounded physical scheduler
 
 Kind: implementation. Owner seam: `NesPhysicalFrameScheduler`. Its external

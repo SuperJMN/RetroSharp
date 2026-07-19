@@ -470,8 +470,8 @@ public sealed class NesLargeWorldCameraTests
                 [0xAD, 0x8F, 0x03, 0xF0, 0x0B, 0xA9, 0x80, 0x8D, 0x09, 0x03, 0xCE, 0x8F, 0x03, 0x4C]),
             "Packed WaitFrame must consume an already-pending frame, suppress a following Camera.Apply, and return without entering the publication path.");
         Assert.True(
-            ContainsSequence(result.Rom, [0x2C, 0x09, 0x03, 0x30]),
-            "Camera.SetPosition must retain packed visible-camera state after a stale NMI until the next safe publication boundary.");
+            ContainsSequence(result.Rom, [0x2C, 0x02, 0x20, 0x10, 0xFB, 0xA9, 0x00, 0x8D, 0x09, 0x03]),
+            "The freshly awaited VBlank path must restore camera publication to Ready before publishing pending state.");
         Assert.True(
             ContainsSequence(
                 result.Rom,
@@ -484,6 +484,73 @@ public sealed class NesLargeWorldCameraTests
         Assert.False(
             ContainsSequence(result.Rom, [0xA9, 0x00, 0x8D, 0x8F, 0x03, 0xAD, 0x8F, 0x03, 0xF0, 0xFB]),
             "Packed WaitFrame must not discard a stale signal and force an extra whole-frame wait.");
+    }
+
+    [Fact]
+    public void Packed_stale_then_fresh_frame_publishes_and_releases_one_edge_without_another_camera_request()
+    {
+        var directory = RepositoryDirectory("samples/runner");
+        var packed = NesTiledWorldImporter.CompileWorldPack(
+            Path.Combine(directory, "assets/maps/stage1.playable.tmj"),
+            NesVideoProgram.FirstSpriteTile);
+        const string source = """
+            void Main() {
+                World.Load("assets/maps/stage1.playable.tmj");
+                Camera.Init(176, 0, 30);
+                u8 continueAfterStale = 0;
+                u8 staleBoundaryDone = 0;
+                u8 freshBoundaryDone = 0;
+                Camera.SetPosition(8, 0);
+                Video.WaitVBlank();
+                Camera.Apply();
+                staleBoundaryDone = 1;
+                while (continueAfterStale == 0) { }
+                Video.WaitVBlank();
+                Camera.Apply();
+                freshBoundaryDone = 1;
+                while (true) { }
+            }
+            """;
+        var result = RetroSharp.NES.NesRomCompiler.CompileSourceForMmc3TvromTestsWithReport(
+            source,
+            directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            packedWorldOverride: packed.SerializedBytes);
+        var cpu = new NesTestCpu(result.Rom);
+        var variables = result.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+
+        cpu.RunFrames(120);
+
+        Assert.Equal(1, cpu.Ram(variables["staleBoundaryDone"].Address));
+        Assert.Equal(0, cpu.Ram(variables["freshBoundaryDone"].Address));
+        Assert.Equal(
+            (byte)NesCameraPublicationState.SuppressedForCurrentTick,
+            cpu.Ram(NesRuntimeMemoryLayout.Camera.ScrollApplied));
+        Assert.Equal(7, cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow));
+        Assert.Equal(0, cpu.Ram(CommitCount));
+        Assert.Equal(0, cpu.Ram(ReleaseCount));
+        Assert.Equal(Column, cpu.Ram(PendingAxes));
+
+        cpu.SetRam(NesRuntimeMemoryLayout.PackedCamera.FramePending, 0);
+        cpu.SetRam(variables["continueAfterStale"].Address, 1);
+        cpu.RunFrames(cpu.PhysicalFrames + 4);
+
+        Assert.Equal(1, cpu.Ram(variables["freshBoundaryDone"].Address));
+        Assert.True(
+            cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow) == 8,
+            $"Expected fresh publication at X=8; observed X={cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow)}, " +
+            $"state={cpu.Ram(NesRuntimeMemoryLayout.Camera.ScrollApplied)}, pendingAxes={cpu.Ram(PendingAxes)}, " +
+            $"pendingFlags={cpu.Ram(NesRuntimeMemoryLayout.Camera.PendingStreamFlags)}, commits={cpu.Ram(CommitCount)}, " +
+            $"releases={cpu.Ram(ReleaseCount)}, slot0={cpu.Ram(Slot0State)}.");
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXHigh));
+        Assert.Equal(1, cpu.Ram(CommitCount));
+        Assert.Equal(1, cpu.Ram(ReleaseCount));
+        Assert.Equal(Released, cpu.Ram(Slot0State));
+        Assert.Equal(
+            (byte)NesCameraPublicationState.Applied,
+            cpu.Ram(NesRuntimeMemoryLayout.Camera.ScrollApplied));
+        Assert.Equal(0, cpu.Ram(PendingAxes));
+        Assert.Equal(0, cpu.Ram(NesRuntimeMemoryLayout.Camera.PendingStreamFlags));
     }
 
     [Fact]
