@@ -89,33 +89,60 @@ public sealed class NesTestCpuTimingTests
     }
 
     [Fact]
-    public void Seventy_six_byte_publisher_costs_1071_cycles_before_return()
+    public void Absolute_subtract_executes_in_four_cycles()
     {
         var rom = CreateRom();
-        Write(
-            rom,
-            0x8000,
-            [
-                0xA9, 0x00,
-                0x8D, 0x03, 0x20,
-                0xA2, 0xB4,
-                0xBD, 0x4C, 0x01,
-                0x8D, 0x04, 0x20,
-                0xE8,
-                0xD0, 0xF7,
-                0x60,
-            ]);
+        Write(rom, 0x8000, [0xA9, 0x0A, 0x38, 0xED, 0x00, 0x02, 0x60]);
         var cpu = new NesTestCpu(rom);
-        for (var index = 0; index < 76; index++)
+        cpu.SetRam(0x0200, 0x03);
+
+        var result = cpu.RunRoutine(0x8000);
+
+        Assert.Equal((byte)0x07, result.A);
+        Assert.Equal(14, result.Cycles);
+    }
+
+    [Fact]
+    public void Absolute_x_increment_executes_in_seven_cycles()
+    {
+        var rom = CreateRom();
+        Write(rom, 0x8000, [0xA2, 0x01, 0xFE, 0x00, 0x02, 0xBD, 0x00, 0x02, 0x60]);
+        var cpu = new NesTestCpu(rom);
+        cpu.SetRam(0x0201, 0x41);
+
+        var result = cpu.RunRoutine(0x8000);
+
+        Assert.Equal((byte)0x42, result.A);
+        Assert.Equal(19, result.Cycles);
+    }
+
+    [Theory]
+    [InlineData(76, 855)]
+    [InlineData(152, 1_222)]
+    public void Bounded_oam_publisher_matches_its_reported_cycles_before_return(
+        int retainedByteCount,
+        long expectedCycles)
+    {
+        var publisher = NesOamPublicationSchedule.Create(0x0200, retainedByteCount);
+        var builder = new PrgBuilder();
+        publisher.Emit(builder);
+        builder.Return();
+        var rom = CreateRom();
+        Write(rom, 0x8000, builder.Build());
+        var cpu = new NesTestCpu(rom);
+        for (var index = 0; index < retainedByteCount; index++)
         {
             cpu.SetRam((ushort)(0x0200 + index), (byte)index);
         }
 
         var result = cpu.RunRoutine(0x8000);
 
-        Assert.Equal(1_071, result.Cycles - 6);
-        Assert.Equal(76, cpu.OamWrites.Count);
-        Assert.Equal(Enumerable.Range(0, 76).Select(index => (byte)index), cpu.OamWrites.Select(write => write.Value));
+        Assert.Equal(expectedCycles, publisher.CpuCycles);
+        Assert.Equal(expectedCycles, result.Cycles - 6);
+        Assert.Equal(retainedByteCount, cpu.OamWrites.Count);
+        Assert.Equal(
+            Enumerable.Range(0, retainedByteCount).Select(index => (byte)index),
+            cpu.OamWrites.Select(write => write.Value));
     }
 
     private static byte[] CreateRom()

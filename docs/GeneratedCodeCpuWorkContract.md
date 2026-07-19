@@ -265,10 +265,9 @@ SDK stream can publish retained sprites, Game Boy adds
 `sprite.publish.transfer` at `640..640` below `sprite.publish`, while NES adds
 the same stable contributor at `513..514` for DMA profiles. The NES MMC3
 sequential profile instead projects the complete root `sprite.publish` from
-the same `NesOamPublicationSchedule` that emits the loop. Its cost is
-`13 * retained-bytes + 7` plus the exact `LDA abs,X` page-crossing penalties;
-the current shadow bias crosses on every retained byte, yielding 1,071 cycles
-at 76 bytes and 2,135 at the accepted 152-byte maximum. The profile removes
+the same `NesOamPublicationSchedule` that emits the bytes. The standard
+76-byte shape publishes four direct bytes plus 72 in groups of nine for 855
+cycles; the large 152-byte shape is fully unrolled for 1,222 cycles. The profile removes
 the inapplicable DMA detail and closes that publication unknown. Programs with
 no retained sprite publication do not claim either cost. Both reports
 currently publish the whole-frame view again as the single `frame` entry in

@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "a1af86b761289bacbac12d5b8f7d4a03ddb491e19b822f8c53740bfc12eb7d7b",
-  "romSha256": "2c70f5e910916f2541ece692528064c653801ec90c31c1f24d33cae5a1725d17",
+  "abiFingerprint": "db61513bc8a70ee10ec11d7807083323e222834f8859904b1e3af3aeca0455c6",
+  "romSha256": "d11fd502e94fdfe44d992644752c84b9ab23fe1b215e9b85a5b8693aa579856d",
   "ranges": [
     {
       "id": "UserLocals",
@@ -1095,6 +1095,12 @@
     },
     {
       "domain": "packed camera",
+      "name": "SelectedMetadataOffset",
+      "address": 909,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
       "name": "FramePending",
       "address": 911,
       "owner": "PackedCameraAndWorldPackAuxiliaryState"
@@ -1597,6 +1603,14 @@
     {
       "name": "packed camera.CommitPhaseOffset",
       "value": 13
+    },
+    {
+      "name": "packed camera.CommitPpuPhase",
+      "value": 1
+    },
+    {
+      "name": "packed camera.CommitReadyToFinalize",
+      "value": 2
     },
     {
       "name": "packed camera.Committing",

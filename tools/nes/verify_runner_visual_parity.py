@@ -317,6 +317,10 @@ def observed_physical_sequence_violations(
         oam_data = [
             event for event in frame_events if integer(event["address"]) == 0x2004
         ]
+        if not frame_events:
+            # Stale WaitFrame consumption deliberately suppresses the entire
+            # physical publication for that tick.
+            continue
         if len(oam_indices) != 1 or len(oam_data) != RUNNER_RETAINED_OAM_BYTES:
             violations.append(
                 f"Observed frame {frame_offset} did not publish one complete retained OAM stream."
@@ -371,20 +375,32 @@ def observed_physical_sequence_violations(
                     f"Observed frame {frame_offset} did not apply PPUADDR to ordered PPUDATA."
                 )
                 break
-            previous_after_v: int | None = None
+            previous_before_v: int | None = None
             while cursor < len(ppu_stream) and integer(ppu_stream[cursor]["address"]) == 0x2007:
                 data_event = ppu_stream[cursor]
                 before_v = integer(data_event["before"]["v"]) & 0x7FFF
                 after_v = integer(data_event["after"]["v"]) & 0x7FFF
+                ordered_delta = (
+                    None
+                    if previous_before_v is None
+                    else (before_v - previous_before_v) & 0x7FFF
+                )
+                snapshot_delta = (after_v - before_v) & 0x7FFF
                 if (
-                    previous_after_v is not None
-                    and before_v != previous_after_v
-                ) or ((after_v - before_v) & 0x7FFF) not in (1, 32):
+                    ordered_delta is not None and ordered_delta not in (1, 32)
+                ) or snapshot_delta not in (0, 1, 32):
+                    previous = (
+                        "none"
+                        if previous_before_v is None
+                        else f"0x{previous_before_v:04X}"
+                    )
                     violations.append(
-                        f"Observed frame {frame_offset} has discontinuous ordered PPUDATA targets."
+                        f"Observed frame {frame_offset} has discontinuous ordered PPUDATA targets "
+                        f"(previous before={previous}, "
+                        f"before=0x{before_v:04X}, after=0x{after_v:04X})."
                     )
                     break
-                previous_after_v = after_v
+                previous_before_v = before_v
                 cursor += 1
 
     return violations
@@ -1014,7 +1030,12 @@ def capture_aprnes(
             "left": work_directory / "trace-states" / "left-start.nesstate",
         }
         state_paths["right"].parent.mkdir(parents=True, exist_ok=True)
-        mcp.call_json("save_state", {"path": str(state_paths["right"])})
+
+        def save_replay_state(name: str) -> None:
+            state_paths[name] = work_directory / "trace-states" / f"{name}-start.nesstate"
+            mcp.call_json("save_state", {"path": str(state_paths[name])})
+
+        save_replay_state("right")
 
         right_frames = 0
         right_state = initial_state
@@ -1038,20 +1059,38 @@ def capture_aprnes(
                 f"AprNes did not reach camera X {target_camera_x} in {maximum_right_frames} RIGHT frames."
             )
 
-        observe("right-post", [], POST_TARGET_SETTLE_FRAMES)
-        observe("right-release", [], release_frames)
+        save_replay_state("right-post")
+        observe(
+            "right-post",
+            [],
+            POST_TARGET_SETTLE_FRAMES,
+            replay_state="right-post",
+        )
+        save_replay_state("right-release")
+        observe(
+            "right-release",
+            [],
+            release_frames,
+            replay_state="right-release",
+        )
         released_state = runtime_snapshot(read)
         checkpoints["camera-target"] = capture_aprnes_checkpoint(mcp, released_state)
         continuation_extra = continuation_frames - release_frames
         if continuation_extra < 0:
             raise ValueError("FCEUmm continuation preceded its serialized target checkpoint.")
-        observe("right-continuation", [], continuation_extra)
+        save_replay_state("right-continuation")
+        observe(
+            "right-continuation",
+            [],
+            continuation_extra,
+            replay_state="right-continuation",
+        )
 
         def advance_jump(pressed: bool) -> dict[str, object]:
             return observe("jump", ["A"] if pressed else [], 1)[-1]["state"]
 
         jump = exercise_jump(lambda: runtime_snapshot(read), advance_jump, jump_hold_frames)
-        mcp.call_json("save_state", {"path": str(state_paths["left"])})
+        save_replay_state("left")
         left_frames = 0
         left_state = runtime_snapshot(read)
         while left_frames < maximum_left_frames:
@@ -1071,11 +1110,33 @@ def capture_aprnes(
                 f"AprNes did not return through camera X {return_camera_x} in "
                 f"{maximum_left_frames} LEFT frames."
             )
-        observe("left-post", [], POST_TARGET_SETTLE_FRAMES)
-        observe("left-release", [], return_release_frames)
+        save_replay_state("left-post")
+        observe(
+            "left-post",
+            [],
+            POST_TARGET_SETTLE_FRAMES,
+            replay_state="left-post",
+        )
+        save_replay_state("left-release")
+        observe(
+            "left-release",
+            [],
+            return_release_frames,
+            replay_state="left-release",
+        )
         checkpoints["camera-return"] = capture_aprnes_checkpoint(
             mcp,
             runtime_snapshot(read),
+        )
+        # A bounded scheduler may finish its last packed phase on the final
+        # settle frame. Keep the required post-commit evidence instead of
+        # weakening commit_frame_windows by accepting a truncated window.
+        save_replay_state("left-window-tail")
+        observe(
+            "left-window-tail",
+            [],
+            TRANSIENT_FRAME_RADIUS,
+            replay_state="left-window-tail",
         )
 
         windows = commit_frame_windows(frames, TRANSIENT_FRAME_RADIUS)
@@ -1755,8 +1816,17 @@ def select_focal_commit_windows(
             frame for frame in window["frames"] if int(frame["step"]) == center_step
         )
 
-    right = [window for window in windows if center(window)["phase"] == "right"]
-    left = [window for window in windows if center(window)["phase"] == "left"]
+    # A bounded packed phase can finish during the input-release/settle tail.
+    # Preserve its movement direction in the phase prefix instead of requiring
+    # the commit counter to advance on the last held-input frame.
+    right = [
+        window for window in windows
+        if str(center(window)["phase"]).startswith("right")
+    ]
+    left = [
+        window for window in windows
+        if str(center(window)["phase"]).startswith("left")
+    ]
     if not right or not left:
         raise AssertionError("Commit evidence must include both RIGHT and LEFT windows.")
     right_cross_index = next(
@@ -2649,9 +2719,19 @@ def validate_ppu_commit_trace(
                 expected_tile_writes = final_phase["tile_count"]
                 expected_attribute_start = final_phase["attribute_start"]
                 expected_attribute_writes = final_phase["attribute_count"]
-                expected_before_cursor = final_phase["tile_start"]
+                expected_before_cursor = (
+                    final_phase["tile_start"]
+                    if final_phase["tile_count"] > 0
+                    else 32 + final_phase["attribute_start"]
+                )
                 expected_after_phase = len(phases)
-                expected_after_cursor = descriptor_payload_length
+                expected_after_cursor = (
+                    32
+                    + final_phase["attribute_start"]
+                    + final_phase["attribute_count"]
+                    if final_phase["attribute_count"] > 0
+                    else final_phase["tile_start"] + final_phase["tile_count"]
+                )
 
     vertical_control = next(
         (

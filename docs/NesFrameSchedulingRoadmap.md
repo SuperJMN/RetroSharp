@@ -171,6 +171,15 @@ X `8`, one commit, one release, a released slot, and no pending axis/flag.
 Kind: implementation. Owner seam: `NesPhysicalFrameScheduler`. Its external
 interface does not grow.
 
+Status: focal implementation preserved on `agent/nfs-3-1-bounded-scheduler`,
+but completion is blocked by [#426](https://github.com/SuperJMN/RetroSharp/issues/426).
+`NesPackedCameraPhaseSchedule` owns the standard/large phase vectors and
+deadlines, `NesOamPublicationSchedule` owns the 855/1,222-cycle emitters, and
+the exact runner's five AprNes focal traces keep all `$2000-$2007` writes in
+physical VBlank. Regenerated functional ROMs show that a multi-phase edge can
+still lag a logical camera walk across its visible tile boundary; this is a
+real nametable/cadence RED, so NFS-3.1 is not mergeable yet.
+
 Fresh-frame order:
 
 1. observe a fresh NMI;

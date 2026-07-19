@@ -268,8 +268,6 @@ internal static class NesPackedCameraRuntimeEmitter
         EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining, NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
 
         builder.LoadYAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
-        builder.TransferAToX();
         builder.Label(tileLoop);
         EmitSetPpuTileAddress(
             builder,
@@ -283,7 +281,7 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
         builder.AndImmediate(0x3F);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.DecrementX();
+        builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.JumpIf(0xD0, tileLoop);
         builder.TransferYToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);

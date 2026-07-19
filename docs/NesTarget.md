@@ -67,10 +67,9 @@ above 152 bytes before emission; incomplete window coverage never claims
 headroom.
 Reachable mapper-0 streams that use `Sprite.Draw(...)` add
 `sprite.publish.transfer` as the numeric `513..514` contributor. The MMC3
-sequential profile instead reports the complete emitted `sprite.publish` loop
-from `NesOamPublicationSchedule`: `13 * retained-bytes + 7` plus exact indexed
-load page-crossing penalties. The current shadow bias crosses for every byte,
-so the corrected cost is 1,071 cycles at 76 bytes and 2,135 at 152 bytes. It
+sequential profile instead reports the complete emitted `sprite.publish`
+schedule from `NesOamPublicationSchedule`: the standard 76-byte shape costs
+855 cycles and the fully unrolled 152-byte large shape costs 1,222 cycles. It
 does not claim a DMA transfer. Programs with no retained sprite publication
 claim neither. The report also names the remaining
 stable generated/runtime/user-loop unknowns, so arbitrary source loops are not
@@ -119,7 +118,7 @@ profiles publish it through `$4014` while rendering is in VBlank. MMC3 packed
 profiles avoid AprNes' non-completing page-$02 DMA: they publish only the
 statically used bytes sequentially through `$2004`, after a fresh NMI and
 hardware VBlank check. That path is bounded to 38 hardware sprites/152 bytes
-and 2,135 NTSC CPU cycles. Both paths then reset the statically allocated
+and 1,222 NTSC CPU cycles. Both paths then reset the statically allocated
 logical call-site bytes to `$FF`, so an unexecuted conditional draw cannot
 retain an earlier sprite. Startup initializes the full shadow and hardware OAM;
 source calls that accept projectile/effect requests after their `Draw()` phase
@@ -129,7 +128,7 @@ explicitly so target-side addressing optimizations do not need to preserve an
 accidental one-frame visibility measurement.
 raw/direct compatibility operations remain separate.
 
-The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. In mapper-backed packed builds, request preparation completes outside VBlank and publishes an immutable resident edge before visible camera state may advance. VBlank validates the complete 16-bit tag, commits at most 32 column tiles plus 9 prepared LW-1.4 palette/provenance attributes, and performs no R6 selection, directory access, or raw/RLE decode. Four-screen rows use four 8-tile phases followed by one attribute-only phase; the row slot remains committing until the fifth phase completes. A stale coalesced NMI suppresses camera application only for that game tick; the next fresh hardware-VBlank path restores publication readiness before committing, so an edge cannot be released while its visible camera update remains deferred. Independent pending column/row descriptors stagger diagonal work without starvation, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
+The horizontal-only camera path updates horizontal scroll, selects the horizontal nametable from its absolute source tile, and requests the next world-map column when the camera crosses an 8-pixel tile boundary. In mapper-backed packed builds, request preparation completes outside VBlank and publishes an immutable resident edge before visible camera state may advance. After retained OAM, each fresh VBlank emits one bounded packed phase: standard columns permit 20 tiles, 2 combined attributes, or 7 attribute-only bytes; standard rows permit 8 tiles or 9 attributes; and the large profile uses 8/1 column and 1/1 row phases. Physical rows 30 and 60 split phases. No phase performs R6 selection, directory access, or raw/RLE decode. The selected slot remains `Committing` until RAM-only finalization advances visible state, commit, and release together. A stale coalesced NMI suppresses camera application only for that game tick; the next fresh hardware-VBlank path restores publication readiness before committing, so an edge cannot be released while its visible camera update remains deferred. Independent pending column/row descriptors finish the committing slot before the next resident peer, while unavailable, malformed, reversed, or wrongly tagged work leaves visible camera state unchanged.
 
 A camera window that exactly fills the visible height (its configured stream height fits the 30-row screen and reaches the bottom visible row) would otherwise draw its bottom tile row against the very bottom scanlines that hardware and most emulators crop as bottom overscan. This is based on the effective camera window, not the complete backing-map height, so a fixed 30-row view over a taller imported world receives the same treatment. The camera scroll restore shifts the scene up one tile row (adds 8 px of vertical scroll) and `Sprite.Draw(...)` offsets sprite Y by the same amount, so the full bottom row lands inside the safe area while staying aligned with sprites; the exposed bottom strip wraps to the empty four-screen sky row. Vertically scrolling windows keep their framing and receive no inset.
 

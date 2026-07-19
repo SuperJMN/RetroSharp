@@ -472,7 +472,17 @@ internal sealed class NesTestCpu
                 }
             case 0xE5: Subtract(Read(Read(pc++))); cycles += 3; break;
             case 0xE9: Subtract(Read(pc++)); cycles += 2; break;
+            case 0xED: Subtract(Read(ReadWordAndAdvance())); cycles += 4; break;
             case 0xF0: Branch(zero); break;
+            case 0xFE:
+                {
+                    var address = (ushort)(ReadWordAndAdvance() + x);
+                    var value = (byte)(Read(address) + 1);
+                    Write(address, value, 6);
+                    SetZeroNegative(value);
+                    cycles += 7;
+                    break;
+                }
             default: throw new InvalidOperationException($"Unsupported NES test opcode ${opcode:X2} at ${(ushort)(pc - 1):X4}.");
         }
     }

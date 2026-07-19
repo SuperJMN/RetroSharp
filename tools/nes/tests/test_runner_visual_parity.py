@@ -526,6 +526,29 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
         self.assertFalse(report["physical_valid"])
         self.assertTrue(any("interleaved" in item for item in report["physical_violations"]))
 
+    def test_observation_accepts_a_stale_frame_with_no_physical_publication(self) -> None:
+        observation = {
+            "framesRequested": 1,
+            "framesRun": 1,
+            "frames": [
+                {
+                    "ppuState": {
+                        "renderingEnabled": True,
+                        "backgroundEnabled": True,
+                        "spritesEnabled": True,
+                    }
+                }
+            ],
+            "ppuEvents": [],
+            "ppuEventCount": 0,
+            "ppuEventsObserved": 0,
+            "ppuTraceTruncated": False,
+            "truncated": False,
+            "stopReason": "framesComplete",
+        }
+
+        self.assertTrue(parity.validate_execution_observation(observation)["physical_valid"])
+
     def test_observation_rejects_discontinuous_ppudata_after_a_valid_address_pair(self) -> None:
         def snapshot(*, v: int, t: int, w: bool) -> dict[str, object]:
             return {
@@ -575,6 +598,57 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
         )
 
         self.assertTrue(any("discontinuous" in item for item in violations))
+
+    def test_observation_accepts_compact_ppudata_snapshots_with_next_before_target(self) -> None:
+        def snapshot(*, v: int, t: int, w: bool) -> dict[str, object]:
+            return {
+                "scanline": 245,
+                "dot": 80,
+                "vblank": False,
+                "renderingActive": False,
+                "v": f"0x{v:04X}",
+                "t": f"0x{t:04X}",
+                "x": 0,
+                "w": w,
+            }
+
+        events = [
+            {
+                "frameOffset": 0,
+                "address": "0x2006",
+                "value": "0x24",
+                "before": snapshot(v=0x2142, t=0x0140, w=False),
+                "after": snapshot(v=0x2142, t=0x2400, w=True),
+            },
+            {
+                "frameOffset": 0,
+                "address": "0x2006",
+                "value": "0x00",
+                "before": snapshot(v=0x2142, t=0x2400, w=True),
+                "after": snapshot(v=0x2400, t=0x2400, w=False),
+            },
+            {
+                "frameOffset": 0,
+                "address": "0x2007",
+                "value": "0x11",
+                "before": snapshot(v=0x2400, t=0x2400, w=False),
+                "after": snapshot(v=0x2400, t=0x2400, w=False),
+            },
+            {
+                "frameOffset": 0,
+                "address": "0x2007",
+                "value": "0x22",
+                "before": snapshot(v=0x2420, t=0x2400, w=False),
+                "after": snapshot(v=0x2420, t=0x2400, w=False),
+            },
+        ]
+
+        violations = parity.observed_physical_sequence_violations(
+            {"framesRun": 1, "frames": [{}], "ppuEvents": events}
+        )
+
+        self.assertFalse(any("discontinuous" in item for item in violations))
+        self.assertFalse(any("malformed PPUADDR" in item for item in violations))
 
     def test_nametable_dump_helpers_preserve_all_four_physical_tables(self) -> None:
         dump = {
@@ -716,8 +790,8 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
             window(1, "right", 9),
             window(30, "right", 249),
             window(31, "right", 257),
-            window(38, "right", 306),
-            window(46, "left", 255),
+            window(38, "right-post", 306),
+            window(46, "left-post", 255),
         ]
 
         selected = parity.select_focal_commit_windows(windows, target_camera_x=304)
@@ -1441,13 +1515,13 @@ class PpuCommitTraceTests(unittest.TestCase):
         before["slots"][0] = {
             "state": 4,
             "commit_phase": 2,
-            "payload_cursor": 30,
+            "payload_cursor": 34,
         }
         after = self.runtime_state(8, payload_length=30, target_start=10)
         after["slots"][0] = {
             "state": 5,
             "commit_phase": 3,
-            "payload_cursor": 30,
+            "payload_cursor": 40,
         }
         after["last_commit_writes"] = {"tiles": 0, "attributes": 6}
 

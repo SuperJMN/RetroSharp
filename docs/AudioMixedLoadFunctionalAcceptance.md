@@ -90,9 +90,9 @@ path writing after VBlank. Mapper-4 page-$02 `$4014` DMA is not a viable AprNes
 fallback because that emulator does not complete the instruction. MMC3 packed
 draws now update the retained `$0200` shadow and publish its statically used
 bytes sequentially through `$2004` only at the fresh VBlank boundary. The
-current budget permits at most 38 hardware sprites/152 bytes; the accepted
-publisher costs 2,135 NTSC CPU cycles, including the indexed-load page-crossing
-penalties. A compile-time regression rejects a 39-sprite MMC3 packed program.
+current budget permits at most 38 hardware sprites/152 bytes; the bounded large
+publisher is fully unrolled and costs 1,222 NTSC CPU cycles. A compile-time
+regression rejects a 39-sprite MMC3 packed program.
 
 The final exact tracked runner passes all start delays
 `[0,2,4,6,8,10,12,14,16,18,20]` in both the deterministic `NesTestCpu` gate
