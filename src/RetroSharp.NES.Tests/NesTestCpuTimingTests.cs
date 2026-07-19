@@ -116,6 +116,19 @@ public sealed class NesTestCpuTimingTests
         Assert.Equal(19, result.Cycles);
     }
 
+    [Fact]
+    public void Transfer_x_to_a_executes_in_two_cycles_and_updates_flags()
+    {
+        var rom = CreateRom();
+        Write(rom, 0x8000, [0xA2, 0x42, 0x8A, 0x60]);
+        var cpu = new NesTestCpu(rom);
+
+        var result = cpu.RunRoutine(0x8000);
+
+        Assert.Equal((byte)0x42, result.A);
+        Assert.Equal(10, result.Cycles);
+    }
+
     [Theory]
     [InlineData(76, 855)]
     [InlineData(152, 1_222)]

@@ -97,7 +97,7 @@ internal static class NesPackedCameraRuntimeEmitter
         var row = builder.CreateLabel("nes_packed_commit_row");
 
         builder.Label(NesRomBuilder.WorldPackCommitEdgeLabel);
-        EmitSelectSlotForCommit(builder, invalid);
+        EmitSelectSlotForCommit(builder, invalid, schedule);
         EmitLoadPendingExpectedTags(builder);
         EmitValidateSelectedSlot(builder, invalid);
         EmitValidatePayloadLength(builder, invalid);
@@ -125,11 +125,13 @@ internal static class NesPackedCameraRuntimeEmitter
         NesPackedCameraPhaseSchedule schedule)
     {
         var attributes = builder.CreateLabel("nes_packed_column_phase_attributes");
+        var attributesFit = builder.CreateLabel("nes_packed_column_phase_attributes_fit");
         var writeAttributes = builder.CreateLabel("nes_packed_column_phase_write_attributes");
         var tileCountWithinBudget = builder.CreateLabel("nes_packed_column_tile_count_budget");
         var topBoundary = builder.CreateLabel("nes_packed_column_top_boundary");
         var boundaryReady = builder.CreateLabel("nes_packed_column_boundary_ready");
         var countReady = builder.CreateLabel("nes_packed_column_tile_count_ready");
+        var tileSegment = builder.CreateLabel("nes_packed_column_tile_segment");
         var tileLoop = builder.CreateLabel("nes_packed_column_tile_phase_loop");
         var tilesRemain = builder.CreateLabel("nes_packed_column_tiles_remain");
         var incomplete = builder.CreateLabel("nes_packed_column_phase_incomplete");
@@ -137,11 +139,16 @@ internal static class NesPackedCameraRuntimeEmitter
         var finish = builder.CreateLabel("nes_packed_column_phase_finish");
 
         builder.CallSubroutine(BeginSelectedPhaseLabel);
+        builder.LoadAImmediate(schedule.MaximumWritesPerPhase);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         EmitLoadSelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
         builder.JumpIf(0xB0, attributes);
 
+        builder.LoadAImmediate(0x84);
+        builder.StoreAAbsolute(0x2000);
+        builder.Label(tileSegment);
         EmitAddModulo(
             builder,
             NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart,
@@ -153,9 +160,9 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.SetCarry();
         builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
-        builder.CompareImmediate(schedule.ColumnTileWritesPerPhase + 1);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         builder.JumpIf(0x90, tileCountWithinBudget);
-        builder.LoadAImmediate(schedule.ColumnTileWritesPerPhase);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.Label(tileCountWithinBudget);
 
@@ -173,10 +180,15 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpIf(0xB0, countReady);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.Label(countReady);
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining, NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.SetCarry();
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
 
-        builder.LoadAImmediate(0x84);
-        builder.StoreAAbsolute(0x2000);
         EmitSetPpuTileAddress(
             builder,
             NesRuntimeMemoryLayout.PackedCamera.TargetCursor,
@@ -199,22 +211,26 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.LoadAImmediate(32);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         EmitStoreASelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
-        if (schedule.ColumnCombinedAttributeWrites > 0)
-        {
-            builder.LoadAImmediate(schedule.ColumnCombinedAttributeWrites);
-            builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
-            builder.JumpAbsolute(writeAttributes);
-        }
-        else
-        {
-            builder.JumpAbsolute(incomplete);
-        }
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.JumpIf(0xF0, incomplete);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        EmitComputeAttributeCount(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.JumpIf(0x90, attributesFit);
+        builder.JumpIf(0xF0, attributesFit);
+        builder.JumpAbsolute(incomplete);
+        builder.Label(attributesFit);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+        builder.JumpAbsolute(writeAttributes);
 
         builder.Label(tilesRemain);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.JumpIf(0xD0, tileSegment);
         builder.JumpAbsolute(incomplete);
 
         builder.Label(attributes);
-        builder.LoadAImmediate(schedule.ColumnAttributeWritesPerPhase);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
         builder.Label(writeAttributes);
         EmitColumnAttributeWrites(builder, ready, incomplete);
@@ -237,18 +253,29 @@ internal static class NesPackedCameraRuntimeEmitter
         NesPackedCameraPhaseSchedule schedule)
     {
         var attributes = builder.CreateLabel("nes_packed_row_phase_attributes");
+        var attributesFit = builder.CreateLabel("nes_packed_row_phase_attributes_fit");
+        var countWithinBudget = builder.CreateLabel("nes_packed_row_tile_count_budget");
+        var leftBoundary = builder.CreateLabel("nes_packed_row_left_boundary");
+        var boundaryReady = builder.CreateLabel("nes_packed_row_boundary_ready");
         var countReady = builder.CreateLabel("nes_packed_row_tile_count_ready");
+        var tileSegment = builder.CreateLabel("nes_packed_row_tile_segment");
         var tileLoop = builder.CreateLabel("nes_packed_row_tile_phase_loop");
+        var tilesRemain = builder.CreateLabel("nes_packed_row_tiles_remain");
         var incomplete = builder.CreateLabel("nes_packed_row_phase_incomplete");
         var ready = builder.CreateLabel("nes_packed_row_phase_ready");
         var finish = builder.CreateLabel("nes_packed_row_phase_finish");
 
         builder.CallSubroutine(BeginSelectedPhaseLabel);
+        builder.LoadAImmediate(schedule.MaximumWritesPerPhase);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
         EmitLoadSelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
         builder.JumpIf(0xB0, attributes);
 
+        builder.LoadAImmediate(0x80);
+        builder.StoreAAbsolute(0x2000);
+        builder.Label(tileSegment);
         EmitAddModulo(
             builder,
             NesRuntimeMemoryLayout.PackedCamera.CommitTargetStart,
@@ -260,36 +287,79 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.SetCarry();
         builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
-        builder.CompareImmediate(schedule.RowTileWritesPerPhase + 1);
-        builder.JumpIf(0x90, countReady);
-        builder.LoadAImmediate(schedule.RowTileWritesPerPhase);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.JumpIf(0x90, countWithinBudget);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.Label(countWithinBudget);
+
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
+        builder.CompareImmediate(32);
+        builder.JumpIf(0x90, leftBoundary);
+        builder.LoadAImmediate(64);
+        builder.JumpAbsolute(boundaryReady);
+        builder.Label(leftBoundary);
+        builder.LoadAImmediate(32);
+        builder.Label(boundaryReady);
+        builder.SetCarry();
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.JumpIf(0xB0, countReady);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.Label(countReady);
-        EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining, NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastTileWrites);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.SetCarry();
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
 
         builder.LoadYAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
-        builder.Label(tileLoop);
         EmitSetPpuTileAddress(
             builder,
             NesRuntimeMemoryLayout.PackedCamera.CommitTarget,
             NesRuntimeMemoryLayout.PackedCamera.TargetCursor,
             "nes_packed_row_phase_tile");
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.TransferAToX();
+        builder.Label(tileLoop);
         builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
         builder.StoreAAbsolute(0x2007);
         builder.IncrementY();
-        builder.IncrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.AndImmediate(0x3F);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.DecrementX();
         builder.JumpIf(0xD0, tileLoop);
         builder.TransferYToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         EmitStoreASelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitPayloadLength);
+        builder.JumpIf(0xD0, tilesRemain);
+        builder.LoadAImmediate(32);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
+        EmitStoreASelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.JumpIf(0xF0, incomplete);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        EmitComputeAttributeCount(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.JumpIf(0x90, attributesFit);
+        builder.JumpIf(0xF0, attributesFit);
+        builder.JumpAbsolute(incomplete);
+        builder.Label(attributesFit);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+        EmitRowAttributeWrites(builder, ready, incomplete);
+
+        builder.Label(tilesRemain);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.JumpIf(0xD0, tileSegment);
         builder.JumpAbsolute(incomplete);
 
         builder.Label(attributes);
-        EmitRowAttributeWrites(builder, schedule.RowAttributeWritesPerPhase, ready, incomplete);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeCount);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
+        EmitRowAttributeWrites(builder, ready, incomplete);
 
         builder.Label(incomplete);
         builder.LoadAImmediate(0);
@@ -337,7 +407,7 @@ internal static class NesPackedCameraRuntimeEmitter
     {
         var countReady = builder.CreateLabel("nes_packed_column_attr_count_ready");
         var topTarget = builder.CreateLabel("nes_packed_column_attr_top_target");
-        var targetReady = builder.CreateLabel("nes_packed_column_attr_target_ready");
+        var addressReady = builder.CreateLabel("nes_packed_column_attr_address_ready");
         var loop = builder.CreateLabel("nes_packed_column_attr_phase_loop");
 
         EmitComputeAttributeCount(builder);
@@ -373,22 +443,28 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(topTarget);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
         EmitPrepareColumnAttributeAddress(builder);
+        EmitInitializeColumnAttributePpuAddress(builder);
 
         builder.LoadYAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         builder.Label(loop);
-        EmitSetPpuAttributeAddressForColumn(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.StoreAAbsolute(0x2006);
+        builder.StoreXAbsolute(0x2006);
         builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
         builder.StoreAAbsolute(0x2007);
         builder.IncrementY();
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
+        builder.Emit(0x8A); // TXA
         builder.ClearCarry();
-        builder.AddImmediate(4);
-        builder.CompareImmediate(60);
-        builder.JumpIf(0x90, targetReady);
-        builder.SetCarry();
-        builder.SubtractImmediate(60);
-        builder.Label(targetReady);
-        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
+        builder.AddImmediate(8);
+        builder.TransferAToX();
+        builder.JumpIf(0x90, addressReady);
+        builder.Emit(0x8A); // TXA
+        builder.OrImmediate(0xC0);
+        builder.TransferAToX();
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.Emit(0x49, 0x08); // EOR #$08: toggle the vertical nametable attribute page.
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.Label(addressReady);
         builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.JumpIf(0xD0, loop);
         builder.TransferYToA();
@@ -403,12 +479,16 @@ internal static class NesPackedCameraRuntimeEmitter
 
     private static void EmitRowAttributeWrites(
         PrgBuilder builder,
-        int maximumWrites,
         string ready,
         string incomplete)
     {
         var countReady = builder.CreateLabel("nes_packed_row_attr_count_ready");
+        var topBlock = builder.CreateLabel("nes_packed_row_attr_top_block");
+        var boundaryReady = builder.CreateLabel("nes_packed_row_attr_boundary_ready");
+        var segmentCountReady = builder.CreateLabel("nes_packed_row_attr_segment_count_ready");
+        var segment = builder.CreateLabel("nes_packed_row_attr_segment");
         var loop = builder.CreateLabel("nes_packed_row_attr_phase_loop");
+        var phaseDone = builder.CreateLabel("nes_packed_row_attr_phase_done");
 
         EmitComputeAttributeCount(builder);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
@@ -419,9 +499,9 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.SetCarry();
         builder.SubtractZeroPage(NesRuntimeMemoryLayout.PackedCamera.PayloadIndexScratch);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
-        builder.CompareImmediate(maximumWrites + 1);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
         builder.JumpIf(0x90, countReady);
-        builder.LoadAImmediate(maximumWrites);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
         builder.Label(countReady);
         EmitCopy(builder, NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining, NesRuntimeMemoryLayout.PackedCamera.LastAttributeWrites);
@@ -434,8 +514,26 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.AndImmediate(0x0F);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeBlock);
         builder.LoadYAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
-        builder.Label(loop);
+
+        builder.Label(segment);
         EmitSetPpuAttributeAddress(builder);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeBlock);
+        builder.CompareImmediate(8);
+        builder.JumpIf(0x90, topBlock);
+        builder.LoadAImmediate(16);
+        builder.JumpAbsolute(boundaryReady);
+        builder.Label(topBlock);
+        builder.LoadAImmediate(8);
+        builder.Label(boundaryReady);
+        builder.SetCarry();
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeBlock);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.JumpIf(0x90, segmentCountReady);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.Label(segmentCountReady);
+        builder.TransferAToX();
+
+        builder.Label(loop);
         builder.LoadAIndirectY(NesRuntimeMemoryLayout.PackedCamera.PointerLow);
         builder.StoreAAbsolute(0x2007);
         builder.IncrementY();
@@ -444,7 +542,11 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.AndImmediate(0x0F);
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.AttributeBlock);
         builder.DecrementAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.DecrementX();
         builder.JumpIf(0xD0, loop);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.PhaseRemaining);
+        builder.JumpIf(0xD0, segment);
+        builder.Label(phaseDone);
         builder.TransferYToA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Iterator);
         EmitStoreASelectedMetadata(builder, NesPackedCameraRuntime.PayloadCursorOffset);
@@ -480,6 +582,19 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.AndImmediate(0x08);
         builder.ShiftRightA();
         builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+    }
+
+    private static void EmitInitializeColumnAttributePpuAddress(PrgBuilder builder)
+    {
+        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
+        builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressHighLabel);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
+        builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressLowLabel);
+        builder.ClearCarry();
+        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
+        builder.TransferAToX();
     }
 
     private static void EmitAddModulo(
@@ -554,15 +669,24 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Return();
     }
 
-    private static void EmitSelectSlotForCommit(PrgBuilder builder, string invalid)
+    private static void EmitSelectSlotForCommit(
+        PrgBuilder builder,
+        string invalid,
+        NesPackedCameraPhaseSchedule schedule)
     {
+        if (schedule.MaximumColumnFrames != schedule.MaximumRowFrames)
+        {
+            throw new InvalidOperationException(
+                "NES packed deadline selection requires the schedule to expose one comparable axis deadline.");
+        }
+
         var slot0Committing = builder.CreateLabel("nes_packed_select_slot_0_committing");
         var slot1Committing = builder.CreateLabel("nes_packed_select_slot_1_committing");
-        var slot0CheckPeerAxis = builder.CreateLabel("nes_packed_select_slot_0_check_peer_axis");
-        var slot1CheckPeerAxis = builder.CreateLabel("nes_packed_select_slot_1_check_peer_axis");
         var checkResidents = builder.CreateLabel("nes_packed_select_check_residents");
         var slot0Resident = builder.CreateLabel("nes_packed_select_slot_0_resident");
         var bothResident = builder.CreateLabel("nes_packed_select_both_resident");
+        var compareDeadlineLow = builder.CreateLabel("nes_packed_select_compare_deadline_low");
+        var deadlinesEqual = builder.CreateLabel("nes_packed_select_deadlines_equal");
         var desiredReady = builder.CreateLabel("nes_packed_select_desired_ready");
         var selectSlot0 = builder.CreateLabel("nes_packed_select_slot_0");
         var selectSlot1 = builder.CreateLabel("nes_packed_select_slot_1");
@@ -579,23 +703,17 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.Label(slot0Committing);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.StateOffset);
         builder.CompareImmediate(NesPackedCameraRuntime.Resident);
-        builder.JumpIf(0xF0, slot0CheckPeerAxis);
-        builder.JumpAbsolute(selectSlot0);
-        builder.Label(slot0CheckPeerAxis);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.NextAxis);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.AxisOffset);
-        builder.JumpIf(0xF0, selectSlot1);
+        builder.JumpIf(0xF0, bothResident);
+        builder.CompareImmediate(NesPackedCameraRuntime.Committing);
+        builder.JumpIf(0xF0, bothResident);
         builder.JumpAbsolute(selectSlot0);
 
         builder.Label(slot1Committing);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.StateOffset);
         builder.CompareImmediate(NesPackedCameraRuntime.Resident);
-        builder.JumpIf(0xF0, slot1CheckPeerAxis);
-        builder.JumpAbsolute(selectSlot1);
-        builder.Label(slot1CheckPeerAxis);
-        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.NextAxis);
-        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.AxisOffset);
-        builder.JumpIf(0xF0, selectSlot0);
+        builder.JumpIf(0xF0, bothResident);
+        builder.CompareImmediate(NesPackedCameraRuntime.Committing);
+        builder.JumpIf(0xF0, bothResident);
         builder.JumpAbsolute(selectSlot1);
 
         builder.Label(checkResidents);
@@ -614,6 +732,35 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.JumpAbsolute(selectSlot0);
 
         builder.Label(bothResident);
+        // Every current schedule gives columns and rows the same visibility
+        // deadline. Their nearest deadline is therefore the oldest request,
+        // compared as a wrap-safe 16-bit age from the current physical frame.
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow);
+        builder.SetCarry();
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.RequestFrameLowOffset);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh);
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot0 + NesPackedCameraRuntime.RequestFrameHighOffset);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterLow);
+        builder.SetCarry();
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.RequestFrameLowOffset);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.FrameCounterHigh);
+        builder.SubtractAbsolute(NesRuntimeMemoryLayout.PackedCamera.Slot1 + NesPackedCameraRuntime.RequestFrameHighOffset);
+        builder.StoreAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeHigh);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalHigh);
+        builder.JumpIf(0x90, selectSlot1);
+        builder.JumpIf(0xF0, compareDeadlineLow);
+        builder.JumpAbsolute(selectSlot0);
+        builder.Label(compareDeadlineLow);
+        builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitWorldEdgeLow);
+        builder.CompareAbsolute(NesRuntimeMemoryLayout.PackedCamera.CommitOrthogonalLow);
+        builder.JumpIf(0x90, selectSlot1);
+        builder.JumpIf(0xF0, deadlinesEqual);
+        builder.JumpAbsolute(selectSlot0);
+        builder.Label(deadlinesEqual);
         builder.LoadAAbsolute(NesRuntimeMemoryLayout.PackedCamera.NextAxis);
         builder.JumpIf(0xD0, desiredReady);
         builder.LoadAImmediate(NesPackedCameraRuntime.Column);
@@ -1327,16 +1474,4 @@ internal static class NesPackedCameraRuntimeEmitter
         builder.StoreAAbsolute(0x2006);
     }
 
-    private static void EmitSetPpuAttributeAddressForColumn(PrgBuilder builder)
-    {
-        builder.LoadXAbsolute(NesRuntimeMemoryLayout.PackedCamera.TargetCursor);
-        builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressHighLabel);
-        builder.ClearCarry();
-        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.Status);
-        builder.StoreAAbsolute(0x2006);
-        builder.LdaAbsoluteX(NesRomBuilder.PpuAttributeRowAddressLowLabel);
-        builder.ClearCarry();
-        builder.AddAbsolute(NesRuntimeMemoryLayout.PackedCamera.AddressColumn);
-        builder.StoreAAbsolute(0x2006);
-    }
 }

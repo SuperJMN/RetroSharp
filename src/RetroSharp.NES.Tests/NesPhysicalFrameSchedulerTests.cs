@@ -8,61 +8,130 @@ using static NesSdkOperationBoundaryTests;
 public sealed class NesPhysicalFrameSchedulerTests
 {
     [Fact]
-    public void Standard_runner_column_schedule_pins_physical_boundary_and_combined_attribute_work()
+    public void Packed_phase_exposes_the_physical_segments_bytes_and_worst_case_cost_it_owns()
     {
-        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 76);
+        var phaseType = typeof(NesPackedCameraPhase);
+        const System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
 
-        Assert.Equal(
-            [
-                new NesPackedCameraPhase(20, 0),
-                new NesPackedCameraPhase(10, 2),
-                new NesPackedCameraPhase(0, 6),
-            ],
-            schedule.PlanColumn(payloadLength: 30, targetStart: 10));
-        Assert.Equal((9, 10), (schedule.MaximumColumnFrames, schedule.MaximumRowFrames));
+        Assert.NotNull(phaseType.GetProperty("Segments", flags));
+        Assert.NotNull(phaseType.GetProperty("PhysicalWriteBytes", flags));
+        Assert.NotNull(phaseType.GetProperty("WorstCaseCpuCycles", flags));
     }
 
     [Fact]
-    public void Standard_worst_column_schedule_treats_rows_30_and_60_as_phase_boundaries()
+    public void Standard_runner_column_schedule_mixes_tiles_and_attributes_within_the_physical_budget()
     {
         var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 76);
+        var phases = schedule.PlanColumn(payloadLength: 30, targetStart: 10);
 
         Assert.Equal(
             [
-                new NesPackedCameraPhase(1, 0),
-                new NesPackedCameraPhase(20, 0),
-                new NesPackedCameraPhase(10, 0),
-                new NesPackedCameraPhase(1, 2),
-                new NesPackedCameraPhase(0, 7),
+                (18, 0),
+                (12, 0),
+                (0, 8),
             ],
-            schedule.PlanColumn(payloadLength: 32, targetStart: 29));
+            phases.Select(Counts));
+        Assert.All(phases, phase => Assert.InRange(
+            phase.WorstCaseCpuCycles,
+            1,
+            NesPackedCameraPhaseSchedule.MaximumPhysicalFrameCycles));
+        Assert.Equal((3, 3), (schedule.MaximumColumnFrames, schedule.MaximumRowFrames));
     }
 
     [Fact]
-    public void Large_worst_column_schedule_uses_six_tile_and_nine_attribute_phases()
+    public void Standard_worst_column_schedule_keeps_rows_30_and_60_as_segments_inside_a_phase()
+    {
+        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 76);
+        var phases = schedule.PlanColumn(payloadLength: 32, targetStart: 29);
+
+        Assert.Equal(
+            [
+                (18, 0),
+                (14, 0),
+                (0, 9),
+            ],
+            phases.Select(Counts));
+        Assert.Equal(
+            [
+                new NesPackedCameraSegment(NesPackedCameraWriteKind.Tile, 29, 1),
+                new NesPackedCameraSegment(NesPackedCameraWriteKind.Tile, 30, 17),
+            ],
+            phases[0].Segments);
+    }
+
+    [Fact]
+    public void Large_worst_column_schedule_fits_four_bounded_phases()
     {
         var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount: 152);
 
         Assert.Equal(
             [
-                new NesPackedCameraPhase(1, 0),
-                new NesPackedCameraPhase(8, 0),
-                new NesPackedCameraPhase(8, 0),
-                new NesPackedCameraPhase(8, 0),
-                new NesPackedCameraPhase(6, 0),
-                new NesPackedCameraPhase(1, 0),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
-                new NesPackedCameraPhase(0, 1),
+                (11, 0),
+                (11, 0),
+                (10, 0),
+                (0, 9),
             ],
-            schedule.PlanColumn(payloadLength: 32, targetStart: 29));
-        Assert.Equal((29, 56), (schedule.MaximumColumnFrames, schedule.MaximumRowFrames));
+            schedule.PlanColumn(payloadLength: 32, targetStart: 29).Select(Counts));
+        Assert.Equal((4, 4), (schedule.MaximumColumnFrames, schedule.MaximumRowFrames));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(76)]
+    [InlineData(152)]
+    public void Packed_schedule_enumerates_every_payload_start_and_profile_deterministically_within_budget(
+        int retainedOamByteCount)
+    {
+        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount);
+        for (var payloadLength = 1; payloadLength <= 32; payloadLength++)
+        {
+            for (var targetStart = 0; targetStart < 60; targetStart++)
+            {
+                AssertPlan(
+                    schedule.PlanColumn(payloadLength, targetStart),
+                    schedule.PlanColumn(payloadLength, targetStart),
+                    payloadLength,
+                    targetStart,
+                    column: true);
+            }
+
+            for (var targetStart = 0; targetStart < 64; targetStart++)
+            {
+                AssertPlan(
+                    schedule.PlanRow(payloadLength, targetStart),
+                    schedule.PlanRow(payloadLength, targetStart),
+                    payloadLength,
+                    targetStart,
+                    column: false);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(76)]
+    [InlineData(152)]
+    public void Packed_schedule_sustains_diagonal_crossings_every_eight_frames_with_two_slots(
+        int retainedOamByteCount)
+    {
+        var schedule = NesPackedCameraPhaseSchedule.Create(retainedOamByteCount);
+        var worstColumn = Enumerable.Range(1, 32)
+            .SelectMany(payloadLength => Enumerable.Range(0, 60)
+                .Select(targetStart => schedule.PlanColumn(payloadLength, targetStart)))
+            .MaxBy(phases => phases.Count)!;
+        var worstRow = Enumerable.Range(1, 32)
+            .SelectMany(payloadLength => Enumerable.Range(0, 64)
+                .Select(targetStart => schedule.PlanRow(payloadLength, targetStart)))
+            .MaxBy(phases => phases.Count)!;
+
+        var result = SimulateCrossings(worstColumn, worstRow, frames: 2_048);
+
+        Assert.True(
+            result.MaximumQueuedEdges <= 2,
+            $"OAM {retainedOamByteCount} accumulated {result.MaximumQueuedEdges} edges " +
+            $"for column={worstColumn.Count} and row={worstRow.Count} phases.");
+        Assert.Equal(0, result.RemainingPhasesAfterDrain);
     }
 
     [Fact]
@@ -191,4 +260,89 @@ public sealed class NesPhysicalFrameSchedulerTests
 
         Assert.Contains("deadline", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static (int MaximumQueuedEdges, int RemainingPhasesAfterDrain) SimulateCrossings(
+        IReadOnlyList<NesPackedCameraPhase> column,
+        IReadOnlyList<NesPackedCameraPhase> row,
+        int frames)
+    {
+        var queuedPhases = new Queue<int>();
+        var maximumQueuedEdges = 0;
+        for (var frame = 0; frame < frames; frame++)
+        {
+            if (frame % 8 == 0)
+            {
+                queuedPhases.Enqueue(column.Count);
+                queuedPhases.Enqueue(row.Count);
+                maximumQueuedEdges = Math.Max(maximumQueuedEdges, queuedPhases.Count);
+            }
+
+            ServiceOnePhase(queuedPhases);
+        }
+
+        var remainingPhases = queuedPhases.Sum();
+        while (queuedPhases.Count > 0)
+        {
+            ServiceOnePhase(queuedPhases);
+        }
+
+        return (maximumQueuedEdges, remainingPhases);
+    }
+
+    private static void ServiceOnePhase(Queue<int> queuedPhases)
+    {
+        if (!queuedPhases.TryDequeue(out var remaining))
+        {
+            return;
+        }
+
+        if (remaining > 1)
+        {
+            queuedPhases.Enqueue(remaining - 1);
+        }
+    }
+
+    private static (int TileWrites, int AttributeWrites) Counts(NesPackedCameraPhase phase) =>
+        (phase.TileWrites, phase.AttributeWrites);
+
+    private static void AssertPlan(
+        IReadOnlyList<NesPackedCameraPhase> first,
+        IReadOnlyList<NesPackedCameraPhase> second,
+        int payloadLength,
+        int targetStart,
+        bool column)
+    {
+        Assert.Equal(
+            first.Select(DescribePhase),
+            second.Select(DescribePhase));
+        Assert.Equal(payloadLength, first.Sum(phase => phase.TileWrites));
+        Assert.Equal((targetStart % 4 + payloadLength + 3) / 4, first.Sum(phase => phase.AttributeWrites));
+        Assert.All(first, phase =>
+        {
+            Assert.InRange(
+                phase.WorstCaseCpuCycles,
+                1,
+                NesPackedCameraPhaseSchedule.MaximumPhysicalFrameCycles);
+            Assert.True(phase.PhysicalWriteBytes > 0);
+            Assert.NotEmpty(phase.Segments);
+            foreach (var segment in phase.Segments)
+            {
+                var boundary = column
+                    ? segment.Kind == NesPackedCameraWriteKind.Tile
+                        ? segment.TargetStart < 30 ? 30 : 60
+                        : segment.TargetStart + 1
+                    : segment.Kind == NesPackedCameraWriteKind.Tile
+                        ? segment.TargetStart < 32 ? 32 : 64
+                        : segment.TargetStart < 8 ? 8 : 16;
+                Assert.True(
+                    segment.TargetStart + segment.WriteCount <= boundary,
+                    $"{(column ? "column" : "row")} segment {segment} crossed physical boundary {boundary}.");
+            }
+        });
+    }
+
+    private static string DescribePhase(NesPackedCameraPhase phase) =>
+        $"{phase.TileWrites}/{phase.AttributeWrites}:{phase.PhysicalWriteBytes}:{phase.WorstCaseCpuCycles}:" +
+        string.Join(',', phase.Segments.Select(segment =>
+            $"{segment.Kind}-{segment.TargetStart}-{segment.WriteCount}"));
 }

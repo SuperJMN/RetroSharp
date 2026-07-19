@@ -371,6 +371,7 @@ internal sealed class NesTestCpu
             case 0x84: Write(Read(pc++), y, 2); cycles += 3; break;
             case 0x85: Write(Read(pc++), a, 2); cycles += 3; break;
             case 0x86: Write(Read(pc++), x, 2); cycles += 3; break;
+            case 0x8A: LoadA(x); cycles += 2; break;
             case 0x8C: Write(ReadWordAndAdvance(), y, 3); cycles += 4; break;
             case 0x8D: Write(ReadWordAndAdvance(), a, 3); cycles += 4; break;
             case 0x8E: Write(ReadWordAndAdvance(), x, 3); cycles += 4; break;

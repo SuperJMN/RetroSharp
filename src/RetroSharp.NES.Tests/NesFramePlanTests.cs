@@ -39,7 +39,7 @@ public sealed class NesFramePlanTests
 
         var staging = Assert.Single(plan.StagedWork);
         Assert.Equal(NesFramePlan.CameraRowStagingId, staging.Id);
-        Assert.Equal(56, staging.MaximumPhysicalFrames);
+        Assert.Equal(4, staging.MaximumPhysicalFrames);
     }
 
     [Fact]

@@ -1,38 +1,92 @@
 namespace RetroSharp.NES;
 
-internal readonly record struct NesPackedCameraPhase(int TileWrites, int AttributeWrites);
+internal enum NesPackedCameraWriteKind
+{
+    Tile,
+    Attribute,
+}
+
+internal readonly record struct NesPackedCameraSegment(
+    NesPackedCameraWriteKind Kind,
+    int TargetStart,
+    int WriteCount);
+
+internal readonly record struct NesPackedCameraPhase
+{
+    internal NesPackedCameraPhase(int tileWrites, int attributeWrites)
+        : this(tileWrites, attributeWrites, [], physicalWriteBytes: 0, worstCaseCpuCycles: 0)
+    {
+    }
+
+    internal NesPackedCameraPhase(
+        int tileWrites,
+        int attributeWrites,
+        IReadOnlyList<NesPackedCameraSegment> segments,
+        int physicalWriteBytes,
+        long worstCaseCpuCycles)
+    {
+        TileWrites = tileWrites;
+        AttributeWrites = attributeWrites;
+        Segments = segments;
+        PhysicalWriteBytes = physicalWriteBytes;
+        WorstCaseCpuCycles = worstCaseCpuCycles;
+    }
+
+    internal int TileWrites { get; }
+
+    internal int AttributeWrites { get; }
+
+    internal IReadOnlyList<NesPackedCameraSegment> Segments { get; }
+
+    internal int PhysicalWriteBytes { get; }
+
+    internal long WorstCaseCpuCycles { get; }
+}
 
 internal sealed class NesPackedCameraPhaseSchedule
 {
-    private const int StandardMaximumRetainedOamBytes = 76;
+    internal const int MaximumPhysicalFrameCycles = 2_273;
+    private const int FixedPhaseCycles = 400;
+    private const int WorstCaseTransactionCycles = 55;
 
-    private NesPackedCameraPhaseSchedule(
-        int columnTileWritesPerPhase,
-        int columnCombinedAttributeWrites,
-        int columnAttributeWritesPerPhase,
-        int rowTileWritesPerPhase,
-        int rowAttributeWritesPerPhase,
-        int maximumColumnFrames,
-        int maximumRowFrames)
+    private NesPackedCameraPhaseSchedule(int retainedOamByteCount, long retainedOamCycles)
     {
-        ColumnTileWritesPerPhase = columnTileWritesPerPhase;
-        ColumnCombinedAttributeWrites = columnCombinedAttributeWrites;
-        ColumnAttributeWritesPerPhase = columnAttributeWritesPerPhase;
-        RowTileWritesPerPhase = rowTileWritesPerPhase;
-        RowAttributeWritesPerPhase = rowAttributeWritesPerPhase;
-        MaximumColumnFrames = maximumColumnFrames;
-        MaximumRowFrames = maximumRowFrames;
+        RetainedOamByteCount = retainedOamByteCount;
+        RetainedOamCycles = retainedOamCycles;
+        MaximumWritesPerPhase = checked((int)(
+            (MaximumPhysicalFrameCycles - retainedOamCycles - FixedPhaseCycles) /
+            WorstCaseTransactionCycles));
+        if (MaximumWritesPerPhase < 1)
+        {
+            throw new InvalidOperationException(
+                $"NES packed camera has no physical transaction capacity after {retainedOamCycles} retained-OAM cycles.");
+        }
+
+        MaximumColumnFrames = Enumerable.Range(1, 32)
+            .SelectMany(payloadLength => Enumerable.Range(0, 60)
+                .Select(targetStart => PlanColumn(payloadLength, targetStart).Count))
+            .Max();
+        MaximumRowFrames = Enumerable.Range(1, 32)
+            .SelectMany(payloadLength => Enumerable.Range(0, 64)
+                .Select(targetStart => PlanRow(payloadLength, targetStart).Count))
+            .Max();
     }
 
-    internal int ColumnTileWritesPerPhase { get; }
+    internal int RetainedOamByteCount { get; }
 
-    internal int ColumnCombinedAttributeWrites { get; }
+    internal long RetainedOamCycles { get; }
 
-    internal int ColumnAttributeWritesPerPhase { get; }
+    internal int MaximumWritesPerPhase { get; }
 
-    internal int RowTileWritesPerPhase { get; }
+    internal int ColumnTileWritesPerPhase => MaximumWritesPerPhase;
 
-    internal int RowAttributeWritesPerPhase { get; }
+    internal int ColumnCombinedAttributeWrites => MaximumWritesPerPhase;
+
+    internal int ColumnAttributeWritesPerPhase => MaximumWritesPerPhase;
+
+    internal int RowTileWritesPerPhase => MaximumWritesPerPhase;
+
+    internal int RowAttributeWritesPerPhase => MaximumWritesPerPhase;
 
     internal int MaximumColumnFrames { get; }
 
@@ -45,23 +99,12 @@ internal sealed class NesPackedCameraPhaseSchedule
             throw new ArgumentOutOfRangeException(nameof(retainedOamByteCount));
         }
 
-        return retainedOamByteCount <= StandardMaximumRetainedOamBytes
-            ? new NesPackedCameraPhaseSchedule(
-                columnTileWritesPerPhase: 20,
-                columnCombinedAttributeWrites: 2,
-                columnAttributeWritesPerPhase: 7,
-                rowTileWritesPerPhase: 8,
-                rowAttributeWritesPerPhase: 9,
-                maximumColumnFrames: 9,
-                maximumRowFrames: 10)
-            : new NesPackedCameraPhaseSchedule(
-                columnTileWritesPerPhase: 8,
-                columnCombinedAttributeWrites: 0,
-                columnAttributeWritesPerPhase: 1,
-                rowTileWritesPerPhase: 1,
-                rowAttributeWritesPerPhase: 1,
-                maximumColumnFrames: 29,
-                maximumRowFrames: 56);
+        var retainedOamCycles = retainedOamByteCount == 0
+            ? 0
+            : NesOamPublicationSchedule.Create(
+                NesRuntimeMemoryLayout.Sprite.OamShadow,
+                retainedOamByteCount).CpuCycles;
+        return new NesPackedCameraPhaseSchedule(retainedOamByteCount, retainedOamCycles);
     }
 
     internal IReadOnlyList<NesPackedCameraPhase> PlanColumn(int payloadLength, int targetStart)
@@ -76,36 +119,27 @@ internal sealed class NesPackedCameraPhaseSchedule
             throw new ArgumentOutOfRangeException(nameof(targetStart));
         }
 
-        var phases = new List<NesPackedCameraPhase>();
-        var remainingTiles = payloadLength;
-        var targetCursor = targetStart;
-        while (remainingTiles > 0)
+        var transactions = new List<NesPackedCameraTransaction>();
+        for (var index = 0; index < payloadLength; index++)
         {
-            var physicalBoundary = targetCursor < 30 ? 30 : 60;
-            var tileWrites = Math.Min(
-                remainingTiles,
-                Math.Min(ColumnTileWritesPerPhase, physicalBoundary - targetCursor));
-            phases.Add(new NesPackedCameraPhase(tileWrites, 0));
-            remainingTiles -= tileWrites;
-            targetCursor = (targetCursor + tileWrites) % 60;
+            var target = (targetStart + index) % 60;
+            transactions.Add(new NesPackedCameraTransaction(
+                NesPackedCameraWriteKind.Tile,
+                target,
+                index == 0 || target is 0 or 30));
         }
 
-        var remainingAttributes = AttributeCount(payloadLength, targetStart);
-        if (ColumnCombinedAttributeWrites > 0)
+        var attributeCount = AttributeCount(payloadLength, targetStart);
+        var attributeStart = targetStart & 0xFC;
+        for (var index = 0; index < attributeCount; index++)
         {
-            var combined = Math.Min(ColumnCombinedAttributeWrites, remainingAttributes);
-            phases[^1] = phases[^1] with { AttributeWrites = combined };
-            remainingAttributes -= combined;
+            transactions.Add(new NesPackedCameraTransaction(
+                NesPackedCameraWriteKind.Attribute,
+                (attributeStart + index * 4) % 60,
+                StartsSegment: true));
         }
 
-        while (remainingAttributes > 0)
-        {
-            var attributeWrites = Math.Min(ColumnAttributeWritesPerPhase, remainingAttributes);
-            phases.Add(new NesPackedCameraPhase(0, attributeWrites));
-            remainingAttributes -= attributeWrites;
-        }
-
-        return phases;
+        return Plan(transactions);
     }
 
     internal IReadOnlyList<NesPackedCameraPhase> PlanRow(int payloadLength, int targetStart)
@@ -120,26 +154,101 @@ internal sealed class NesPackedCameraPhaseSchedule
             throw new ArgumentOutOfRangeException(nameof(targetStart));
         }
 
-        var phases = new List<NesPackedCameraPhase>();
-        var remainingTiles = payloadLength;
-        while (remainingTiles > 0)
+        var transactions = new List<NesPackedCameraTransaction>();
+        for (var index = 0; index < payloadLength; index++)
         {
-            var tileWrites = Math.Min(RowTileWritesPerPhase, remainingTiles);
-            phases.Add(new NesPackedCameraPhase(tileWrites, 0));
-            remainingTiles -= tileWrites;
+            var target = (targetStart + index) % 64;
+            transactions.Add(new NesPackedCameraTransaction(
+                NesPackedCameraWriteKind.Tile,
+                target,
+                index == 0 || target is 0 or 32));
         }
 
-        var remainingAttributes = AttributeCount(payloadLength, targetStart);
-        while (remainingAttributes > 0)
+        var attributeCount = AttributeCount(payloadLength, targetStart);
+        var attributeStart = targetStart / 4;
+        for (var index = 0; index < attributeCount; index++)
         {
-            var attributeWrites = Math.Min(RowAttributeWritesPerPhase, remainingAttributes);
-            phases.Add(new NesPackedCameraPhase(0, attributeWrites));
-            remainingAttributes -= attributeWrites;
+            var target = (attributeStart + index) % 16;
+            transactions.Add(new NesPackedCameraTransaction(
+                NesPackedCameraWriteKind.Attribute,
+                target,
+                index == 0 || target is 0 or 8));
         }
 
-        return phases;
+        return Plan(transactions);
+    }
+
+    private IReadOnlyList<NesPackedCameraPhase> Plan(IReadOnlyList<NesPackedCameraTransaction> transactions)
+    {
+        var tileCount = transactions.TakeWhile(transaction => transaction.Kind == NesPackedCameraWriteKind.Tile).Count();
+        var phaseTransactions = new List<List<NesPackedCameraTransaction>>();
+        for (var offset = 0; offset < tileCount; offset += MaximumWritesPerPhase)
+        {
+            phaseTransactions.Add(transactions
+                .Skip(offset)
+                .Take(Math.Min(MaximumWritesPerPhase, tileCount - offset))
+                .ToList());
+        }
+
+        var remainingAttributes = transactions.Skip(tileCount).ToArray();
+        if (remainingAttributes.Length > 0 &&
+            phaseTransactions.Count > 0 &&
+            remainingAttributes.Length <= MaximumWritesPerPhase - phaseTransactions[^1].Count)
+        {
+            phaseTransactions[^1].AddRange(remainingAttributes);
+            remainingAttributes = [];
+        }
+
+        for (var offset = 0; offset < remainingAttributes.Length; offset += MaximumWritesPerPhase)
+        {
+            phaseTransactions.Add(remainingAttributes
+                .Skip(offset)
+                .Take(MaximumWritesPerPhase)
+                .ToList());
+        }
+
+        return phaseTransactions.Select(CreatePhase).ToArray();
+    }
+
+    private NesPackedCameraPhase CreatePhase(IReadOnlyList<NesPackedCameraTransaction> phaseTransactions)
+    {
+        var segments = new List<NesPackedCameraSegment>();
+        foreach (var transaction in phaseTransactions)
+        {
+            if (segments.Count == 0 || transaction.StartsSegment)
+            {
+                segments.Add(new NesPackedCameraSegment(transaction.Kind, transaction.Target, WriteCount: 1));
+            }
+            else
+            {
+                segments[^1] = segments[^1] with { WriteCount = segments[^1].WriteCount + 1 };
+            }
+        }
+
+        var tileWrites = phaseTransactions.Count(transaction => transaction.Kind == NesPackedCameraWriteKind.Tile);
+        var attributeWrites = phaseTransactions.Count - tileWrites;
+        var physicalWriteBytes = checked(
+            RetainedOamByteCount +
+            segments.Count * 2 +
+            phaseTransactions.Count +
+            3); // PPUCTRL plus both PPUSCROLL bytes.
+        var worstCaseCpuCycles = checked(
+            RetainedOamCycles +
+            FixedPhaseCycles +
+            phaseTransactions.Count * WorstCaseTransactionCycles);
+        return new NesPackedCameraPhase(
+            tileWrites,
+            attributeWrites,
+            segments,
+            physicalWriteBytes,
+            worstCaseCpuCycles);
     }
 
     private static int AttributeCount(int payloadLength, int targetStart) =>
         (targetStart % 4 + payloadLength + 3) / 4;
+
+    private readonly record struct NesPackedCameraTransaction(
+        NesPackedCameraWriteKind Kind,
+        int Target,
+        bool StartsSegment);
 }
