@@ -2,7 +2,7 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "e22a5fa74b088fcd9d1538cf2ad10ad02aef36fbd3338bbdee209ad0a5f57737",
+  "abiFingerprint": "a18403a231ed4feb8098b36489c4190a69bd3186916450542d1a8a60f822017d",
   "romSha256": "68e7cd55a237293d01254b79b0d6d8d27b06b05972526c95f7608cdcc145ec53",
   "ranges": [
     {
@@ -1107,8 +1107,32 @@
     },
     {
       "domain": "packed camera",
+      "name": "Slot0CommitPhase",
+      "address": 925,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Slot0PayloadCursor",
+      "address": 927,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
       "name": "Slot1",
       "address": 928,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Slot1CommitPhase",
+      "address": 941,
+      "owner": "PackedCameraAndWorldPackAuxiliaryState"
+    },
+    {
+      "domain": "packed camera",
+      "name": "Slot1PayloadCursor",
+      "address": 943,
       "owner": "PackedCameraAndWorldPackAuxiliaryState"
     },
     {

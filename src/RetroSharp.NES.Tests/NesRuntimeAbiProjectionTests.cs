@@ -49,6 +49,15 @@ public sealed class NesRuntimeAbiProjectionTests
         Assert.Equal(NesPackedCameraRuntime.NoSlot, constants["packed camera.NoSlot"]);
         Assert.Equal(NesPackedCameraRuntime.SlotMetadataBytes, constants["packed camera.SlotMetadataBytes"]);
         Assert.Equal(NesRuntimeMemoryLayout.WorldPack.MaximumStagingBytes, constants["WorldPack.MaximumStagingBytes"]);
+
+        var addresses = root.GetProperty("addresses").EnumerateArray().ToDictionary(
+            item => $"{item.GetProperty("domain").GetString()}.{item.GetProperty("name").GetString()}",
+            item => item.GetProperty("address").GetInt32(),
+            StringComparer.Ordinal);
+        Assert.Equal(0x039D, addresses["packed camera.Slot0CommitPhase"]);
+        Assert.Equal(0x039F, addresses["packed camera.Slot0PayloadCursor"]);
+        Assert.Equal(0x03AD, addresses["packed camera.Slot1CommitPhase"]);
+        Assert.Equal(0x03AF, addresses["packed camera.Slot1PayloadCursor"]);
     }
 
     [Fact]

@@ -254,6 +254,12 @@ internal static class NesRuntimeMemoryLayout
         internal const ushort FramePending = 0x038F;
         internal const ushort Slot0 = 0x0390;
         internal const ushort Slot1 = 0x03A0;
+        // Semantic observation aliases keep external harnesses independent from
+        // the packed metadata byte offsets owned by NesPackedCameraRuntime.
+        internal const ushort Slot0CommitPhase = Slot0 + NesPackedCameraRuntime.CommitPhaseOffset;
+        internal const ushort Slot0PayloadCursor = Slot0 + NesPackedCameraRuntime.PayloadCursorOffset;
+        internal const ushort Slot1CommitPhase = Slot1 + NesPackedCameraRuntime.CommitPhaseOffset;
+        internal const ushort Slot1PayloadCursor = Slot1 + NesPackedCameraRuntime.PayloadCursorOffset;
         internal const ushort Iterator = 0x03B0;
         internal const ushort DestinationLow = 0x03B1;
         internal const ushort DestinationHigh = 0x03B2;

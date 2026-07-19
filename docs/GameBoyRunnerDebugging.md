@@ -1,7 +1,7 @@
 # Game Boy Runner Debugging Workflow
 
 Status: operational debugging guide.
-Last updated: 2026-07-13.
+Last updated: 2026-07-19.
 
 Use this workflow when debugging Game Boy runtime behavior with `samples/runner/runner.retrosharp.json` as the test application. The runner is the main acceptance app for playable Game Boy behavior: camera movement, Tiled map loading, collision, sprites, animation, input, and reset/fail state. The project manifest lists `src/main.rs` plus helper/state code under `samples/runner/src` and enables physical project namespaces, so direct CLI builds should use the project file. It is not automatically portable SDK evidence; check `samples/manifest.json` before treating a call as portable.
 
@@ -89,6 +89,20 @@ occupancy or synthetic screenshots:
 ```bash
 python3 tools/nes/verify_runner_visual_parity.py
 ```
+
+The default `--gate full` runs that complete three-emulator comparison. While
+iterating on NES frame scheduling, use the independent AprNes physical gate:
+
+```bash
+python3 tools/nes/verify_runner_visual_parity.py --gate physical
+```
+
+That mode does not require FCEUmm, Nestopia, or persistent RetroArch
+configuration. It replays five focal commits and requires the retained OAM
+stream, every sensitive `$2000-$2007` write, exact PPU address/data order, and
+the selected-slot lifecycle transition to remain coherent inside physical
+VBlank. It does not perform or weaken the RGB/nametable comparison owned by
+`full`.
 
 It drives Right beyond camera X 300, exercises jump/collision, then returns
 Left through X 256 in AprNes/NesMcp, isolated RetroArch/FCEUmm, and Nestopia.
