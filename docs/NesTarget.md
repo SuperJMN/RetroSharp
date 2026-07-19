@@ -68,9 +68,11 @@ headroom.
 Reachable mapper-0 streams that use `Sprite.Draw(...)` add
 `sprite.publish.transfer` as the numeric `513..514` contributor. The MMC3
 sequential profile instead reports the complete emitted `sprite.publish` loop
-as `13 * retained-bytes + 7` cycles (1,983 at 152 bytes) and does not claim a
-DMA transfer. Programs with no retained sprite publication claim neither. The
-report also names the remaining
+from `NesOamPublicationSchedule`: `13 * retained-bytes + 7` plus exact indexed
+load page-crossing penalties. The current shadow bias crosses for every byte,
+so the corrected cost is 1,071 cycles at 76 bytes and 2,135 at 152 bytes. It
+does not claim a DMA transfer. Programs with no retained sprite publication
+claim neither. The report also names the remaining
 stable generated/runtime/user-loop unknowns, so arbitrary source loops are not
 assigned fabricated exact costs. There is no public source cycle API, and the
 CLI does not reject current programs merely because coverage is incomplete.
@@ -117,7 +119,7 @@ profiles publish it through `$4014` while rendering is in VBlank. MMC3 packed
 profiles avoid AprNes' non-completing page-$02 DMA: they publish only the
 statically used bytes sequentially through `$2004`, after a fresh NMI and
 hardware VBlank check. That path is bounded to 38 hardware sprites/152 bytes
-and 1,983 NTSC CPU cycles. Both paths then reset the statically allocated
+and 2,135 NTSC CPU cycles. Both paths then reset the statically allocated
 logical call-site bytes to `$FF`, so an unexecuted conditional draw cannot
 retain an earlier sprite. Startup initializes the full shadow and hardware OAM;
 source calls that accept projectile/effect requests after their `Draw()` phase

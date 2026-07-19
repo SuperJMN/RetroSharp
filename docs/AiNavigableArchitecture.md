@@ -20,7 +20,7 @@ Keep the language, portable 2D SDK, and target-intrinsic layers separate.
 | Actor Framework analysis and generation | `ActorFrameworkLowerer.Analyze(...)`, `Lower(...)`, and one `ActorFrameworkLoweringPlan`; Actor/Spawn/Projectile/Effect/GeneratedCall state modules own mutable facts; `ActorFrameworkDomains.Contributions` is the ordered generated-program seam | `TargetFrontendPreparation` analyzes once, lowers through the plan, and retains that plan only for late metasprite-aware pool-budget validation | `ActorFrameworkLoweringPlanTests`, `ActorFrameworkDomainArchitectureTests`, and the `ActorFrameworkActors`, `ActorFrameworkProjectiles`, `ActorFrameworkEffects`, and `ActorFrameworkCrossDomain` suites |
 | Game Boy portable SDK emission | `GameBoySdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `GameBoySdkLoweringContext` supplies only operand/storage primitives | `GameBoyRuntimeCompiler` owns one lowerer and routes its collected `Sdk2DProgram` through `GameBoySdkStreamReader`; the lowerer must not call back into the runtime compiler | `GameBoySdkLoweringArchitectureTests`, `GameBoySdkOperationBoundaryTests`, and the `GameBoySdk{FrameInput,Sprite,Animation,CameraRuntime,CameraStreaming,CollisionRuntime,Collision}LoweringTests` suites |
 | NES portable SDK emission | `NesSdkOperationLowerer.Emit(Sdk2DOperation)` and feature partials; `NesSdkLoweringContext` supplies only operand/storage primitives | `NesRuntimeCompiler` owns one lowerer and routes its collected `SdkOperationStream` through `NesSdkStreamReader`; the lowerer must not call back into the runtime compiler | `NesSdkLoweringArchitectureTests`, `NesSdkOperationBoundaryTests`, and `NesSdk{FrameInput,Sprite,CameraStreaming,Collision}LoweringTests` |
-| Target physical frame scheduling | Game Boy consumes its target-private static plan directly. NES exposes `NesPhysicalFrameScheduler` as the only executable authority over runtime frame boundaries, NMI/VBlank admission, retained OAM publication, video-safe transfer order, camera staging phases, and CPU-work projection; `NesFramePlan` is its validated private policy data. Shared code owns only report vocabulary and checked range arithmetic | NES ROM/runtime/lowerer modules receive one scheduler instance. Lowerer partials implement closed transfer mechanics but cannot read the plan or select physical phases; the ROM builder supplies facts and link/bootstrap orchestration only | `GameBoyFramePlanTests`, `NesFramePlanTests`, `NesPhysicalFrameSchedulerTests`, per-window CPU-work report tests, `NesSdkLoweringArchitectureTests`, and exact-ROM timing acceptance |
+| Target physical frame scheduling | Game Boy consumes its target-private static plan directly. NES exposes `NesPhysicalFrameScheduler` as the only executable authority over runtime frame boundaries, NMI/VBlank admission, retained OAM publication, video-safe transfer order, camera staging phases, and CPU-work projection; `NesFramePlan` is its validated private policy data, while `NesOamPublicationSchedule.Create(...)`, `CpuCycles`, and `Emit(...)` jointly own sequential publisher bytes and cost. Shared code owns only report vocabulary and checked range arithmetic | NES ROM/runtime/lowerer modules receive one scheduler instance. The scheduler is the only production consumer of the OAM schedule. Lowerer partials implement closed transfer mechanics but cannot read the plan or select physical phases; the ROM builder supplies facts and link/bootstrap orchestration only | `GameBoyFramePlanTests`, `NesFramePlanTests`, `NesOamPublicationScheduleTests`, `NesPhysicalFrameSchedulerTests`, per-window CPU-work report tests, `NesSdkLoweringArchitectureTests`, and exact-ROM timing acceptance |
 | Functional cartridge observation | `GameBoyFunctionalObservationEngine` and `NesFunctionalObservationEngine` project target-native exact-ROM events into normalized semantic frame observations; `FunctionalScenarioRunMode` selects full evidence or bounded fail-fast collection | Functional scenario runners consume observations without embedding emulator- or hardware-register rules | Target observation-engine tests plus cross-target functional scenario acceptance |
 
 The target cartridge modules are deliberately physical as well as conceptual.
@@ -28,12 +28,13 @@ For Game Boy, the six documented physical navigation roots for
 layout/placement, frame planning, runtime compilation, SDK stream reading, SDK
 emission, and byte building are `GameBoyRomLayout.cs`, `GameBoyFramePlan.cs`,
 `GameBoyRuntimeCompiler.cs`, `GameBoySdkStreamReader.cs`,
-`GameBoySdkOperationLowerer.cs`, and `GbBuilder.cs`. The NES equivalents are
-`NesCartridgeLayout.cs`, `NesPhysicalFrameScheduler.cs`, `NesFramePlan.cs`,
-`NesRuntimeCompiler.cs`, `NesSdkStreamReader.cs`,
-`NesSdkOperationLowerer.cs`, and `PrgBuilder.cs`. The extra NES root is
-intentional: the plan validates immutable policy while the scheduler is the
-single executable façade that consumes it.
+`GameBoySdkOperationLowerer.cs`, and `GbBuilder.cs`. The eight NES equivalents
+are `NesCartridgeLayout.cs`, `NesPhysicalFrameScheduler.cs`, `NesFramePlan.cs`,
+`NesOamPublicationSchedule.cs`, `NesRuntimeCompiler.cs`,
+`NesSdkStreamReader.cs`, `NesSdkOperationLowerer.cs`, and `PrgBuilder.cs`. The
+extra NES roots are intentional: the plan validates immutable policy, the OAM
+schedule owns sequential publisher bytes and cost, and the scheduler is their
+single executable façade and sole production consumer.
 Feature partials are the next
 navigation hop, but their file names are not architecture contracts; the ROM
 builders are link/orchestration modules, not the owner of those extracted
@@ -180,6 +181,8 @@ files=(
   src/RetroSharp.NES.Tests/NesPhysicalFrameSchedulerTests.cs
   src/RetroSharp.NES/NesFramePlan.cs
   src/RetroSharp.NES.Tests/NesFramePlanTests.cs
+  src/RetroSharp.NES/NesOamPublicationSchedule.cs
+  src/RetroSharp.NES.Tests/NesOamPublicationScheduleTests.cs
   src/RetroSharp.NES/NesRuntimeAbiProjection.cs
   src/RetroSharp.NES/NesRuntimeCompiler.cs
   src/RetroSharp.NES.Tests/NesRuntimeMemoryLayoutTests.cs
@@ -221,7 +224,8 @@ probes returned the requested symbol map. AIN-11 adds the three new focused
 Game Boy suite probes. The physical-frame and observation-engine slice adds seven
 target plan/test and functional observation probes. The NES executable
 scheduler deepening adds its production and focused-test probes, bringing the
-reproducible recipe to 39 files. Together
+reproducible recipe to 39 files. The retained-OAM schedule adds its production
+and focused-test probes, bringing the current recipe to 41 files. Together
 they locate each authority, its production route, and its focused C# or Python
 tests without loading either complete ROM builder. The direct frame/input
 lowerer tests expose an explicit constructor edge; the boundary/architecture

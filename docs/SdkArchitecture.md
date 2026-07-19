@@ -68,9 +68,10 @@ uses the same compiled-symbol and IL-call-edge guard: runtime compilers may
 consume streams and route operations, but the lowerer must not call back into a
 runtime compiler. Exact paths remain tests only when physical separation itself
 is the contract. The physical contracts are the six documented Game Boy roots
-and seven NES roots for layout, frame policy/execution, runtime, stream,
-lowerer, and byte building; NES separates the validated `NesFramePlan` from
-the executable `NesPhysicalFrameScheduler`. Feature partial names are
+and eight NES roots for layout, frame policy/execution, OAM publication,
+runtime, stream, lowerer, and byte building; NES separates the validated
+`NesFramePlan` and scheduler-owned `NesOamPublicationSchedule` from the
+executable `NesPhysicalFrameScheduler`. Feature partial names are
 deliberately rename-safe. Compiled owner types must be
 declared in those roots and absent from `GameBoyRomBuilder.cs` or
 `NesRomBuilder.cs`. Every focused SDK test method, plus intentional focused

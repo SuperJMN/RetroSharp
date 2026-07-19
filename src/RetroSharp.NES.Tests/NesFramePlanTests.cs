@@ -58,32 +58,6 @@ public sealed class NesFramePlanTests
     }
 
     [Fact]
-    public void Sequential_publication_projects_the_emitted_loop_instead_of_the_mapper_zero_dma_detail()
-    {
-        var plan = NesFramePlan.Create(
-            "nes-mmc3-tvrom-v1",
-            hasFrameBoundary: true,
-            usesRetainedOam: true,
-            retainedOamByteCount: 152,
-            usesPackedCameraRuntime: true,
-            useSequentialOamPublication: true,
-            useFourScreenNametables: true);
-
-        var report = plan.CreateCpuWorkReport([]);
-
-        var publication = Assert.Single(report.Contributors);
-        Assert.Equal(SdkCpuWorkContributorIds.SpritePublish, publication.Id);
-        Assert.Equal(1_983, publication.TotalLower);
-        Assert.Equal(1_983, publication.TotalUpper);
-        Assert.DoesNotContain(report.Contributors, contributor =>
-            contributor.Id == SdkCpuWorkContributorIds.SpritePublishTransfer);
-        Assert.DoesNotContain(report.Unknowns, unknown => unknown.Id == SdkCpuWorkContributorIds.SpritePublish);
-        var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
-        Assert.Equal(1_983, videoSafe.KnownLower);
-        Assert.Equal(1_983, videoSafe.KnownUpper);
-    }
-
-    [Fact]
     public void Cpu_work_projection_uses_the_selected_plan_windows()
     {
         var plan = NesFramePlan.Create(
