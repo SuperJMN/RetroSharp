@@ -7,9 +7,9 @@
   "observationFrames": 600,
   "inputs": [],
   "checkpoints": [
-    { "id": "holding-at-vertical-limit", "frame": 280, "expectedSignals": { "user0": 240, "user1": 1, "user2": 24, "visibleCameraY": 240 } },
-    { "id": "reversed-after-authored-hold", "frame": 320, "expectedSignals": { "user0": 208, "user1": 0, "visibleCameraY": 209 } },
-    { "id": "returned-and-forward-again", "frame": 560, "expectedSignals": { "user0": 32, "user1": 1, "visibleCameraY": 31 } }
+    { "id": "holding-at-vertical-limit", "frame": 280, "expectedSignals": { "user0": 240, "user1": 1, "user2": 23, "visibleCameraY": 240 } },
+    { "id": "reversed-after-authored-hold", "frame": 320, "expectedSignals": { "user0": 209, "user1": 0, "visibleCameraY": 210 } },
+    { "id": "returned-and-forward-again", "frame": 560, "expectedSignals": { "user0": 31, "user1": 1, "visibleCameraY": 30 } }
   ],
   "expectedFeatures": {
     "gameplayTicks": true,

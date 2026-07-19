@@ -12,6 +12,20 @@ The language and portable SDK are unchanged. This work stays in the NES target
 lowering/runtime and its validation adapters. It must not reduce the runner map,
 metasprite, gameplay/audio throughput, or acceptance strength.
 
+GitHub tracking:
+
+- integrator: [NFS-0 / #410](https://github.com/SuperJMN/RetroSharp/issues/410);
+- timing adapter: [NFS-1.1 / #413](https://github.com/SuperJMN/RetroSharp/issues/413);
+- OAM publication module: [NFS-1.2 / #414](https://github.com/SuperJMN/RetroSharp/issues/414);
+- physical gate: [NFS-1.3 / #415](https://github.com/SuperJMN/RetroSharp/issues/415);
+- lifecycle: [NFS-2.1 / #416](https://github.com/SuperJMN/RetroSharp/issues/416);
+- bounded scheduler: [NFS-3.1 / #417](https://github.com/SuperJMN/RetroSharp/issues/417);
+- certification: [NFS-4.1 / #418](https://github.com/SuperJMN/RetroSharp/issues/418); and
+- transient parity investigation: [NFS-V1 / #419](https://github.com/SuperJMN/RetroSharp/issues/419).
+
+External timing calibration is retained under
+[`validation/nes-test-cpu`](../validation/nes-test-cpu/README.md).
+
 ## Why the previous WIP was discarded
 
 The earlier monolithic attempt mixed timing-model repair, runtime lifecycle,
@@ -238,4 +252,3 @@ real corruption. Its result is a bounded evidence report, not a scheduler patch.
   infrastructure issue.
 - No public language or SDK change, capability reduction, content trimming,
   rendering-disable workaround, or weakened acceptance is permitted.
-

@@ -317,7 +317,7 @@ internal sealed class NesTestCpu
                     var value = Read(address);
                     carry = (value & 1) != 0;
                     value >>= 1;
-                    Write(address, value);
+                    Write(address, value, 4);
                     SetZeroNegative(value);
                     cycles += 5;
                     break;
@@ -332,7 +332,7 @@ internal sealed class NesTestCpu
                     var value = Read(address);
                     carry = (value & 1) != 0;
                     value >>= 1;
-                    Write(address, value);
+                    Write(address, value, 5);
                     SetZeroNegative(value);
                     cycles += 6;
                     break;
@@ -346,7 +346,7 @@ internal sealed class NesTestCpu
                     var oldCarry = carry;
                     carry = (value & 1) != 0;
                     value = (byte)((value >> 1) | (oldCarry ? 0x80 : 0));
-                    Write(address, value);
+                    Write(address, value, 4);
                     SetZeroNegative(value);
                     cycles += 5;
                     break;
@@ -361,33 +361,33 @@ internal sealed class NesTestCpu
                     var oldCarry = carry;
                     carry = (value & 1) != 0;
                     value = (byte)((value >> 1) | (oldCarry ? 0x80 : 0));
-                    Write(address, value);
+                    Write(address, value, 5);
                     SetZeroNegative(value);
                     cycles += 6;
                     break;
                 }
             case 0x75: Add(Read((byte)(Read(pc++) + x))); cycles += 4; break;
             case 0x78: interruptDisable = true; cycles += 2; break;
-            case 0x84: Write(Read(pc++), y); cycles += 3; break;
-            case 0x85: Write(Read(pc++), a); cycles += 3; break;
-            case 0x86: Write(Read(pc++), x); cycles += 3; break;
-            case 0x8C: Write(ReadWordAndAdvance(), y); cycles += 4; break;
-            case 0x8D: Write(ReadWordAndAdvance(), a); cycles += 4; break;
-            case 0x8E: Write(ReadWordAndAdvance(), x); cycles += 4; break;
+            case 0x84: Write(Read(pc++), y, 2); cycles += 3; break;
+            case 0x85: Write(Read(pc++), a, 2); cycles += 3; break;
+            case 0x86: Write(Read(pc++), x, 2); cycles += 3; break;
+            case 0x8C: Write(ReadWordAndAdvance(), y, 3); cycles += 4; break;
+            case 0x8D: Write(ReadWordAndAdvance(), a, 3); cycles += 4; break;
+            case 0x8E: Write(ReadWordAndAdvance(), x, 3); cycles += 4; break;
             case 0x90: Branch(!carry); break;
             case 0x91:
                 {
                     var pointer = Read(pc++);
                     var address = (ushort)(Read(pointer) | Read((byte)(pointer + 1)) << 8);
-                    Write((ushort)(address + y), a);
+                    Write((ushort)(address + y), a, 5);
                     cycles += 6;
                     break;
                 }
-            case 0x95: Write((byte)(Read(pc++) + x), a); cycles += 4; break;
-            case 0x99: Write((ushort)(ReadWordAndAdvance() + y), a); cycles += 5; break;
+            case 0x95: Write((byte)(Read(pc++) + x), a, 3); cycles += 4; break;
+            case 0x99: Write((ushort)(ReadWordAndAdvance() + y), a, 4); cycles += 5; break;
             case 0x98: LoadA(y); cycles += 2; break;
             case 0x9A: stackPointer = x; cycles += 2; break;
-            case 0x9D: Write((ushort)(ReadWordAndAdvance() + x), a); cycles += 5; break;
+            case 0x9D: Write((ushort)(ReadWordAndAdvance() + x), a, 4); cycles += 5; break;
             case 0xA0: LoadY(Read(pc++)); cycles += 2; break;
             case 0xA2: LoadX(Read(pc++)); cycles += 2; break;
             case 0xA4: LoadY(Read(Read(pc++))); cycles += 3; break;
@@ -402,19 +402,35 @@ internal sealed class NesTestCpu
             case 0xB1:
                 {
                     var pointer = Read(pc++);
-                    var address = (ushort)(Read(pointer) | Read((byte)(pointer + 1)) << 8);
-                    LoadA(Read((ushort)(address + y)));
-                    cycles += 5;
+                    var baseAddress = (ushort)(Read(pointer) | Read((byte)(pointer + 1)) << 8);
+                    var address = (ushort)(baseAddress + y);
+                    LoadA(Read(address));
+                    cycles += 5 + (CrossesPage(baseAddress, address) ? 1 : 0);
                     break;
                 }
             case 0xB5: LoadA(Read((byte)(Read(pc++) + x))); cycles += 4; break;
-            case 0xBD: LoadA(Read((ushort)(ReadWordAndAdvance() + x))); cycles += 4; break;
+            case 0xB9:
+                {
+                    var baseAddress = ReadWordAndAdvance();
+                    var address = (ushort)(baseAddress + y);
+                    LoadA(Read(address));
+                    cycles += 4 + (CrossesPage(baseAddress, address) ? 1 : 0);
+                    break;
+                }
+            case 0xBD:
+                {
+                    var baseAddress = ReadWordAndAdvance();
+                    var address = (ushort)(baseAddress + x);
+                    LoadA(Read(address));
+                    cycles += 4 + (CrossesPage(baseAddress, address) ? 1 : 0);
+                    break;
+                }
             case 0xC5: Compare(a, Read(Read(pc++))); cycles += 3; break;
             case 0xC6:
                 {
                     var address = Read(pc++);
                     var value = (byte)(Read(address) - 1);
-                    Write(address, value);
+                    Write(address, value, 4);
                     SetZeroNegative(value);
                     cycles += 5;
                     break;
@@ -427,7 +443,7 @@ internal sealed class NesTestCpu
                 {
                     var address = ReadWordAndAdvance();
                     var value = (byte)(Read(address) - 1);
-                    Write(address, value);
+                    Write(address, value, 5);
                     SetZeroNegative(value);
                     cycles += 6;
                     break;
@@ -439,7 +455,7 @@ internal sealed class NesTestCpu
                 {
                     var address = Read(pc++);
                     var value = (byte)(Read(address) + 1);
-                    Write(address, value);
+                    Write(address, value, 4);
                     SetZeroNegative(value);
                     cycles += 5;
                     break;
@@ -449,7 +465,7 @@ internal sealed class NesTestCpu
                 {
                     var address = ReadWordAndAdvance();
                     var value = (byte)(Read(address) + 1);
-                    Write(address, value);
+                    Write(address, value, 5);
                     SetZeroNegative(value);
                     cycles += 6;
                     break;
@@ -531,7 +547,7 @@ internal sealed class NesTestCpu
         return prg[bank * 0x2000 + (address & 0x1FFF)];
     }
 
-    private void Write(ushort address, byte value)
+    private void Write(ushort address, byte value, int busCycleOffset)
     {
         if (address < 0x2000)
         {
@@ -546,7 +562,7 @@ internal sealed class NesTestCpu
 
         if (address < 0x4000)
         {
-            WritePpuRegister((ushort)(0x2000 | (address & 0x07)), value);
+            WritePpuRegister((ushort)(0x2000 | (address & 0x07)), value, cycles + busCycleOffset);
             return;
         }
 
@@ -603,27 +619,27 @@ internal sealed class NesTestCpu
         }
     }
 
-    private void WritePpuRegister(ushort register, byte value)
+    private void WritePpuRegister(ushort register, byte value, long writeCycle)
     {
         switch (register)
         {
             case 0x2000:
                 ppuControl = value;
-                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
             case 0x2001:
                 ppuMask = value;
-                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
             case 0x2003:
                 oamAddress = value;
-                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
             case 0x2004:
                 oam[oamAddress] = value;
-                OamWrites.Add(new NesOamWrite((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + oamAddress), value, cycles, RenderingEnabled));
+                OamWrites.Add(new NesOamWrite((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow + oamAddress), value, writeCycle, RenderingEnabled));
                 oamAddress++;
-                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
             case 0x2005:
                 if (!ppuWriteToggle)
@@ -636,7 +652,7 @@ internal sealed class NesTestCpu
                 }
 
                 ppuWriteToggle = !ppuWriteToggle;
-                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
             case 0x2006:
                 if (!ppuWriteToggle)
@@ -649,15 +665,15 @@ internal sealed class NesTestCpu
                 }
 
                 ppuWriteToggle = !ppuWriteToggle;
-                PpuWrites.Add(new NesPpuWrite(register, value, ppuWriteToggle ? null : ppuAddress, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, ppuWriteToggle ? null : ppuAddress, writeCycle, RenderingEnabled));
                 break;
             case 0x2007:
                 ppuMemory[NormalizePpuAddress(ppuAddress)] = value;
-                PpuWrites.Add(new NesPpuWrite(register, value, ppuAddress, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, ppuAddress, writeCycle, RenderingEnabled));
                 ppuAddress = (ushort)((ppuAddress + ((ppuControl & 0x04) != 0 ? 32 : 1)) & 0x3FFF);
                 break;
             default:
-                PpuWrites.Add(new NesPpuWrite(register, value, null, cycles, RenderingEnabled));
+                PpuWrites.Add(new NesPpuWrite(register, value, null, writeCycle, RenderingEnabled));
                 break;
         }
     }
@@ -766,10 +782,18 @@ internal sealed class NesTestCpu
         cycles += 2;
         if (condition)
         {
-            pc = (ushort)(pc + delta);
+            var baseAddress = pc;
+            pc = (ushort)(baseAddress + delta);
             cycles++;
+            if (CrossesPage(baseAddress, pc))
+            {
+                cycles++;
+            }
         }
     }
+
+    private static bool CrossesPage(ushort baseAddress, ushort address) =>
+        (baseAddress & 0xFF00) != (address & 0xFF00);
 
     private void Push(byte value) => ram[NesRuntimeMemoryLayout.Stack.Start | stackPointer--] = value;
 
