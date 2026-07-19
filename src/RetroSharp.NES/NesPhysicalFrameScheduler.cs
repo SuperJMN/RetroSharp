@@ -54,6 +54,7 @@ internal sealed class NesPhysicalFrameScheduler
     internal const string FrameSignalNmiHandlerLabel = "nes_frame_signal_nmi_handler";
     private readonly PrgBuilder builder;
     private readonly NesFramePlan plan;
+    private readonly NesOamPublicationSchedule? oamPublicationSchedule;
     private readonly NesStagedFrameWork? cameraRowStaging;
 
     internal NesPhysicalFrameScheduler(PrgBuilder builder, NesFramePlan plan)
@@ -62,6 +63,13 @@ internal sealed class NesPhysicalFrameScheduler
         ArgumentNullException.ThrowIfNull(plan);
         this.builder = builder;
         this.plan = plan;
+        if (plan.UseSequentialOamPublication && plan.UsesRetainedOam)
+        {
+            oamPublicationSchedule = NesOamPublicationSchedule.Create(
+                NesRuntimeMemoryLayout.Sprite.OamShadow,
+                plan.RetainedOamByteCount);
+        }
+
         if (plan.UsesPackedCameraRuntime || plan.UseFourScreenNametables)
         {
             cameraRowStaging = plan.StagedWork.SingleOrDefault(work =>
@@ -116,8 +124,31 @@ internal sealed class NesPhysicalFrameScheduler
                 usesPackedCameraRuntime,
                 useSequentialOamPublication));
 
-    internal SdkCpuWorkReport CreateCpuWorkReport(IEnumerable<Sdk2DOperation> operations) =>
-        plan.CreateCpuWorkReport(operations);
+    internal SdkCpuWorkReport CreateCpuWorkReport(IEnumerable<Sdk2DOperation> operations)
+    {
+        var report = SdkCpuWorkReportFactory.ForNes(
+            plan.CartridgeProfile,
+            oamPublicationSchedule is null ? operations : null);
+        if (oamPublicationSchedule is not null)
+        {
+            report = SdkCpuWorkReport.Create(
+                report.Target,
+                report.Profile,
+                report.Unit,
+                report.FrameWindow,
+                report.Contributors.Append(SdkCpuWorkContributor.Create(
+                    SdkCpuWorkContributorIds.SpritePublish,
+                    SdkCpuWorkContributorCategories.TargetRuntime,
+                    "one sequential retained OAM publication prefix",
+                    count: 1,
+                    unitLower: oamPublicationSchedule.CpuCycles,
+                    unitUpper: oamPublicationSchedule.CpuCycles,
+                    calibration: "NesOamPublicationSchedule/v1")),
+                report.Unknowns.Where(unknown => unknown.Id != SdkCpuWorkContributorIds.SpritePublish));
+        }
+
+        return plan.ProjectCpuWork(report);
+    }
 
     internal string SelectedProfile => plan.CartridgeProfile;
 
@@ -453,24 +484,14 @@ internal sealed class NesPhysicalFrameScheduler
 
     private void EmitOamPublication()
     {
-        if (!plan.UseSequentialOamPublication)
+        if (oamPublicationSchedule is null)
         {
             builder.LoadAImmediate((NesRuntimeMemoryLayout.Sprite.OamShadow >> 8) & 0xFF);
             builder.StoreAAbsolute(OamDmaAddress);
             return;
         }
 
-        var startIndex = 256 - plan.RetainedOamByteCount;
-        var biasedShadowAddress = checked((ushort)(NesRuntimeMemoryLayout.Sprite.OamShadow - startIndex));
-        var publish = builder.CreateLabel("oam_shadow_publish");
-        builder.LoadAImmediate(0);
-        builder.StoreAAbsolute(0x2003);
-        builder.LoadXImmediate(startIndex);
-        builder.Label(publish);
-        builder.LoadAAbsoluteX(biasedShadowAddress);
-        builder.StoreAAbsolute(0x2004);
-        builder.IncrementX();
-        builder.BranchRelative(0xD0, publish);
+        oamPublicationSchedule.Emit(builder);
     }
 
     private void EmitOamShadowReset(bool clearCompletePage = false)

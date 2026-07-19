@@ -12,6 +12,7 @@ public sealed class NesSdkLoweringArchitectureTests
         new("src/RetroSharp.NES/NesCartridgeLayout.cs", "Cartridge layout and placement have a dedicated physical navigation root.", [typeof(NesCartridgeLayout)]),
         new("src/RetroSharp.NES/NesPhysicalFrameScheduler.cs", "Physical frame scheduling has one executable target-private authority.", [typeof(NesPhysicalFrameScheduler)]),
         new("src/RetroSharp.NES/NesFramePlan.cs", "Validated frame policy remains private to the executable scheduler.", [typeof(NesFramePlan)]),
+        new("src/RetroSharp.NES/NesOamPublicationSchedule.cs", "Sequential retained OAM bytes and cost have one scheduler-owned module.", [typeof(NesOamPublicationSchedule)]),
         new("src/RetroSharp.NES/NesRuntimeCompiler.cs", "Runtime compilation has a dedicated physical navigation root.", [typeof(NesRuntimeCompiler)]),
         new("src/RetroSharp.NES/NesSdkStreamReader.cs", "Collected SDK stream consumption has a dedicated physical navigation root.", [typeof(NesSdkStreamReader)]),
         new("src/RetroSharp.NES/NesSdkOperationLowerer.cs", "Portable SDK emission has a dedicated physical navigation root.", [typeof(NesSdkOperationLowerer)]),
@@ -71,6 +72,37 @@ public sealed class NesSdkLoweringArchitectureTests
         var schedulerCalls = ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler));
 
         Assert.Contains(schedulerCalls, method => method.DeclaringType == typeof(NesFramePlan));
+    }
+
+    [Fact]
+    public void Nes_production_consumes_oam_publication_schedule_only_through_the_scheduler()
+    {
+        const BindingFlags declaredMembers =
+            BindingFlags.Public |
+            BindingFlags.NonPublic |
+            BindingFlags.Instance |
+            BindingFlags.Static |
+            BindingFlags.DeclaredOnly;
+        var consumers = typeof(NesOamPublicationSchedule).Assembly
+            .GetTypes()
+            .Where(type => type != typeof(NesOamPublicationSchedule) &&
+                           type != typeof(NesPhysicalFrameScheduler))
+            .Where(type =>
+                ArchitectureSymbolAssertions.CalledMethods(type)
+                    .Any(method => method.DeclaringType == typeof(NesOamPublicationSchedule)) ||
+                type.GetFields(declaredMembers)
+                    .Any(field => field.FieldType == typeof(NesOamPublicationSchedule)) ||
+                type.GetMethods(declaredMembers)
+                    .Any(method =>
+                        method.ReturnType == typeof(NesOamPublicationSchedule) ||
+                        method.GetParameters().Any(parameter =>
+                            parameter.ParameterType == typeof(NesOamPublicationSchedule))))
+            .ToArray();
+
+        Assert.Contains(
+            ArchitectureSymbolAssertions.CalledMethods(typeof(NesPhysicalFrameScheduler)),
+            method => method.DeclaringType == typeof(NesOamPublicationSchedule));
+        Assert.Empty(consumers);
     }
 
     [Fact]

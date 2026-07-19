@@ -157,33 +157,6 @@ internal sealed record NesFramePlan(
                 : []);
     }
 
-    internal SdkCpuWorkReport CreateCpuWorkReport(IEnumerable<Sdk2DOperation> operations)
-    {
-        var report = SdkCpuWorkReportFactory.ForNes(
-            CartridgeProfile,
-            UseSequentialOamPublication ? null : operations);
-        if (UseSequentialOamPublication && UsesRetainedOam)
-        {
-            var publicationCycles = checked(RetainedOamByteCount * 13L + 7);
-            report = SdkCpuWorkReport.Create(
-                report.Target,
-                report.Profile,
-                report.Unit,
-                report.FrameWindow,
-                report.Contributors.Append(SdkCpuWorkContributor.Create(
-                    SdkCpuWorkContributorIds.SpritePublish,
-                    SdkCpuWorkContributorCategories.TargetRuntime,
-                    "one sequential retained OAM publication prefix",
-                    count: 1,
-                    unitLower: publicationCycles,
-                    unitUpper: publicationCycles,
-                    calibration: "NesFramePlan.SequentialOamPublication/v1")),
-                report.Unknowns.Where(unknown => unknown.Id != SdkCpuWorkContributorIds.SpritePublish));
-        }
-
-        return ProjectCpuWork(report);
-    }
-
     internal SdkCpuWorkReport ProjectCpuWork(SdkCpuWorkReport wholeFrame)
     {
         ArgumentNullException.ThrowIfNull(wholeFrame);

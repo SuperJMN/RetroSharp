@@ -264,12 +264,15 @@ The initial GCP-3.1 report uses that schema directly. Game Boy reports
 SDK stream can publish retained sprites, Game Boy adds
 `sprite.publish.transfer` at `640..640` below `sprite.publish`, while NES adds
 the same stable contributor at `513..514` for DMA profiles. The NES MMC3
-sequential profile instead projects the complete root `sprite.publish` as the
-exact emitted loop `13 * retained-bytes + 7` (1,983 cycles at the accepted
-152-byte maximum), removes the inapplicable DMA detail, and closes that
-profile's publication unknown. Programs with no retained sprite publication do
-not claim either cost. Both reports currently publish the
-whole-frame view again as the single `frame` entry in `windows[]`; target frame
+sequential profile instead projects the complete root `sprite.publish` from
+the same `NesOamPublicationSchedule` that emits the loop. Its cost is
+`13 * retained-bytes + 7` plus the exact `LDA abs,X` page-crossing penalties;
+the current shadow bias crosses on every retained byte, yielding 1,071 cycles
+at 76 bytes and 2,135 at the accepted 152-byte maximum. The profile removes
+the inapplicable DMA detail and closes that publication unknown. Programs with
+no retained sprite publication do not claim either cost. Both reports
+currently publish the whole-frame view again as the single `frame` entry in
+`windows[]`; target frame
 plans add narrower physical windows only with calibrated target evidence. Both
 reports keep the rest of section 5's generated, SDK-runtime, target-runtime,
 and user-loop coverage as explicit `unknown[]` entries.

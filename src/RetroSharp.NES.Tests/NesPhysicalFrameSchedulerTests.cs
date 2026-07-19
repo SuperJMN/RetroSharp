@@ -75,9 +75,38 @@ public sealed class NesPhysicalFrameSchedulerTests
         Assert.True(IndexOfSequence(
             builder.Build(),
             [0xA9, 0x00, 0x8D, 0x03, 0x20, 0xA2, 0x68, 0xBD, 0x98, 0x01, 0x8D, 0x04, 0x20, 0xE8, 0xD0, 0xF7]) >= 0);
-        var publication = Assert.Single(scheduler.CreateCpuWorkReport([]).Contributors);
+        var report = scheduler.CreateCpuWorkReport([]);
+        var publication = Assert.Single(report.Contributors);
         Assert.Equal(SdkCpuWorkContributorIds.SpritePublish, publication.Id);
-        Assert.Equal((1_983L, 1_983L), (publication.TotalLower, publication.TotalUpper));
+        Assert.Equal((2_135L, 2_135L), (publication.TotalLower, publication.TotalUpper));
+        Assert.DoesNotContain(report.Contributors, contributor =>
+            contributor.Id == SdkCpuWorkContributorIds.SpritePublishTransfer);
+        Assert.DoesNotContain(report.Unknowns, unknown =>
+            unknown.Id == SdkCpuWorkContributorIds.SpritePublish);
+        var videoSafe = Assert.Single(report.Windows, window => window.Id == SdkCpuWorkWindowIds.VideoSafe);
+        Assert.Equal((2_135L, 2_135L), (videoSafe.KnownLower, videoSafe.KnownUpper));
+    }
+
+    [Fact]
+    public void Sequential_profile_without_retained_oam_needs_no_publication_schedule()
+    {
+        var builder = new PrgBuilder();
+        var plan = NesFramePlan.Create(
+            "nes-mmc3-tvrom-v1",
+            hasFrameBoundary: true,
+            usesRetainedOam: false,
+            retainedOamByteCount: 0,
+            usesPackedCameraRuntime: true,
+            useSequentialOamPublication: true,
+            useFourScreenNametables: true);
+
+        var scheduler = new NesPhysicalFrameScheduler(builder, plan);
+        scheduler.EmitFrameBoundary(NesFrameBoundaryPurpose.Gameplay);
+
+        Assert.DoesNotContain(
+            scheduler.CreateCpuWorkReport([]).Contributors,
+            contributor => contributor.Id == SdkCpuWorkContributorIds.SpritePublish);
+        Assert.True(IndexOfSequence(builder.Build(), [0x8D, 0x03, 0x20]) < 0);
     }
 
     [Theory]
