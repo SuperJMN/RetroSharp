@@ -16,12 +16,13 @@ Use this order when you need project context:
 6. `docs/SdkArchitecture.md`: frontend preparation, Actor Framework internals, and target SDK lowering navigation.
 7. `docs/LargeWorldsRoadmap.md`: large-map, banking, mapper, chunking, and full-`stage1` execution plan when that epic is in scope.
 8. `docs/GeneratedCodePerformanceRoadmap.md`: measured GB/NES code-generation bottlenecks, CPU-work contract, and execution graph when performance work is in scope.
-9. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
-10. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
-11. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
-12. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
-13. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
-14. `docs/LegacyZ80Compiler.md`: archived Z80 path, fork provenance, and exact recovery instructions when that history is in scope.
+9. `docs/NesFrameSchedulingRoadmap.md`: timing, OAM publication, physical tracing, lifecycle, bounded scheduling, and certification graph when #410 is in scope.
+10. `docs/Portable2DSdkV1.md`: current portable SDK surface and capability expectations.
+11. `docs/GameBoyTarget.md` and `docs/NesTarget.md`: target-specific supported subsets.
+12. `docs/GameBoyRunnerDebugging.md`: normal debugging workflow with the Game Boy runner as test app.
+13. `samples/README.md` and `samples/manifest.json`: sample classification and portability rules.
+14. `docs/AgentExecution.md`: GitHub issue/roadmap execution workflow.
+15. `docs/LegacyZ80Compiler.md`: archived Z80 path, fork provenance, and exact recovery instructions when that history is in scope.
 
 `WARP.md` remains a tool-specific guide. `llms.txt` is a compact index for agents and RAG systems.
 

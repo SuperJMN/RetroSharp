@@ -35,6 +35,14 @@ and joint acceptance graph lives in
 #387](https://github.com/SuperJMN/RetroSharp/issues/387). Existing AF-5.10 / #244
 is reused as the spatial spawn-index task rather than duplicated.
 
+The corrective NES frame-scheduling chain for runner issue #410 is owned by
+`docs/NesFrameSchedulingRoadmap.md`. It first repairs the validation clock,
+then centralizes OAM emission and cost, hardens the physical trace gate, fixes
+stale-to-fresh lifecycle publication, and only then selects a bounded scheduler.
+This is target-runtime and validation work; it does not expand the language or
+portable SDK. Treat #410 as the integrator and dispatch its `NFS-x.y` children
+independently.
+
 The accepted [`WorldPack` v1 format](WorldPackFormatV1.md) fixes that shared
 contract as deterministic 8x8 source-metatile chunks with independently
 compressed visual and collision planes, relative offsets, target-owned visual
