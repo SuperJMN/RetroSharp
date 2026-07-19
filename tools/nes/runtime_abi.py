@@ -41,6 +41,10 @@ REQUIRED_ADDRESSES = frozenset(
         "packed camera.FramePending",
         "packed camera.Slot0",
         "packed camera.Slot1",
+        "packed camera.Slot0CommitPhase",
+        "packed camera.Slot0PayloadCursor",
+        "packed camera.Slot1CommitPhase",
+        "packed camera.Slot1PayloadCursor",
         "packed camera.Status",
         "packed camera.PendingAxes",
         "packed camera.VisibleCameraXLow",
@@ -67,8 +71,11 @@ REQUIRED_RANGES = frozenset(
     }
 )
 REQUIRED_REGIONS = frozenset(
-    f"WorldPack.VisualSlot{index}"
-    for index in range(6)
+    {
+        *(f"WorldPack.VisualSlot{index}" for index in range(6)),
+        "WorldPack.EdgeSlot0",
+        "WorldPack.EdgeSlot1",
+    }
 )
 REQUIRED_CONSTANTS = frozenset(
     {

@@ -5,7 +5,9 @@ import json
 from dataclasses import replace
 import struct
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from PIL import Image
@@ -393,7 +395,15 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
         observation = {
             "framesRequested": 1,
             "framesRun": 1,
-            "frames": [{}],
+            "frames": [
+                {
+                    "ppuState": {
+                        "renderingEnabled": True,
+                        "backgroundEnabled": True,
+                        "spritesEnabled": True,
+                    }
+                }
+            ],
             "ppuEvents": [
                 {
                     "address": "0x2007",
@@ -445,6 +455,126 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
         report = parity.validate_execution_observation(observation)
 
         self.assertEqual(0, report["ppudata_outside_vblank"])
+
+    def test_observation_checks_every_frame_for_complete_contiguous_oam(self) -> None:
+        snapshot = {
+            "scanline": 245,
+            "dot": 80,
+            "vblank": False,
+            "renderingActive": False,
+            "v": "0x2400",
+            "t": "0x2400",
+            "x": 0,
+            "w": False,
+        }
+        events = [
+            {
+                "frameOffset": 0,
+                "address": "0x2003",
+                "value": "0x00",
+                "before": snapshot,
+                "after": snapshot,
+            },
+            *[
+                {
+                    "frameOffset": 0,
+                    "address": "0x2004",
+                    "value": f"0x{index:02X}",
+                    "before": snapshot,
+                    "after": snapshot,
+                }
+                for index in range(76)
+            ],
+        ]
+        observation = {
+            "framesRequested": 1,
+            "framesRun": 1,
+            "frames": [
+                {
+                    "ppuState": {
+                        "renderingEnabled": True,
+                        "backgroundEnabled": True,
+                        "spritesEnabled": True,
+                    }
+                }
+            ],
+            "ppuEvents": events,
+            "ppuEventCount": len(events),
+            "ppuEventsObserved": len(events),
+            "ppuTraceTruncated": False,
+            "truncated": False,
+            "stopReason": "framesComplete",
+        }
+
+        self.assertTrue(parity.validate_execution_observation(observation)["physical_valid"])
+
+        events.insert(
+            10,
+            {
+                "frameOffset": 0,
+                "address": "0x2000",
+                "value": "0x80",
+                "before": snapshot,
+                "after": snapshot,
+            },
+        )
+        observation["ppuEventCount"] = len(events)
+        observation["ppuEventsObserved"] = len(events)
+
+        report = parity.validate_execution_observation(observation)
+
+        self.assertFalse(report["physical_valid"])
+        self.assertTrue(any("interleaved" in item for item in report["physical_violations"]))
+
+    def test_observation_rejects_discontinuous_ppudata_after_a_valid_address_pair(self) -> None:
+        def snapshot(*, v: int, t: int, w: bool) -> dict[str, object]:
+            return {
+                "scanline": 245,
+                "dot": 80,
+                "vblank": False,
+                "renderingActive": False,
+                "v": f"0x{v:04X}",
+                "t": f"0x{t:04X}",
+                "x": 0,
+                "w": w,
+            }
+
+        events = [
+            {
+                "frameOffset": 0,
+                "address": "0x2006",
+                "value": "0x24",
+                "before": snapshot(v=0x2142, t=0x0140, w=False),
+                "after": snapshot(v=0x2142, t=0x2400, w=True),
+            },
+            {
+                "frameOffset": 0,
+                "address": "0x2006",
+                "value": "0x00",
+                "before": snapshot(v=0x2142, t=0x2400, w=True),
+                "after": snapshot(v=0x2400, t=0x2400, w=False),
+            },
+            {
+                "frameOffset": 0,
+                "address": "0x2007",
+                "value": "0x11",
+                "before": snapshot(v=0x2400, t=0x2400, w=False),
+                "after": snapshot(v=0x2420, t=0x2400, w=False),
+            },
+            {
+                "frameOffset": 0,
+                "address": "0x2007",
+                "value": "0x22",
+                "before": snapshot(v=0x2999, t=0x2400, w=False),
+                "after": snapshot(v=0x29B9, t=0x2400, w=False),
+            },
+        ]
+
+        violations = parity.observed_physical_sequence_violations(
+            {"framesRun": 1, "frames": [{}], "ppuEvents": events}
+        )
+
+        self.assertTrue(any("discontinuous" in item for item in violations))
 
     def test_nametable_dump_helpers_preserve_all_four_physical_tables(self) -> None:
         dump = {
@@ -504,6 +634,10 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
                 variable = real_abi.variable(name)
                 return replace(variable, address=variable.address + self.offset)
 
+            def region(self, name: str):
+                region = real_abi.region(name)
+                return replace(region, start=region.start + self.offset)
+
         abi = RelocatedAbi()
         frame = {
             "screen": {"frameOffset": 1, "totalFrame": 501, "hash": "sha256:x"},
@@ -515,9 +649,21 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
                 probe(abi.address("packed camera.FrameCounterLow"), [0xF5, 0x01, 7, 7, 7, 7, 7, 0, 0, 0, 32, 8]),
                 probe(abi.address("packed camera.CriticalSection"), [0, 1, 1, 2, 0, 0, 33, 0, 0, 32, 0, 0]),
                 probe(abi.address("packed camera.Slot0"), [5]),
+                probe(abi.address("packed camera.Slot0CommitPhase"), [2]),
+                probe(abi.address("packed camera.Slot0PayloadCursor"), [30]),
                 probe(abi.address("packed camera.Slot1"), [0]),
+                probe(abi.address("packed camera.Slot1CommitPhase"), [0]),
+                probe(abi.address("packed camera.Slot1PayloadCursor"), [0]),
                 probe(abi.address("packed camera.PendingAxes"), [0, 0x06, 0x01, 0x50, 0x00]),
                 probe(abi.address("WorldPack.CollisionDecodeCountLow"), [3, 0, 0xAA, 0xBB]),
+                probe(
+                    abi.region("WorldPack.EdgeSlot0").start,
+                    list(range(41)),
+                ),
+                probe(
+                    abi.region("WorldPack.EdgeSlot1").start,
+                    [0] * 41,
+                ),
             ],
             "ppuState": {"ppuctrl": "0x81", "v": "0x0D48", "t": "0x0540"},
         }
@@ -530,6 +676,11 @@ class TransientFrameAcceptanceTests(unittest.TestCase):
         self.assertEqual(80, observed["state"]["requested_camera_y"])
         self.assertEqual(262, observed["state"]["visible_camera_x"])
         self.assertEqual(7, observed["state"]["lifecycle"]["commit"])
+        self.assertEqual(
+            {"state": 5, "commit_phase": 2, "payload_cursor": 30},
+            observed["state"]["slots"][0],
+        )
+        self.assertEqual(list(range(41)), observed["state"]["slot_payloads"][0])
         self.assertEqual(
             {
                 "axis": 1,
@@ -966,6 +1117,9 @@ class PpuCommitTraceTests(unittest.TestCase):
             "address": f"0x{address:04X}",
             "register": {
                 0x2000: "PPUCTRL",
+                0x2001: "PPUMASK",
+                0x2003: "OAMADDR",
+                0x2004: "OAMDATA",
                 0x2005: "PPUSCROLL",
                 0x2006: "PPUADDR",
                 0x2007: "PPUDATA",
@@ -976,51 +1130,74 @@ class PpuCommitTraceTests(unittest.TestCase):
         }
 
     @classmethod
-    def valid_events(cls) -> list[dict[str, object]]:
+    def valid_events(
+        cls,
+        *,
+        payload_length: int = 32,
+        target_start: int = 0,
+    ) -> list[dict[str, object]]:
         cycle = 100
         events = [
+            cls.event(
+                0x2003,
+                0,
+                cycle,
+                cls.snapshot(v=0x2142),
+                cls.snapshot(v=0x2142),
+            ),
+            *[
+                cls.event(
+                    0x2004,
+                    index,
+                    cycle + 4 + index * 4,
+                    cls.snapshot(v=0x2142),
+                    cls.snapshot(v=0x2142),
+                )
+                for index in range(76)
+            ],
+        ]
+        cycle += 4 + 76 * 4
+        events.append(
             cls.event(
                 0x2000,
                 0x84,
                 cycle,
                 cls.snapshot(v=0x2142),
                 cls.snapshot(v=0x2142),
-            ),
-            cls.event(
-                0x2006,
-                0x24,
-                cycle + 10,
-                cls.snapshot(v=0x2142, t=0x0140, w=False),
-                cls.snapshot(v=0x2142, t=0x2400, w=True),
-            ),
-            cls.event(
-                0x2006,
-                0x01,
-                cycle + 20,
-                cls.snapshot(v=0x2142, t=0x2400, w=True),
-                cls.snapshot(v=0x2401, t=0x2401, w=False),
-            ),
-        ]
-        cycle += 30
-        address = 0x2401
-        for index in range(32):
-            if index == 30:
-                address = 0x2C01
+            )
+        )
+        cycle += 10
+        previous_address: int | None = None
+        address = 0x2142
+        for index in range(payload_length):
+            tile_row = (target_start + index) % 60
+            vertical_table = tile_row // 30
+            local_row = tile_row % 30
+            tile_address = 0x2401 + vertical_table * 0x800 + local_row * 32
+            if previous_address is None or tile_address != previous_address + 32:
                 events.extend(
                     (
                         cls.event(
                             0x2006,
-                            0x2C,
+                            tile_address >> 8,
                             cycle,
-                            cls.snapshot(v=0x27C1, t=0x2401, w=False),
-                            cls.snapshot(v=0x27C1, t=0x2C01, w=True),
+                            cls.snapshot(v=address, t=0x0140, w=False),
+                            cls.snapshot(
+                                v=address,
+                                t=tile_address & 0x3F00,
+                                w=True,
+                            ),
                         ),
                         cls.event(
                             0x2006,
-                            0x01,
+                            tile_address & 0xFF,
                             cycle + 10,
-                            cls.snapshot(v=0x27C1, t=0x2C01, w=True),
-                            cls.snapshot(v=0x2C01, t=0x2C01, w=False),
+                            cls.snapshot(
+                                v=address,
+                                t=tile_address & 0x3F00,
+                                w=True,
+                            ),
+                            cls.snapshot(v=tile_address, t=tile_address, w=False),
                         ),
                     )
                 )
@@ -1030,12 +1207,13 @@ class PpuCommitTraceTests(unittest.TestCase):
                     0x2007,
                     index,
                     cycle,
-                    cls.snapshot(v=address),
-                    cls.snapshot(v=(address + 32) & 0x7FFF),
+                    cls.snapshot(v=tile_address),
+                    cls.snapshot(v=(tile_address + 32) & 0x7FFF),
                 )
             )
             cycle += 20
-            address = (address + 32) & 0x7FFF
+            address = (tile_address + 32) & 0x7FFF
+            previous_address = tile_address
         events.append(
             cls.event(
                 0x2000,
@@ -1046,8 +1224,14 @@ class PpuCommitTraceTests(unittest.TestCase):
             )
         )
         cycle += 10
-        for index in range(8):
-            attribute_address = 0x27C0 + index * 8
+        attribute_count = (target_start % 4 + payload_length + 3) // 4
+        for index in range(attribute_count):
+            tile_row = ((target_start & 0xFC) + index * 4) % 60
+            vertical_table = tile_row // 30
+            local_row = tile_row % 30
+            attribute_address = (
+                0x27C0 + vertical_table * 0x800 + (local_row // 4) * 8
+            )
             events.extend(
                 (
                     cls.event(
@@ -1106,13 +1290,32 @@ class PpuCommitTraceTests(unittest.TestCase):
         return events
 
     @classmethod
-    def valid_trace(cls) -> dict[str, object]:
-        events = cls.valid_events()
+    def valid_trace(
+        cls,
+        *,
+        payload_length: int = 32,
+        target_start: int = 0,
+    ) -> dict[str, object]:
+        events = cls.valid_events(
+            payload_length=payload_length,
+            target_start=target_start,
+        )
         return {
             "framesRequested": 1,
             "framesRun": 1,
-            "initialPpuState": {"timeline": {"cycles": 10_000}},
-            "finalPpuState": {"w": False, "timeline": {"cycles": 12_000}},
+            "initialPpuState": {
+                "renderingEnabled": True,
+                "backgroundEnabled": True,
+                "spritesEnabled": True,
+                "timeline": {"cycles": 10_000},
+            },
+            "finalPpuState": {
+                "renderingEnabled": True,
+                "backgroundEnabled": True,
+                "spritesEnabled": True,
+                "w": False,
+                "timeline": {"cycles": 12_000},
+            },
             "events": events,
             "eventCount": len(events),
             "eventsObserved": len(events),
@@ -1123,21 +1326,49 @@ class PpuCommitTraceTests(unittest.TestCase):
         }
 
     @staticmethod
-    def runtime_state(commit: int) -> dict[str, object]:
+    def runtime_state(
+        commit: int,
+        *,
+        payload_length: int = 32,
+        target_start: int = 0,
+    ) -> dict[str, object]:
+        final = commit == 8
+        attribute_count = (target_start % 4 + payload_length + 3) // 4
+        payload = list(range(32)) + list(range(9))
         return {
             "requested_camera_x": 8,
             "visible_camera_x": 7 if commit == 7 else 9,
             "visible_camera_y": 80,
-            "lifecycle": {"commit": commit},
+            "lifecycle": {
+                "request": 8,
+                "prepare": 8,
+                "resident": 8,
+                "commit": commit,
+                "release": commit,
+            },
             "forbidden_commit_work": {"bank": 0, "directory": 0, "decode": 0},
-            "last_commit_writes": {"tiles": 32, "attributes": 8},
+            "last_commit_writes": {
+                "tiles": payload_length,
+                "attributes": attribute_count,
+            },
             "critical_section": 0,
+            "selected_slot": 0,
+            "slots": [
+                {
+                    "state": 5 if final else 3,
+                    "commit_phase": 0,
+                    "payload_cursor": 0,
+                },
+                {"state": 0, "commit_phase": 0, "payload_cursor": 0},
+            ],
+            "slot_payloads": [payload, [0] * len(payload)],
+            "pending_axes": 0 if final else 1,
             "commit_descriptor": {
                 "axis": 1,
                 "direction": 2,
                 "target": 33,
-                "payload_length": 32,
-                "target_start": 0,
+                "payload_length": payload_length,
+                "target_start": target_start,
             },
         }
 
@@ -1162,10 +1393,193 @@ class PpuCommitTraceTests(unittest.TestCase):
         self.assertEqual(8, report["attribute_writes"])
         self.assertEqual([], report["violations"])
 
+    def test_commit_trace_accepts_runner_payload_30_start_10_without_false_positive(self) -> None:
+        trace = self.valid_trace(payload_length=30, target_start=10)
+        report = parity.validate_ppu_commit_trace(
+            trace,
+            before_state=self.runtime_state(
+                7,
+                payload_length=30,
+                target_start=10,
+            ),
+            after_state=self.runtime_state(
+                8,
+                payload_length=30,
+                target_start=10,
+            ),
+            max_cpu_cycles=parity.PPU_COMMIT_BUDGET_CYCLES,
+        )
+
+        self.assertTrue(report["valid"], report["violations"])
+        self.assertEqual(30, report["tile_writes"])
+        self.assertEqual(8, report["attribute_writes"])
+        self.assertEqual(
+            ["0x2541", "0x2C01"],
+            [pair["address"] for pair in report["ppuaddr_pairs"] if pair["kind"] == "tiles"],
+        )
+
+    def test_commit_trace_accepts_exact_runner_final_attribute_only_phase(self) -> None:
+        trace = self.valid_trace(payload_length=30, target_start=10)
+        events = trace["events"]
+        vertical = next(
+            index
+            for index, event in enumerate(events)
+            if event["register"] == "PPUCTRL" and event["value"] == "0x84"
+        )
+        horizontal = next(
+            index
+            for index, event in enumerate(events)
+            if index > vertical
+            and event["register"] == "PPUCTRL"
+            and event["value"] == "0x80"
+        )
+        del events[vertical:horizontal]
+        del events[vertical + 1 : vertical + 7]
+        trace["eventCount"] = len(events)
+        trace["eventsObserved"] = len(events)
+        before = self.runtime_state(7, payload_length=30, target_start=10)
+        before["slots"][0] = {
+            "state": 4,
+            "commit_phase": 2,
+            "payload_cursor": 30,
+        }
+        after = self.runtime_state(8, payload_length=30, target_start=10)
+        after["slots"][0] = {
+            "state": 5,
+            "commit_phase": 3,
+            "payload_cursor": 30,
+        }
+        after["last_commit_writes"] = {"tiles": 0, "attributes": 6}
+
+        report = parity.validate_ppu_commit_trace(
+            trace,
+            before_state=before,
+            after_state=after,
+            max_cpu_cycles=parity.PPU_COMMIT_BUDGET_CYCLES,
+        )
+
+        self.assertTrue(report["valid"], report["violations"])
+        self.assertEqual(0, report["tile_writes"])
+        self.assertEqual(6, report["attribute_writes"])
+
+    def test_cli_defaults_to_full_and_accepts_explicit_physical_gate(self) -> None:
+        with mock.patch("sys.argv", ["verify_runner_visual_parity.py"]):
+            self.assertEqual("full", parity.parse_args().gate)
+        with mock.patch(
+            "sys.argv",
+            ["verify_runner_visual_parity.py", "--gate", "physical"],
+        ):
+            self.assertEqual("physical", parity.parse_args().gate)
+
+    def test_physical_gate_does_not_require_external_emulator_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rom = root / "runner.nes"
+            rom.write_bytes(b"NES\x1A")
+            args = SimpleNamespace(
+                rom=rom,
+                runtime_abi=root / "runner.nes.runtime-abi.json",
+                artifacts=root / "artifacts",
+                gate="physical",
+                fceumm_core=root / "missing-fceumm.so",
+            )
+            abi = object()
+            with (
+                mock.patch.object(parity, "parse_args", return_value=args),
+                mock.patch.object(parity.NesRuntimeAbi, "load", return_value=abi),
+                mock.patch.object(parity, "activate_runtime_abi"),
+                mock.patch.object(parity, "run_physical_gate", return_value=0) as gate,
+            ):
+                self.assertEqual(0, parity.main())
+
+            gate.assert_called_once_with(args, rom.resolve(), args.artifacts.resolve())
+
+    def test_commit_trace_requires_one_contiguous_76_byte_oam_publication(self) -> None:
+        trace = self.valid_trace()
+        events = trace["events"]
+        events.insert(10, self.event(
+            0x2001,
+            0x1E,
+            130,
+            self.snapshot(v=0x2142),
+            self.snapshot(v=0x2142),
+        ))
+        trace["eventCount"] = len(events)
+        trace["eventsObserved"] = len(events)
+
+        report = self.validate(trace)
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("contiguous" in item for item in report["violations"]))
+
+    def test_commit_trace_rejects_rendering_suppression(self) -> None:
+        trace = self.valid_trace()
+        events = trace["events"]
+        events.insert(0, self.event(
+            0x2001,
+            0x00,
+            96,
+            self.snapshot(v=0x2142),
+            self.snapshot(v=0x2142),
+        ))
+        trace["eventCount"] = len(events)
+        trace["eventsObserved"] = len(events)
+
+        report = self.validate(trace)
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("rendering" in item.lower() for item in report["violations"]))
+
+    def test_commit_trace_requires_rendering_enabled_at_both_frame_boundaries(self) -> None:
+        trace = self.valid_trace()
+        trace["finalPpuState"]["spritesEnabled"] = False
+
+        report = self.validate(trace)
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("rendering" in item.lower() for item in report["violations"]))
+
+    def test_commit_trace_requires_coherent_final_slot_commit_and_release(self) -> None:
+        after = self.runtime_state(8)
+        after["lifecycle"] = {**after["lifecycle"], "release": 7}
+        after["slots"][0] = {**after["slots"][0], "state": 4}
+        after["pending_axes"] = 1
+
+        report = parity.validate_ppu_commit_trace(
+            self.valid_trace(),
+            before_state=self.runtime_state(7),
+            after_state=after,
+            max_cpu_cycles=parity.PPU_COMMIT_BUDGET_CYCLES,
+        )
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("release" in item.lower() for item in report["violations"]))
+        self.assertTrue(any("selected slot" in item.lower() for item in report["violations"]))
+        self.assertTrue(any("pending axis" in item.lower() for item in report["violations"]))
+
+    def test_commit_trace_preserves_unrelated_pending_axis_bits(self) -> None:
+        before = self.runtime_state(7)
+        before["pending_axes"] = 3
+        after = self.runtime_state(8)
+        after["pending_axes"] = 0
+
+        report = parity.validate_ppu_commit_trace(
+            self.valid_trace(),
+            before_state=before,
+            after_state=after,
+            max_cpu_cycles=parity.PPU_COMMIT_BUDGET_CYCLES,
+        )
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("unrelated" in item for item in report["violations"]))
+
     def test_commit_trace_rejects_ppudata_after_vblank(self) -> None:
         trace = self.valid_trace()
-        trace["events"][12]["before"] = {
-            **trace["events"][12]["before"],
+        ppudata = next(
+            event for event in trace["events"] if event["register"] == "PPUDATA"
+        )
+        ppudata["before"] = {
+            **ppudata["before"],
             "scanline": 261,
             "dot": 12,
             "vblank": False,
@@ -1309,6 +1723,45 @@ class PpuCommitTraceTests(unittest.TestCase):
         self.assertFalse(report["valid"])
         self.assertTrue(any("attribute address sequence" in item for item in report["violations"]))
 
+    def test_commit_trace_rejects_ordered_ppudata_that_disagrees_with_slot_payload(self) -> None:
+        trace = self.valid_trace()
+        tile_data = [
+            event for event in trace["events"] if event["register"] == "PPUDATA"
+        ][:32]
+        tile_data[0]["value"], tile_data[1]["value"] = (
+            tile_data[1]["value"],
+            tile_data[0]["value"],
+        )
+
+        report = self.validate(trace)
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("selected slot payload" in item for item in report["violations"]))
+
+    def test_commit_trace_rejects_incoherent_final_phase_and_cursor_transition(self) -> None:
+        before = self.runtime_state(7)
+        after = self.runtime_state(8)
+        before["slots"][0] = {
+            "state": 4,
+            "commit_phase": 31,
+            "payload_cursor": 31,
+        }
+        after["slots"][0] = {
+            "state": 5,
+            "commit_phase": 17,
+            "payload_cursor": 1,
+        }
+
+        report = parity.validate_ppu_commit_trace(
+            self.valid_trace(),
+            before_state=before,
+            after_state=after,
+            max_cpu_cycles=parity.PPU_COMMIT_BUDGET_CYCLES,
+        )
+
+        self.assertFalse(report["valid"])
+        self.assertTrue(any("phase" in item.lower() for item in report["violations"]))
+
     def test_commit_trace_rejects_column_shifted_away_from_runtime_target(self) -> None:
         trace = self.valid_trace()
         restore_index = next(
@@ -1358,7 +1811,10 @@ class PpuCommitTraceTests(unittest.TestCase):
 
     def test_commit_trace_rejects_bad_ppuaddr_and_over_budget_commit(self) -> None:
         bad_address = self.valid_trace()
-        low = bad_address["events"][2]
+        ppuaddr = [
+            event for event in bad_address["events"] if event["register"] == "PPUADDR"
+        ]
+        low = ppuaddr[1]
         low["after"] = {**low["after"], "v": "0x2402", "t": "0x2402"}
         over_budget = self.valid_trace()
         [

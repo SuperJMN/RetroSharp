@@ -58,6 +58,10 @@ class NesRuntimeAbiLoaderTests(unittest.TestCase):
         self.assertEqual(0x0318, abi.address("camera.XHigh"))
         self.assertEqual(0x036E, abi.address("packed camera.FrameCounterLow"))
         self.assertEqual(0x03CB, abi.address("packed camera.VisibleCameraXLow"))
+        self.assertEqual(0x039D, abi.address("packed camera.Slot0CommitPhase"))
+        self.assertEqual(0x039F, abi.address("packed camera.Slot0PayloadCursor"))
+        self.assertEqual(0x03AD, abi.address("packed camera.Slot1CommitPhase"))
+        self.assertEqual(0x03AF, abi.address("packed camera.Slot1PayloadCursor"))
         self.assertEqual(0x03F8, abi.address("WorldPack.CollisionDecodeCountLow"))
         self.assertEqual(0x03FA, abi.address("WorldPack.GameplayTickCount"))
         self.assertEqual(0x03FB, abi.address("WorldPack.AudioTickCount"))
@@ -80,6 +84,14 @@ class NesRuntimeAbiLoaderTests(unittest.TestCase):
                 (abi.region(f"WorldPack.VisualSlot{index}").start,
                  abi.region(f"WorldPack.VisualSlot{index}").length)
                 for index in range(6)
+            ],
+        )
+        self.assertEqual(
+            [(0x0600, 41), (0x0629, 41)],
+            [
+                (abi.region(f"WorldPack.EdgeSlot{index}").start,
+                 abi.region(f"WorldPack.EdgeSlot{index}").length)
+                for index in range(2)
             ],
         )
 

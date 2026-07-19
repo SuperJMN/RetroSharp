@@ -82,7 +82,9 @@ TRANSIENT_FRAME_RADIUS = 2
 POST_TARGET_SETTLE_FRAMES = TRANSIENT_FRAME_RADIUS * 2
 MCP_MIN_VERSION = (0, 0, 7, 0)
 OBSERVATION_MAX_PPU_EVENTS = 2_000
+OBSERVATION_MAX_MEMORY_PROBE_BYTES = 64
 PPU_COMMIT_BUDGET_CYCLES = 2_136
+RUNNER_RETAINED_OAM_BYTES = 76
 REQUIRED_FOCAL_TRACE_LABELS = frozenset(
     {
         "first-column",
@@ -147,6 +149,10 @@ SNAPSHOT_ADDRESS_FIELDS = (
     "packed camera.CommitTargetStart",
     "packed camera.Slot0",
     "packed camera.Slot1",
+    "packed camera.Slot0CommitPhase",
+    "packed camera.Slot0PayloadCursor",
+    "packed camera.Slot1CommitPhase",
+    "packed camera.Slot1PayloadCursor",
     "packed camera.PendingAxes",
     "packed camera.VisibleCameraXLow",
     "packed camera.VisibleCameraXHigh",
@@ -168,6 +174,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--rom", type=Path, default=DEFAULT_ROM)
     parser.add_argument("--runtime-abi", type=Path, default=DEFAULT_RUNTIME_ABI)
+    parser.add_argument(
+        "--gate",
+        choices=("physical", "full"),
+        default="full",
+        help="Run only AprNes physical-write validation or the full three-emulator gate.",
+    )
     parser.add_argument("--fceumm-core", type=Path, default=DEFAULT_FCEUMM_CORE)
     parser.add_argument("--nestopia-core", type=Path)
     parser.add_argument("--nestopia-core-url", default=NESTOPIA_CORE_URL)
@@ -249,6 +261,135 @@ def ppu_snapshot_in_physical_vblank(snapshot: dict[str, object]) -> bool:
     return in_interval and not bool(snapshot["renderingActive"])
 
 
+def observed_physical_sequence_violations(
+    observation: dict[str, object],
+) -> list[str]:
+    """Validate every traced runner frame without needing runtime descriptors."""
+
+    def integer(value: object) -> int:
+        return int(value, 16) if isinstance(value, str) else int(value)
+
+    events = list(observation.get("ppuEvents", []))
+    violations: list[str] = []
+    outside_vblank = [
+        event
+        for event in events
+        if 0x2000 <= integer(event["address"]) <= 0x2007
+        and (
+            not ppu_snapshot_in_physical_vblank(event["before"])
+            or not ppu_snapshot_in_physical_vblank(event["after"])
+        )
+    ]
+    if outside_vblank:
+        violations.append(
+            f"{len(outside_vblank)} sensitive writes occurred outside physical VBlank."
+        )
+    if any(
+        integer(event["address"]) == 0x2001
+        and integer(event["value"]) & 0x18 != 0x18
+        for event in events
+    ):
+        violations.append("PPUMASK suppressed rendering in an observed frame.")
+    for frame_offset, frame in enumerate(observation.get("frames", [])):
+        ppu_state = frame.get("ppuState") if isinstance(frame, dict) else None
+        if not (
+            isinstance(ppu_state, dict)
+            and bool(ppu_state.get("renderingEnabled"))
+            and bool(ppu_state.get("backgroundEnabled"))
+            and bool(ppu_state.get("spritesEnabled"))
+        ):
+            violations.append(
+                f"Observed frame {frame_offset} ended without background and sprite rendering enabled."
+            )
+
+    frames_run = int(observation.get("framesRun", 0))
+    for frame_offset in range(frames_run):
+        frame_events = [
+            event
+            for event in events
+            if int(event.get("frameOffset", 0)) == frame_offset
+        ]
+        oam_indices = [
+            index
+            for index, event in enumerate(frame_events)
+            if integer(event["address"]) == 0x2003
+        ]
+        oam_data = [
+            event for event in frame_events if integer(event["address"]) == 0x2004
+        ]
+        if len(oam_indices) != 1 or len(oam_data) != RUNNER_RETAINED_OAM_BYTES:
+            violations.append(
+                f"Observed frame {frame_offset} did not publish one complete retained OAM stream."
+            )
+        else:
+            start = oam_indices[0]
+            segment = frame_events[start : start + 1 + RUNNER_RETAINED_OAM_BYTES]
+            if (
+                integer(segment[0]["value"]) != 0
+                or len(segment) != 1 + RUNNER_RETAINED_OAM_BYTES
+                or any(integer(event["address"]) != 0x2004 for event in segment[1:])
+            ):
+                violations.append(
+                    f"Observed frame {frame_offset} interleaved or misaddressed retained OAM."
+                )
+
+        ppu_stream = [
+            event
+            for event in frame_events
+            if integer(event["address"]) in (0x2006, 0x2007)
+        ]
+        cursor = 0
+        while cursor < len(ppu_stream):
+            if (
+                cursor + 2 >= len(ppu_stream)
+                or [integer(event["address"]) for event in ppu_stream[cursor : cursor + 2]]
+                != [0x2006, 0x2006]
+            ):
+                violations.append(
+                    f"Observed frame {frame_offset} has malformed PPUADDR/PPUDATA ordering."
+                )
+                break
+            high, low = ppu_stream[cursor : cursor + 2]
+            target = ((integer(high["value"]) & 0x3F) << 8) | integer(low["value"])
+            if not (
+                not bool(high["before"]["w"])
+                and bool(high["after"]["w"])
+                and bool(low["before"]["w"])
+                and not bool(low["after"]["w"])
+                and integer(low["after"]["t"]) & 0x3FFF == target
+            ):
+                violations.append(
+                    f"Observed frame {frame_offset} has an invalid PPUADDR latch/target pair."
+                )
+            cursor += 2
+            if (
+                cursor >= len(ppu_stream)
+                or integer(ppu_stream[cursor]["address"]) != 0x2007
+                or integer(ppu_stream[cursor]["before"]["v"]) & 0x3FFF != target
+            ):
+                violations.append(
+                    f"Observed frame {frame_offset} did not apply PPUADDR to ordered PPUDATA."
+                )
+                break
+            previous_after_v: int | None = None
+            while cursor < len(ppu_stream) and integer(ppu_stream[cursor]["address"]) == 0x2007:
+                data_event = ppu_stream[cursor]
+                before_v = integer(data_event["before"]["v"]) & 0x7FFF
+                after_v = integer(data_event["after"]["v"]) & 0x7FFF
+                if (
+                    previous_after_v is not None
+                    and before_v != previous_after_v
+                ) or ((after_v - before_v) & 0x7FFF) not in (1, 32):
+                    violations.append(
+                        f"Observed frame {frame_offset} has discontinuous ordered PPUDATA targets."
+                    )
+                    break
+                previous_after_v = after_v
+                cursor += 1
+
+    return violations
+
+
 def validate_execution_observation(observation: dict[str, object]) -> dict[str, object]:
     frames_requested = int(observation.get("framesRequested", -1))
     frames_run = int(observation.get("framesRun", -1))
@@ -286,6 +427,7 @@ def validate_execution_observation(observation: dict[str, object]) -> dict[str, 
         raise AssertionError(
             f"Nes.Mcp observed {len(outside_vblank)} PPUDATA writes outside VBlank."
         )
+    physical_violations = observed_physical_sequence_violations(observation)
     return {
         "frames_requested": frames_requested,
         "frames_run": frames_run,
@@ -294,6 +436,8 @@ def validate_execution_observation(observation: dict[str, object]) -> dict[str, 
         "ppu_trace_truncated": False,
         "truncated": False,
         "ppudata_outside_vblank": 0,
+        "physical_valid": not physical_violations,
+        "physical_violations": physical_violations,
         "timeline": observation.get("timeline"),
     }
 
@@ -311,12 +455,18 @@ def observation_memory_probes(abi: NesRuntimeAbi | None = None) -> tuple[tuple[i
     addresses.add(contract.address("camera.X"))
     addresses.add(contract.address("camera.Y"))
     addresses.update(contract.address(name) for name in SNAPSHOT_ADDRESS_FIELDS)
+    for slot in range(2):
+        region = contract.region(f"WorldPack.EdgeSlot{slot}")
+        addresses.update(range(region.start, region.end_exclusive))
 
     spans: list[tuple[int, int]] = []
     for address in sorted(addresses):
-        if spans and spans[-1][0] + spans[-1][1] == address:
+        if (
+            spans
+            and address - spans[-1][0] < OBSERVATION_MAX_MEMORY_PROBE_BYTES
+        ):
             start, length = spans[-1]
-            spans[-1] = (start, length + 1)
+            spans[-1] = (start, max(length, address - start + 1))
         else:
             spans.append((address, 1))
     return tuple(spans)
@@ -337,6 +487,14 @@ def runtime_snapshot(read, abi: NesRuntimeAbi | None = None) -> dict[str, object
             raise RuntimeError(f"NES runner variable '{name}' must occupy exactly two bytes.")
         low, high = read(variable.address, variable.size)
         return low | high << 8
+
+    slot_payloads = [
+        read(
+            contract.region(f"WorldPack.EdgeSlot{slot}").start,
+            contract.region(f"WorldPack.EdgeSlot{slot}").length,
+        )
+        for slot in range(2)
+    ]
 
     return {
         "player_x": variable_word("player.x"),
@@ -370,6 +528,19 @@ def runtime_snapshot(read, abi: NesRuntimeAbi | None = None) -> dict[str, object
             "target_start": byte("packed camera.CommitTargetStart"),
         },
         "slot_states": [byte("packed camera.Slot0"), byte("packed camera.Slot1")],
+        "slots": [
+            {
+                "state": byte("packed camera.Slot0"),
+                "commit_phase": byte("packed camera.Slot0CommitPhase"),
+                "payload_cursor": byte("packed camera.Slot0PayloadCursor"),
+            },
+            {
+                "state": byte("packed camera.Slot1"),
+                "commit_phase": byte("packed camera.Slot1CommitPhase"),
+                "payload_cursor": byte("packed camera.Slot1PayloadCursor"),
+            },
+        ],
+        "slot_payloads": slot_payloads,
         "pending_axes": byte("packed camera.PendingAxes"),
         "visible_camera_x": word("packed camera.VisibleCameraXLow", "packed camera.VisibleCameraXHigh"),
         "visible_camera_y": word("packed camera.VisibleCameraYLow", "packed camera.VisibleCameraYHigh"),
@@ -392,13 +563,23 @@ def observed_runtime_frame(
     }
 
     def read(address: int, length: int) -> list[int]:
-        for probe_address, values in probes.items():
-            offset = address - probe_address
-            if 0 <= offset and offset + length <= len(values):
-                return values[offset : offset + length]
-        raise KeyError(
-            f"Nes.Mcp observation omitted RAM probe 0x{address:04X}+{length}."
-        )
+        result: list[int] = []
+        cursor = address
+        remaining = length
+        while remaining:
+            for probe_address, values in probes.items():
+                offset = cursor - probe_address
+                if 0 <= offset < len(values):
+                    count = min(remaining, len(values) - offset)
+                    result.extend(values[offset : offset + count])
+                    cursor += count
+                    remaining -= count
+                    break
+            else:
+                raise KeyError(
+                    f"Nes.Mcp observation omitted RAM probe 0x{address:04X}+{length}."
+                )
+        return result
 
     return {
         "step": step,
@@ -768,6 +949,9 @@ def capture_aprnes(
                     "maxPpuEvents": OBSERVATION_MAX_PPU_EVENTS,
                     "ppuRegisters": [
                         "PPUCTRL",
+                        "PPUMASK",
+                        "OAMADDR",
+                        "OAMDATA",
                         "PPUSCROLL",
                         "PPUADDR",
                         "PPUDATA",
@@ -1017,7 +1201,15 @@ def capture_aprnes_ppu_commit_traces(
                 "buttons": buttons,
                 "frameCount": 1,
                 "maxEvents": 10_000,
-                "registers": ["PPUCTRL", "PPUSCROLL", "PPUADDR", "PPUDATA"],
+                "registers": [
+                    "PPUCTRL",
+                    "PPUMASK",
+                    "OAMADDR",
+                    "OAMDATA",
+                    "PPUSCROLL",
+                    "PPUADDR",
+                    "PPUDATA",
+                ],
             },
         )
         current_state = runtime_snapshot(read)
@@ -2274,6 +2466,46 @@ def validate_ppu_commit_trace(
     def snapshot_value(event: dict[str, object], side: str, name: str) -> int:
         return integer(event[side][name])
 
+    def standard_column_phases(
+        payload_length: int,
+        target_start: int,
+        attribute_count: int,
+    ) -> list[dict[str, int]]:
+        phases: list[dict[str, int]] = []
+        tile_cursor = 0
+        row_cursor = target_start
+        while tile_cursor < payload_length:
+            tile_count = min(
+                20,
+                payload_length - tile_cursor,
+                30 - row_cursor % 30,
+            )
+            phases.append(
+                {
+                    "tile_start": tile_cursor,
+                    "tile_count": tile_count,
+                    "attribute_start": 0,
+                    "attribute_count": 0,
+                }
+            )
+            tile_cursor += tile_count
+            row_cursor = (row_cursor + tile_count) % 60
+        combined_attributes = min(2, attribute_count)
+        phases[-1]["attribute_count"] = combined_attributes
+        attribute_cursor = combined_attributes
+        while attribute_cursor < attribute_count:
+            count = min(7, attribute_count - attribute_cursor)
+            phases.append(
+                {
+                    "tile_start": payload_length,
+                    "tile_count": 0,
+                    "attribute_start": attribute_cursor,
+                    "attribute_count": count,
+                }
+            )
+            attribute_cursor += count
+        return phases
+
     required_event_fields = {
         "frameOffset",
         "frame",
@@ -2311,6 +2543,116 @@ def validate_ppu_commit_trace(
             "PPU events lack PC/cycle/instruction/frame or before/after v/t/x/w metadata."
         )
 
+    sensitive_addresses = set(range(0x2000, 0x2008))
+    outside_vblank = [
+        event
+        for event in events
+        if address(event) in sensitive_addresses
+        and (
+            not ppu_snapshot_in_physical_vblank(event["before"])
+            or not ppu_snapshot_in_physical_vblank(event["after"])
+        )
+    ]
+    if outside_vblank:
+        violations.append(
+            f"{len(outside_vblank)} physical $2000-$2007 writes occurred outside VBlank."
+        )
+
+    oam_address_indices = [
+        index for index, event in enumerate(events) if address(event) == 0x2003
+    ]
+    oam_data_events = [event for event in events if address(event) == 0x2004]
+    oam_contiguous = False
+    if len(oam_address_indices) != 1:
+        violations.append(
+            f"OAM publication wrote OAMADDR {len(oam_address_indices)} times instead of once."
+        )
+    else:
+        oam_start = oam_address_indices[0]
+        oam_segment = events[oam_start : oam_start + 1 + RUNNER_RETAINED_OAM_BYTES]
+        oam_contiguous = (
+            len(oam_segment) == 1 + RUNNER_RETAINED_OAM_BYTES
+            and value(oam_segment[0]) == 0
+            and all(address(event) == 0x2004 for event in oam_segment[1:])
+        )
+        if not oam_contiguous:
+            violations.append(
+                "OAMADDR=$00 was not followed by one contiguous retained OAM publication."
+            )
+    if len(oam_data_events) != RUNNER_RETAINED_OAM_BYTES:
+        violations.append(
+            f"OAM publication wrote {len(oam_data_events)} bytes instead of "
+            f"{RUNNER_RETAINED_OAM_BYTES}."
+        )
+
+    rendering_suppression = [
+        event
+        for event in events
+        if address(event) == 0x2001 and value(event) & 0x18 != 0x18
+    ]
+    if rendering_suppression:
+        violations.append(
+            "PPUMASK disabled background or sprite rendering during the focal frame."
+        )
+    rendering_boundaries_valid = all(
+        isinstance(state, dict)
+        and bool(state.get("renderingEnabled"))
+        and bool(state.get("backgroundEnabled"))
+        and bool(state.get("spritesEnabled"))
+        for state in (trace.get("initialPpuState"), trace.get("finalPpuState"))
+    )
+    if not rendering_boundaries_valid:
+        violations.append(
+            "Rendering, background, and sprites must remain enabled at both focal frame boundaries."
+        )
+
+    descriptor = before_state.get("commit_descriptor")
+    expected_tile_writes: int | None = None
+    expected_attribute_writes: int | None = None
+    expected_tile_start = 0
+    expected_attribute_start = 0
+    expected_before_phase: int | None = None
+    expected_before_cursor: int | None = None
+    expected_after_phase: int | None = None
+    expected_after_cursor: int | None = None
+    if isinstance(descriptor, dict):
+        descriptor_axis = int(descriptor["axis"])
+        descriptor_payload_length = int(descriptor["payload_length"])
+        descriptor_target_start = int(descriptor["target_start"])
+        descriptor_attribute_count = (
+            descriptor_target_start % 4 + descriptor_payload_length + 3
+        ) // 4
+        phase_slot = int(before_state.get("selected_slot", -1))
+        before_slots_for_phase = before_state.get("slots")
+        if (
+            descriptor_axis == 1
+            and 1 <= descriptor_payload_length <= 32
+            and phase_slot in (0, 1)
+            and isinstance(before_slots_for_phase, list)
+            and len(before_slots_for_phase) == 2
+        ):
+            selected_phase_state = before_slots_for_phase[phase_slot]
+            if int(selected_phase_state["state"]) == 3:
+                expected_tile_writes = descriptor_payload_length
+                expected_attribute_writes = descriptor_attribute_count
+                expected_before_phase = expected_before_cursor = 0
+                expected_after_phase = expected_after_cursor = 0
+            elif int(selected_phase_state["state"]) == 4:
+                phases = standard_column_phases(
+                    descriptor_payload_length,
+                    descriptor_target_start,
+                    descriptor_attribute_count,
+                )
+                expected_before_phase = len(phases) - 1
+                final_phase = phases[expected_before_phase]
+                expected_tile_start = final_phase["tile_start"]
+                expected_tile_writes = final_phase["tile_count"]
+                expected_attribute_start = final_phase["attribute_start"]
+                expected_attribute_writes = final_phase["attribute_count"]
+                expected_before_cursor = final_phase["tile_start"]
+                expected_after_phase = len(phases)
+                expected_after_cursor = descriptor_payload_length
+
     vertical_control = next(
         (
             index
@@ -2325,12 +2667,18 @@ def validate_ppu_commit_trace(
             for index, event in enumerate(events)
             if address(event) == 0x2000
             and value(event) == 0x80
-            and (vertical_control is None or index > vertical_control)
+            and (
+                vertical_control is None
+                or expected_tile_writes == 0
+                or index > vertical_control
+            )
         ),
         None,
     )
-    if vertical_control is None:
+    if expected_tile_writes != 0 and vertical_control is None:
         violations.append("PPUCTRL=$84 was not written before vertical tile streaming.")
+    if expected_tile_writes == 0 and vertical_control is not None:
+        violations.append("An attribute-only phase unexpectedly enabled vertical tile streaming.")
     if horizontal_control is None:
         violations.append("PPUCTRL=$80 was not restored before attribute streaming.")
 
@@ -2408,45 +2756,45 @@ def validate_ppu_commit_trace(
     attribute_writes = 0
     tile_events: list[dict[str, object]] = []
     attribute_events: list[dict[str, object]] = []
-    if vertical_control is not None and horizontal_control is not None:
+    if horizontal_control is not None:
+        tile_phase_start = (
+            vertical_control + 1 if vertical_control is not None else horizontal_control
+        )
         tile_events = [
             event
-            for event in events[vertical_control + 1 : horizontal_control]
+            for event in events[tile_phase_start:horizontal_control]
             if address(event) == 0x2007
         ]
         attribute_events = [
             event
-            for event in events[horizontal_control + 1 :]
+            for event in events[
+                horizontal_control + 1 : display_control
+                if display_control is not None
+                else len(events)
+            ]
             if address(event) == 0x2007
         ]
         tile_writes = len(tile_events)
         attribute_writes = len(attribute_events)
-    if tile_writes != 32:
-        violations.append(f"Column commit wrote {tile_writes} tiles instead of 32.")
-    if attribute_writes != 8:
+    if expected_tile_writes is None or tile_writes != expected_tile_writes:
         violations.append(
-            f"Column commit wrote {attribute_writes} attributes instead of 8."
+            f"Column commit wrote {tile_writes} tiles instead of descriptor count "
+            f"{expected_tile_writes}."
         )
-
-    outside_vblank = [
-        event
-        for event in events
-        if address(event) == 0x2007
-        and (
-            not ppu_snapshot_in_physical_vblank(event["before"])
-            or not ppu_snapshot_in_physical_vblank(event["after"])
-        )
-    ]
-    if outside_vblank:
+    if expected_attribute_writes is None or attribute_writes != expected_attribute_writes:
         violations.append(
-            f"{len(outside_vblank)} PPUDATA writes occurred outside VBlank."
+            f"Column commit wrote {attribute_writes} attributes instead of descriptor count "
+            f"{expected_attribute_writes}."
         )
 
     ppuaddr_pairs: list[dict[str, object]] = []
-    if vertical_control is not None and horizontal_control is not None:
+    if horizontal_control is not None:
+        tile_phase_start = (
+            vertical_control + 1 if vertical_control is not None else horizontal_control
+        )
         tile_phase = [
             event
-            for event in events[vertical_control + 1 : horizontal_control]
+            for event in events[tile_phase_start:horizontal_control]
             if address(event) in (0x2006, 0x2007)
         ]
         cursor = 0
@@ -2543,8 +2891,9 @@ def validate_ppu_commit_trace(
 
     expected_tile_addresses: list[int] = []
     expected_attribute_addresses: list[int] = []
+    expected_tile_values: list[int] = []
+    expected_attribute_values: list[int] = []
     expected_commit_target: int | None = None
-    descriptor = before_state.get("commit_descriptor")
     if not isinstance(descriptor, dict):
         violations.append("Focal runtime state omitted the commit descriptor.")
     else:
@@ -2557,11 +2906,11 @@ def validate_ppu_commit_trace(
             commit_axis != 1
             or commit_direction not in (1, 2)
             or not 0 <= commit_target < 64
-            or commit_payload_length != 32
+            or not 1 <= commit_payload_length <= 32
             or not 0 <= commit_target_start < 60
         ):
             violations.append(
-                "Focal runtime commit descriptor is not one valid 32-row column."
+                "Focal runtime commit descriptor is not one valid bounded column."
             )
         else:
             requested_tile_column = int(before_state["requested_camera_x"]) // 8
@@ -2574,7 +2923,10 @@ def validate_ppu_commit_trace(
                 )
             horizontal_table = expected_commit_target // 32
             tile_column = expected_commit_target % 32
-            for index in range(commit_payload_length):
+            for index in range(
+                expected_tile_start,
+                expected_tile_start + (expected_tile_writes or 0),
+            ):
                 tile_row = (commit_target_start + index) % 60
                 vertical_table = tile_row // 30
                 local_row = tile_row % 30
@@ -2585,8 +2937,11 @@ def validate_ppu_commit_trace(
                     + local_row * 32
                     + tile_column
                 )
-            for index in range(8):
-                tile_row = (commit_target_start + index * 4) % 60
+            for index in range(
+                expected_attribute_start,
+                expected_attribute_start + (expected_attribute_writes or 0),
+            ):
+                tile_row = ((commit_target_start & 0xFC) + index * 4) % 60
                 vertical_table = tile_row // 30
                 local_row = tile_row % 30
                 expected_attribute_addresses.append(
@@ -2597,26 +2952,59 @@ def validate_ppu_commit_trace(
                     + (local_row // 4) * 8
                     + tile_column // 4
                 )
+            selected_payload_slot = int(before_state.get("selected_slot", -1))
+            slot_payloads = before_state.get("slot_payloads")
+            if (
+                selected_payload_slot not in (0, 1)
+                or not isinstance(slot_payloads, list)
+                or len(slot_payloads) != 2
+                or len(slot_payloads[selected_payload_slot])
+                < 32 + expected_attribute_start + (expected_attribute_writes or 0)
+            ):
+                violations.append("Focal runtime state omitted the selected slot payload bytes.")
+            else:
+                selected_payload = slot_payloads[selected_payload_slot]
+                expected_tile_values = [
+                    int(item)
+                    for item in selected_payload[
+                        expected_tile_start : expected_tile_start
+                        + (expected_tile_writes or 0)
+                    ]
+                ]
+                expected_attribute_values = [
+                    int(item)
+                    for item in selected_payload[
+                        32 + expected_attribute_start : 32
+                        + expected_attribute_start
+                        + (expected_attribute_writes or 0)
+                    ]
+                ]
 
-    if tile_events:
-        actual_tile_addresses = [
-            snapshot_value(event, "before", "v") & 0x3FFF
-            for event in tile_events
-        ]
-        if actual_tile_addresses != expected_tile_addresses:
-            violations.append(
-                "Tile PPUDATA targets do not match the focal runtime commit target."
-            )
+    actual_tile_addresses = [
+        snapshot_value(event, "before", "v") & 0x3FFF
+        for event in tile_events
+    ]
+    if actual_tile_addresses != expected_tile_addresses:
+        violations.append(
+            "Tile PPUDATA targets do not match the focal runtime commit target."
+        )
+    if [value(event) for event in tile_events] != expected_tile_values:
+        violations.append(
+            "Ordered tile PPUDATA bytes do not match the selected slot payload."
+        )
 
-        if attribute_events:
-            actual_attribute_addresses = [
-                snapshot_value(event, "before", "v") & 0x3FFF
-                for event in attribute_events
-            ]
-            if actual_attribute_addresses != expected_attribute_addresses:
-                violations.append(
-                    "Attribute PPUDATA targets do not follow the semantic attribute address sequence."
-                )
+    actual_attribute_addresses = [
+        snapshot_value(event, "before", "v") & 0x3FFF
+        for event in attribute_events
+    ]
+    if actual_attribute_addresses != expected_attribute_addresses:
+        violations.append(
+            "Attribute PPUDATA targets do not follow the semantic attribute address sequence."
+        )
+    if [value(event) for event in attribute_events] != expected_attribute_values:
+        violations.append(
+            "Ordered attribute PPUDATA bytes do not match the selected slot payload."
+        )
 
     vertical_controls = [
         index
@@ -2630,10 +3018,11 @@ def validate_ppu_commit_trace(
         violations.append("PPUCTRL=$84 was active outside vertical tile streaming.")
 
     write_span_cycles: int | None = None
-    if vertical_control is not None and (tile_events or attribute_events):
+    phase_control = vertical_control if vertical_control is not None else horizontal_control
+    if phase_control is not None and (tile_events or attribute_events):
         last_data = (attribute_events or tile_events)[-1]
         write_span_cycles = int(last_data["cpuCycle"]) - int(
-            events[vertical_control]["cpuCycle"]
+            events[phase_control]["cpuCycle"]
         )
         if write_span_cycles > max_cpu_cycles:
             violations.append(
@@ -2644,17 +3033,95 @@ def validate_ppu_commit_trace(
     after_commit = int(after_state["lifecycle"]["commit"])
     if after_commit != (before_commit + 1) & 0xFF:
         violations.append("Focal frame did not publish exactly one commit counter advance.")
+    before_release = int(before_state["lifecycle"]["release"])
+    after_release = int(after_state["lifecycle"]["release"])
+    if after_release != (before_release + 1) & 0xFF:
+        violations.append("Focal frame did not publish exactly one release counter advance.")
+    if any(
+        int(after_state["lifecycle"][name])
+        != int(before_state["lifecycle"][name])
+        for name in ("request", "prepare", "resident")
+    ):
+        violations.append(
+            "Request, prepare, or resident lifecycle counters changed during final publication."
+        )
+    if before_commit != before_release or after_commit != after_release:
+        violations.append("Commit and release lifecycle counters did not advance together.")
+
+    selected_slot = int(before_state.get("selected_slot", -1))
+    after_selected_slot = int(after_state.get("selected_slot", -1))
+    before_slots = before_state.get("slots")
+    after_slots = after_state.get("slots")
+    commit_axis = int(before_state.get("commit_descriptor", {}).get("axis", 0))
+    if (
+        selected_slot not in (0, 1)
+        or after_selected_slot != selected_slot
+        or not isinstance(before_slots, list)
+        or not isinstance(after_slots, list)
+        or len(before_slots) != 2
+        or len(after_slots) != 2
+    ):
+        violations.append("Selected slot metadata is missing or changed during the focal commit.")
+    else:
+        selected_before = before_slots[selected_slot]
+        selected_after = after_slots[selected_slot]
+        unselected_slot = 1 - selected_slot
+        if int(selected_before["state"]) not in (3, 4):
+            violations.append("Selected slot was neither Resident nor Committing before publication.")
+        if int(selected_after["state"]) != 5:
+            violations.append("Selected slot was not Released in the final publication phase.")
+        if before_slots[unselected_slot] != after_slots[unselected_slot]:
+            violations.append("Unselected slot metadata changed during the focal commit.")
+        before_phase = int(selected_before["commit_phase"])
+        after_phase = int(selected_after["commit_phase"])
+        before_cursor = int(selected_before["payload_cursor"])
+        after_cursor = int(selected_after["payload_cursor"])
+        if (
+            expected_before_phase is None
+            or expected_before_cursor is None
+            or expected_after_phase is None
+            or expected_after_cursor is None
+            or (before_phase, before_cursor)
+            != (expected_before_phase, expected_before_cursor)
+            or (after_phase, after_cursor)
+            != (expected_after_phase, expected_after_cursor)
+        ):
+            violations.append(
+                "Final publication phase/cursor did not match its exact scheduled write slice."
+            )
+        before_payloads = before_state.get("slot_payloads")
+        after_payloads = after_state.get("slot_payloads")
+        if before_payloads != after_payloads:
+            violations.append("Packed edge-slot payload bytes changed during publication.")
+
+    before_pending = int(before_state.get("pending_axes", 0))
+    after_pending = int(after_state.get("pending_axes", 0))
+    if commit_axis not in (1, 2) or before_pending & commit_axis == 0:
+        violations.append("Pending axis did not own the selected commit before publication.")
+    if commit_axis in (1, 2):
+        expected_after_pending = before_pending & (~commit_axis & 0xFF)
+        if after_pending != expected_after_pending:
+            violations.append(
+                "Pending axis clearing changed bits unrelated to the selected commit."
+            )
     writes = after_state["last_commit_writes"]
-    if int(writes["tiles"]) != 32 or int(writes["attributes"]) != 8:
-        violations.append("Runtime commit counters do not report exactly 32 tiles and 8 attributes.")
+    if (
+        expected_tile_writes is None
+        or expected_attribute_writes is None
+        or int(writes["tiles"]) != expected_tile_writes
+        or int(writes["attributes"]) != expected_attribute_writes
+    ):
+        violations.append(
+            "Runtime commit counters do not match the exact descriptor tile/attribute counts."
+        )
     forbidden = {
         key: (int(before_state["forbidden_commit_work"][key]), int(after_state["forbidden_commit_work"][key]))
         for key in ("bank", "directory", "decode")
     }
     if any(before or after for before, after in forbidden.values()):
         violations.append("WorldPack bank/directory/decode work occurred inside a commit.")
-    if int(after_state["critical_section"]) != 0:
-        violations.append("Commit critical section remained active after the focal frame.")
+    if int(before_state["critical_section"]) != 0 or int(after_state["critical_section"]) != 0:
+        violations.append("Commit critical section was active at a focal frame boundary.")
 
     return {
         "valid": not violations,
@@ -2670,7 +3137,13 @@ def validate_ppu_commit_trace(
         "expected_attribute_addresses": [
             f"0x{target:04X}" for target in expected_attribute_addresses
         ],
+        "expected_tile_values": expected_tile_values,
+        "expected_attribute_values": expected_attribute_values,
         "outside_vblank_writes": outside_vblank,
+        "oam_writes": len(oam_data_events),
+        "oam_contiguous": oam_contiguous,
+        "rendering_suppression_writes": len(rendering_suppression),
+        "rendering_boundaries_valid": rendering_boundaries_valid,
         "ppuaddr_pairs": decoded_pairs,
         "write_span_cycles": write_span_cycles,
         "max_cpu_cycles": max_cpu_cycles,
@@ -2876,14 +3349,80 @@ def consensus_visible_mismatches(
     return mismatches, repeated_runs
 
 
+def run_physical_gate(
+    args: argparse.Namespace,
+    rom: Path,
+    artifacts: Path,
+) -> int:
+    """Validate physical AprNes writes without invoking RGB/reference emulators."""
+
+    shutil.rmtree(artifacts, ignore_errors=True)
+    artifacts.mkdir(parents=True)
+    with tempfile.TemporaryDirectory(prefix="nfs-physical-", dir=artifacts) as temporary:
+        aprnes = capture_aprnes(
+            rom,
+            Path(temporary) / "aprnes",
+            args.idle_frames,
+            args.right_frames,
+            args.target_camera_x,
+            0,
+            0,
+            args.left_frames,
+            args.return_camera_x,
+            0,
+            args.jump_hold_frames,
+            shlex.split(args.mcp_command),
+        )
+        traces = aprnes["ppu_commit_traces"]
+        serialized_traces = save_ppu_commit_trace_artifacts(artifacts, traces)
+        complete = REQUIRED_FOCAL_TRACE_LABELS <= set(traces)
+        focal_traces_valid = complete and all(
+            report["validation"]["valid"] for report in traces.values()
+        )
+        observations_valid = all(
+            report["physical_valid"] for report in aprnes["observation_reports"]
+        )
+        valid = focal_traces_valid and observations_valid
+        summary = {
+            "gate": "physical",
+            "rom": str(rom),
+            "rom_sha256": sha256(rom),
+            "aprnes_server": aprnes["server"],
+            "aprnes_observation_reports": aprnes["observation_reports"],
+            "required_focal_traces": sorted(REQUIRED_FOCAL_TRACE_LABELS),
+            "ppu_commit_traces": serialized_traces,
+            "ppu_traces_complete": complete,
+            "ppu_traces_valid": focal_traces_valid,
+            "all_observed_physical_sequences_valid": observations_valid,
+            "verified": valid,
+        }
+    summary_path = artifacts / "summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(summary_path)
+    if not valid:
+        print(
+            "RED: AprNes physical OAM/PPU ordering, VBlank timing, or runtime "
+            "lifecycle evidence did not converge."
+        )
+        return 2
+    print(
+        "GREEN: all five AprNes focal traces preserved rendering and published "
+        "contiguous OAM plus exact PPU/lifecycle state inside physical VBlank."
+    )
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     activate_runtime_abi(NesRuntimeAbi.load(args.runtime_abi, args.rom))
     rom = args.rom.resolve()
-    fceumm_core = args.fceumm_core.resolve()
     artifacts = args.artifacts.resolve()
     if not rom.is_file():
         raise FileNotFoundError(rom)
+    if args.gate == "physical":
+        return run_physical_gate(args, rom, artifacts)
+
+    fceumm_core = args.fceumm_core.resolve()
     if not fceumm_core.is_file():
         raise FileNotFoundError(fceumm_core)
     if b"(SVN) 3a84a6f" not in fceumm_core.read_bytes():
@@ -2901,6 +3440,7 @@ def main() -> int:
         text=True,
     )
     summary: dict[str, object] = {
+        "gate": "full",
         "rom": str(rom),
         "rom_sha256": sha256(rom),
         "fceumm_core": str(fceumm_core),
@@ -2985,6 +3525,9 @@ def main() -> int:
             ppu_traces_valid = ppu_traces_complete and all(
                 trace["validation"]["valid"] for trace in ppu_commit_traces.values()
             )
+            all_observed_physical_sequences_valid = all(
+                report["physical_valid"] for report in aprnes["observation_reports"]
+            )
             commit_window_counts = {
                 emulator: int(report["count"])
                 for emulator, report in commit_windows.items()
@@ -2998,6 +3541,9 @@ def main() -> int:
             summary["ppu_commit_traces"] = serialized_ppu_commit_traces
             summary["ppu_traces_complete"] = ppu_traces_complete
             summary["ppu_traces_valid"] = ppu_traces_valid
+            summary["all_observed_physical_sequences_valid"] = (
+                all_observed_physical_sequences_valid
+            )
 
             initial = {
                 emulator: capture["checkpoints"]["initial"]
@@ -3300,6 +3846,7 @@ def main() -> int:
                 and commit_windows_complete
                 and transient_frames["verified"]
                 and ppu_traces_valid
+                and all_observed_physical_sequences_valid
             )
     finally:
         config_guard.verify_unchanged()
