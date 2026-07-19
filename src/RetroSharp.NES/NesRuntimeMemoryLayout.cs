@@ -251,6 +251,7 @@ internal static class NesRuntimeMemoryLayout
         internal const ushort RowPhase = 0x038A;
         internal const ushort CommitTargetStart = 0x038B;
         internal const ushort NextAxis = 0x038C;
+        internal const ushort SelectedMetadataOffset = 0x038D;
         internal const ushort FramePending = 0x038F;
         internal const ushort Slot0 = 0x0390;
         internal const ushort Slot1 = 0x03A0;
