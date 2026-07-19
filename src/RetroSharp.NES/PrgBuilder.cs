@@ -4,10 +4,11 @@ internal sealed class PrgBuilder
 {
     private readonly ushort baseAddress;
     private readonly List<byte> bytes = [];
-    private readonly Dictionary<string, int> labels = [];
+    private readonly Dictionary<string, LabelDefinition> labels = [];
     private readonly List<(int Offset, string Label, int Addend)> absoluteFixups = [];
     private readonly List<(int Offset, string Label, int Addend, bool High)> byteFixups = [];
     private readonly List<(int Offset, string Label)> relativeFixups = [];
+    private readonly List<JumpIfFixup> jumpIfFixups = [];
     private int nextLabelId;
 
     public PrgBuilder(ushort baseAddress = 0x8000)
@@ -15,11 +16,12 @@ internal sealed class PrgBuilder
         this.baseAddress = baseAddress;
     }
 
-    public int CurrentAddress => baseAddress + bytes.Count;
+    public int CurrentAddress => baseAddress + CreateBranchLayout().MapOffset(bytes.Count);
 
-    public void Label(string name) => labels[name] = bytes.Count;
+    public void Label(string name) => labels[name] = new LabelDefinition(bytes.Count, IsExternal: false);
 
-    public void DefineExternalLabel(string name, ushort address) => labels[name] = address - baseAddress;
+    public void DefineExternalLabel(string name, ushort address) =>
+        labels[name] = new LabelDefinition(address - baseAddress, IsExternal: true);
 
     public string CreateLabel(string prefix) => $"{prefix}_{nextLabelId++}";
 
@@ -32,16 +34,13 @@ internal sealed class PrgBuilder
             throw new InvalidOperationException($"NES PRG address ${address:X4} is below PRG ROM base ${baseAddress:X4}.");
         }
 
-        var targetOffset = address - baseAddress;
-        if (targetOffset < bytes.Count)
+        var currentAddress = CurrentAddress;
+        if (address < currentAddress)
         {
             throw new InvalidOperationException($"NES PRG address ${address:X4} has already been emitted.");
         }
 
-        while (bytes.Count < targetOffset)
-        {
-            bytes.Add(0);
-        }
+        bytes.AddRange(new byte[address - currentAddress]);
     }
 
     public void EmitLabelLowByte(string label, int addend = 0)
@@ -222,42 +221,80 @@ internal sealed class PrgBuilder
             0xF0 => 0xD0, // BEQ -> BNE
             _ => throw new ArgumentOutOfRangeException(nameof(branchOpcode), branchOpcode, "Unsupported 6502 condition branch."),
         };
-        Emit((byte)inverse, 0x03); // Skip the following absolute JMP when the condition is false.
-        JumpAbsolute(label);
+        var offset = bytes.Count;
+        Emit((byte)inverse, 0x03, 0x4C, 0x00, 0x00); // Skip the absolute JMP when the condition is false.
+        jumpIfFixups.Add(new JumpIfFixup(offset, branchOpcode, (byte)inverse, label));
     }
 
     public byte[] Build()
     {
+        var layout = CreateBranchLayout();
+        var output = new List<byte>(layout.MapOffset(bytes.Count));
+        for (var offset = 0; offset < bytes.Count; offset++)
+        {
+            if (!layout.IsRemoved(offset))
+            {
+                output.Add(bytes[offset]);
+            }
+        }
+
+        var result = output.ToArray();
         foreach (var fixup in byteFixups)
         {
-            var address = AddressOf(fixup.Label, fixup.Addend);
-            bytes[fixup.Offset] = (byte)(fixup.High ? address >> 8 : address & 0xFF);
+            var address = AddressOf(fixup.Label, layout, fixup.Addend);
+            result[layout.MapOffset(fixup.Offset)] = (byte)(fixup.High ? address >> 8 : address & 0xFF);
         }
 
         foreach (var fixup in absoluteFixups)
         {
-            var address = AddressOf(fixup.Label, fixup.Addend);
-            bytes[fixup.Offset] = (byte)(address & 0xFF);
-            bytes[fixup.Offset + 1] = (byte)(address >> 8);
+            var address = AddressOf(fixup.Label, layout, fixup.Addend);
+            var offset = layout.MapOffset(fixup.Offset);
+            result[offset] = (byte)(address & 0xFF);
+            result[offset + 1] = (byte)(address >> 8);
         }
 
         foreach (var fixup in relativeFixups)
         {
-            var target = AddressOf(fixup.Label);
-            var branchFrom = baseAddress + fixup.Offset + 1;
+            var target = AddressOf(fixup.Label, layout);
+            var offset = layout.MapOffset(fixup.Offset);
+            var branchFrom = baseAddress + offset + 1;
             var delta = target - branchFrom;
             if (delta is < -128 or > 127)
             {
                 throw new BranchOutOfRangeException(fixup.Label, delta);
             }
 
-            bytes[fixup.Offset] = unchecked((byte)(sbyte)delta);
+            result[offset] = unchecked((byte)(sbyte)delta);
         }
 
-        return bytes.ToArray();
+        for (var index = 0; index < jumpIfFixups.Count; index++)
+        {
+            var fixup = jumpIfFixups[index];
+            var offset = layout.MapOffset(fixup.Offset);
+            var target = AddressOf(fixup.Label, layout);
+            if (layout.IsRelaxed(index))
+            {
+                var delta = target - (baseAddress + offset + 2);
+                result[offset] = fixup.BranchOpcode;
+                result[offset + 1] = unchecked((byte)(sbyte)delta);
+                continue;
+            }
+
+            result[offset] = fixup.InverseOpcode;
+            result[offset + 1] = 0x03;
+            result[offset + 2] = 0x4C;
+            result[offset + 3] = (byte)(target & 0xFF);
+            result[offset + 4] = (byte)(target >> 8);
+        }
+
+        return result;
     }
 
-    public ushort AddressOfLabel(string label) => checked((ushort)AddressOf(label));
+    public ushort AddressOfLabel(string label)
+    {
+        var layout = CreateBranchLayout();
+        return checked((ushort)AddressOf(label, layout));
+    }
 
     private static byte CheckedByte(int value)
     {
@@ -273,13 +310,109 @@ internal sealed class PrgBuilder
 
     private static byte High(ushort value) => (byte)(value >> 8);
 
-    private int AddressOf(string label, int addend = 0)
+    private BranchLayout CreateBranchLayout()
     {
-        if (!labels.TryGetValue(label, out var offset))
+        var relaxed = new bool[jumpIfFixups.Count];
+        // Start with every conditional jump in its always-safe long form. Shortening an internal
+        // jump can only move its source and target closer together, so the monotone fixed point is
+        // deterministic even when one relaxation enables another in a later iteration.
+        while (true)
+        {
+            List<int>? newlyRelaxed = null;
+            for (var index = 0; index < jumpIfFixups.Count; index++)
+            {
+                if (relaxed[index])
+                {
+                    continue;
+                }
+
+                var fixup = jumpIfFixups[index];
+                // A fixed external address does not move with this builder's layout, so keep the
+                // conservative long form when earlier relaxations could move the branch source.
+                if (!labels.TryGetValue(fixup.Label, out var targetLabel) || targetLabel.IsExternal)
+                {
+                    continue;
+                }
+
+                var target = baseAddress + MapOffset(targetLabel.Offset, relaxed, index);
+                var branchFrom = baseAddress + MapOffset(fixup.Offset, relaxed, index) + 2;
+                var delta = target - branchFrom;
+                if (delta is >= -128 and <= 127)
+                {
+                    (newlyRelaxed ??= []).Add(index);
+                }
+            }
+
+            if (newlyRelaxed is null)
+            {
+                return new BranchLayout(jumpIfFixups, relaxed);
+            }
+
+            foreach (var index in newlyRelaxed)
+            {
+                relaxed[index] = true;
+            }
+        }
+    }
+
+    private int AddressOf(string label, BranchLayout layout, int addend = 0)
+    {
+        if (!labels.TryGetValue(label, out var definition))
         {
             throw new InvalidOperationException($"Unknown NES PRG label '{label}'.");
         }
 
+        var offset = definition.IsExternal ? definition.Offset : layout.MapOffset(definition.Offset);
         return baseAddress + offset + addend;
+    }
+
+    private int MapOffset(int offset, IReadOnlyList<bool> relaxed, int candidate)
+    {
+        var removed = 0;
+        for (var index = 0; index < jumpIfFixups.Count; index++)
+        {
+            if (relaxed[index] || index == candidate)
+            {
+                removed += Math.Clamp(offset - (jumpIfFixups[index].Offset + 2), 0, 3);
+            }
+        }
+
+        return offset - removed;
+    }
+
+    private readonly record struct LabelDefinition(int Offset, bool IsExternal);
+
+    private readonly record struct JumpIfFixup(int Offset, byte BranchOpcode, byte InverseOpcode, string Label);
+
+    private sealed class BranchLayout(IReadOnlyList<JumpIfFixup> fixups, IReadOnlyList<bool> relaxed)
+    {
+        public bool IsRelaxed(int index) => relaxed[index];
+
+        public bool IsRemoved(int offset)
+        {
+            for (var index = 0; index < fixups.Count; index++)
+            {
+                if (relaxed[index] && offset >= fixups[index].Offset + 2 && offset < fixups[index].Offset + 5)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        public int MapOffset(int offset)
+        {
+            var removed = 0;
+            for (var index = 0; index < fixups.Count; index++)
+            {
+                if (relaxed[index])
+                {
+                    removed += Math.Clamp(offset - (fixups[index].Offset + 2), 0, 3);
+                }
+            }
+
+            return offset - removed;
+        }
     }
 }
