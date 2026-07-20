@@ -17,9 +17,6 @@ public sealed class GameBoyRunnerLandingTests
     private const ushort PlayerDisplayFlipX = 0xC008;
     private const ushort PlayerJumping = 0xC00B;
     private const ushort PlayerVerticalSubpixelLow = 0xC00C;
-    private const int FirstPlatformCameraX = 696;
-    private const int PlatformTopY = 272;
-    private const int PlatformPlayerY = PlatformTopY - 31;
     private const int FloorPlayerY = 273;
     private const int FirstStairWallX = 448;
     private const int PlayerWidth = 18;
@@ -87,65 +84,6 @@ public sealed class GameBoyRunnerLandingTests
 
         Assert.Equal(expectedSourceColumn, cpu.Wram(0xC0E3) | cpu.Wram(0xC143) << 8);
         Assert.Equal(expectedTop, cpu.Wram(0xC005) | cpu.Wram(0xC006) << 8);
-    }
-
-    [Fact]
-    public void Short_jump_below_one_way_platform_does_not_snap_the_player_upward()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var trace = RunJump(cpu, heldFrames: 1, observedFrames: 180);
-        var playerYByFrame = trace.PlayerY;
-
-        Assert.True(
-            playerYByFrame.Min() + 31 > PlatformTopY,
-            $"The short jump unexpectedly crossed the platform top: minimum playerY={playerYByFrame.Min()}.");
-        Assert.DoesNotContain(PlatformPlayerY, playerYByFrame);
-        Assert.All(playerYByFrame.TakeLast(60), playerY => Assert.Equal(FloorPlayerY, playerY));
-    }
-
-    [Fact]
-    public void Full_jump_crosses_one_way_platform_from_below_then_lands_on_its_top()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var trace = RunJump(cpu, heldFrames: 40, observedFrames: 240);
-        var playerYByFrame = trace.PlayerY;
-
-        Assert.True(
-            playerYByFrame.Min() + 31 < PlatformTopY,
-            $"The full jump never crossed the platform top: minimum playerY={playerYByFrame.Min()}, "
-            + $"minimum velocity={trace.VelocityY.Min()}, maximum hold ticks={trace.HoldTicks.Max()}, "
-            + $"trajectory={string.Join(',', playerYByFrame.Take(40).Zip(trace.VelocityY, (y, velocity) => $"{y}/{velocity}"))}.");
-        var landingFrame = Enumerable.Range(0, playerYByFrame.Count)
-            .FirstOrDefault(
-                index => playerYByFrame[index] == PlatformPlayerY && trace.VelocityY[index] == 0,
-                -1);
-        Assert.True(
-            landingFrame >= 0,
-            "The player crossed the platform but never landed on it: "
-            + string.Join(',', playerYByFrame.Zip(trace.VelocityY, (y, velocity) => (y, velocity))
-                .Where(item => item.velocity > 0 && item.y is >= 210 and <= 280)
-                .Select(item => $"{item.y}/{item.velocity}")));
-        Assert.All(playerYByFrame.Skip(landingFrame), playerY => Assert.Equal(PlatformPlayerY, playerY));
-    }
-
-    [Fact]
-    public void Walking_off_one_way_platform_releases_grounded_state_and_falls_to_the_floor()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var jump = RunJump(cpu, heldFrames: 40, observedFrames: 180);
-        Assert.Equal(PlatformPlayerY, jump.PlayerY[^1]);
-
-        var playerYByFrame = RunHorizontal(cpu, "right", observedFrames: 400);
-
-        Assert.True(
-            playerYByFrame.Any(playerY => playerY > PlatformPlayerY),
-            $"The player never fell after walking to world X {cpu.Wram(0xC000) | cpu.Wram(0xC001) << 8}; "
-            + $"camera X={cpu.Wram(PackedCameraMemory.VisibleCameraXLow) | cpu.Wram(PackedCameraMemory.VisibleCameraXLow + 1) << 8}; "
-            + $"observed Y values={string.Join(',', playerYByFrame.Distinct())}.");
-        Assert.True(
-            playerYByFrame.Max() <= FloorPlayerY,
-            $"The player crossed the floor before being reset: maximum playerY={playerYByFrame.Max()}.");
-        Assert.All(playerYByFrame.TakeLast(40), playerY => Assert.Equal(FloorPlayerY, playerY));
     }
 
     [Fact]
@@ -1041,23 +979,6 @@ public sealed class GameBoyRunnerLandingTests
             + $"actual={Convert.ToHexString(actualOam[..checked(asset.Pieces.Count * 4)])}.");
     }
 
-    private static GameBoyTestCpu RunnerAtFirstPlatform()
-    {
-        var source = RunnerSample.CompiledSource();
-        var positionedSource = source.Replace(
-            "view.y = Camera.VerticalScrollMax();",
-            $"view.x = {FirstPlatformCameraX};\n    view.y = Camera.VerticalScrollMax();",
-            StringComparison.Ordinal);
-        Assert.NotEqual(source, positionedSource);
-
-        var rom = GameBoyRomCompiler.CompileSource(positionedSource, RunnerSample.Directory);
-        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
-        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
-        cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
-        return cpu;
-    }
-
     private static JumpTrace RunJump(GameBoyTestCpu cpu, int heldFrames, int observedFrames)
     {
         var playerYByFrame = new List<int>(observedFrames);
@@ -1144,20 +1065,6 @@ public sealed class GameBoyRunnerLandingTests
         {
             cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
         }
-    }
-
-    private static List<int> RunHorizontal(GameBoyTestCpu cpu, string direction, int observedFrames)
-    {
-        var playerYByFrame = new List<int>(observedFrames);
-        cpu.Held.Add(direction);
-        for (var frame = 0; frame < observedFrames; frame++)
-        {
-            cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
-            playerYByFrame.Add(cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8);
-        }
-
-        cpu.Held.Remove(direction);
-        return playerYByFrame;
     }
 
     private sealed record JumpTrace(

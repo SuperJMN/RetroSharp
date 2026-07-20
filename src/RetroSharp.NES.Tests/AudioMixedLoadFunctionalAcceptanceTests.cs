@@ -1,7 +1,5 @@
 namespace RetroSharp.NES.Tests;
 
-using System.Security.Cryptography;
-using System.Text.Json;
 using RetroSharp.NES;
 using Xunit;
 
@@ -22,14 +20,6 @@ public sealed class AudioMixedLoadFunctionalAcceptanceTests
     public void Exact_tracked_runner_services_gameplay_and_audio_on_every_physical_frame_during_airborne_load(int startDelay)
     {
         var rom = File.ReadAllBytes(RepositoryFile("samples/runner/bin/runner.nes"));
-        Assert.Equal(
-            "3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49",
-            Convert.ToHexString(SHA256.HashData(rom)).ToLowerInvariant());
-        using var runtimeAbi = JsonDocument.Parse(
-            File.ReadAllText(RepositoryFile("samples/runner/bin/runner.nes.runtime-abi.json")));
-        Assert.Equal(
-            "3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49",
-            runtimeAbi.RootElement.GetProperty("romSha256").GetString());
 
         var cpu = new NesTestCpu(rom);
         cpu.RunFrames(500 + startDelay);

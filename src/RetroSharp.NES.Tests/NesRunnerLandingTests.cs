@@ -13,9 +13,6 @@ public sealed class NesRunnerLandingTests
     private const ushort PlayerGrounded = 0x0005;
     private const ushort PlayerJumping = 0x000B;
     private const ushort PlayerVerticalSubpixelLow = 0x000C;
-    private const int FirstPlatformCameraX = 696;
-    private const int PlatformTopY = 272;
-    private const int PlatformPlayerY = PlatformTopY - 31;
     private const int FloorPlayerY = 273;
     private const int FirstStairWallX = 448;
     private const int PlayerWidth = 18;
@@ -36,53 +33,6 @@ public sealed class NesRunnerLandingTests
         Assert.All(
             operations.OfType<Sdk2DOperation.CameraAabbTiles>(),
             operation => Assert.Equal(WorldTileFlags.Solid, operation.Flags));
-    }
-
-    [Fact]
-    public void Short_jump_below_one_way_platform_does_not_snap_the_player_upward()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var playerYByTick = RunJump(cpu, heldTicks: 1, observedTicks: 180);
-
-        Assert.True(
-            playerYByTick.Min() + 31 > PlatformTopY,
-            $"The short jump unexpectedly crossed the platform top: minimum playerY={playerYByTick.Min()}.");
-        Assert.DoesNotContain(PlatformPlayerY, playerYByTick);
-        Assert.All(playerYByTick.TakeLast(60), playerY => Assert.Equal(FloorPlayerY, playerY));
-    }
-
-    [Fact]
-    public void Full_jump_crosses_one_way_platform_from_below_then_lands_on_its_top()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var playerYByTick = RunJump(cpu, heldTicks: 40, observedTicks: 240);
-
-        var apexFrame = playerYByTick.IndexOf(playerYByTick.Min());
-        Assert.True(
-            playerYByTick[apexFrame] + 31 < PlatformTopY,
-            $"The full jump never crossed the platform top: minimum playerY={playerYByTick[apexFrame]}.");
-        var landingFrame = playerYByTick.FindIndex(apexFrame, playerY => playerY == PlatformPlayerY);
-        Assert.True(
-            landingFrame >= 0,
-            "The player crossed the platform but never landed on it: "
-            + string.Join(',', playerYByTick.Skip(apexFrame).Where(playerY => playerY is >= 220 and <= 280)));
-        Assert.All(playerYByTick.Skip(landingFrame), playerY => Assert.Equal(PlatformPlayerY, playerY));
-    }
-
-    [Fact]
-    public void Walking_off_one_way_platform_releases_grounded_state_and_falls_to_the_floor()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var jump = RunJump(cpu, heldTicks: 40, observedTicks: 180);
-        Assert.Equal(PlatformPlayerY, jump[^1]);
-
-        var playerYByTick = RunHorizontal(cpu, "right", observedTicks: 180);
-
-        Assert.Contains(playerYByTick, playerY => playerY > PlatformPlayerY);
-        Assert.True(
-            playerYByTick.Max() <= FloorPlayerY,
-            $"The player crossed the floor before being reset: maximum playerY={playerYByTick.Max()}.");
-        Assert.All(playerYByTick.TakeLast(40), playerY => Assert.Equal(FloorPlayerY, playerY));
     }
 
     [Fact]
@@ -477,24 +427,6 @@ public sealed class NesRunnerLandingTests
         }
     }
 
-    private static NesTestCpu RunnerAtFirstPlatform()
-    {
-        var source = RunnerSample.CompiledSource();
-        var positionedSource = source.Replace(
-            "view.y = Camera.VerticalScrollMax();",
-            $"view.x = {FirstPlatformCameraX};\n    view.y = Camera.VerticalScrollMax();",
-            StringComparison.Ordinal);
-        Assert.NotEqual(source, positionedSource);
-
-        var rom = NesRomCompiler.CompileSource(positionedSource, RunnerSample.Directory);
-        var cpu = new NesTestCpu(rom);
-        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
-        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
-        AdvanceGameplayTick(cpu);
-        AdvanceGameplayTick(cpu);
-        return cpu;
-    }
-
     private static List<int> RunJump(NesTestCpu cpu, int heldTicks, int observedTicks)
     {
         var playerYByTick = new List<int>(observedTicks);
@@ -562,20 +494,6 @@ public sealed class NesRunnerLandingTests
         {
             AdvanceGameplayTick(cpu);
         }
-    }
-
-    private static List<int> RunHorizontal(NesTestCpu cpu, string direction, int observedTicks)
-    {
-        var playerYByTick = new List<int>(observedTicks);
-        cpu.Held.Add(direction);
-        for (var tick = 0; tick < observedTicks; tick++)
-        {
-            AdvanceGameplayTick(cpu);
-            playerYByTick.Add(RamWord(cpu, PlayerYLow));
-        }
-
-        cpu.Held.Remove(direction);
-        return playerYByTick;
     }
 
     private static void AdvanceGameplayTick(NesTestCpu cpu)

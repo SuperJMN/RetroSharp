@@ -18,8 +18,8 @@ and packed-camera details.
 | `audio-mixed-load.gb` | `adcef49366405e81912c1de028809662de497e97c2fd630ab11ecf5595dbe1ef` |
 | `audio-mixed-load.nes` | `2c70f5e910916f2541ece692528064c653801ec90c31c1f24d33cae5a1725d17` |
 | NES runtime ABI sidecar | `99e9d062b99b3bfd7a5299af8ed6a22ee1988567e94dbdc91fcf734bcdc77668` |
-| exact tracked `runner.nes` | `3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49` |
-| runner NES runtime ABI sidecar | `39d8603c73304963ba7636fb631c7cf6b5105f9c85ba2ab398c9539f342dc5e6` |
+| exact tracked `runner.nes` | `26ab400141da8bfd8b502f5272463e5fd0236d170ba17901526f41b064f0d727` |
+| runner NES runtime ABI sidecar | `f34132e5e5a4881fbfa2249f4611d316b8b9e56518d20aab0bb0e1318a35ea47` |
 
 The canary carries BGM, two independently completed SFX starts, two airborne
 arcs, periodic packed collision probes, two moving metasprites, a packed
