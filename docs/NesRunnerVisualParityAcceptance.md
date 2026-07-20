@@ -3,6 +3,12 @@
 Status: accepted evidence for issue #327.
 Captured: 2026-07-13.
 
+Policy update (2026-07-20): this multi-emulator differential harness is now an
+optional diagnostic smoke check, not a mandated acceptance gate. The product
+gate is in-process gameplay simulation. See the Acceptance Policy in `AGENTS.md`.
+Run a single emulator for a visual sanity pass when useful, and do not block work
+on FCEUmm, Nestopia, or RetroArch byte or raster parity.
+
 This checkpoint exercises the exact tracked `samples/runner/bin/runner.nes`
 through the complete `stage1.tmj` WorldPack. It is a differential runtime
 acceptance, not a screenshot heuristic: it compares CPU lifecycle state, all

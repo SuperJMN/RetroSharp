@@ -52,6 +52,15 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 - Keep transitional APIs working until the roadmap explicitly removes them.
 - Prefer zero-cost ergonomics. Restricted classes, receiver methods, SDK dot calls, `let`, helper calls, and other high-level source forms are acceptable only when they lower to static data, direct calls, direct branches, fixed storage, or constants. Do not introduce heap allocation, GC, RTTI, boxing, delegates, closures, virtual dispatch, or hidden object identity.
 
+## Acceptance Policy
+
+Acceptance is judged by observable gameplay fluidity, not by byte-for-byte output. What matters is that the game plays well.
+
+- The product gate is in-process behavioral simulation (`NesTestCpu` and `GameBoyTestCpu`): movement, jumps, landing, camera follow, collisions, audio cadence, deterministic execution, and absence of sustained backlog. Validate behavior on the freshly compiled ROM, not on a committed golden.
+- ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.
+- Tracked sample ROMs are regeneratable artifacts. Regenerate them when the sample source changes. Their exact bytes are not a product requirement, so do not block work to preserve a specific hash.
+- Cross-emulator visual parity (`tools/nes/verify_runner_visual_parity.py`) is an optional single-emulator smoke check, not a mandated gate. Do not block work on FCEUmm, Nestopia, or RetroArch byte or raster parity.
+
 ## Reliable Commands
 
 Run from the repository root.
