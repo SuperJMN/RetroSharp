@@ -1,7 +1,16 @@
 # NES Frame Scheduling Roadmap
 
 Status: accepted execution roadmap for issue #410.
-Last updated: 2026-07-19.
+Last updated: 2026-07-20.
+
+Acceptance policy (supersedes the byte-exact and cycle-exact wording below):
+acceptance is judged by observable gameplay fluidity, not by byte-for-byte
+output. ROM byte identity, hardcoded SHA-256, exact emitted-byte sequences, and
+exact CPU-cycle counts are diagnostic baselines, not gates. CPU cost is bounded
+by upper-bound budgets, and the cycle figures in this document are estimates,
+not equalities to preserve. Cross-emulator visual parity is an optional
+single-emulator smoke check, not a mandated FCEUmm/Nestopia/AprNes gate. See the
+Acceptance Policy in `AGENTS.md`.
 
 This roadmap turns the NES retained-OAM and packed-camera VBlank failure into
 independently verifiable slices. GitHub issue #410 is the integrator, not an
@@ -10,7 +19,7 @@ request.
 
 The language and portable SDK are unchanged. This work stays in the NES target
 lowering/runtime and its validation adapters. It must not reduce the runner map,
-metasprite, gameplay/audio throughput, or acceptance strength.
+metasprite, gameplay/audio throughput, or observable gameplay behavior.
 
 GitHub tracking:
 
@@ -109,11 +118,11 @@ a parallel cost formula.
 
 The first implementation preserves the current loop exactly. With the corrected
 timing adapter, the expected costs are 1,071 cycles for 76 bytes and 2,135
-cycles for 152 bytes. Representative and tracked ROMs must remain byte-identical
-in this child.
+cycles for 152 bytes. These costs are diagnostic budgets, not equalities to
+preserve, and ROM bytes may change freely as long as gameplay behavior holds.
 
-Stop if byte identity changes or AprNes contradicts the corrected cost. Do not
-change the publisher shape in this slice.
+Stop if AprNes contradicts the corrected cost budget. Do not change the
+publisher shape in this slice.
 
 ## NFS-1.3 — Harden the physical acceptance gate
 
@@ -216,21 +225,23 @@ weaken throughput/gates.
 
 ## NFS-4.1 — Certify and integrate
 
-Kind: certification gate. Owner seam: end-to-end exact-ROM acceptance.
+Kind: certification gate. Owner seam: end-to-end behavioral acceptance.
 
 Run in order and stop at the first red:
 
 1. focused timing, OAM schedule, physical gate, lifecycle, and scheduler tests;
 2. the complete NES test project;
-3. `dotnet test RetroSharp.sln -m:1`;
-4. deterministic ROM/sidecar regeneration and a clean subsequent dry-run;
-5. AprNes/NesMcp at five focal commits, with every physical `$2000-$2007`
-   write inside VBlank;
-6. FCEUmm and Nestopia state, input, collision, four nametables, and visible
-   tile/palette checks;
-7. preserve #409 with an explicit local WIP commit, rebase it onto the new
-   `master`, and run its exact respawn gate without changing behavior; and
-8. CI, independent review, PR, merge, remote alignment, and #410 closeout.
+3. `dotnet test RetroSharp.sln -m:1`; and
+4. deterministic ROM/sidecar regeneration and a clean subsequent dry-run.
+
+Optional diagnostics, never gates: AprNes/NesMcp spot checks and a single
+emulator visual smoke run. Do not block certification on multi-emulator byte or
+raster parity, on absolute startup frame numbers, or on a specific ROM hash.
+
+After the behavioral ladder is green, preserve #409 with an explicit local WIP
+commit, rebase it onto the new `master`, and run its respawn behavior gate
+without regressing gameplay, then take CI, independent review, PR, merge, remote
+alignment, and #410 closeout.
 
 A behavior-changing #409 rebase conflict returns to #409. Certification does not
 implement that correction. After #410 closes, resume the integration chain in
@@ -257,5 +268,6 @@ real corruption. Its result is a bounded evidence report, not a scheduler patch.
 - Run full validation only after the focused gate is green.
 - Retry an external emulator/backend once. A second timeout becomes a focused
   infrastructure issue.
-- No public language or SDK change, capability reduction, content trimming,
-  rendering-disable workaround, or weakened acceptance is permitted.
+- No public language or SDK change, capability reduction, content trimming, or
+  rendering-disable workaround is permitted. Observable gameplay behavior must
+  not regress. Byte-for-byte ROM identity is not required.

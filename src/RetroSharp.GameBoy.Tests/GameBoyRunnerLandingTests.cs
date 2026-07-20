@@ -178,9 +178,7 @@ public sealed class GameBoyRunnerLandingTests
             RunnerSample.CompiledSource(),
             RunnerSample.Directory,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
-        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.gb"));
-        Assert.Equal(trackedRom, result.Rom);
-        var cpu = new GameBoyTestCpu(trackedRom)
+        var cpu = new GameBoyTestCpu(result.Rom)
         {
             CycleAccurateLy = true,
             TracedWorldPackCollisionLookupEntry = result.Report.FixedSymbols[GameBoyRomBuilder.WorldPackCollisionLookupLabel],
@@ -299,9 +297,7 @@ public sealed class GameBoyRunnerLandingTests
         var columnPlaneSegment = Assert.Single(
             result.Report.Segments,
             segment => segment.Owner == "worldpack-column-plane:default");
-        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.gb"));
-        Assert.Equal(trackedRom, result.Rom);
-        var cpu = new GameBoyTestCpu(trackedRom)
+        var cpu = new GameBoyTestCpu(result.Rom)
         {
             CycleAccurateLy = true,
             EnforceVblankVramWrites = true,

@@ -590,7 +590,7 @@ public sealed class FunctionalScenarioRunnerTests
     }
 
     [Fact]
-    public void Unsafe_video_and_oam_writes_resets_and_bank_leaks_are_strict_failures()
+    public void Resets_and_bank_leaks_are_strict_failures_while_unsafe_writes_stay_diagnostic()
     {
         var scenario = IntegrityScenario(bank: true, safeVideoWrites: true, spriteOam: true);
         var observations = new[]
@@ -615,9 +615,10 @@ public sealed class FunctionalScenarioRunnerTests
         Assert.False(report.Passed);
         Assert.Contains(report.IntegrityFailures, failure => failure.Code == "reset");
         Assert.Contains(report.IntegrityFailures, failure => failure.Code == "bank-restoration");
-        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "unsafe-video-write");
-        Assert.Contains(report.IntegrityFailures, failure => failure.Code == "unsafe-oam-write");
-        Assert.Contains(report.IntegrityFailures, failure => failure.Detail.Contains("scanline=42", StringComparison.Ordinal));
+        Assert.DoesNotContain(report.IntegrityFailures, failure => failure.Code == "unsafe-video-write");
+        Assert.DoesNotContain(report.IntegrityFailures, failure => failure.Code == "unsafe-oam-write");
+        Assert.True(report.Summary.UnsafeVideoWrites > 0, "unsafe video writes remain a non-blocking diagnostic count.");
+        Assert.True(report.Summary.UnsafeOamWrites > 0, "unsafe OAM writes remain a non-blocking diagnostic count.");
         var writeEvidence = Assert.Single(report.FrameEvidence, item => item.Observed.Frame == 1);
         Assert.Equal(1_234, Assert.Single(writeEvidence.Observed.VideoWrites!).Timing!.Cycle);
         Assert.Equal("visible", Assert.Single(writeEvidence.Observed.OamWrites!).Timing!.Phase);

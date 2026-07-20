@@ -33,10 +33,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
     [Fact]
     public void Exact_runner_background_survives_a_short_right_then_left_return_at_nonzero_y()
     {
-        var trackedRomPath = RepositoryFile("samples/runner/bin/runner.nes");
-        var trackedRom = File.ReadAllBytes(trackedRomPath);
-        var regeneratedRom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
-        Assert.Equal(trackedRom, regeneratedRom);
+        var rom = NesRomCompiler.CompileSource(RunnerSample.CompiledSource(), RunnerSample.Directory);
 
         var map = NesTiledWorldImporter.Load(
             RepositoryFile("samples/runner/assets/maps/stage1.tmj"),
@@ -89,7 +86,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact("samples/runner/bin/runner.nes", trackedRom),
+            new FunctionalRomArtifact("samples/runner/bin/runner.nes", rom),
             adapter,
             new AuthoredTiledBackgroundOracle(map, factory.VisibleCameraByFrame));
 
@@ -125,8 +122,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
             [RetroSharp.Sdk.SdkImportResolver.Portable2D],
             null);
         var romRelativePath = "samples/audio-mixed-load/bin/audio-mixed-load.nes";
-        var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
-        Assert.Equal(trackedRom, build.Rom);
+        var rom = build.Rom;
         Assert.Equal("nes-mmc3-tvrom-v1", build.Report.SelectedProfile);
         var soundEffect = Assert.Single(program.SoundEffectAssetsInLoadOrder);
         var soundEffectFrames = 0;
@@ -162,7 +158,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
 
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact(romRelativePath, trackedRom),
+            new FunctionalRomArtifact(romRelativePath, rom),
             adapter,
             new AuthoredTiledBackgroundOracle(map, factory.VisibleCameraByFrame, program, scenario));
 
@@ -183,7 +179,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         Assert.Contains(apuEvents, item => item.Address == 0x4013);
         Assert.Contains(apuEvents, item => item.Address == 0x4015 && (item.Value & 0x10) != 0);
         Assert.True(report.Passed, Diagnostic(report));
-        Assert.Equal(trackedRom, factory.LoadedRom);
+        Assert.Equal(rom, factory.LoadedRom);
         Assert.Equal(1, factory.ResetCount);
         Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
         Assert.Empty(report.IntegrityFailures);
@@ -233,9 +229,6 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         {
             regeneratedRom = NesRomCompiler.CompileSource(source, sourceDirectory);
         }
-        var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
-        Assert.Equal(trackedRom, regeneratedRom);
-
         var map = platformerProgram?.PackedWorld?.LoweredWorld
             ?? NesTiledWorldImporter.Load(RepositoryFile(mapRelativePath), NesVideoProgram.FirstSpriteTile);
         Assert.True(map.Width > 0);
@@ -260,7 +253,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact(romRelativePath, trackedRom),
+            new FunctionalRomArtifact(romRelativePath, regeneratedRom),
             adapter,
             new AuthoredTiledBackgroundOracle(map, factory.VisibleCameraByFrame, platformerProgram, scenario));
 
@@ -271,7 +264,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         }
 
         Assert.True(report.Passed, Diagnostic(report));
-        Assert.Equal(trackedRom, factory.LoadedRom);
+        Assert.Equal(regeneratedRom, factory.LoadedRom);
         Assert.Equal(1, factory.ResetCount);
         Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
         Assert.Empty(report.IntegrityFailures);

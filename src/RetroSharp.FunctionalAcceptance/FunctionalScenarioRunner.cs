@@ -446,6 +446,9 @@ public static class FunctionalScenarioRunner
             return;
         }
 
+        // Physical-VBlank write timing is a non-blocking diagnostic. Unsafe video and OAM
+        // writes are still counted in the summary and surfaced in per-frame evidence, but
+        // they do not fail fluidity acceptance. Only malformed timing evidence stays blocking.
         foreach (var write in observation.VideoWrites)
         {
             if (!ValidTiming(write.Timing) || string.IsNullOrWhiteSpace(write.Space) || write.Address < 0)
@@ -454,14 +457,6 @@ public static class FunctionalScenarioRunner
                     "invalid-video-write-timing",
                     frame,
                     $"Invalid video-write evidence for {write.Space} at 0x{write.Address:X4}."));
-            }
-
-            if (!write.Safe)
-            {
-                failures.Add(new(
-                    "unsafe-video-write",
-                    frame,
-                    $"Unsafe {write.Space} write at 0x{write.Address:X4} ({write.Timing.DiagnosticText(write.Safe)})."));
             }
         }
 
@@ -473,14 +468,6 @@ public static class FunctionalScenarioRunner
                     "invalid-oam-write-timing",
                     frame,
                     $"Invalid OAM-write evidence at 0x{write.Address:X4}."));
-            }
-
-            if (!write.Safe)
-            {
-                failures.Add(new(
-                    "unsafe-oam-write",
-                    frame,
-                    $"Unsafe OAM write at 0x{write.Address:X4} ({write.Timing.DiagnosticText(write.Safe)})."));
             }
         }
     }

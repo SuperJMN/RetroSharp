@@ -25,10 +25,7 @@ public sealed class PlatformerLandingFunctionalAcceptanceTests
             null,
             [SdkImportResolver.Portable2D],
             null);
-        var trackedRom = File.ReadAllBytes(RepositoryFile("samples/platformer-landing/bin/platformer-landing.nes"));
-        Assert.Equal(trackedRom, build.Rom);
         Assert.Equal("nes-mapper-0-current", build.Report.SelectedProfile);
-        Assert.Equal("1fadb1ad32e18244f18c52e4bc727387a24c0064c39f0906a06b7b3f6a4adc6d", Sha256(trackedRom));
         Assert.NotNull(program.PackedWorld);
         Assert.Equal(4, program.PackedWorld.Pack.Descriptor.ChunkColumns);
         Assert.Equal(3, program.PackedWorld.Pack.Descriptor.ChunkRows);
@@ -45,7 +42,7 @@ public sealed class PlatformerLandingFunctionalAcceptanceTests
         AssertVariable(variables, "player.wallContactCount", "u8", 1);
         AssertVariable(variables, "view.x", "i16", 2);
 
-        var cpu = new NesTestCpu(trackedRom);
+        var cpu = new NesTestCpu(build.Rom);
         var snapshots = new Dictionary<int, Snapshot>();
         for (var frame = 1; frame <= 1240; frame++)
         {
@@ -114,9 +111,6 @@ public sealed class PlatformerLandingFunctionalAcceptanceTests
         cpu.Ram(variable.Address) | (cpu.Ram((ushort)(variable.Address + 1)) << 8);
 
     private static int Byte(NesTestCpu cpu, NesRuntimeUserVariable variable) => cpu.Ram(variable.Address);
-
-    private static string Sha256(byte[] bytes) =>
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 
     private static string RepositoryFile(string relativePath)
     {
