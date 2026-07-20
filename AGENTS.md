@@ -54,9 +54,10 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 
 ## Acceptance Policy
 
-Acceptance is judged by observable gameplay fluidity, not by byte-for-byte output. What matters is that the game plays well.
+The goal is a good in-game experience: smooth scrolling and movement, responsive controls, and music without stuttering. Acceptance is judged by that observable gameplay fluidity, not by byte-for-byte output. Aim to do it well, not perfectly. A ROM that plays well is correct even if its bytes move between builds.
 
 - The product gate is in-process behavioral simulation (`NesTestCpu` and `GameBoyTestCpu`): movement, jumps, landing, camera follow, collisions, audio cadence, deterministic execution, and absence of sustained backlog. Validate behavior on the freshly compiled ROM, not on a committed golden.
+- Prefer good over perfect. Fix real, observable problems such as stutter, input lag, torn or lagging scroll, audio dropouts, and sustained backlog. Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
 - ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.
 - Tracked sample ROMs are regeneratable artifacts. Regenerate them when the sample source changes. Their exact bytes are not a product requirement, so do not block work to preserve a specific hash.
 - Cross-emulator visual parity (`tools/nes/verify_runner_visual_parity.py`) is an optional single-emulator smoke check, not a mandated gate. Do not block work on FCEUmm, Nestopia, or RetroArch byte or raster parity.

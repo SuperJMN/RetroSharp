@@ -17,7 +17,7 @@ This document preserves project knowledge that previously lived only in agent me
   contract, and a deadline that disagrees with its emitted phases is rejected.
   Lowerer partials retain target byte mechanics only.
   Scheduler and architecture tests guard the seam; representative runner, audio-mixed-load,
-  and full hscroll NES outputs must remain byte-identical for architecture-only
+  and full hscroll NES outputs must preserve observable gameplay behavior for architecture-only
   changes.
 - RPH-5 / #406 restores the exact tracked Game Boy runner's sustained Right+B
   cadence over complete `stage1.tmj`: SHA-256
@@ -557,7 +557,7 @@ Operation-driven lowering pattern (already proven, replicate it):
   `SdkStorageLocation` (`Local`, recursive `Field`, or `IndexedElement`); targets convert that
   descriptor to their runtime local-map key only at the backend boundary. Do NOT add general
   expression tree cases such as `BinaryOp` to the IR.
-- Every step must keep tracked ROMs byte-identical and the full suite green.
+- Every step keeps the full suite green. Tracked ROMs are regeneratable artifacts, not byte-exact gates: regenerate them when behavior changes, and judge acceptance by observable gameplay (see the Acceptance Policy in `AGENTS.md`).
 
 Progress (2026-06-14):
 - Done: PL-A1 #107 (GB camera apply), PL-B1 #111 (NES lowerer wait/poll),

@@ -3,6 +3,8 @@
 Status: **accepted by GCP-0.2 / GitHub #389 and given an initial executable
 report projection by GCP-3.1 / GitHub #402 on 2026-07-17.**
 
+Acceptance policy: the CPU-work figures in this contract are diagnostic budgets and upper bounds, not byte-exact or cycle-exact gates. Acceptance is judged by observable gameplay fluidity. See the Acceptance Policy in `AGENTS.md`.
+
 This document fixes the v1 contract for classifying compiler-known CPU work on
 the Game Boy and NES targets. GCP-3.1 implements the first build-report
 projection of the model as `SdkCpuWorkReport`, attached to the internal Game
