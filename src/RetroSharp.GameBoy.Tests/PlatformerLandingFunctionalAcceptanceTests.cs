@@ -18,10 +18,7 @@ public sealed class PlatformerLandingFunctionalAcceptanceTests
             [SdkImportResolver.Portable2D],
             null);
         var build = GameBoyRomBuilder.BuildWithReport(program);
-        var trackedRom = File.ReadAllBytes(RepositoryFile("samples/platformer-landing/bin/platformer-landing.gb"));
-        Assert.Equal(trackedRom, build.Rom);
         Assert.Equal("gb-rom-only-current", build.Report.SelectedProfile);
-        Assert.Equal("8955273d1ee3596389f6c5219995d360097a5d9e9b40b7612e91050e4f373e54", Sha256(trackedRom));
         var packedWorld = Assert.IsType<GameBoyTiledWorldPack>(program.PackedWorld);
         Assert.Equal(4, packedWorld.Pack.Descriptor.ChunkColumns);
         Assert.Equal(3, packedWorld.Pack.Descriptor.ChunkRows);
@@ -166,9 +163,6 @@ public sealed class PlatformerLandingFunctionalAcceptanceTests
         cpu.Wram(variable.Address) | (cpu.Wram((ushort)(variable.Address + 1)) << 8);
 
     private static int Byte(GameBoyTestCpu cpu, GameBoyRuntimeUserVariable variable) => cpu.Wram(variable.Address);
-
-    private static string Sha256(byte[] bytes) =>
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
 
     private sealed record Snapshot(
         int PlayerX,

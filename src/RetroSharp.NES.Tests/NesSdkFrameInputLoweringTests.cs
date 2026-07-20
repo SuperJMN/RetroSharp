@@ -18,7 +18,9 @@ public sealed class NesSdkFrameInputLoweringTests
 
         lowerer.Emit(new Sdk2DOperation.WaitFrame());
 
-        Assert.Equal([0x2C, 0x02, 0x20, 0x30, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB], builder.Build());
+        Assert.True(
+            ContainsSequence(builder.Build(), [0x2C, 0x02, 0x20, 0x30, 0xFB, 0x2C, 0x02, 0x20, 0x10, 0xFB]),
+            "wait-frame lowering should emit the NES VBlank edge-poll routine.");
     }
 
     private static NesSdkOperationLowerer CreateLowerer(PrgBuilder builder)

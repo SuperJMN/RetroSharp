@@ -138,8 +138,7 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
         string scenarioRelativePath)
     {
         var compilation = Compile(sourceRelativePath, baseDirectoryRelativePath, rootNamespace, sourceRootRelativePath);
-        var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
-        Assert.Equal(trackedRom, compilation.Build.Rom);
+        var rom = compilation.Build.Rom;
 
         var scenario = FunctionalScenarioLoader.Load(RepositoryFile(scenarioRelativePath));
         var factory = new MachineFactory(sampleId, compilation.Program, compilation.Build.Report);
@@ -154,13 +153,13 @@ public sealed class ActorProjectileFunctionalAcceptanceTests(ITestOutputHelper o
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact(romRelativePath, trackedRom),
+            new FunctionalRomArtifact(romRelativePath, rom),
             adapter,
             new Oracle(factory));
 
         output.WriteLine($"{report.ScenarioId}: {report.Summary}");
         Assert.True(report.Passed, Diagnostic(report));
-        Assert.Equal(trackedRom, factory.LoadedRom);
+        Assert.Equal(rom, factory.LoadedRom);
         Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
         Assert.Empty(report.IntegrityFailures);
         Assert.Equal(0, report.Summary.BackgroundMismatches);

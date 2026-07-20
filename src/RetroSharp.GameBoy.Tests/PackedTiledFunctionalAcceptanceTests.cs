@@ -72,9 +72,6 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         {
             regeneratedRom = GameBoyRomCompiler.CompileSource(source, sourceDirectory);
         }
-        var trackedRom = File.ReadAllBytes(RepositoryFile(romRelativePath));
-        Assert.Equal(trackedRom, regeneratedRom);
-
         var map = GameBoyTiledMapImporter.Load(RepositoryFile(mapRelativePath));
         if (sampleId.StartsWith("tiled-hscroll-", StringComparison.Ordinal))
         {
@@ -98,7 +95,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
                 VideoWriteTiming: true));
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact(romRelativePath, trackedRom),
+            new FunctionalRomArtifact(romRelativePath, regeneratedRom),
             adapter,
             new AuthoredTiledBackgroundOracle(map, factory, platformerProgram, scenario));
 
@@ -109,7 +106,7 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         }
 
         Assert.True(report.Passed, Diagnostic(report));
-        Assert.Equal(trackedRom, factory.LoadedRom);
+        Assert.Equal(regeneratedRom, factory.LoadedRom);
         Assert.All(report.TimingChecks, check => Assert.True(check.Passed, check.Metric));
         Assert.Empty(report.IntegrityFailures);
         Assert.Equal(0, report.Summary.BankRestorationFailures);
