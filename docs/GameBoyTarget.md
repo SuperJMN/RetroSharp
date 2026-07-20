@@ -740,7 +740,8 @@ Landed after the playable-loop pass:
 - The runner checks the logical player width against each covered foot column instead of using a single source-map tile.
 - The initial visible background matches the same source-map pattern used for streaming, including a visible multi-column hole and failure tile.
 - Separate left/right streaming cursors keep the background stable when changing direction.
-- The reset path restores actor position, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
+- The fall path enters a staged respawn only after a complete airborne `player.y >= 320` update. It freezes physics and movement input while the source camera returns one axis at a time, at 4 px or less per tick, through the existing single `Camera.SetPosition(...)` call; VBlank, camera publication, OAM, audio, and input polling continue normally.
+- Once camera source and visible state have settled at `(0, 176)` for two source publications, the runner restores the authored world spawn `(72, 273)` through `Land(...)`. Its Game Boy screen pose is therefore `(72, 97)` and the first metasprite piece is published at OAM `(80, 113)` after the retained-OAM pipeline catches up.
 
 Landed after the camera-runtime pass:
 

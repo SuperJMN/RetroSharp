@@ -2,6 +2,7 @@ namespace RetroSharp.NES.Tests;
 
 using RetroSharp.Core.Sdk;
 using RetroSharp.NES;
+using RetroSharp.Sdk;
 using Xunit;
 
 public sealed class NesRunnerLandingTests
@@ -99,6 +100,250 @@ public sealed class NesRunnerLandingTests
         Assert.True(
             playerYByTick.Max() <= FloorPlayerY,
             $"The player crossed the floor before landing: maximum playerY={playerYByTick.Max()}.");
+    }
+
+    [Fact]
+    public void Shared_runner_input_route_respawns_once_at_the_authored_start_and_stays_grounded()
+    {
+        var build = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var oracleProgram = RetroSharp.NES.NesRomCompiler.PrepareVideoProgram(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: null,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            sdkPluginRegistry: null).VideoProgram;
+        var playerSprite = oracleProgram.SpriteAssets["mario_player"];
+        var playerPaletteSlot = oracleProgram.ResolveSpritePaletteBaseSlot("mario_player", 0);
+        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.nes"));
+        Assert.Equal(trackedRom, build.Rom);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var playerX = variables["player.x"].Address;
+        var playerY = variables["player.y"].Address;
+        var playerVelocityY = variables["player.velocityY"].Address;
+        var playerGrounded = variables["player.grounded"].Address;
+        var playerDisplayFrame = variables["player.displayFrame"].Address;
+        var playerDisplayFlipX = variables["player.displayFlipX"].Address;
+        var cameraX = variables["view.x"].Address;
+        var cameraY = variables["view.y"].Address;
+        var respawnPhase = variables["frame.respawnPhase"].Address;
+        var world = NesTiledWorldImporter.Load(
+            Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"),
+            NesVideoProgram.FirstSpriteTile + 95);
+        var cpu = new NesTestCpu(trackedRom);
+        cpu.TracedRamBytes.Add(playerY);
+        cpu.TracedRamBytes.Add(checked((ushort)(playerY + 1)));
+        cpu.TracedRamBytes.Add(respawnPhase);
+        cpu.TracedRamBytes.Add(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount);
+
+        RunUntilRamWordEquals(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow, 80, maxFrames: 400);
+        AdvanceGameplayTick(cpu);
+        AdvanceGameplayTick(cpu);
+
+        for (var frame = 0; frame < 280; frame++)
+        {
+            cpu.Held.Clear();
+            if (frame < 40)
+            {
+                cpu.Held.Add("a");
+            }
+
+            cpu.RunFrames(cpu.PhysicalFrames + 1);
+        }
+
+        Assert.DoesNotContain(cpu.RamByteWrites, write => write.Address == respawnPhase && write.Value != 0);
+        Assert.Equal(273, RamWord(cpu, playerY));
+        Assert.Equal(1, cpu.Ram(playerGrounded));
+
+        var recentRequestedCameras = new Queue<(int X, int Y, int Frame)>();
+        var respawnRouteFrame = -1;
+        for (var frame = 0; frame < 2_000 && respawnRouteFrame < 0; frame++)
+        {
+            cpu.Held.Clear();
+            cpu.Held.Add("right");
+            cpu.Held.Add("b");
+            if (frame >= 270 && (frame - 270) % 40 < 22)
+            {
+                cpu.Held.Add("a");
+            }
+
+            cpu.RunFrames(cpu.PhysicalFrames + 1);
+            recentRequestedCameras.Enqueue((
+                cpu.Ram(NesRuntimeMemoryLayout.Camera.X) | cpu.Ram(NesRuntimeMemoryLayout.Camera.XHigh) << 8,
+                cpu.Ram(NesRuntimeMemoryLayout.Camera.Y) | cpu.Ram(NesRuntimeMemoryLayout.Camera.YHigh) << 8,
+                frame));
+            while (recentRequestedCameras.Count > 4)
+            {
+                recentRequestedCameras.Dequeue();
+            }
+
+            if (cpu.Ram(respawnPhase) != 0)
+            {
+                respawnRouteFrame = frame;
+            }
+        }
+
+        var respawnEntryWrite = Assert.Single(
+            cpu.RamByteWrites,
+            write => write.Address == respawnPhase && write.Value == 1);
+        var playerYWrites = cpu.RamByteWrites
+            .Where(write => (write.Address == playerY || write.Address == playerY + 1) && write.Cycle < respawnEntryWrite.Cycle)
+            .ToArray();
+        var highWriteIndex = Array.FindLastIndex(playerYWrites, write => write.Address == playerY + 1);
+        Assert.True(
+            highWriteIndex > 0 && playerYWrites[highWriteIndex - 1].Address == playerY,
+            "The observed player.y byte writes did not end in one adjacent low/high pair.");
+        var lowWrite = playerYWrites[highWriteIndex - 1];
+        var highWrite = playerYWrites[highWriteIndex];
+        var fallY = lowWrite.Value | highWrite.Value << 8;
+        Assert.True(
+            fallY >= 320,
+            $"Respawning began before a complete out-of-world player.y assignment: y={fallY}, lowCycle={lowWrite.Cycle}, highCycle={highWrite.Cycle}, phaseCycle={respawnEntryWrite.Cycle}.");
+
+        cpu.Held.Clear();
+        cpu.Held.Add("left");
+        cpu.Held.Add("a");
+        cpu.Held.Add("b");
+        var requestedFrames = new Dictionary<(int X, int Y), int>();
+        (int X, int Y)? previousRequestedCamera = null;
+        foreach (var requested in recentRequestedCameras)
+        {
+            var requestedCamera = (requested.X, requested.Y);
+            RecordRequestedCameraWalk(
+                requestedFrames,
+                previousRequestedCamera ?? requestedCamera,
+                requestedCamera,
+                requested.Frame - respawnRouteFrame);
+            previousRequestedCamera = requestedCamera;
+        }
+
+        var previousCamera = (X: RamWord(cpu, cameraX), Y: RamWord(cpu, cameraY));
+        var frozenVelocityY = cpu.Ram(playerVelocityY);
+        var frozenDisplayFrame = cpu.Ram(playerDisplayFrame);
+        var frozenDisplayFlipX = cpu.Ram(playerDisplayFlipX) != 0;
+        var retainedOam = Enumerable.Range(0, 0x100).Select(index => cpu.Oam((byte)index)).ToArray();
+        var oamWritesAtRespawn = cpu.OamWrites.Count;
+        var playerOamBytes = playerSprite.Pieces.Count * 4;
+        var transitionOam = ExpectedRunnerOam(playerSprite, retainedOam, frozenDisplayFrame, frozenDisplayFlipX, playerPaletteSlot);
+        var respawnOamPublished = false;
+        var transitionGameplayTicks = 0;
+        var transitionAudioTicks = 0;
+        var missedGameplayFrames = 0;
+        var missedAudioFrames = 0;
+        var maximumMissedGameplayFrames = 0;
+        var maximumMissedAudioFrames = 0;
+        var transitionFrames = 0;
+        while (cpu.Ram(respawnPhase) != 0 && transitionFrames < 400)
+        {
+            var gameplayTicksBefore = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount);
+            var audioTicksBefore = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.AudioTickCount);
+            cpu.RunFrames(cpu.PhysicalFrames + 1);
+            var gameplayAdvance = unchecked((byte)(cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount) - gameplayTicksBefore));
+            var audioAdvance = unchecked((byte)(cpu.Ram(NesRuntimeMemoryLayout.WorldPack.AudioTickCount) - audioTicksBefore));
+            Assert.InRange(gameplayAdvance, (byte)0, (byte)1);
+            transitionGameplayTicks += gameplayAdvance;
+            transitionAudioTicks += audioAdvance;
+            missedGameplayFrames = gameplayAdvance == 0 ? missedGameplayFrames + 1 : 0;
+            missedAudioFrames = audioAdvance == 0 ? missedAudioFrames + 1 : 0;
+            maximumMissedGameplayFrames = Math.Max(maximumMissedGameplayFrames, missedGameplayFrames);
+            maximumMissedAudioFrames = Math.Max(maximumMissedAudioFrames, missedAudioFrames);
+
+            var sourceCamera = (X: RamWord(cpu, cameraX), Y: RamWord(cpu, cameraY));
+            Assert.InRange(Math.Abs(sourceCamera.X - previousCamera.X), 0, 8);
+            Assert.InRange(Math.Abs(sourceCamera.Y - previousCamera.Y), 0, 8);
+            Assert.False(sourceCamera.X != previousCamera.X && sourceCamera.Y != previousCamera.Y);
+            var requestedCamera = (
+                X: cpu.Ram(NesRuntimeMemoryLayout.Camera.X) | cpu.Ram(NesRuntimeMemoryLayout.Camera.XHigh) << 8,
+                Y: cpu.Ram(NesRuntimeMemoryLayout.Camera.Y) | cpu.Ram(NesRuntimeMemoryLayout.Camera.YHigh) << 8);
+            RecordRequestedCameraWalk(requestedFrames, previousRequestedCamera ?? requestedCamera, requestedCamera, transitionFrames);
+            previousRequestedCamera = requestedCamera;
+
+            var visibleCamera = (
+                X: RamWord(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow),
+                Y: RamWord(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow));
+            Assert.True(
+                requestedFrames.TryGetValue(visibleCamera, out var requestedFrame)
+                && transitionFrames - requestedFrame <= 2,
+                $"Visible camera {visibleCamera} missed the two-frame lifecycle bound on respawn frame {transitionFrames}; target={sourceCamera}; requested={requestedCamera}; requests={string.Join(",", requestedFrames.OrderBy(pair => pair.Value).Select(pair => $"{pair.Key}@{pair.Value}"))}.");
+            AssertVisibleBackgroundMatchesWorld(cpu, world, visibleCamera.X, visibleCamera.Y, transitionFrames);
+
+            if (cpu.Ram(respawnPhase) != 0)
+            {
+                Assert.Equal(0, cpu.Ram(playerGrounded));
+                Assert.Equal(frozenVelocityY, cpu.Ram(playerVelocityY));
+                Assert.Equal(frozenDisplayFrame, cpu.Ram(playerDisplayFrame));
+                Assert.Equal(frozenDisplayFlipX, cpu.Ram(playerDisplayFlipX) != 0);
+                respawnOamPublished = AssertOamPublicationSequence(
+                    cpu,
+                    oamWritesAtRespawn,
+                    retainedOam,
+                    transitionOam,
+                    playerOamBytes,
+                    "transition",
+                    transitionFrames);
+
+                if (cpu.Ram(respawnPhase) >= 2)
+                {
+                    cpu.Held.Clear();
+                }
+            }
+
+            previousCamera = sourceCamera;
+            transitionFrames++;
+        }
+
+        Assert.InRange(transitionFrames, 1, 400);
+        Assert.True(respawnOamPublished, "NES never published the target-correct respawn OAM pose.");
+        Assert.True(
+            transitionGameplayTicks * 100 >= transitionFrames * 95 && maximumMissedGameplayFrames <= 1,
+            $"Respawn gameplay cadence regressed: ticks={transitionGameplayTicks}/{transitionFrames}, maxMiss={maximumMissedGameplayFrames}.");
+        Assert.True(
+            maximumMissedAudioFrames <= 1 && Math.Abs(transitionAudioTicks - transitionFrames) <= 1,
+            $"Respawn audio cadence regressed: audio={transitionAudioTicks}/{transitionFrames}, gameplay={transitionGameplayTicks}, maxAudioMiss={maximumMissedAudioFrames}.");
+        var firstRespawn = RunnerState(cpu, playerX, playerY, playerVelocityY, playerGrounded, cameraX, cameraY);
+        Assert.True(IsRunnerSpawn(firstRespawn, 80), $"Respawn completed with {firstRespawn}.");
+        Assert.True(
+            VisibleCameraIsAtSpawn(cpu, 80),
+            $"NES visible camera was ({RamWord(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow)},{RamWord(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow)}) when respawn phase completed after {transitionFrames} frames.");
+        Assert.True(
+            AssertOamPublicationSequence(cpu, oamWritesAtRespawn, retainedOam, transitionOam, playerOamBytes, "transition", transitionFrames),
+            "NES never completed the target-correct transition metasprite publication.");
+        var settledOam = ExpectedRunnerOam(playerSprite, transitionOam, 0, frozenDisplayFlipX, playerPaletteSlot);
+        var settledOamPublished = frozenDisplayFrame == 0;
+        var oamWritesAtSettling = cpu.OamWrites.Count;
+        Assert.Equal(new[] { 1, 2, 3, 4, 0 }, cpu.RamByteWrites
+            .Where(write => write.Address == respawnPhase && write.Cycle >= respawnEntryWrite.Cycle)
+            .Select(write => (int)write.Value)
+            .ToArray());
+
+        cpu.Held.Clear();
+        for (var frame = 0; frame < 300; frame++)
+        {
+            var gameplayTicksBefore = cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount);
+            cpu.RunFrames(cpu.PhysicalFrames + 1);
+            var gameplayAdvance = unchecked((byte)(cpu.Ram(NesRuntimeMemoryLayout.WorldPack.GameplayTickCount) - gameplayTicksBefore));
+            Assert.InRange(gameplayAdvance, (byte)0, (byte)1);
+            var stableState = RunnerState(cpu, playerX, playerY, playerVelocityY, playerGrounded, cameraX, cameraY);
+            Assert.True(IsRunnerSpawn(stableState, 80), $"NES spawn changed on idle frame {frame}: {stableState}.");
+            Assert.True(VisibleCameraIsAtSpawn(cpu, 80));
+            Assert.Equal(0, cpu.Ram(respawnPhase));
+            settledOamPublished = AssertOamPublicationSequence(
+                cpu,
+                oamWritesAtSettling,
+                transitionOam,
+                settledOam,
+                playerOamBytes,
+                "settled",
+                frame);
+            AssertVisibleBackgroundMatchesWorld(cpu, world, 0, 80, frame);
+        }
+        Assert.True(settledOamPublished, "NES never published the settled respawn OAM frame.");
+        Assert.DoesNotContain(
+            cpu.OamWrites.Skip(oamWritesAtRespawn),
+            write => write.Address >= NesRuntimeMemoryLayout.Sprite.OamShadow + playerOamBytes);
     }
 
     [Fact]
@@ -366,6 +611,161 @@ public sealed class NesRunnerLandingTests
     private static int RamWord(NesTestCpu cpu, ushort lowAddress) =>
         cpu.Ram(lowAddress) | cpu.Ram((ushort)(lowAddress + 1)) << 8;
 
+    private static RespawnState RunnerState(
+        NesTestCpu cpu,
+        ushort playerX,
+        ushort playerY,
+        ushort playerVelocityY,
+        ushort playerGrounded,
+        ushort cameraX,
+        ushort cameraY)
+    {
+        return new RespawnState(
+            RamWord(cpu, playerX),
+            RamWord(cpu, playerY),
+            unchecked((sbyte)cpu.Ram(playerVelocityY)),
+            cpu.Ram(playerGrounded),
+            RamWord(cpu, cameraX),
+            RamWord(cpu, cameraY));
+    }
+
+    private static bool IsRunnerSpawn(RespawnState state, int expectedCameraY) =>
+        state == new RespawnState(72, 273, 0, 1, 0, expectedCameraY);
+
+    private static bool VisibleCameraIsAtSpawn(NesTestCpu cpu, int expectedCameraY) =>
+        RamWord(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraXLow) == 0
+        && RamWord(cpu, NesRuntimeMemoryLayout.PackedCamera.VisibleCameraYLow) == expectedCameraY;
+
+    private static void RecordRequestedCameraWalk(
+        IDictionary<(int X, int Y), int> requestedFrames,
+        (int X, int Y) from,
+        (int X, int Y) to,
+        int frame)
+    {
+        if (from.X != to.X)
+        {
+            foreach (var x in Enumerable.Range(Math.Min(from.X, to.X), Math.Abs(to.X - from.X) + 1))
+            {
+                requestedFrames[(x, from.Y)] = frame;
+            }
+        }
+        if (from.Y != to.Y)
+        {
+            foreach (var y in Enumerable.Range(Math.Min(from.Y, to.Y), Math.Abs(to.Y - from.Y) + 1))
+            {
+                requestedFrames[(to.X, y)] = frame;
+            }
+        }
+        if (from == to)
+        {
+            requestedFrames[to] = frame;
+        }
+    }
+
+    private static byte[] ExpectedRunnerOam(
+        NesCompiledSpriteAsset asset,
+        byte[] baseline,
+        int animationFrame,
+        bool flipX,
+        int paletteSlot)
+    {
+        Assert.InRange(animationFrame, 0, asset.FrameCount - 1);
+        var expected = baseline.ToArray();
+        for (var sprite = 0; sprite < asset.Pieces.Count; sprite++)
+        {
+            var piece = asset.Pieces[sprite];
+            var offset = sprite * 4;
+            expected[offset] = checked((byte)(193 - 1 + piece.YOffset));
+            expected[offset + 1] = checked((byte)(asset.FirstTile + animationFrame * asset.TilesPerFrame + piece.TileOffset));
+            expected[offset + 2] = checked((byte)(paletteSlot + piece.PaletteSlotOffset + (flipX ? 0x40 : 0)));
+            expected[offset + 3] = checked((byte)(72 + (flipX ? asset.LogicalWidth - 8 - piece.XOffset : piece.XOffset)));
+        }
+
+        return expected;
+    }
+
+    private static bool AssertOamPublicationSequence(
+        NesTestCpu cpu,
+        int firstOamWrite,
+        byte[] retained,
+        byte[] expected,
+        int byteCount,
+        string phase,
+        int frame)
+    {
+        var writes = cpu.OamWrites.Skip(firstOamWrite).ToArray();
+        var completePublications = new List<byte[]>();
+        for (var start = 0; start < writes.Length; start++)
+        {
+            if (writes[start].Address != NesRuntimeMemoryLayout.Sprite.OamShadow || start + byteCount > writes.Length)
+            {
+                continue;
+            }
+
+            var publication = writes.AsSpan(start, byteCount);
+            if (!publication.ToArray().Select((write, offset) => write.Address == NesRuntimeMemoryLayout.Sprite.OamShadow + offset).All(matches => matches))
+            {
+                continue;
+            }
+
+            completePublications.Add(publication.ToArray().Select(write => write.Value).ToArray());
+            start += byteCount - 1;
+        }
+
+        var expectedPrefix = expected[..byteCount];
+        var retainedPrefix = retained[..byteCount];
+        var targetPublished = false;
+        var retainedPublications = 0;
+        foreach (var publication in completePublications)
+        {
+            if (publication.SequenceEqual(expectedPrefix))
+            {
+                targetPublished = true;
+                continue;
+            }
+
+            Assert.False(targetPublished, $"NES OAM regressed after publishing the {phase} metasprite on frame {frame}.");
+            Assert.True(
+                publication.SequenceEqual(retainedPrefix),
+                $"NES {phase} OAM publication was neither retained nor expected on frame {frame}: publication={Convert.ToHexString(publication)}, retained={Convert.ToHexString(retainedPrefix)}, expected={Convert.ToHexString(expectedPrefix)}.");
+            retainedPublications++;
+            Assert.InRange(retainedPublications, 0, 1);
+        }
+
+        return targetPublished;
+    }
+
+    private static void AssertVisibleBackgroundMatchesWorld(
+        NesTestCpu cpu,
+        NesTiledWorld world,
+        int cameraX,
+        int cameraY,
+        int frame)
+    {
+        var width = cameraX % 8 == 0 ? 32 : 33;
+        var height = cameraY % 8 == 0 ? 30 : 31;
+        var startColumn = cameraX / 8;
+        var startRow = cameraY / 8;
+        for (var screenRow = 0; screenRow < height; screenRow++)
+        {
+            for (var screenColumn = 0; screenColumn < width; screenColumn++)
+            {
+                var sourceColumn = (startColumn + screenColumn) % world.Width;
+                var sourceRow = (startRow + screenRow) % world.Height;
+                var expected = world.WorldTileIds[sourceRow * world.Width + sourceColumn];
+                var bufferColumn = (startColumn + screenColumn) % 64;
+                var bufferRow = (startRow + screenRow) % 60;
+                var nametable = 0x2000 + bufferRow / 30 * 0x800 + bufferColumn / 32 * 0x400;
+                var address = checked((ushort)(nametable + bufferRow % 30 * 32 + bufferColumn % 32));
+                var actual = cpu.PpuVram(address);
+                Assert.True(
+                    actual == expected,
+                    $"Runner background mismatch on respawn frame {frame} at screen ({screenColumn},{screenRow}), "
+                    + $"source ({sourceColumn},{sourceRow}), address ${address:X4}: expected={expected}, actual={actual}.");
+            }
+        }
+    }
+
     private sealed record JumpTrace(List<int> PlayerY, List<int> VerticalSubpixel);
 
     private sealed record JumpProfile(
@@ -375,4 +775,12 @@ public sealed class NesRunnerLandingTests
         int ExpectedRiseSixteenths);
 
     private sealed record GravityProbe(int InitialVelocity, bool IsHeld, int ExpectedVelocity);
+
+    private sealed record RespawnState(
+        int PlayerX,
+        int PlayerY,
+        int PlayerVelocityY,
+        int PlayerGrounded,
+        int CameraX,
+        int CameraY);
 }

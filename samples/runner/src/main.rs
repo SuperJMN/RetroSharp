@@ -38,7 +38,8 @@ void Main()
 
     view.ResetMotion();
     view.y = Camera.VerticalScrollMax();
-    player.Reset(view);
+    player.x = Player.StartX;
+    player.Land(Player.StartY);
 
     while (true)
     {
@@ -56,23 +57,27 @@ void Main()
 
 inline void SimulatePlayer(PlayerState player, CameraState view, FrameState frame)
 {
-    frame.Begin();
-    i16 previousFootWorldY = player.y + Player.FootOffset;
-    player.ApplyGravity();
+    if (frame.IsRespawning())
+    {
+        frame.AdvanceRespawn(player, view);
+    }
+    else
+    {
+        i16 previousFootWorldY = player.y + Player.FootOffset;
+        player.ApplyGravity();
 
-    i16 footWorldY = player.y + Player.FootOffset;
-    let screenX = view.ScreenX(player);
+        i16 footWorldY = player.y + Player.FootOffset;
+        let screenX = view.ScreenX(player);
 
-    frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);
-    frame.ResolveCeilingHit(player, screenX, footWorldY);
-    frame.ResolveFall(player);
-    frame.ResolveReset(player, view);
+        frame.ResolveLanding(player, screenX, previousFootWorldY, footWorldY);
+        frame.ResolveCeilingHit(player, screenX, footWorldY);
+        view.FollowPlayer(player);
+        player.HandleJumpInput(view.speed);
 
-    view.FollowPlayer(player);
-    player.HandleJumpInput(view.speed);
-
-    i16 movementFootWorldY = player.y + Player.FootOffset;
-    view.HandleHorizontalInput(player, movementFootWorldY);
+        i16 movementFootWorldY = player.y + Player.FootOffset;
+        view.HandleHorizontalInput(player, movementFootWorldY);
+        player.UpdateRunAnimation(view);
+        frame.ResolveFall(player, view);
+    }
     view.ApplyPosition();
-    player.UpdateRunAnimation(view);
 }
