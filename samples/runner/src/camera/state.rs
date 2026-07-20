@@ -6,9 +6,9 @@ class CameraState
     Pixel x;
     Pixel y;
     bool moving;
-    Pixel speed;
-    Pixel direction;
-    Pixel movementRemainder;
+    u8 speed;
+    u8 direction;
+    u8 movementRemainder;
 
     inline void ResetMotion()
     {
@@ -47,7 +47,7 @@ class CameraState
         }
     }
 
-    inline void StartDirection(Pixel desiredDirection)
+    inline void StartDirection(u8 desiredDirection)
     {
         direction = desiredDirection;
         speed = MotionSpeed.Walk;
@@ -107,7 +107,7 @@ class CameraState
         }
     }
 
-    inline void UpdateIntent(Pixel desiredDirection, bool grounded)
+    inline void UpdateIntent(u8 desiredDirection, bool grounded)
     {
         if (desiredDirection == Direction.None)
         {
@@ -146,7 +146,7 @@ class CameraState
         {
             player.displayFlipX = false;
         }
-        if (direction == Direction.Left)
+        else if (direction == Direction.Left)
         {
             player.displayFlipX = true;
         }
@@ -229,7 +229,7 @@ class CameraState
     inline void HandleHorizontalInput(PlayerState player, Pixel footWorldY)
     {
         i16 wallProbeY = footWorldY - CollisionProbe.WallProbeHeight;
-        Pixel desiredDirection = Direction.None;
+        u8 desiredDirection = Direction.None;
         if (Input.IsDown(Button.Right))
         {
             desiredDirection = Direction.Right;

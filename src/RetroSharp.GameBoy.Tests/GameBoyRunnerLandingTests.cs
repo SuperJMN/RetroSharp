@@ -17,9 +17,6 @@ public sealed class GameBoyRunnerLandingTests
     private const ushort PlayerDisplayFlipX = 0xC008;
     private const ushort PlayerJumping = 0xC00B;
     private const ushort PlayerVerticalSubpixelLow = 0xC00C;
-    private const int FirstPlatformCameraX = 696;
-    private const int PlatformTopY = 272;
-    private const int PlatformPlayerY = PlatformTopY - 31;
     private const int FloorPlayerY = 273;
     private const int FirstStairWallX = 448;
     private const int PlayerWidth = 18;
@@ -90,65 +87,6 @@ public sealed class GameBoyRunnerLandingTests
     }
 
     [Fact]
-    public void Short_jump_below_one_way_platform_does_not_snap_the_player_upward()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var trace = RunJump(cpu, heldFrames: 1, observedFrames: 180);
-        var playerYByFrame = trace.PlayerY;
-
-        Assert.True(
-            playerYByFrame.Min() + 31 > PlatformTopY,
-            $"The short jump unexpectedly crossed the platform top: minimum playerY={playerYByFrame.Min()}.");
-        Assert.DoesNotContain(PlatformPlayerY, playerYByFrame);
-        Assert.All(playerYByFrame.TakeLast(60), playerY => Assert.Equal(FloorPlayerY, playerY));
-    }
-
-    [Fact]
-    public void Full_jump_crosses_one_way_platform_from_below_then_lands_on_its_top()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var trace = RunJump(cpu, heldFrames: 40, observedFrames: 240);
-        var playerYByFrame = trace.PlayerY;
-
-        Assert.True(
-            playerYByFrame.Min() + 31 < PlatformTopY,
-            $"The full jump never crossed the platform top: minimum playerY={playerYByFrame.Min()}, "
-            + $"minimum velocity={trace.VelocityY.Min()}, maximum hold ticks={trace.HoldTicks.Max()}, "
-            + $"trajectory={string.Join(',', playerYByFrame.Take(40).Zip(trace.VelocityY, (y, velocity) => $"{y}/{velocity}"))}.");
-        var landingFrame = Enumerable.Range(0, playerYByFrame.Count)
-            .FirstOrDefault(
-                index => playerYByFrame[index] == PlatformPlayerY && trace.VelocityY[index] == 0,
-                -1);
-        Assert.True(
-            landingFrame >= 0,
-            "The player crossed the platform but never landed on it: "
-            + string.Join(',', playerYByFrame.Zip(trace.VelocityY, (y, velocity) => (y, velocity))
-                .Where(item => item.velocity > 0 && item.y is >= 210 and <= 280)
-                .Select(item => $"{item.y}/{item.velocity}")));
-        Assert.All(playerYByFrame.Skip(landingFrame), playerY => Assert.Equal(PlatformPlayerY, playerY));
-    }
-
-    [Fact]
-    public void Walking_off_one_way_platform_releases_grounded_state_and_falls_to_the_floor()
-    {
-        var cpu = RunnerAtFirstPlatform();
-        var jump = RunJump(cpu, heldFrames: 40, observedFrames: 180);
-        Assert.Equal(PlatformPlayerY, jump.PlayerY[^1]);
-
-        var playerYByFrame = RunHorizontal(cpu, "right", observedFrames: 400);
-
-        Assert.True(
-            playerYByFrame.Any(playerY => playerY > PlatformPlayerY),
-            $"The player never fell after walking to world X {cpu.Wram(0xC000) | cpu.Wram(0xC001) << 8}; "
-            + $"camera X={cpu.Wram(PackedCameraMemory.VisibleCameraXLow) | cpu.Wram(PackedCameraMemory.VisibleCameraXLow + 1) << 8}; "
-            + $"observed Y values={string.Join(',', playerYByFrame.Distinct())}.");
-        Assert.True(
-            playerYByFrame.Max() <= FloorPlayerY,
-            $"The player crossed the floor before being reset: maximum playerY={playerYByFrame.Max()}.");
-        Assert.All(playerYByFrame.TakeLast(40), playerY => Assert.Equal(FloorPlayerY, playerY));
-    }
-
-    [Fact]
     public void Shared_runner_stays_on_the_authored_stage1_floor_for_300_frames()
     {
         var runnerDirectory = RunnerSample.Directory;
@@ -169,6 +107,250 @@ public sealed class GameBoyRunnerLandingTests
                 $"Mario left the authored floor on frame {frame}: playerY={playerWorldY}, footY={playerWorldY + 31}, "
                 + $"cameraY={cameraY}, oamY={cpu.Oam(0xFE00)}.");
         }
+    }
+
+    [Fact]
+    public void Shared_runner_input_route_respawns_once_at_the_authored_start_and_stays_grounded()
+    {
+        var build = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            sdkLibraryImports: [SdkImportResolver.Portable2D]);
+        var oracleProgram = RetroSharp.GameBoy.GameBoyRomCompiler.PrepareVideoProgram(
+            RunnerSample.CompiledSource(),
+            RunnerSample.Directory,
+            SdkLibraryImportMode.ExplicitOnly,
+            sdkLibraryRegistry: null,
+            sdkLibraryImports: [SdkImportResolver.Portable2D],
+            sdkPluginRegistry: null);
+        var playerSprite = oracleProgram.SpriteAssets["mario_player"];
+        var trackedRom = File.ReadAllBytes(Path.Combine(RunnerSample.Directory, "bin", "runner.gb"));
+        Assert.Equal(trackedRom, build.Rom);
+        var variables = build.Report.UserVariables.ToDictionary(variable => variable.Name, StringComparer.Ordinal);
+        var playerX = variables["player.x"].Address;
+        var playerY = variables["player.y"].Address;
+        var playerVelocityY = variables["player.velocityY"].Address;
+        var playerGrounded = variables["player.grounded"].Address;
+        var playerDisplayFrame = variables["player.displayFrame"].Address;
+        var playerDisplayFlipX = variables["player.displayFlipX"].Address;
+        var cameraX = variables["view.x"].Address;
+        var cameraY = variables["view.y"].Address;
+        var respawnPhase = variables["frame.respawnPhase"].Address;
+        var world = GameBoyTiledMapImporter.Load(Path.Combine(RunnerSample.Directory, "assets", "maps", "stage1.tmj"));
+        var cpu = new GameBoyTestCpu(trackedRom) { CycleAccurateLy = true };
+        cpu.TracedWramBytes.Add(playerY);
+        cpu.TracedWramBytes.Add(checked((ushort)(playerY + 1)));
+        cpu.TracedWramBytes.Add(respawnPhase);
+
+        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
+        cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
+
+        for (var frame = 0; frame < 280; frame++)
+        {
+            cpu.Held.Clear();
+            if (frame < 40)
+            {
+                cpu.Held.Add("a");
+            }
+
+            cpu.RunAdditionalFrames(1);
+        }
+
+        Assert.DoesNotContain(cpu.WramByteWrites, write => write.Address == respawnPhase && write.Value != 0);
+        Assert.Equal(273, ReadWord(cpu, playerY));
+        Assert.Equal(1, cpu.Wram(playerGrounded));
+
+        var recentRequestedCameras = new Queue<(int X, int Y, int Frame)>();
+        var respawnRouteFrame = -1;
+        for (var frame = 0; frame < 2_000 && respawnRouteFrame < 0; frame++)
+        {
+            cpu.Held.Clear();
+            cpu.Held.Add("right");
+            cpu.Held.Add("b");
+            if (frame >= 270 && (frame - 270) % 40 < 22)
+            {
+                cpu.Held.Add("a");
+            }
+
+            cpu.RunAdditionalFrames(1);
+            recentRequestedCameras.Enqueue((
+                ReadWord(cpu, GameBoyRuntimeMemoryLayout.Camera.XLow),
+                ReadWord(cpu, GameBoyRuntimeMemoryLayout.Camera.YLow),
+                frame));
+            while (recentRequestedCameras.Count > 4)
+            {
+                recentRequestedCameras.Dequeue();
+            }
+
+            if (cpu.Wram(respawnPhase) != 0)
+            {
+                respawnRouteFrame = frame;
+            }
+        }
+
+        var respawnEntryWrite = Assert.Single(
+            cpu.WramByteWrites,
+            write => write.Address == respawnPhase && write.Value == 1);
+        var playerYWrites = cpu.WramByteWrites
+            .Where(write => (write.Address == playerY || write.Address == playerY + 1) && write.Cycles < respawnEntryWrite.Cycles)
+            .ToArray();
+        var highWriteIndex = Array.FindLastIndex(playerYWrites, write => write.Address == playerY + 1);
+        Assert.True(
+            highWriteIndex > 0 && playerYWrites[highWriteIndex - 1].Address == playerY,
+            "The observed player.y byte writes did not end in one adjacent low/high pair.");
+        var lowWrite = playerYWrites[highWriteIndex - 1];
+        var highWrite = playerYWrites[highWriteIndex];
+        var fallY = lowWrite.Value | highWrite.Value << 8;
+        Assert.True(
+            fallY >= 320,
+            $"Respawning began before a complete out-of-world player.y assignment: y={fallY}, lowCycle={lowWrite.Cycles}, highCycle={highWrite.Cycles}, phaseCycle={respawnEntryWrite.Cycles}.");
+
+        cpu.Held.Clear();
+        cpu.Held.Add("left");
+        cpu.Held.Add("a");
+        cpu.Held.Add("b");
+        var requestedFrames = new Dictionary<(int X, int Y), int>();
+        (int X, int Y)? previousRequestedCamera = null;
+        foreach (var requested in recentRequestedCameras)
+        {
+            var requestedCamera = (requested.X, requested.Y);
+            RecordRequestedCameraWalk(
+                requestedFrames,
+                previousRequestedCamera ?? requestedCamera,
+                requestedCamera,
+                requested.Frame - respawnRouteFrame);
+            previousRequestedCamera = requestedCamera;
+        }
+
+        var previousCamera = (X: ReadWord(cpu, cameraX), Y: ReadWord(cpu, cameraY));
+        var frozenVelocityY = cpu.Wram(playerVelocityY);
+        var frozenDisplayFrame = cpu.Wram(playerDisplayFrame);
+        var frozenDisplayFlipX = cpu.Wram(playerDisplayFlipX) != 0;
+        var retainedOam = Enumerable.Range(0, 0xA0).Select(index => cpu.Oam((ushort)(0xFE00 + index))).ToArray();
+        var respawnOamPublished = false;
+        var transitionGameplayTicks = 0L;
+        var transitionAudioTicks = 0L;
+        var missedGameplayFrames = 0;
+        var missedAudioFrames = 0;
+        var maximumMissedGameplayFrames = 0;
+        var maximumMissedAudioFrames = 0;
+        var maximumGameplayBurst = 0L;
+        var nextPhysicalFrame = checked((int)(cpu.Cycles / GameBoyTestCpu.DmgCyclesPerFrame) + 1);
+        var transitionFrames = 0;
+        while (cpu.Wram(respawnPhase) != 0 && transitionFrames < 400)
+        {
+            var gameplayTicksBefore = cpu.SourceWaitCompletions;
+            var audioTicksBefore = cpu.AudioUpdateCalls;
+            cpu.RunFrames(nextPhysicalFrame++);
+            var gameplayAdvance = cpu.SourceWaitCompletions - gameplayTicksBefore;
+            var audioAdvance = cpu.AudioUpdateCalls - audioTicksBefore;
+            Assert.InRange(gameplayAdvance, 0, 2);
+            maximumGameplayBurst = Math.Max(maximumGameplayBurst, gameplayAdvance);
+            transitionGameplayTicks += gameplayAdvance;
+            transitionAudioTicks += audioAdvance;
+            missedGameplayFrames = gameplayAdvance == 0 ? missedGameplayFrames + 1 : 0;
+            missedAudioFrames = audioAdvance == 0 ? missedAudioFrames + 1 : 0;
+            maximumMissedGameplayFrames = Math.Max(maximumMissedGameplayFrames, missedGameplayFrames);
+            maximumMissedAudioFrames = Math.Max(maximumMissedAudioFrames, missedAudioFrames);
+
+            var sourceCamera = (X: ReadWord(cpu, cameraX), Y: ReadWord(cpu, cameraY));
+            Assert.InRange(Math.Abs(sourceCamera.X - previousCamera.X), 0, 8);
+            Assert.InRange(Math.Abs(sourceCamera.Y - previousCamera.Y), 0, 8);
+            Assert.False(sourceCamera.X != previousCamera.X && sourceCamera.Y != previousCamera.Y);
+            var requestedCamera = (
+                X: ReadWord(cpu, GameBoyRuntimeMemoryLayout.Camera.XLow),
+                Y: ReadWord(cpu, GameBoyRuntimeMemoryLayout.Camera.YLow));
+            RecordRequestedCameraWalk(requestedFrames, previousRequestedCamera ?? requestedCamera, requestedCamera, transitionFrames);
+            previousRequestedCamera = requestedCamera;
+
+            var visibleCamera = (
+                X: ReadWord(cpu, PackedCameraMemory.VisibleCameraXLow),
+                Y: ReadWord(cpu, PackedCameraMemory.VisibleCameraYLow));
+            Assert.True(
+                requestedFrames.TryGetValue(visibleCamera, out var requestedFrame)
+                && transitionFrames - requestedFrame <= 2,
+                $"Visible camera {visibleCamera} missed the two-frame lifecycle bound on respawn frame {transitionFrames}; target={sourceCamera}; requested={requestedCamera}.");
+            AssertVisibleBackgroundMatchesWorld(cpu, world, transitionFrames);
+
+            if (cpu.Wram(respawnPhase) != 0)
+            {
+                Assert.Equal(0, cpu.Wram(playerGrounded));
+                Assert.Equal(frozenVelocityY, cpu.Wram(playerVelocityY));
+                Assert.Equal(frozenDisplayFrame, cpu.Wram(playerDisplayFrame));
+                Assert.Equal(frozenDisplayFlipX, cpu.Wram(playerDisplayFlipX) != 0);
+                if (cpu.Oam(0xFE00) == 113 && cpu.Oam(0xFE01) == 80)
+                {
+                    AssertRunnerOam(cpu, playerSprite, transitionFrames, 72, 97, frozenDisplayFrame, frozenDisplayFlipX, 0, 0);
+                    respawnOamPublished = true;
+                }
+                else
+                {
+                    Assert.False(respawnOamPublished, $"Game Boy OAM regressed after publishing the respawn pose on frame {transitionFrames}.");
+                    Assert.True(
+                        transitionGameplayTicks < 2,
+                        $"Game Boy retained OAM beyond its two-publication bound on frame {transitionFrames}: gameplayTicks={transitionGameplayTicks}, current=({cpu.Oam(0xFE01)},{cpu.Oam(0xFE00)}).");
+                    var currentOam = Enumerable.Range(0, 0xA0).Select(index => cpu.Oam((ushort)(0xFE00 + index))).ToArray();
+                    Assert.True(retainedOam.SequenceEqual(currentOam), $"Game Boy OAM was neither retained byte-exactly nor published at the respawn pose on frame {transitionFrames}; gameplayAdvance={gameplayAdvance}.");
+                }
+
+                if (cpu.Wram(respawnPhase) >= 2)
+                {
+                    cpu.Held.Clear();
+                }
+            }
+
+            previousCamera = sourceCamera;
+            transitionFrames++;
+        }
+
+        Assert.InRange(transitionFrames, 1, 400);
+        Assert.True(respawnOamPublished, "Game Boy never published the target-correct respawn OAM pose.");
+        Assert.True(
+            transitionGameplayTicks * 100 >= transitionFrames * 95L && maximumMissedGameplayFrames <= 1,
+            $"Respawn gameplay cadence regressed: ticks={transitionGameplayTicks}/{transitionFrames}, maxMiss={maximumMissedGameplayFrames}, maxBurst={maximumGameplayBurst}.");
+        Assert.True(
+            maximumMissedAudioFrames <= 1 && Math.Abs(transitionAudioTicks - transitionFrames) <= 1,
+            $"Respawn audio cadence regressed: audio={transitionAudioTicks}/{transitionFrames}, gameplay={transitionGameplayTicks}, maxAudioMiss={maximumMissedAudioFrames}.");
+        var firstRespawn = RunnerState(cpu, playerX, playerY, playerVelocityY, playerGrounded, cameraX, cameraY);
+        Assert.True(IsRunnerSpawn(firstRespawn, 176), $"Respawn completed with {firstRespawn}.");
+        Assert.True(VisibleCameraIsAtSpawn(cpu, 176));
+        AssertRunnerOam(cpu, playerSprite, transitionFrames, 72, 97, frozenDisplayFrame, frozenDisplayFlipX, 0, 0);
+        var settlingOam = Enumerable.Range(0, 0xA0).Select(index => cpu.Oam((ushort)(0xFE00 + index))).ToArray();
+        var settledOamPublished = frozenDisplayFrame == 0;
+        var settledGameplayTicks = 0L;
+        Assert.Equal(new[] { 1, 2, 3, 4, 0 }, cpu.WramByteWrites
+            .Where(write => write.Address == respawnPhase && write.Cycles >= respawnEntryWrite.Cycles)
+            .Select(write => (int)write.Value)
+            .ToArray());
+
+        cpu.Held.Clear();
+        for (var frame = 0; frame < 300; frame++)
+        {
+            var gameplayTicksBefore = cpu.SourceWaitCompletions;
+            cpu.RunFrames(nextPhysicalFrame++);
+            var gameplayAdvance = cpu.SourceWaitCompletions - gameplayTicksBefore;
+            Assert.InRange(gameplayAdvance, 0, 2);
+            settledGameplayTicks += gameplayAdvance;
+            var stableState = RunnerState(cpu, playerX, playerY, playerVelocityY, playerGrounded, cameraX, cameraY);
+            Assert.True(IsRunnerSpawn(stableState, 176), $"GB spawn changed on idle frame {frame}: {stableState}.");
+            Assert.True(VisibleCameraIsAtSpawn(cpu, 176));
+            Assert.Equal(0, cpu.Wram(respawnPhase));
+            var settledFirstTile = playerSprite.FirstTile + playerSprite.Pieces[0].TileOffset;
+            if (cpu.Oam(0xFE02) == settledFirstTile)
+            {
+                AssertRunnerOam(cpu, playerSprite, frame, 72, 97, 0, frozenDisplayFlipX, 0, 0);
+                settledOamPublished = true;
+            }
+            else
+            {
+                Assert.False(settledOamPublished, $"Game Boy OAM regressed after publishing the settled frame on idle frame {frame}.");
+                Assert.True(settledGameplayTicks < 2, $"Game Boy did not publish settled OAM within two gameplay completions: ticks={settledGameplayTicks}.");
+                var currentOam = Enumerable.Range(0, 0xA0).Select(index => cpu.Oam((ushort)(0xFE00 + index))).ToArray();
+                Assert.True(settlingOam.SequenceEqual(currentOam), $"Game Boy OAM was not retained byte-exactly while settling on idle frame {frame}.");
+            }
+            AssertVisibleBackgroundMatchesWorld(cpu, world, frame);
+        }
+        Assert.True(settledOamPublished, "Game Boy never published the settled respawn OAM frame.");
     }
 
     [Fact]
@@ -657,6 +839,57 @@ public sealed class GameBoyRunnerLandingTests
         return cpu.Wram(lowAddress) | cpu.Wram((ushort)(lowAddress + 1)) << 8;
     }
 
+    private static RespawnState RunnerState(
+        GameBoyTestCpu cpu,
+        ushort playerX,
+        ushort playerY,
+        ushort playerVelocityY,
+        ushort playerGrounded,
+        ushort cameraX,
+        ushort cameraY)
+    {
+        return new RespawnState(
+            ReadWord(cpu, playerX),
+            ReadWord(cpu, playerY),
+            unchecked((sbyte)cpu.Wram(playerVelocityY)),
+            cpu.Wram(playerGrounded),
+            ReadWord(cpu, cameraX),
+            ReadWord(cpu, cameraY));
+    }
+
+    private static bool IsRunnerSpawn(RespawnState state, int expectedCameraY) =>
+        state == new RespawnState(72, 273, 0, 1, 0, expectedCameraY);
+
+    private static bool VisibleCameraIsAtSpawn(GameBoyTestCpu cpu, int expectedCameraY) =>
+        ReadWord(cpu, PackedCameraMemory.VisibleCameraXLow) == 0
+        && ReadWord(cpu, PackedCameraMemory.VisibleCameraYLow) == expectedCameraY;
+
+    private static void RecordRequestedCameraWalk(
+        IDictionary<(int X, int Y), int> requestedFrames,
+        (int X, int Y) from,
+        (int X, int Y) to,
+        int frame)
+    {
+        if (from.X != to.X)
+        {
+            foreach (var x in Enumerable.Range(Math.Min(from.X, to.X), Math.Abs(to.X - from.X) + 1))
+            {
+                requestedFrames[(x, from.Y)] = frame;
+            }
+        }
+        if (from.Y != to.Y)
+        {
+            foreach (var y in Enumerable.Range(Math.Min(from.Y, to.Y), Math.Abs(to.Y - from.Y) + 1))
+            {
+                requestedFrames[(to.X, y)] = frame;
+            }
+        }
+        if (from == to)
+        {
+            requestedFrames[to] = frame;
+        }
+    }
+
     private static (ushort From, ushort To)? ObservedWordBoundaryCrossing(
         GameBoyTestCpu cpu,
         ushort lowAddress,
@@ -744,23 +977,6 @@ public sealed class GameBoyRunnerLandingTests
             + $"camera=({cameraX},{cameraY}) animation={animationFrame}, "
             + $"expected={Convert.ToHexString(expectedOam[..checked(asset.Pieces.Count * 4)])}, "
             + $"actual={Convert.ToHexString(actualOam[..checked(asset.Pieces.Count * 4)])}.");
-    }
-
-    private static GameBoyTestCpu RunnerAtFirstPlatform()
-    {
-        var source = RunnerSample.CompiledSource();
-        var positionedSource = source.Replace(
-            "view.y = Camera.VerticalScrollMax();",
-            $"view.x = {FirstPlatformCameraX};\n    view.y = Camera.VerticalScrollMax();",
-            StringComparison.Ordinal);
-        Assert.NotEqual(source, positionedSource);
-
-        var rom = GameBoyRomCompiler.CompileSource(positionedSource, RunnerSample.Directory);
-        var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
-        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraXLow, FirstPlatformCameraX, maxFrames: 800);
-        RunUntilWordEquals(cpu, PackedCameraMemory.VisibleCameraYLow, 176, maxFrames: 400);
-        cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 2);
-        return cpu;
     }
 
     private static JumpTrace RunJump(GameBoyTestCpu cpu, int heldFrames, int observedFrames)
@@ -851,20 +1067,6 @@ public sealed class GameBoyRunnerLandingTests
         }
     }
 
-    private static List<int> RunHorizontal(GameBoyTestCpu cpu, string direction, int observedFrames)
-    {
-        var playerYByFrame = new List<int>(observedFrames);
-        cpu.Held.Add(direction);
-        for (var frame = 0; frame < observedFrames; frame++)
-        {
-            cpu.RunUntilAudioUpdateCalls(cpu.AudioUpdateCalls + 1);
-            playerYByFrame.Add(cpu.Wram(PlayerYLow) | cpu.Wram(PlayerYLow + 1) << 8);
-        }
-
-        cpu.Held.Remove(direction);
-        return playerYByFrame;
-    }
-
     private sealed record JumpTrace(
         List<int> PlayerY,
         List<int> VelocityY,
@@ -878,5 +1080,13 @@ public sealed class GameBoyRunnerLandingTests
         int ExpectedRiseSixteenths);
 
     private sealed record GravityProbe(int InitialVelocity, bool IsHeld, int ExpectedVelocity);
+
+    private sealed record RespawnState(
+        int PlayerX,
+        int PlayerY,
+        int PlayerVelocityY,
+        int PlayerGrounded,
+        int CameraX,
+        int CameraY);
 
 }

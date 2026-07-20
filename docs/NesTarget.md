@@ -350,6 +350,14 @@ The tracked runner pair is regenerated together by
 `tools/gameboy/generate_sample_roms.py`; its sidecar is
 `samples/runner/bin/runner.nes.runtime-abi.json`.
 
+Runner fall recovery keeps the normal VBlank/audio/input loop alive while a
+shared staged phase returns the source camera by at most 4 px on one axis per
+tick and lets the packed camera publication settle. The final authored NES
+state remains world `(72, 273)` with camera `(0, 80)`, so its target-correct
+screen pose is `(72, 193)` and the first OAM piece is `(72, 192)`; the shared
+Game Boy source instead projects the same world spawn to screen Y 97 because
+its vertical camera maximum is 176.
+
 ## Cross-Target Sample
 
 `samples/platformer-landing/` is the focused shared `target-acceptance` rung for

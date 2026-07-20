@@ -4,12 +4,7 @@ using Runner.Player;
 
 class FrameState
 {
-    bool resetRequested;
-
-    inline void Begin()
-    {
-        resetRequested = false;
-    }
+    u8 respawnPhase;
 
     inline void ResolveLanding(PlayerState player, Pixel screenX, Pixel previousFootWorldY, Pixel footWorldY)
     {
@@ -27,14 +22,14 @@ class FrameState
         }
     }
 
-    inline void ResolveFall(PlayerState player)
+    inline void ResolveFall(PlayerState player, CameraState view)
     {
-        if (!player.grounded)
+        if (!player.grounded && player.y >= Player.FallResetY)
         {
-            if (player.y >= Player.FallResetY)
-            {
-                resetRequested = true;
-            }
+            respawnPhase = 1;
+            view.ResetMotion();
+            player.x = view.x + Player.StartX;
+            player.y = view.y + Player.StartY - Camera.VerticalScrollMax();
         }
     }
 
@@ -50,19 +45,53 @@ class FrameState
         }
     }
 
-    inline void ResolveReset(PlayerState player, CameraState view)
+    inline pure bool IsRespawning() => respawnPhase != 0;
+
+    void AdvanceRespawn(PlayerState player, CameraState view)
     {
-        if (resetRequested)
+        if (view.x > 4)
         {
-            player.Reset(view);
-            view.ResetMotion();
+            view.x -= 4;
+            player.x -= 4;
         }
+        else if (view.x > 0)
+        {
+            view.x = 0;
+            player.x = Player.StartX;
+        }
+        else
+        {
+            let spawnY = Camera.VerticalScrollMax();
+            if (view.y < spawnY)
+            {
+                view.y += 4;
+                player.y += 4;
+                if (view.y > spawnY)
+                {
+                    view.y = spawnY;
+                    player.y = Player.StartY;
+                }
+            }
+            else
+            {
+                respawnPhase += 1;
+                if (respawnPhase >= 4)
+                {
+                    player.x = Player.StartX;
+                    player.displayFrame = 0;
+                    player.Land(Player.StartY);
+                    respawnPhase = 0;
+                }
+            }
+        }
+
     }
+
 }
 
 inline void PresentFrame(PlayerState player, CameraState view)
 {
-    let screenX = view.ScreenX(player);
-    let screenY = view.ScreenY(player);
+    Pixel screenX = view.ScreenX(player);
+    Pixel screenY = view.ScreenY(player);
     Sprite.Draw(mario_player, screenX, screenY, player.displayFrame, player.displayFlipX, 0);
 }

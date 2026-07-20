@@ -1,4 +1,3 @@
-using Runner.Camera;
 using Runner.Level;
 
 class PlayerState
@@ -12,17 +11,6 @@ class PlayerState
     Pixel animTick;
     bool jumping;
     Pixel verticalSubpixel;
-
-    inline void Reset(CameraState view)
-    {
-        x = view.x + Player.StartX;
-        y = Player.StartY;
-        velocityY = 0;
-        grounded = true;
-        displayFrame = 0;
-        jumping = false;
-        verticalSubpixel = 0;
-    }
 
     inline void ApplyGravity()
     {
@@ -56,7 +44,7 @@ class PlayerState
         }
     }
 
-    inline void Land(Pixel targetY)
+    void Land(Pixel targetY)
     {
         y = targetY;
         velocityY = 0;
@@ -73,7 +61,7 @@ class PlayerState
         verticalSubpixel = 0;
     }
 
-    inline void StartJump(Pixel horizontalSpeed)
+    inline void StartJump(u8 horizontalSpeed)
     {
         velocityY = Jump.StandingVelocity;
         if (horizontalSpeed > 0)
@@ -106,23 +94,17 @@ class PlayerState
         };
     }
 
-    inline void HandleJumpInput(Pixel horizontalSpeed)
+    inline void HandleJumpInput(u8 horizontalSpeed)
     {
-        if (Input.WasPressed(Button.A))
+        if (Input.WasPressed(Button.A) && grounded)
         {
-            if (grounded)
-            {
-                StartJump(horizontalSpeed);
-                Sfx.Play(jump_sfx);
-            }
+            StartJump(horizontalSpeed);
+            Sfx.Play(jump_sfx);
         }
 
-        if (jumping)
+        if (jumping && Input.WasReleased(Button.A))
         {
-            if (Input.WasReleased(Button.A))
-            {
-                jumping = false;
-            }
+            jumping = false;
         }
     }
 

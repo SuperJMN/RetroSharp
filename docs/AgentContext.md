@@ -734,7 +734,8 @@ Suggested next steps for the next agent:
 - Collision over wider sprites should use logical sprite width through helpers such as `Sprite.Width(...)`; runner actors should project current screen X/Y from actor/player world position minus camera position, then pass byte-backed screen coordinates to `Camera.AabbTiles(...)`/`Camera.AabbHitTop(...)` or the fully screen-space `Camera.ScreenAabbTiles(...)`/`Camera.ScreenAabbHitTop(...)` forms so collision stays aligned with the visible camera after long scrolls.
 - If a platform feels dead even though visual tiles look correct, inspect frame order and state transitions, not just collision geometry.
 - Clamp vertical runner state before collision/reset logic when it can cross the top of the scene.
-- The runner reset path should restore actor, velocity, animation, facing, jump, and movement state without rebasing the scrolled background.
+- The runner fall path is a staged respawn, not an actor-only teleport. After a complete airborne `player.y >= 320` observation it freezes physics and movement input, resets motion, and walks the source camera back to `(0, Camera.VerticalScrollMax())` by at most 4 px on one axis per source tick through the existing single `Camera.SetPosition(...)` call. The normal VBlank, camera publication, sprite, audio, and input loop remains live; the final authored world spawn `(72, 273)` is published only after two settled source ticks, then `Land(...)` restores velocity, subpixel, jump, and grounded state.
+- The authored spawn has target-correct screen Y, not one cross-target screen constant: `273 - 176 = 97` on Game Boy and `273 - 80 = 193` on NES. OAM acceptance must use those respective poses while requiring the same world spawn and target-owned camera maximum.
 
 ## Tiled Map Pipeline
 

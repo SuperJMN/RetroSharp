@@ -192,13 +192,25 @@ supersede the run-speed staircase revision hashes above.
 | Target | Tracked artifact | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
 | Game Boy | `samples/runner/bin/runner.gb` | 131072 | `8380505914850759123430543e0dba6be2ac6a8770cd05cb6acb695200608944` |
-| NES | `samples/runner/bin/runner.nes` | 81936 | `3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49` |
+| NES | `samples/runner/bin/runner.nes` | 81936 | `26ab400141da8bfd8b502f5272463e5fd0236d170ba17901526f41b064f0d727` |
 
 The current Game Boy hash incorporates later target work without changing the
 landing contract. The current NES hash incorporates CSL-5 / #340's
 stale-NMI publication, bounded OAM publisher, and DPCM-link placement
 corrections. The exact landing, staircase, gravity, and jump-rise regressions
 remain green against these tracked cartridges.
+
+## Staged fall recovery (#409)
+
+An input-driven fall past `Player.FallResetY = 320` now starts one staged
+recovery instead of resetting the player at a stale scrolled camera position.
+Physics and movement input pause while the camera returns to the authored
+spawn view `(0, Camera.VerticalScrollMax())`, one axis at a time and by at
+most four pixels per source tick. VBlank, audio, retained OAM publication, and
+input polling stay live. Once the camera has settled, the runner restores the
+safe world state `(player.x, player.y) = (72, 273)` and grounded play; the
+focused GB and NES ROM tests prove 300 subsequent idle physical frames do not
+start another reset.
 
 ## Validation
 

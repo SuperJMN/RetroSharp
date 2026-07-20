@@ -2,8 +2,8 @@
   "contract": "retrosharp.nes.runtime-abi",
   "version": 1,
   "target": "nes",
-  "abiFingerprint": "a18403a231ed4feb8098b36489c4190a69bd3186916450542d1a8a60f822017d",
-  "romSha256": "3e61d5566bfdd9acd19c9c16007c265c8ccd374186b92dfb960361d978dd0d49",
+  "abiFingerprint": "2120ff483ea3f1b9b32fe0ee2200caa9c5d59ce2ed352d793123bce86f5e5790",
+  "romSha256": "26ab400141da8bfd8b502f5272463e5fd0236d170ba17901526f41b064f0d727",
   "ranges": [
     {
       "id": "UserLocals",
@@ -1836,140 +1836,146 @@
     },
     {
       "name": "view.speed",
-      "type": "i16",
+      "type": "u8",
       "address": 19,
-      "size": 2
+      "size": 1
     },
     {
       "name": "view.direction",
-      "type": "i16",
-      "address": 21,
-      "size": 2
+      "type": "u8",
+      "address": 20,
+      "size": 1
     },
     {
       "name": "view.movementRemainder",
-      "type": "i16",
-      "address": 23,
-      "size": 2
+      "type": "u8",
+      "address": 21,
+      "size": 1
     },
     {
-      "name": "frame.resetRequested",
-      "type": "bool",
-      "address": 25,
+      "name": "frame.respawnPhase",
+      "type": "u8",
+      "address": 22,
       "size": 1
     },
     {
       "name": "__retrosharp_inline_12_screenX",
       "type": "i16",
-      "address": 26,
+      "address": 23,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_12_screenY",
       "type": "i16",
-      "address": 28,
+      "address": 25,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_17_spawnY",
+      "type": "i16",
+      "address": 27,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_previousFootWorldY",
       "type": "i16",
-      "address": 30,
+      "address": 29,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_18_verticalMotion",
+      "name": "__retrosharp_inline_19_verticalMotion",
       "type": "i16",
-      "address": 32,
+      "address": 31,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_footWorldY",
       "type": "i16",
-      "address": 34,
+      "address": 33,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_screenX",
       "type": "i16",
-      "address": 36,
+      "address": 35,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_19_footTile",
+      "name": "__retrosharp_inline_20_footTile",
       "type": "i16",
-      "address": 38,
+      "address": 37,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_21_headProbeY",
+      "name": "__retrosharp_inline_22_headProbeY",
       "type": "i16",
-      "address": 40,
+      "address": 39,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_27_screenY",
+      "name": "__retrosharp_inline_24_screenY",
       "type": "i16",
-      "address": 42,
+      "address": 41,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_27_maxScrollY",
+      "name": "__retrosharp_inline_24_maxScrollY",
       "type": "i16",
-      "address": 44,
+      "address": 43,
       "size": 2
     },
     {
       "name": "__retrosharp_inline_16_movementFootWorldY",
       "type": "i16",
-      "address": 46,
+      "address": 45,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_31_wallProbeY",
+      "name": "__retrosharp_inline_28_wallProbeY",
       "type": "i16",
-      "address": 48,
+      "address": 47,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_31_desiredDirection",
+      "name": "__retrosharp_inline_28_desiredDirection",
+      "type": "u8",
+      "address": 49,
+      "size": 1
+    },
+    {
+      "name": "__retrosharp_inline_40_collisionCameraX",
       "type": "i16",
       "address": 50,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_43_collisionCameraX",
-      "type": "i16",
-      "address": 52,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_43_steps",
+      "name": "__retrosharp_inline_40_steps",
       "type": "u8",
-      "address": 54,
+      "address": 52,
       "size": 1
     },
     {
-      "name": "__retrosharp_inline_45_screenX",
+      "name": "__retrosharp_inline_42_screenX",
+      "type": "i16",
+      "address": 53,
+      "size": 2
+    },
+    {
+      "name": "__retrosharp_inline_42_rightProbeX",
       "type": "i16",
       "address": 55,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_45_rightProbeX",
+      "name": "__retrosharp_inline_44_screenX",
       "type": "i16",
       "address": 57,
       "size": 2
     },
     {
-      "name": "__retrosharp_inline_47_screenX",
+      "name": "__retrosharp_inline_44_leftProbeX",
       "type": "i16",
       "address": 59,
-      "size": 2
-    },
-    {
-      "name": "__retrosharp_inline_47_leftProbeX",
-      "type": "i16",
-      "address": 61,
       "size": 2
     }
   ]

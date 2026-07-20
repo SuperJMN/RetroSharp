@@ -25,6 +25,8 @@ internal readonly record struct NesOamDmaTransfer(
 
 internal readonly record struct NesApuWrite(ushort Register, byte Value, long Cycle);
 
+internal readonly record struct NesRamByteWrite(ushort Address, byte Value, long Cycle);
+
 internal sealed class NesTestCpu
 {
     private const long PpuCyclesPerFrame = 341 * 262;
@@ -33,6 +35,7 @@ internal sealed class NesTestCpu
     private readonly byte[] ram = new byte[0x800];
     private readonly byte[] ppuMemory = new byte[0x4000];
     private readonly byte[] oam = new byte[0x100];
+    private readonly List<NesRamByteWrite> ramByteWrites = [];
     private readonly int mapper;
     private readonly bool fourScreen;
     private readonly bool verticalMirroring;
@@ -127,6 +130,10 @@ internal sealed class NesTestCpu
     public void SetRam(ushort address, byte value) => ram[address & 0x07FF] = value;
 
     public byte Ram(ushort address) => ram[address & 0x07FF];
+
+    public HashSet<ushort> TracedRamBytes { get; } = [];
+
+    public IReadOnlyList<NesRamByteWrite> RamByteWrites => ramByteWrites;
 
     public byte PpuVram(ushort address) => ppuMemory[NormalizePpuAddress(address)];
 
@@ -552,6 +559,11 @@ internal sealed class NesTestCpu
         if (address < 0x2000)
         {
             ram[address & 0x07FF] = value;
+            var normalizedAddress = checked((ushort)(address & 0x07FF));
+            if (TracedRamBytes.Contains(normalizedAddress))
+            {
+                ramByteWrites.Add(new NesRamByteWrite(normalizedAddress, value, cycles));
+            }
             return;
         }
 

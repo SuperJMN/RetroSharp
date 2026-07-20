@@ -45,6 +45,7 @@ internal sealed class GameBoyTestCpu
     private readonly List<AudioUpdateTrace> audioUpdateTrace = [];
     private readonly List<long> sourceWaitCycles = [];
     private readonly List<WramWordWrite> wramWordWrites = [];
+    private readonly List<WramByteWrite> wramByteWrites = [];
     private readonly Queue<FarReadInjection> farReadInjections = [];
     private readonly List<FarReadResult> injectedFarReadResults = [];
 
@@ -79,6 +80,10 @@ internal sealed class GameBoyTestCpu
     public HashSet<ushort> TracedWramWords { get; } = [];
 
     public IReadOnlyList<WramWordWrite> WramWordWrites => wramWordWrites;
+
+    public HashSet<ushort> TracedWramBytes { get; } = [];
+
+    public IReadOnlyList<WramByteWrite> WramByteWrites => wramByteWrites;
 
     public ushort? TracedWorldPackCollisionLookupEntry { get; set; }
 
@@ -522,11 +527,13 @@ internal sealed class GameBoyTestCpu
                 return;
             case < 0xE000:
                 wram[addr - 0xC000] = value;
+                TraceWramByte(addr, value);
                 TraceWramWord(addr);
                 return;
             case < 0xFE00:
                 var mirroredAddress = checked((ushort)(addr - 0x2000));
                 wram[mirroredAddress - 0xC000] = value;
+                TraceWramByte(mirroredAddress, value);
                 TraceWramWord(mirroredAddress);
                 return;
             case < 0xFEA0:
@@ -603,6 +610,14 @@ internal sealed class GameBoyTestCpu
             var low = wram[lowAddress - 0xC000];
             var high = wram[lowAddress + 1 - 0xC000];
             wramWordWrites.Add(new WramWordWrite(lowAddress, checked((ushort)(low | high << 8)), cycles));
+        }
+    }
+
+    private void TraceWramByte(ushort writtenAddress, byte value)
+    {
+        if (TracedWramBytes.Contains(writtenAddress))
+        {
+            wramByteWrites.Add(new WramByteWrite(writtenAddress, value, cycles));
         }
     }
 
@@ -929,6 +944,8 @@ internal readonly record struct OamWrite(ushort Address, byte Value, long Cycles
 internal readonly record struct VramWrite(ushort Address, byte Value, long Cycles, byte Ly, bool LcdEnabled, bool Applied);
 
 internal readonly record struct WramWordWrite(ushort LowAddress, ushort Value, long Cycles);
+
+internal readonly record struct WramByteWrite(ushort Address, byte Value, long Cycles);
 
 internal readonly record struct RomBankWrite(
     ushort ProgramCounter,
