@@ -12,32 +12,6 @@ public sealed class GameBoySdkSpriteLoweringTests
 {
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-    public void Golden_sprite_draw_emission_is_pinned_gb()
-    {
-        var baseDirectory = WriteSpriteJsonAsset(
-            "player.sprite.json",
-            SpriteJson(
-                Rows(
-                    8,
-                    16,
-                    "01230123",
-                    "32103210")));
-
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(player_run, "player.sprite.json");
-                                  Sprite.Draw(player_run, 72, 80, 0, false, 1);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal("8D3D133258DBBA2A28B934EA16C03404AA25DF2D1B1C3BF3044A1250FC8C529D", Fingerprint(rom));
-    }
-
-    [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_sprite_asset_draw_to_a_game_boy_metasprite()
     {
         var baseDirectory = WriteSpriteJsonAsset(

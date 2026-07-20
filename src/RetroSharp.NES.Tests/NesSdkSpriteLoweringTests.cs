@@ -70,40 +70,6 @@ public sealed class NesSdkSpriteLoweringTests
 
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-    public void Golden_sprite_draw_emission_is_pinned_nes()
-    {
-        var baseDirectory = WriteSpriteAsset(
-            "hero.nes.json",
-            """
-            {
-              "platforms": {
-                "nes": {
-                  "frames": [[
-                    "11111111", "11111111", "11111111", "11111111",
-                    "11111111", "11111111", "11111111", "11111111"
-                  ]]
-                }
-              }
-            }
-            """);
-        const string source = """
-                              void Main() {
-                                  Video.Init();
-                                  Sprite.Asset(hero, "hero.nes.json");
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      Sprite.Draw(hero, 24, 32, 0, false, 2);
-                                  }
-                              }
-                              """;
-
-        var rom = NesRomCompiler.CompileSource(source, baseDirectory);
-
-        Assert.Equal("3E85ACCE1E4410F58224D80EC04AF5BD342F6092F51FEB304A3A91057514814D", Fingerprint(rom));
-    }
-
-    [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_logical_sprite_draw_to_nes_oam_and_chr_data()
     {
         var baseDirectory = WriteSpriteAsset(

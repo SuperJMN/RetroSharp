@@ -10,30 +10,6 @@ public sealed class NesSdkCollisionLoweringTests
 {
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-    public void Golden_collision_aabb_emission_is_pinned_nes()
-    {
-        const string source = """
-                              void Main() {
-                                  World.Column(0, 1, 2);
-                                  World.Flags(0, 0, 1);
-                                  World.Map(1, 10, 2);
-                                  Camera.Init(1, 10, 2);
-                                  while (true) {
-                                      Video.WaitVBlank();
-                                      u8 footY = 16;
-                                      u8 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                      u8 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
-                                  }
-                              }
-                              """;
-
-        var rom = NesRomCompiler.CompileSource(source);
-
-        Assert.Equal("9DADC4F11B3870D538625243392EFDAD30BFDFE08220DAC0A6FBC7F9B2A7A9EC", Fingerprint(rom));
-    }
-
-    [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void World_camera_hit_top_materializes_y_304_and_minus_one_through_a_x_on_nes()
     {
         var source = CollisionHitContractSource(

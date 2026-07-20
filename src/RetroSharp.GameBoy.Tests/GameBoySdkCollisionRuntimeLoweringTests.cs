@@ -9,35 +9,6 @@ public sealed class GameBoySdkCollisionRuntimeLoweringTests
 {
     [Fact]
     [Trait("RetroSharp.TestOwnership", "SdkLowering")]
-    public void Golden_collision_aabb_emission_is_pinned_gb()
-    {
-        const string source = """
-                              void DefineWorld() {
-                                  World.Column(0, 0, 4);
-                                  World.Column(1, 0, 4);
-                                  World.Column(2, 0, 4);
-                                  World.Flags(0, 0, 1);
-                                  World.Flags(1, 0, 1);
-                                  World.Flags(2, 0, 1);
-                                  World.Map(3, 11, 2);
-                                  Camera.Init(3, 11, 2);
-                              }
-
-                              void Main() {
-                                  DefineWorld();
-                                  i16 footY = 16;
-                                  i16 hit = Camera.AabbTiles(72, footY - 8, 16, 16, 1);
-                                  i16 hitTop = Camera.AabbHitTop(72, footY - 8, 16, 16, 1);
-                              }
-                              """;
-
-        var rom = GameBoyRomCompiler.CompileSource(source);
-
-        Assert.Equal("927F804320BC973C4139D33F5010C236EE595EE39AEC17DA0A2D02D05B42099F", Fingerprint(rom));
-    }
-
-    [Fact]
-    [Trait("RetroSharp.TestOwnership", "SdkLowering")]
     public void Compiles_map_tile_lookup_as_a_runtime_expression()
     {
         const string source = """

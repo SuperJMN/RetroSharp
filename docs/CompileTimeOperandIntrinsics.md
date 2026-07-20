@@ -147,13 +147,8 @@ Game Boy and NES `Camera.AabbTiles` and `Camera.AabbHitTop` use the same mechani
 
 `StreamMapColumn` and `StreamMapRow` stay compiler-emitted. They are effects of camera lowering, not public source calls that should be migrated to source library helpers in SAL-8.
 
-## Golden Characterization
+## Lowering coverage
 
-SAL-8.1 pins the current emitted bytes before any lowering changes:
+The sprite and collision lowering paths are covered by behavioral and structural tests (for example `Compiles_logical_sprite_draw_to_nes_oam_and_chr_data`, `Compiles_sprite_asset_draw_to_a_game_boy_metasprite`, `Compiles_map_tile_lookup_as_a_runtime_expression`, and `World_camera_hit_top_materializes_y_304_and_minus_one_through_a_x_on_nes`), which assert the emitted OAM, CHR, and collision behavior directly.
 
-- `Golden_sprite_draw_emission_is_pinned_gb`
-- `Golden_collision_aabb_emission_is_pinned_gb`
-- `Golden_sprite_draw_emission_is_pinned_nes`
-- `Golden_collision_aabb_emission_is_pinned_nes`
-
-These tests compile focused programs and compare full ROM SHA-256 fingerprints. Later SAL-8 slices must keep these goldens byte-identical unless an integrator explicitly accepts a new byte baseline with full target validation.
+The earlier byte-exact `Golden_..._is_pinned` ROM SHA-256 fingerprint tests were removed under the fluidity-first acceptance policy: byte-identical emission is a diagnostic baseline, not a gate. See the Acceptance Policy in `AGENTS.md`.

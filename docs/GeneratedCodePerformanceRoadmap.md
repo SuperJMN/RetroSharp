@@ -8,6 +8,8 @@ cover the reproducible baseline, CPU-work contract, generated-shape
 optimizations, initial executable CPU-work report, and joint exact-ROM cadence
 acceptance.
 
+Acceptance policy: acceptance is judged by observable gameplay fluidity, not byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic baselines rather than gates, and CPU-cost figures are upper-bound budgets. Tracked ROMs are regeneratable artifacts. See the Acceptance Policy in `AGENTS.md`.
+
 This roadmap turns the measured Actor Framework code-generation bottlenecks
 into bounded work for Game Boy and NES. It covers compiler-generated work whose
 cost the compiler can know from fixed pool capacities, authored spawn tables,

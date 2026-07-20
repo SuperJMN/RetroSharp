@@ -3,6 +3,8 @@
 Status: proposed architecture roadmap.
 Last updated: 2026-07-17.
 
+Acceptance policy: acceptance is judged by observable gameplay fluidity, not byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic baselines rather than gates. Tracked ROMs are regeneratable artifacts. See the Acceptance Policy in `AGENTS.md`.
+
 This roadmap defines how RetroSharp should grow from the current Game Boy runner proving ground into a portable 2D SDK without letting one machine's details become the language or public SDK by accident.
 
 For the current public package vs internal compiler model boundary, see

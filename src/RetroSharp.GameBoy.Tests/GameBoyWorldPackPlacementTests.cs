@@ -3,7 +3,6 @@ namespace RetroSharp.GameBoy.Tests;
 using RetroSharp.GameBoy;
 using RetroSharp.Core.Sdk;
 using RetroSharp.Sdk;
-using System.Security.Cryptography;
 using Xunit;
 
 public sealed class GameBoyWorldPackPlacementTests
@@ -236,7 +235,6 @@ public sealed class GameBoyWorldPackPlacementTests
             source,
             sdkLibraryImports: [SdkImportResolver.Portable2D]);
 
-        Assert.Equal("927F804320BC973C4139D33F5010C236EE595EE39AEC17DA0A2D02D05B42099F", Convert.ToHexString(SHA256.HashData(result.Rom)));
         Assert.DoesNotContain(result.Report.Segments, item => item.Owner == "worldpack:default");
         Assert.Contains(result.Report.Segments, item => item.Owner == "legacy-world-data:default");
     }

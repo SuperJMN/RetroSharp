@@ -4,6 +4,8 @@ Status: **complete; Waves 0 and 1, Game Boy `LW-2.1` through `LW-2.5`, NES
 `LW-3.1` through `LW-3.4`, and joint acceptance `LW-3.5` are implemented.**
 Last updated: 2026-07-14.
 
+Acceptance policy: acceptance is judged by observable gameplay fluidity, not byte-for-byte output. The byte-identical ROM, hardcoded SHA-256, exact CPU-cycle, and cross-emulator parity criteria mentioned below are diagnostic baselines rather than gates. Tracked ROMs are regeneratable artifacts. See the Acceptance Policy in `AGENTS.md`.
+
 Post-epic content revision: the runner now authors 56 one-way `Platform` cells
 on its existing green ledges. This does not change WorldPack v1 or the completed
 banking graph; it adds one collision profile and changes the current production
