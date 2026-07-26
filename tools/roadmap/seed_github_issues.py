@@ -18,6 +18,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROADMAP = ROOT / "docs" / "ArchitectureRoadmap.md"
+sys.path.insert(0, str(ROOT / "tools" / "agent"))
+from issue_contract import render_exemption
 
 LABELS: dict[str, tuple[str, str]] = {
     "roadmap": ("6f42c1", "Architecture roadmap work"),
@@ -32,6 +34,10 @@ LABELS: dict[str, tuple[str, str]] = {
     "layer:validation": ("5319e7", "Validation, acceptance, or test infrastructure"),
     "target:gb": ("8dd6f9", "Game Boy target"),
     "target:nes": ("fef2c0", "NES target"),
+    "agent:ready": ("0e8a16", "Machine-checkable issue ready for dispatch"),
+    "agent:claimed": ("fbca04", "Machine-checkable issue currently leased"),
+    "agent:blocked": ("d73a4a", "Machine-checkable issue blocked"),
+    "agent:verified": ("1d76db", "Machine-checkable issue verified"),
 }
 
 PARALLEL_SAFE = {
@@ -212,7 +218,7 @@ def layer_labels(task: RoadmapTask) -> list[str]:
 
 
 def labels_for(task: RoadmapTask) -> list[str]:
-    labels = ["roadmap", "agent-task", "needs-integration"]
+    labels = ["roadmap", "agent-task", "needs-integration", "agent:blocked"]
     labels.extend(layer_labels(task))
     labels.extend(EXTRA_LABELS.get(task.task_id, []))
     if task.task_id in PARALLEL_SAFE:
@@ -225,7 +231,13 @@ def labels_for(task: RoadmapTask) -> list[str]:
 def issue_body(task: RoadmapTask) -> str:
     dependencies = DEPENDENCIES.get(task.task_id, [])
     dependency_text = "\n".join(f"- {dependency}" for dependency in dependencies) if dependencies else "- None"
-    return f"""Source: `docs/ArchitectureRoadmap.md` line {task.line}
+    return render_exemption(
+        source=f"docs/ArchitectureRoadmap.md line {task.line}",
+        reason=("Legacy roadmap card: enrich it with the AEX-1 issue form before dispatch. "
+                "The seeder intentionally never creates a claimable contract from inferred fields."),
+    ) + f"""
+
+## Roadmap task
 
 ## Dependencies
 

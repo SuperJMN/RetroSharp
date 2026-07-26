@@ -11,9 +11,9 @@
 
 ## Verification
 
-- [ ] `dotnet test RetroSharp.sln`
+- [ ] `dotnet test RetroSharp.sln -m:1`
 - [ ] Game Boy runner build, when affected:
-  `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out /tmp/runner.gb samples/gameboy-runner/runner.rs`
+  `dotnet run --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out samples/runner/bin/runner.gb samples/runner/runner.retrosharp.json`
 - [ ] Documentation updated, when public API or roadmap status changed.
 
 ## Agent Handoff
