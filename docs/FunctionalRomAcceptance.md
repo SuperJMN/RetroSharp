@@ -100,6 +100,8 @@ The adapters deliberately do not introduce target-specific acceptance rules:
 - `GameboyMcp` and `NesMcp` transports implement the same machine interface, so they feed the shared runner rather than introducing target-specific acceptance logic.
 - External-emulator launch scripts may provide transport, but the shared .NET runner remains the behavioral oracle and report producer.
 
+While fixing a bug, the in-process `GameBoyTestCpu`/`NesTestCpu` path that owns the failing RED test is the single authority the fix iterates against. `GameboyMcp`, `NesMcp`, and external-emulator transports are diagnostic confirmation, run once on the final candidate; do not swap the oracle mid-fix, because greening one observer while another stays red does not close the defect.
+
 Concrete sample adapters and scenarios are added by the ladder rung that owns the sample. CSL-2 establishes the contract and deliberately does not migrate all samples.
 
 The first binding proof is `FunctionalProductionRomAcceptanceTests`: it loads `validation/scenarios/tiled-vscroll.gb.json`, passes the exact tracked `samples/tiled-vscroll/vscroll.gb` bytes through `GameBoyFunctionalRomAdapter`, and drives the existing cycle-accurate `GameBoyTestCpu`. That scenario enables only the observations this seam can prove reliably (gameplay cadence, resets, and request/resident/commit/visible camera state). It does not claim bank or PPU write-timing coverage; later sample rungs must enable those features only through instrumentation that can actually observe them.

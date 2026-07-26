@@ -62,6 +62,17 @@ The Zafiro ecosystem source is available locally. If Zafiro internals matter, in
 
 The goal is a good in-game experience: smooth scrolling and movement, responsive controls, and music without stuttering. Acceptance is judged by that observable gameplay fluidity, not by byte-for-byte output. Aim to do it well, not perfectly. A ROM that plays well is correct even if its bytes move between builds.
 
+- A bug fix is *solved* when its named reproduction — the smallest deterministic
+  in-process behavioral test that fails because of the defect — flips from RED to
+  GREEN and stays green across two matching runs. It is not solved because the
+  ROM subjectively feels fluid. Write that reproduction before editing, prefer a
+  compiled-snippet `GameBoyTestCpu`/`NesTestCpu` test in the style of
+  `GameBoyRunnerLandingTests`, and iterate the fix against that single test.
+  Fluidity is the end-of-loop guard, run once on the final candidate, not the
+  target the fix loop iterates against. If the defect cannot be expressed as a
+  failing deterministic test within the reproduction budget, stop and hand it
+  back as an investigation carrying that reproduction attempt; do not keep
+  editing against the subjective fluidity signal.
 - The product gate is in-process behavioral simulation (`NesTestCpu` and `GameBoyTestCpu`): movement, jumps, landing, camera follow, collisions, audio cadence, deterministic execution, and absence of sustained backlog. Validate behavior on the freshly compiled ROM, not on a committed golden.
 - Prefer good over perfect. Fix real, observable problems such as stutter, input lag, torn or lagging scroll, audio dropouts, and sustained backlog. Do not chase byte-perfect reproduction, exact cycle counts, or cross-emulator pixel parity once the experience is smooth.
 - ROM byte identity, hardcoded SHA-256 digests, exact emitted-byte sequences, and exact CPU-cycle counts are diagnostic baselines, not gates. Do not add tests that pin them. Express CPU-cost limits as upper-bound budgets, not equalities.

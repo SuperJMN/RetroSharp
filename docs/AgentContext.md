@@ -88,6 +88,11 @@ can make an old constraint look current.
 - Game Boy runner cadence investigations use SameBoy's `GB_run_frame` timeline
   as physical-frame authority. `GameBoyTestCpu` remains a behavioral simulator,
   not a physical-frame clock.
+- A bug fix iterates against one authority: the in-process behavioral simulator
+  (`GameBoyTestCpu`/`NesTestCpu`) that owns its named RED test. Physical
+  emulators and MCP transports are diagnostic confirmation only; do not alternate
+  oracles mid-fix, because a fix that greens one observer while another stays red
+  is not solved.
 - Transitional public forms remain supported until an explicit removal slice
   changes their contract.
 
@@ -164,6 +169,8 @@ Classify a regression by its primary observable:
 | Applying broad formatting to inherited debt | Format touched files only and run `git diff --check` |
 | Fixing hardware/emulator symptoms only in sample code | Inspect target runtime behavior first |
 | Debugging the complete runner without isolation | Use `tools/gameboy/runner_diagnostics.py` and locate the first failing step |
+| Editing a bug fix before a named RED test fails for it | Reproduce as the cheapest deterministic `*TestCpu` test first; iterate the fix until that test greens twice |
+| Alternating oracles while fixing a bug | Iterate against one in-process `*TestCpu` RED; keep physical emulators and MCP transports diagnostic and never swap them in mid-fix |
 | Calling local validation “published” | Prove upstream alignment separately, as required by `AGENTS.md` |
 
 In a new worktree, restore before using `--no-restore`. Do not run concurrent
