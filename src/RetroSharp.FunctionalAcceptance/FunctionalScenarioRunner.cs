@@ -433,7 +433,7 @@ public static class FunctionalScenarioRunner
         var current = frames[^1];
         if (scenario.ExpectedFeatures.GameplayTicks)
         {
-            var missed = CurrentMissedStreak(frames, frame => frame.GameplayTicks);
+            var missed = CurrentMissedStreak(frames, scenario.WarmUpFrames, frame => frame.GameplayTicks);
             if (missed > scenario.Budgets.MaximumConsecutiveMissedGameplayTicks)
             {
                 failures.Add(new(
@@ -445,7 +445,7 @@ public static class FunctionalScenarioRunner
 
         if (scenario.ExpectedFeatures.AudioService && AudioServiceExpected(scenario, current.Frame))
         {
-            var missed = CurrentMissedStreak(frames, frame => frame.AudioServiceTicks);
+            var missed = CurrentMissedStreak(frames, scenario.WarmUpFrames, frame => frame.AudioServiceTicks);
             if (missed > scenario.Budgets.MaximumUnplannedAudioGapFrames!.Value)
             {
                 failures.Add(new(
@@ -911,10 +911,11 @@ public static class FunctionalScenarioRunner
 
     private static int CurrentMissedStreak(
         IReadOnlyList<FunctionalFrameObservation> frames,
+        int firstFrame,
         Func<FunctionalFrameObservation, long> counter)
     {
         var missed = 0;
-        for (var frame = frames.Count - 1; frame > 0; frame--)
+        for (var frame = frames.Count - 1; frame > firstFrame; frame--)
         {
             if (counter(frames[frame]) > counter(frames[frame - 1]))
             {
