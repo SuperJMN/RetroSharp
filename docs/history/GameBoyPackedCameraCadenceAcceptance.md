@@ -4,7 +4,7 @@ Status: accepted evidence for issue #332.
 Captured: 2026-07-13.
 
 This checkpoint uses the autonomous
-`samples/tiled-vscroll/vscroll.rs` production build. The final-link report owns
+`samples/tiled-vertical-scroll/vertical-scroll.rs` production build. The final-link report owns
 `worldpack:default` and contains no `legacy-world-data:default` segment, so the
 measurement exercises the packed `WorldPack` reader and staged camera rather
 than the raw row-table route.

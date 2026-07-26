@@ -233,7 +233,7 @@ budgets without building or writing a ROM by opting into
 dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb \
   --world-budget-report \
-  samples/tiled-free-scroll/free-scroll.tmj
+  samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj
 ```
 
 The option accepts one importer-ready `.tmj`, requires `--target gb` or

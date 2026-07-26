@@ -15,7 +15,7 @@ public sealed class GameBoyWorldPackReaderTests
     public void One_byte_runtime_uses_two_visual_slots_by_default_three_for_packed_camera_and_six_for_diagonal_camera()
     {
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
-            Path.Combine(RepositoryDirectory("samples/tiled-free-scroll"), "free-scroll.tmj"),
+            Path.Combine(RepositoryDirectory("samples/tiled-cross-target-2d-scroll"), "cross-target-2d-scroll.tmj"),
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
 
         var direct = GameBoyWorldPackRuntimePlan.Create(canonical.SerializedBytes);
@@ -573,9 +573,9 @@ public sealed class GameBoyWorldPackReaderTests
     [Fact]
     public void Staged_raw_decode_rejects_compensated_invalid_ids_before_cache_publication()
     {
-        var directory = RepositoryDirectory("samples/tiled-vscroll");
+        var directory = RepositoryDirectory("samples/tiled-vertical-scroll");
         var canonical = GameBoyTiledMapImporter.CompileWorldPack(
-            Path.Combine(directory, "vscroll.tmj"),
+            Path.Combine(directory, "vertical-scroll.tmj"),
             GameBoyVideoProgram.FirstGeneratedBackgroundTile);
         Assert.Equal(1, canonical.Pack.Descriptor.VisualIdBytes);
         var rawChunkIndex = Enumerable.Range(0, canonical.Pack.Chunks.Count)
@@ -608,7 +608,7 @@ public sealed class GameBoyWorldPackReaderTests
 
         Assert.True(compensation.HasValue, "Expected a same-lane payload compensation in a raw visual chunk.");
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
-            File.ReadAllText(Path.Combine(directory, "vscroll.rs")),
+            File.ReadAllText(Path.Combine(directory, "vertical-scroll.rs")),
             directory);
         var packSegment = Assert.Single(result.Report.Segments, segment => segment.Owner == "worldpack:default");
         var rom = result.Rom.ToArray();

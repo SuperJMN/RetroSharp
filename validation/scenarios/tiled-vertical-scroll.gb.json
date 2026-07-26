@@ -1,7 +1,7 @@
 {
   "$schema": "functional-scenario.schema.json",
-  "id": "tiled-vscroll-gb-functional",
-  "sampleId": "tiled-vscroll",
+  "id": "tiled-vertical-scroll-gb-functional",
+  "sampleId": "tiled-vertical-scroll",
   "target": "gb",
   "warmUpFrames": 20,
   "observationFrames": 600,

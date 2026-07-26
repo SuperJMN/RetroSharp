@@ -13,7 +13,7 @@ public sealed class FullStage1BaselineTests(ITestOutputHelper output)
     [Fact]
     public void External_tsj_background_world_map_round_trips_through_nes_world_pack()
     {
-        var mapPath = RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj");
+        var mapPath = RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj");
         var firstGeneratedTile = NesVideoProgram.FirstSpriteTile;
         var raw = NesTiledWorldImporter.Load(mapPath, firstGeneratedTile);
         var compiled = NesTiledWorldImporter.CompileWorldPack(mapPath, firstGeneratedTile);

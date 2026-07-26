@@ -104,7 +104,7 @@ While fixing a bug, the in-process `GameBoyTestCpu`/`NesTestCpu` path that owns 
 
 Concrete sample adapters and scenarios are added by the ladder rung that owns the sample. CSL-2 establishes the contract and deliberately does not migrate all samples.
 
-The first binding proof is `FunctionalProductionRomAcceptanceTests`: it loads `validation/scenarios/tiled-vscroll.gb.json`, passes the exact tracked `samples/tiled-vscroll/vscroll.gb` bytes through `GameBoyFunctionalRomAdapter`, and drives the existing cycle-accurate `GameBoyTestCpu`. That scenario enables only the observations this seam can prove reliably (gameplay cadence, resets, and request/resident/commit/visible camera state). It does not claim bank or PPU write-timing coverage; later sample rungs must enable those features only through instrumentation that can actually observe them.
+The first binding proof is `FunctionalProductionRomAcceptanceTests`: it loads `validation/scenarios/tiled-vertical-scroll.gb.json`, passes the exact tracked `samples/tiled-vertical-scroll/vertical-scroll.gb` bytes through `GameBoyFunctionalRomAdapter`, and drives the existing cycle-accurate `GameBoyTestCpu`. That scenario enables only the observations this seam can prove reliably (gameplay cadence, resets, and request/resident/commit/visible camera state). It does not claim bank or PPU write-timing coverage; later sample rungs must enable those features only through instrumentation that can actually observe them.
 
 CSL-3 binds eight canonical sample/target scenarios to production source and
 the freshly emitted ROM: static drawing on GB/NES, the shared input-driven camera
@@ -117,8 +117,8 @@ deadlines, and legal video/OAM write timing. See
 for the matrix, reviewed budgets, hashes, MCP checkpoints, and focused command.
 
 RPH-3.5 binds the next eight canonical sample/target scenarios to the packed
-Tiled production path: `tiled-tall` GB, `tiled-vscroll` GB/NES,
-`tiled-diagonal` GB, `tiled-free-scroll` GB/NES, and `deadzone-follow` GB/NES.
+Tiled production path: `tiled-tall` GB, `tiled-vertical-scroll` GB/NES,
+`tiled-gb-diagonal-streaming` GB, `tiled-cross-target-2d-scroll` GB/NES, and `deadzone-follow` GB/NES.
 They add complete authored tile/palette oracles, request/resident/commit/visible
 lifecycles, bank/mapper restoration, and cycle-positioned video/OAM writes over
 long vertical, diagonal, reversal, circular-buffer, chunk, and bank-sensitive

@@ -119,9 +119,9 @@ public sealed class CrossTargetCliAcceptanceTests
     public void Cli_world_budget_report_is_explicit_deterministic_json_and_default_output_is_byte_compatible()
     {
         using var workspace = TemporaryWorkspace();
-        var source = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");
-        var map = RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj");
-        var rom = Path.Combine(workspace.Path, "free-scroll.gb");
+        var source = RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs");
+        var map = RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj");
+        var rom = Path.Combine(workspace.Path, "cross-target-2d-scroll.gb");
 
         var normal = RunCli("--target", "gb", "--out", rom, source);
 
@@ -129,7 +129,7 @@ public sealed class CrossTargetCliAcceptanceTests
         Assert.Equal(string.Empty, normal.StandardOutput);
         Assert.Equal($"Wrote Game Boy ROM: {rom}{Environment.NewLine}", normal.StandardError);
 
-        var nesRom = Path.Combine(workspace.Path, "free-scroll.nes");
+        var nesRom = Path.Combine(workspace.Path, "cross-target-2d-scroll.nes");
         var normalNes = RunCli("--target", "nes", "--out", nesRom, source);
 
         Assert.Equal(0, normalNes.ExitCode);
@@ -177,12 +177,12 @@ public sealed class CrossTargetCliAcceptanceTests
             "--target",
             target,
             "--world-budget-report",
-            RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj"));
+            RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj"));
         var smallSecond = RunCli(
             "--target",
             target,
             "--world-budget-report",
-            RepositoryFile("samples/tiled-free-scroll/free-scroll.tmj"));
+            RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj"));
 
         Assert.Equal(0, small.ExitCode);
         Assert.Equal(string.Empty, small.StandardError);

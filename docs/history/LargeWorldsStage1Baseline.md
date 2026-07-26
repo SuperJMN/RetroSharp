@@ -32,7 +32,7 @@ available explicitly through the CLI without writing a ROM:
 ```bash
 dotnet run --no-launch-profile --project src/RetroSharp.Cli/RetroSharp.Cli.csproj -- \
   --target gb --world-budget-report \
-  samples/tiled-free-scroll/free-scroll.tmj
+  samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj
 ```
 
 Use `--target nes` for the NES payload. `stage1.tmj` now carries the

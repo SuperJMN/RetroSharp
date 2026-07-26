@@ -1,4 +1,4 @@
-# Diagonal Tiled Scroll Sample
+# Game Boy Tiled Diagonal Streaming Sample
 
 Sample Layer: `target-acceptance`
 
@@ -7,5 +7,5 @@ This sample exercises Game Boy diagonal camera streaming from a 40x40 Tiled map 
 Build the Game Boy ROM:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out diag.gb diag.rs
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out diagonal-streaming.gb diagonal-streaming.rs
 ```

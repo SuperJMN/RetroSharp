@@ -25,9 +25,9 @@ at instruction start.
 ## Fixed-frame scenario refresh
 
 Page-crossing corrections can move a logical observation by one instruction
-at a physical frame boundary. The refreshed `tiled-vscroll` NES checkpoints
+at a physical frame boundary. The refreshed `tiled-vertical-scroll` NES checkpoints
 were therefore checked against the unchanged tracked ROM
-`samples/tiled-vscroll/vscroll.nes` (SHA-256
+`samples/tiled-vertical-scroll/vertical-scroll.nes` (SHA-256
 `cbf9fbf1f5159a52258431403f7ef9fcf2532055808d5d6fa82bf159eaddde74`).
 AprNes and the in-process adapter use frame origins two frames apart for this
 ROM; the aligned observations were:

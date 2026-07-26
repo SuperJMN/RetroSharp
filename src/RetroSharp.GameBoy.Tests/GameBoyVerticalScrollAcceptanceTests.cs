@@ -115,14 +115,14 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     }
 
     [Fact]
-    public void Game_boy_tiled_vscroll_keeps_visible_rows_aligned_at_bottom_wrap()
+    public void Game_boy_tiled_vertical_scroll_keeps_visible_rows_aligned_at_bottom_wrap()
     {
-        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate tiled vertical scroll sample directory.");
         var source = File.ReadAllText(samplePath);
         var rom = GameBoyRomCompiler.CompileSource(source, sampleDirectory);
-        var map = GameBoyTiledMapImporter.Load(Path.Combine(sampleDirectory, "vscroll.tmj"));
+        var map = GameBoyTiledMapImporter.Load(Path.Combine(sampleDirectory, "vertical-scroll.tmj"));
         var cpu = new GameBoyTestCpu(rom) { CycleAccurateLy = true };
 
         for (var frame = 1; frame <= 260; frame++)
@@ -132,15 +132,15 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
             Assert.Equal(0, cpu.IoRegister(0xFF43)); // SCX
             if (cpu.IoRegister(0xFF42) >= 200)
             {
-                AssertVisibleTilesMatchTiledWorld(cpu, map, $"tiled-vscroll frame {frame}");
+                AssertVisibleTilesMatchTiledWorld(cpu, map, $"tiled-vertical-scroll frame {frame}");
             }
         }
     }
 
     [Fact]
-    public void Game_boy_tiled_vscroll_keeps_gameplay_and_visible_camera_at_baseline_cadence_on_the_production_packed_path()
+    public void Game_boy_tiled_vertical_scroll_keeps_gameplay_and_visible_camera_at_baseline_cadence_on_the_production_packed_path()
     {
-        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate tiled vertical scroll sample directory.");
         var source = File.ReadAllText(samplePath);
@@ -180,9 +180,9 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     }
 
     [Fact]
-    public void Game_boy_tiled_vscroll_makes_cold_and_chunk_boundary_edges_resident_within_one_hardware_frame()
+    public void Game_boy_tiled_vertical_scroll_makes_cold_and_chunk_boundary_edges_resident_within_one_hardware_frame()
     {
-        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate tiled vertical scroll sample directory.");
         var result = RetroSharp.GameBoy.GameBoyRomCompiler.CompileSourceWithReport(
@@ -291,11 +291,11 @@ public sealed class GameBoyVerticalScrollAcceptanceTests
     [Fact]
     public void Game_boy_diagonal_tiled_world_load_streams_fresh_columns_and_rows_from_full_map()
     {
-        var samplePath = RepositoryFile("samples/tiled-diagonal/diag.rs");
+        var samplePath = RepositoryFile("samples/tiled-gb-diagonal-streaming/diagonal-streaming.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath)
             ?? throw new InvalidOperationException("Could not locate diagonal Tiled sample directory.");
         var source = File.ReadAllText(samplePath);
-        Assert.Contains("World.Load(\"diag.tmj\");", source, StringComparison.Ordinal);
+        Assert.Contains("World.Load(\"diagonal-streaming.tmj\");", source, StringComparison.Ordinal);
         Assert.Contains("Camera.Init(Level.Width, Level.StreamY, Level.Height);", source, StringComparison.Ordinal);
 
         var operations = GameBoyRomCompiler.CollectSdkOperations(source, sampleDirectory);

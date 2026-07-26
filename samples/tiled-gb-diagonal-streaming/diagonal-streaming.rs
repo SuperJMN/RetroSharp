@@ -16,7 +16,7 @@ void Main()
 {
     Video.Init();
 
-    World.Load("diag.tmj");
+    World.Load("diagonal-streaming.tmj");
     Camera.Init(Level.Width, Level.StreamY, Level.Height);
 
     u8 cameraX = 0;

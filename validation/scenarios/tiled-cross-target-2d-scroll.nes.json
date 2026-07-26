@@ -1,7 +1,7 @@
 {
   "$schema": "functional-scenario.schema.json",
-  "id": "tiled-free-scroll-nes-functional",
-  "sampleId": "tiled-free-scroll",
+  "id": "tiled-cross-target-2d-scroll-nes-functional",
+  "sampleId": "tiled-cross-target-2d-scroll",
   "target": "nes",
   "warmUpFrames": 20,
   "observationFrames": 360,

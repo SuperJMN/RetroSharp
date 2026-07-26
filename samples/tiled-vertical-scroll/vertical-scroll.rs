@@ -17,7 +17,7 @@ void Main()
 {
     Video.Init();
 
-    World.Load("vscroll.tmj");
+    World.Load("vertical-scroll.tmj");
     Camera.Init(Level.Width, Level.StreamY, Level.Height);
 
     u8 cameraY = 0;

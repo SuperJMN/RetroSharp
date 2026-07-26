@@ -124,7 +124,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     [Fact]
     public void Wide_tall_tiled_sample_lowers_vertical_camera_on_game_boy_and_nes()
     {
-        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath);
         var source = File.ReadAllText(samplePath);
 
@@ -137,7 +137,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     [Fact]
     public void Tiled_free_scroll_sample_lowers_diagonal_camera_on_game_boy_and_nes()
     {
-        var samplePath = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath);
         var source = File.ReadAllText(samplePath);
 
@@ -186,7 +186,7 @@ public sealed class CrossTargetScrollAcceptanceTests
     [Fact]
     public void Tiled_free_scroll_sample_populates_four_screen_nametable_tiles_and_attributes_on_nes()
     {
-        var samplePath = RepositoryFile("samples/tiled-free-scroll/free-scroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs");
         var sampleDirectory = Path.GetDirectoryName(samplePath);
         var source = File.ReadAllText(samplePath);
 

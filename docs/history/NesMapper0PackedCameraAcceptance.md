@@ -4,7 +4,7 @@ Status: accepted evidence for issue #331.
 Captured: 2026-07-13.
 
 This checkpoint uses the autonomous
-`samples/tiled-vscroll/vscroll.rs` production build with automatic cartridge
+`samples/tiled-vertical-scroll/vertical-scroll.rs` production build with automatic cartridge
 profile selection. It does not force MMC3, disable NMI, use the raw camera
 path, or change the map or source movement loop.
 

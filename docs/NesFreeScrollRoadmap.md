@@ -108,7 +108,7 @@ Navigation after AIN-2/AIN-8: the completed phase cards retain historical
   spans and is also used by the shared capability/budget model.
 - `samples/source-free-scroll/freescroll.rs` remains the source-authored NES four-screen
   behavioral proof and now also builds for Game Boy, where the same diagonal source
-  exercises the GB staggered one-axis-queue-per-VBlank streaming policy. `samples/tiled-free-scroll/free-scroll.rs`
+  exercises the GB staggered one-axis-queue-per-VBlank streaming policy. `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs`
   is the matching Tiled `World.Load(...)` diagonal proof inside the 64x60 four-screen surface.
 - **No in-process NES emulator** in the repo (GB has `GameBoyTestCpu`; NES does
   not). Behavioral NES testing is via the `nes_debug` MCP (`Nes.Mcp`, ADNES).
@@ -340,7 +340,7 @@ requirement.
     **and** row tables available to NES streaming.
   - [x] Respect the current one-byte source-column runtime limit (or lift it
     deliberately); document the maximum free-scroll level size per substrate.
-- Verify: `samples/tiled-free-scroll/free-scroll.rs` loads a Tiled map and scrolls
+- Verify: `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs` loads a Tiled map and scrolls
   in both axes; Game Boy parity unaffected.
 
 ---
@@ -348,7 +348,7 @@ requirement.
 ## Phase NF-9 — Acceptance: sample + tests + cross-check
 
 - Layer: samples + validation + docs.
-- Files: `samples/source-free-scroll/`, `samples/tiled-free-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
+- Files: `samples/source-free-scroll/`, `samples/tiled-cross-target-2d-scroll/`, NES acceptance tests, `docs/NesTarget.md`,
   `samples/manifest.json`, `docs/ArchitectureRoadmap.md`.
 - Steps:
   - [x] The historical NF-9 golden-byte tests covered the four-screen header,
@@ -387,7 +387,7 @@ stable IRQ HUD remains a distinct follow-up:
 
 ## Acceptance criteria (free-scroll milestone)
 
-- `samples/source-free-scroll/freescroll.rs` and `samples/tiled-free-scroll/free-scroll.rs`
+- `samples/source-free-scroll/freescroll.rs` and `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs`
   scroll **diagonally** (both axes at once) with no corner artifacts, proven behaviorally
   through the four-screen `nes_debug` MCP, not just compile level.
 - Levels up to 512x480 work with no runtime streaming (NF-3). Larger

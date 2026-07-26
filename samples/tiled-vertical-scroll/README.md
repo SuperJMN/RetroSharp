@@ -1,4 +1,4 @@
-# Wide Tall Tiled Scroll Sample
+# Tiled Vertical Scroll Sample
 
 Sample Layer: `target-acceptance`
 
@@ -7,11 +7,11 @@ This sample exercises vertical camera movement from a 40x60 Tiled map loaded wit
 Build the Game Boy ROM:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out vscroll.gb vscroll.rs
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out vertical-scroll.gb vertical-scroll.rs
 ```
 
 Build the NES ROM:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out vscroll.nes vscroll.rs
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out vertical-scroll.nes vertical-scroll.rs
 ```

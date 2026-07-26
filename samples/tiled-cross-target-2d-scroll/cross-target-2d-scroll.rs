@@ -13,7 +13,7 @@ void Main()
 {
     Video.Init();
 
-    World.Load("free-scroll.tmj");
+    World.Load("cross-target-2d-scroll.tmj");
     Camera.Init(Level.Width, Level.StreamY, Level.Height);
 
     i16 cameraX = 0;

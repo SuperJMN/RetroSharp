@@ -35,11 +35,11 @@ physical frames.
 | `tiled-hscroll-full` NES | `344ae867796fef03691baaeba9167950a645bbb72756d41404561beac4256073` | 2584 | 2569 / 2584 (0.994) | 1 | 0 / 2 | 0 |
 | `tiled-hscroll-offset` GB | `8f948c2e55a8b7833244005ed3199d73f20bd78028332f2f6741e334b2301c9c` | 420 | 420 / 420 (1.000) | 0 | 1 / 1 | 0 |
 | `tiled-hscroll-offset` NES | `e0a0a7865d1594d19a4412bf5bc167b975eb1caf7dcfe5ca0c567cab1679d942` | 420 | 418 / 420 (0.995) | 1 | 0 / 2 | 0 |
-| `tiled-vscroll` GB | `ad9e91a65d9b4ac1f3c741115ec364834205d603d1191bec2d8722f96e24e193` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
-| `tiled-vscroll` NES | `cbf9fbf1f5159a52258431403f7ef9fcf2532055808d5d6fa82bf159eaddde74` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
-| `tiled-diagonal` GB | `749bb8bc626aa5096c153e8df0829621c8d2a100a56274c3e2d508778de4b64f` | 360 | 348 / 360 (0.967) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` GB | `9ba6a24c1438cc736628bcb69c2133d266336f2bd0c77581b1d3326db23952ff` | 360 | 350 / 360 (0.972) | 1 | 2 / 2 | 0 |
-| `tiled-free-scroll` NES | `3a1ef1859dceaf0b64e4dfec3d50c1f503c58b54fd70d9126b60b8fe19a03edd` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
+| `tiled-vertical-scroll` GB | `ad9e91a65d9b4ac1f3c741115ec364834205d603d1191bec2d8722f96e24e193` | 600 | 596 / 600 (0.993) | 1 | 1 / 1 | 0 |
+| `tiled-vertical-scroll` NES | `cbf9fbf1f5159a52258431403f7ef9fcf2532055808d5d6fa82bf159eaddde74` | 600 | 600 / 600 (1.000) | 0 | 0 / 0 | 0 |
+| `tiled-gb-diagonal-streaming` GB | `749bb8bc626aa5096c153e8df0829621c8d2a100a56274c3e2d508778de4b64f` | 360 | 348 / 360 (0.967) | 1 | 2 / 2 | 0 |
+| `tiled-cross-target-2d-scroll` GB | `9ba6a24c1438cc736628bcb69c2133d266336f2bd0c77581b1d3326db23952ff` | 360 | 350 / 360 (0.972) | 1 | 2 / 2 | 0 |
+| `tiled-cross-target-2d-scroll` NES | `3a1ef1859dceaf0b64e4dfec3d50c1f503c58b54fd70d9126b60b8fe19a03edd` | 360 | 359 / 360 (0.997) | 1 | 0 / 0 | 0 |
 | `deadzone-follow` GB | `e124964846e2edc885691743a588941fccb29d0b0e3a5c5407e2f54a64cd3e0a` | 400 | 384 / 400 (0.960) | 2 | 2 / 3 | 0 |
 | `deadzone-follow` NES | `7c7d79ba3fccc70608f4788009a206dde5d646cc05486bc8079e47958ee22124` | 400 | 396 / 400 (0.990) | 4 | 0 / 0 | 0 |
 
@@ -182,7 +182,7 @@ held or skipped scroll value.
 
 ## External emulator checkpoints
 
-The exact tracked `tiled-free-scroll` cartridges were also inspected outside
+The exact tracked `tiled-cross-target-2d-scroll` cartridges were also inspected outside
 the in-process runner.
 
 - GameboyMcp/SameBoy: after 20 frames the source camera at `$C000` was

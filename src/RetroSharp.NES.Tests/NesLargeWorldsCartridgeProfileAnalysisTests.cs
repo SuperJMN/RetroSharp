@@ -114,9 +114,9 @@ public sealed class NesLargeWorldsCartridgeProfileAnalysisTests
     }
 
     [Fact]
-    public void Automatic_mapper0_tiled_vscroll_vectors_nmi_to_the_fixed_frame_signal_handler()
+    public void Automatic_mapper0_tiled_vertical_scroll_vectors_nmi_to_the_fixed_frame_signal_handler()
     {
-        var samplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var samplePath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.rs");
         var result = RetroSharp.NES.NesRomCompiler.CompileSourceWithReport(
             File.ReadAllText(samplePath),
             Path.GetDirectoryName(samplePath));

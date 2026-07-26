@@ -24,8 +24,8 @@ public sealed class PackedTiledFunctionalAcceptanceTests(ITestOutputHelper outpu
         { "tiled-hscroll-short", "samples/tiled-hscroll/hscroll-short.rs", "samples/tiled-hscroll/stage1-short.tmj", "samples/tiled-hscroll/hscroll-short.nes", "validation/scenarios/tiled-hscroll-short.nes.json" },
         { "tiled-hscroll-full", "samples/tiled-hscroll/hscroll-full.rs", "samples/tiled-hscroll/stage1-full.tmj", "samples/tiled-hscroll/hscroll-full.nes", "validation/scenarios/tiled-hscroll-full.nes.json" },
         { "tiled-hscroll-offset", "samples/tiled-hscroll/hscroll-offset.rs", "samples/tiled-hscroll/stage1-full.tmj", "samples/tiled-hscroll/hscroll-offset.nes", "validation/scenarios/tiled-hscroll-offset.nes.json" },
-        { "tiled-vscroll", "samples/tiled-vscroll/vscroll.rs", "samples/tiled-vscroll/vscroll.tmj", "samples/tiled-vscroll/vscroll.nes", "validation/scenarios/tiled-vscroll.nes.json" },
-        { "tiled-free-scroll", "samples/tiled-free-scroll/free-scroll.rs", "samples/tiled-free-scroll/free-scroll.tmj", "samples/tiled-free-scroll/free-scroll.nes", "validation/scenarios/tiled-free-scroll.nes.json" },
+        { "tiled-vertical-scroll", "samples/tiled-vertical-scroll/vertical-scroll.rs", "samples/tiled-vertical-scroll/vertical-scroll.tmj", "samples/tiled-vertical-scroll/vertical-scroll.nes", "validation/scenarios/tiled-vertical-scroll.nes.json" },
+        { "tiled-cross-target-2d-scroll", "samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs", "samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.tmj", "samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.nes", "validation/scenarios/tiled-cross-target-2d-scroll.nes.json" },
         { "deadzone-follow", "samples/deadzone-follow/deadzone.rs", "samples/deadzone-follow/deadzone.tmj", "samples/deadzone-follow/deadzone.nes", "validation/scenarios/deadzone-follow.nes.json" },
         { "platformer-landing", "samples/platformer-landing/src/main.rs", "samples/platformer-landing/assets/platformer-landing.tmj", "samples/platformer-landing/bin/platformer-landing.nes", "validation/scenarios/platformer-landing.nes.json" },
     };

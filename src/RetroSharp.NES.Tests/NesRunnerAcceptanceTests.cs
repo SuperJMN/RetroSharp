@@ -187,7 +187,7 @@ public sealed class NesRunnerAcceptanceTests
             ContainsSequence(runnerRom, verticalScrollInset),
             "The full-stage runner must keep vertical camera framing without the fixed-height inset.");
 
-        var scrollingSamplePath = RepositoryFile("samples/tiled-vscroll/vscroll.rs");
+        var scrollingSamplePath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.rs");
         var scrollingSource = File.ReadAllText(scrollingSamplePath);
         var scrollingRom = NesRomCompiler.CompileSource(scrollingSource, Path.GetDirectoryName(scrollingSamplePath));
         Assert.False(

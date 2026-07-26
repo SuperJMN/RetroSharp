@@ -89,23 +89,23 @@
       "targets": ["gb", "nes"]
     },
     {
-      "id": "tiled-vscroll",
-      "path": "samples/tiled-vscroll/vscroll.rs",
-      "readme": "samples/tiled-vscroll/README.md",
+      "id": "tiled-vertical-scroll",
+      "path": "samples/tiled-vertical-scroll/vertical-scroll.rs",
+      "readme": "samples/tiled-vertical-scroll/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },
     {
-      "id": "tiled-diagonal",
-      "path": "samples/tiled-diagonal/diag.rs",
-      "readme": "samples/tiled-diagonal/README.md",
+      "id": "tiled-gb-diagonal-streaming",
+      "path": "samples/tiled-gb-diagonal-streaming/diagonal-streaming.rs",
+      "readme": "samples/tiled-gb-diagonal-streaming/README.md",
       "layer": "target-acceptance",
       "targets": ["gb"]
     },
     {
-      "id": "tiled-free-scroll",
-      "path": "samples/tiled-free-scroll/free-scroll.rs",
-      "readme": "samples/tiled-free-scroll/README.md",
+      "id": "tiled-cross-target-2d-scroll",
+      "path": "samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs",
+      "readme": "samples/tiled-cross-target-2d-scroll/README.md",
       "layer": "target-acceptance",
       "targets": ["gb", "nes"]
     },

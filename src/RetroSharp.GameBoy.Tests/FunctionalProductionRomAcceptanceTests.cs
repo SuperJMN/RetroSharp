@@ -12,10 +12,10 @@ public sealed class FunctionalProductionRomAcceptanceTests
     [Fact]
     public void Checked_in_scenario_executes_the_exact_tracked_production_rom_through_the_shared_runner()
     {
-        var romPath = RepositoryFile("samples/tiled-vscroll/vscroll.gb");
+        var romPath = RepositoryFile("samples/tiled-vertical-scroll/vertical-scroll.gb");
         var romBytes = File.ReadAllBytes(romPath);
         var scenario = FunctionalScenarioLoader.Load(
-            RepositoryFile("validation/scenarios/tiled-vscroll.gb.cadence.json"));
+            RepositoryFile("validation/scenarios/tiled-vertical-scroll.gb.cadence.json"));
         var factory = new GameBoyTestCpuMachineFactory();
         var adapter = new GameBoyFunctionalRomAdapter(
             factory,
@@ -26,7 +26,7 @@ public sealed class FunctionalProductionRomAcceptanceTests
 
         var report = FunctionalScenarioRunner.Run(
             scenario,
-            new FunctionalRomArtifact("samples/tiled-vscroll/vscroll.gb", romBytes),
+            new FunctionalRomArtifact("samples/tiled-vertical-scroll/vertical-scroll.gb", romBytes),
             adapter);
 
         Assert.True(report.Passed, report.ToHumanReadable());

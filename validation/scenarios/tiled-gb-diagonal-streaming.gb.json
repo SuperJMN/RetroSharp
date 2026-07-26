@@ -1,7 +1,7 @@
 {
   "$schema": "functional-scenario.schema.json",
-  "id": "tiled-diagonal-gb-functional",
-  "sampleId": "tiled-diagonal",
+  "id": "tiled-gb-diagonal-streaming-gb-functional",
+  "sampleId": "tiled-gb-diagonal-streaming",
   "target": "gb",
   "warmUpFrames": 20,
   "observationFrames": 360,

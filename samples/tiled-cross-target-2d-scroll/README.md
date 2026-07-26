@@ -1,4 +1,4 @@
-# Tiled Free Scroll Sample
+# Cross-Target Tiled 2D Scroll Sample
 
 Sample Layer: `target-acceptance`
 
@@ -7,11 +7,11 @@ This sample exercises bounded diagonal camera movement from a 50x60 Tiled map lo
 Build the Game Boy ROM:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out free-scroll.gb free-scroll.rs
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target gb --out cross-target-2d-scroll.gb cross-target-2d-scroll.rs
 ```
 
 Build the NES ROM:
 
 ```bash
-dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out free-scroll.nes free-scroll.rs
+dotnet run --project ../../src/RetroSharp.Cli/RetroSharp.Cli.csproj -- --target nes --out cross-target-2d-scroll.nes cross-target-2d-scroll.rs
 ```

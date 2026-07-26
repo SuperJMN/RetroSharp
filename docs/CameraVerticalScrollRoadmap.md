@@ -24,14 +24,14 @@ placement. See `docs/SdkArchitecture.md` and the target guide before editing.
   implemented at the codegen level and is internally consistent. The VS-1..VS-5
   slice proved it with `samples/source-vscroll/vscroll.rs`, ROM/VRAM acceptance,
   and a row-streamer emission fix. The diagonal Strategy A slice is also proven
-  by `samples/source-free-scroll/freescroll.rs`, `samples/tiled-diagonal/diag.rs`,
-	  and `samples/tiled-free-scroll/free-scroll.rs` on Game Boy: diagonal movement
+  by `samples/source-free-scroll/freescroll.rs`, `samples/tiled-gb-diagonal-streaming/diagonal-streaming.rs`,
+	  and `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs` on Game Boy: diagonal movement
 	  queues columns and rows independently and drains one axis queue per VBlank.
 - **NES is tracked separately.** The bounded free-scroll path now uses iNES
   four-screen VRAM, writes `$2000`/`$2005` for X and Y, and handles the 240-row
   coarse-Y wrap for maps that fit 64x60 tiles. Tall Tiled `World.Load(...)`
   maps now enter that four-screen path when a vertical camera axis is used, and
-  `samples/tiled-free-scroll/free-scroll.rs` proves diagonal Tiled maps inside
+  `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs` proves diagonal Tiled maps inside
   the 64x60 four-screen surface. Runtime row, diagonal, and attribute streaming for larger worlds remains
   governed by `docs/NesFreeScrollRoadmap.md`.
 - Every change keeps the layer golden rule: the language and classic IR never
@@ -65,12 +65,12 @@ Game Boy — fully wired, coherent, and now exercised by samples/tests:
   24-row source-authored map, scrolls down and back up, and builds as a Game Boy ROM.
   `samples/tiled-tall/tall.rs` proves the same vertical row streamer over a 16x40
   Tiled `World.Load(...)` map whose full height is kept in the imported world rows.
-  `samples/tiled-vscroll/vscroll.rs` builds for Game Boy and NES from a 40x60 Tiled
+  `samples/tiled-vertical-scroll/vertical-scroll.rs` builds for Game Boy and NES from a 40x60 Tiled
   map; NES uses it to prove four-screen vertical scroll over all four nametables.
-  `samples/tiled-diagonal/diag.rs` moves X and Y together by one pixel per frame
+  `samples/tiled-gb-diagonal-streaming/diagonal-streaming.rs` moves X and Y together by one pixel per frame
   over a 40x40 Tiled `World.Load(...)` map, proving that the imported rows and
   columns feed the staggered diagonal streamer.
-  `samples/tiled-free-scroll/free-scroll.rs` moves X and Y together by one pixel
+  `samples/tiled-cross-target-2d-scroll/cross-target-2d-scroll.rs` moves X and Y together by one pixel
   per frame over a 50x60 Tiled `World.Load(...)` map and builds for both Game Boy
   and NES.
   `GameBoyVerticalScrollAcceptanceTests` compiles the sample, confirms the SDK
